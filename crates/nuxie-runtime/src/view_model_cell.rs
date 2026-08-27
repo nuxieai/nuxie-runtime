@@ -22,6 +22,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
+#[path = "assets/blob_asset.rs"]
+mod blob_asset_owner;
+pub use blob_asset_owner::RuntimeBlobAsset;
+
 type RuntimeDeferredNotification = Box<dyn FnOnce()>;
 
 thread_local! {
@@ -619,37 +623,6 @@ pub struct RuntimeFontAssetValue {
     live_font_bytes: Option<Arc<[u8]>>,
 }
 
-/// One retained runtime Blob asset.
-///
-/// C++ passes an `rcp<BlobAsset>` through scripting and data binding. Keep the
-/// asset metadata and payload behind one shared identity for the same reason.
-#[derive(Debug)]
-pub struct RuntimeBlobAsset {
-    name: Arc<str>,
-    bytes: Arc<[u8]>,
-}
-
-impl RuntimeBlobAsset {
-    pub fn new(name: impl Into<String>, bytes: Arc<[u8]>) -> Self {
-        Self {
-            name: Arc::from(name.into()),
-            bytes,
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-
-    pub fn bytes_arc(&self) -> Arc<[u8]> {
-        Arc::clone(&self.bytes)
-    }
-}
-
 /// Serialized asset id plus the optional directly-set Blob asset.
 ///
 /// A non-null live value is distinct from an id-bound value even when its
@@ -724,7 +697,7 @@ impl RuntimeBlobAssetValue {
 
     fn set_live_blob_bytes(&mut self, bytes: Option<Arc<[u8]>>) -> bool {
         let same = match (&self.live_blob_asset, &bytes) {
-            (Some(current), Some(next)) => Arc::ptr_eq(&current.bytes, next),
+            (Some(current), Some(next)) => current.bytes_arc_ptr_eq(next),
             (None, None) => true,
             _ => false,
         };

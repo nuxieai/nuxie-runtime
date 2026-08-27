@@ -1522,9 +1522,9 @@ impl ScriptViewModel {
         let bytes = self
             .file
             .imported_file_asset_contents(asset.id)
-            .map(Arc::<[u8]>::from)?;
+            .map(<[u8]>::to_vec)?;
         let name = asset.string_property("name").unwrap_or_default();
-        let retained = Arc::new(RuntimeBlobAsset::new(name, bytes));
+        let retained = Arc::new(RuntimeBlobAsset::from_decoded(name, bytes));
         self.blob_assets
             .borrow_mut()
             .insert(asset.id, Arc::clone(&retained));

@@ -11156,6 +11156,11 @@ impl RuntimeDataBindGraphSourceNode {
         value: RuntimeDataBindGraphValue,
     ) -> Option<RuntimeDataBindGraphValue> {
         match (target, value) {
+            (RuntimeDataBindGraphTarget::Color { .. }, value) => {
+                Some(RuntimeDataBindGraphValue::Color(
+                    crate::context_value_color::calculate_value(&value),
+                ))
+            }
             (
                 RuntimeDataBindGraphTarget::Number { .. }
                 | RuntimeDataBindGraphTarget::TransitionDuration { .. }

@@ -35,10 +35,18 @@ impl RuntimeFocusActionTraversal {
         // mount recorded before the first update pass (renderOpacity still
         // zero) would pin its subtree ineligible forever.
         focus.refresh_visibility_change(artboard);
-        focus.traverse(
-            self.action_owner
-                .uint(super::listener_action_owner::FOCUS_TRAVERSAL_KIND_KEY),
-        )
+        match self
+            .action_owner
+            .uint(super::listener_action_owner::FOCUS_TRAVERSAL_KIND_KEY)
+        {
+            0 => focus.traverse(0),
+            1 => focus.traverse(1),
+            2 => focus.traverse(2),
+            3 => focus.traverse(3),
+            4 => focus.traverse(4),
+            5 => focus.traverse(5),
+            _ => focus.traverse(0),
+        }
     }
 }
 

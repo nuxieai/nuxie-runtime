@@ -28,25 +28,10 @@ fn deform_point_from_skin(
 }
 
 impl ArtboardInstance {
-    pub(crate) fn runtime_vertex_weight_state(
-        &self,
-        vertex_local: usize,
-    ) -> Option<crate::components::RuntimeWeightState> {
-        let vertex = self.component_handle(vertex_local)?;
-        let weight = self
-            .objects
-            .component(vertex)?
-            .concrete
-            .vertex
-            .as_ref()?
-            .weight?;
-        self.objects.component(weight)?.concrete.weight
-    }
-
     /// Settle one retained Weight/CubicWeight from the Skin-owned transform
     /// buffer. The caller supplies live Vertex points; packed indices/values
     /// are always read from this occurrence's generated storage.
-    pub(crate) fn deform_runtime_vertex_weight(
+    pub(crate) fn deform_linked_vertex_weight(
         &mut self,
         vertex_local: usize,
         point: (f32, f32),

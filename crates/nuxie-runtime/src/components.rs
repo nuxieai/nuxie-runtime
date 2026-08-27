@@ -7,6 +7,7 @@ use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     artboard_index_for_graph, cached_property_key_for_name, property_key_for_name,
 };
+use crate::shapes::vertex::RuntimeVertexState;
 use crate::text_value_run_owner::RuntimeTextValueRunState;
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 use nuxie_binary::RuntimeFile;
@@ -423,11 +424,6 @@ pub(crate) struct RuntimeWeightState {
     pub(crate) translation: (f32, f32),
     pub(crate) in_translation: (f32, f32),
     pub(crate) out_translation: (f32, f32),
-}
-
-#[derive(Debug, Clone, Default)]
-pub(crate) struct RuntimeVertexState {
-    pub(crate) weight: Option<ComponentHandle>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

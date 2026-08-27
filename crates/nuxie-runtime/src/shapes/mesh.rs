@@ -469,11 +469,11 @@ pub(super) fn runtime_realize_mesh_shared_buffers(
 pub(super) fn runtime_mesh_vertex_buffer_bytes(
     instance: &ArtboardInstance,
     mesh: &MeshGeometryNode,
-    weighted_context: Option<&WeightedPathContext<'_>>,
+    _weighted_context: Option<&WeightedPathContext<'_>>,
 ) -> Result<Vec<u8>> {
     let mut bytes = Vec::with_capacity(mesh.vertices.len() * 8);
     for vertex in &mesh.vertices {
-        let (x, y) = runtime_mesh_vertex_render_translation(instance, vertex, weighted_context)?;
+        let (x, y) = runtime_mesh_vertex_render_translation(instance, vertex)?;
         push_f32_pair_bytes(&mut bytes, x, y);
     }
     Ok(bytes)
@@ -482,7 +482,6 @@ pub(super) fn runtime_mesh_vertex_buffer_bytes(
 pub(super) fn runtime_mesh_vertex_render_translation(
     instance: &ArtboardInstance,
     vertex: &MeshVertexNode,
-    weighted_context: Option<&WeightedPathContext<'_>>,
 ) -> Result<(f32, f32)> {
     let x_key = runtime_draw_property_key_for_name("Vertex", "x").context("missing Vertex.x")?;
     let y_key = runtime_draw_property_key_for_name("Vertex", "y").context("missing Vertex.y")?;
@@ -492,14 +491,8 @@ pub(super) fn runtime_mesh_vertex_render_translation(
     let y = instance
         .double_property(vertex.local_id, y_key)
         .unwrap_or(0.0);
-    if let Some(weighted_context) = weighted_context
-        && vertex.weight_local.is_some()
-    {
-        return weighted_context
-            .translation(vertex.local_id)
-            .context("mesh Weight occurrence has no settled translation");
-    }
-    Ok((x, y))
+    crate::shapes::vertex::render_translation(instance, vertex.local_id, x, y)
+        .context("mesh Weight occurrence has no settled translation")
 }
 
 pub(super) fn preallocate_file_source_mesh_owners(

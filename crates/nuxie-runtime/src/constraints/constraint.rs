@@ -2,6 +2,25 @@
 
 use super::*;
 
+/// Direct translation of pinned `rive::getParentWorld`.
+///
+/// C++ returns a reference to a module-static identity matrix when the direct
+/// parent is not a `WorldTransformComponent`. `Mat2D` is copy-sized in Rust,
+/// so the same branch returns the identity value instead of a shared
+/// reference.
+pub(crate) fn parent_world_transform(
+    artboard: &ArtboardInstance,
+    component_index: ComponentHandle,
+) -> Mat2D {
+    let Some(parent) = artboard.component_parent_handle(component_index) else {
+        return Mat2D::IDENTITY;
+    };
+    Some(artboard.component_at(parent))
+        .filter(|parent| parent.capabilities.world_transform)
+        .map(|parent| parent.transform.world_transform)
+        .unwrap_or(Mat2D::IDENTITY)
+}
+
 pub(crate) fn constraint_double_change_marks_parent_dirty(
     kind: RuntimeConstraintKind,
     property_key: u16,

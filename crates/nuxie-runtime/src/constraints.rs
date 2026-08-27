@@ -42,6 +42,7 @@ pub(crate) mod scrolling {
     pub(crate) mod scroll_virtualizer;
 }
 
+use constraint::parent_world_transform;
 use draggable_constraint::{RuntimeDraggableProxy, RuntimeDraggableProxyKind};
 use follow_path_constraint::{
     follow_path_constrain_components, target_transform_for_follow_path_constraint_at_distance,
@@ -2547,16 +2548,6 @@ fn point_length(point: (f32, f32)) -> f32 {
 
 fn point_atan2(point: (f32, f32)) -> f32 {
     point.1.atan2(point.0)
-}
-
-fn parent_world_transform(artboard: &ArtboardInstance, component_index: ComponentHandle) -> Mat2D {
-    let Some(parent) = artboard.component_parent_handle(component_index) else {
-        return Mat2D::IDENTITY;
-    };
-    Some(artboard.component_at(parent))
-        .filter(|parent| parent.capabilities.world_transform)
-        .map(|parent| parent.transform.world_transform)
-        .unwrap_or(Mat2D::IDENTITY)
 }
 
 fn invert(transform: Mat2D) -> Option<Mat2D> {

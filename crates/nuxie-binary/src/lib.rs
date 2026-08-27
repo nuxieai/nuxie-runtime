@@ -9516,7 +9516,7 @@ fn cpp_convert_operation_value(
 ) -> f32 {
     let Some(input_value) = (match input {
         RuntimeConvertedDataValue::Number(value) => Some(*value),
-        RuntimeConvertedDataValue::SymbolListIndex(value) => Some(*value as f32),
+        RuntimeConvertedDataValue::SymbolListIndex(value) => Some((*value as u32) as f32),
         _ => None,
     }) else {
         return 0.0;

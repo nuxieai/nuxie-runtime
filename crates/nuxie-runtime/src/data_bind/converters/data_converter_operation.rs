@@ -1,4 +1,12 @@
-//! Scalar operation semantics shared by C++ operation converters.
+//! Direct owner for pinned C++ `DataConverterOperation`.
+//!
+//! C++ retains one `DataValueNumber m_output`. Rust graph conversion returns
+//! that number by value, so there is no mutable occurrence-local output to
+//! retain. Input classification stays here because `convertValue` accepts
+//! numbers and symbol-list indices, while `reverseConvertValue` accepts only
+//! numbers.
+
+use crate::data_bind_graph::RuntimeDataBindGraphValue;
 
 pub(crate) fn positive_mod(value: f32, mut range: f32) -> f32 {
     if range < 0.0 {
@@ -11,7 +19,15 @@ pub(crate) fn positive_mod(value: f32, mut range: f32) -> f32 {
     value
 }
 
-pub(crate) fn convert(input: f32, operand: f32, operation_type: u64) -> f32 {
+pub(crate) fn convert(input: &RuntimeDataBindGraphValue, operand: f32, operation_type: u64) -> f32 {
+    let input = match input {
+        RuntimeDataBindGraphValue::Number(value) => *value,
+        // Pinned `DataValueSymbolListIndex` stores a `uint32_t` in its
+        // `DataValueInteger` base before `convertValue` casts it to float.
+        RuntimeDataBindGraphValue::SymbolListIndex(value) => (*value as u32) as f32,
+        _ => return 0.0,
+    };
+
     match operation_type {
         0 => input + operand,
         1 => input - operand,
@@ -36,7 +52,12 @@ pub(crate) fn convert(input: f32, operand: f32, operation_type: u64) -> f32 {
     }
 }
 
-pub(crate) fn reverse(input: f32, operand: f32, operation_type: u64) -> f32 {
+pub(crate) fn reverse(input: &RuntimeDataBindGraphValue, operand: f32, operation_type: u64) -> f32 {
+    let RuntimeDataBindGraphValue::Number(input) = input else {
+        return 0.0;
+    };
+    let input = *input;
+
     match operation_type {
         0 => input - operand,
         1 => input + operand,
@@ -56,6 +77,10 @@ pub(crate) fn reverse(input: f32, operand: f32, operation_type: u64) -> f32 {
         15..=18 => input,
         _ => operand,
     }
+}
+
+pub(crate) fn output_type() -> nuxie_binary::RuntimeDataType {
+    nuxie_binary::RuntimeDataType::Number
 }
 
 #[cfg(test)]

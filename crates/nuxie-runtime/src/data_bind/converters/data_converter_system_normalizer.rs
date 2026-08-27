@@ -1,6 +1,13 @@
 //! Direction-aware operation owner matching C++ `DataConverterSystemNormalizer`.
 
-pub(crate) fn convert(input: f32, operand: f32, operation: u64, to_source: bool) -> f32 {
+use crate::data_bind_graph::RuntimeDataBindGraphValue;
+
+pub(crate) fn convert(
+    input: &RuntimeDataBindGraphValue,
+    operand: f32,
+    operation: u64,
+    to_source: bool,
+) -> f32 {
     if to_source {
         crate::data_converter_operation::reverse(input, operand, operation)
     } else {
@@ -9,7 +16,7 @@ pub(crate) fn convert(input: f32, operand: f32, operation: u64, to_source: bool)
 }
 
 pub(crate) fn reverse_convert(
-    input: f32,
+    input: &RuntimeDataBindGraphValue,
     operand: f32,
     operation: u64,
     to_target: bool,

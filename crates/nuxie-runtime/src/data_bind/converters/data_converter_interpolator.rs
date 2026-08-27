@@ -6,10 +6,19 @@ use crate::draw::color_lerp;
 
 /// Occurrence-local interpolator state. Like C++, this owns both alternating
 /// animation records and the currently presented value.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub(crate) struct RuntimeDataConverterInterpolatorState {
     advance_count: u8,
     advancer: Option<RuntimeDataConverterInterpolatorAdvancer>,
+}
+
+impl Clone for RuntimeDataConverterInterpolatorState {
+    fn clone(&self) -> Self {
+        // DataConverterInterpolatorBase::clone copies authored converter
+        // properties, but its new concrete converter has no output or
+        // initialized advancer and starts with m_advanceCount == 0.
+        Self::default()
+    }
 }
 
 impl RuntimeDataConverterInterpolatorState {
@@ -30,9 +39,8 @@ impl RuntimeDataConverterInterpolatorState {
         if duration == 0.0
             && let Some(advancer) = &mut self.advancer
         {
-            if let Some(input_value) = RuntimeDataConverterInterpolatorValue::from_graph(input) {
-                advancer.reset_to_start(&input_value);
-            }
+            let input_value = RuntimeDataConverterInterpolatorValue::from_graph(input);
+            advancer.reset_to_start(input_value.as_ref());
             return Some(input.clone());
         }
 
@@ -66,7 +74,7 @@ impl RuntimeDataConverterInterpolatorState {
         }
         let Some(advancer) = &mut self.advancer else {
             return RuntimeDataBindGraphStatefulAdvance {
-                changed: true,
+                changed: false,
                 keep_going: true,
             };
         };
@@ -110,8 +118,13 @@ impl RuntimeDataConverterInterpolatorAdvancer {
         self.current_value.copy_from(input);
     }
 
-    fn reset_to_start(&mut self, input: &RuntimeDataConverterInterpolatorValue) {
-        self.reset_values(input);
+    fn reset_to_start(&mut self, input: Option<&RuntimeDataConverterInterpolatorValue>) {
+        // C++ calls resetValues even for an unsupported DataValue. Its
+        // type-specific copyValue calls then do nothing, but the timeline is
+        // still unconditionally reset below.
+        if let Some(input) = input {
+            self.reset_values(input);
+        }
         self.is_smoothing_animation = false;
         self.animation_data_a.elapsed_seconds = 0.0;
         self.animation_data_b.elapsed_seconds = 0.0;
@@ -150,10 +163,13 @@ impl RuntimeDataConverterInterpolatorAdvancer {
             return RuntimeDataBindGraphStatefulAdvance::default();
         }
 
-        let previous_value = self.current_value.clone();
+        let previous_elapsed_seconds = self.animation_data(animation_index).elapsed_seconds;
         self.advance_animation_data(duration, interpolator, elapsed_seconds, animation_index);
         RuntimeDataBindGraphStatefulAdvance {
-            changed: self.current_value != previous_value,
+            // This is the exact markConverterDirty predicate, which is not an
+            // output-value comparison: even a flat interpolator dirties the
+            // parent while its prior elapsed time is below the duration.
+            changed: previous_elapsed_seconds < duration,
             keep_going: self.animation_data(animation_index).elapsed_seconds < duration,
         }
     }
@@ -331,4 +347,59 @@ fn interpolation_factor(
         factor = interpolator.transform(factor);
     }
     factor
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clone_starts_with_a_cold_advancer() {
+        let mut state = RuntimeDataConverterInterpolatorState::new();
+        state.convert(1.0, None, &RuntimeDataBindGraphValue::Number(7.0));
+
+        let mut cloned = state.clone();
+        assert!(!cloned.is_initialized());
+        assert_eq!(
+            cloned.advance(1.0, None, 0.25),
+            RuntimeDataBindGraphStatefulAdvance {
+                changed: false,
+                keep_going: true,
+            }
+        );
+    }
+
+    #[test]
+    fn advance_reports_the_cpp_dirty_predicate() {
+        let mut state = RuntimeDataConverterInterpolatorState::new();
+        state.convert(1.0, None, &RuntimeDataBindGraphValue::Number(0.0));
+        state.advance(1.0, None, 0.1);
+        state.advance(1.0, None, 0.1);
+        state.convert(1.0, None, &RuntimeDataBindGraphValue::Number(1.0));
+
+        assert_eq!(
+            state.advance(f32::NAN, None, 0.25),
+            RuntimeDataBindGraphStatefulAdvance {
+                changed: false,
+                keep_going: false,
+            }
+        );
+    }
+
+    #[test]
+    fn zero_duration_unsupported_input_still_resets_the_timeline() {
+        let mut state = RuntimeDataConverterInterpolatorState::new();
+        state.convert(1.0, None, &RuntimeDataBindGraphValue::Number(0.0));
+        state.advance(1.0, None, 0.1);
+        state.advance(1.0, None, 0.1);
+        state.convert(1.0, None, &RuntimeDataBindGraphValue::Number(1.0));
+        state.advance(1.0, None, 0.25);
+
+        state.convert(0.0, None, &RuntimeDataBindGraphValue::Boolean(true));
+
+        let advancer = state.advancer.as_ref().expect("initialized advancer");
+        assert!(!advancer.is_smoothing_animation);
+        assert_eq!(advancer.animation_data_a.elapsed_seconds, 0.0);
+        assert_eq!(advancer.animation_data_b.elapsed_seconds, 0.0);
+    }
 }

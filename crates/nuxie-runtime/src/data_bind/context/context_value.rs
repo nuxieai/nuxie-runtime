@@ -801,7 +801,7 @@ impl RuntimeDataBindGraphConverter {
     /// (`data_bind.cpp:165-173,251-299`).
     pub(crate) fn cpp_output_data_type(&self) -> RuntimeDataType {
         match self {
-            Self::PassThrough | Self::ToNumber
+            Self::PassThrough
             | Self::OperationValue { .. }
             | Self::OperationViewModel { .. }
             | Self::SystemOperationValue { .. }
@@ -826,6 +826,7 @@ impl RuntimeDataBindGraphConverter {
             },
             Self::BooleanNegate => crate::data_converter_boolean_negate::output_type(),
             Self::TriggerIncrement => RuntimeDataType::Trigger,
+            Self::ToNumber => crate::data_converter_to_number::output_type(),
             Self::NumberToList { .. } => crate::data_converter_number_to_list::output_type(),
             Self::ToString { .. } => RuntimeDataType::String,
             Self::StringPad { .. } => crate::data_converter_string_pad::output_type(),
@@ -2714,32 +2715,11 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
         (RuntimeDataBindGraphConverter::TriggerIncrement, value) => {
             crate::data_converter_trigger_owner::convert(value)
         }
-        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Number(value)) => {
-            Some(RuntimeDataBindGraphValue::Number(*value))
+        (RuntimeDataBindGraphConverter::ToNumber, value) => {
+            let mut output = 0.0;
+            crate::data_converter_to_number::convert(value, &mut output);
+            Some(RuntimeDataBindGraphValue::Number(output))
         }
-        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Boolean(value)) => {
-            Some(RuntimeDataBindGraphValue::Number(if *value {
-                1.0
-            } else {
-                0.0
-            }))
-        }
-        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Enum(value)) => {
-            Some(RuntimeDataBindGraphValue::Number(*value as f32))
-        }
-        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Color(value)) => {
-            Some(RuntimeDataBindGraphValue::Number((*value as i32) as f32))
-        }
-        (
-            RuntimeDataBindGraphConverter::ToNumber,
-            RuntimeDataBindGraphValue::SymbolListIndex(value),
-        ) => Some(RuntimeDataBindGraphValue::Number(*value as f32)),
-        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::String(value)) => {
-            Some(RuntimeDataBindGraphValue::Number(
-                crate::data_converter_to_number::string(value),
-            ))
-        }
-        (RuntimeDataBindGraphConverter::ToNumber, _) => None,
         (
             RuntimeDataBindGraphConverter::ListToLength,
             RuntimeDataBindGraphValue::ListLength(value),
@@ -3091,10 +3071,9 @@ pub(crate) fn runtime_data_bind_graph_reverse_convert_value(
         (RuntimeDataBindGraphConverter::TriggerIncrement, value) => {
             crate::data_converter_trigger_owner::reverse(value)
         }
-        (RuntimeDataBindGraphConverter::ToNumber, RuntimeDataBindGraphValue::Number(value)) => {
-            Some(RuntimeDataBindGraphValue::Number(*value))
-        }
-        (RuntimeDataBindGraphConverter::ToNumber, _) => None,
+        // `DataConverterToNumber` does not override `reverseConvert`; pinned
+        // `DataConverter` returns every concrete input object unchanged.
+        (RuntimeDataBindGraphConverter::ToNumber, value) => Some(value.clone()),
         (
             RuntimeDataBindGraphConverter::ToString { .. },
             RuntimeDataBindGraphValue::String(value),
@@ -4212,6 +4191,7 @@ fn runtime_data_bind_graph_default_operation_view_model_operand(
 #[derive(Debug, Clone)]
 pub(crate) enum RuntimeDataBindGraphConverterState {
     None,
+    ToNumber(f32),
     Scripted(crate::scripted_data_converter::RuntimeScriptedDataConverterState),
     Formula(RuntimeDataBindGraphFormulaState),
     Interpolator(RuntimeDataConverterInterpolatorState),
@@ -4225,6 +4205,7 @@ pub(crate) enum RuntimeDataBindGraphConverterState {
 impl RuntimeDataBindGraphConverterState {
     pub(crate) fn for_converter(converter: Option<&RuntimeDataBindGraphConverter>) -> Self {
         match converter {
+            Some(RuntimeDataBindGraphConverter::ToNumber) => Self::ToNumber(0.0),
             Some(RuntimeDataBindGraphConverter::Scripted { definition, .. }) => Self::Scripted(
                 crate::scripted_data_converter::RuntimeScriptedDataConverterState::from_definition(
                     definition,
@@ -4270,7 +4251,11 @@ impl RuntimeDataBindGraphConverterState {
                     state.set_scripted_converter_parent_wake(wake.clone());
                 }
             }
-            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::External { .. } => {}
+            Self::None
+            | Self::ToNumber(_)
+            | Self::Formula(_)
+            | Self::Interpolator(_)
+            | Self::External { .. } => {}
         }
     }
 
@@ -4282,7 +4267,11 @@ impl RuntimeDataBindGraphConverterState {
                     state.unbind_scripted_converter_sources();
                 }
             }
-            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::External { .. } => {}
+            Self::None
+            | Self::ToNumber(_)
+            | Self::Formula(_)
+            | Self::Interpolator(_)
+            | Self::External { .. } => {}
         }
     }
 
@@ -4297,7 +4286,11 @@ impl RuntimeDataBindGraphConverterState {
                     state.set_scripted_artboard_ancestor_sources(sources.clone());
                 }
             }
-            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::External { .. } => {}
+            Self::None
+            | Self::ToNumber(_)
+            | Self::Formula(_)
+            | Self::Interpolator(_)
+            | Self::External { .. } => {}
         }
     }
 
@@ -4309,7 +4302,11 @@ impl RuntimeDataBindGraphConverterState {
             Self::Group(states) => states
                 .iter()
                 .find_map(Self::scripted_artboard_ancestor_sources),
-            Self::None | Self::Formula(_) | Self::Interpolator(_) | Self::External { .. } => None,
+            Self::None
+            | Self::ToNumber(_)
+            | Self::Formula(_)
+            | Self::Interpolator(_)
+            | Self::External { .. } => None,
         }
     }
 
@@ -4759,6 +4756,10 @@ impl RuntimeDataBindGraphConverterState {
         formula_random_source: &mut RuntimeDataBindGraphFormulaRandomSource,
     ) -> Option<RuntimeDataBindGraphValue> {
         match (converter, self) {
+            (RuntimeDataBindGraphConverter::ToNumber, Self::ToNumber(output)) => {
+                crate::data_converter_to_number::convert(value, output);
+                Some(RuntimeDataBindGraphValue::Number(*output))
+            }
             (
                 RuntimeDataBindGraphConverter::Scripted {
                     serialized_implemented_methods,
@@ -5141,7 +5142,7 @@ impl RuntimeDataBindGraphConverterState {
             Self::Interpolator(state) => state.is_initialized(),
             Self::External { state, .. } => state.is_active(),
             Self::Group(states) => states.iter().any(Self::is_initialized_stateful),
-            Self::Formula(_) | Self::Scripted(_) | Self::None => false,
+            Self::Formula(_) | Self::Scripted(_) | Self::ToNumber(_) | Self::None => false,
         }
     }
 
@@ -5153,7 +5154,11 @@ impl RuntimeDataBindGraphConverterState {
                     state.reset_formula_randoms();
                 }
             }
-            Self::Interpolator(_) | Self::External { .. } | Self::Scripted(_) | Self::None => {}
+            Self::Interpolator(_)
+            | Self::External { .. }
+            | Self::Scripted(_)
+            | Self::ToNumber(_)
+            | Self::None => {}
         }
     }
 

@@ -5239,21 +5239,9 @@ impl RuntimeFile {
                     .map(|value| u64::from(value.wrapping_add(1)))
                     .unwrap_or(0),
             ),
-            "DataConverterToNumber" => RuntimeConvertedDataValue::Number(match input {
-                RuntimeConvertedDataValue::String(value) => cpp_atof_f32(value),
-                RuntimeConvertedDataValue::Enum { value, .. } => *value as f32,
-                RuntimeConvertedDataValue::Number(value) => *value,
-                RuntimeConvertedDataValue::Color(value) => (*value as i32) as f32,
-                RuntimeConvertedDataValue::Boolean(value) => {
-                    if *value {
-                        1.0
-                    } else {
-                        0.0
-                    }
-                }
-                RuntimeConvertedDataValue::SymbolListIndex(value) => *value as f32,
-                _ => 0.0,
-            }),
+            "DataConverterToNumber" => {
+                RuntimeConvertedDataValue::Number(data_converter_to_number_value(input, 0.0))
+            }
             "DataConverterToString" => RuntimeConvertedDataValue::String(
                 self.cpp_data_converter_to_string(data_converter, input)?,
             ),
@@ -5486,6 +5474,11 @@ impl RuntimeFile {
             "DataConverterInterpolator" => state
                 .interpolator_state(data_converter.id)
                 .convert_converted(data_converter, input),
+            "DataConverterToNumber" if !reverse => {
+                let output = state.to_number_output(data_converter.id);
+                *output = data_converter_to_number_value(input, *output);
+                Some(RuntimeConvertedDataValue::Number(*output))
+            }
             _ if reverse => self.cpp_data_converter_reverse_convert(
                 data_converter,
                 input,
@@ -6506,6 +6499,7 @@ pub enum RuntimeConvertedDataValue<'a> {
 #[derive(Debug, Clone, Default)]
 pub struct RuntimeDataConverterState {
     interpolators: BTreeMap<u32, RuntimeDataConverterInterpolatorState>,
+    to_number_outputs: BTreeMap<u32, f32>,
 }
 
 impl RuntimeDataConverterState {
@@ -6515,6 +6509,8 @@ impl RuntimeDataConverterState {
 
     pub fn reset(&mut self) {
         self.interpolators.clear();
+        // Pinned `DataConverterToNumber` inherits `DataConverter::reset`,
+        // which is a no-op; its retained `m_output` survives group resets.
     }
 
     fn interpolator_state(
@@ -6522,6 +6518,10 @@ impl RuntimeDataConverterState {
         data_converter_id: u32,
     ) -> &mut RuntimeDataConverterInterpolatorState {
         self.interpolators.entry(data_converter_id).or_default()
+    }
+
+    fn to_number_output(&mut self, data_converter_id: u32) -> &mut f32 {
+        self.to_number_outputs.entry(data_converter_id).or_default()
     }
 }
 
@@ -9185,7 +9185,7 @@ fn cpp_data_converter_direct_output_type(
         "DataConverterStringRemoveZeros" => RuntimeDataType::String,
         "DataConverterStringTrim" => RuntimeDataType::String,
         "ScriptedDataConverter" => RuntimeDataType::Any,
-        "DataConverterToNumber" => RuntimeDataType::Number,
+        "DataConverterToNumber" => data_converter_to_number_output_type(),
         "DataConverterToString" => RuntimeDataType::String,
         "DataConverterTrigger" => RuntimeDataType::Trigger,
         _ => RuntimeDataType::None,
@@ -9465,8 +9465,43 @@ fn cpp_pad_string(value: &[u8], length: u64, text: &[u8], pad_type: u64) -> Vec<
     output
 }
 
-pub fn data_converter_to_number_string_value(value: &[u8]) -> f32 {
-    cpp_atof_f32(value)
+/// Pinned `DataConverterToNumber::convertString`. C++ leaves its retained
+/// output unchanged when `atof` reports a range error.
+pub fn data_converter_to_number_string_value(value: &[u8], previous_output: f32) -> f32 {
+    let parsed = cpp_atof_f32(value);
+    if parsed.range_error {
+        previous_output
+    } else {
+        parsed.value
+    }
+}
+
+fn data_converter_to_number_value(
+    input: &RuntimeConvertedDataValue<'_>,
+    previous_output: f32,
+) -> f32 {
+    match input {
+        RuntimeConvertedDataValue::String(value) => {
+            data_converter_to_number_string_value(value, previous_output)
+        }
+        RuntimeConvertedDataValue::Enum { value, .. } => (*value as u32) as f32,
+        RuntimeConvertedDataValue::Number(value) => *value,
+        RuntimeConvertedDataValue::Color(value) => *value as f32,
+        RuntimeConvertedDataValue::Boolean(value) => {
+            if *value {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        RuntimeConvertedDataValue::SymbolListIndex(value) => (*value as u32) as f32,
+        _ => 0.0,
+    }
+}
+
+/// Pinned primary-header `DataConverterToNumber::outputType()` inline.
+pub fn data_converter_to_number_output_type() -> RuntimeDataType {
+    RuntimeDataType::Number
 }
 
 /// Pinned `DataConverterBooleanNegate::convert` value branch and non-boolean
@@ -9505,7 +9540,13 @@ pub fn data_converter_rounder_output_type() -> RuntimeDataType {
     RuntimeDataType::Number
 }
 
-fn cpp_atof_f32(value: &[u8]) -> f32 {
+#[derive(Clone, Copy)]
+struct CppAtofF32 {
+    value: f32,
+    range_error: bool,
+}
+
+fn cpp_atof_f32(value: &[u8]) -> CppAtofF32 {
     let mut start = 0usize;
     while start < value.len() && value[start].is_ascii_whitespace() {
         start += 1;
@@ -9531,6 +9572,29 @@ fn cpp_atof_f32(value: &[u8]) -> f32 {
         return cpp_atof_hex_f32(value, number_start, sign);
     }
 
+    let keyword = &value[number_start..];
+    if keyword
+        .get(..8)
+        .is_some_and(|value| value.eq_ignore_ascii_case(b"infinity"))
+        || keyword
+            .get(..3)
+            .is_some_and(|value| value.eq_ignore_ascii_case(b"inf"))
+    {
+        return CppAtofF32 {
+            value: (sign as f32) * f32::INFINITY,
+            range_error: false,
+        };
+    }
+    if keyword
+        .get(..3)
+        .is_some_and(|value| value.eq_ignore_ascii_case(b"nan"))
+    {
+        return CppAtofF32 {
+            value: f32::NAN.copysign(sign as f32),
+            range_error: false,
+        };
+    }
+
     let mut end = number_start;
     if value
         .get(end)
@@ -9540,7 +9604,9 @@ fn cpp_atof_f32(value: &[u8]) -> f32 {
     }
 
     let mut digits = 0usize;
+    let mut nonzero_digit = false;
     while value.get(end).is_some_and(u8::is_ascii_digit) {
+        nonzero_digit |= value[end] != b'0';
         end += 1;
         digits += 1;
     }
@@ -9548,13 +9614,17 @@ fn cpp_atof_f32(value: &[u8]) -> f32 {
     if value.get(end) == Some(&b'.') {
         end += 1;
         while value.get(end).is_some_and(u8::is_ascii_digit) {
+            nonzero_digit |= value[end] != b'0';
             end += 1;
             digits += 1;
         }
     }
 
     if digits == 0 {
-        return 0.0;
+        return CppAtofF32 {
+            value: 0.0,
+            range_error: false,
+        };
     }
 
     let mantissa_end = end;
@@ -9582,42 +9652,71 @@ fn cpp_atof_f32(value: &[u8]) -> f32 {
         .expect("numeric prefix is ASCII")
         .parse::<f64>()
     else {
-        return 0.0;
+        return CppAtofF32 {
+            value: 0.0,
+            range_error: true,
+        };
     };
 
-    if parsed.is_finite() {
-        parsed as f32
-    } else {
-        0.0
+    CppAtofF32 {
+        value: parsed as f32,
+        range_error: !parsed.is_finite()
+            || (nonzero_digit && parsed == 0.0)
+            || (parsed != 0.0 && parsed.abs() < f64::MIN_POSITIVE),
     }
 }
 
-fn cpp_atof_hex_f32(value: &[u8], number_start: usize, sign: f64) -> f32 {
+fn cpp_atof_hex_f32(value: &[u8], number_start: usize, sign: f64) -> CppAtofF32 {
     let mut end = number_start + 2;
-    let mut mantissa = 0.0f64;
     let mut digits = 0usize;
-    while let Some(digit) = value.get(end).and_then(|byte| ascii_hex_digit_value(*byte)) {
-        mantissa = mantissa * 16.0 + f64::from(digit);
-        end += 1;
-        digits += 1;
-    }
+    let mut fraction_digits = 0usize;
+    let mut after_point = false;
+    let mut significant_bits = 0usize;
+    let mut prefix = 0u64;
+    let mut prefix_bits = 0usize;
+    let mut tail_nonzero = false;
 
-    if value.get(end) == Some(&b'.') {
-        end += 1;
-        let mut place = 1.0 / 16.0;
-        while let Some(digit) = value.get(end).and_then(|byte| ascii_hex_digit_value(*byte)) {
-            mantissa += f64::from(digit) * place;
-            place /= 16.0;
+    loop {
+        if !after_point && value.get(end) == Some(&b'.') {
+            after_point = true;
             end += 1;
-            digits += 1;
+            continue;
+        }
+        let Some(digit) = value.get(end).and_then(|byte| ascii_hex_digit_value(*byte)) else {
+            break;
+        };
+        digits += 1;
+        fraction_digits += usize::from(after_point);
+        end += 1;
+
+        let width = if significant_bits == 0 {
+            if digit == 0 {
+                continue;
+            }
+            (u8::BITS - digit.leading_zeros()) as usize
+        } else {
+            4
+        };
+        significant_bits += width;
+        for shift in (0..width).rev() {
+            let bit = (digit >> shift) & 1;
+            if prefix_bits < u64::BITS as usize {
+                prefix = (prefix << 1) | u64::from(bit);
+                prefix_bits += 1;
+            } else {
+                tail_nonzero |= bit != 0;
+            }
         }
     }
 
-    if digits == 0 {
-        return 0.0;
+    if digits == 0 || significant_bits == 0 {
+        return CppAtofF32 {
+            value: 0.0f32.copysign(sign as f32),
+            range_error: false,
+        };
     }
 
-    let mut exponent = 0i32;
+    let mut exponent = 0i128;
     if value
         .get(end)
         .is_some_and(|byte| matches!(*byte, b'p' | b'P'))
@@ -9635,25 +9734,82 @@ fn cpp_atof_hex_f32(value: &[u8], number_start: usize, sign: f64) -> f32 {
             _ => 1,
         };
         let exponent_start = end;
-        let mut exponent_value = 0i32;
+        let mut exponent_value = 0i128;
         while let Some(digit) = value
             .get(end)
             .filter(|byte| byte.is_ascii_digit())
-            .map(|byte| i32::from(*byte - b'0'))
+            .map(|byte| i128::from(*byte - b'0'))
         {
             exponent_value = exponent_value.saturating_mul(10).saturating_add(digit);
             end += 1;
         }
         if exponent_start != end {
-            exponent = exponent_sign * exponent_value;
+            exponent = i128::from(exponent_sign) * exponent_value;
         }
     }
 
-    let parsed = sign * mantissa * 2.0f64.powi(exponent);
-    if parsed.is_finite() {
-        parsed as f32
+    if prefix_bits < u64::BITS as usize {
+        prefix <<= u64::BITS as usize - prefix_bits;
+    }
+
+    let mut unbiased_exponent = exponent
+        .saturating_add(significant_bits as i128 - 1)
+        .saturating_sub((fraction_digits as i128).saturating_mul(4));
+    if unbiased_exponent > 1023 {
+        return CppAtofF32 {
+            value: (sign as f32) * f32::INFINITY,
+            range_error: true,
+        };
+    }
+
+    let retained_bits = if unbiased_exponent >= -1022 {
+        53
     } else {
-        0.0
+        unbiased_exponent + 1075
+    };
+    if retained_bits < 0 || retained_bits == 0 && prefix == 1u64 << 63 && !tail_nonzero {
+        return CppAtofF32 {
+            value: 0.0f32.copysign(sign as f32),
+            range_error: true,
+        };
+    }
+
+    let retained_bits = retained_bits as usize;
+    let mut retained = if retained_bits == 0 {
+        0
+    } else {
+        prefix >> (u64::BITS as usize - retained_bits)
+    };
+    let guard = (prefix >> (u64::BITS as usize - retained_bits - 1)) & 1 != 0;
+    let remaining_prefix_bits = u64::BITS as usize - retained_bits - 1;
+    let remaining_nonzero = remaining_prefix_bits != 0
+        && prefix & ((1u64 << remaining_prefix_bits) - 1) != 0
+        || tail_nonzero;
+    if guard && (remaining_nonzero || retained & 1 != 0) {
+        retained += 1;
+    }
+
+    if unbiased_exponent >= -1022 && retained == 1u64 << 53 {
+        retained >>= 1;
+        unbiased_exponent += 1;
+        if unbiased_exponent > 1023 {
+            return CppAtofF32 {
+                value: (sign as f32) * f32::INFINITY,
+                range_error: true,
+            };
+        }
+    }
+
+    let sign_bit = u64::from(sign.is_sign_negative()) << 63;
+    let bits = if unbiased_exponent >= -1022 {
+        sign_bit | ((unbiased_exponent as u64 + 1023) << 52) | (retained & ((1u64 << 52) - 1))
+    } else {
+        sign_bit | retained
+    };
+    let parsed = f64::from_bits(bits);
+    CppAtofF32 {
+        value: parsed as f32,
+        range_error: bits & (0x7ffu64 << 52) == 0,
     }
 }
 
@@ -9663,6 +9819,43 @@ fn ascii_hex_digit_value(byte: u8) -> Option<u8> {
         b'a'..=b'f' => Some(byte - b'a' + 10),
         b'A'..=b'F' => Some(byte - b'A' + 10),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod data_converter_to_number_tests {
+    use super::*;
+
+    #[test]
+    fn compensating_hex_exponents_match_host_atof_without_range_error() {
+        let mut large_integer = b"0x".to_vec();
+        large_integer.extend(std::iter::repeat_n(b'f', 400));
+        large_integer.extend_from_slice(b"p-1600");
+        assert_eq!(
+            data_converter_to_number_string_value(&large_integer, 7.0),
+            1.0
+        );
+
+        let mut small_fraction = b"0x0.".to_vec();
+        small_fraction.extend(std::iter::repeat_n(b'0', 399));
+        small_fraction.extend_from_slice(b"1p1600");
+        assert_eq!(
+            data_converter_to_number_string_value(&small_fraction, 7.0),
+            1.0
+        );
+    }
+
+    #[test]
+    fn range_error_retains_output_and_integer_subclasses_use_u32_payloads() {
+        assert_eq!(data_converter_to_number_string_value(b"1e309", 7.0), 7.0);
+        assert!(data_converter_to_number_string_value(b"-0x0.0p0", 7.0).is_sign_negative());
+        assert_eq!(
+            data_converter_to_number_value(
+                &RuntimeConvertedDataValue::SymbolListIndex(0x1_0000_0000),
+                7.0,
+            ),
+            0.0
+        );
     }
 }
 

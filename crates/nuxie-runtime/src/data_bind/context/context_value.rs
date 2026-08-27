@@ -12058,6 +12058,43 @@ mod tests {
     }
 
     #[test]
+    fn string_default_empty_is_owned_only_by_typed_string_contexts() {
+        let mut graph = graph_with_number_binding(0);
+        let source = &mut graph.sources[0];
+        source.default_value = RuntimeDataBindGraphValue::String(b"source".to_vec());
+        source.value = RuntimeDataBindGraphValue::String(b"source".to_vec());
+
+        for target in [
+            RuntimeDataBindGraphTarget::String { global_id: 7 },
+            RuntimeDataBindGraphTarget::KeyFrameString { global_id: 8 },
+        ] {
+            assert_eq!(
+                source.source_to_target_value_for_concrete_target(
+                    target,
+                    RuntimeDataBindGraphValue::Boolean(true),
+                ),
+                Some(RuntimeDataBindGraphValue::String(Vec::new())),
+                "typed ContextValueString uses DataValueString::defaultValue for {target:?}",
+            );
+        }
+
+        source.converter = Some(RuntimeDataBindGraphConverter::Scripted {
+            global_id: 9,
+            serialized_implemented_methods: 0,
+            definition: Default::default(),
+            instance: None,
+        });
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::String { global_id: 7 },
+                RuntimeDataBindGraphValue::Boolean(true),
+            ),
+            Some(RuntimeDataBindGraphValue::Boolean(true)),
+            "ContextValueAny preserves the wrong concrete value so CoreString dispatch no-ops",
+        );
+    }
+
+    #[test]
     fn boolean_default_false_is_owned_only_by_typed_boolean_contexts() {
         let mut graph = graph_with_number_binding(0);
         let source = &mut graph.sources[0];

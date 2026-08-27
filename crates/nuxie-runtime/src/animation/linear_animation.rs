@@ -135,13 +135,19 @@ impl RuntimeLinearAnimation {
         let mut changed = false;
         for keyed_object in self.keyed_objects.iter() {
             for keyed_property in &keyed_object.keyed_properties {
+                let actual_mix = keyed_property_actual_mix(
+                    &*instance,
+                    keyed_object.target_local_id,
+                    keyed_property.property_key,
+                    mix,
+                );
                 // CoreRegistry assigns exactly one field type per property,
                 // matching C++ KeyedProperty's single virtual apply dispatch.
                 match &keyed_property.target {
                     RuntimeKeyedPropertyTarget::Double { transform_property } => {
                         let Some(value) = keyed_property.double_value_at_with_script_context(
                             seconds,
-                            mix,
+                            actual_mix,
                             key_frame_values,
                             Some(effective_scripted_interpolation_context(
                                 animation_instance,
@@ -191,7 +197,7 @@ impl RuntimeLinearAnimation {
                         else {
                             continue;
                         };
-                        let Some(value) = apply_key_frame_color_mix(frame_value, mix, || {
+                        let Some(value) = apply_key_frame_color_mix(frame_value, actual_mix, || {
                             if *solid_color_property {
                                 instance.solid_color_value(keyed_object.target_local_id)
                             } else {
@@ -220,7 +226,7 @@ impl RuntimeLinearAnimation {
                     }
                     RuntimeKeyedPropertyTarget::Bool => {
                         let Some(value) =
-                            keyed_property.bool_value_at(seconds, mix, key_frame_values)
+                            keyed_property.bool_value_at(seconds, actual_mix, key_frame_values)
                         else {
                             continue;
                         };
@@ -252,7 +258,7 @@ impl RuntimeLinearAnimation {
                     }
                     RuntimeKeyedPropertyTarget::String => {
                         let Some(value) =
-                            keyed_property.string_value_at(seconds, mix, key_frame_values)
+                            keyed_property.string_value_at(seconds, actual_mix, key_frame_values)
                         else {
                             continue;
                         };

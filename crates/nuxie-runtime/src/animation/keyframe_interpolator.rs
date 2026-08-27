@@ -83,3 +83,51 @@ impl RuntimeInterpolator {
         }
     }
 }
+
+/// Mirrors `InterpolatorHost::from` followed by
+/// `InterpolatorHost::overridesKeyedInterpolation`.
+///
+/// The pinned static dispatch checks `coreType()` rather than `isTypeOf()`, so
+/// only the concrete `LayoutComponent` type is an interpolator host. Its
+/// implementation overrides the caller's keyed mix for width and height only
+/// while the component's own layout animation is active.
+fn interpolator_host_overrides_keyed_interpolation(
+    artboard: &ArtboardInstance,
+    target_local_id: usize,
+    property_key: u16,
+) -> bool {
+    let Some(component) = artboard.component(target_local_id) else {
+        return false;
+    };
+    if component.type_name != "LayoutComponent" {
+        return false;
+    }
+    let Some(layout) = component.concrete.layout.as_ref() else {
+        return false;
+    };
+
+    layout.animates()
+        && ["width", "height"].into_iter().any(|property_name| {
+            crate::properties::property_key_for_name("LayoutComponent", property_name)
+                == Some(property_key)
+        })
+}
+
+/// Pinned `KeyedProperty::apply` forces a host-owned property to its complete
+/// keyed value, leaving the host to perform its own interpolation.
+fn keyed_property_actual_mix(
+    artboard: &ArtboardInstance,
+    target_local_id: usize,
+    property_key: u16,
+    mix: f32,
+) -> f32 {
+    if interpolator_host_overrides_keyed_interpolation(
+        artboard,
+        target_local_id,
+        property_key,
+    ) {
+        1.0
+    } else {
+        mix
+    }
+}

@@ -5251,11 +5251,10 @@ impl RuntimeFile {
                 self.cpp_data_converter_to_string(data_converter, input)?,
             ),
             "DataConverterRounder" => RuntimeConvertedDataValue::Number(match input {
-                RuntimeConvertedDataValue::Number(value) => {
-                    let decimals = data_converter.uint_property("decimals").unwrap_or(0) as f32;
-                    let rounder = 10.0_f32.powf(decimals);
-                    (value * rounder).round() / rounder
-                }
+                RuntimeConvertedDataValue::Number(value) => data_converter_rounder_value(
+                    *value,
+                    data_converter.uint_property("decimals").unwrap_or(0),
+                ),
                 _ => 0.0,
             }),
             "DataConverterRangeMapper" => RuntimeConvertedDataValue::Number(
@@ -9172,7 +9171,7 @@ fn cpp_data_converter_direct_output_type(
         "DataConverterListToLength" => RuntimeDataType::Number,
         "DataConverterNumberToList" => RuntimeDataType::List,
         "DataConverterRangeMapper" => RuntimeDataType::Number,
-        "DataConverterRounder" => RuntimeDataType::Number,
+        "DataConverterRounder" => data_converter_rounder_output_type(),
         "DataConverterStringPad" => RuntimeDataType::String,
         "DataConverterStringRemoveZeros" => RuntimeDataType::String,
         "DataConverterStringTrim" => RuntimeDataType::String,
@@ -9459,6 +9458,20 @@ fn cpp_pad_string(value: &[u8], length: u64, text: &[u8], pad_type: u64) -> Vec<
 
 pub fn data_converter_to_number_string_value(value: &[u8]) -> f32 {
     cpp_atof_f32(value)
+}
+
+/// Pinned `DataConverterRounder::convert` numeric branch. `decimals` is a
+/// generated CoreUint (`uint32_t`) even though the generic binary property
+/// representation is `u64`.
+pub fn data_converter_rounder_value(value: f32, decimals: u64) -> f32 {
+    let number_of_places = decimals as u32;
+    let rounder = 10.0_f32.powf(number_of_places as f32);
+    (value * rounder).round() / rounder
+}
+
+/// Pinned primary-header `DataConverterRounder::outputType()` inline.
+pub fn data_converter_rounder_output_type() -> RuntimeDataType {
+    RuntimeDataType::Number
 }
 
 fn cpp_atof_f32(value: &[u8]) -> f32 {

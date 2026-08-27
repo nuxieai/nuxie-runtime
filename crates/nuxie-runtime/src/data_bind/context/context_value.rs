@@ -806,9 +806,9 @@ impl RuntimeDataBindGraphConverter {
             | Self::OperationValue { .. }
             | Self::OperationViewModel { .. }
             | Self::SystemOperationValue { .. }
-            | Self::Rounder { .. }
             | Self::RangeMapper { .. }
             | Self::Formula { .. } => RuntimeDataType::Number,
+            Self::Rounder { .. } => crate::data_converter_rounder::output_type(),
             Self::Scripted { .. } => RuntimeDataType::Any,
             Self::External { program, .. } => match program.output_type() {
                 Some(RuntimeExternalDataOutputType::String) => RuntimeDataType::String,

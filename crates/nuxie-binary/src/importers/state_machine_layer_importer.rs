@@ -40,6 +40,7 @@ pub(super) fn update_context(definition: &'static Definition, context: &mut Impo
 #[derive(Debug)]
 struct CppStateMachineLayerResolution {
     object_id: u32,
+    owner_artboard_range: Option<(usize, usize)>,
     owner_artboard_resolve_boundary: usize,
     importer_resolve_boundary: usize,
     state_count: usize,
@@ -65,6 +66,7 @@ pub(super) fn validate_cpp_state_machine_layers(
     let artboard_ranges = runtime_artboard_ranges(objects, import_statuses);
     let artboard_indices = runtime_artboard_indices_by_file_index(objects, import_statuses);
     let mut current_artboard_index = None;
+    let mut current_state_machine_owner_artboard_range = None;
     let mut current_state_machine_owner_artboard_boundary = None;
     let mut layers = Vec::<CppStateMachineLayerResolution>::new();
     let mut current_layer: Option<usize> = None;
@@ -98,9 +100,11 @@ pub(super) fn validate_cpp_state_machine_layers(
         }
 
         if definition.name == "StateMachine" {
-            current_state_machine_owner_artboard_boundary = current_artboard_index
+            current_state_machine_owner_artboard_range = current_artboard_index
                 .and_then(|index| artboard_ranges.get(index))
-                .map(|(_, end)| *end);
+                .copied();
+            current_state_machine_owner_artboard_boundary =
+                current_state_machine_owner_artboard_range.map(|(_, end)| end);
             continue;
         }
 
@@ -110,6 +114,7 @@ pub(super) fn validate_cpp_state_machine_layers(
             }
             layers.push(CppStateMachineLayerResolution {
                 object_id: object.id,
+                owner_artboard_range: current_state_machine_owner_artboard_range,
                 owner_artboard_resolve_boundary: current_state_machine_owner_artboard_boundary
                     .unwrap_or(0),
                 importer_resolve_boundary: objects.len(),
@@ -154,7 +159,7 @@ pub(super) fn validate_cpp_state_machine_layers(
     }
 
     for layer in layers {
-        validate_cpp_state_machine_layer_transitions(&layer)?;
+        validate_cpp_state_machine_layer_transitions(&layer, objects, import_statuses)?;
     }
 
     Ok(())
@@ -162,6 +167,8 @@ pub(super) fn validate_cpp_state_machine_layers(
 
 fn validate_cpp_state_machine_layer_transitions(
     layer: &CppStateMachineLayerResolution,
+    objects: &[Option<RuntimeObject>],
+    import_statuses: &[RuntimeImportStatus],
 ) -> Result<()> {
     if (layer.object_id as usize) < layer.owner_artboard_resolve_boundary
         && (!layer.has_any_state || !layer.has_entry_state || !layer.has_exit_state)
@@ -170,6 +177,47 @@ fn validate_cpp_state_machine_layer_transitions(
             "state machine layer {} is missing required AnyState/EntryState/ExitState objects",
             layer.object_id
         );
+    }
+
+    // LayerState::onAddedDirty visits retained transitions in authored order
+    // and returns the first StateTransition lifecycle error. Conditions have
+    // no-op dirty/clean hooks at this pin; the only fallible transition hook
+    // resolves a non-default interpolator id to KeyFrameInterpolator.
+    if let Some(owner_artboard_range) = layer.owner_artboard_range {
+        let mut slots =
+            runtime_artboard_local_slots(objects, import_statuses, owner_artboard_range);
+        validate_cpp_artboard_local_slots(&mut slots, objects);
+        for transition in &layer.transitions {
+            // A transition attached through the still-latest LayerState
+            // importer after its owner Artboard initialized is retained but
+            // never receives onAddedDirty.
+            if transition.file_index >= owner_artboard_range.1 {
+                continue;
+            }
+            let Some(interpolator_id) = objects[transition.file_index]
+                .as_ref()
+                .and_then(|object| object.uint_property("interpolatorId"))
+            else {
+                continue;
+            };
+            if interpolator_id == u64::from(u32::MAX) {
+                continue;
+            }
+            let interpolator = usize::try_from(interpolator_id).ok().and_then(|local_id| {
+                local_object_reference(&slots, objects, Some(local_id as u64))
+            });
+            let is_key_frame_interpolator = interpolator
+                .and_then(|object| definition_by_type_key(object.type_key))
+                .is_some_and(|definition| definition.is_a("KeyFrameInterpolator"));
+            if !is_key_frame_interpolator {
+                bail!(
+                    "state transition object {} ({}) has missing KeyFrameInterpolator {}",
+                    transition.object_id,
+                    transition.type_name,
+                    interpolator_id
+                );
+            }
+        }
     }
 
     for transition in &layer.transitions {
@@ -233,8 +281,7 @@ impl RuntimeFile {
         let mut state_machines = Vec::<RuntimeStateMachine<'_>>::new();
         let mut state_machine_artboard_owners = Vec::new();
         let mut layer_importer_resolve_boundaries = Vec::<Vec<usize>>::new();
-        let mut current_state_machine =
-            None::<state_machine_importer::StateMachineImporter>;
+        let mut current_state_machine = None::<state_machine_importer::StateMachineImporter>;
         // StateMachineLayerImporter captures the latest Artboard at the
         // instant the layer is constructed. That identity survives later
         // Artboard and StateMachine importers (`file.cpp:435-447`;
@@ -244,9 +291,8 @@ impl RuntimeFile {
         // does not replace the latest LayerState, and a new StateMachine does
         // not replace either key.
         let mut current_layer_state: Option<(usize, usize, usize, Option<usize>)> = None;
-        let mut current_transition: Option<
-            state_transition_importer::StateTransitionImporter,
-        > = None;
+        let mut current_transition: Option<state_transition_importer::StateTransitionImporter> =
+            None;
         // ImportStack retains the latest importer independently for every
         // type key. Listener and ListenerInputType ownership therefore
         // survives unrelated records, layer/state changes, and even a later
@@ -301,8 +347,8 @@ impl RuntimeFile {
                                 // `StateMachineImporter::readNullObject` appends
                                 // a null input occurrence. Keep the slot so
                                 // every later `inputId` retains its C++ index.
-                                let consumed = state_machine_importer
-                                    .read_null_object(&mut state_machines);
+                                let consumed =
+                                    state_machine_importer.read_null_object(&mut state_machines);
                                 debug_assert!(consumed);
                             }
                         }
@@ -335,9 +381,7 @@ impl RuntimeFile {
                 state_machine_artboard_owners.push(current_artboard_index);
                 layer_importer_resolve_boundaries.push(Vec::new());
                 let next_state_machine_importer =
-                    state_machine_importer::StateMachineImporter::new(
-                        state_machines.len() - 1,
-                    );
+                    state_machine_importer::StateMachineImporter::new(state_machines.len() - 1);
                 if let Some(previous_state_machine_importer) = current_state_machine.take() {
                     previous_state_machine_importer.resolve();
                 }
@@ -401,19 +445,14 @@ impl RuntimeFile {
                 // StateMachineLayer::import appends through the retained
                 // StateMachineImporter before File replaces/resolves the
                 // previous StateMachineLayerImporter.
-                let layer_index =
-                    state_machine_importer.add_layer(&mut state_machines, object);
+                let layer_index = state_machine_importer.add_layer(&mut state_machines, object);
                 if let Some((previous_state_machine_index, previous_layer_index, _)) = current_layer
                 {
                     layer_importer_resolve_boundaries[previous_state_machine_index]
                         [previous_layer_index] = file_index;
                 }
                 layer_importer_resolve_boundaries[state_machine_index].push(self.objects.len());
-                current_layer = Some((
-                    state_machine_index,
-                    layer_index,
-                    current_artboard_index,
-                ));
+                current_layer = Some((state_machine_index, layer_index, current_artboard_index));
                 continue;
             }
 

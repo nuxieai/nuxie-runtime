@@ -1,6 +1,6 @@
 use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "tools"))]
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 
@@ -41,9 +41,9 @@ impl Ord for PointKey {
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "tools"))]
 type EdgeMap = BTreeMap<PointKey, Vec2D>;
-#[cfg(not(feature = "testing"))]
+#[cfg(not(any(test, feature = "tools")))]
 type EdgeMap = HashMap<PointKey, Vec2D>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -372,11 +372,11 @@ fn sort_rect_events(
     start..output.len()
 }
 fn first_horizontal_key(map: &EdgeMap) -> Option<PointKey> {
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "tools"))]
     {
         map.keys().next().copied()
     }
-    #[cfg(not(feature = "testing"))]
+    #[cfg(not(any(test, feature = "tools")))]
     {
         map.keys().next().copied()
     }

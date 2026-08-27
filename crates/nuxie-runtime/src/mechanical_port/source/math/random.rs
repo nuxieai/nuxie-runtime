@@ -1,62 +1,52 @@
-#[cfg(any(
-    feature = "testing",
-    all(target_arch = "wasm32", target_os = "unknown")
-))]
-use std::sync::{LazyLock, Mutex};
-
-#[cfg(feature = "testing")]
 use std::collections::VecDeque;
+use std::sync::{LazyLock, Mutex, MutexGuard};
 
 pub struct RandomProvider;
 
-#[cfg(feature = "testing")]
 #[derive(Default)]
 struct TestingRandomState {
     calls: i32,
     results: VecDeque<f32>,
 }
 
-#[cfg(feature = "testing")]
-static TESTING_RANDOM_STATE: LazyLock<Mutex<TestingRandomState>> =
-    LazyLock::new(|| Mutex::new(TestingRandomState::default()));
+#[derive(Default)]
+struct RandomState {
+    testing: Option<TestingRandomState>,
+    wasm_seed: u64,
+}
 
-#[cfg(all(
-    not(feature = "testing"),
-    target_arch = "wasm32",
-    target_os = "unknown"
-))]
-static WASM_RANDOM_STATE: LazyLock<Mutex<u64>> = LazyLock::new(|| Mutex::new(0));
+static RANDOM_STATE: LazyLock<Mutex<RandomState>> =
+    LazyLock::new(|| Mutex::new(RandomState::default()));
 
 impl RandomProvider {
-    #[cfg(feature = "testing")]
+    /// Enter the pinned `TESTING` FIFO mode and append a deterministic draw.
     pub fn add_random_value(value: f32) {
-        testing_state().results.push_back(value);
+        random_state()
+            .testing
+            .get_or_insert_with(TestingRandomState::default)
+            .results
+            .push_back(value);
     }
 
-    #[cfg(feature = "testing")]
+    /// Match pinned `clearRandoms`: remain in test mode with an empty FIFO.
     pub fn clear_randoms() {
-        *testing_state() = TestingRandomState::default();
+        random_state().testing = Some(TestingRandomState::default());
+    }
+
+    /// Leave the downstream runtime test adaptation and resume platform draws.
+    pub fn clear_testing_mode() {
+        random_state().testing = None;
     }
 
     /// Seed the same process-global generator used by `generate_random_float`.
     pub fn seed(seed: u32) {
-        #[cfg(feature = "testing")]
-        let _ = seed;
-
-        #[cfg(all(
-            not(feature = "testing"),
-            target_arch = "wasm32",
-            target_os = "unknown"
-        ))]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
             // Emscripten's musl `srand` stores the wrapping 32-bit `seed - 1`.
-            *wasm_random_state() = u64::from(seed.wrapping_sub(1));
+            random_state().wasm_seed = u64::from(seed.wrapping_sub(1));
         }
 
-        #[cfg(all(
-            not(feature = "testing"),
-            not(all(target_arch = "wasm32", target_os = "unknown"))
-        ))]
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         native_seed(seed);
     }
 
@@ -68,60 +58,43 @@ impl RandomProvider {
         }
     }
 
-    #[cfg(feature = "testing")]
     pub fn generate_random_float() -> f32 {
-        let mut state = testing_state();
-        state.calls += 1;
-        state.results.pop_front().unwrap_or(0.0)
+        let mut state = random_state();
+        if let Some(testing) = &mut state.testing {
+            testing.calls += 1;
+            return testing.results.pop_front().unwrap_or(0.0);
+        }
+
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        {
+            state.wasm_seed = 6_364_136_223_846_793_005_u64
+                .wrapping_mul(state.wasm_seed)
+                .wrapping_add(1);
+            return (state.wasm_seed >> 33) as u32 as f32 / 2_147_483_647.0;
+        }
+
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        {
+            drop(state);
+            native_draw()
+        }
     }
 
-    #[cfg(all(
-        not(feature = "testing"),
-        target_arch = "wasm32",
-        target_os = "unknown"
-    ))]
-    pub fn generate_random_float() -> f32 {
-        let mut state = wasm_random_state();
-        *state = 6_364_136_223_846_793_005_u64
-            .wrapping_mul(*state)
-            .wrapping_add(1);
-        (*state >> 33) as u32 as f32 / 2_147_483_647.0
-    }
-
-    #[cfg(all(
-        not(feature = "testing"),
-        not(all(target_arch = "wasm32", target_os = "unknown"))
-    ))]
-    pub fn generate_random_float() -> f32 {
-        native_draw()
-    }
-
-    #[cfg(feature = "testing")]
     pub fn total_calls() -> i32 {
-        testing_state().calls
+        random_state()
+            .testing
+            .as_ref()
+            .map_or(0, |testing| testing.calls)
     }
 }
 
-#[cfg(feature = "testing")]
-fn testing_state() -> std::sync::MutexGuard<'static, TestingRandomState> {
-    TESTING_RANDOM_STATE
+fn random_state() -> MutexGuard<'static, RandomState> {
+    RANDOM_STATE
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 #[cfg(all(
-    not(feature = "testing"),
-    target_arch = "wasm32",
-    target_os = "unknown"
-))]
-fn wasm_random_state() -> std::sync::MutexGuard<'static, u64> {
-    WASM_RANDOM_STATE
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-#[cfg(all(
-    not(feature = "testing"),
     not(all(target_arch = "wasm32", target_os = "unknown")),
     target_os = "android"
 ))]
@@ -130,14 +103,10 @@ unsafe extern "C" {
     fn rand() -> libc::c_int;
 }
 
-#[cfg(all(
-    not(feature = "testing"),
-    not(all(target_arch = "wasm32", target_os = "unknown"))
-))]
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 fn native_seed(seed: u32) {
     #[cfg(not(target_os = "android"))]
-    // SAFETY: this calls the same process-global C runtime function as pinned
-    // C++; runtime use serializes layer initialization and random draws.
+    // SAFETY: this calls the same process-global C runtime function as pinned C++.
     unsafe {
         libc::srand(seed)
     };
@@ -148,10 +117,7 @@ fn native_seed(seed: u32) {
     };
 }
 
-#[cfg(all(
-    not(feature = "testing"),
-    not(all(target_arch = "wasm32", target_os = "unknown"))
-))]
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 fn native_draw() -> f32 {
     #[cfg(not(target_os = "android"))]
     // SAFETY: `rand` takes no arguments and returns a C `int`.
@@ -166,7 +132,6 @@ fn native_draw() -> f32 {
 }
 
 #[cfg(all(
-    not(feature = "testing"),
     not(all(target_arch = "wasm32", target_os = "unknown")),
     not(any(target_os = "android", target_os = "wasi"))
 ))]
@@ -175,7 +140,6 @@ fn platform_rand_max() -> f32 {
 }
 
 #[cfg(all(
-    not(feature = "testing"),
     not(all(target_arch = "wasm32", target_os = "unknown")),
     any(target_os = "android", target_os = "wasi")
 ))]

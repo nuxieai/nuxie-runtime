@@ -48,7 +48,9 @@ impl RuntimeFocusActionTarget {
             (0..artboard.component_child_len(target_handle)).find_map(|index| {
                 let child = artboard.component_child_at(target_handle, index)?;
                 let child = artboard.component_at(child);
-                (child.type_name == "FocusData").then_some(child.local_id)
+                nuxie_schema::definition_by_name(child.type_name)
+                    .is_some_and(|definition| definition.is_a("FocusData"))
+                    .then_some(child.local_id)
             });
         let Some(focus_data_local_id) = focus_data_local_id else {
             return false;

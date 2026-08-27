@@ -38,13 +38,12 @@ impl ViewModelInstanceArtboardRuntime {
                 .value
                 .cell()
                 .set_value(RuntimeViewModelCellValue::Artboard(u32::MAX));
-            if artboard.is_some() && !changed {
+            if !changed {
                 // C++ `asset()` dirties bindings even when the retained
-                // BindableArtboard pointer is unchanged.
+                // BindableArtboard pointer is unchanged, including nullptr.
                 self.value.cell().notify_bindings_value_changed();
-                return true;
             }
-            return changed;
+            return true;
         }
         self.runtime_state.borrow_mut().bindable_artboard = artboard;
         let changed = self
@@ -69,6 +68,11 @@ impl ViewModelInstanceArtboardRuntime {
             .as_ref()
             .map(|artboard| artboard.name().to_owned())
             .unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    fn testing_value(&self) -> Option<RuntimeBindableArtboard> {
+        self.runtime_state.borrow().bindable_artboard.clone()
     }
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
@@ -151,5 +155,18 @@ mod upstream_data_binding_artboard_tests {
         assert_eq!(property.artboard_name(), "ch2");
         assert!(property.set_value(None));
         assert_eq!(property.artboard_name(), "");
+    }
+
+    #[test]
+    fn setting_an_unchanged_null_artboard_still_dirties_bindings() {
+        let (_runtime, property) = artboard_property();
+        assert!(property.set_value(None));
+        assert!(property.testing_value().is_none());
+
+        let dependent = RuntimeCellDirtSink::new();
+        property.value.cell().add_dependent(&dependent);
+
+        assert!(property.set_value(None));
+        assert!(dependent.take_dirt().contains(RuntimeCellDirt::BINDINGS));
     }
 }

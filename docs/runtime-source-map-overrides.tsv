@@ -11,6 +11,7 @@ constraints/scrolling/clamped_scroll_physics.cpp	translated	crates/nuxie-runtime
 importers/state_transition_importer.cpp	translated	crates/nuxie-binary/src/importers/state_transition_importer.rs	complete pinned owner translated
 importers/transition_viewmodel_condition_importer.cpp	translated	crates/nuxie-binary/src/importers/transition_viewmodel_condition_importer.rs	complete pinned owner translated
 core/binary_data_reader.cpp	translated	crates/nuxie-binary/src/binary_data_reader.rs	complete pinned owner translated under safe slice-plus-offset representation
+core/binary_writer.cpp	translated	crates/nuxie-binary/src/binary_writer.rs	complete pinned owner translated under borrowed stream and explicit little-endian representation
 core/field_types/core_bool_type.cpp	translated	crates/nuxie-binary/src/core/field_types/core_bool_type.rs	runtime profile exact; ID is schema-owned and WITH_RIVE_TOOLS is excluded
 core/field_types/core_bytes_type.cpp	translated	crates/nuxie-binary/src/core/field_types/core_bytes_type.rs	runtime profile exact under owned-byte safety adaptation; ID is schema-owned and WITH_RIVE_TOOLS is excluded
 core/field_types/core_color_type.cpp	translated	crates/nuxie-binary/src/core/field_types/core_color_type.rs	runtime profile exact under bit-preserving u32 color representation; ID is schema-owned and WITH_RIVE_TOOLS is excluded

@@ -5211,7 +5211,9 @@ impl RuntimeFile {
                 ))
             }
             "DataConverterListToLength" => {
-                RuntimeConvertedDataValue::Number(input.list_len().unwrap_or(0) as f32)
+                RuntimeConvertedDataValue::Number(data_converter_list_to_length_value(
+                    input.list_len(),
+                ))
             }
             "DataConverterNumberToList" => match input {
                 RuntimeConvertedDataValue::List(_)
@@ -9175,7 +9177,7 @@ fn cpp_data_converter_direct_output_type(
         "DataConverterBooleanNegate" => data_converter_boolean_negate_output_type(),
         "DataConverterFormula" => RuntimeDataType::Number,
         "DataConverterInterpolator" => RuntimeDataType::Input,
-        "DataConverterListToLength" => RuntimeDataType::Number,
+        "DataConverterListToLength" => data_converter_list_to_length_output_type(),
         "DataConverterNumberToList" => RuntimeDataType::List,
         "DataConverterRangeMapper" => RuntimeDataType::Number,
         "DataConverterRounder" => data_converter_rounder_output_type(),
@@ -9476,6 +9478,17 @@ pub fn data_converter_boolean_negate_value(value: Option<bool>) -> bool {
 /// Pinned primary-header `DataConverterBooleanNegate::outputType()` inline.
 pub fn data_converter_boolean_negate_output_type() -> RuntimeDataType {
     RuntimeDataType::Boolean
+}
+
+/// Pinned `DataConverterListToLength::convert` list branch and non-list
+/// default branch. `None` represents any non-`DataValueList` input.
+pub fn data_converter_list_to_length_value(item_count: Option<usize>) -> f32 {
+    item_count.unwrap_or(0) as f32
+}
+
+/// Pinned primary-header `DataConverterListToLength::outputType()` inline.
+pub fn data_converter_list_to_length_output_type() -> RuntimeDataType {
+    RuntimeDataType::Number
 }
 
 /// Pinned `DataConverterRounder::convert` numeric branch. `decimals` is a

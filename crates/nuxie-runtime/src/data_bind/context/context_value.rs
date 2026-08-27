@@ -801,14 +801,13 @@ impl RuntimeDataBindGraphConverter {
     /// (`data_bind.cpp:165-173,251-299`).
     pub(crate) fn cpp_output_data_type(&self) -> RuntimeDataType {
         match self {
-            Self::PassThrough
-            | Self::ToNumber
-            | Self::ListToLength
+            Self::PassThrough | Self::ToNumber
             | Self::OperationValue { .. }
             | Self::OperationViewModel { .. }
             | Self::SystemOperationValue { .. }
             | Self::RangeMapper { .. }
             | Self::Formula { .. } => RuntimeDataType::Number,
+            Self::ListToLength => crate::data_converter_list_to_length::output_type(),
             Self::Rounder { .. } => crate::data_converter_rounder::output_type(),
             Self::Scripted { .. } => RuntimeDataType::Any,
             Self::External { program, .. } => match program.output_type() {

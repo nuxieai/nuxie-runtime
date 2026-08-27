@@ -8,6 +8,9 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+mod artboard_list_map_rule;
+use artboard_list_map_rule::component_list_map_rules;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct GraphFile {
     pub file_assets: Vec<FileAssetNode>,
@@ -3223,54 +3226,6 @@ fn component_lists(file: &RuntimeFile, local_objects: &[LocalObject]) -> Vec<Com
                 map_rules: component_list_map_rules(file, local_objects, object),
             })
         })
-        .collect()
-}
-
-fn component_list_map_rules(
-    file: &RuntimeFile,
-    local_objects: &[LocalObject],
-    component_list: &RuntimeObject,
-) -> Vec<ComponentListMapRuleNode> {
-    let mut map_rules = BTreeMap::new();
-    for rule in file.artboard_component_list_map_rules_for_object(component_list) {
-        let state_machine_ids = local_objects
-            .iter()
-            .find(|local| local.global_id == rule.object.id)
-            .map(|rule_local| {
-                local_objects
-                    .iter()
-                    .filter_map(|local| {
-                        let object = runtime_object_for_local(file, local_objects, local.local_id)?;
-                        (object.type_name == "NestedStateMachine"
-                            && object.uint_property("parentId") == Some(rule_local.local_id as u64))
-                        .then(|| {
-                            object
-                                .uint_property("animationId")
-                                .and_then(|id| usize::try_from(id).ok())
-                        })
-                        .flatten()
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        map_rules.insert(
-            cpp_i32_from_runtime_uint(rule.view_model_id),
-            (
-                cpp_i32_from_runtime_uint(rule.artboard_id),
-                state_machine_ids,
-            ),
-        );
-    }
-
-    map_rules
-        .into_iter()
-        .map(
-            |(view_model_id, (artboard_id, state_machine_ids))| ComponentListMapRuleNode {
-                view_model_id,
-                artboard_id,
-                state_machine_ids,
-            },
-        )
         .collect()
 }
 

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail};
+mod artboard_list_map_rule;
 mod binary_data_reader;
 mod binary_writer;
 
@@ -713,60 +714,6 @@ impl RuntimeFile {
         self.resolved_axis_animation_for_joystick_object(joystick, "yId")
     }
 
-    pub fn artboard_component_list_map_rules(
-        &self,
-        list_id: usize,
-    ) -> Vec<RuntimeArtboardListMapRule<'_>> {
-        let Some(list) = self.object(list_id) else {
-            return Vec::new();
-        };
-
-        self.artboard_component_list_map_rules_for_object(list)
-    }
-
-    pub fn artboard_component_list_map_rules_for_object(
-        &self,
-        list: &RuntimeObject,
-    ) -> Vec<RuntimeArtboardListMapRule<'_>> {
-        if list.type_name != "ArtboardComponentList" {
-            return Vec::new();
-        }
-
-        let Some((_, range, slots, list_local_index)) =
-            self.cpp_artboard_local_context_for_object(list)
-        else {
-            return Vec::new();
-        };
-
-        self.objects[range.0..range.1]
-            .iter()
-            .enumerate()
-            .filter_map(|(offset, object)| {
-                let file_index = range.0 + offset;
-                if self.import_status(file_index) != Some(RuntimeImportStatus::Imported) {
-                    return None;
-                }
-
-                let object = object.as_ref()?;
-                if object.type_name != "ArtboardListMapRule" {
-                    return None;
-                }
-                if !slots.iter().any(|slot| *slot == Some(file_index)) {
-                    return None;
-                }
-                if object.uint_property("parentId") != Some(list_local_index as u64) {
-                    return None;
-                }
-
-                Some(RuntimeArtboardListMapRule {
-                    object,
-                    view_model_id: object.uint_property("viewModelId")?,
-                    artboard_id: object.uint_property("artboardId")?,
-                })
-            })
-            .collect()
-    }
-
     pub fn resolved_artboard_for_artboard_component_list_item(
         &self,
         list_id: usize,
@@ -796,9 +743,8 @@ impl RuntimeFile {
         let view_model_id = referenced_instance.object.uint_property("viewModelId")?;
 
         if let Some(rule) = self
-            .artboard_component_list_map_rules_for_object(list)
+            .registered_artboard_component_list_map_rules_for_object(list)
             .into_iter()
-            .rev()
             .find(|rule| rule.view_model_id == view_model_id)
             && let Ok(artboard_index) = usize::try_from(rule.artboard_id)
             && let Some(object) = self.artboard(artboard_index)
@@ -11539,11 +11485,7 @@ fn cpp_artboard_local_slot_is_valid(
     }
 
     if definition.name == "ArtboardListMapRule" {
-        let Some(parent) = local_object_reference(slots, objects, object.uint_property("parentId"))
-        else {
-            return false;
-        };
-        return runtime_object_is_cpp_artboard_component_list(parent);
+        return artboard_list_map_rule::on_added_dirty_parent_is_valid(object, slots, objects);
     }
 
     true

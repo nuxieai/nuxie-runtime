@@ -259,8 +259,9 @@ impl RuntimeFile {
         let mut current_gamepad_input_type: Option<
             listener_input_type_gamepad_importer::ListenerInputTypeGamepadImporter,
         > = None;
-        let mut current_semantic_input_type: Option<RuntimeStateMachineListenerInputTypeOwner> =
-            None;
+        let mut current_semantic_input_type: Option<
+            listener_input_type_semantic_importer::ListenerInputTypeSemanticImporter,
+        > = None;
         let mut current_layer_component: Option<RuntimeStateMachineLayerComponentOwner> = None;
         let mut current_state_machine_scripted_object: Option<
             RuntimeStateMachineScriptedObjectOwner,
@@ -353,7 +354,8 @@ impl RuntimeFile {
                     "KeyboardInput" => current_keyboard_input_type,
                     "GamepadInput" => current_gamepad_input_type
                         .map(|importer| importer.listener_input_type_gamepad()),
-                    "SemanticInput" => current_semantic_input_type,
+                    "SemanticInput" => current_semantic_input_type
+                        .map(|importer| importer.listener_input_type_semantic()),
                     _ => unreachable!("the enclosing match filters concrete listener inputs"),
                 };
                 if let Some(owner) = owner
@@ -731,7 +733,13 @@ impl RuntimeFile {
                             }
                         }
                         "ListenerInputTypeSemantic" => {
-                            current_semantic_input_type = input_owner;
+                            if let Some(input_owner) = input_owner {
+                                let next = listener_input_type_semantic_importer::
+                                    ListenerInputTypeSemanticImporter::new(input_owner);
+                                if let Some(previous) = current_semantic_input_type.replace(next) {
+                                    let _ = previous.resolve();
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -756,6 +764,9 @@ impl RuntimeFile {
         }
         if let Some(gamepad_importer) = current_gamepad_input_type {
             let _ = gamepad_importer.resolve();
+        }
+        if let Some(semantic_importer) = current_semantic_input_type {
+            let _ = semantic_importer.resolve();
         }
 
         resolve_runtime_state_machine_transition_targets(

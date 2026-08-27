@@ -4374,9 +4374,6 @@ impl StateMachineInstance {
             let item =
                 hit.process_gamepad_invocation(self, artboard, invocation, already_dispatched);
             hit_result = hit_result.strongest(item);
-            if hit_result == HitResult::HitOpaque {
-                break;
-            }
         }
         self.hit_components = hit_components;
         if self.script_error.is_some() {

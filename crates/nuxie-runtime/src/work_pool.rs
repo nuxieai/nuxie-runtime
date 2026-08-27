@@ -2,7 +2,7 @@
 //!
 //! This ports Rive's `WorkTask` state and `WorkPool` lifecycle from
 //! `include/rive/async/{work_task,work_pool}.hpp` and
-//! `src/async/work_pool.cpp` at `d788e8ec`.
+//! `src/async/work_pool.cpp` at `4ac7b327`.
 
 use std::collections::VecDeque;
 #[cfg(feature = "threading")]
@@ -201,12 +201,13 @@ impl Drop for WorkPool {
             .work_queue
             .get_mut()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        for task in work_queue.drain(..) {
+        for task in work_queue.iter() {
             if task.state().is_cancelled() {
                 task.state().set_status(WorkStatus::Cancelled);
                 task.on_cancel();
             }
         }
+        work_queue.clear();
     }
 }
 
@@ -352,15 +353,28 @@ impl Drop for WorkPool {
             let _ = thread.join();
         }
 
-        let mut abandoned = Vec::new();
-        abandoned.extend(lock_unpoisoned(&self.pool.completed).drain(..));
-        abandoned.extend(lock_unpoisoned(&self.pool.work).tasks.drain(..));
-        for task in abandoned {
+        let completed = lock_unpoisoned(&self.pool.completed)
+            .drain(..)
+            .collect::<Vec<_>>();
+        for task in &completed {
             if task.state().is_cancelled() {
                 task.state().set_status(WorkStatus::Cancelled);
                 task.on_cancel();
             }
         }
+        drop(completed);
+
+        let queued = lock_unpoisoned(&self.pool.work)
+            .tasks
+            .drain(..)
+            .collect::<Vec<_>>();
+        for task in &queued {
+            if task.state().is_cancelled() {
+                task.state().set_status(WorkStatus::Cancelled);
+                task.on_cancel();
+            }
+        }
+        drop(queued);
     }
 }
 

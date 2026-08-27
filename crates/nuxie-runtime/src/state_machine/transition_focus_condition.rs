@@ -11,7 +11,10 @@ use nuxie_binary::{RuntimeFile, RuntimeObject};
 #[derive(Debug, Clone, Copy)]
 pub(super) struct RuntimeTransitionFocusCondition {
     target_local_id: Option<usize>,
-    op: TransitionConditionOp,
+    // C++ casts the retained uint without normalizing it and then compares it
+    // only with `TransitionConditionOp::equal`. Every other value, including
+    // an unknown future value, therefore takes the negating branch.
+    op_value: u32,
 }
 
 impl RuntimeTransitionFocusCondition {
@@ -24,11 +27,17 @@ impl RuntimeTransitionFocusCondition {
                 comparators
                     .right
                     .filter(|comparator| {
-                        comparator.type_name == "TransitionPropertyComponentComparator"
+                        nuxie_schema::definition_by_name(comparator.type_name).is_some_and(
+                            |definition| definition.is_a("TransitionPropertyComponentComparator"),
+                        )
                     })
                     .or_else(|| {
                         comparators.left.filter(|comparator| {
-                            comparator.type_name == "TransitionPropertyComponentComparator"
+                            nuxie_schema::definition_by_name(comparator.type_name).is_some_and(
+                                |definition| {
+                                    definition.is_a("TransitionPropertyComponentComparator")
+                                },
+                            )
                         })
                     })
             })
@@ -36,14 +45,24 @@ impl RuntimeTransitionFocusCondition {
             .map(RuntimeTransitionPropertyComponentComparator::local_id);
         Self {
             target_local_id,
-            op: TransitionConditionOp::from_value(object.uint_property("opValue").unwrap_or(0)),
+            op_value: object
+                .uint_property("opValue")
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(0),
         }
     }
 
     pub(super) fn new(target_local_id: usize, op: TransitionConditionOp) -> Self {
         Self {
             target_local_id: Some(target_local_id),
-            op,
+            op_value: match op {
+                TransitionConditionOp::Equal => 0,
+                TransitionConditionOp::NotEqual => 1,
+                TransitionConditionOp::LessThanOrEqual => 2,
+                TransitionConditionOp::GreaterThanOrEqual => 3,
+                TransitionConditionOp::LessThan => 4,
+                TransitionConditionOp::GreaterThan => 5,
+            },
         }
     }
 
@@ -56,7 +75,7 @@ impl RuntimeTransitionFocusCondition {
             return false;
         };
         let focused = executor.target_has_focus(target_local_id);
-        if self.op == TransitionConditionOp::Equal {
+        if self.op_value == 0 {
             focused
         } else {
             !focused

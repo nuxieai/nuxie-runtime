@@ -10,7 +10,9 @@ pub(super) struct RuntimeTransitionPropertyComponentComparator {
 
 impl RuntimeTransitionPropertyComponentComparator {
     pub(super) fn from_object(object: &RuntimeObject) -> Option<Self> {
-        if object.type_name != "TransitionPropertyComponentComparator" {
+        if !nuxie_schema::definition_by_name(object.type_name)
+            .is_some_and(|definition| definition.is_a("TransitionPropertyComponentComparator"))
+        {
             return None;
         }
         Some(Self {

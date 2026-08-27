@@ -187,6 +187,9 @@ impl RuntimeLinearAnimation {
                     self.end_time() - local_time
                 }
             }
+            // `loop_kind` rejects this before constructing the enum, matching
+            // the pinned `RIVE_UNREACHABLE` after LinearAnimation's switch.
+            AnimationLoop::Raw => unreachable!("invalid LinearAnimation loopValue"),
         }
     }
 

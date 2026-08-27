@@ -4154,9 +4154,9 @@ fn runtime_data_bind_graph_formula_converter(
             "FormulaTokenFunction" => {
                 let function_type = token.object.uint_property("functionType").unwrap_or(0);
                 let random_mode = converter.uint_property("randomModeValue").unwrap_or(0);
-                if function_type == 16 && random_mode > 2 {
-                    return RuntimeDataBindGraphConverter::Unsupported;
-                }
+                // Pinned `getRandom` treats every raw value other than
+                // `always` as a cached mode; only exact `sourceChange` dirt
+                // clears that cache. Preserve invalid serialized values too.
                 tokens.push(RuntimeDataBindGraphFormulaToken::Function {
                     function_type,
                     arguments_count: token.arguments_count,

@@ -4,14 +4,21 @@ pub(crate) enum AnimationLoop {
     OneShot,
     Loop,
     PingPong,
+    /// A raw value outside the generated `Loop` enum's authored domain.
+    ///
+    /// `LinearAnimationInstance::loopValue(int)` deliberately retains any
+    /// signed integer. The pinned `advance` switch has no default arm, while
+    /// `keepGoing` compares the raw value only with `oneShot`.
+    Raw,
 }
 
 impl AnimationLoop {
     pub(crate) fn from_loop_value(value: i32) -> Self {
         match value {
+            0 => Self::OneShot,
             1 => Self::Loop,
             2 => Self::PingPong,
-            _ => Self::OneShot,
+            _ => Self::Raw,
         }
     }
 }
@@ -146,7 +153,16 @@ impl LinearAnimationInstance {
         speed_multiplier: f32,
     ) -> Option<Self> {
         let definition = animation.resolve(&animation_definitions, &empty_animation_definition)?;
-        let time = definition.start_time_with_speed(speed_multiplier);
+        // Keep the two pinned sign decisions separate. Collapsing them to
+        // `definition.start_time_with_speed(speed_multiplier)` changes the
+        // result for signed zero and NaN because that helper tests a product,
+        // while the instance constructor first selects `startTime` versus
+        // `endTime` from `speedMultiplier` alone.
+        let time = if speed_multiplier >= 0.0 {
+            definition.start_time()
+        } else {
+            definition.end_time()
+        };
         Some(Self {
             animation,
             animation_definitions,
@@ -487,14 +503,14 @@ impl LinearAnimationInstance {
             self.key_frame_value_context(),
             Some(self),
         );
-        let scripted_bind_more = self
-            .pending_scripted_bind_advance
-            .take()
-            .is_some_and(|elapsed_seconds| {
-                self.scripted_interpolators
-                    .borrow_mut()
-                    .advance_stateful_converters(elapsed_seconds)
-            });
+        let scripted_bind_more =
+            self.pending_scripted_bind_advance
+                .take()
+                .is_some_and(|elapsed_seconds| {
+                    self.scripted_interpolators
+                        .borrow_mut()
+                        .advance_stateful_converters(elapsed_seconds)
+                });
         changed || scripted_bind_more
     }
 
@@ -631,7 +647,11 @@ impl LinearAnimationInstance {
     }
 
     pub(crate) fn reset(&mut self, animation: &RuntimeLinearAnimation, speed_multiplier: f32) {
-        self.time = animation.start_time_with_speed(speed_multiplier);
+        self.time = if speed_multiplier >= 0.0 {
+            animation.start_time()
+        } else {
+            animation.end_time()
+        };
     }
 
     pub fn directed_speed(&self, animation: &RuntimeLinearAnimation) -> f32 {
@@ -706,7 +726,8 @@ impl LinearAnimationInstance {
             &mut dyn FnMut(RuntimeKeyedCallback, Option<StateMachineReportedEvent>),
         >,
     ) -> bool {
-        self.pending_scripted_bind_advance.set(Some(elapsed_seconds));
+        self.pending_scripted_bind_advance
+            .set(Some(elapsed_seconds));
         let delta_seconds = elapsed_seconds * animation.speed * self.direction;
         self.spilled_time = 0.0;
         if delta_seconds == 0.0 {
@@ -823,6 +844,10 @@ impl LinearAnimationInstance {
                     from_pong = !from_pong;
                 }
             }
+            // The pinned switch has no default arm. An arbitrary value stored
+            // by `loopValue(int)` therefore performs no boundary correction;
+            // `keepGoing` below still treats it as non-one-shot.
+            AnimationLoop::Raw => {}
         }
 
         if kill_spilled_time {

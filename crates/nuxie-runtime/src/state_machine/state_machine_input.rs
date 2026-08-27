@@ -12,6 +12,22 @@ pub struct RuntimeStateMachineInput {
 }
 
 impl RuntimeStateMachineInput {
+    /// Value exposed by the generated `StateMachineBoolBase` getter.
+    pub(crate) fn bool_value(&self) -> Option<bool> {
+        match self.value {
+            StateMachineInputDefaultValue::Bool(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Value exposed by the generated `StateMachineNumberBase` getter.
+    pub(crate) fn number_value(&self) -> Option<f32> {
+        match self.value {
+            StateMachineInputDefaultValue::Number(value) => Some(value),
+            _ => None,
+        }
+    }
+
     /// Mechanical translation of `StateMachineInput::onAddedDirty`.
     #[allow(dead_code)]
     pub(crate) fn on_added_dirty(&self) -> bool {

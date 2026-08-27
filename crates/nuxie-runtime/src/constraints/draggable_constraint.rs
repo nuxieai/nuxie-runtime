@@ -67,7 +67,7 @@ pub(crate) fn runtime_draggable_proxies(artboard: &ArtboardInstance) -> Vec<Runt
             proxies.push(scrolling::scroll_constraint_proxy::new(handle, viewport));
         }
         if component.concrete.scroll_bar.is_some() {
-            scrolling::scroll_bar_constraint_proxy::append_proxies(artboard, handle, &mut proxies);
+            scrolling::scroll_bar_constraint::append_proxies(artboard, handle, &mut proxies);
         }
     }
     proxies

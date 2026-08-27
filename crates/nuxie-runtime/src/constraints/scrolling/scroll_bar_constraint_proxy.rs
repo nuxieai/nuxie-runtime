@@ -1,51 +1,7 @@
 //! Direct owner for pinned `src/constraints/scrolling/scroll_bar_constraint_proxy.cpp`.
 
 use super::super::*;
-
-pub(in crate::constraints) fn append_proxies(
-    artboard: &ArtboardInstance,
-    constraint: ComponentHandle,
-    proxies: &mut Vec<RuntimeDraggableProxy>,
-) {
-    let Some(thumb) = artboard
-        .objects
-        .component(constraint)
-        .and_then(|item| item.parent)
-        .filter(|thumb| {
-            artboard
-                .objects
-                .component(*thumb)
-                .is_some_and(|item| item.concrete.layout.is_some())
-        })
-    else {
-        return;
-    };
-    let Some(track) = artboard
-        .objects
-        .component(thumb)
-        .and_then(|item| item.parent)
-        .filter(|track| {
-            artboard
-                .objects
-                .component(*track)
-                .is_some_and(|item| item.concrete.layout.is_some())
-        })
-    else {
-        return;
-    };
-    proxies.push(RuntimeDraggableProxy::new(
-        constraint,
-        thumb,
-        RuntimeDraggableProxyKind::Thumb,
-        true,
-    ));
-    proxies.push(RuntimeDraggableProxy::new(
-        constraint,
-        track,
-        RuntimeDraggableProxyKind::Track,
-        false,
-    ));
-}
+use super::scroll_bar_constraint;
 
 pub(in crate::constraints) fn start(
     artboard: &mut ArtboardInstance,
@@ -82,7 +38,7 @@ pub(in crate::constraints) fn start(
             }
         }
         RuntimeDraggableProxyKind::Track => {
-            scroll_bar_hit_track(artboard, proxy.constraint, position);
+            scroll_bar_constraint::hit_track(artboard, proxy.constraint, position);
         }
         RuntimeDraggableProxyKind::Viewport => {}
     }
@@ -97,7 +53,7 @@ pub(in crate::constraints) fn drag(
 ) -> bool {
     match proxy.kind {
         RuntimeDraggableProxyKind::Thumb => {
-            scroll_bar_drag_thumb(artboard, proxy.constraint, delta, timestamp);
+            scroll_bar_constraint::drag_thumb(artboard, proxy.constraint, delta, timestamp);
             proxy.last_position = position;
             true
         }

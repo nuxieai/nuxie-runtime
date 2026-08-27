@@ -264,7 +264,9 @@ impl RuntimeFile {
         let mut current_semantic_input_type: Option<
             listener_input_type_semantic_importer::ListenerInputTypeSemanticImporter,
         > = None;
-        let mut current_layer_component: Option<RuntimeStateMachineLayerComponentOwner> = None;
+        let mut current_layer_component: Option<
+            state_machine_layer_component_importer::StateMachineLayerComponentImporter,
+        > = None;
         let mut current_state_machine_scripted_object: Option<
             RuntimeStateMachineScriptedObjectOwner,
         > = None;
@@ -446,11 +448,15 @@ impl RuntimeFile {
                         state_index,
                         layer_artboard_index,
                     ));
-                    current_layer_component = Some(RuntimeStateMachineLayerComponentOwner::State {
-                        state_machine_index: owner_state_machine_index,
-                        layer_index,
-                        state_index,
-                    });
+                    current_layer_component = Some(
+                        state_machine_layer_component_importer::StateMachineLayerComponentImporter::new(
+                            RuntimeStateMachineLayerComponentOwner::State {
+                                state_machine_index: owner_state_machine_index,
+                                layer_index,
+                                state_index,
+                            },
+                        ),
+                    );
                     state_machines[owner_state_machine_index].layers[layer_index].state_count += 1;
                 }
                 continue;
@@ -547,29 +553,23 @@ impl RuntimeFile {
                         previous_transition_importer.resolve();
                     }
                     current_transition = Some(next_transition_importer);
-                    current_layer_component =
-                        Some(RuntimeStateMachineLayerComponentOwner::Transition {
-                            state_machine_index: owner_state_machine_index,
-                            layer_index,
-                            state_index,
-                            transition_index,
-                        });
+                    current_layer_component = Some(
+                        state_machine_layer_component_importer::StateMachineLayerComponentImporter::new(
+                            RuntimeStateMachineLayerComponentOwner::Transition {
+                                state_machine_index: owner_state_machine_index,
+                                layer_index,
+                                state_index,
+                                transition_index,
+                            },
+                        ),
+                    );
                 }
                 continue;
             }
 
             if definition.is_a("StateMachineFireAction") {
-                if let Some(owner) = current_layer_component {
-                    let state_machine_index = match owner {
-                        RuntimeStateMachineLayerComponentOwner::State {
-                            state_machine_index,
-                            ..
-                        }
-                        | RuntimeStateMachineLayerComponentOwner::Transition {
-                            state_machine_index,
-                            ..
-                        } => state_machine_index,
-                    };
+                if let Some(importer) = current_layer_component {
+                    let state_machine_index = importer.state_machine_index();
                     let owner_artboard_slots = state_machine_artboard_owners
                         .get(state_machine_index)
                         .copied()
@@ -577,9 +577,8 @@ impl RuntimeFile {
                         .and_then(|index| artboard_local_slots_by_index.get(index))
                         .map(Vec::as_slice)
                         .unwrap_or_default();
-                    state_machine_layer_component_importer::add_fire_event(
+                    importer.add_fire_event(
                         &mut state_machines,
-                        owner,
                         object,
                         owner_artboard_slots,
                         &self.objects,
@@ -638,59 +637,26 @@ impl RuntimeFile {
                             ),
                         );
                     }
-                } else if let Some(owner) = current_layer_component {
-                    match owner {
-                        RuntimeStateMachineLayerComponentOwner::State {
-                            state_machine_index,
-                            layer_index,
-                            state_index,
-                        } => {
-                            let owner_artboard_slots = state_machine_artboard_owners
-                                .get(state_machine_index)
-                                .copied()
-                                .flatten()
-                                .and_then(|index| artboard_local_slots_by_index.get(index))
-                                .map(Vec::as_slice)
-                                .unwrap_or_default();
-                            state_machines[state_machine_index].layers[layer_index].states
-                                [state_index]
-                                .listener_actions
-                                .push(cpp_runtime_listener_action(
-                                    object,
-                                    owner_artboard_slots,
-                                    &self.objects,
-                                    (object.type_name == "ListenerViewModelChange")
-                                        .then(|| self.latest_bindable_property_for_object(object))
-                                        .flatten(),
-                                ));
-                        }
-                        RuntimeStateMachineLayerComponentOwner::Transition {
-                            state_machine_index,
-                            layer_index,
-                            state_index,
-                            transition_index,
-                        } => {
-                            let owner_artboard_slots = state_machine_artboard_owners
-                                .get(state_machine_index)
-                                .copied()
-                                .flatten()
-                                .and_then(|index| artboard_local_slots_by_index.get(index))
-                                .map(Vec::as_slice)
-                                .unwrap_or_default();
-                            state_machines[state_machine_index].layers[layer_index].states
-                                [state_index]
-                                .transitions[transition_index]
-                                .listener_actions
-                                .push(cpp_runtime_listener_action(
-                                    object,
-                                    owner_artboard_slots,
-                                    &self.objects,
-                                    (object.type_name == "ListenerViewModelChange")
-                                        .then(|| self.latest_bindable_property_for_object(object))
-                                        .flatten(),
-                                ));
-                        }
-                    }
+                } else if let Some(importer) = current_layer_component {
+                    let state_machine_index = importer.state_machine_index();
+                    let owner_artboard_slots = state_machine_artboard_owners
+                        .get(state_machine_index)
+                        .copied()
+                        .flatten()
+                        .and_then(|index| artboard_local_slots_by_index.get(index))
+                        .map(Vec::as_slice)
+                        .unwrap_or_default();
+                    importer.add_listener_action(
+                        &mut state_machines,
+                        cpp_runtime_listener_action(
+                            object,
+                            owner_artboard_slots,
+                            &self.objects,
+                            (object.type_name == "ListenerViewModelChange")
+                                .then(|| self.latest_bindable_property_for_object(object))
+                                .flatten(),
+                        ),
+                    );
                 }
                 continue;
             }

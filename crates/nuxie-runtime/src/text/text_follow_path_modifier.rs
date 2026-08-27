@@ -194,32 +194,40 @@ pub(crate) fn update_text_follow_path_world_path(
         .text_target
         .as_ref()?
         .target_local()?;
-    let path_locals = if type_for_local(graph, target_local) == Some("Shape") {
-        graph
-            .path_composers
-            .iter()
-            .find(|composer| composer.shape_local == target_local)
-            .map(|composer| {
-                composer
-                    .paths
-                    .iter()
-                    .map(|path| path.local_id)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default()
-    } else if type_for_local(graph, target_local) == Some("Path") {
-        vec![target_local]
-    } else {
-        Vec::new()
-    };
+    let target = instance.component_handle(target_local)?;
+    let path_handles = instance
+        .component(target_local)?
+        .concrete
+        .shape
+        .as_ref()
+        .map(|shape| shape.paths.clone())
+        .or_else(|| {
+            instance
+                .component(target_local)?
+                .concrete
+                .path
+                .as_ref()
+                .map(|_| vec![target])
+        })
+        .unwrap_or_default();
+
     let mut commands = Vec::new();
-    for path_local in path_locals {
-        let path = graph
-            .paths
-            .iter()
-            .find(|path| path.local_id == path_local)?;
-        let path_world = instance.component(path_local)?.transform.world_transform;
-        commands.extend(runtime_path_geometry_commands(instance, path, path_world));
+    for path in path_handles {
+        let path_local = instance.component_local_id(path)?;
+        let Some((raw_path, has_weighted_context)) = instance
+            .runtime_shapes
+            .retained_follow_path_source(path_local)
+        else {
+            continue;
+        };
+        let path_transform = crate::shapes::points_path::path_transform(
+            has_weighted_context,
+            instance.component(path_local)?.transform.world_transform,
+        );
+        let mut path_commands =
+            crate::math::raw_path::runtime_path_commands_from_raw_path(raw_path.as_ref());
+        transform_path_commands(&mut path_commands, path_transform);
+        commands.extend(path_commands);
     }
     Some(commands)
 }
@@ -281,10 +289,11 @@ struct RuntimePathSampleParts {
     tangent: (f32, f32),
 }
 fn normalize_point(point: (f32, f32)) -> (f32, f32) {
-    let length = (point.0 * point.0 + point.1 * point.1).sqrt();
-    if length == 0.0 {
-        (0.0, 0.0)
+    let length_squared = point.0 * point.0 + point.1 * point.1;
+    let scale = if length_squared > 0.0 {
+        1.0 / length_squared.sqrt()
     } else {
-        (point.0 / length, point.1 / length)
-    }
+        1.0
+    };
+    (point.0 * scale, point.1 * scale)
 }

@@ -368,7 +368,7 @@ pub(super) fn runtime_realize_mesh_owner(
             || shared.uv_coords.is_none()
             || shared.indices.is_none()
         {
-            runtime_realize_mesh_shared_buffers(runtime, mesh, image, factory, &mut shared)?;
+            runtime_realize_mesh_shared_buffers(runtime, mesh, Some(image), factory, &mut shared)?;
         }
     }
 
@@ -409,7 +409,7 @@ pub(super) fn runtime_realize_mesh_owner(
 pub(super) fn runtime_realize_mesh_shared_buffers(
     runtime: &RuntimeFile,
     mesh: &MeshGeometryNode,
-    image: &dyn RenderImage,
+    image: Option<&dyn RenderImage>,
     factory: &mut dyn RenderFactory,
     shared: &mut RuntimeMeshSharedRenderBuffers,
 ) -> Result<()> {
@@ -428,12 +428,16 @@ pub(super) fn runtime_realize_mesh_shared_buffers(
         RenderBufferFlags::None,
         mesh.vertices.len().saturating_mul(8),
     );
+    // `Mesh::onAssetLoaded` uses an identity transform when the ImageAsset is
+    // retained but its RenderImage has not decoded yet. Those source-owned UV
+    // and index buffers are still shared by every later Mesh clone.
+    let uv_transform = image.map_or(RenderMat2D::IDENTITY, RenderImage::uv_transform);
     let mut uv_bytes = Vec::with_capacity(mesh.vertices.len() * 8);
     for vertex in &mesh.vertices {
         let vertex_object = runtime
             .object(vertex.global_id as usize)
             .with_context(|| format!("missing mesh vertex global {}", vertex.global_id))?;
-        let uv = image.uv_transform().transform_point(RenderVec2D::new(
+        let uv = uv_transform.transform_point(RenderVec2D::new(
             runtime_object_explicit_double_property_by_key(vertex_object, u_key).unwrap_or(0.0),
             runtime_object_explicit_double_property_by_key(vertex_object, v_key).unwrap_or(0.0),
         ));
@@ -506,9 +510,12 @@ pub(super) fn preallocate_file_source_mesh_owners(
     // file-owned; each later occurrence shares UV/index from these owners.
     for graph in artboards {
         for mesh in &graph.meshes {
-            let Some(image) = runtime_source_mesh_image(runtime, graph, mesh, image_assets) else {
+            let Some(image_asset_global) =
+                runtime_source_mesh_image_asset_global(runtime, graph, mesh)
+            else {
                 continue;
             };
+            let image = image_assets.get(image_asset_global);
             let source = Rc::new(RefCell::new(RuntimeMeshSharedRenderBuffers {
                 context_id: Some(backend_context_id),
                 ..RuntimeMeshSharedRenderBuffers::default()
@@ -516,7 +523,7 @@ pub(super) fn preallocate_file_source_mesh_owners(
             if mesh::runtime_realize_mesh_shared_buffers(
                 runtime,
                 mesh,
-                image.as_ref(),
+                image.as_deref(),
                 factory,
                 &mut source.borrow_mut(),
             )
@@ -528,12 +535,11 @@ pub(super) fn preallocate_file_source_mesh_owners(
     }
 }
 
-fn runtime_source_mesh_image(
+fn runtime_source_mesh_image_asset_global(
     runtime: &RuntimeFile,
     graph: &ArtboardGraph,
     mesh: &MeshGeometryNode,
-    image_assets: &RuntimeImageAssetOwners,
-) -> Option<Rc<dyn RenderImage>> {
+) -> Option<u32> {
     let mesh_object = runtime.object(mesh.global_id as usize)?;
     let parent_id_key = runtime_draw_property_key_for_name("Component", "parentId")
         .or_else(|| runtime_draw_property_key_for_name("WorldTransformComponent", "parentId"))?;
@@ -549,5 +555,5 @@ fn runtime_source_mesh_image(
         .global_id;
     let image_object = runtime.object(image_global as usize)?;
     let image_asset = runtime.resolved_file_asset_for_referencer(image_object)?;
-    image_assets.get(image_asset.id)
+    (image_asset.type_name == "ImageAsset").then_some(image_asset.id)
 }

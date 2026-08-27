@@ -231,15 +231,25 @@ impl ArtboardInstance {
                     .and_then(|bounds| bounds.get(&0).copied())
             })
             .map(|bounds| (Some(bounds.width), Some(bounds.height)));
-        let hug_axis_changed = |property_name: &str, intrinsic: Option<f32>, assigned: f32| {
+        let scale_type = |property_name: &str| {
             property_key_for_name("NestedArtboardLayout", property_name)
                 .and_then(|key| self.uint_property(host_local_id, key))
-                == Some(2)
-                && intrinsic.is_some_and(|intrinsic| (intrinsic - assigned).abs() > 1.0e-4)
+                .unwrap_or(0)
+        };
+        let width_scale_type = scale_type("instanceWidthScaleType");
+        let height_scale_type = scale_type("instanceHeightScaleType");
+        // Preserve StyleOverrider::updateHeightOverride literally: after the
+        // fixed/fill branches it tests the width scale type for height hug.
+        let hug_axis_changed = |is_hug: bool, intrinsic: Option<f32>, assigned: f32| {
+            is_hug && intrinsic.is_some_and(|intrinsic| (intrinsic - assigned).abs() > 1.0e-4)
         };
         if transferred_intrinsic_size.is_some_and(|(width, height)| {
-            hug_axis_changed("instanceWidthScaleType", width, bounds.width)
-                || hug_axis_changed("instanceHeightScaleType", height, bounds.height)
+            hug_axis_changed(width_scale_type == 2, width, bounds.width)
+                || hug_axis_changed(
+                    !matches!(height_scale_type, 0 | 1) && width_scale_type == 2,
+                    height,
+                    bounds.height,
+                )
         }) {
             // A nested child can settle its own transferred descendants after
             // the parent's first detached measurement. C++ still has one

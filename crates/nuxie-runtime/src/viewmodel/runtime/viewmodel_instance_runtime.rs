@@ -67,16 +67,14 @@ impl ViewModelInstanceRuntime {
         if path.is_empty() {
             return None;
         }
-        let mut segments = path.split('/').collect::<Vec<_>>();
-        if segments.iter().any(|segment| segment.is_empty()) {
-            return None;
+
+        match path.rsplit_once('/') {
+            Some((instance_path, property_name)) => Some((
+                self.view_model_instance_at_path(instance_path)?,
+                property_name.to_owned(),
+            )),
+            None => Some((self.clone(), path.to_owned())),
         }
-        let property_name = segments.pop()?.to_owned();
-        let mut runtime = self.clone();
-        for segment in segments {
-            runtime = runtime.instance_runtime(segment)?;
-        }
-        Some((runtime, property_name))
     }
 
     fn instance_runtime(&self, name: &str) -> Option<Self> {
@@ -96,14 +94,23 @@ impl ViewModelInstanceRuntime {
     }
 
     pub fn view_model_instance_at_path(&self, path: &str) -> Option<Self> {
-        if path.is_empty() || path.split('/').any(|segment| segment.is_empty()) {
+        if path.is_empty() {
             return None;
         }
-        let mut runtime = self.clone();
-        for segment in path.split('/') {
-            runtime = runtime.instance_runtime(segment)?;
+
+        let (instance_name, rest_of_path) = path
+            .split_once('/')
+            .map_or((path, ""), |(instance_name, rest)| (instance_name, rest));
+        if instance_name.is_empty() {
+            return None;
         }
-        Some(runtime)
+
+        let runtime = self.instance_runtime(instance_name)?;
+        if rest_of_path.is_empty() {
+            Some(runtime)
+        } else {
+            runtime.view_model_instance_at_path(rest_of_path)
+        }
     }
 
     fn property_index_and_cell(
@@ -475,7 +482,17 @@ mod viewmodel_instance_runtime_identity_tests {
 
         let child = root.property_view_model("child").expect("child");
         assert!(child.ptr_eq(&root.property_view_model("child").expect("child")));
+        assert!(child.ptr_eq(
+            &root
+                .view_model_instance_at_path("child/")
+                .expect("C++ accepts one trailing path delimiter")
+        ));
         let nested = root.property_number("child/value").expect("nested number");
+        assert!(nested.ptr_eq(
+            &root
+                .property_number("child//value")
+                .expect("C++ accepts one trailing delimiter in the instance prefix")
+        ));
         assert!(nested.ptr_eq(
             &root
                 .property_number("child/value")

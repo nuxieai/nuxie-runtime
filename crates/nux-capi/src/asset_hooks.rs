@@ -849,6 +849,8 @@ pub unsafe extern "C" fn nux_file_import_configured(
     out_file: *mut *mut NuxFile,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
+    #[cfg(all(feature = "android-vulkan", feature = "scripting"))]
+    super::android_product_import::prepare_configured_import_runtime();
     unsafe {
         nux_file_import_configured_with_authority(
             bytes,

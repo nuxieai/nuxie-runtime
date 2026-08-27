@@ -18,6 +18,9 @@ mod apple_metal;
 #[cfg(feature = "android-vulkan")]
 mod android_vulkan;
 
+#[cfg(all(feature = "android-vulkan", feature = "scripting"))]
+mod android_product_import;
+
 #[cfg(any(
     all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
     feature = "android-vulkan"

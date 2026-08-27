@@ -1088,6 +1088,7 @@ version = "0.8.0"
 dependencies = [
  "nux-capi",
  "nuxie-project-data",
+ "nuxie-runtime",
  "nuxie-schema",
 ]
 
@@ -1101,7 +1102,10 @@ dependencies = [
  "luaur-compiler",
  "nuxie",
  "nuxie-image-codec",
+ "nuxie-project-data",
+ "nuxie-render-api",
  "nuxie-renderer",
+ "nuxie-runtime",
  "nuxie-schema",
  "objc2",
  "objc2-core-foundation",

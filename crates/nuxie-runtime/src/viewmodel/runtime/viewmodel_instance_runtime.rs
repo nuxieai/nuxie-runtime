@@ -482,17 +482,21 @@ mod viewmodel_instance_runtime_identity_tests {
 
         let child = root.property_view_model("child").expect("child");
         assert!(child.ptr_eq(&root.property_view_model("child").expect("child")));
-        assert!(child.ptr_eq(
-            &root
-                .view_model_instance_at_path("child/")
-                .expect("C++ accepts one trailing path delimiter")
-        ));
+        assert!(
+            child.ptr_eq(
+                &root
+                    .view_model_instance_at_path("child/")
+                    .expect("C++ accepts one trailing path delimiter")
+            )
+        );
         let nested = root.property_number("child/value").expect("nested number");
-        assert!(nested.ptr_eq(
-            &root
-                .property_number("child//value")
-                .expect("C++ accepts one trailing delimiter in the instance prefix")
-        ));
+        assert!(
+            nested.ptr_eq(
+                &root
+                    .property_number("child//value")
+                    .expect("C++ accepts one trailing delimiter in the instance prefix")
+            )
+        );
         assert!(nested.ptr_eq(
             &root
                 .property_number("child/value")

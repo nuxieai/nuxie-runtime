@@ -11,6 +11,50 @@ include!("bezier_utils.rs");
 include!("raw_path_utils.rs");
 include!("vec2d.rs");
 
+fn cubic_measure_segment_count(points: [(f32, f32); 4], inv_tolerance: f32) -> u32 {
+    wangs_cubic(points, inv_tolerance)
+        .ceil()
+        .ceil()
+        .min(TRIM_CONTOUR_MAX_SEGMENTS as f32) as u32
+}
+
+fn wangs_cubic(points: [(f32, f32); 4], precision: f32) -> f32 {
+    let first = vector_length_squared((
+        points[0].0 - 2.0 * points[1].0 + points[2].0,
+        points[0].1 - 2.0 * points[1].1 + points[2].1,
+    ));
+    let second = vector_length_squared((
+        points[1].0 - 2.0 * points[2].0 + points[3].0,
+        points[1].1 - 2.0 * points[2].1 + points[3].1,
+    ));
+    let length_term_pow2 = 9.0 * 4.0 / 64.0 * precision * precision;
+    (first.max(second) * length_term_pow2).sqrt().sqrt()
+}
+
+fn eval_cubic(points: [(f32, f32); 4], t: f32) -> (f32, f32) {
+    bezier_utils_owner::EvalCubic::new(points).evaluate(t)
+}
+
+fn cubic_position_tangent(points: [(f32, f32); 4], t: f32) -> ((f32, f32), (f32, f32)) {
+    if t == 0.0 {
+        return (points[0], bezier_utils_owner::find_cubic_tan0(points));
+    }
+    if t == 1.0 {
+        return (points[3], bezier_utils_owner::find_cubic_tan1(points));
+    }
+
+    let eval = bezier_utils_owner::EvalCubic::new(points);
+    let tan = normalized_vector((
+        (eval.a.0 * 3.0)
+            .mul_add(t, eval.b.0 + eval.b.0)
+            .mul_add(t, eval.c.0),
+        (eval.a.1 * 3.0)
+            .mul_add(t, eval.b.1 + eval.b.1)
+            .mul_add(t, eval.c.1),
+    ));
+    (eval.evaluate(t), tan)
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimeContourMeasure {
     contour: TrimContour,

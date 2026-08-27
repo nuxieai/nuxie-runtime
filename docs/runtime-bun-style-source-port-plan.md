@@ -1,106 +1,100 @@
-# Bun-style runtime source port plan
+# Literal runtime translation plan
 
-Decision date: 2026-08-26
+Decision date: 2026-08-27
 
-This plan supersedes the per-pair certification loop in
-`docs/runtime-exact-parity-workflow-correction.md`. The campaign is returning
-to the central Bun port tactic: mechanically translate the complete pinned
-source tree into a corresponding Rust source tree before spending substantial
-time certifying tests, fixtures, or platform matrices.
+Pinned authority: Rive runtime
+`4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
 
-The immutable upstream remains Rive runtime
-`4ac7b32798da0482e441ef09304dc3b480ed3ee5`. Continue to ignore and not use the
-`implement` and `tdd` skills. Preserve Taffy and the Rust-native audio and
-scripting adaptations.
+This is a fresh mechanical translation. The pinned upstream source is the
+behavioral authority. The existing Rust runtime is reference material for the
+later integration review; it is not an authority for what the translation
+should do.
 
-## Primary deliverable
+Continue to ignore and not use the `implement` and `tdd` skills.
 
-For every applicable pinned C++ source owner, create or identify one primary
-Rust source file that visibly mirrors the upstream owner.
+## Translation
 
-The Rust should preserve the upstream file boundary, type and method names
-where Rust permits, method order, retained fields and defaults, control flow,
-meaningful branches, callback order, mutation order, error paths, and clone or
-reset behavior. Rust-specific representation changes are allowed only for an
-already approved adaptation and should be named briefly beside the translated
+Translate every pinned C++ implementation and its primary header into one
+corresponding Rust source file. Mirror the upstream source path beneath:
+
+`crates/nuxie-runtime/src/mechanical_port/source/`
+
+For example, `src/animation/foo.cpp` and `include/rive/animation/foo.hpp`
+become `mechanical_port/source/animation/foo.rs`. Header-only owners receive a
+corresponding Rust file as well. Generated owners may be emitted mechanically,
+but their resulting Rust owner must still exist in the mirrored tree.
+
+The first pass reads the upstream pair, not the old Rust implementation. It
+translates the complete owner: types, retained state, defaults, constructors,
+methods, meaningful branches, mutation and callback order, lifecycle, clone
+and reset behavior, error behavior, and conditional compilation.
+
+Do not build, test, redesign, refactor, certify, or create evidence while the
+translation pass is running. Do not add placeholder bodies or comment-only
+owners. The filesystem is the progress record: an upstream pair is translated
+when its complete Rust counterpart exists. Completeness is derived directly by
+comparing the pinned source tree with the mirrored Rust tree; there is no
+manually maintained source ledger.
+
+## Adversarial review 1: source equivalence
+
+After the complete mirrored tree exists, reviewers receive:
+
+- the pinned `.hpp`;
+- the pinned `.cpp`;
+- the translated `.rs`.
+
+They look only for missing or altered source semantics: omitted state or
+bodies, changed defaults, branches, ordering, integer and floating-point
+behavior, error paths, lifecycle, conditional compilation, or virtual
+dispatch. They do not redesign the Rust or use tests to invent behavior.
+
+## Adversarial review 2: Rust integration and adaptations
+
+After source-equivalence corrections, reviewers additionally receive the old
+Rust files that the translated owner will replace and the small approved
+adaptation set. They identify Rust-specific integration work without changing
+the upstream observable contract.
+
+Approved integration boundaries include safe Rust ownership, Taffy in place
+of Yoga, and the existing Rust-native audio, scripting, and text stacks. An
+approved library or backend replacement is not permission to omit the Rive
+owner's surrounding state, ordering, callbacks, or error behavior.
+
+This pass also checks lifetimes, aliasing, thread-safety, public API continuity,
+crate boundaries, FFI representation, and whether old packed Rust code contains
+necessary host integration that must be retained around the new owner.
+
+## Integration
+
+Apply both review passes, then make the mirrored owners live. Move or route the
+translated modules into their final crates, preserve required public Rust
+interfaces, and delete the superseded packed implementations. The old parity
+implementation may help diagnose integration failures, but a disagreement is
+resolved from pinned upstream source or an approved adaptation.
+
+Only after a translated owner is live may its old implementation be removed.
+Do not retain the old path as a hidden fallback.
+
+## Validation
+
+Once the complete translated tree is integrated:
+
+1. compile the affected workspace and supported targets;
+2. run the complete translated upstream unit-test suite;
+3. run the existing C++/Rust differentials, silver corpus, rendering corpus,
+   lifecycle checks, and larger validation harnesses;
+4. diagnose every failure by returning to the exact upstream/Rust pair and
+   the approved integration boundary;
+5. fix translation or integration mistakes rather than inventing new runtime
+   behavior;
+6. perform final source-equivalence and integration rereviews over the frozen
+   bytes that passed validation.
+
+## Completion
+
+The campaign is complete when every pinned source/header owner has a complete
+Rust counterpart, both adversarial passes are resolved, the new owners are the
+only live implementation, and the full validation suite has reached its
+truthful supported-platform result with every approved adaptation explicit in
 code.
-
-The deliverable of this pass is the source translation itself. A ledger,
-receipt, fixture census, or bespoke test is not a substitute for the missing
-Rust source owner.
-
-## Atomic workflow
-
-For one complete source file at a time:
-
-1. Read the complete pinned implementation and its primary handwritten
-   header.
-2. Create or normalize the corresponding Rust file so unrelated upstream
-   owners are not packed into it.
-3. Translate every executable body and retained state directly, keeping the
-   Rust structure visibly comparable to the C++.
-4. When existing Rust behavior differs, recover the pinned behavior from the
-   source comparison. Do not invent a fix from a test or downstream symptom.
-5. Give the complete pair one lightweight self-read against the pinned source.
-   Do not dispatch a per-owner independent review, or create a separate
-   rejection receipt, fixture census, consumer topology, or custom evidence
-   campaign. Independent review belongs at a directory or PR-sized batch
-   boundary when it is useful.
-6. Apply concrete review corrections directly and commit the completed source
-   pair. Record only a concise commit message and, when necessary, a short
-   inline adaptation note.
-7. Move immediately to the next source owner.
-
-Do not require a new unit test merely because a source file was translated.
-Add a focused test only when it is the shortest practical way to preserve a
-subtle cross-language semantic difference discovered during translation.
-
-## Batch checks
-
-Run fast existing checks at natural directory or commit-batch boundaries, not
-after every small function or review comment:
-
-- compile/check the affected Rust crates;
-- run the existing focused package tests that are already available;
-- keep the worktree and adaptation boundaries intact.
-
-Defer global correspondence, release IR, frozen-byte, forbidden-fallback,
-fixture-wide scans, platform CI, and full differential matrices until a source
-directory or PR-sized batch is complete.
-
-## Explicitly deferred work
-
-The source translation pass does not close or repeatedly re-adjudicate C7-C10,
-the 1,404-case ledger, pending consumer counts, fixture-reference counts,
-expected-red rendering cases, or platform CI. Preserve existing results as
-historical evidence, but do not make their closeout a prerequisite for
-translating the next source file.
-
-After the complete source tree has one-to-one correspondence:
-
-1. port or reconcile the full upstream test suite against the now-callable
-   Rust owners;
-2. run the broad differentials and global gates;
-3. fix failures by returning to the exact translated source pair;
-4. perform the final parity audit once, across the completed tree.
-
-## Progress accounting
-
-Use a minimal source checklist with only these states:
-
-- `not started`;
-- `translated`;
-- `blocked by an approved adaptation decision`;
-- `needs source correction`.
-
-Do not count pending tests as translated source, and do not require test-case
-or fixture accounting to mark a source file translated. A source file is
-translated when every executable body and retained state in the complete pair
-has a concrete, visibly comparable Rust owner or a named approved adaptation.
-
-## Completion criterion
-
-This pass is complete when the applicable pinned C++ source tree has a
-one-to-one, mechanically comparable Rust source tree with no silently omitted
-bodies or state. Test-suite parity and final runtime parity are subsequent
-campaign gates; they are not interleaved into every source-file translation.

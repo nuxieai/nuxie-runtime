@@ -105,7 +105,7 @@ impl<'a> BinaryReader<'a> {
     pub fn read_float32(&mut self) -> f32 {
         f32::from_le_bytes(self.read_array())
     }
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn read_float64(&mut self) -> f64 {
         f64::from_le_bytes(self.read_array())
     }

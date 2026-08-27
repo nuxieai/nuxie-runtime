@@ -1,5 +1,6 @@
 // Direct Rust owner for pinned C++ `src/viewmodel/viewmodel_instance_symbol_list_index.cpp`.
-// Symbol replacement order and list-index value identity.
+// Symbol replacement order, retained uint32 value identity, generated-property
+// mutation, raw import, `applyValue`, and clone behavior.
 
 pub(crate) fn set_component_list_item_index(
     _file: &RuntimeFile,
@@ -36,6 +37,27 @@ impl RuntimeOwnedViewModelSymbolListIndex {
         }
     }
 
+    fn for_property(property_index: usize) -> Self {
+        Self::new(property_index, 0)
+    }
+
+    /// Generated `deserialize(propertyValuePropertyKey, ...)` writes the raw
+    /// uint32 payload without calling `propertyValueChanged()`. Construct the
+    /// retained cell silently so authored values begin clean just like C++.
+    fn for_instance_value(source: &RuntimeObject) -> Option<Self> {
+        if source.type_name != "ViewModelInstanceSymbolListIndex" {
+            return None;
+        }
+        let property_index = usize::try_from(source.uint_property("viewModelPropertyId")?).ok()?;
+        let value = Self::for_property(property_index);
+        value
+            .cell
+            .restore_value_silent(RuntimeViewModelCellValue::SymbolListIndex(
+                owned_scalar_u32_payload(source.uint_property("propertyValue")?),
+            ));
+        Some(value)
+    }
+
     fn value(&self) -> u64 {
         match self.cell.value() {
             RuntimeViewModelCellValue::SymbolListIndex(value) => u64::from(value),
@@ -43,15 +65,22 @@ impl RuntimeOwnedViewModelSymbolListIndex {
         }
     }
 
-    fn set_value(&mut self, value: u64) -> bool {
-        if self.value() == value {
-            return false;
-        }
-        self.cell
-            .set_value(RuntimeViewModelCellValue::SymbolListIndex(
-                owned_scalar_u32_payload(value),
-            ));
-        true
+    /// Generated `propertyValue(uint32_t)` followed by
+    /// `propertyValueChanged()`: project to the C++ uint32 boundary before
+    /// equality, then publish `Bindings` dirt and the retained change edge.
+    fn set_property_value_cell(cell: &RuntimeViewModelCell, value: u64) -> bool {
+        cell.set_value(RuntimeViewModelCellValue::SymbolListIndex(
+            owned_scalar_u32_payload(value),
+        ))
+    }
+
+    fn set_property_value(&mut self, value: u64) -> bool {
+        Self::set_property_value_cell(&self.cell, value)
+    }
+
+    /// `ViewModelInstanceSymbolListIndex::applyValue(DataValueInteger*)`.
+    fn apply_value(&mut self, data_value: u64) -> bool {
+        self.set_property_value(data_value)
     }
 }
 
@@ -73,7 +102,9 @@ fn runtime_owned_view_model_symbol_list_indices(
                 .enumerate()
                 .filter_map(|(property_index, property)| {
                     (property.type_name == "ViewModelPropertySymbolListIndex")
-                        .then_some(RuntimeOwnedViewModelSymbolListIndex::new(property_index, 0))
+                        .then_some(RuntimeOwnedViewModelSymbolListIndex::for_property(
+                            property_index,
+                        ))
                 })
                 .collect()
         })
@@ -87,15 +118,7 @@ fn runtime_owned_view_model_symbol_list_indices_for_instance(
 ) -> Vec<RuntimeOwnedViewModelSymbolListIndex> {
     runtime_owned_view_model_instance_value_objects(file, view_model_index, view_model_instance)
         .into_iter()
-        .filter_map(|source| {
-            let value = file.view_model_instance_symbol_list_index_value_for_object(source)?;
-            let property_index =
-                usize::try_from(source.uint_property("viewModelPropertyId")?).ok()?;
-            Some(RuntimeOwnedViewModelSymbolListIndex::new(
-                property_index,
-                value,
-            ))
-        })
+        .filter_map(RuntimeOwnedViewModelSymbolListIndex::for_instance_value)
         .collect()
 }
 

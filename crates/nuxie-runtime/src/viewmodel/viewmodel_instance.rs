@@ -4326,7 +4326,7 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if !symbol_list_index.set_value(value) {
+        if !symbol_list_index.set_property_value(value) {
             return false;
         }
         true

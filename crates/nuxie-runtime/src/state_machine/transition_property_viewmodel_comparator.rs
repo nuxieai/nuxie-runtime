@@ -3,7 +3,7 @@
 //! Mirrors pinned C++
 //! `src/animation/transition_property_viewmodel_comparator.cpp`.
 
-use super::TransitionConditionOp;
+use super::RuntimeScheduledListenerActionExecutor;
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 
 #[derive(Debug, Clone, Copy)]
@@ -13,6 +13,12 @@ pub(super) struct RuntimeTransitionPropertyViewModelComparator<'a> {
 }
 
 impl<'a> RuntimeTransitionPropertyViewModelComparator<'a> {
+    /// Mechanical counterpart of pinned C++ `import`.
+    ///
+    /// `latest_bindable_property_for_object` reconstructs the import-stack
+    /// lookup and ownership transfer. Rust borrows the imported property from
+    /// `RuntimeFile`, so the C++ destructor's delete-and-null body is supplied
+    /// by the borrow lifetime rather than a second executable cleanup path.
     pub(super) fn from_object(
         file: &'a RuntimeFile,
         comparator: &'a RuntimeObject,
@@ -26,6 +32,20 @@ impl<'a> RuntimeTransitionPropertyViewModelComparator<'a> {
         })
     }
 
+    /// Mechanical counterpart of pinned C++ `useInLayer` after Rust's
+    /// retained global-id adaptation has replaced bindable/data-bind pointers.
+    pub(super) fn use_in_layer(
+        bindable_global_id: u32,
+        executor: &dyn RuntimeScheduledListenerActionExecutor,
+        view_model_trigger_layer_id: u64,
+    ) {
+        let Some(source) = executor.retained_view_model_source(bindable_global_id) else {
+            return;
+        };
+        source.use_in_layer(view_model_trigger_layer_id);
+    }
+
+    /// Mechanical counterpart of pinned C++ `bindableProperty()`.
     pub(super) fn bindable(self) -> &'a RuntimeObject {
         debug_assert_eq!(
             self.comparator.type_name,
@@ -35,49 +55,8 @@ impl<'a> RuntimeTransitionPropertyViewModelComparator<'a> {
     }
 }
 
-pub(super) fn compare_view_model_integer_pair(
-    op: TransitionConditionOp,
-    left: u64,
-    right: u64,
-) -> bool {
-    // Pinned C++ resolves two BindablePropertyInteger comparands to
-    // ComparisonShape::Uint32. Only equality and inequality are implemented
-    // for that shape; ordering operations return false.
-    op.compare_u32_equal_only(left as u32, right as u32)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn integer_pairs_keep_uint_precision_and_cpp_operation_support() {
-        let left = 0x0100_0001;
-        let right = 0x0100_0000;
-        assert!(!compare_view_model_integer_pair(
-            TransitionConditionOp::Equal,
-            left,
-            right,
-        ));
-        assert!(compare_view_model_integer_pair(
-            TransitionConditionOp::NotEqual,
-            left,
-            right,
-        ));
-        assert!(!compare_view_model_integer_pair(
-            TransitionConditionOp::LessThan,
-            left,
-            right,
-        ));
-        assert!(!compare_view_model_integer_pair(
-            TransitionConditionOp::GreaterThan,
-            left,
-            right,
-        ));
-        assert!(compare_view_model_integer_pair(
-            TransitionConditionOp::Equal,
-            u64::from(u32::MAX) + 1,
-            0,
-        ));
-    }
-}
+// The header's uncalled `value<T, U>` template is instantiated by Rust at its
+// concrete typed evaluation sites: `bindable_*_value` performs the same
+// bindable-instance lookup and each caller applies the matching
+// `BindableProperty*::defaultValue` when lookup fails. Keeping those live,
+// typed paths avoids introducing an unused erased-value facade here.

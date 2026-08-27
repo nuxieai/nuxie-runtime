@@ -196,7 +196,5 @@ use transition_number_condition::RuntimeTransitionNumberCondition;
 use transition_number_condition::TransitionConditionOp;
 use transition_property_artboard_comparator::RuntimeTransitionPropertyArtboardComparator;
 use transition_property_component_comparator::RuntimeTransitionPropertyComponentComparator;
-use transition_property_viewmodel_comparator::{
-    RuntimeTransitionPropertyViewModelComparator, compare_view_model_integer_pair,
-};
+use transition_property_viewmodel_comparator::RuntimeTransitionPropertyViewModelComparator;
 use transition_trigger_condition::RuntimeTransitionTriggerCondition;

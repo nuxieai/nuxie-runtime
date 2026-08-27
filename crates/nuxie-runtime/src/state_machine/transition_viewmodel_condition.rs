@@ -9,8 +9,8 @@ use super::{
     StateMachineInputInstance, TransitionConditionOp, TransitionEvaluationContext,
     bindable_artboard_value, bindable_asset_value, bindable_boolean_value, bindable_color_value,
     bindable_enum_value, bindable_integer_value, bindable_number_value, bindable_string_value,
-    bindable_trigger_value, bindable_view_model_value, compare_view_model_integer_pair,
-    runtime_transition_comparators, transition_comparator,
+    bindable_trigger_value, bindable_view_model_value, runtime_transition_comparators,
+    transition_comparator,
 };
 use crate::ArtboardInstance;
 use crate::components::TransformProperty;
@@ -242,6 +242,13 @@ pub(super) enum RuntimeTransitionViewModelCondition {
         op: TransitionConditionOp,
         view_model: RuntimeViewModelNumberValue,
     },
+}
+
+fn compare_view_model_integer_pair(op: TransitionConditionOp, left: u64, right: u64) -> bool {
+    // Pinned C++ resolves two BindablePropertyInteger comparands to
+    // ComparisonShape::Uint32. Only equality and inequality are implemented
+    // for that shape; ordering operations return false.
+    op.compare_u32_equal_only(left as u32, right as u32)
 }
 
 impl RuntimeTransitionViewModelCondition {
@@ -1579,9 +1586,11 @@ impl RuntimeTransitionViewModelCondition {
         view_model_trigger_layer_id: u64,
     ) {
         if let Some(bindable_global_id) = self.left_view_model_bindable_global_id() {
-            if let Some(source) = executor.retained_view_model_source(bindable_global_id) {
-                source.use_in_layer(view_model_trigger_layer_id);
-            }
+            RuntimeTransitionPropertyViewModelComparator::use_in_layer(
+                bindable_global_id,
+                executor,
+                view_model_trigger_layer_id,
+            );
         } else {
             transition_comparator::use_in_layer();
         }
@@ -1944,4 +1953,40 @@ fn runtime_component_string_value(
         .filter(|_| supports_property)
         .and_then(|object| runtime_object_string_property_by_key(object, property_key))
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn integer_pairs_keep_uint_precision_and_cpp_operation_support() {
+        let left = 0x0100_0001;
+        let right = 0x0100_0000;
+        assert!(!compare_view_model_integer_pair(
+            TransitionConditionOp::Equal,
+            left,
+            right,
+        ));
+        assert!(compare_view_model_integer_pair(
+            TransitionConditionOp::NotEqual,
+            left,
+            right,
+        ));
+        assert!(!compare_view_model_integer_pair(
+            TransitionConditionOp::LessThan,
+            left,
+            right,
+        ));
+        assert!(!compare_view_model_integer_pair(
+            TransitionConditionOp::GreaterThan,
+            left,
+            right,
+        ));
+        assert!(compare_view_model_integer_pair(
+            TransitionConditionOp::Equal,
+            u64::from(u32::MAX) + 1,
+            0,
+        ));
+    }
 }

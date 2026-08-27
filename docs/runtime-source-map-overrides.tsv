@@ -2,3 +2,6 @@ text/text_style_paint.cpp	translated	crates/nuxie-runtime/src/text/text_style_pa
 text/text_style_feature.cpp	translated	crates/nuxie-runtime/src/text/text_style_feature.rs	complete pinned owner translated
 text/text_value_run.cpp	translated	crates/nuxie-runtime/src/text/text_value_run.rs	complete pinned owner translated
 animation/cubic_ease_interpolator.cpp	translated	crates/nuxie-runtime/src/animation/cubic_ease_interpolator.rs	complete pinned owner translated
+animation/blend_state_1d.cpp	translated	crates/nuxie-runtime/src/animation/blend_state_1d.rs	complete pinned owner translated
+assets/blob_asset.cpp	translated	crates/nuxie-runtime/src/assets/blob_asset.rs	complete pinned owner translated
+constraints/scrolling/clamped_scroll_physics.cpp	translated	crates/nuxie-runtime/src/constraints/scrolling/clamped_scroll_physics.rs	complete pinned owner translated

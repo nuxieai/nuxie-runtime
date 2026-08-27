@@ -114,10 +114,7 @@ impl RuntimeSemanticListenerGroup {
         action_type: u32,
     ) -> Option<ScriptListenerInvocation> {
         listener.semantic_constraints_met(action_type).then_some(
-            ScriptListenerInvocation::Semantic {
-                listener_index: self.listener_index,
-                action_type,
-            },
+            ScriptListenerInvocation::semantic(self.listener_index, action_type),
         )
     }
 }

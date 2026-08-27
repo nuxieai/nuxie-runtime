@@ -108,19 +108,14 @@ impl RuntimeKeyboardListenerGroup {
     ) -> Option<ScriptListenerInvocation> {
         (self.listens_keyboard
             && listener.keyboard_constraints_met(key, modifiers, is_pressed, is_repeat))
-        .then_some(ScriptListenerInvocation::Keyboard {
-            key,
-            modifiers,
-            is_pressed,
-            is_repeat,
-        })
+        .then_some(ScriptListenerInvocation::keyboard(
+            key, modifiers, is_pressed, is_repeat,
+        ))
     }
 
     pub(crate) fn text_invocation(&self, text: &str) -> Option<ScriptListenerInvocation> {
         self.listens_text
-            .then_some(ScriptListenerInvocation::TextInput {
-                text: text.to_owned(),
-            })
+            .then_some(ScriptListenerInvocation::text_input(text.to_owned()))
     }
 
     /// Execute one C++ `KeyboardListenerGroup::keyInput` occurrence.
@@ -144,12 +139,7 @@ impl RuntimeKeyboardListenerGroup {
             return RuntimeInputDispatchOutcome::handled(handled);
         }
 
-        let invocation = ScriptListenerInvocation::Keyboard {
-            key,
-            modifiers,
-            is_pressed,
-            is_repeat,
-        };
+        let invocation = ScriptListenerInvocation::keyboard(key, modifiers, is_pressed, is_repeat);
         if let Some(global_id) = self.scripted_global_id {
             if !self.listens_keyboard {
                 return RuntimeInputDispatchOutcome::default();
@@ -218,9 +208,7 @@ impl RuntimeKeyboardListenerGroup {
             return RuntimeInputDispatchOutcome::handled(handled);
         }
 
-        let invocation = ScriptListenerInvocation::TextInput {
-            text: text.to_owned(),
-        };
+        let invocation = ScriptListenerInvocation::text_input(text.to_owned());
         if let Some(global_id) = self.scripted_global_id {
             if !self.listens_text {
                 return RuntimeInputDispatchOutcome::default();

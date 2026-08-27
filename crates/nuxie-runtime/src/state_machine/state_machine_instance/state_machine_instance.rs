@@ -1335,10 +1335,7 @@ impl RuntimeQueuedFocusEvent {
     }
 
     fn into_invocation(self) -> ScriptListenerInvocation {
-        ScriptListenerInvocation::Focus {
-            listener_index: self.listener_index,
-            is_focus: self.is_focus,
-        }
+        ScriptListenerInvocation::focus(self.listener_index, self.is_focus)
     }
 }
 
@@ -1366,10 +1363,10 @@ impl RuntimeQueuedSemanticEvent {
     }
 
     fn into_invocation(self) -> Option<ScriptListenerInvocation> {
-        Some(ScriptListenerInvocation::Semantic {
-            listener_index: self.listener_index?,
-            action_type: self.action_type,
-        })
+        Some(ScriptListenerInvocation::semantic(
+            self.listener_index?,
+            self.action_type,
+        ))
     }
 }
 
@@ -1787,17 +1784,15 @@ fn script_pointer_invocation(
         | RuntimeListenerType::Blur
         | RuntimeListenerType::Keyboard
         | RuntimeListenerType::SemanticAction
-        | RuntimeListenerType::Gamepad => return ScriptListenerInvocation::None,
+        | RuntimeListenerType::Gamepad => return ScriptListenerInvocation::none(),
     };
-    ScriptListenerInvocation::Pointer {
-        x: pointer.x,
-        y: pointer.y,
-        previous_x: pointer.previous_x,
-        previous_y: pointer.previous_y,
-        pointer_id: pointer.id,
+    ScriptListenerInvocation::pointer(
+        nuxie_render_api::Vec2D::new(pointer.x, pointer.y),
+        nuxie_render_api::Vec2D::new(pointer.previous_x, pointer.previous_y),
+        pointer.id,
         event,
-        timestamp_seconds: pointer.timestamp_seconds,
-    }
+        pointer.timestamp_seconds,
+    )
 }
 
 fn listener_target_direct_child(
@@ -6322,10 +6317,10 @@ impl StateMachineInstance {
                     artboard,
                     &listener.listener_actions,
                     owned_context.as_deref_mut(),
-                    &ScriptListenerInvocation::ReportedEvent {
-                        event_local_index: event.event_local_index(),
-                        seconds_delay: event.seconds_delay(),
-                    },
+                    &ScriptListenerInvocation::reported_event(
+                        event.event_local_index(),
+                        event.seconds_delay(),
+                    ),
                     host,
                     event.context.as_ref(),
                 );
@@ -6699,7 +6694,7 @@ impl StateMachineInstance {
             let Some(listener) = listeners.get(listener_index) else {
                 continue;
             };
-            let invocation = ScriptListenerInvocation::ViewModelChange { listener_index };
+            let invocation = ScriptListenerInvocation::view_model_change(listener_index);
             let action_result = if let Some(context) = owned_context.as_deref_mut() {
                 self.perform_listener_actions(
                     artboard,

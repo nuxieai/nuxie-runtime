@@ -129,8 +129,8 @@ pub(crate) use listener_bool_change::RuntimeListenerBoolChange;
 #[cfg(test)]
 pub(crate) use listener_input_change::RuntimeListenerInputTarget;
 pub use listener_invocation::{
-    ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
-    ScriptListenerInvocation, ScriptPointerEventKind,
+    ListenerInvocationKind, ScriptGamepadInputChange, ScriptGamepadMappingKind,
+    ScriptGamepadSnapshot, ScriptListenerInvocation, ScriptPointerEventKind,
 };
 #[cfg(test)]
 pub(crate) use listener_number_change::RuntimeListenerNumberChange;

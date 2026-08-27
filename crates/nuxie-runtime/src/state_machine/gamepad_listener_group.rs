@@ -100,11 +100,11 @@ impl RuntimeGamepadListenerGroup {
     }
 
     pub(crate) fn connected(snapshot: ScriptGamepadSnapshot) -> ScriptListenerInvocation {
-        ScriptListenerInvocation::GamepadConnected { snapshot }
+        ScriptListenerInvocation::gamepad_connected(snapshot)
     }
 
     pub(crate) fn disconnected(device_id: i32) -> ScriptListenerInvocation {
-        ScriptListenerInvocation::GamepadDisconnected { device_id }
+        ScriptListenerInvocation::gamepad_disconnected(device_id)
     }
 
     /// Execute one pinned C++ `GamepadListenerGroup::gamepadDispatch`.

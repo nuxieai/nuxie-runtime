@@ -40,7 +40,7 @@ impl StateMachineInstance {
                         .insert(snapshot.device_id, snapshot.clone());
                     let _ = self.gamepad_dispatch(
                         artboard,
-                        ScriptListenerInvocation::GamepadConnected { snapshot },
+                        ScriptListenerInvocation::gamepad_connected(snapshot),
                     );
                 }
                 Some(RECORD_UPDATE) => {
@@ -67,12 +67,12 @@ impl StateMachineInstance {
                             standard_intents(final_state.mapping, change);
                         let _ = self.gamepad_dispatch(
                             artboard,
-                            ScriptListenerInvocation::GamepadEvent {
-                                full_state: final_state.clone(),
+                            ScriptListenerInvocation::gamepad_event(
+                                final_state.clone(),
                                 change,
                                 standard_button_intent,
                                 standard_axis_intent,
-                            },
+                            ),
                         );
                     }
                 }
@@ -83,7 +83,7 @@ impl StateMachineInstance {
                     self.embedder_gamepads.remove(&device_id);
                     let _ = self.gamepad_dispatch(
                         artboard,
-                        ScriptListenerInvocation::GamepadDisconnected { device_id },
+                        ScriptListenerInvocation::gamepad_disconnected(device_id),
                     );
                 }
                 _ => return false,

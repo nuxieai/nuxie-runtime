@@ -45,9 +45,9 @@ impl RuntimeFocusListenerGroup {
             FocusEventKind::Blurred if self.is_blur_listener => false,
             _ => return None,
         };
-        Some(ScriptListenerInvocation::Focus {
-            listener_index: self.listener_index,
+        Some(ScriptListenerInvocation::focus(
+            self.listener_index,
             is_focus,
-        })
+        ))
     }
 }

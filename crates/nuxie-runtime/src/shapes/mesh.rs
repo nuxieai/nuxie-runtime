@@ -84,11 +84,11 @@ impl RuntimeMeshList {
             for mesh in &graph.meshes {
                 let mut owner = RuntimeMeshOwner::new(mesh.local_id);
                 for vertex in &mesh.vertices {
-                    super::mesh_vertex::on_added_dirty(
+                    super::mesh_vertex::on_added_dirty_after_super(
                         mesh.local_id,
                         &mut owner.vertex_locals,
-                        vertex,
-                        Some(mesh.local_id),
+                        vertex.local_id,
+                        Some((mesh.local_id, mesh.type_name)),
                     )
                     .expect("validated Mesh projection must retain each MeshVertex parent");
                 }

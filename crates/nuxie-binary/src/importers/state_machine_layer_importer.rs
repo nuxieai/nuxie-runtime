@@ -233,7 +233,8 @@ impl RuntimeFile {
         let mut state_machines = Vec::<RuntimeStateMachine<'_>>::new();
         let mut state_machine_artboard_owners = Vec::new();
         let mut layer_importer_resolve_boundaries = Vec::<Vec<usize>>::new();
-        let mut current_state_machine: Option<usize> = None;
+        let mut current_state_machine =
+            None::<state_machine_importer::StateMachineImporter>;
         // StateMachineLayerImporter captures the latest Artboard at the
         // instant the layer is constructed. That identity survives later
         // Artboard and StateMachine importers (`file.cpp:435-447`;
@@ -290,11 +291,13 @@ impl RuntimeFile {
                             }
                         }
                         Some(NullObjectConsumer::StateMachine) => {
-                            if let Some(state_machine_index) = current_state_machine {
+                            if let Some(state_machine_importer) = current_state_machine {
                                 // `StateMachineImporter::readNullObject` appends
                                 // a null input occurrence. Keep the slot so
                                 // every later `inputId` retains its C++ index.
-                                state_machines[state_machine_index].inputs.push(None);
+                                let consumed = state_machine_importer
+                                    .read_null_object(&mut state_machines);
+                                debug_assert!(consumed);
                             }
                         }
                         _ => {}
@@ -325,13 +328,21 @@ impl RuntimeFile {
                 });
                 state_machine_artboard_owners.push(current_artboard_index);
                 layer_importer_resolve_boundaries.push(Vec::new());
-                current_state_machine = Some(state_machines.len() - 1);
+                let next_state_machine_importer =
+                    state_machine_importer::StateMachineImporter::new(
+                        state_machines.len() - 1,
+                    );
+                if let Some(previous_state_machine_importer) = current_state_machine.take() {
+                    previous_state_machine_importer.resolve();
+                }
+                current_state_machine = Some(next_state_machine_importer);
                 continue;
             }
 
-            let Some(state_machine_index) = current_state_machine else {
+            let Some(state_machine_importer) = current_state_machine else {
                 continue;
             };
+            let state_machine_index = state_machine_importer.state_machine();
 
             if matches!(
                 definition.name,
@@ -357,19 +368,12 @@ impl RuntimeFile {
             }
 
             if definition_adds_cpp_state_machine_scripted_object(definition) {
-                state_machines[state_machine_index]
-                    .scripted_objects
-                    .push(RuntimeScriptedObject {
-                        object,
-                        inputs: Vec::new(),
-                    });
+                let scripted_object_index =
+                    state_machine_importer.add_scripted_object(&mut state_machines, object);
                 current_state_machine_scripted_object =
                     Some(RuntimeStateMachineScriptedObjectOwner {
                         state_machine_index,
-                        scripted_object_index: state_machines[state_machine_index]
-                            .scripted_objects
-                            .len()
-                            - 1,
+                        scripted_object_index,
                     });
             } else if definition_is_cpp_scripted_object(definition) {
                 current_state_machine_scripted_object = None;
@@ -386,22 +390,20 @@ impl RuntimeFile {
             }
 
             if definition.name == "StateMachineLayer" {
+                // StateMachineLayer::import appends through the retained
+                // StateMachineImporter before File replaces/resolves the
+                // previous StateMachineLayerImporter.
+                let layer_index =
+                    state_machine_importer.add_layer(&mut state_machines, object);
                 if let Some((previous_state_machine_index, previous_layer_index, _)) = current_layer
                 {
                     layer_importer_resolve_boundaries[previous_state_machine_index]
                         [previous_layer_index] = file_index;
                 }
-                state_machines[state_machine_index]
-                    .layers
-                    .push(RuntimeStateMachineLayer {
-                        object,
-                        state_count: 0,
-                        states: Vec::new(),
-                    });
                 layer_importer_resolve_boundaries[state_machine_index].push(self.objects.len());
                 current_layer = Some((
                     state_machine_index,
-                    state_machines[state_machine_index].layers.len() - 1,
+                    layer_index,
                     current_artboard_index,
                 ));
                 continue;
@@ -610,24 +612,16 @@ impl RuntimeFile {
             }
 
             if definition.is_a("StateMachineInput") {
-                state_machines[state_machine_index]
-                    .inputs
-                    .push(Some(object));
+                state_machine_importer.add_input(&mut state_machines, object);
                 continue;
             }
 
             if definition.is_a("StateMachineListener") {
-                state_machines[state_machine_index]
-                    .listeners
-                    .push(RuntimeStateMachineListener {
-                        object,
-                        actions: Vec::new(),
-                        listener_input_types: Vec::new(),
-                        listener_input_type_inputs: Vec::new(),
-                    });
+                let listener_index =
+                    state_machine_importer.add_listener(&mut state_machines, object);
                 current_listener = Some(RuntimeStateMachineListenerOwner {
                     state_machine_index,
-                    listener_index: state_machines[state_machine_index].listeners.len() - 1,
+                    listener_index,
                 });
                 continue;
             }
@@ -742,10 +736,13 @@ impl RuntimeFile {
                     data_bind_targets[file_index].map(|target| target.object),
                 )
             {
-                state_machines[state_machine_index].data_binds.push(object);
+                state_machine_importer.add_data_bind(&mut state_machines, object);
             }
         }
 
+        if let Some(state_machine_importer) = current_state_machine {
+            state_machine_importer.resolve();
+        }
         if let Some(transition_importer) = current_transition {
             transition_importer.resolve();
         }

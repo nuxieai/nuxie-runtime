@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Debug, Clone)]
-pub(super) struct AnimationReset {
+pub(crate) struct AnimationReset {
     // `StateMachineInstance::clone` is a Rust snapshot API with no C++
     // occurrence-copy counterpart. Share this immutable reset lease so a
     // snapshot never clones factory state; the final Arc owner returns the
@@ -91,7 +91,7 @@ impl AnimationResetObjectData {
     }
 }
 
-pub(super) struct AnimationResetFactory;
+pub(crate) struct AnimationResetFactory;
 
 fn animation_reset_pool() -> &'static Mutex<Vec<Vec<AnimationResetEntry>>> {
     static POOL: OnceLock<Mutex<Vec<Vec<AnimationResetEntry>>>> = OnceLock::new();
@@ -99,7 +99,7 @@ fn animation_reset_pool() -> &'static Mutex<Vec<Vec<AnimationResetEntry>>> {
 }
 
 impl AnimationResetFactory {
-    pub(super) fn from_animation_instances<'a>(
+    pub(crate) fn from_animation_instances<'a>(
         artboard: &ArtboardInstance,
         animation_instances: impl IntoIterator<Item = &'a LinearAnimationInstance>,
         use_first_as_baseline: bool,
@@ -198,7 +198,7 @@ impl AnimationResetFactory {
 }
 
 impl AnimationReset {
-    pub(super) fn apply(&self, artboard: &mut ArtboardInstance) -> bool {
+    pub(crate) fn apply(&self, artboard: &mut ArtboardInstance) -> bool {
         let mut changed = false;
         for entry in &self.storage.entries {
             match entry {

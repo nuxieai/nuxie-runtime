@@ -39,6 +39,7 @@ include!("animation/blend_animation.rs");
 include!("animation/blend_state.rs");
 include!("animation/blend_state_1d.rs");
 include!("animation/blend_state_1d_input.rs");
+include!("animation/blend_state_1d_instance.rs");
 include!("animation/blend_state_1d_viewmodel.rs");
 include!("animation/blend_state_direct.rs");
 include!("animation/blend_animation_1d.rs");

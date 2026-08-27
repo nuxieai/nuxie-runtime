@@ -75,7 +75,7 @@ mod transition_property_comparator;
 mod transition_property_viewmodel_comparator;
 mod transition_trigger_condition;
 mod transition_viewmodel_condition;
-use animation_reset_factory::{AnimationReset, AnimationResetFactory};
+pub(crate) use animation_reset_factory::{AnimationReset, AnimationResetFactory};
 #[cfg(test)]
 use animation_reset_factory::{AnimationResetColorValue, AnimationResetEntry};
 pub(crate) use bindables::{
@@ -147,11 +147,12 @@ pub(crate) use scripted_listener_action::{
 };
 use scripted_transition_condition::RuntimeScriptedTransitionCondition;
 use state_instance::RuntimeStateInstance;
-use state_machine::RuntimeBlendAnimationHandle;
+pub(crate) use state_machine::RuntimeBlendAnimationHandle;
+pub(crate) use crate::animation::BlendState1DInstance;
 pub use state_machine::RuntimeStateMachine;
 use state_machine::next_view_model_trigger_layer_id;
 pub(crate) use state_machine::{
-    BlendState1DInstance, RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeBlendStateDirect,
+    RuntimeBlendState1D, RuntimeBlendState1DSource, RuntimeBlendStateDirect,
     RuntimeTransitionInterpolator, TransitionEvaluationContext, build_state_machines,
     build_state_machines_with_action_catalog,
 };

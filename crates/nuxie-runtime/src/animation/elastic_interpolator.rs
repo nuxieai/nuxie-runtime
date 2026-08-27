@@ -9,16 +9,12 @@ fn elastic_interpolator_transform(
     } else {
         serialized_period
     };
-    let shift = if amplitude < 1.0 {
-        period / 4.0
-    } else {
-        period / (2.0 * std::f32::consts::PI) * (1.0 / amplitude).asin()
-    };
+    let elastic = RuntimeElasticEase::new(amplitude, period);
 
     match easing_value {
-        0 => elastic_ease_in(factor, amplitude, period, shift),
-        1 => elastic_ease_out(factor, amplitude, period, shift),
-        2 => elastic_ease_in_out(factor, amplitude, period, shift),
+        0 => elastic.ease_in(factor),
+        1 => elastic.ease_out(factor),
+        2 => elastic.ease_in_out(factor),
         _ => factor,
     }
 }

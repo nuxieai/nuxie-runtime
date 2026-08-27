@@ -25,9 +25,7 @@ impl ViewModelInstanceColorRuntime {
     }
 
     pub fn set_value(&self, value: u32) -> bool {
-        self.value
-            .cell()
-            .set_value(RuntimeViewModelCellValue::Color(value))
+        RuntimeOwnedViewModelColor::set_cell_value(self.value.cell(), value)
     }
 
     pub fn set_rgb(&self, red: u8, green: u8, blue: u8) -> bool {

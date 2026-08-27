@@ -1305,7 +1305,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if !color.set_value(value) {
+        if !color.apply_value(value) {
             return false;
         }
         true
@@ -1605,7 +1605,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if !current.set_value(value) {
+        if !current.apply_value(value) {
             return false;
         }
         true

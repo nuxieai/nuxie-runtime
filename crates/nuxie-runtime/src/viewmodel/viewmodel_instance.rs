@@ -4024,7 +4024,7 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if !color.set_value(value) {
+        if !color.apply_value(value) {
             return false;
         }
         true

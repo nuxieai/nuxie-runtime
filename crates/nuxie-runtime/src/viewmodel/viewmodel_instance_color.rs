@@ -22,8 +22,33 @@ impl RuntimeOwnedViewModelColor {
         }
     }
 
+    /// Rust spelling of the generated `propertyValue(int)` setter followed
+    /// by `ViewModelInstanceColor::propertyValueChanged()`: preserve the
+    /// packed ARGB bits, reject an identical value, then let the retained cell
+    /// publish `Bindings` dirt and `onValueChanged` state in source order.
+    fn set_cell_value(cell: &RuntimeViewModelCell, value: u32) -> bool {
+        match cell.value() {
+            RuntimeViewModelCellValue::Color(current) if current == value => return false,
+            RuntimeViewModelCellValue::Color(_) => {}
+            _ => {
+                debug_assert!(false, "owned color write targeted a non-color cell");
+                return false;
+            }
+        }
+        cell.set_value(RuntimeViewModelCellValue::Color(value));
+        true
+    }
+
     fn set_value(&mut self, value: u32) -> bool {
-        self.cell.set_value(RuntimeViewModelCellValue::Color(value))
+        Self::set_cell_value(&self.cell, value)
+    }
+
+    /// `ViewModelInstanceColor::applyValue(DataValueColor*)`.
+    ///
+    /// The binary object ends at the crate boundary, so its decoded packed
+    /// color enters the exact generated-property setter above.
+    fn apply_value(&mut self, data_value: u32) -> bool {
+        self.set_value(data_value)
     }
 }
 

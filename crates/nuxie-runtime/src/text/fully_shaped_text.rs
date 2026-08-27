@@ -47,6 +47,29 @@ struct StaticPositionedTextGlyph {
     modifier_opacity: f32,
 }
 impl StaticShapedTextLayout {
+    /// Glyph advance rectangles recorded by pinned `Text::buildRenderStyles`
+    /// for one `TextValueRun`, before Text's local render transform.
+    fn value_run_hit_rects(&self, char_start: usize, char_len: usize) -> Vec<RenderAabb> {
+        let char_end = char_start.saturating_add(char_len);
+        self.lines
+            .iter()
+            .flat_map(|line| {
+                line.glyphs.iter().filter_map(move |positioned| {
+                    let glyph_start = positioned.glyph.char_index;
+                    let glyph_end = glyph_start.saturating_add(positioned.glyph.char_len);
+                    (glyph_start < char_end && char_start < glyph_end).then(|| {
+                        RenderAabb::new(
+                            positioned.x,
+                            line.top,
+                            positioned.x + positioned.glyph.advance,
+                            line.bottom,
+                        )
+                    })
+                })
+            })
+            .collect()
+    }
+
     fn caret(&self, byte_offset: usize) -> Option<(RenderVec2D, RenderVec2D)> {
         if !self.geometry_is_finite() {
             return None;

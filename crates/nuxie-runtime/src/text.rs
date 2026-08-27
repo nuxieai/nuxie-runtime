@@ -30,10 +30,10 @@ use crate::draw::{
 };
 use crate::joystick::{joystick_x_property_key, joystick_y_property_key};
 use crate::properties::{property_key_for_name, solid_color_value_property_key};
+use crate::text_style_paint_owner::RuntimeTextStylePaintPaths;
 use crate::view_model::RuntimeFontAssetValue;
 use crate::{ArtboardInstance, Mat2D, RuntimePathCommand};
 use crate::{RuntimeShapePaintCommand, RuntimeShapePaintKind, RuntimeShapePaintPathKind};
-use crate::text_style_paint_owner::RuntimeTextStylePaintPaths;
 use std::collections::BTreeMap;
 
 pub(crate) mod cursor;
@@ -216,8 +216,8 @@ pub(crate) fn static_text_layout_debug_report(
                     };
                     let run = resolved.iter().find(|run| run.local_id == run_local)?;
                     Some(Some(RuntimeTextSelectedRunDebugReport {
-                        offset: run.char_start,
-                        length: run.char_len,
+                        offset: run.value_run_offset,
+                        length: run.value_run_length,
                         byte_length: run.text.len(),
                     }))
                 })
@@ -474,17 +474,48 @@ pub(crate) fn static_text_value_run_hit(
     ) else {
         return false;
     };
-    let start = char_byte_index(&layout.text, run.char_start);
-    let end = char_byte_index(&layout.text, run.char_start.saturating_add(run.char_len));
-    layout
-        .selection_rects(start..end)
-        .into_iter()
-        .any(|bounds| {
-            point.x >= bounds.min_x - hit_radius
-                && point.x <= bounds.max_x + hit_radius
-                && point.y >= bounds.min_y - hit_radius
-                && point.y <= bounds.max_y + hit_radius
-        })
+    let Some(run_state) = instance
+        .component(run_local)
+        .and_then(|run| run.concrete.text_value_run.as_ref())
+    else {
+        return false;
+    };
+    run_state.reset_hit_test();
+    for rect in layout.value_run_hit_rects(run.char_start, run.char_len) {
+        run_state.add_hit_rect(rect);
+    }
+    run_state.compute_hit_contours();
+
+    let local_bounds = match layout_constraint {
+        Some(constraint) => slice
+            .local_bounds_with_layout_constraint(runtime, instance, constraint)
+            .ok()
+            .flatten(),
+        None => slice.local_bounds(runtime, instance).ok().flatten(),
+    };
+    let Some((left, top, width, height)) = local_bounds else {
+        return false;
+    };
+    let text_local_bounds = RenderAabb::from_ltwh(left, top, width, height);
+    let overflow_visible = slice
+        .text_uint_property(runtime, instance, "overflowValue")
+        .is_ok_and(|overflow| overflow == TEXT_OVERFLOW_VISIBLE);
+    let text_component_local =
+        run_state.text_component_local(instance.component_parent_local(run_local));
+    run_state.hit_test_aabb(
+        point,
+        text_component_local,
+        overflow_visible,
+        text_world,
+        text_local_bounds,
+        layout.local_transform,
+    ) && run_state.hit_test_hifi(
+        point,
+        hit_radius,
+        text_component_local,
+        text_world,
+        layout.local_transform,
+    )
 }
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -696,10 +727,9 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
             .text_style_paint_locals(style.local_id)
             .into_iter()
             .filter_map(|paint_local| {
-                text_style_paint_node_for_local(graph, paint_local)
-                    .map(|(container_index, paint_index, paint)| {
-                        (container_index, paint_index, paint)
-                    })
+                text_style_paint_node_for_local(graph, paint_local).map(
+                    |(container_index, paint_index, paint)| (container_index, paint_index, paint),
+                )
             })
             .collect::<Vec<_>>();
         let paint_pool = RuntimeTextPaintPoolSpec {
@@ -747,8 +777,7 @@ pub(crate) fn runtime_text_draw_data_from_retained_layout(
                     }
                     command.text_path_bucket_slot = Some(path_bucket_slot_start + bucket_index);
                     command.text_path_bucket_opacity = Some(path_bucket.opacity);
-                    command.text_paint_ref =
-                        Some((source_container_index, source_paint_index));
+                    command.text_paint_ref = Some((source_container_index, source_paint_index));
                     command.ensure_text_paint_pool_after_draw = Some(paint_pool);
                     commands.push(command);
                 }
@@ -999,6 +1028,12 @@ struct StaticResolvedRun {
     /// omitted, matching the separate `m_allRuns` and `StyledText::m_runs`
     /// ownership in C++.
     styled_text_included: bool,
+    /// Pinned `TextValueRun::offset()` and `length()`. These deliberately
+    /// count raw run text even when `Text::makeStyled` skips that run.
+    value_run_offset: usize,
+    value_run_length: usize,
+    /// Position and length in `StyledText`; unlike the two fields above,
+    /// skipped runs occupy no shaped-text characters.
     char_start: usize,
     char_len: usize,
     source_bytes: Vec<u8>,
@@ -2075,7 +2110,7 @@ impl StaticTextSlice {
             .copied()
             .filter(|local| child_type(*local) == Some("TextValueRun"))
             .collect::<Vec<_>>();
-        let style_locals = text_component
+        let mut style_locals = text_component
             .children
             .iter()
             .copied()
@@ -2101,13 +2136,25 @@ impl StaticTextSlice {
             let run = runtime
                 .object(run_global as usize)
                 .with_context(|| format!("missing TextValueRun global {run_global}"))?;
-            let style_local = run
-                .uint_property("styleId")
-                .context("TextValueRun missing styleId")? as usize;
-            if !style_locals.contains(&style_local) {
+            let authored_style_local =
+                run.uint_property("styleId")
+                    .context("TextValueRun missing styleId")? as usize;
+            let style_local = instance
+                .and_then(|instance| instance.component(run_local))
+                .and_then(|run| run.concrete.text_value_run.as_ref())
+                .and_then(|run| run.style_local())
+                .unwrap_or(authored_style_local);
+            let style_type = child_type(style_local);
+            if !style_type
+                .and_then(definition_by_name)
+                .is_some_and(|definition| definition.is_a("TextStylePaint"))
+            {
                 bail!(
-                    "static text subset requires every TextValueRun to reference a TextStylePaint child"
+                    "TextValueRun local {run_local} style local {style_local} is not a TextStylePaint"
                 );
+            }
+            if !style_locals.contains(&style_local) {
+                style_locals.push(style_local);
             }
             let bytes = run
                 .string_property_bytes("text")
@@ -2709,6 +2756,19 @@ impl StaticTextSlice {
         layout: Option<&StaticShapedTextLayout>,
         selection_filter: Option<(std::ops::Range<usize>, bool)>,
     ) -> Result<StaticTextRenderData> {
+        let hit_runs = (self.kind == StaticTextKind::Text && selection_filter.is_none())
+            .then(|| self.resolved_runs(runtime, instance))
+            .transpose()?;
+        if let Some(runs) = &hit_runs {
+            for run in runs {
+                if let Some(state) = instance
+                    .component(run.local_id)
+                    .and_then(|run| run.concrete.text_value_run.as_ref())
+                {
+                    state.reset_hit_test();
+                }
+            }
+        }
         let Some(layout) = layout else {
             return Ok(StaticTextRenderData {
                 style_paths: vec![RuntimeTextStylePaintPaths::default(); self.styles.len()],
@@ -2730,6 +2790,23 @@ impl StaticTextSlice {
                     if selected != *include_selected {
                         continue;
                     }
+                }
+                if let Some(run) = hit_runs.as_ref().and_then(|runs| {
+                    runs.iter().find(|run| {
+                        run.char_start <= glyph.char_index
+                            && glyph.char_index < run.char_start.saturating_add(run.char_len)
+                    })
+                }) && let Some(state) = instance
+                    .component(run.local_id)
+                    .and_then(|run| run.concrete.text_value_run.as_ref())
+                    .filter(|run| run.is_hit_target())
+                {
+                    state.add_hit_rect(RenderAabb::new(
+                        positioned.x,
+                        line.top,
+                        positioned.x + glyph.advance,
+                        line.bottom,
+                    ));
                 }
                 let center_x = positioned.x + glyph.advance * 0.5;
                 let glyph_id = GlyphId::new(glyph.glyph_id);
@@ -2810,6 +2887,18 @@ impl StaticTextSlice {
                             order.push(RuntimeTextDrawOrder::Style(style.local_id));
                         }
                     }
+                }
+            }
+        }
+
+        if let Some(runs) = &hit_runs {
+            for run in runs {
+                if let Some(state) = instance
+                    .component(run.local_id)
+                    .and_then(|run| run.concrete.text_value_run.as_ref())
+                    .filter(|run| run.is_hit_target())
+                {
+                    state.compute_hit_contours();
                 }
             }
         }
@@ -3139,6 +3228,7 @@ impl StaticTextSlice {
     ) -> Result<Vec<StaticResolvedRun>> {
         let mut runs = Vec::new();
         let mut char_start = 0;
+        let mut value_run_offset = 0;
         let mut style_id = 0u16;
         for run in &self.runs {
             let property_key = property_key_for_name(run.text_property_owner, "text")
@@ -3173,26 +3263,40 @@ impl StaticTextSlice {
             let text = cxx_styled_text_prefix(&source_bytes)
                 .with_context(|| format!("{}.text prefix is not UTF-8", run.text_property_owner))?
                 .to_owned();
-            let style_index = self.style_index_for_local(run.style_local)?;
+            let style_local = instance
+                .component(run.local_id)
+                .and_then(|run| run.concrete.text_value_run.as_ref())
+                .and_then(|run| run.style_local())
+                .unwrap_or(run.style_local);
+            let style_index = self.style_index_for_local(style_local)?;
             let styled_text_included = !source_bytes.is_empty()
                 && self.styles[style_index]
                     .font_bytes(runtime, instance)
                     .is_some();
+            let value_run_length = instance
+                .component(run.local_id)
+                .and_then(|run| run.concrete.text_value_run.as_ref())
+                .and_then(|run| run.length(&source_bytes))
+                .context("TextValueRun text prefix is not valid UTF-8")?
+                as usize;
             let char_len = styled_text_included
-                .then(|| text.chars().count())
+                .then_some(value_run_length)
                 .unwrap_or(0);
             runs.push(StaticResolvedRun {
                 local_id: run.local_id,
                 global_id: run.global_id,
-                style_local: Some(run.style_local),
+                style_local: Some(style_local),
                 style_id,
                 styled_text_included,
+                value_run_offset,
+                value_run_length,
                 char_start,
                 char_len,
                 source_bytes,
                 text,
             });
             style_id = style_id.wrapping_add(1);
+            value_run_offset += value_run_length;
             char_start += char_len;
         }
         runs.extend(self.resolved_dynamic_runs(
@@ -3200,6 +3304,7 @@ impl StaticTextSlice {
             instance,
             instance.text_list_runs(self.text_local),
             char_start,
+            value_run_offset,
             style_id,
         )?);
         Ok(runs)
@@ -3211,6 +3316,7 @@ impl StaticTextSlice {
         instance: &ArtboardInstance,
         list_runs: Vec<crate::view_model::RuntimeTextListRun>,
         mut char_start: usize,
+        mut value_run_offset: usize,
         mut style_id: u16,
     ) -> Result<Vec<StaticResolvedRun>> {
         let mut runs = Vec::with_capacity(list_runs.len());
@@ -3249,18 +3355,22 @@ impl StaticTextSlice {
             let char_len = styled_text_included
                 .then(|| text.chars().count())
                 .unwrap_or(0);
+            let value_run_length = text.chars().count();
             runs.push(StaticResolvedRun {
                 local_id: self.text_local,
                 global_id: self.text_global,
                 style_local,
                 style_id,
                 styled_text_included,
+                value_run_offset,
+                value_run_length,
                 char_start,
                 char_len,
                 source_bytes,
                 text,
             });
             style_id = style_id.wrapping_add(1);
+            value_run_offset += value_run_length;
             char_start += char_len;
         }
         Ok(runs)
@@ -5084,8 +5194,7 @@ impl StaticTextStyle {
             .text_style_paint_locals(self.local_id)
             .into_iter()
             .filter_map(|paint_local| {
-                text_style_paint_node_for_local(graph, paint_local)
-                    .map(|(_, _, paint)| paint)
+                text_style_paint_node_for_local(graph, paint_local).map(|(_, _, paint)| paint)
             })
             .find(|paint| {
                 paint.paint_type == ShapePaintKind::Fill
@@ -6336,6 +6445,7 @@ mod tests {
                 ],
                 0,
                 0,
+                0,
             )
             .expect("dynamic runs resolve");
 
@@ -6359,6 +6469,11 @@ mod tests {
         assert_eq!(runs[4].style_local, Some(99));
         assert_eq!((runs[4].char_start, runs[4].char_len), (8, 5));
         assert_eq!(
+            (runs[4].value_run_offset, runs[4].value_run_length),
+            (22, 5),
+            "TextValueRun::offset counts every preceding raw run, including makeStyled omissions"
+        );
+        assert_eq!(
             runs.iter()
                 .map(StaticResolvedRun::styled_text)
                 .collect::<String>(),
@@ -6374,6 +6489,7 @@ mod tests {
                     text: Some(b"unpainted".to_vec()),
                     style: Some(b"first".to_vec()),
                 }],
+                0,
                 0,
                 0,
             )
@@ -6444,7 +6560,7 @@ mod tests {
         });
 
         let runs = slice
-            .resolved_dynamic_runs(&runtime, &instance, list_runs, 0, 0)
+            .resolved_dynamic_runs(&runtime, &instance, list_runs, 0, 0, 0)
             .expect("wrapping all-runs sequence resolves");
         assert_eq!(runs.len(), usize::from(u16::MAX) + 2);
         assert_eq!(runs[0].style_id, 0);
@@ -6612,6 +6728,7 @@ mod tests {
                 ],
                 0,
                 0,
+                0,
             )
             .expect("dynamic runs resolve");
         assert_eq!(runs.len(), 3);
@@ -6650,6 +6767,7 @@ mod tests {
                 }],
                 0,
                 0,
+                0,
             )
             .expect("second-style control resolves");
         let second_metrics = slice
@@ -6663,6 +6781,7 @@ mod tests {
                     text: Some(b"\nA".to_vec()),
                     style: Some(b"first".to_vec()),
                 }],
+                0,
                 0,
                 0,
             )
@@ -7641,11 +7760,7 @@ mod tests {
                 "SolidColor",
                 vec![
                     property("SolidColor", "parentId", FixtureValue::Uint(3)),
-                    property(
-                        "SolidColor",
-                        "colorValue",
-                        FixtureValue::Color(0xff11_2233),
-                    ),
+                    property("SolidColor", "colorValue", FixtureValue::Color(0xff11_2233)),
                 ],
             ),
             fixture_record(
@@ -7653,11 +7768,7 @@ mod tests {
                 vec![
                     property("TextValueRun", "parentId", FixtureValue::Uint(1)),
                     property("TextValueRun", "styleId", FixtureValue::Uint(2)),
-                    property(
-                        "TextValueRun",
-                        "text",
-                        FixtureValue::String("A".into()),
-                    ),
+                    property("TextValueRun", "text", FixtureValue::String("A".into())),
                 ],
             ),
             fixture_record("Text", Vec::new()),
@@ -7677,11 +7788,7 @@ mod tests {
                 "SolidColor",
                 vec![
                     property("SolidColor", "parentId", FixtureValue::Uint(8)),
-                    property(
-                        "SolidColor",
-                        "colorValue",
-                        FixtureValue::Color(0xffaa_bbcc),
-                    ),
+                    property("SolidColor", "colorValue", FixtureValue::Color(0xffaa_bbcc)),
                 ],
             ),
             fixture_record(
@@ -7689,11 +7796,7 @@ mod tests {
                 vec![
                     property("TextValueRun", "parentId", FixtureValue::Uint(6)),
                     property("TextValueRun", "styleId", FixtureValue::Uint(7)),
-                    property(
-                        "TextValueRun",
-                        "text",
-                        FixtureValue::String("B".into()),
-                    ),
+                    property("TextValueRun", "text", FixtureValue::String("B".into())),
                 ],
             ),
             // Pinned ShapePaint::onAddedClean does not append a child whose
@@ -7705,8 +7808,8 @@ mod tests {
             ),
         ])
         .expect("TextStylePaint lifecycle fixture imports");
-        let graphs = GraphFile::from_runtime_file(&runtime)
-            .expect("TextStylePaint lifecycle graph builds");
+        let graphs =
+            GraphFile::from_runtime_file(&runtime).expect("TextStylePaint lifecycle graph builds");
         let graph = graphs.artboards.first().expect("fixture artboard");
         let mut source = ArtboardInstance::from_graph(&runtime, graph)
             .expect("TextStylePaint source occurrence constructs");
@@ -7719,8 +7822,33 @@ mod tests {
             .expect("source A production topology");
         let source_b = StaticTextSlice::from_instance(&runtime, graph, &source, 6)
             .expect("source B production topology");
-        assert_eq!(source_a.styles[0].foreground_color(&source, graph), 0xff11_2233);
-        assert_eq!(source_b.styles[0].foreground_color(&source, graph), 0xffaa_bbcc);
+        assert_eq!(
+            source_a.styles[0].foreground_color(&source, graph),
+            0xff11_2233
+        );
+        assert_eq!(
+            source_b.styles[0].foreground_color(&source, graph),
+            0xffaa_bbcc
+        );
+
+        let style_id = property_key_for_name("TextValueRun", "styleId").unwrap();
+        assert!(source.set_uint_property(5, style_id, 7));
+        let cross_text_style = StaticTextSlice::from_instance(&runtime, graph, &source, 1)
+            .expect("a resolved TextStylePaint may belong to another Text");
+        assert_eq!(
+            cross_text_style.resolved_runs(&runtime, &source).unwrap()[0].style_local,
+            Some(7)
+        );
+        source.set_uint_property(5, style_id, 3);
+        assert_eq!(
+            source
+                .component(5)
+                .and_then(|run| run.concrete.text_value_run.as_ref())
+                .and_then(|run| run.style_local()),
+            Some(7),
+            "an invalid live styleId preserves the previous TextStylePaint pointer"
+        );
+        assert!(source.set_uint_property(5, style_id, 7));
 
         let parent_id = property_key_for_name("Component", "parentId").unwrap();
         assert!(source.set_uint_property(3, parent_id, 7));
@@ -7736,8 +7864,14 @@ mod tests {
             .expect("clone A production topology");
         let clone_b = StaticTextSlice::from_instance(&runtime, graph, &clone, 6)
             .expect("clone B production topology");
-        assert_eq!(clone_a.styles[0].foreground_color(&clone, graph), 0xff00_0000);
-        assert_eq!(clone_b.styles[0].foreground_color(&clone, graph), 0xff11_2233);
+        assert_eq!(
+            clone_a.styles[0].foreground_color(&clone, graph),
+            0xff00_0000
+        );
+        assert_eq!(
+            clone_b.styles[0].foreground_color(&clone, graph),
+            0xff11_2233
+        );
         assert!(
             clone.runtime_shapes.text_style_paint_owner(3).is_some(),
             "clone rebuilds the moved paint's concrete backend owner under B"
@@ -8388,8 +8522,7 @@ mod tests {
         let cache_epoch_before = instance.cache_epoch();
         let prepared_epoch_before = instance.prepared_epoch();
         let tag_key = property_key_for_name("TextStyleFeature", "tag").unwrap();
-        let feature_value_key =
-            property_key_for_name("TextStyleFeature", "featureValue").unwrap();
+        let feature_value_key = property_key_for_name("TextStyleFeature", "featureValue").unwrap();
         for (key, value) in [(tag_key, u64::from(clig)), (feature_value_key, 0)] {
             assert!(instance.set_uint_property(feature_local, key, value));
             assert_eq!(instance.uint_property(feature_local, key), Some(value));
@@ -8475,11 +8608,7 @@ mod tests {
         // non-collapsed dirt bit, so the retained helper must still perform
         // exactly one live option refresh and publish no new dirt of its own.
         instance.update_pass();
-        assert!(instance.set_uint_property(
-            feature_local,
-            feature_value_key,
-            1,
-        ));
+        assert!(instance.set_uint_property(feature_local, feature_value_key, 1,));
         assert_eq!(instance.debug_component_dirt(1), Some(ComponentDirt::NONE));
         assert_eq!(
             instance.objects.component(helper).unwrap().dirt,
@@ -10371,7 +10500,10 @@ mod tests {
                 ),
                 fixture_record(
                     "TextValueRun",
-                    vec![property("TextValueRun", "parentId", FixtureValue::Uint(1))],
+                    vec![
+                        property("TextValueRun", "parentId", FixtureValue::Uint(1)),
+                        property("TextValueRun", "styleId", FixtureValue::Uint(7)),
+                    ],
                 ),
                 fixture_record(
                     "CubicInterpolatorComponent",
@@ -10387,6 +10519,14 @@ mod tests {
                         "CubicInterpolatorComponent",
                         "parentId",
                         FixtureValue::Uint(3),
+                    )],
+                ),
+                fixture_record(
+                    "TextStylePaint",
+                    vec![property(
+                        "TextStylePaint",
+                        "parentId",
+                        FixtureValue::Uint(1),
                     )],
                 ),
             ])

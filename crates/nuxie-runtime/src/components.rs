@@ -5,6 +5,7 @@ use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
     artboard_index_for_graph, cached_property_key_for_name, property_key_for_name,
 };
+use crate::text_value_run_owner::RuntimeTextValueRunState;
 use crate::view_model::RuntimeOwnedViewModelListHandle;
 use nuxie_binary::RuntimeFile;
 use nuxie_graph::{ArtboardGraph, ComponentNode};
@@ -979,6 +980,7 @@ pub(crate) struct RuntimeTextInputState {
 pub(crate) struct RuntimeTextState {
     bounds: Cell<Option<(f32, f32, f32, f32)>>,
     control_size: Cell<Option<(f32, f32, u64, u64, u64)>>,
+    run_locals: RefCell<Vec<usize>>,
     modifier_group_locals: RefCell<Vec<usize>>,
     modifier_range_maps: RefCell<BTreeMap<usize, Vec<(usize, usize)>>>,
     modifier_range_indices: RefCell<BTreeMap<usize, [f32; 4]>>,
@@ -1204,6 +1206,7 @@ impl RuntimeTextState {
         Self {
             bounds: Cell::new(None),
             control_size: Cell::new(None),
+            run_locals: RefCell::new(Vec::new()),
             modifier_group_locals: RefCell::new(Vec::new()),
             modifier_range_maps: RefCell::new(BTreeMap::new()),
             modifier_range_indices: RefCell::new(BTreeMap::new()),
@@ -1220,6 +1223,18 @@ impl RuntimeTextState {
 
     pub(crate) fn register_modifier_group(&self, group_local: usize) {
         self.modifier_group_locals.borrow_mut().push(group_local);
+    }
+
+    pub(crate) fn register_run(&self, run_local: usize) {
+        self.run_locals.borrow_mut().push(run_local);
+    }
+
+    pub(crate) fn clear_runs(&self) {
+        self.run_locals.borrow_mut().clear();
+    }
+
+    pub(crate) fn run_locals(&self) -> Vec<usize> {
+        self.run_locals.borrow().clone()
     }
 
     pub(crate) fn clear_modifier_groups(&self) {
@@ -1919,6 +1934,7 @@ pub(crate) struct RuntimeConcreteComponentState {
     pub(crate) vertex: Option<RuntimeVertexState>,
     pub(crate) scripted: Option<RuntimeScriptedComponentState>,
     pub(crate) text: Option<RuntimeTextState>,
+    pub(crate) text_value_run: Option<RuntimeTextValueRunState>,
     pub(crate) text_style: Option<RuntimeTextStyleState>,
     pub(crate) text_style_paint: Option<RuntimeTextStylePaintState>,
     pub(crate) text_modifier_group: Option<RuntimeTextModifierGroupState>,
@@ -1971,6 +1987,8 @@ impl RuntimeConcreteComponentState {
             )
             .then(RuntimeScriptedComponentState::default),
             text: type_is_a(type_name, "Text").then(RuntimeTextState::new),
+            text_value_run: type_is_a(type_name, "TextValueRun")
+                .then(RuntimeTextValueRunState::default),
             text_style: type_is_a(type_name, "TextStyle").then(RuntimeTextStyleState::default),
             text_style_paint: type_is_a(type_name, "TextStylePaint")
                 .then(RuntimeTextStylePaintState::default),
@@ -2054,6 +2072,10 @@ impl RuntimeConcreteComponentState {
                 .text
                 .as_ref()
                 .map(RuntimeTextState::clone_for_occurrence),
+            text_value_run: self
+                .text_value_run
+                .as_ref()
+                .map(|_| RuntimeTextValueRunState::default()),
             text_style: self
                 .text_style
                 .as_ref()

@@ -1367,7 +1367,14 @@ impl ArtboardInstance {
                 .component(*handle)
                 .and_then(|component| component.concrete.text.as_ref())
             {
+                text.clear_runs();
                 text.clear_modifier_groups();
+            }
+            if let Some(run) = objects
+                .component(*handle)
+                .and_then(|component| component.concrete.text_value_run.as_ref())
+            {
+                run.reset_added_state();
             }
             if let Some(group) = objects
                 .component(*handle)
@@ -1421,6 +1428,56 @@ impl ArtboardInstance {
                         "TextStyle local {} requires a direct TextInterface parent",
                         component.local_id
                     );
+                }
+                // `TextValueRun::onAddedClean` registers the run on its direct
+                // Text parent. `onAddedDirty` then resolves and retains the
+                // generated styleId as a TextStylePaint pointer. Both lists
+                // and pointers are occurrence-owned and rebuilt for clones.
+                if definition_by_name(component.type_name)
+                    .is_some_and(|definition| definition.is_a("TextValueRun"))
+                {
+                    if !definition_by_name(parent_type)
+                        .is_some_and(|definition| definition.is_a("Text"))
+                    {
+                        anyhow::bail!(
+                            "TextValueRun local {} requires a direct Text parent",
+                            component.local_id
+                        );
+                    }
+                    objects
+                        .component(parent)
+                        .and_then(|parent| parent.concrete.text.as_ref())
+                        .expect("Text occurrence state")
+                        .register_run(component.local_id);
+
+                    let style_key = property_key_for_name("TextValueRun", "styleId")
+                        .context("TextValueRun.styleId is missing from the runtime schema")?;
+                    let style_local = objects
+                        .uint_property(component.local_id, style_key)
+                        .and_then(|style| usize::try_from(style).ok())
+                        .context("TextValueRun styleId does not resolve to an object slot")?;
+                    let style = objects.component_handle(style_local).context(
+                        "TextValueRun styleId does not resolve to a Component occurrence",
+                    )?;
+                    let style_type = objects
+                        .component(style)
+                        .map(|style| style.type_name)
+                        .unwrap_or("<missing>");
+                    if !definition_by_name(style_type)
+                        .is_some_and(|definition| definition.is_a("TextStylePaint"))
+                    {
+                        anyhow::bail!(
+                            "TextValueRun local {} style local {} type {} is not a TextStylePaint",
+                            component.local_id,
+                            style_local,
+                            style_type
+                        );
+                    }
+                    objects
+                        .component(handle)
+                        .and_then(|run| run.concrete.text_value_run.as_ref())
+                        .expect("TextValueRun occurrence state")
+                        .set_style_local(style_local);
                 }
                 // `TextStyleAxis::onAddedDirty` first runs Component Super,
                 // then requires a direct TextStyle parent and appends itself
@@ -6015,9 +6072,9 @@ impl ArtboardInstance {
                     definition_by_name(type_name)
                         .is_some_and(|definition| definition.is_a("TextStyleFeature"))
                 })
-            && ["tag", "featureValue"].into_iter().any(|name| {
-                property_key_for_name("TextStyleFeature", name) == Some(property_key)
-            });
+            && ["tag", "featureValue"]
+                .into_iter()
+                .any(|name| property_key_for_name("TextStyleFeature", name) == Some(property_key));
         if let Some(previous_flags) = previous_drawable_flags {
             self.mark_runtime_drawable_visibility_changed(local_id, previous_flags);
         }

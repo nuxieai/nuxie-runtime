@@ -178,7 +178,7 @@ impl StaticTextModifierRange {
         if coverage.is_empty() {
             return Ok(());
         }
-        let (start, end) = self.character_range(runs, coverage.len())?;
+        let (start, end) = self.character_range(instance, runs, coverage.len())?;
         let units_value = self.uint_property(runtime, instance, "unitsValue", 0)?;
         let range_map = self.range_map(
             instance,
@@ -268,6 +268,7 @@ impl StaticTextModifierRange {
 
     fn character_range(
         &self,
+        instance: &ArtboardInstance,
         runs: &[StaticResolvedRun],
         text_len: usize,
     ) -> Result<(usize, usize)> {
@@ -280,7 +281,15 @@ impl StaticTextModifierRange {
             .with_context(|| {
                 format!("TextModifierRange run local {run_local} has no Text offset")
             })?;
-        Ok((run.char_start, run.char_start + run.char_len))
+        if let Some((offset, length)) = crate::text_value_run_owner::offset(instance, run_local)
+            .zip(crate::text_value_run_owner::length(instance, run_local))
+        {
+            return Ok((offset as usize, offset.wrapping_add(length) as usize));
+        }
+        Ok((
+            run.value_run_offset,
+            run.value_run_offset + run.value_run_length,
+        ))
     }
 
     fn range_map(
@@ -543,9 +552,7 @@ fn cubic_interpolator_calc_bezier(t: f32, a1: f32, a2: f32) -> f32 {
 }
 
 fn cubic_interpolator_slope(t: f32, a1: f32, a2: f32) -> f32 {
-    3.0 * (1.0 - 3.0 * a2 + 3.0 * a1) * t * t
-        + 2.0 * (3.0 * a2 - 6.0 * a1) * t
-        + (3.0 * a1)
+    3.0 * (1.0 - 3.0 * a2 + 3.0 * a1) * t * t + 2.0 * (3.0 * a2 - 6.0 * a1) * t + (3.0 * a1)
 }
 
 fn cubic_interpolator_get_t(x: f32, x1: f32, x2: f32) -> f32 {
@@ -597,8 +604,7 @@ fn cubic_interpolator_get_t(x: f32, x1: f32, x2: f32) -> f32 {
                 interval_start = current_t;
             }
             iterations += 1;
-            if current_x.abs() <= SUBDIVISION_PRECISION
-                || iterations >= SUBDIVISION_MAX_ITERATIONS
+            if current_x.abs() <= SUBDIVISION_PRECISION || iterations >= SUBDIVISION_MAX_ITERATIONS
             {
                 return current_t;
             }

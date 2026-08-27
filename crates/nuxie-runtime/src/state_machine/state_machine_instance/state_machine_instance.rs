@@ -2701,6 +2701,13 @@ impl StateMachineInstance {
         }
 
         if type_name == "TextValueRun" {
+            artboard
+                .component_at(target)
+                .concrete
+                .text_value_run
+                .as_ref()
+                .expect("TextValueRun occurrence state")
+                .set_is_hit_target(true);
             let drawable = artboard.component_parent_handle(target).or(Some(target));
             if let Some(drawable) = drawable {
                 let local_id = artboard.component_at(drawable).local_id;

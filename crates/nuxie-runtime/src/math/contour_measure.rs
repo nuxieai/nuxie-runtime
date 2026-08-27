@@ -406,7 +406,11 @@ impl RuntimeContourMeasure {
 
     pub fn at_distance(&self, distance: f32) -> RuntimePathSample {
         let (pos, tan) = self.contour.position_tangent_at_distance(distance);
-        RuntimePathSample { pos, tan }
+        RuntimePathSample {
+            pos,
+            tan,
+            ..RuntimePathSample::default()
+        }
     }
 
     pub fn append_segment(

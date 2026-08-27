@@ -228,7 +228,8 @@ impl RuntimeLinearAnimation {
                         };
                     }
                     RuntimeKeyedPropertyTarget::Bool => {
-                        let Some(value) = keyed_property.bool_value_at(seconds, key_frame_values)
+                        let Some(value) =
+                            keyed_property.bool_value_at(seconds, mix, key_frame_values)
                         else {
                             continue;
                         };

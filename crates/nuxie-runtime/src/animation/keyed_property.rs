@@ -42,9 +42,9 @@ impl RuntimeKeyedPropertyTarget {
     }
 }
 
-// Mirrors KeyFrameDouble::applyDouble and KeyFrameColor::applyColor. Keep the
-// current-value read lazy: C++ writes the sampled keyframe target directly at
-// a full mix, and only reads the property when a partial blend is required.
+// Mirrors KeyFrameDouble::applyDouble. Keep the current-value read lazy: C++
+// writes the sampled keyframe target directly at a full mix, and only reads
+// the property when a partial blend is required.
 fn apply_key_frame_double_mix(
     value: f32,
     mix: f32,
@@ -54,18 +54,6 @@ fn apply_key_frame_double_mix(
         Some(value)
     } else {
         current().map(|current| mix_value(current, value, mix))
-    }
-}
-
-fn apply_key_frame_color_mix(
-    value: u32,
-    mix: f32,
-    current: impl FnOnce() -> Option<u32>,
-) -> Option<u32> {
-    if mix == 1.0 {
-        Some(value)
-    } else {
-        current().map(|current| color_lerp(current, value, mix))
     }
 }
 
@@ -178,34 +166,8 @@ impl RuntimeKeyedProperty {
                 to.effective_value(key_frame_values)
             } else if from.interpolation_type == 0 {
                 from.effective_value(key_frame_values)
-            } else if from.interpolator_id.is_some() {
-                let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
-                let factor = match from.interpolator? {
-                    RuntimeInterpolator::Scripted { global_id } => {
-                        script_context.map_or(frame_mix, |context| {
-                            context.evaluate(
-                                from.global_id,
-                                global_id,
-                                ScriptInterpolatorMethod::Transform,
-                                &[frame_mix],
-                                frame_mix,
-                            )
-                        })
-                    }
-                    interpolator => interpolator.transform(frame_mix),
-                };
-                color_lerp(
-                    from.effective_value(key_frame_values),
-                    to.effective_value(key_frame_values),
-                    factor,
-                )
             } else {
-                let frame_mix = frame_mix(seconds, from.seconds, to.seconds);
-                color_lerp(
-                    from.effective_value(key_frame_values),
-                    to.effective_value(key_frame_values),
-                    frame_mix,
-                )
+                from.interpolation_value(seconds, to, key_frame_values, script_context)
             }
         } else {
             self.key_frames
@@ -220,6 +182,7 @@ impl RuntimeKeyedProperty {
     fn bool_value_at(
         &self,
         seconds: f32,
+        mix: f32,
         key_frame_values: RuntimeKeyFrameValueContext<'_>,
     ) -> Option<bool> {
         if self.key_frames.is_empty() {
@@ -230,20 +193,22 @@ impl RuntimeKeyedProperty {
         let value = if idx == 0 {
             self.key_frames[0]
                 .as_bool()?
-                .effective_value(key_frame_values)
+                .apply(mix, key_frame_values)
         } else if idx < self.key_frames.len() {
             let from = self.key_frames[idx - 1].as_bool()?;
             let to = self.key_frames[idx].as_bool()?;
             if seconds == to.seconds {
-                to.effective_value(key_frame_values)
+                to.apply(mix, key_frame_values)
+            } else if from.interpolation_type == 0 {
+                from.apply(mix, key_frame_values)
             } else {
-                from.effective_value(key_frame_values)
+                from.apply_interpolation(seconds, to, mix, key_frame_values)
             }
         } else {
             self.key_frames
                 .last()?
                 .as_bool()?
-                .effective_value(key_frame_values)
+                .apply(mix, key_frame_values)
         };
 
         Some(value)

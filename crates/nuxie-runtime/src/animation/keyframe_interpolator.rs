@@ -9,12 +9,7 @@ pub(crate) enum RuntimeInterpolator {
         x2: f32,
         y2: f32,
     },
-    CubicValue {
-        x1: f32,
-        y1: f32,
-        x2: f32,
-        y2: f32,
-    },
+    CubicValue(RuntimeCubicValueInterpolator),
     Elastic {
         amplitude: f32,
         period: f32,
@@ -34,12 +29,14 @@ impl RuntimeInterpolator {
                 x2: object.double_property("x2").unwrap_or(0.58),
                 y2: object.double_property("y2").unwrap_or(1.0),
             }),
-            "CubicValueInterpolator" => Some(Self::CubicValue {
-                x1: object.double_property("x1").unwrap_or(0.42),
-                y1: object.double_property("y1").unwrap_or(0.0),
-                x2: object.double_property("x2").unwrap_or(0.58),
-                y2: object.double_property("y2").unwrap_or(1.0),
-            }),
+            "CubicValueInterpolator" => Some(Self::CubicValue(
+                RuntimeCubicValueInterpolator::on_added_dirty(
+                    object.double_property("x1").unwrap_or(0.42),
+                    object.double_property("y1").unwrap_or(0.0),
+                    object.double_property("x2").unwrap_or(0.58),
+                    object.double_property("y2").unwrap_or(1.0),
+                ),
+            )),
             "ElasticInterpolator" => Some(Self::Elastic {
                 amplitude: object.double_property("amplitude").unwrap_or(1.0),
                 period: object.double_property("period").unwrap_or(1.0),
@@ -49,21 +46,20 @@ impl RuntimeInterpolator {
         }
     }
 
-    pub(crate) fn transform_value(self, value_from: f32, value_to: f32, factor: f32) -> f32 {
-        match self {
+    pub(crate) fn transform_value(mut self, value_from: f32, value_to: f32, factor: f32) -> f32 {
+        match &mut self {
             Self::Scripted { .. } => value_from + (value_to - value_from) * factor,
             Self::CubicEase { x1, y1, x2, y2 } => cubic_ease_interpolator_transform_value(
-                value_from, value_to, factor, x1, y1, x2, y2,
+                value_from, value_to, factor, *x1, *y1, *x2, *y2,
             ),
-            Self::CubicValue { x1, y1, x2, y2 } => {
-                let t = cubic_interpolator_get_t(factor, x1, x2);
-                cubic_interpolator_calc_cubic_value(t, value_from, y1, y2, value_to)
+            Self::CubicValue(interpolator) => {
+                interpolator.transform_value(value_from, value_to, factor)
             }
             Self::Elastic {
                 amplitude,
                 period,
                 easing_value,
-            } => RuntimeElasticInterpolator::on_added_dirty(easing_value, amplitude, period)
+            } => RuntimeElasticInterpolator::on_added_dirty(*easing_value, *amplitude, *period)
                 .transform_value(value_from, value_to, factor),
         }
     }
@@ -74,7 +70,7 @@ impl RuntimeInterpolator {
             Self::CubicEase { x1, y1, x2, y2 } => {
                 cubic_ease_interpolator_transform(factor, x1, y1, x2, y2)
             }
-            Self::CubicValue { .. } => factor,
+            Self::CubicValue(interpolator) => interpolator.transform(factor),
             Self::Elastic {
                 amplitude,
                 period,

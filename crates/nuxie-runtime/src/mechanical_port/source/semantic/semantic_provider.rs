@@ -15,24 +15,20 @@ pub struct ResolvedSemanticData {
 impl Bounds {
     pub fn for_expansion() -> Self {
         Self {
-            min_x: f32::INFINITY,
-            min_y: f32::INFINITY,
-            max_x: f32::NEG_INFINITY,
-            max_y: f32::NEG_INFINITY,
+            min_x: f32::MAX,
+            min_y: f32::MAX,
+            max_x: -f32::MAX,
+            max_y: -f32::MAX,
         }
     }
     pub fn is_empty_or_nan(self) -> bool {
-        self.min_x > self.max_x
-            || self.min_y > self.max_y
-            || [self.min_x, self.min_y, self.max_x, self.max_y]
-                .iter()
-                .any(|v| v.is_nan())
+        !(self.max_x - self.min_x > 0.0 && self.max_y - self.min_y > 0.0)
     }
     pub fn expand(&mut self, p: (f32, f32)) {
-        self.min_x = self.min_x.min(p.0);
-        self.min_y = self.min_y.min(p.1);
-        self.max_x = self.max_x.max(p.0);
-        self.max_y = self.max_y.max(p.1);
+        self.min_x = if p.0 < self.min_x { p.0 } else { self.min_x };
+        self.min_y = if p.1 < self.min_y { p.1 } else { self.min_y };
+        self.max_x = if self.max_x < p.0 { p.0 } else { self.max_x };
+        self.max_y = if self.max_y < p.1 { p.1 } else { self.max_y };
     }
 }
 pub trait SemanticComponent: InferenceComponent {

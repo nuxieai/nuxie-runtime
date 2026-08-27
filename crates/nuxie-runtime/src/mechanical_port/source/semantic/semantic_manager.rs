@@ -81,12 +81,12 @@ impl SemanticManager {
     fn ensure_node_id(&mut self, node: &mut SemanticNode) {
         if node.id == 0 {
             while self.nodes_by_id.contains_key(&self.next_local_id) {
-                self.next_local_id += 1;
+                self.next_local_id = self.next_local_id.wrapping_add(1);
             }
             node.id = self.next_local_id;
-            self.next_local_id += 1;
+            self.next_local_id = self.next_local_id.wrapping_add(1);
         } else if node.id >= self.next_local_id {
-            self.next_local_id = node.id + 1;
+            self.next_local_id = node.id.wrapping_add(1);
         }
     }
     pub fn add_child(&mut self, parent: Option<SemanticNodeRef>, child: SemanticNodeRef) {
@@ -128,7 +128,23 @@ impl SemanticManager {
         self.mark_dirty(SemanticDirt::STRUCTURE);
     }
     fn normalize_label(input: &str) -> String {
-        input.split_whitespace().collect::<Vec<_>>().join(" ")
+        let mut result = String::with_capacity(input.len());
+        let mut last_was_space = true;
+        for character in input.chars() {
+            if u32::from(character) <= u32::from(b' ') {
+                if !last_was_space && !result.is_empty() {
+                    result.push(' ');
+                    last_was_space = true;
+                }
+            } else {
+                result.push(character);
+                last_was_space = false;
+            }
+        }
+        if result.ends_with(' ') {
+            result.pop();
+        }
+        result
     }
     fn collect_labels(
         node: &SemanticNodeRef,
@@ -221,7 +237,7 @@ impl SemanticManager {
             parent_id,
             sibling_index: *sibling,
         };
-        *sibling += 1;
+        *sibling = (*sibling).wrapping_add(1);
         let id = n.id;
         drop(n);
         out.push(flat);
@@ -234,11 +250,32 @@ impl SemanticManager {
         nodes.sort_by(|a, b| {
             let a = a.borrow().bounds;
             let b = b.borrow().bounds;
-            let ae = a.min_x > a.max_x || a.min_x.is_nan() || a.min_y.is_nan();
-            let be = b.min_x > b.max_x || b.min_x.is_nan() || b.min_y.is_nan();
-            ae.cmp(&be)
-                .then_with(|| a.min_y.total_cmp(&b.min_y))
-                .then_with(|| a.min_x.total_cmp(&b.min_x))
+            let a_empty = a.is_empty_or_nan();
+            let b_empty = b.is_empty_or_nan();
+            if a_empty != b_empty {
+                return if b_empty {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Greater
+                };
+            }
+            if a_empty {
+                return std::cmp::Ordering::Equal;
+            }
+            if a.min_y != b.min_y {
+                return if a.min_y < b.min_y {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Greater
+                };
+            }
+            if a.min_x < b.min_x {
+                std::cmp::Ordering::Less
+            } else if b.min_x < a.min_x {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
         });
         for node in nodes {
             Self::sort_nodes(&mut node.borrow_mut().children);
@@ -317,11 +354,8 @@ impl SemanticManager {
             }
             if p.role != n.role
                 || p.label != n.label
-                || p.value != n.value
-                || p.hint != n.hint
                 || p.state_flags != n.state_flags
                 || p.trait_flags != n.trait_flags
-                || p.heading_level != n.heading_level
             {
                 d.updated_semantic.push(n.clone());
             }
@@ -412,8 +446,34 @@ impl SemanticManager {
                 .dirty_content_nodes
                 .iter()
                 .any(|id| self.excluded_ids.contains(id));
-        if structure || rederive || self.last_flat_snapshot.is_empty() {
-            if structure || self.last_flat_snapshot.is_empty() {
+        let mut needs_reorder = false;
+        if bounds && !structure && !self.last_flat_snapshot.is_empty() {
+            let mut parents = Vec::new();
+            let mut root_moved = false;
+            for id in &self.dirty_bounds_nodes {
+                let Some(node) = self.nodes_by_id.get(id) else {
+                    continue;
+                };
+                if let Some(parent) = node.borrow().parent() {
+                    if !parents
+                        .iter()
+                        .any(|candidate| Rc::ptr_eq(candidate, &parent))
+                    {
+                        parents.push(parent);
+                    }
+                } else {
+                    root_moved = true;
+                }
+            }
+            needs_reorder = parents.iter().any(|parent| {
+                let parent = parent.borrow();
+                parent.children.len() > 1 && !Self::nodes_in_visual_order(&parent.children)
+            }) || (root_moved
+                && self.roots.len() > 1
+                && !Self::nodes_in_visual_order(&self.roots));
+        }
+        if structure || rederive || needs_reorder || self.last_flat_snapshot.is_empty() {
+            if structure || needs_reorder || self.last_flat_snapshot.is_empty() {
                 Self::sort_nodes(&mut self.roots);
             }
             self.derived_labels.clear();
@@ -425,18 +485,18 @@ impl SemanticManager {
             let diff = Self::build_diff(
                 &flat,
                 &self.last_flat_snapshot,
-                self.version + 1,
+                self.version.wrapping_add(1),
                 self.frame_number,
             );
             if !diff.is_empty() {
-                self.version += 1;
+                self.version = self.version.wrapping_add(1);
                 self.last_diff = diff;
                 self.last_flat_snapshot = flat;
             }
         } else {
             let mut diff = self.patch_incremental();
             if !diff.is_empty() {
-                self.version += 1;
+                self.version = self.version.wrapping_add(1);
                 diff.tree_version = self.version;
                 self.last_diff = diff;
             }
@@ -445,6 +505,26 @@ impl SemanticManager {
         self.dirty_content_nodes.clear();
         self.dirty_bounds_nodes.clear();
         self.dirty_boundary_ids.clear();
+    }
+
+    fn nodes_in_visual_order(nodes: &[SemanticNodeRef]) -> bool {
+        let mut previous = None;
+        for node in nodes {
+            let bounds = node.borrow().bounds;
+            if bounds.is_empty_or_nan() {
+                continue;
+            }
+            if let Some(previous_bounds) = previous {
+                if bounds.min_y < previous_bounds.min_y
+                    || (bounds.min_y == previous_bounds.min_y
+                        && bounds.min_x < previous_bounds.min_x)
+                {
+                    return false;
+                }
+            }
+            previous = Some(bounds);
+        }
+        true
     }
     pub fn drain_diff(&mut self) -> SemanticsDiff {
         self.refresh();

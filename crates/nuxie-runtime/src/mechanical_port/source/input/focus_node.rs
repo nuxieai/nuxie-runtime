@@ -55,6 +55,15 @@ impl FocusNode {
         }
         n
     }
+    pub fn focusable(&self) -> Option<FocusableRef> {
+        self.focusable.clone()
+    }
+    pub fn set_focusable(&mut self, focusable: Option<FocusableRef>) {
+        self.focusable = focusable;
+    }
+    pub fn clear_focusable(&mut self) {
+        self.set_focusable(None);
+    }
     fn flag(&self, f: u8) -> bool {
         self.flags & f != 0
     }
@@ -128,6 +137,14 @@ impl FocusNode {
         parent.borrow_mut().children.insert(i, child)
     }
     pub fn remove_child(parent: &FocusNodeRef, child: &FocusNodeRef) {
+        if child
+            .borrow()
+            .parent()
+            .as_ref()
+            .is_none_or(|actual_parent| !Rc::ptr_eq(actual_parent, parent))
+        {
+            return;
+        }
         parent
             .borrow_mut()
             .children

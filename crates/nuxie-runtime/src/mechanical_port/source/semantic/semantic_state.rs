@@ -20,6 +20,20 @@ impl SemanticState {
     pub const MULTILINE: Self = Self(1 << 13);
 }
 
+impl core::ops::BitOr for SemanticState {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl core::ops::BitAnd for SemanticState {
+    type Output = Self;
+    fn bitand(self, rhs: Self) -> Self {
+        Self(self.0 & rhs.0)
+    }
+}
+
 pub fn has_semantic_state(flags: u32, flag: SemanticState) -> bool {
     flags & flag.0 != 0
 }

@@ -16,6 +16,12 @@ impl core::ops::BitOr for KeyModifiers {
         Self(self.0 | rhs.0)
     }
 }
+impl core::ops::BitAnd for KeyModifiers {
+    type Output = Self;
+    fn bitand(self, rhs: Self) -> Self {
+        Self(self.0 & rhs.0)
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u16)]
 pub enum Key {

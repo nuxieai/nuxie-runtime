@@ -3877,7 +3877,10 @@ fn component_has_parent_child_dependency(object: &RuntimeObject) -> bool {
     definition.is_a("TransformComponent")
         || definition.is_a("Constraint")
         || definition.is_a("TextStyle")
-        || matches!(object.type_name, "FocusData" | "SemanticData" | "NSlicer")
+        || matches!(
+            object.type_name,
+            "FocusData" | "GridItemPlacement" | "SemanticData" | "NSlicer"
+        )
 }
 
 fn dependency_kind_sort_key(kind: DependencyKind) -> u8 {

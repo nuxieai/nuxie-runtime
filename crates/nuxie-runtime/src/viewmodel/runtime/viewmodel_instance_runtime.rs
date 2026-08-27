@@ -439,6 +439,14 @@ mod viewmodel_instance_runtime_identity_tests {
                     )],
                 ),
                 record(
+                    "ViewModelPropertyAssetFont",
+                    vec![property(
+                        "ViewModelPropertyAssetFont",
+                        "name",
+                        FixtureValue::String("font".to_owned()),
+                    )],
+                ),
+                record(
                     "ViewModelPropertyArtboard",
                     vec![property(
                         "ViewModelPropertyArtboard",
@@ -557,6 +565,13 @@ mod viewmodel_instance_runtime_identity_tests {
                 .expect("image")
                 .set_value(Some(image_value.clone()))
         );
+        let font_value = Arc::<[u8]>::from(&b"font"[..]);
+        assert!(
+            runtime
+                .property_font("font")
+                .expect("font")
+                .set_value(Some(Arc::clone(&font_value)))
+        );
         let artboard_value = RuntimeBindableArtboard::new("Nested");
         assert!(
             runtime
@@ -575,6 +590,14 @@ mod viewmodel_instance_runtime_identity_tests {
                 .expect("live image")
                 .ptr_eq(&image_value)
         );
+        assert!(Arc::ptr_eq(
+            &reacquired
+                .property_font("font")
+                .expect("reacquired font")
+                .testing_value()
+                .expect("live font"),
+            &font_value,
+        ));
         assert_eq!(
             reacquired
                 .property_artboard("artboard")

@@ -21,6 +21,16 @@ impl ViewModelInstanceAssetFontRuntime {
         self.value.cell().set_live_font_bytes(font_bytes)
     }
 
+    #[cfg(test)]
+    fn testing_value(&self) -> Option<Arc<[u8]>> {
+        match self.value.cell().value() {
+            RuntimeViewModelCellValue::AssetFont(value) => {
+                value.live_font_bytes_arc().map(Arc::clone)
+            }
+            _ => unreachable!("asset-font runtime must retain an asset-font cell"),
+        }
+    }
+
     pub fn ptr_eq(&self, other: &Self) -> bool {
         self.value.ptr_eq(&other.value)
     }

@@ -29,7 +29,7 @@ pub(crate) mod rotation_constraint;
 pub(crate) mod scale_constraint;
 pub(crate) mod targeted_constraint;
 mod transform_constraint;
-mod translation_constraint;
+pub(crate) mod translation_constraint;
 
 pub(crate) mod scrolling {
     pub(crate) mod clamped_scroll_physics;

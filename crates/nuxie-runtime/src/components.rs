@@ -1863,7 +1863,10 @@ impl RuntimeConstraintState {
             requires_target: match type_name {
                 "RotationConstraint" => crate::constraints::rotation_constraint::requires_target(),
                 "ScaleConstraint" => crate::constraints::scale_constraint::requires_target(),
-                _ => type_name != "TranslationConstraint",
+                "TranslationConstraint" => {
+                    crate::constraints::translation_constraint::requires_target()
+                }
+                _ => true,
             },
             target: None,
             scratch: RuntimeConstraintScratch::for_kind(kind),

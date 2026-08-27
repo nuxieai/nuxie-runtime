@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// Direct port of `TranslationConstraint::requiresTarget()` from the primary
+/// header.
+pub(crate) const fn requires_target() -> bool {
+    false
+}
+
 pub(super) fn apply(
     artboard: &mut ArtboardInstance,
     component_index: ComponentHandle,

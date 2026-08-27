@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::mem;
 use std::ptr::NonNull;
 
-use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods};
+use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods, Value};
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 
 use super::lua_image::{ScriptedImage, ScriptedImageSampler};
@@ -49,7 +49,16 @@ impl RendererBindings {
         let lua = table.lua();
         self.verify_render_context(factory)?;
         let scripted_renderer = ScriptedRenderer::create_userdata(&lua, renderer, self.clone())?;
-        let result = table.call_function_unit("draw", (table.clone(), scripted_renderer.clone()));
+        let field: Value = table.get("draw")?;
+        let result = match field {
+            Value::Function(function) => {
+                function.call::<()>((table.clone(), scripted_renderer.clone()))
+            }
+            // Legacy files advertise every optional method. C++ treats a
+            // currently missing or non-function draw field as a balanced
+            // no-op after installing the renderer userdata.
+            _ => Ok(()),
+        };
 
         let balanced = {
             let scripted_renderer = scripted_renderer.borrow::<ScriptedRenderer>()?;

@@ -554,27 +554,7 @@ impl HitScriptedDrawable {
         can_hit: bool,
         hit_type: RuntimeListenerType,
     ) -> Option<ScriptMethod> {
-        if !can_hit {
-            return self
-                .implemented_methods
-                .wants_pointer_exit()
-                .then_some(ScriptMethod::PointerExit);
-        }
-        match hit_type {
-            RuntimeListenerType::Down => self
-                .implemented_methods
-                .wants_pointer_down()
-                .then_some(ScriptMethod::PointerDown),
-            RuntimeListenerType::Up => self
-                .implemented_methods
-                .wants_pointer_up()
-                .then_some(ScriptMethod::PointerUp),
-            RuntimeListenerType::DragStart | RuntimeListenerType::DragEnd => None,
-            _ => self
-                .implemented_methods
-                .wants_pointer_move()
-                .then_some(ScriptMethod::PointerMove),
-        }
+        crate::scripted_drawable::method_for_event(self.implemented_methods, can_hit, hit_type)
     }
 }
 
@@ -624,12 +604,9 @@ impl HitComponent for HitScriptedDrawable {
             .runtime_graph()
             .map(|graph| artboard.runtime_component_world_transform(owner.local_id, graph))
             .unwrap_or(owner.transform.world_transform);
-        if world.determinant() == 0.0 {
+        let Some(local) = crate::scripted_drawable::world_to_local(world, position) else {
             return Ok(HitResult::None);
-        }
-        let local = world
-            .invert_or_identity()
-            .transform_point(position.0, position.1);
+        };
         let Some(script) = artboard.script_instance_for_global(self.global_id) else {
             return Ok(HitResult::None);
         };
@@ -2874,7 +2851,7 @@ impl StateMachineInstance {
             let wants_gamepad_connected = implemented.wants_gamepad_connect();
             let wants_gamepad_event = implemented.wants_gamepad_event();
             let wants_gamepad_disconnected = implemented.wants_gamepad_disconnect();
-            if implemented.listens_to_pointer_events() {
+            if crate::scripted_drawable::has_hit_component(implemented) {
                 self.hit_components.push(Box::new(HitScriptedDrawable {
                     component: artboard.component_handle(component.local_id),
                     global_id: component.global_id,

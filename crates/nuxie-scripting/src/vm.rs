@@ -855,6 +855,32 @@ impl LuaScriptInstance {
             .map_err(|error| self.script_error(error))
     }
 
+    /// Resolve and invoke `ScriptedObject::scriptAdvance` as one VM operation.
+    ///
+    /// The pinned owner accepts every Lua truthy result, treats a missing or
+    /// non-function `advance` field as false, and consumes an ordinary
+    /// protected-call failure as false (`scripted_object.cpp:178-203`). Keep
+    /// those semantics out of the narrower [`ScriptValue`] bridge, which
+    /// cannot represent every truthy Lua value.
+    fn call_scripted_object_advance_truthy(
+        &mut self,
+        args: &[ScriptValue],
+    ) -> std::result::Result<bool, ScriptError> {
+        self.reset_execution_budget();
+        let Some(table) = self.table.clone() else {
+            return Ok(false);
+        };
+        let lua = table.lua();
+        let mut call_args = MultiValue::with_capacity(args.len() + 1);
+        call_args.push_back(Value::Table(table.clone()));
+        for arg in args {
+            call_args.push_back(script_value_to_lua(&lua, arg));
+        }
+        table
+            .call_function_truthy(ScriptMethod::Advance.as_str(), call_args)
+            .map_err(|error| self.script_error(error))
+    }
+
     fn dispose_script_lifetime(&mut self) {
         // Pinned `tryLuaUserInit` drops `m_self` before disposing the Context
         // (`scripted_object.cpp:277-303`). Taking the registry-backed Table
@@ -2322,9 +2348,22 @@ impl ScriptInstance for LuaScriptInstance {
         host: &mut dyn ScriptHost,
     ) -> std::result::Result<ScriptValue, ScriptError> {
         self.context_mark_needs_update_requested.set(false);
-        let result = self.call_method_value(method, args).and_then(|value| {
-            script_value_from_lua(value).map_err(|error| self.script_error(error))
-        });
+        let result = if method == ScriptMethod::Advance {
+            match self.call_scripted_object_advance_truthy(args) {
+                Ok(value) => Ok(ScriptValue::Bool(value)),
+                Err(error)
+                    if error.resource_code().is_none()
+                        && !host.requires_atomic_script_callbacks() =>
+                {
+                    Ok(ScriptValue::Bool(false))
+                }
+                Err(error) => Err(error),
+            }
+        } else {
+            self.call_method_value(method, args).and_then(|value| {
+                script_value_from_lua(value).map_err(|error| self.script_error(error))
+            })
+        };
         let requested = self.context_mark_needs_update_requested.replace(false);
         if requested && (result.is_ok() || !host.requires_atomic_script_callbacks()) {
             host.mark_script_update();
@@ -2397,18 +2436,25 @@ impl ScriptInstance for LuaScriptInstance {
     fn call_advance_truthy(
         &mut self,
         elapsed_seconds: f32,
-        _host: &mut dyn ScriptHost,
+        host: &mut dyn ScriptHost,
     ) -> std::result::Result<bool, ScriptError> {
-        self.reset_execution_budget();
-        let Some(table) = self.table.clone() else {
-            return Ok(false);
+        self.context_mark_needs_update_requested.set(false);
+        let result = match self
+            .call_scripted_object_advance_truthy(&[ScriptValue::Number(f64::from(elapsed_seconds))])
+        {
+            Ok(value) => Ok(value),
+            Err(error)
+                if error.resource_code().is_none() && !host.requires_atomic_script_callbacks() =>
+            {
+                Ok(false)
+            }
+            Err(error) => Err(error),
         };
-        table
-            .call_function_truthy(
-                ScriptMethod::Advance.as_str(),
-                (table.clone(), f64::from(elapsed_seconds)),
-            )
-            .map_err(|error| self.script_error(error))
+        let requested = self.context_mark_needs_update_requested.replace(false);
+        if requested && (result.is_ok() || !host.requires_atomic_script_callbacks()) {
+            host.mark_script_update();
+        }
+        result
     }
 
     fn call_method_with_factory(
@@ -2749,9 +2795,19 @@ impl ScriptInstance for LuaScriptInstance {
         }
         let table = self.live_table()?;
         self.reset_execution_budget();
-        self.renderer_bindings
-            .call_draw(&table, factory, renderer)
-            .map_err(|error| self.script_error(error))
+        match self.renderer_bindings.call_draw(&table, factory, renderer) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                let error = self.script_error(error);
+                if error.resource_code().is_some() {
+                    Err(error)
+                } else {
+                    // C++ contains an ordinary protected-call failure and
+                    // continues after balancing ScriptedRenderer.
+                    Ok(())
+                }
+            }
+        }
     }
 
     fn call_draw_canvas(
@@ -3113,6 +3169,50 @@ mod context_init_tests {
                 "{label} is the false side of Lua truthiness"
             );
         }
+    }
+
+    #[test]
+    fn scripted_object_advance_preserves_native_truthiness_and_consumes_ordinary_failures() {
+        let lua = Lua::new();
+        let table = lua.create_table();
+        let mut instance = LuaScriptInstance::new(table.clone());
+        let mut host = NoopScriptHost;
+
+        for (label, source, expected) in [
+            ("table", "return function() return {} end", true),
+            ("nil", "return function() return nil end", false),
+            (
+                "error",
+                "return function() error('advance failed') end",
+                false,
+            ),
+        ] {
+            let advance: Function = lua.load(source).eval().expect(label);
+            table.set("advance", advance).expect(label);
+            assert_eq!(
+                instance
+                    .call_method(
+                        ScriptMethod::Advance,
+                        &[ScriptValue::Number(0.25)],
+                        &mut host,
+                    )
+                    .expect(label),
+                ScriptValue::Bool(expected),
+                "ScriptedObject::scriptAdvance applies Lua truthiness and turns an ordinary protected-call failure into false"
+            );
+        }
+
+        table.set("advance", 17).expect("non-function advance");
+        assert_eq!(
+            instance
+                .call_method(
+                    ScriptMethod::Advance,
+                    &[ScriptValue::Number(0.25)],
+                    &mut host,
+                )
+                .expect("non-function advance"),
+            ScriptValue::Bool(false)
+        );
     }
 
     #[test]

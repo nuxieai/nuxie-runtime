@@ -144,6 +144,7 @@ mod script_input_string;
 mod script_input_trigger;
 mod script_input_viewmodel_property;
 mod scripted_data_converter;
+mod scripted_drawable;
 mod scripted_interpolator;
 mod scripted_layout;
 mod scripted_object;

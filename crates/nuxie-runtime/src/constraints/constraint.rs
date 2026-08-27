@@ -20,7 +20,7 @@ pub(crate) fn constraint_double_change_marks_parent_dirty(
                 | LIST_FOLLOW_PATH_DISTANCE_OFFSET_PROPERTY_KEY
         ))
         || (kind == RuntimeConstraintKind::Transform
-            && (keys.origin_x == property_key || keys.origin_y == property_key))
+            && transform_constraint::double_property_changed(property_key))
 }
 
 pub(crate) fn constraint_is_ik_strength_property(

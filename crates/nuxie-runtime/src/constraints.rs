@@ -28,7 +28,7 @@ mod list_follow_path_constraint;
 pub(crate) mod rotation_constraint;
 pub(crate) mod scale_constraint;
 pub(crate) mod targeted_constraint;
-mod transform_constraint;
+pub(crate) mod transform_constraint;
 pub(crate) mod translation_constraint;
 
 pub(crate) mod scrolling {
@@ -1892,8 +1892,19 @@ fn apply_scroll_constraint_child(
     let constraint_local = artboard.component_at(constraint).local_id;
     let strength = constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
     let current = artboard.component_at(child).transform.world_transform;
-    let (constrained, components_a, components_b) =
-        scroll_constrained_world_transform(current, scroll_transform, strength);
+    let (components_a, components_b) = artboard
+        .objects
+        .component(constraint)
+        .and_then(|component| component.concrete.scroll.as_ref())
+        .map(|scroll| (scroll.components_a, scroll.components_b))
+        .unwrap_or_default();
+    let constrained = scroll_constrained_world_transform(
+        current,
+        scroll_transform,
+        components_a,
+        components_b,
+        strength,
+    );
     let changed = write_world_transform(artboard, child, constrained);
 
     // C++ applies the transform before incrementing and only then tests the
@@ -1903,8 +1914,6 @@ fn apply_scroll_constraint_child(
         .component_mut(constraint)
         .and_then(|component| component.concrete.scroll.as_mut())
         .expect("registered ScrollConstraint remains live");
-    scroll.components_a = components_a;
-    scroll.components_b = components_b;
     scroll.child_constraint_applied_count += 1;
     // C++ calls `constrainVirtualized()` after every successful child. That
     // owner performs the live `virtualize()` and rendezvous gates itself
@@ -1916,25 +1925,18 @@ fn apply_scroll_constraint_child(
 fn scroll_constrained_world_transform(
     current: Mat2D,
     scroll_transform: Mat2D,
+    components_a: TransformComponents,
+    components_b: TransformComponents,
     strength: f32,
-) -> (Mat2D, TransformComponents, TransformComponents) {
+) -> Mat2D {
     let target = current.multiply(scroll_transform);
-    let components_a = current.decompose();
-    let mut components_b = target.decompose();
-    let inverse_strength = 1.0 - strength;
-    components_b.rotation = interpolated_rotation_from_modded_base(
-        components_a.rotation,
-        components_b.rotation,
+    transform_constraint::constrain_world(
+        current,
+        components_a,
+        target,
+        components_b,
         strength,
-    );
-    components_b.x = components_a.x * inverse_strength + components_b.x * strength;
-    components_b.y = components_a.y * inverse_strength + components_b.y * strength;
-    components_b.scale_x =
-        components_a.scale_x * inverse_strength + components_b.scale_x * strength;
-    components_b.scale_y =
-        components_a.scale_y * inverse_strength + components_b.scale_y * strength;
-    components_b.skew = components_a.skew * inverse_strength + components_b.skew * strength;
-    (Mat2D::compose(components_b), components_a, components_b)
+    )
 }
 
 /// Compose the fresh hosted-layout base world with the list's retained parent
@@ -1964,7 +1966,19 @@ pub(crate) fn constrain_component_list_world_transform(
         };
         let constraint_local = artboard.component_at(constraint).local_id;
         let strength = constraint_double(artboard, constraint_local, "Constraint", "strength", 1.0);
-        world = scroll_constrained_world_transform(world, scroll_transform, strength).0;
+        let (components_a, components_b) = artboard
+            .objects
+            .component(constraint)
+            .and_then(|component| component.concrete.scroll.as_ref())
+            .map(|scroll| (scroll.components_a, scroll.components_b))
+            .unwrap_or_default();
+        world = scroll_constrained_world_transform(
+            world,
+            scroll_transform,
+            components_a,
+            components_b,
+            strength,
+        );
     }
     world
 }
@@ -2438,24 +2452,6 @@ fn rive_math_clamp(value: f32, lo: f32, hi: f32) -> f32 {
     lo.max(value).min(hi)
 }
 
-fn target_transform_for_transform_constraint(
-    artboard: &ArtboardInstance,
-    target_index: ComponentHandle,
-    origin_x: f32,
-    origin_y: f32,
-) -> Mat2D {
-    let (left, top, width, height) = constraint_bounds(artboard, target_index);
-    let component = artboard.component_at(target_index);
-    component.transform.world_transform.multiply(Mat2D([
-        1.0,
-        0.0,
-        0.0,
-        1.0,
-        left + width * origin_x,
-        top + height * origin_y,
-    ]))
-}
-
 fn constraint_bounds(
     artboard: &ArtboardInstance,
     component_index: ComponentHandle,
@@ -2484,31 +2480,6 @@ fn constraint_bounds(
     // C++ `TransformComponent::constraintBounds()` defaults to an empty AABB.
     // Concrete LayoutComponent/Text overrides read their retained owner state.
     (0.0, 0.0, 0.0, 0.0)
-}
-
-fn constrained_world_transform(
-    from: Mat2D,
-    to: Mat2D,
-    strength: f32,
-) -> (Mat2D, TransformComponents, TransformComponents) {
-    let components_from = from.decompose();
-    let mut components_to = to.decompose();
-    let t = strength;
-    let ti = 1.0 - t;
-
-    components_to.rotation =
-        interpolated_rotation_from_modded_base(components_from.rotation, components_to.rotation, t);
-    components_to.x = components_from.x * ti + components_to.x * t;
-    components_to.y = components_from.y * ti + components_to.y * t;
-    components_to.scale_x = components_from.scale_x * ti + components_to.scale_x * t;
-    components_to.scale_y = components_from.scale_y * ti + components_to.scale_y * t;
-    components_to.skew = components_from.skew * ti + components_to.skew * t;
-
-    (
-        Mat2D::compose(components_to),
-        components_from,
-        components_to,
-    )
 }
 
 fn write_world_transform(
@@ -2702,7 +2673,7 @@ fn retain_constraint_component_a(
         RuntimeConstraintScratch::Scale(scale) => {
             scale.retain_components_a(components);
         }
-        RuntimeConstraintScratch::None | RuntimeConstraintScratch::Transform { .. } => {}
+        RuntimeConstraintScratch::None | RuntimeConstraintScratch::Transform(_) => {}
     }
 }
 
@@ -2725,30 +2696,7 @@ fn retain_constraint_component_b(
         RuntimeConstraintScratch::Scale(scale) => {
             scale.retain_components_b(components);
         }
-        RuntimeConstraintScratch::None | RuntimeConstraintScratch::Transform { .. } => {}
-    }
-}
-
-fn retain_transform_constraint_components(
-    artboard: &mut ArtboardInstance,
-    constraint: ComponentHandle,
-    components_a: TransformComponents,
-    components_b: TransformComponents,
-) {
-    let Some(state) = artboard
-        .objects
-        .component_mut(constraint)
-        .and_then(|component| component.concrete.constraint.as_mut())
-    else {
-        return;
-    };
-    if let RuntimeConstraintScratch::Transform {
-        components_a: retained_a,
-        components_b: retained_b,
-    } = &mut state.scratch
-    {
-        *retained_a = components_a;
-        *retained_b = components_b;
+        RuntimeConstraintScratch::None | RuntimeConstraintScratch::Transform(_) => {}
     }
 }
 

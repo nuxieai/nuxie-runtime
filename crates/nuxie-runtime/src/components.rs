@@ -842,10 +842,7 @@ pub(crate) enum RuntimeConstraintScratch {
     None,
     Rotation(RuntimeRotationConstraintState),
     Scale(RuntimeScaleConstraintState),
-    Transform {
-        components_a: TransformComponents,
-        components_b: TransformComponents,
-    },
+    Transform(crate::constraints::transform_constraint::RuntimeTransformConstraintState),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1829,10 +1826,9 @@ impl RuntimeConstraintScratch {
                 Self::Rotation(RuntimeRotationConstraintState::default())
             }
             RuntimeConstraintKind::Scale => Self::Scale(RuntimeScaleConstraintState::default()),
-            RuntimeConstraintKind::Transform => Self::Transform {
-                components_a: TransformComponents::default(),
-                components_b: TransformComponents::default(),
-            },
+            RuntimeConstraintKind::Transform => Self::Transform(
+                crate::constraints::transform_constraint::RuntimeTransformConstraintState::default(),
+            ),
             _ => Self::None,
         }
     }
@@ -2721,7 +2717,7 @@ mod constraint_state_tests {
                         RuntimeConstraintScratch::Scale(_)
                     ) | (
                         RuntimeConstraintKind::Transform,
-                        RuntimeConstraintScratch::Transform { .. }
+                        RuntimeConstraintScratch::Transform(_)
                     ) | (
                         RuntimeConstraintKind::Distance | RuntimeConstraintKind::Translation,
                         RuntimeConstraintScratch::None

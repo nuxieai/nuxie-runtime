@@ -161,15 +161,18 @@ pub(in crate::constraints) fn apply(
         RUNTIME_CONSTRAINT_PROPERTY_KEYS.strength,
         1.0,
     );
-    let (constrained, components_a, components_b) =
-        constrained_world_transform(world, target, strength);
-    if let Some(scroll_bar) = artboard
+    let (components_a, components_b) = artboard
         .objects
-        .component_mut(constraint_handle)
-        .and_then(|component| component.concrete.scroll_bar.as_mut())
-    {
-        scroll_bar.components_a = components_a;
-        scroll_bar.components_b = components_b;
-    }
+        .component(constraint_handle)
+        .and_then(|component| component.concrete.scroll_bar.as_ref())
+        .map(|scroll_bar| (scroll_bar.components_a, scroll_bar.components_b))
+        .unwrap_or_default();
+    let constrained = transform_constraint::constrain_world(
+        world,
+        components_a,
+        target,
+        components_b,
+        strength,
+    );
     write_world_transform(artboard, component_index, constrained)
 }

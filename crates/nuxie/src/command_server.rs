@@ -9,8 +9,8 @@ use std::{collections::BTreeMap, rc::Rc, sync::Arc};
 
 use crate::{
     Factory, File, Mat2D, OwnedArtboardInstance, RawTextFont, RenderImage, RuntimeBlobAsset,
-    RuntimeFileAssetLoader, SemanticBounds, SemanticsDiff, StateMachineInstance, Vec2D,
-    ViewModelInstance,
+    RuntimeFileAssetLoader, RuntimeHitResult, SemanticBounds, SemanticsDiff, StateMachineInstance,
+    Vec2D, ViewModelInstance,
     command_queue::{
         ArtboardHandle, AudioSourceHandle, BlobAssetHandle, Command, CommandDataType, CommandEvent,
         CommandQueue, CommandValue, DrawCallback, DrawKey, FileAssetData, FileHandle, Fit,
@@ -263,16 +263,28 @@ impl CommandServer {
         )
     }
     #[doc(hidden)]
-    pub fn pointer_down_synchronized(&mut self, handle: StateMachineHandle, event: PointerEvent) {
-        self.process_pointer(handle, PointerKind::Down, event, 0);
+    pub fn pointer_down_synchronized(
+        &mut self,
+        handle: StateMachineHandle,
+        event: PointerEvent,
+    ) -> RuntimeHitResult {
+        self.process_pointer(handle, PointerKind::Down, event, None)
     }
     #[doc(hidden)]
-    pub fn pointer_up_synchronized(&mut self, handle: StateMachineHandle, event: PointerEvent) {
-        self.process_pointer(handle, PointerKind::Up, event, 0);
+    pub fn pointer_up_synchronized(
+        &mut self,
+        handle: StateMachineHandle,
+        event: PointerEvent,
+    ) -> RuntimeHitResult {
+        self.process_pointer(handle, PointerKind::Up, event, None)
     }
     #[doc(hidden)]
-    pub fn pointer_move_synchronized(&mut self, handle: StateMachineHandle, event: PointerEvent) {
-        self.process_pointer(handle, PointerKind::Move, event, 0);
+    pub fn pointer_move_synchronized(
+        &mut self,
+        handle: StateMachineHandle,
+        event: PointerEvent,
+    ) -> RuntimeHitResult {
+        self.process_pointer(handle, PointerKind::Move, event, None)
     }
 
     /// Wait for at least one command, then execute one entry-bounded poll.
@@ -675,16 +687,16 @@ impl CommandServer {
                     match result {
                         Some(Ok(mut diff)) if !diff.is_empty() => {
                             if let Some(artboard) = self.artboards.get(&artboard_handle) {
-                                map_semantics_diff_to_view_space(
-                                    &mut diff,
-                                    semantic_view_transform(
-                                        artboard.instance.artboard_bounds(),
-                                        fit,
-                                        alignment,
-                                        scale_factor,
-                                        view_bounds,
-                                    ),
+                                let transform = semantic_view_transform(
+                                    artboard.instance.artboard_bounds(),
+                                    fit,
+                                    alignment,
+                                    scale_factor,
+                                    view_bounds,
                                 );
+                                if transform != Mat2D::IDENTITY {
+                                    map_semantics_diff_to_view_space(&mut diff, transform);
+                                }
                             }
                             self.emit(CommandEvent::SemanticsDiffReceived {
                                 handle,
@@ -776,7 +788,9 @@ impl CommandServer {
                     kind,
                     event,
                     request_id,
-                } => self.process_pointer(handle, kind, event, request_id),
+                } => {
+                    self.process_pointer(handle, kind, event, Some(request_id));
+                }
                 Command::InstantiateViewModel {
                     handle,
                     file,
@@ -1059,11 +1073,15 @@ impl CommandServer {
                     handle,
                     path,
                     data_type,
-                } => self.subscriptions.retain(|subscription| {
-                    subscription.0 != handle
-                        || subscription.1 != path
-                        || subscription.2 != data_type
-                }),
+                    request_id,
+                } => {
+                    let _ = request_id;
+                    self.subscriptions.retain(|subscription| {
+                        subscription.0 != handle
+                            || subscription.1 != path
+                            || subscription.2 != data_type
+                    });
+                }
                 Command::GetViewModelName { handle, request_id } => {
                     match self.view_models.get(&handle) {
                         Some(entry) => self.emit(CommandEvent::ViewModelName {
@@ -1140,6 +1158,43 @@ impl CommandServer {
                             Some(file.runtime()),
                             artboard.instance.raw_mut(),
                         );
+                    }
+                }
+                Command::SetViewModelInstance {
+                    state_machine,
+                    view_model,
+                    request_id,
+                } => {
+                    if !self.state_machines.contains_key(&state_machine) {
+                        self.state_machine_error(
+                            state_machine,
+                            request_id,
+                            format!(
+                                "State machine {} not found for setting view model instance.",
+                                state_machine.get()
+                            ),
+                        );
+                        continue;
+                    }
+                    let Some(view_model) = self
+                        .view_models
+                        .get(&view_model)
+                        .map(|entry| entry.instance.handle().clone())
+                    else {
+                        self.state_machine_error(
+                            state_machine,
+                            request_id,
+                            format!(
+                                "View model instance {} not found when trying to set the main view model instance on a state machine",
+                                view_model.get()
+                            ),
+                        );
+                        continue;
+                    };
+                    if let Some(state_machine) = self.state_machines.get_mut(&state_machine) {
+                        state_machine
+                            .instance
+                            .set_view_model_instance_for_command_queue(Some(view_model));
                     }
                 }
                 Command::SetGlobalViewModel {
@@ -1292,7 +1347,7 @@ impl CommandServer {
                     handle,
                     image,
                     request_id,
-                } => {
+                } => if let Some(image) = image {
                     let image: Box<dyn RenderImage> = image;
                     let original = Rc::new(image);
                     let shared: Rc<dyn RenderImage> =
@@ -1300,7 +1355,13 @@ impl CommandServer {
                     self.images
                         .insert(handle, RenderImageEntry::External { original, shared });
                     self.emit(CommandEvent::ImageDecoded { handle, request_id });
-                }
+                } else {
+                    self.emit(CommandEvent::ImageError {
+                        handle,
+                        request_id,
+                        error: "External image was empty".to_owned(),
+                    });
+                },
                 Command::DeleteImage { handle, request_id } => {
                     self.images.remove(&handle);
                     self.global_images.retain(|_, value| *value != handle);
@@ -1325,10 +1386,16 @@ impl CommandServer {
                     handle,
                     audio,
                     request_id,
-                } => {
+                } => if let Some(audio) = audio {
                     self.audio_sources.insert(handle, audio);
                     self.emit(CommandEvent::AudioDecoded { handle, request_id });
-                }
+                } else {
+                    self.emit(CommandEvent::AudioError {
+                        handle,
+                        request_id,
+                        error: "External audio source was invalid".to_owned(),
+                    });
+                },
                 Command::DeleteAudio { handle, request_id } => {
                     self.audio_sources.remove(&handle);
                     self.global_audio.retain(|_, value| *value != handle);
@@ -1338,11 +1405,18 @@ impl CommandServer {
                     handle,
                     bytes,
                     request_id,
-                } => match RawTextFont::decode(bytes) {
-                    Ok(font) => {
-                        self.fonts.insert(handle, font);
-                        self.emit(CommandEvent::FontDecoded { handle, request_id });
-                    }
+                } => match self.factory.decode_font(&bytes) {
+                    Ok(decoded) => match RawTextFont::decode(decoded.into_bytes()) {
+                        Ok(font) => {
+                            self.fonts.insert(handle, font);
+                            self.emit(CommandEvent::FontDecoded { handle, request_id });
+                        }
+                        Err(error) => self.emit(CommandEvent::FontError {
+                            handle,
+                            request_id,
+                            error: error.to_string(),
+                        }),
+                    },
                     Err(error) => self.emit(CommandEvent::FontError {
                         handle,
                         request_id,
@@ -1353,10 +1427,16 @@ impl CommandServer {
                     handle,
                     font,
                     request_id,
-                } => {
+                } => if let Some(font) = font {
                     self.fonts.insert(handle, font);
                     self.emit(CommandEvent::FontDecoded { handle, request_id });
-                }
+                } else {
+                    self.emit(CommandEvent::FontError {
+                        handle,
+                        request_id,
+                        error: "Command Server failed to decode font".to_owned(),
+                    });
+                },
                 Command::DeleteFont { handle, request_id } => {
                     self.fonts.remove(&handle);
                     self.global_fonts.retain(|_, value| *value != handle);
@@ -1392,28 +1472,55 @@ impl CommandServer {
                     self.blobs.remove(&handle);
                     self.emit(CommandEvent::BlobDeleted { handle, request_id });
                 }
-                Command::AddGlobalImage { name, handle } => {
+                Command::AddGlobalImage {
+                    name,
+                    handle,
+                    request_id,
+                } => {
+                    let _ = request_id;
                     if self.images.contains_key(&handle) {
                         self.global_images.insert(name, handle);
                     }
                 }
-                Command::RemoveGlobalImage { name } => {
+                Command::RemoveGlobalImage {
+                    name,
+                    request_id,
+                } => {
+                    let _ = request_id;
                     self.global_images.remove(&name);
                 }
-                Command::AddGlobalAudio { name, handle } => {
+                Command::AddGlobalAudio {
+                    name,
+                    handle,
+                    request_id,
+                } => {
+                    let _ = request_id;
                     if self.audio_sources.contains_key(&handle) {
                         self.global_audio.insert(name, handle);
                     }
                 }
-                Command::RemoveGlobalAudio { name } => {
+                Command::RemoveGlobalAudio {
+                    name,
+                    request_id,
+                } => {
+                    let _ = request_id;
                     self.global_audio.remove(&name);
                 }
-                Command::AddGlobalFont { name, handle } => {
+                Command::AddGlobalFont {
+                    name,
+                    handle,
+                    request_id,
+                } => {
+                    let _ = request_id;
                     if self.fonts.contains_key(&handle) {
                         self.global_fonts.insert(name, handle);
                     }
                 }
-                Command::RemoveGlobalFont { name } => {
+                Command::RemoveGlobalFont {
+                    name,
+                    request_id,
+                } => {
+                    let _ = request_id;
                     self.global_fonts.remove(&name);
                 }
                 Command::ListArtboards { handle, request_id } => match self.files.get(&handle) {
@@ -2005,69 +2112,76 @@ impl CommandServer {
         handle: StateMachineHandle,
         kind: PointerKind,
         event: PointerEvent,
-        request_id: u64,
-    ) {
+        request_id: Option<u64>,
+    ) -> RuntimeHitResult {
         let Some(artboard_handle) = self.state_machines.get(&handle).map(|entry| entry.artboard)
         else {
-            self.state_machine_error(
-                handle,
-                request_id,
-                "State machine not found for pointer event",
-            );
-            return;
+            if let Some(request_id) = request_id {
+                self.state_machine_error(
+                    handle,
+                    request_id,
+                    "State machine not found for pointer event",
+                );
+            }
+            return RuntimeHitResult::None;
         };
         let position = {
             let Some(artboard) = self.artboards.get(&artboard_handle) else {
-                return;
+                return RuntimeHitResult::None;
             };
             map_pointer(&artboard.instance, event)
         };
         let hit = {
             let Some(machine) = self.state_machines.get_mut(&handle) else {
-                return;
+                return RuntimeHitResult::None;
             };
             let Some(artboard) = self.artboards.get_mut(&artboard_handle) else {
-                return;
+                return RuntimeHitResult::None;
             };
             match kind {
-                PointerKind::Move => machine.instance.pointer_move(
+                PointerKind::Move => machine.instance.pointer_move_hit_result(
                     artboard.instance.raw_mut(),
                     position.x,
                     position.y,
                     0.0,
                     event.pointer_id,
+                    None,
                 ),
-                PointerKind::Down => machine.instance.pointer_down(
+                PointerKind::Down => machine.instance.pointer_down_hit_result(
                     artboard.instance.raw_mut(),
                     position.x,
                     position.y,
                     event.pointer_id,
+                    None,
                 ),
-                PointerKind::Up => machine.instance.pointer_up(
+                PointerKind::Up => machine.instance.pointer_up_hit_result(
                     artboard.instance.raw_mut(),
                     position.x,
                     position.y,
                     event.pointer_id,
+                    None,
                 ),
-                PointerKind::Exit => machine.instance.pointer_exit(
+                PointerKind::Exit => machine.instance.pointer_exit_hit_result(
                     artboard.instance.raw_mut(),
                     position.x,
                     position.y,
                     event.pointer_id,
+                    None,
                 ),
             }
         };
-        if hit && matches!(kind, PointerKind::Down | PointerKind::Up) {
+        if hit != RuntimeHitResult::None && matches!(kind, PointerKind::Down | PointerKind::Up) {
             let Some(machine) = self.state_machines.get_mut(&handle) else {
-                return;
+                return hit;
             };
             let Some(artboard) = self.artboards.get_mut(&artboard_handle) else {
-                return;
+                return hit;
             };
             let _ = machine
                 .instance
                 .advance_and_apply(artboard.instance.raw_mut(), 0.0);
         }
+        hit
     }
 
     fn check_subscriptions(&mut self) {
@@ -2235,32 +2349,25 @@ fn enum_value_name_for_path(
 }
 
 fn map_pointer(artboard: &OwnedArtboardInstance, event: PointerEvent) -> crate::Vec2D {
-    let (_, _, aw, ah) = artboard.artboard_bounds();
-    let sw = event.screen_bounds.x;
-    let sh = event.screen_bounds.y;
-    if sw == aw && sh == ah || sw == 0.0 || sh == 0.0 {
+    let (x, y, width, height) = artboard.artboard_bounds();
+    let artboard_bounds = crate::Aabb::from_ltwh(x, y, width, height);
+    let surface_bounds = crate::Aabb::new(0.0, 0.0, event.screen_bounds.x, event.screen_bounds.y);
+    if surface_bounds == artboard_bounds
+        || surface_bounds.width() == 0.0
+        || surface_bounds.height() == 0.0
+    {
         return event.position;
     }
-    let sx = sw / aw;
-    let sy = sh / ah;
-    let scale = match event.fit {
-        Fit::Fill => return crate::Vec2D::new(event.position.x / sx, event.position.y / sy),
-        Fit::Contain => sx.min(sy),
-        Fit::Cover => sx.max(sy),
-        Fit::FitWidth => sx,
-        Fit::FitHeight => sy,
-        Fit::None => 1.0,
-        Fit::ScaleDown => 1.0_f32.min(sx.min(sy)),
-        Fit::Layout => 1.0,
-    } * event.scale_factor;
-    let width = aw * scale;
-    let height = ah * scale;
-    let ox = (sw - width) * (event.alignment.x + 1.0) * 0.5;
-    let oy = (sh - height) * (event.alignment.y + 1.0) * 0.5;
-    crate::Vec2D::new(
-        (event.position.x - ox) / scale,
-        (event.position.y - oy) / scale,
+    nuxie_render_api::compute_alignment(
+        render_fit(event.fit),
+        Vec2D::new(event.alignment.x, event.alignment.y),
+        surface_bounds,
+        artboard_bounds,
+        event.scale_factor,
     )
+    .invert()
+    .unwrap_or(Mat2D::IDENTITY)
+    .transform_point(event.position)
 }
 
 fn render_fit(fit: Fit) -> nuxie_render_api::Fit {

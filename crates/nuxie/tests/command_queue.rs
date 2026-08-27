@@ -989,12 +989,12 @@ fn global_asset_set_and_remove() {
     let bad_audio = queue.decode_audio(vec![0; 1024], None, 0);
     let font = queue.decode_font(FONT_FIXTURE.to_vec(), None, 0);
     let bad_font = queue.decode_font(vec![0; 1024], None, 0);
-    queue.add_global_image_asset("image", image);
-    queue.add_global_image_asset("bad-image", bad_image);
-    queue.add_global_audio_asset("audio", audio);
-    queue.add_global_audio_asset("bad-audio", bad_audio);
-    queue.add_global_font_asset("font", font);
-    queue.add_global_font_asset("bad-font", bad_font);
+    queue.add_global_image_asset("image", image, 0);
+    queue.add_global_image_asset("bad-image", bad_image, 0);
+    queue.add_global_audio_asset("audio", audio, 0);
+    queue.add_global_audio_asset("bad-audio", bad_audio, 0);
+    queue.add_global_font_asset("font", font, 0);
+    queue.add_global_font_asset("bad-font", bad_font, 0);
     let mut server = server(&queue);
     assert!(server.process_commands());
     assert_eq!(server.global_image_named("image"), Some(image));
@@ -1004,20 +1004,20 @@ fn global_asset_set_and_remove() {
     assert_eq!(server.global_audio_named("bad-audio"), None);
     assert_eq!(server.global_font_named("bad-font"), None);
 
-    queue.remove_global_image_asset("image");
-    queue.remove_global_audio_asset("audio");
-    queue.remove_global_font_asset("font");
-    queue.remove_global_image_asset("missing");
-    queue.remove_global_audio_asset("missing");
-    queue.remove_global_font_asset("missing");
+    queue.remove_global_image_asset("image", 0);
+    queue.remove_global_audio_asset("audio", 0);
+    queue.remove_global_font_asset("font", 0);
+    queue.remove_global_image_asset("missing", 0);
+    queue.remove_global_audio_asset("missing", 0);
+    queue.remove_global_font_asset("missing", 0);
     assert!(server.process_commands());
     assert_eq!(server.global_image_named("image"), None);
     assert_eq!(server.global_audio_named("audio"), None);
     assert_eq!(server.global_font_named("font"), None);
 
-    queue.add_global_image_asset("image", image);
-    queue.add_global_audio_asset("audio", audio);
-    queue.add_global_font_asset("font", font);
+    queue.add_global_image_asset("image", image, 0);
+    queue.add_global_audio_asset("audio", audio, 0);
+    queue.add_global_font_asset("font", font, 0);
     queue.delete_image(image, 0);
     queue.delete_audio(audio, 0);
     queue.delete_font(font, 0);
@@ -1040,9 +1040,9 @@ fn external_resources() {
         Arc::<[u8]>::from([1, 2, 3, 4, 5]),
     ));
     let blob_identity = Arc::as_ptr(&blob) as usize;
-    let image_handle = queue.add_external_image(image, None, 0);
-    let audio_handle = queue.add_external_audio(audio, None, 0);
-    let font_handle = queue.add_external_font(font, None, 0);
+    let image_handle = queue.add_external_image(Some(image), None, 0);
+    let audio_handle = queue.add_external_audio(Some(audio), None, 0);
+    let font_handle = queue.add_external_font(Some(font), None, 0);
     let blob_handle = queue.add_external_blob(Some(blob), None, 0);
     let mut server = server(&queue);
     assert!(server.process_commands());
@@ -1076,6 +1076,34 @@ fn external_resources() {
     assert!(server.audio_source(audio_handle).is_none());
     assert!(server.font(font_handle).is_none());
     assert!(server.blob(blob_handle).is_none());
+}
+
+#[test]
+fn empty_external_resources_report_the_pinned_errors() {
+    let queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    queue.add_external_image(None, Some(&listener), 1);
+    queue.add_external_audio(None, Some(&listener), 2);
+    queue.add_external_font(None, Some(&listener), 3);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        CommandEvent::ImageError { request_id: 1, error, .. }
+            if error == "External image was empty"
+    )));
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        CommandEvent::AudioError { request_id: 2, error, .. }
+            if error == "External audio source was invalid"
+    )));
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        CommandEvent::FontError { request_id: 3, error, .. }
+            if error == "Command Server failed to decode font"
+    )));
 }
 
 #[test]
@@ -1284,7 +1312,7 @@ fn view_model_blob_property_subscription() {
         CommandEvent::ViewModelError { handle, request_id: 0x51, .. } if *handle == root
     )));
 
-    queue.unsubscribe_from_view_model_property(root, "xml", CommandDataType::AssetBlob);
+    queue.unsubscribe_from_view_model_property(root, "xml", CommandDataType::AssetBlob, 0);
     queue.run_once(|server| assert_eq!(server.testing_subscription_count(), 0));
     assert!(server.process_commands());
 }
@@ -1602,7 +1630,7 @@ fn view_model_property_set_get() {
     });
 
     let external: Box<dyn RenderImage + Send> = Box::new(ExternalImage(7));
-    let external_image = queue.add_external_image(external, None, 0);
+    let external_image = queue.add_external_image(Some(external), None, 0);
     queue.set_view_model_value(
         root,
         "Test Image",
@@ -1968,9 +1996,9 @@ fn view_model_property_subscriptions() {
         ("Test List", CommandDataType::List),
         ("Test Image", CommandDataType::AssetImage),
     ] {
-        queue.unsubscribe_from_view_model_property(root, path, data_type);
+        queue.unsubscribe_from_view_model_property(root, path, data_type, 0);
     }
-    queue.unsubscribe_from_view_model_property(root, "Blah", CommandDataType::Boolean);
+    queue.unsubscribe_from_view_model_property(root, "Blah", CommandDataType::Boolean, 0);
     queue.run_once(|server| assert_eq!(server.testing_subscription_count(), 0));
     assert!(server.process_commands());
 }
@@ -2024,7 +2052,7 @@ fn view_model_property_async_subscriptions() {
         CommandEvent::ViewModelValue { handle, path, value: CommandValue::Number(10.0), .. }
             if *handle == root && path == "Test Num"
     )));
-    queue.unsubscribe_from_view_model_property(root, "Test Num", CommandDataType::Number);
+    queue.unsubscribe_from_view_model_property(root, "Test Num", CommandDataType::Number, 0);
     queue.run_once(|server| assert_eq!(server.testing_subscription_count(), 0));
     queue.disconnect();
     worker.join().expect("server thread");
@@ -2480,15 +2508,22 @@ fn bind_view_model_instance() {
     assert!(server.state_machine(state_machine).is_some());
     assert!(server.view_model(view_model).is_some());
     assert!(server.testing_state_machine_view_model_is(state_machine, view_model));
+    let replacement = queue.instantiate_blank_view_model_named(file, "Test All", None, 0);
+    queue.set_view_model_instance(state_machine, replacement, 0);
+    assert!(server.process_commands());
+    assert!(server.testing_state_machine_view_model_is(state_machine, replacement));
     let bad_vm = queue.instantiate_view_model_named(file, "blah", "Test Alternate", None, 0);
     let bad_machine = queue.instantiate_state_machine_named(artboard, "blah", None, 0);
     queue.bind_view_model(state_machine, bad_vm, 1);
     queue.bind_view_model(bad_machine, view_model, 2);
     queue.bind_view_model(bad_machine, bad_vm, 3);
+    queue.set_view_model_instance(state_machine, bad_vm, 4);
+    queue.set_view_model_instance(bad_machine, view_model, 5);
+    queue.set_view_model_instance(bad_machine, bad_vm, 6);
     assert!(server.process_commands());
     queue.process_messages();
     let captured = events(&log);
-    for request_id in 1..=3 {
+    for request_id in 1..=6 {
         assert!(captured.iter().any(|event| matches!(
             event,
             CommandEvent::StateMachineError { request_id: actual, .. }

@@ -580,6 +580,7 @@ pub(crate) enum Command {
         handle: ViewModelInstanceHandle,
         path: String,
         data_type: CommandDataType,
+        request_id: u64,
     },
     GetViewModelName {
         handle: ViewModelInstanceHandle,
@@ -590,6 +591,11 @@ pub(crate) enum Command {
         request_id: u64,
     },
     BindViewModel {
+        state_machine: StateMachineHandle,
+        view_model: ViewModelInstanceHandle,
+        request_id: u64,
+    },
+    SetViewModelInstance {
         state_machine: StateMachineHandle,
         view_model: ViewModelInstanceHandle,
         request_id: u64,
@@ -617,7 +623,7 @@ pub(crate) enum Command {
     },
     ExternalImage {
         handle: RenderImageHandle,
-        image: Box<dyn RenderImage + Send>,
+        image: Option<Box<dyn RenderImage + Send>>,
         request_id: u64,
     },
     DeleteImage {
@@ -631,7 +637,7 @@ pub(crate) enum Command {
     },
     ExternalAudio {
         handle: AudioSourceHandle,
-        audio: Arc<AudioSource>,
+        audio: Option<Arc<AudioSource>>,
         request_id: u64,
     },
     DeleteAudio {
@@ -645,7 +651,7 @@ pub(crate) enum Command {
     },
     ExternalFont {
         handle: FontHandle,
-        font: RawTextFont,
+        font: Option<RawTextFont>,
         request_id: u64,
     },
     DeleteFont {
@@ -669,23 +675,29 @@ pub(crate) enum Command {
     AddGlobalImage {
         name: String,
         handle: RenderImageHandle,
+        request_id: u64,
     },
     RemoveGlobalImage {
         name: String,
+        request_id: u64,
     },
     AddGlobalAudio {
         name: String,
         handle: AudioSourceHandle,
+        request_id: u64,
     },
     RemoveGlobalAudio {
         name: String,
+        request_id: u64,
     },
     AddGlobalFont {
         name: String,
         handle: FontHandle,
+        request_id: u64,
     },
     RemoveGlobalFont {
         name: String,
+        request_id: u64,
     },
     ListArtboards {
         handle: FileHandle,
@@ -753,6 +765,9 @@ pub(crate) enum ViewModelSource {
 #[derive(Default)]
 struct Counters {
     file: u64,
+    // Retained by the pinned source even though it never allocates a list
+    // handle through the public command surface.
+    _list: u64,
     artboard: u64,
     state_machine: u64,
     view_model: u64,
@@ -1275,11 +1290,13 @@ impl CommandQueue {
         handle: ViewModelInstanceHandle,
         path: impl Into<String>,
         data_type: CommandDataType,
+        request_id: u64,
     ) {
         self.enqueue(Command::UnsubscribeViewModelValue {
             handle,
             path: path.into(),
             data_type,
+            request_id,
         });
     }
     pub fn request_view_model_name(&self, handle: ViewModelInstanceHandle, request_id: u64) {
@@ -1299,6 +1316,18 @@ impl CommandQueue {
         request_id: u64,
     ) {
         self.enqueue(Command::BindViewModel {
+            state_machine,
+            view_model,
+            request_id,
+        });
+    }
+    pub fn set_view_model_instance(
+        &self,
+        state_machine: StateMachineHandle,
+        view_model: ViewModelInstanceHandle,
+        request_id: u64,
+    ) {
+        self.enqueue(Command::SetViewModelInstance {
             state_machine,
             view_model,
             request_id,
@@ -1359,7 +1388,7 @@ impl CommandQueue {
     }
     pub fn add_external_image(
         &self,
-        image: Box<dyn RenderImage + Send>,
+        image: Option<Box<dyn RenderImage + Send>>,
         listener: Option<&Listener>,
         request_id: u64,
     ) -> RenderImageHandle {
@@ -1392,7 +1421,7 @@ impl CommandQueue {
     }
     pub fn add_external_audio(
         &self,
-        audio: Arc<AudioSource>,
+        audio: Option<Arc<AudioSource>>,
         listener: Option<&Listener>,
         request_id: u64,
     ) -> AudioSourceHandle {
@@ -1425,7 +1454,7 @@ impl CommandQueue {
     }
     pub fn add_external_font(
         &self,
-        font: RawTextFont,
+        font: Option<RawTextFont>,
         listener: Option<&Listener>,
         request_id: u64,
     ) -> FontHandle {
@@ -1474,32 +1503,59 @@ impl CommandQueue {
     pub fn delete_blob(&self, handle: BlobAssetHandle, request_id: u64) {
         self.enqueue(Command::DeleteBlob { handle, request_id });
     }
-    pub fn add_global_image_asset(&self, name: impl Into<String>, handle: RenderImageHandle) {
+    pub fn add_global_image_asset(
+        &self,
+        name: impl Into<String>,
+        handle: RenderImageHandle,
+        request_id: u64,
+    ) {
         self.enqueue(Command::AddGlobalImage {
             name: name.into(),
             handle,
+            request_id,
         });
     }
-    pub fn remove_global_image_asset(&self, name: impl Into<String>) {
-        self.enqueue(Command::RemoveGlobalImage { name: name.into() });
+    pub fn remove_global_image_asset(&self, name: impl Into<String>, request_id: u64) {
+        self.enqueue(Command::RemoveGlobalImage {
+            name: name.into(),
+            request_id,
+        });
     }
-    pub fn add_global_audio_asset(&self, name: impl Into<String>, handle: AudioSourceHandle) {
+    pub fn add_global_audio_asset(
+        &self,
+        name: impl Into<String>,
+        handle: AudioSourceHandle,
+        request_id: u64,
+    ) {
         self.enqueue(Command::AddGlobalAudio {
             name: name.into(),
             handle,
+            request_id,
         });
     }
-    pub fn remove_global_audio_asset(&self, name: impl Into<String>) {
-        self.enqueue(Command::RemoveGlobalAudio { name: name.into() });
+    pub fn remove_global_audio_asset(&self, name: impl Into<String>, request_id: u64) {
+        self.enqueue(Command::RemoveGlobalAudio {
+            name: name.into(),
+            request_id,
+        });
     }
-    pub fn add_global_font_asset(&self, name: impl Into<String>, handle: FontHandle) {
+    pub fn add_global_font_asset(
+        &self,
+        name: impl Into<String>,
+        handle: FontHandle,
+        request_id: u64,
+    ) {
         self.enqueue(Command::AddGlobalFont {
             name: name.into(),
             handle,
+            request_id,
         });
     }
-    pub fn remove_global_font_asset(&self, name: impl Into<String>) {
-        self.enqueue(Command::RemoveGlobalFont { name: name.into() });
+    pub fn remove_global_font_asset(&self, name: impl Into<String>, request_id: u64) {
+        self.enqueue(Command::RemoveGlobalFont {
+            name: name.into(),
+            request_id,
+        });
     }
     pub fn request_artboard_names(&self, handle: FileHandle, request_id: u64) {
         self.enqueue(Command::ListArtboards { handle, request_id });
@@ -1556,7 +1612,11 @@ impl CommandQueue {
         });
     }
     pub fn create_draw_key(&self) -> DrawKey {
-        self.next(|c| &mut c.draw, DrawKey)
+        let key = self.next(|c| &mut c.draw, DrawKey);
+        // `AutoLockAndNotify` also wakes the pinned server for this
+        // command-less allocation.
+        self.shared.wake.notify_one();
+        key
     }
     pub fn run_once(&self, callback: impl FnOnce(&mut CommandServer) + Send + 'static) {
         self.enqueue(Command::RunOnce(Box::new(callback)));
@@ -1591,22 +1651,42 @@ impl CommandQueue {
             messages.drain(..count).collect::<Vec<_>>()
         };
         for event in &events {
-            let (global, local) = {
+            let key = event.listener_key();
+            let global = {
                 let listeners = lock(&self.listeners);
-                let key = event.listener_key();
-                (
-                    key.map(ListenerKey::global_key)
-                        .and_then(|key| listeners.global.get(&key))
-                        .and_then(Weak::upgrade),
-                    key.and_then(|key| listeners.by_handle.get(&key))
-                        .and_then(Weak::upgrade),
-                )
+                key.map(ListenerKey::global_key)
+                    .and_then(|key| listeners.global.get(&key))
+                    .and_then(Weak::upgrade)
             };
+            let had_global = global.is_some();
             if let Some(listener) = global {
                 listener.on_event(event);
             }
+            // Upstream deliberately resolves the handle listener only after
+            // the global callback returns, so listener destruction or
+            // replacement from the global callback affects this event.
+            let local = {
+                let listeners = lock(&self.listeners);
+                key.and_then(|key| listeners.by_handle.get(&key))
+                    .and_then(Weak::upgrade)
+            };
             if let Some(listener) = local {
-                listener.on_event(event);
+                // Preserve the pinned source's move order: this one message
+                // moves `enums` to the global listener rather than copying it,
+                // leaving the handle listener an empty vector when both exist.
+                if had_global
+                    && let CommandEvent::ViewModelEnumsListed {
+                        handle, request_id, ..
+                    } = event
+                {
+                    listener.on_event(&CommandEvent::ViewModelEnumsListed {
+                        handle: *handle,
+                        request_id: *request_id,
+                        enums: Vec::new(),
+                    });
+                } else {
+                    listener.on_event(event);
+                }
             }
         }
         events.len()

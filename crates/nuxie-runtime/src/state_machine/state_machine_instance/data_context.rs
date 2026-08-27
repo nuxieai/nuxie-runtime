@@ -133,8 +133,7 @@ impl StateMachineInstance {
         context.set_main(view_model_instance);
         true
     }
-    /// Tool-only forwarding seam for replaying the exact C++ command order.
-    #[cfg(feature = "tools")]
+    /// Command-queue forwarding seam for replaying the exact C++ command order.
     #[doc(hidden)]
     pub fn set_view_model_instance_for_command_queue(
         &mut self,

@@ -22,7 +22,8 @@ impl RuntimeFile {
     pub(crate) fn cpp_view_models(&self) -> Vec<RuntimeViewModel<'_>> {
         let mut view_models = Vec::<RuntimeViewModel<'_>>::new();
         let mut latest_view_model = None;
-        let mut latest_view_model_instance = None;
+        let mut latest_view_model_instance =
+            None::<viewmodel_instance_importer::ViewModelInstanceImporter>;
         let mut latest_view_model_instance_list = None;
 
         for (index, object) in self.objects.iter().enumerate() {
@@ -55,7 +56,9 @@ impl RuntimeFile {
             }
 
             if definition.name == "ViewModelInstance" {
-                latest_view_model_instance = None;
+                if let Some(previous) = latest_view_model_instance.take() {
+                    let _ = previous.resolve();
+                }
                 let Some(view_model_index) = object.uint_property("viewModelId") else {
                     continue;
                 };
@@ -67,33 +70,34 @@ impl RuntimeFile {
                         object,
                         values: Vec::new(),
                     });
-                    latest_view_model_instance =
-                        Some((view_model_index, view_model.instances.len() - 1));
+                    let next = viewmodel_instance_importer::ViewModelInstanceImporter::new(
+                        view_model_index,
+                        view_model.instances.len() - 1,
+                    );
+                    latest_view_model_instance = Some(next);
                 }
                 continue;
             }
 
             if definition.is_a("ViewModelInstanceValue") {
-                let Some((view_model_index, instance_index)) = latest_view_model_instance else {
+                let Some(view_model_instance_importer) = latest_view_model_instance else {
                     if definition.name == "ViewModelInstanceList" {
                         latest_view_model_instance_list = None;
                     }
                     continue;
                 };
-                view_models[view_model_index].instances[instance_index]
-                    .values
-                    .push(RuntimeViewModelInstanceValue {
-                        object,
-                        list_items: Vec::new(),
-                    });
+                let Some(value_index) =
+                    view_model_instance_importer.add_value(&mut view_models, object)
+                else {
+                    continue;
+                };
                 if definition.name == "ViewModelInstanceList" {
+                    let (view_model_index, instance_index) =
+                        view_model_instance_importer.view_model_instance();
                     latest_view_model_instance_list = Some((
                         view_model_index,
                         instance_index,
-                        view_models[view_model_index].instances[instance_index]
-                            .values
-                            .len()
-                            - 1,
+                        value_index,
                     ));
                 }
                 continue;
@@ -109,6 +113,10 @@ impl RuntimeFile {
                     .list_items
                     .push(object);
             }
+        }
+
+        if let Some(view_model_instance_importer) = latest_view_model_instance {
+            let _ = view_model_instance_importer.resolve();
         }
 
         view_models

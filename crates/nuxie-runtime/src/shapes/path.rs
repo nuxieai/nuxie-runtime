@@ -15,7 +15,7 @@ use crate::{
         RuntimeOwnedPath, WeightedPathContext, parametric_path_with_control_size, path_commands,
         runtime_path_geometry,
     },
-    math::raw_path::{prune_empty_path_segments, runtime_raw_path_from_commands},
+    math::raw_path::{runtime_raw_path_from_commands, runtime_rebuild_raw_path_from_commands},
     properties::property_key_for_name,
 };
 
@@ -168,24 +168,37 @@ impl ArtboardInstance {
         let weighted_context = self
             .runtime_skinnable_handle_has_skin(path_handle)
             .then_some(WeightedPathContext { instance: self });
-        let mut commands = path_commands(
+        let commands = path_commands(
             &runtime_path,
             nuxie_graph::ShapePaintPathKind::World,
             Mat2D::IDENTITY,
             weighted_context.as_ref(),
         );
-        prune_empty_path_segments(&mut commands);
         let owner = self
             .runtime_shapes
             .paths_by_local
             .get(path_local)
             .and_then(Option::as_ref)
             .expect("Path owner must remain live during its update");
-        owner.retained.replace(Some(RuntimeOwnedPath {
-            path: Arc::new(runtime_path),
-            raw_path: Arc::new(runtime_raw_path_from_commands(&commands)),
-            has_weighted_context: weighted_context.is_some(),
-        }));
+        let has_weighted_context = weighted_context.is_some();
+        let mut retained = owner.retained.borrow_mut();
+        match retained.as_mut() {
+            Some(retained) => {
+                retained.path = Arc::new(runtime_path);
+                runtime_rebuild_raw_path_from_commands(
+                    Arc::make_mut(&mut retained.raw_path),
+                    &commands,
+                );
+                retained.has_weighted_context = has_weighted_context;
+            }
+            None => {
+                *retained = Some(RuntimeOwnedPath {
+                    path: Arc::new(runtime_path),
+                    raw_path: Arc::new(runtime_raw_path_from_commands(&commands)),
+                    has_weighted_context,
+                });
+            }
+        }
         owner.dirty.set(false);
     }
 

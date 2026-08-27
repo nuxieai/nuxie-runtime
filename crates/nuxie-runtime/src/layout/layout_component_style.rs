@@ -1,7 +1,4 @@
-use crate::{
-    artboard::ArtboardInstance, components::ComponentDirt, layout_component,
-    properties::property_key_for_name,
-};
+use crate::{artboard::ArtboardInstance, layout_component, properties::property_key_for_name};
 
 const NODE_DIRTY_PROPERTIES: &[&str] = &[
     "layoutAlignmentType",
@@ -76,7 +73,7 @@ const STYLE_DIRTY_PROPERTIES: &[&str] = &[
 ];
 
 fn mark_parent_layout(instance: &mut ArtboardInstance, style_local_id: usize) -> bool {
-    let Some(parent_local) = instance.component_parent_local(style_local_id) else {
+    let Some(parent_local) = parent_layout_local(instance, style_local_id) else {
         return false;
     };
     layout_component::mark_layout_node_dirty(instance, parent_local)
@@ -169,11 +166,9 @@ fn direction_changed(instance: &mut ArtboardInstance, style_local_id: usize) -> 
 }
 
 fn mark_parent_layout_style(instance: &mut ArtboardInstance, style_local_id: usize) -> bool {
-    instance
-        .component_parent_local(style_local_id)
-        .is_some_and(|parent_local| {
-            instance.add_dirt(parent_local, ComponentDirt::LAYOUT_STYLE, false)
-        })
+    parent_layout_local(instance, style_local_id).is_some_and(|parent_local| {
+        layout_component::mark_layout_style_dirty(instance, parent_local)
+    })
 }
 
 fn changed(

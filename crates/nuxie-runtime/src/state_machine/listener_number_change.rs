@@ -1,6 +1,16 @@
+//! Direct Rust owner for pinned C++
+//! `src/animation/listener_number_change.cpp`.
+//!
+//! The concrete validators retain C++'s null-is-valid compatibility rule;
+//! perform gives a nonempty nested id precedence and otherwise mutates the
+//! direct number input with the live authored value.
+
 use super::StateMachineInputInstance;
 use super::listener_input_change::RuntimeListenerInputTarget;
 use crate::ArtboardInstance;
+use nuxie_binary::RuntimeObject;
+use nuxie_graph::ArtboardGraph;
+use nuxie_schema::definition_by_name;
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeListenerNumberChange {
@@ -8,6 +18,39 @@ pub(crate) struct RuntimeListenerNumberChange {
 }
 
 impl RuntimeListenerNumberChange {
+    /// Mechanical translation of
+    /// `ListenerNumberChange::validateInputType`. C++ accepts a null slot for
+    /// forward compatibility and otherwise requires `StateMachineNumber`.
+    fn validate_input_type(input_type: Option<&str>) -> bool {
+        input_type.is_none_or(|input_type| {
+            definition_by_name(input_type)
+                .is_some_and(|definition| definition.is_a("StateMachineNumber"))
+        })
+    }
+
+    /// Mechanical translation of
+    /// `ListenerNumberChange::validateNestedInputType`. The base importer only
+    /// calls this for a resolved `NestedInput`, while the virtual itself keeps
+    /// the pinned null-is-valid contract.
+    fn validate_nested_input_type(input_type: Option<&str>) -> bool {
+        input_type.is_none_or(|input_type| {
+            definition_by_name(input_type).is_some_and(|definition| definition.is_a("NestedNumber"))
+        })
+    }
+
+    pub(crate) fn validates_for_import(
+        target: RuntimeListenerInputTarget,
+        graph: &ArtboardGraph,
+        inputs: &[Option<&RuntimeObject>],
+    ) -> bool {
+        target.validates_for_import_with(
+            graph,
+            inputs,
+            Self::validate_input_type,
+            Self::validate_nested_input_type,
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn for_test(flags: u64, target: RuntimeListenerInputTarget, value: f32) -> Self {
         let action_owner = super::RuntimeActionCoreHandle::for_test("ListenerNumberChange");

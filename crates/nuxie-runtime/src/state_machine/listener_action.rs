@@ -203,13 +203,11 @@ impl RuntimeScheduledListenerAction {
                     "StateMachineBool",
                     "NestedBool",
                 ),
-            "ListenerNumberChange" => RuntimeListenerInputTarget::from_object(action.object)
-                .validates_for_import(
-                    graph,
-                    state_machine_inputs,
-                    "StateMachineNumber",
-                    "NestedNumber",
-                ),
+            "ListenerNumberChange" => RuntimeListenerNumberChange::validates_for_import(
+                RuntimeListenerInputTarget::from_object(action.object),
+                graph,
+                state_machine_inputs,
+            ),
             "ListenerTriggerChange" => RuntimeListenerInputTarget::from_object(action.object)
                 .validates_for_import(
                     graph,
@@ -253,11 +251,10 @@ impl RuntimeScheduledListenerAction {
             }
             "ListenerNumberChange" => {
                 let target = RuntimeListenerInputTarget::from_object(action.object);
-                debug_assert!(target.validates_for_import(
+                debug_assert!(RuntimeListenerNumberChange::validates_for_import(
+                    target,
                     graph,
                     state_machine_inputs,
-                    "StateMachineNumber",
-                    "NestedNumber",
                 ));
                 Self::NumberChange(RuntimeListenerNumberChange { action_owner })
             }

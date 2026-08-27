@@ -40,6 +40,31 @@ impl RuntimeListenerInputTarget {
         direct_type: &str,
         nested_type: &str,
     ) -> bool {
+        self.validates_for_import_with(
+            graph,
+            inputs,
+            |input_type| {
+                input_type.is_none_or(|input_type| {
+                    definition_by_name(input_type)
+                        .is_some_and(|definition| definition.is_a(direct_type))
+                })
+            },
+            |nested_input_type| {
+                nested_input_type.is_none_or(|nested_input_type| {
+                    definition_by_name(nested_input_type)
+                        .is_some_and(|definition| definition.is_a(nested_type))
+                })
+            },
+        )
+    }
+
+    pub(crate) fn validates_for_import_with(
+        self,
+        graph: &ArtboardGraph,
+        inputs: &[Option<&RuntimeObject>],
+        validate_input_type: impl FnOnce(Option<&str>) -> bool,
+        validate_nested_input_type: impl FnOnce(Option<&str>) -> bool,
+    ) -> bool {
         if let Some(local_id) = self.nested_input_local_id
             && let Some(component) = graph
                 .components
@@ -48,18 +73,16 @@ impl RuntimeListenerInputTarget {
             && definition_by_name(component.type_name)
                 .is_some_and(|definition| definition.is_a("NestedInput"))
         {
-            return definition_by_name(component.type_name)
-                .is_some_and(|definition| definition.is_a(nested_type));
+            return validate_nested_input_type(Some(component.type_name));
         }
 
-        self.direct_input_index
-            .and_then(|index| inputs.get(index))
-            .copied()
-            .flatten()
-            .is_none_or(|input| {
-                definition_by_name(input.type_name)
-                    .is_some_and(|definition| definition.is_a(direct_type))
-            })
+        validate_input_type(
+            self.direct_input_index
+                .and_then(|index| inputs.get(index))
+                .copied()
+                .flatten()
+                .map(|input| input.type_name),
+        )
     }
 
     pub(crate) fn resolve_live(action_owner: &super::RuntimeActionCoreHandle) -> Self {

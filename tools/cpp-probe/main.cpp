@@ -17515,8 +17515,10 @@ void write_f12_profiler_oracle(std::ostream& out)
     transition.fromStateId = 3;
     transition.toStateId = 4;
     transition.tick = 41;
-    transition.path.push_back({0, 5, -1});
-    transition.path.push_back({1, 6, 7});
+    // `buildArtboardPath` resolves the leaf host first and the child artboard
+    // second, then reverses the two segments for root-to-leaf output.
+    transition.path.push_back({0, 6, -1});
+    transition.path.push_back({1, 5, 7});
     rive::ListenerPerformChangeRecord listener;
     listener.artboardId = 0;
     listener.smId = 1;

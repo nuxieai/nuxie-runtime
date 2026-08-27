@@ -6,6 +6,7 @@ use super::*;
 #[derive(Debug, Default)]
 pub(crate) struct RuntimeImageList {
     by_local: Vec<Option<Rc<RefCell<RuntimeImageOwner>>>>,
+    asset_dimensions_by_global: BTreeMap<u32, (f32, f32)>,
 }
 
 impl RuntimeImageList {
@@ -14,6 +15,20 @@ impl RuntimeImageList {
             runtime.header.major_version,
             runtime.header.minor_version,
         );
+        let asset_dimensions_by_global = runtime
+            .file_assets()
+            .into_iter()
+            .filter(|asset| asset.type_name == "ImageAsset")
+            .map(|asset| {
+                (
+                    asset.id,
+                    (
+                        asset.double_property("width").unwrap_or(0.0),
+                        asset.double_property("height").unwrap_or(0.0),
+                    ),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
         let image_locals = graph
             .components
             .iter()
@@ -29,13 +44,36 @@ impl RuntimeImageList {
                     .iter()
                     .find(|component| component.local_id == local_id)
                     .and_then(|component| runtime.object(component.global_id as usize));
-                by_local[local_id] = Some(Rc::new(RefCell::new(RuntimeImageOwner::new(
-                    separate,
-                    image_object,
-                ))));
+                let mut owner = RuntimeImageOwner::new(separate, image_object);
+                owner.is_participating_in_layout = graph
+                    .components
+                    .iter()
+                    .find(|component| component.local_id == local_id)
+                    .is_some_and(|image| {
+                        image.children.iter().any(|child_local| {
+                            graph.components.iter().any(|child| {
+                                child.local_id == *child_local
+                                    && child.type_name == "LayoutParticipant"
+                            })
+                        })
+                    });
+                let asset_global = graph
+                    .drawable_order
+                    .iter()
+                    .find(|drawable| drawable.local_id == Some(local_id))
+                    .and_then(|drawable| drawable.resolved_image_asset_global);
+                owner.set_asset(
+                    asset_global,
+                    asset_global
+                        .and_then(|global| asset_dimensions_by_global.get(&global).copied()),
+                );
+                by_local[local_id] = Some(Rc::new(RefCell::new(owner)));
             }
         }
-        let owners = Self { by_local };
+        let owners = Self {
+            by_local,
+            asset_dimensions_by_global,
+        };
         owners
             .register_mesh_children(graph)
             .expect("validated Image children must register their Mesh owners");
@@ -75,11 +113,14 @@ impl RuntimeImageList {
         asset_global: Option<u32>,
         dimensions: Option<(u32, u32)>,
     ) -> bool {
-        self.owner(local_id).is_some_and(|owner| {
-            owner
-                .borrow_mut()
-                .set_asset(asset_global, dimensions.map(|(w, h)| (w as f32, h as f32)))
-        })
+        let dimensions = dimensions
+            .map(|(width, height)| (width as f32, height as f32))
+            .or_else(|| {
+                asset_global
+                    .and_then(|global| self.asset_dimensions_by_global.get(&global).copied())
+            });
+        self.owner(local_id)
+            .is_some_and(|owner| owner.borrow_mut().set_asset(asset_global, dimensions))
     }
 
     /// Direct `Image::setMesh`: retain the clone-local non-owning mesh link
@@ -180,6 +221,10 @@ impl Clone for RuntimeImageList {
                     owner.as_ref().map(|owner| {
                         let owner = owner.borrow();
                         let mut cloned = RuntimeImageOwner::new(owner.layout_scale_separate, None);
+                        cloned.asset_global = owner.asset_global;
+                        cloned.image_width = owner.image_width;
+                        cloned.image_height = owner.image_height;
+                        cloned.is_participating_in_layout = owner.is_participating_in_layout;
                         cloned.mesh = owner.mesh;
                         cloned.fit = owner.fit;
                         cloned.origin_x = owner.origin_x;
@@ -190,6 +235,7 @@ impl Clone for RuntimeImageList {
                     })
                 })
                 .collect(),
+            asset_dimensions_by_global: self.asset_dimensions_by_global.clone(),
         }
     }
 }
@@ -207,6 +253,7 @@ pub(super) struct RuntimeImageOwner {
     layout_scale_y: f32,
     layout_scale_separate: bool,
     mesh: Option<RuntimeImageMeshOwner>,
+    is_participating_in_layout: bool,
     has_layout_fit: bool,
     fit: u64,
     origin_x: f32,
@@ -231,6 +278,7 @@ impl RuntimeImageOwner {
             layout_scale_y: 1.0,
             layout_scale_separate,
             mesh: None,
+            is_participating_in_layout: false,
             has_layout_fit: false,
             fit: image_object
                 .and_then(|object| object.uint_property("fit"))
@@ -321,6 +369,7 @@ impl RuntimeImageOwner {
                     self.layout_height,
                     matches!(self.mesh, Some(RuntimeImageMeshOwner::Mesh(_))),
                     self.fit,
+                    self.is_participating_in_layout,
                     self.origin_x,
                     self.origin_y,
                     self.alignment_x,
@@ -541,6 +590,7 @@ fn runtime_image_layout_fit_values(
     layout_height: f32,
     has_vertex_mesh: bool,
     fit: u64,
+    is_participating_in_layout: bool,
     origin_x: f32,
     origin_y: f32,
     alignment_x: f32,
@@ -548,7 +598,7 @@ fn runtime_image_layout_fit_values(
 ) -> RuntimeImageLayoutFit {
     let width_scale = layout_width / image_width;
     let height_scale = layout_height / image_height;
-    let (mut scale_x, mut scale_y) = match fit {
+    let (scale_x, scale_y) = match fit {
         1 => {
             let scale = width_scale.min(height_scale);
             (scale, scale)
@@ -569,13 +619,8 @@ fn runtime_image_layout_fit_values(
         _ => (width_scale, height_scale),
     };
 
-    if fit != 5 && fit != 6 && (!scale_x.is_finite() || !scale_y.is_finite()) {
-        scale_x = f32::NAN;
-        scale_y = f32::NAN;
-    }
-
     let (mut offset_x, mut offset_y) = (0.0, 0.0);
-    if fit != 0 {
+    if fit != 0 || is_participating_in_layout {
         let (bounds_origin_x, bounds_origin_y) = if has_vertex_mesh {
             (0.5, 0.5)
         } else {

@@ -90,7 +90,7 @@ impl ProfileCapture for OracleCapture {
     }
 
     fn captured_frame(&self, frame_index: u64) -> Option<ProfileCaptureFrame> {
-        (frame_index == 3).then(|| ProfileCaptureFrame {
+        (frame_index == 4).then(|| ProfileCaptureFrame {
             frame_start_cpu: 100,
             next_frame_start_cpu: 140,
             events: vec![
@@ -157,6 +157,7 @@ fn profiler_wire_bytes_and_record_layout_match_pinned_cpp_source_oracle() {
     profile.record_listener_perform_change("Board", "Machine", "Tap", 6, 2, 99);
     profile.flush_transition_records();
     profile.flush_listener_perform_change_records();
+    profile.end_frame();
     profile.end_frame();
     profile.end_frame();
     let mut rust_bytes = Vec::new();

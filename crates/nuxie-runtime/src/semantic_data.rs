@@ -97,10 +97,9 @@ impl RuntimeSemanticData {
 
     /// Refresh authored and provider-derived state on the retained node.
     ///
-    /// The Focused bit is manager/focus-runtime state rather than an authored
-    /// property, so a generated `stateFlags` refresh must preserve it. The
-    /// Focusable trait is likewise projected from a retained sibling
-    /// `FocusData` on every refresh instead of being snapshotted once.
+    /// Runtime-only Focused/Focusable state is applied when requested or when
+    /// the node is created. A later authored property change replaces the
+    /// corresponding node flags, matching the generated C++ change handlers.
     pub(crate) fn synchronize_from_artboard(
         &mut self,
         artboard: &mut ArtboardInstance,
@@ -112,24 +111,15 @@ impl RuntimeSemanticData {
         let hint = semantic_string_property(artboard, self.local_id, "hint");
         let heading_level = semantic_uint_property(artboard, self.local_id, "headingLevel");
         let authored_traits = semantic_uint_property(artboard, self.local_id, "traitFlags");
-        let trait_flags = if self.parent_has_focus_data(artboard) {
-            authored_traits | SemanticTrait::FOCUSABLE.0
-        } else {
-            authored_traits
-        };
         let authored_states = semantic_uint_property(artboard, self.local_id, "stateFlags");
-        let retained_focus = self.semantic_node.as_ref().map_or(0, |node| {
-            node.borrow().state_flags() & SemanticState::FOCUSED.0
-        });
-        let state_flags = authored_states | retained_focus;
 
         self.set_role(role, Some(manager));
         self.set_label(label, Some(manager));
         self.set_value(value, Some(manager));
         self.set_hint(hint, Some(manager));
         self.set_heading_level(heading_level, Some(manager));
-        self.set_trait_flags(trait_flags, Some(manager));
-        self.set_state_flags(state_flags, Some(manager), artboard);
+        self.set_trait_flags(authored_traits, Some(manager));
+        self.set_state_flags(authored_states, Some(manager), artboard);
         self.apply_inferred_semantics_if_needed(artboard, Some(manager));
     }
 
@@ -272,11 +262,10 @@ impl RuntimeSemanticData {
         } else {
             flags &= !SemanticState::FOCUSED.0;
         }
-        if node.borrow().state_flags() == flags {
-            return;
-        }
         node.borrow_mut().set_state_flags(flags);
-        if let Some(manager) = manager {
+        if let Some(manager) = manager
+            && self.parent_local_id.is_some()
+        {
             manager.mark_node_dirty(node.borrow().id(), SemanticDirt::CONTENT);
         }
     }
@@ -376,7 +365,9 @@ impl RuntimeSemanticData {
             return;
         };
         update(&mut node.borrow_mut());
-        if let Some(manager) = manager {
+        if let Some(manager) = manager
+            && self.parent_local_id.is_some()
+        {
             manager.mark_node_dirty(node.borrow().id(), SemanticDirt::CONTENT);
         }
     }
@@ -460,10 +451,20 @@ impl RuntimeSemanticData {
         let Some(parent_local) = self.parent_local_id else {
             return true;
         };
-        if artboard.component(parent_local).is_none() {
+        let Some(parent) = artboard.component(parent_local) else {
+            return true;
+        };
+        if artboard.runtime_component_is_collapsed_for_draw(parent_local) {
             return true;
         }
-        artboard.runtime_component_is_collapsed_for_draw(parent_local)
+        parent.type_name != "ClippingShape"
+            && parent
+                .concrete
+                .drawable
+                .as_ref()
+                .and_then(|drawable| drawable.drawable_flags_property_key)
+                .and_then(|key| artboard.uint_property(parent_local, key))
+                .is_some_and(|flags| flags & 1 != 0)
     }
 
     pub fn sync_tree_visibility(

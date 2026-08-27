@@ -173,7 +173,11 @@ impl RiveProfile {
         self.string_ids.clear();
         self.string_list.clear();
         self.capture.set_enabled(true);
-        self.last_flushed_frame_index = self.capture.current_frame_index();
+        // Skip the capture slot at the session boundary. It begins before
+        // this session, so treating it as an in-session frame would include
+        // the idle interval before `start`, exactly like the stale
+        // `nFramePutIndex` slot in the pinned MicroProfile owner.
+        self.last_flushed_frame_index = self.capture.current_frame_index().wrapping_add(1);
     }
 
     pub fn stop(&mut self) {
@@ -236,21 +240,31 @@ impl RiveProfile {
         let layer_id = self.resolve_string_id(layer_name);
         let from_state_id = self.resolve_string_id(from_state_name);
         let to_state_id = self.resolve_string_id(to_state_name);
-        let path = path
+        // Pinned `recordTransition` samples the tick before
+        // `buildArtboardPath`, whose string-id resolutions are observable.
+        let tick = self.capture.tick();
+        // `buildArtboardPath` resolves names while walking from the leaf to
+        // the root, then reverses its completed segments for output. The
+        // retained Rust path is already root-to-leaf, so resolve in reverse
+        // before restoring output order. Both the string ids and final path
+        // order are observable.
+        let mut path = path
             .iter()
+            .rev()
             .map(|segment| ArtboardPathSegment {
                 segment_type: segment.segment_type,
                 name_id: self.resolve_string_id(&segment.name),
                 index: segment.index,
             })
-            .collect();
+            .collect::<Vec<_>>();
+        path.reverse();
         self.transition_records.push(TransitionRecord {
             artboard_id,
             sm_id,
             layer_id,
             from_state_id,
             to_state_id,
-            tick: self.capture.tick(),
+            tick,
             path,
         });
     }
@@ -338,7 +352,9 @@ impl RiveProfile {
             self.last_flushed_frame_index = end_frame_index.saturating_sub(max_history);
         }
         for frame_index in self.last_flushed_frame_index..end_frame_index {
-            if let Some(frame) = self.capture.captured_frame(frame_index) {
+            if let Some(frame) = self.capture.captured_frame(frame_index)
+                && frame.next_frame_start_cpu >= frame.frame_start_cpu
+            {
                 write_frame_events(&mut writer, &frame);
             }
         }

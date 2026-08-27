@@ -928,11 +928,24 @@ pub(crate) struct RuntimeLayoutAdvance {
 /// ScriptedDrawable/ScriptedLayout/ScriptedPathEffect owner. These bits must
 /// therefore clone cold with the occurrence rather than living in an
 /// Artboard-wide global-id set.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct RuntimeScriptedComponentState {
     pub(crate) advance_active: bool,
     pub(crate) update_pending: bool,
     pub(crate) in_update_phase: bool,
+}
+
+impl Default for RuntimeScriptedComponentState {
+    fn default() -> Self {
+        Self {
+            // ScriptedDrawable and ScriptedPathEffect both construct with
+            // m_isAdvanceActive=true. Their first non-zero advance either
+            // rearms the owner from the callback result or parks it.
+            advance_active: true,
+            update_pending: false,
+            in_update_phase: false,
+        }
+    }
 }
 
 /// Runtime-only fields owned by one C++ `TextInput` occurrence.

@@ -14,6 +14,7 @@ impl RuntimeScriptImplementedMethods {
     pub(crate) const LEGACY_ALL: Self = Self(Self::METHOD_MASK);
 
     pub(crate) const ADVANCE: u32 = 1 << 0;
+    pub(crate) const UPDATE: u32 = 1 << 1;
     pub(crate) const MEASURE: u32 = 1 << 2;
     pub(crate) const POINTER_DOWN: u32 = 1 << 3;
     pub(crate) const POINTER_MOVE: u32 = 1 << 4;
@@ -47,6 +48,10 @@ impl RuntimeScriptImplementedMethods {
 
     pub(crate) fn advances(self) -> bool {
         self.0 & Self::ADVANCE != 0
+    }
+
+    pub(crate) fn updates(self) -> bool {
+        self.0 & Self::UPDATE != 0
     }
 
     pub(crate) fn measures(self) -> bool {
@@ -168,6 +173,7 @@ mod tests {
         let legacy = RuntimeScriptImplementedMethods::from_serialized(u32::MAX);
         assert_eq!(legacy, RuntimeScriptImplementedMethods::LEGACY_ALL);
         assert!(legacy.advances());
+        assert!(legacy.updates());
         assert!(legacy.measures());
         assert!(legacy.resizes());
         assert!(legacy.listens_to_pointer_events());
@@ -191,6 +197,7 @@ mod tests {
         assert!(convert.data_converts());
         assert!(!convert.data_reverse_converts());
         assert!(!convert.advances());
+        assert!(!convert.updates());
         assert!(!convert.measures());
         assert!(!convert.resizes());
         assert!(!convert.inits());

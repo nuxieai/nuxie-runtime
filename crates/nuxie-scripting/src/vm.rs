@@ -2728,7 +2728,10 @@ impl ScriptInstance for LuaScriptInstance {
     ) -> std::result::Result<nuxie_render_api::RawPath, ScriptError> {
         self.reset_execution_budget();
         if self.table.is_none() {
-            return Ok(source);
+            // ScriptedPathEffect rewinds its retained output before checking
+            // for a live Lua state. A missing state therefore exposes an
+            // empty effect path, not the input path.
+            return Ok(nuxie_render_api::RawPath::new());
         }
         let table = self.live_table()?;
         renderer::call_path_effect_update(&table, source, node)

@@ -147,6 +147,7 @@ mod scripted_data_converter;
 mod scripted_interpolator;
 mod scripted_layout;
 mod scripted_object;
+mod scripted_path_effect;
 mod scripting;
 mod semantic_data;
 mod semantic_inference_registry;

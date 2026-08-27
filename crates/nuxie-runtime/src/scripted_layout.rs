@@ -170,12 +170,21 @@ impl ArtboardInstance {
             let Some(component) = self.component(local_id) else {
                 return false;
             };
-            if component.type_name == "LayoutComponent" {
+            if matches!(
+                component.type_name,
+                "LayoutComponent" | "NestedArtboardLayout"
+            ) {
                 return local_id == layout_local;
             }
-            // `LayoutComponent::propagateSizeToChildren` does not traverse an
-            // exact Node child. Other container components remain transparent.
-            if component.type_name == "Node" {
+            // `LayoutComponent::propagateSizeToChildren` stops at every
+            // retained layout provider, at transparent Node/Group/Solo
+            // containers, and at the two IntrinsicallySizeable owners whose
+            // `shouldPropagateSizeToChildren` override is false.
+            if matches!(
+                component.type_name,
+                "ArtboardComponentList" | "Node" | "Group" | "Solo" | "Joystick" | "NSlicedNode"
+            ) || self.runtime_layout_participant_local(local_id).is_some()
+            {
                 return false;
             }
             parent = self.component_parent_local(local_id);
@@ -191,7 +200,13 @@ fn constrained_measurement(
     maximum_height: Option<f32>,
 ) -> (f32, f32) {
     (
-        maximum_width.unwrap_or(f32::MAX).min(width),
-        maximum_height.unwrap_or(f32::MAX).min(height),
+        cpp_std_min(maximum_width.unwrap_or(f32::MAX), width),
+        cpp_std_min(maximum_height.unwrap_or(f32::MAX), height),
     )
+}
+
+/// Literal two-argument `std::min`: compare the second operand and otherwise
+/// retain the first, including its NaN payload and signed-zero bits.
+fn cpp_std_min(first: f32, second: f32) -> f32 {
+    if second < first { second } else { first }
 }

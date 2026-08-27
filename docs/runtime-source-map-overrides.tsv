@@ -67,3 +67,7 @@ component.cpp	needs source correction	crates/nuxie-runtime/src/components.rs,cra
 math/random.cpp	translated	crates/nuxie-runtime/src/math/random.rs	complete pinned owner translated under mutex-serialized process state and target-specific C-rand adapters
 animation/state_instance.cpp	translated	crates/nuxie-runtime/src/state_machine/state_instance.rs	complete pinned owner translated under stable layer-state handle and enum-dispatched occurrence adaptation
 shapes/straight_vertex.cpp	translated	crates/nuxie-runtime/src/shapes/straight_vertex.rs	complete pinned radius dirt callback translated through nominal property-change owner
+animation/system_state_instance.cpp	translated	crates/nuxie-runtime/src/state_machine/system_state_instance.rs	complete pinned no-op system-state occurrence translated with retained state identity in its base handle
+viewmodel/viewmodel_property_enum_system.cpp	translated	crates/nuxie-runtime/src/viewmodel/viewmodel_property_enum_system.rs	complete pinned static empty system-enum catalog translated under system-enum classification adaptation
+animation/blend_state_transition.cpp	translated	crates/nuxie-runtime/src/state_machine/blend_state_transition.rs	complete pinned owner translated under stable occurrence and retained animation handles
+importers/bindable_property_importer.cpp	translated	crates/nuxie-binary/src/importers/bindable_property_importer.rs	complete pinned single-use retained-property transfer translated through import-stack handles

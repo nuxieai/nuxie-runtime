@@ -1454,11 +1454,20 @@ fn runtime_data_converter_data_bind_definition_inner(
     }
     visiting.push(converter_object.id);
 
-    let formula_tokens = if converter_object.type_name == "DataConverterFormula" {
-        file.data_converter_formula_authored_tokens_for_object(converter_object)
-    } else {
-        Vec::new()
-    };
+    let mut formula_tokens = Vec::new();
+    if converter_object.type_name == "DataConverterFormula" {
+        for token in file.data_converter_formula_authored_tokens_for_object(converter_object) {
+            let status = crate::formula_token::RuntimeFormulaToken::import(
+                Some(converter_object),
+                token,
+                &mut formula_tokens,
+            );
+            debug_assert_eq!(
+                status,
+                crate::formula_token::RuntimeFormulaTokenImportStatus::Ok
+            );
+        }
+    }
     let formula_output_tokens = if converter_object.type_name == "DataConverterFormula" {
         file.data_converter_formula_output_tokens_for_object(converter_object)
     } else {
@@ -1478,69 +1487,79 @@ fn runtime_data_converter_data_bind_definition_inner(
         && !matches!(converter, RuntimeDataBindGraphConverter::Scripted { .. }))
     .then_some(authored_scripted_definition.clone());
 
-    let bindings = (0..file.object_count())
+    let mut bindings = Vec::new();
+    for data_bind in (0..file.object_count())
         .filter_map(|id| file.object(id))
         .filter(|object| {
             nuxie_schema::definition_by_name(object.type_name)
                 .is_some_and(|definition| definition.is_a("DataBind"))
         })
-        .filter_map(|data_bind| {
-            let target_object = file.data_bind_target_for_object(data_bind)?;
-            let (target, initial_target_object) = if target_object.id == converter_object.id {
+    {
+        let Some(target_object) = file.data_bind_target_for_object(data_bind) else {
+            continue;
+        };
+        let formula_token = formula_tokens
+            .iter()
+            .copied()
+            .find(|token| token.object().id == target_object.id);
+        let (target, initial_target_object) = if target_object.id == converter_object.id {
+            (
+                RuntimeDataConverterBindingTarget::SelfProperty,
+                converter_object,
+            )
+        } else if formula_token.is_some() {
+            // `DataConverter::copy` initially targets every owned bind at
+            // the cloned Formula itself. Formula repairs only output-queue
+            // tokens by the original bind-list index; non-output tokens
+            // stay self-targeted instead of disappearing.
+            if matches!(converter, RuntimeDataBindGraphConverter::Formula { .. })
+                && let Some(token_index) = formula_output_tokens
+                    .iter()
+                    .position(|token| token.object.id == target_object.id)
+            {
+                (
+                    RuntimeDataConverterBindingTarget::FormulaToken { token_index },
+                    target_object,
+                )
+            } else {
                 (
                     RuntimeDataConverterBindingTarget::SelfProperty,
                     converter_object,
                 )
-            } else if formula_tokens
-                .iter()
-                .any(|token| token.id == target_object.id)
-            {
-                // `DataConverter::copy` initially targets every owned bind at
-                // the cloned Formula itself. Formula repairs only output-queue
-                // tokens by the original bind-list index; non-output tokens
-                // stay self-targeted instead of disappearing.
-                if matches!(converter, RuntimeDataBindGraphConverter::Formula { .. })
-                    && let Some(token_index) = formula_output_tokens
-                        .iter()
-                        .position(|token| token.object.id == target_object.id)
-                {
-                    (
-                        RuntimeDataConverterBindingTarget::FormulaToken { token_index },
-                        target_object,
-                    )
-                } else {
-                    (
-                        RuntimeDataConverterBindingTarget::SelfProperty,
-                        converter_object,
-                    )
-                }
-            } else if let Some(inputs) = scripted_inputs {
-                let input_index = inputs
-                    .iter()
-                    .position(|input| input.input_global_id == target_object.id)?;
-                let data_bind_index = inputs[input_index]
-                    .data_binds
-                    .iter()
-                    .position(|binding| binding.authored_order() == data_bind.id)?;
-                (
-                    RuntimeDataConverterBindingTarget::ScriptedInput {
-                        input_index,
-                        data_bind_index,
-                    },
-                    target_object,
-                )
-            } else {
-                return None;
-            };
-
-            if data_bind.type_name != "DataBindContext" {
-                return Some(RuntimeDataConverterBindingDefinition::Inert);
             }
+        } else if let Some(inputs) = scripted_inputs {
+            let Some(input_index) = inputs
+                .iter()
+                .position(|input| input.input_global_id == target_object.id)
+            else {
+                continue;
+            };
+            let Some(data_bind_index) = inputs[input_index]
+                .data_binds
+                .iter()
+                .position(|binding| binding.authored_order() == data_bind.id)
+            else {
+                continue;
+            };
+            (
+                RuntimeDataConverterBindingTarget::ScriptedInput {
+                    input_index,
+                    data_bind_index,
+                },
+                target_object,
+            )
+        } else {
+            continue;
+        };
+
+        let binding = if data_bind.type_name != "DataBindContext" {
+            RuntimeDataConverterBindingDefinition::Inert
+        } else {
             let property_key = data_bind
                 .uint_property("propertyKey")
                 .and_then(|value| u32::try_from(value).ok())
                 .unwrap_or(u32::MAX);
-            Some(RuntimeDataConverterBindingDefinition::Context {
+            RuntimeDataConverterBindingDefinition::Context {
                 source_path: file.data_bind_context_source_path_ids_for_object(data_bind),
                 name_based: file
                     .data_bind_is_name_based_for_object(data_bind)
@@ -1549,9 +1568,15 @@ fn runtime_data_converter_data_bind_definition_inner(
                 flags: data_bind.uint_property("flags").unwrap_or(0),
                 target,
                 initial_target: runtime_object_target_value(initial_target_object, property_key),
-            })
-        })
-        .collect();
+            }
+        };
+
+        if let Some(token) = formula_token {
+            token.add_data_bind(&mut bindings, binding);
+        } else {
+            bindings.push(binding);
+        }
+    }
 
     let children = match converter {
         RuntimeDataBindGraphConverter::Group(children) => file

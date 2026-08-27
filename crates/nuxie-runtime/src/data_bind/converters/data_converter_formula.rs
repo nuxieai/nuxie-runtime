@@ -1,5 +1,18 @@
 //! Formula stack ownership matching C++ `DataConverterFormula`.
 
+use crate::data_bind_graph::RuntimeDataBindGraphFormulaToken;
+
+pub(crate) fn is_source_change_random(token: &RuntimeDataBindGraphFormulaToken) -> bool {
+    matches!(
+        token,
+        RuntimeDataBindGraphFormulaToken::Function {
+            function_type: 16,
+            random_mode: 2,
+            ..
+        }
+    )
+}
+
 pub(crate) fn binary_operation(left: f32, right: f32, operation_type: u64) -> f32 {
     match operation_type {
         0 => left + right,

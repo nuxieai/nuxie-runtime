@@ -1360,7 +1360,7 @@ pub(crate) fn runtime_data_bind_graph_converter_contains_source_change_random(
     match converter {
         RuntimeDataBindGraphConverter::Formula { tokens } => tokens
             .iter()
-            .any(crate::formula_token::is_source_change_random),
+            .any(crate::data_converter_formula::is_source_change_random),
         RuntimeDataBindGraphConverter::Group(converters) => converters
             .iter()
             .any(runtime_data_bind_graph_converter_contains_source_change_random),

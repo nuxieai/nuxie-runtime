@@ -611,10 +611,16 @@ impl StateMachineLayerInstance {
             return None;
         }
 
-        let animation_instance = self
-            .current_state
-            .as_ref()?
-            .transition_animation(transition.exit_blend_animation_index)?;
+        let current_state = self.current_state.as_ref()?;
+        if let Some(animation) = super::blend_state_transition::exit_time_animation(
+            current_state,
+            transition.exit_blend_animation_index,
+            artboard,
+        ) {
+            return Some(animation);
+        }
+
+        let animation_instance = current_state.transition_animation(None)?;
         let animation = artboard.linear_animation_instance_definition(animation_instance)?;
         Some(RuntimeTransitionAnimationRef {
             instance: animation_instance,

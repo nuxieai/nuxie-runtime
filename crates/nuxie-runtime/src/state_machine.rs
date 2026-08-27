@@ -21,6 +21,7 @@ mod animation_reset_factory;
 include!("animation/animation_reset.rs");
 mod bindables;
 mod blend_state_direct_instance;
+mod blend_state_transition;
 mod data_bind_template;
 mod data_converter_binding;
 mod event_report;

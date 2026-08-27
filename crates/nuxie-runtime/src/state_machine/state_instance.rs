@@ -9,11 +9,11 @@ use super::*;
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeStateInstance {
     state_index: usize,
-    kind: RuntimeStateInstanceKind,
+    pub(super) kind: RuntimeStateInstanceKind,
 }
 
 #[derive(Debug, Clone)]
-enum RuntimeStateInstanceKind {
+pub(super) enum RuntimeStateInstanceKind {
     System(RuntimeSystemStateInstance),
     Animation(AnimationStateInstance),
     Blend1D(BlendState1DInstance),
@@ -161,11 +161,11 @@ impl RuntimeStateInstance {
     ) -> Option<&LinearAnimationInstance> {
         match &self.kind {
             RuntimeStateInstanceKind::Animation(instance) => Some(instance.animation_instance()),
-            RuntimeStateInstanceKind::Blend1D(instance) => {
-                instance.animation_instance(blend_animation_index?)
-            }
-            RuntimeStateInstanceKind::BlendDirect(instance) => {
-                instance.animation_instance(blend_animation_index?)
+            RuntimeStateInstanceKind::Blend1D(_) | RuntimeStateInstanceKind::BlendDirect(_) => {
+                super::blend_state_transition::exit_time_animation_instance(
+                    self,
+                    blend_animation_index,
+                )
             }
             RuntimeStateInstanceKind::System(_) => None,
         }

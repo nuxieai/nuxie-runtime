@@ -516,8 +516,10 @@ pub(crate) fn build_state_machines_with_action_catalog<'a>(
                                             RuntimeStateTransition {
                                                 global_id: transition.object.id,
                                                 state_to_index: transition.state_to_index,
-                                                exit_blend_animation_index: transition
-                                                    .exit_blend_animation_index,
+                                                exit_blend_animation_index:
+                                                    blend_state_transition::from_imported(
+                                                        &transition,
+                                                    ),
                                                 duration: transition
                                                     .object
                                                     .uint_property("duration")

@@ -11171,6 +11171,15 @@ impl RuntimeDataBindGraphSourceNode {
             RuntimeDataBindGraphValue::Boolean(crate::context_value_boolean::calculate_value(
                 &value,
             ))
+        } else if crate::context_value_trigger::owns_output(
+            &self.default_value,
+            self.converter.as_ref(),
+        ) {
+            // `DataBindContextValueTrigger::apply` always calls setUint after
+            // its concrete Trigger check, independent of the target kind.
+            RuntimeDataBindGraphValue::Integer(crate::context_value_trigger::calculate_value(
+                &value,
+            ))
         } else {
             value
         };
@@ -11627,18 +11636,6 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
                     && let Ok(value) = usize::try_from(*value)
                 {
                     target.set_value(value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::Trigger { global_id },
-                RuntimeDataBindGraphValue::Trigger(value),
-            ) => {
-                if let Some(target) = self
-                    .triggers
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
                 }
             }
             (
@@ -12154,6 +12151,50 @@ mod tests {
             ),
             Some(RuntimeDataBindGraphValue::Number(1.0)),
             "ContextValueAny preserves the wrong concrete value so CoreBool dispatch no-ops",
+        );
+    }
+
+    #[test]
+    fn trigger_default_zero_is_selected_before_target_kind_dispatch() {
+        let mut graph = graph_with_number_binding(0);
+        let source = &mut graph.sources[0];
+        source.default_value = RuntimeDataBindGraphValue::Trigger(7);
+        source.value = RuntimeDataBindGraphValue::Trigger(7);
+
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::String { global_id: 9 },
+                RuntimeDataBindGraphValue::Integer(7),
+            ),
+            Some(RuntimeDataBindGraphValue::Integer(0)),
+            "typed ContextValueTrigger uses DataValueTrigger::defaultValue before target dispatch",
+        );
+
+        source.default_value = RuntimeDataBindGraphValue::String(Vec::new());
+        source.converter = Some(RuntimeDataBindGraphConverter::TriggerIncrement);
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::Integer { global_id: 7 },
+                RuntimeDataBindGraphValue::Integer(7),
+            ),
+            Some(RuntimeDataBindGraphValue::Integer(0)),
+            "converter-selected ContextValueTrigger owns the result even for a non-Trigger source",
+        );
+
+        source.default_value = RuntimeDataBindGraphValue::Trigger(7);
+        source.converter = Some(RuntimeDataBindGraphConverter::Scripted {
+            global_id: 11,
+            serialized_implemented_methods: 0,
+            definition: Default::default(),
+            instance: None,
+        });
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::Trigger { global_id: 7 },
+                RuntimeDataBindGraphValue::Trigger(8),
+            ),
+            Some(RuntimeDataBindGraphValue::Trigger(8)),
+            "ContextValueAny preserves the concrete value; the uint dispatcher rejects Trigger",
         );
     }
 

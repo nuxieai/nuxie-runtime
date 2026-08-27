@@ -35,8 +35,7 @@ impl RuntimeStateInstance {
     ) -> Option<Self> {
         let state = layer.states.get(state_index)?;
         let kind = if let Some(definition) = state.blend_state_1d.as_ref() {
-            let mut occurrence = BlendState1DInstance::new(
-                definition,
+            let mut occurrence = definition.make_instance(
                 artboard,
                 animation_definitions,
                 empty_animation_definition,

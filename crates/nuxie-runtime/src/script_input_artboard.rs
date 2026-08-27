@@ -1,7 +1,10 @@
 //! Pinned `src/script_input_artboard.cpp` occurrence semantics.
 
 use crate::RuntimeBindableArtboard;
-use crate::artboard::RuntimeArtboardAncestorSources;
+use crate::artboard::{
+    RuntimeArtboardAncestorSources, RuntimeResolvedArtboardReference,
+    RuntimeViewModelInstanceArtboardReference, find_artboard,
+};
 use crate::data_bind_graph::RuntimeDataBindGraphValue;
 use nuxie_binary::{RuntimeFile, RuntimeObject};
 
@@ -103,33 +106,23 @@ impl RuntimeScriptInputArtboardOccurrence {
         artboard_id: u64,
         runtime_artboard: Option<RuntimeBindableArtboard>,
     ) -> RuntimeScriptInputArtboardApply {
-        if let Some(runtime_artboard) = runtime_artboard {
-            let Some(candidate) = runtime_artboard.artboard_instance() else {
-                return RuntimeScriptInputArtboardApply::Rejected;
-            };
-            if self
-                .ancestor_sources
-                .as_ref()
-                .is_some_and(|ancestors| ancestors.rejects(&candidate))
-            {
-                return RuntimeScriptInputArtboardApply::Rejected;
-            }
-            let source = ScriptArtboardSource::Live(runtime_artboard);
-            self.referenced_artboard = Some(source.clone());
-            return RuntimeScriptInputArtboardApply::Project(source);
-        }
-        let Some(candidate) = file_artboard(file, artboard_id) else {
+        let file = self.file_attached.then_some(file);
+        let Some(resolved) = find_artboard(
+            Some(RuntimeViewModelInstanceArtboardReference {
+                asset: runtime_artboard.as_ref(),
+                property_value: artboard_id,
+            }),
+            self.ancestor_sources.as_ref(),
+            file,
+        ) else {
             return RuntimeScriptInputArtboardApply::Rejected;
         };
-        if !self.file_attached
-            || self
-                .ancestor_sources
-                .as_ref()
-                .is_some_and(|ancestors| ancestors.rejects_file_artboard_global(candidate.id))
-        {
-            return RuntimeScriptInputArtboardApply::Rejected;
-        }
-        let source = ScriptArtboardSource::File(artboard_id);
+        let source = match resolved {
+            RuntimeResolvedArtboardReference::Live { source } => ScriptArtboardSource::Live(source),
+            RuntimeResolvedArtboardReference::File { artboard_id } => {
+                ScriptArtboardSource::File(artboard_id)
+            }
+        };
         self.referenced_artboard = Some(source.clone());
         RuntimeScriptInputArtboardApply::Project(source)
     }

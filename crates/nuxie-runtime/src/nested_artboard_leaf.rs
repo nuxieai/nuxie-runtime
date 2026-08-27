@@ -12,10 +12,7 @@ pub(crate) fn nested_artboard_leaf_uint_property_changed(
 }
 
 fn is_nested_artboard_occurrence_type(type_name: &str) -> bool {
-    matches!(
-        type_name,
-        "NestedArtboard" | "NestedArtboardLayout" | "NestedArtboardLeaf"
-    )
+    artboard_referencer_from_type(type_name) == Some(RuntimeArtboardReferencerKind::NestedArtboard)
 }
 
 /// Direct transform update owned by C++ `NestedArtboardLeaf::update`.

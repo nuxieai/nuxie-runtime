@@ -6,6 +6,7 @@
 //! the DataBind target; the Lua table is only a projection updated by the
 //! generated `*Changed` callback.
 
+use crate::artboard;
 use crate::data_bind_graph::RuntimeDataBindGraphValue;
 use crate::script_input_artboard::{
     RuntimeScriptInputArtboardApply, RuntimeScriptInputArtboardOccurrence, ScriptArtboardSource,
@@ -50,8 +51,10 @@ impl RuntimeScriptInputProperties {
                 .and_then(|value| u32::try_from(value).ok())
                 .unwrap_or(u32::MAX),
             value: value_key.and_then(|key| authored_value(input, kind, key)),
-            artboard: (kind == ScriptListenerInputKind::Artboard)
-                .then(|| RuntimeScriptInputArtboardOccurrence::from_imported(file, input)),
+            artboard: (kind == ScriptListenerInputKind::Artboard
+                && artboard::artboard_referencer_from_type(input.type_name)
+                    == Some(artboard::RuntimeArtboardReferencerKind::ScriptInputArtboard))
+            .then(|| RuntimeScriptInputArtboardOccurrence::from_imported(file, input)),
             view_model_path: (kind == ScriptListenerInputKind::ViewModelProperty)
                 .then(|| ScriptInputViewModelPropertyPath::from_imported(file, input))
                 .flatten(),

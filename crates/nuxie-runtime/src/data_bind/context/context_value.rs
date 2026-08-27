@@ -828,9 +828,8 @@ impl RuntimeDataBindGraphConverter {
             Self::BooleanNegate => crate::data_converter_boolean_negate::output_type(),
             Self::TriggerIncrement => RuntimeDataType::Trigger,
             Self::NumberToList { .. } => RuntimeDataType::List,
-            Self::ToString { .. }
-            | Self::StringTrim { .. }
-            | Self::StringPad { .. } => RuntimeDataType::String,
+            Self::ToString { .. } | Self::StringPad { .. } => RuntimeDataType::String,
+            Self::StringTrim { .. } => crate::data_converter_string_trim::output_type(),
             Self::StringRemoveZeros => {
                 crate::data_converter_string_remove_zeros::output_type()
             }
@@ -1078,9 +1077,8 @@ impl RuntimeDataBindGraphConverter {
             RuntimeDataBindGraphConverter::StringTrim {
                 global_id,
                 trim_type,
-            } if *global_id == target_global_id && *trim_type != value => {
-                *trim_type = value;
-                true
+            } if *global_id == target_global_id => {
+                crate::data_converter_string_trim::set_trim_type(trim_type, value)
             }
             RuntimeDataBindGraphConverter::Group(converters) => {
                 let mut changed = false;
@@ -2965,9 +2963,13 @@ pub(crate) fn runtime_data_bind_graph_convert_value(
             RuntimeDataBindGraphConverter::StringTrim { trim_type, .. },
             RuntimeDataBindGraphValue::String(value),
         ) => Some(RuntimeDataBindGraphValue::String(
-            crate::data_converter_string_trim::convert(value, *trim_type),
+            crate::data_converter_string_trim::convert(Some(value), *trim_type),
         )),
-        (RuntimeDataBindGraphConverter::StringTrim { .. }, _) => None,
+        (RuntimeDataBindGraphConverter::StringTrim { trim_type, .. }, _) => Some(
+            RuntimeDataBindGraphValue::String(crate::data_converter_string_trim::convert(
+                None, *trim_type,
+            )),
+        ),
         (
             RuntimeDataBindGraphConverter::StringRemoveZeros,
             RuntimeDataBindGraphValue::String(value),

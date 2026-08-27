@@ -10,7 +10,7 @@ use super::{
     bindable_artboard_value, bindable_asset_value, bindable_boolean_value, bindable_color_value,
     bindable_enum_value, bindable_integer_value, bindable_number_value, bindable_string_value,
     bindable_trigger_value, bindable_view_model_value, compare_view_model_integer_pair,
-    runtime_transition_comparators,
+    runtime_transition_comparators, transition_comparator,
 };
 use crate::ArtboardInstance;
 use crate::components::TransformProperty;
@@ -1582,6 +1582,8 @@ impl RuntimeTransitionViewModelCondition {
             if let Some(source) = executor.retained_view_model_source(bindable_global_id) {
                 source.use_in_layer(view_model_trigger_layer_id);
             }
+        } else {
+            transition_comparator::use_in_layer();
         }
     }
 }

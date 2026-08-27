@@ -1,6 +1,8 @@
 // Coarsely translated from:
 // /Users/levi/dev/oss/rive-runtime/include/rive/renderer.hpp
 // /Users/levi/dev/oss/rive-runtime/include/rive/factory.hpp
+// /Users/levi/dev/oss/rive-runtime/include/rive/math/vec2d.hpp
+// /Users/levi/dev/oss/rive-runtime/src/math/vec2d.cpp
 // /Users/levi/dev/rive-rust/tools/golden-runner/recording_renderer.cpp
 use std::any::Any;
 use std::cell::{Ref, RefCell, RefMut};
@@ -47,6 +49,171 @@ impl Vec2D {
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
+
+    pub fn length_squared(self) -> f32 {
+        self.x.mul_add(self.x, self.y * self.y)
+    }
+
+    pub fn length(self) -> f32 {
+        self.length_squared().sqrt()
+    }
+
+    pub fn normalized(self) -> Self {
+        let length_squared = self.length_squared();
+        let scale = if length_squared > 0.0 {
+            1.0 / length_squared.sqrt()
+        } else {
+            1.0
+        };
+        self * scale
+    }
+
+    /// Normalize this vector and return its previous length.
+    pub fn normalize_length(&mut self) -> f32 {
+        let length = self.length();
+        if length > 0.0 {
+            self.x /= length;
+            self.y /= length;
+        }
+        length
+    }
+
+    pub fn lerp(a: Self, b: Self, factor: f32) -> Self {
+        a + (b - a) * factor
+    }
+
+    pub fn transform_dir(point: Self, matrix: Mat2D) -> Self {
+        let [xx, yx, xy, yy, _, _] = matrix.0;
+        Self::new(
+            xx.mul_add(point.x, xy * point.y),
+            yx.mul_add(point.x, yy * point.y),
+        )
+    }
+
+    pub fn transform_mat2d(point: Self, matrix: Mat2D) -> Self {
+        let [xx, yx, xy, yy, tx, ty] = matrix.0;
+        Self::new(
+            tx + xx.mul_add(point.x, xy * point.y),
+            ty + yx.mul_add(point.x, yy * point.y),
+        )
+    }
+
+    pub fn dot(a: Self, b: Self) -> f32 {
+        a.x.mul_add(b.x, a.y * b.y)
+    }
+
+    pub fn cross(a: Self, b: Self) -> f32 {
+        a.x.mul_add(b.y, -(a.y * b.x))
+    }
+
+    pub fn scale_and_add(a: Self, b: Self, scale: f32) -> Self {
+        Self::new(b.x.mul_add(scale, a.x), b.y.mul_add(scale, a.y))
+    }
+
+    pub fn distance(a: Self, b: Self) -> f32 {
+        (a - b).length()
+    }
+
+    pub fn distance_squared(a: Self, b: Self) -> f32 {
+        (a - b).length_squared()
+    }
+}
+
+impl std::ops::Neg for Vec2D {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self::new(-self.x, -self.y)
+    }
+}
+
+impl std::ops::MulAssign<f32> for Vec2D {
+    fn mul_assign(&mut self, scale: f32) {
+        self.x *= scale;
+        self.y *= scale;
+    }
+}
+
+impl std::ops::DivAssign<f32> for Vec2D {
+    fn div_assign(&mut self, scale: f32) {
+        self.x /= scale;
+        self.y /= scale;
+    }
+}
+
+impl std::ops::Sub for Vec2D {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self::new(self.x - rhs.x, self.y - rhs.y)
+    }
+}
+
+impl std::ops::AddAssign for Vec2D {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
+}
+
+impl std::ops::SubAssign for Vec2D {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+    }
+}
+
+impl std::ops::Mul<f32> for Vec2D {
+    type Output = Self;
+
+    fn mul(self, scale: f32) -> Self::Output {
+        Self::new(self.x * scale, self.y * scale)
+    }
+}
+
+impl std::ops::Mul<Vec2D> for f32 {
+    type Output = Vec2D;
+
+    fn mul(self, vector: Vec2D) -> Self::Output {
+        vector * self
+    }
+}
+
+impl std::ops::Div<f32> for Vec2D {
+    type Output = Self;
+
+    fn div(self, scale: f32) -> Self::Output {
+        Self::new(self.x / scale, self.y / scale)
+    }
+}
+
+impl std::ops::Add for Vec2D {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::new(self.x + rhs.x, self.y + rhs.y)
+    }
+}
+
+impl std::ops::Index<usize> for Vec2D {
+    type Output = f32;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match index {
+            0 => &self.x,
+            1 => &self.y,
+            _ => unreachable!("Vec2D index is outside 0..2"),
+        }
+    }
+}
+
+impl std::hash::Hash for Vec2D {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // `std::hash<float>` must hash equal signed zeroes alike.
+        let bits = |value: f32| if value == 0.0 { 0 } else { value.to_bits() };
+        state.write_u32(bits(self.x));
+        state.write_u32(bits(self.y));
+    }
 }
 
 /// Pinned C++ `rive::Fit` values from `include/rive/layout.hpp`.
@@ -91,12 +258,7 @@ impl Mat2D {
     pub const IDENTITY: Self = Self([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 
     pub fn transform_point(self, point: Vec2D) -> Vec2D {
-        let [xx, yx, xy, yy, tx, ty] = self.0;
-        // Pinned C++ contracts the two linear products, then adds translation.
-        Vec2D {
-            x: tx + xx.mul_add(point.x, xy * point.y),
-            y: ty + yx.mul_add(point.x, yy * point.y),
-        }
+        Vec2D::transform_mat2d(point, self)
     }
 
     /// Exact scalar owner for pinned `Mat2D::determinant`.

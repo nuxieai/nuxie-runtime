@@ -124,33 +124,23 @@ fn rounded_corner(
     next: Vec2D,
     radius: f32,
 ) -> (Vec2D, Vec2D, Vec2D, Vec2D) {
-    let (to_prev, to_prev_length) = normalized(prev.x - pos.x, prev.y - pos.y);
-    let (to_next, to_next_length) = normalized(next.x - pos.x, next.y - pos.y);
+    let mut to_prev = prev - pos;
+    let to_prev_length = to_prev.normalize_length();
+    let mut to_next = next - pos;
+    let to_next_length = to_next.normalize_length();
     let render_radius = (to_prev_length * 0.5).min(to_next_length * 0.5).min(radius);
     let ideal_distance = ideal_control_point_distance(to_prev, to_next, render_radius);
     (
-        scale_and_add(pos, to_prev, render_radius),
-        scale_and_add(pos, to_prev, render_radius - ideal_distance),
-        scale_and_add(pos, to_next, render_radius - ideal_distance),
-        scale_and_add(pos, to_next, render_radius),
-    )
-}
-
-fn normalized(x: f32, y: f32) -> (Vec2D, f32) {
-    let length = x.mul_add(x, y * y).sqrt();
-    (Vec2D::new(x / length, y / length), length)
-}
-
-fn scale_and_add(point: Vec2D, vector: Vec2D, scale: f32) -> Vec2D {
-    Vec2D::new(
-        vector.x.mul_add(scale, point.x),
-        vector.y.mul_add(scale, point.y),
+        Vec2D::scale_and_add(pos, to_prev, render_radius),
+        Vec2D::scale_and_add(pos, to_prev, render_radius - ideal_distance),
+        Vec2D::scale_and_add(pos, to_next, render_radius - ideal_distance),
+        Vec2D::scale_and_add(pos, to_next, render_radius),
     )
 }
 
 fn ideal_control_point_distance(to_prev: Vec2D, to_next: Vec2D, radius: f32) -> f32 {
-    let cross = to_prev.x.mul_add(to_next.y, -(to_prev.y * to_next.x));
-    let dot = to_prev.x.mul_add(to_next.x, to_prev.y * to_next.y);
+    let cross = Vec2D::cross(to_prev, to_next);
+    let dot = Vec2D::dot(to_prev, to_next);
     let angle = cross.atan2(dot).abs();
     radius.min(
         (4.0 / 3.0)

@@ -71,23 +71,23 @@ impl EvalCubic {
 
 fn quad_subdivide(points: [(f32, f32); 3], t: f32) -> [(f32, f32); 5] {
     debug_assert!(t >= 0.0 && t <= 1.0);
-    let ab = weighted_lerp_point(points[0], points[1], t);
-    let bc = weighted_lerp_point(points[1], points[2], t);
-    [points[0], ab, weighted_lerp_point(ab, bc, t), bc, points[2]]
+    let ab = lerp_point(points[0], points[1], t);
+    let bc = lerp_point(points[1], points[2], t);
+    [points[0], ab, lerp_point(ab, bc, t), bc, points[2]]
 }
 
 fn cubic_subdivide(points: [(f32, f32); 4], t: f32) -> [(f32, f32); 7] {
     debug_assert!(t >= 0.0 && t <= 1.0);
-    let ab = weighted_lerp_point(points[0], points[1], t);
-    let bc = weighted_lerp_point(points[1], points[2], t);
-    let cd = weighted_lerp_point(points[2], points[3], t);
-    let abc = weighted_lerp_point(ab, bc, t);
-    let bcd = weighted_lerp_point(bc, cd, t);
+    let ab = lerp_point(points[0], points[1], t);
+    let bc = lerp_point(points[1], points[2], t);
+    let cd = lerp_point(points[2], points[3], t);
+    let abc = lerp_point(ab, bc, t);
+    let bcd = lerp_point(bc, cd, t);
     [
         points[0],
         ab,
         abc,
-        weighted_lerp_point(abc, bcd, t),
+        lerp_point(abc, bcd, t),
         bcd,
         cd,
         points[3],
@@ -99,8 +99,8 @@ fn line_extract(points: [(f32, f32); 2], start_t: f32, end_t: f32) -> [(f32, f32
     debug_assert!(start_t >= 0.0 && end_t <= 1.0);
 
     [
-        weighted_lerp_point(points[0], points[1], start_t),
-        weighted_lerp_point(points[0], points[1], end_t),
+        lerp_point(points[0], points[1], start_t),
+        lerp_point(points[0], points[1], end_t),
     ]
 }
 

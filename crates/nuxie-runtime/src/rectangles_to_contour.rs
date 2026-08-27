@@ -521,7 +521,7 @@ fn compare_float(left: f32, right: f32) -> Ordering {
 }
 
 fn cross(left: Vec2D, right: Vec2D) -> f32 {
-    left.x.mul_add(right.y, -(left.y * right.x))
+    Vec2D::cross(left, right)
 }
 
 #[cfg(test)]

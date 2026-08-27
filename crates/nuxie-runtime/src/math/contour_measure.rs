@@ -573,8 +573,8 @@ impl TrimSegmentKind {
     ) {
         match self {
             Self::Line { from, to } => {
-                let start = weighted_lerp_point(from, to, start_t);
-                let end = weighted_lerp_point(from, to, end_t);
+                let start = lerp_point(from, to, start_t);
+                let end = lerp_point(from, to, end_t);
                 if move_to {
                     destination.move_to(start);
                 }

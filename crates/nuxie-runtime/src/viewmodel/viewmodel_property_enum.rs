@@ -1,5 +1,8 @@
-// Direct Rust owner for pinned C++ `src/viewmodel/viewmodel_property_enum.cpp`.
-// Enum-property path typing plus the narrow metadata adapter.
+// Enum-property path typing adapter used by retained ViewModel accessors.
+//
+// Pinned `src/viewmodel/viewmodel_property_enum.cpp` also owns the retained,
+// mutable `DataEnum` relationship and its lookup/mutation facade. Those live
+// behaviors are not represented by these path helpers.
 
 pub(super) fn runtime_imported_view_model_enum_property_path_for_name(
     file: &RuntimeFile,

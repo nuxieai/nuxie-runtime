@@ -13,6 +13,7 @@ pub trait PathImporter {
     fn file(&mut self) -> Option<*mut dyn PathFile>;
     fn import_super(&mut self, path: &mut DataBindPath) -> StatusCode;
 }
+#[derive(Clone)]
 pub struct DataBindPath {
     path_buffer: Vec<u32>,
     file: Option<*mut dyn PathFile>,

@@ -110,6 +110,7 @@ mod state_machine_layer_importer;
 mod state_machine_listener_importer;
 mod state_transition_importer;
 mod text_asset_importer;
+pub(super) mod transition_viewmodel_condition_importer;
 mod viewmodel_importer;
 mod viewmodel_instance_importer;
 mod viewmodel_instance_list_importer;
@@ -338,9 +339,10 @@ fn object_imports_successfully(
     {
         return decision;
     }
-
-    if definition.is_a("TransitionComparator") {
-        return context.latest(ImportStackKey::TransitionViewModelCondition);
+    if let Some(decision) = transition_viewmodel_condition_importer::dispatch_imports_successfully(
+        object, definition, context,
+    ) {
+        return decision;
     }
 
     if let Some(decision) = state_machine_layer_component_importer::dispatch_imports_successfully(
@@ -452,9 +454,7 @@ pub(crate) fn update_import_context(
             .artboard_local_nested_inputs
             .push(nested_input_kind(definition));
     }
-    if definition.is_a("TransitionViewModelCondition") {
-        context.make_latest(ImportStackKey::TransitionViewModelCondition);
-    }
+    transition_viewmodel_condition_importer::dispatch_update_context(definition, context);
     if definition.is_a("BindableProperty") {
         bindable_property_importer::update_context(definition, context);
     }

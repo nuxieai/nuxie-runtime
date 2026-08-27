@@ -5112,33 +5112,11 @@ impl RuntimeFile {
         &'a self,
         condition: &RuntimeObject,
     ) -> RuntimeTransitionViewModelConditionComparators<'a> {
-        let Some(object_id) = usize::try_from(condition.id).ok() else {
-            return RuntimeTransitionViewModelConditionComparators::default();
-        };
-        let mut comparators = RuntimeTransitionViewModelConditionComparators::default();
-        for candidate in self.objects.iter().skip(object_id + 1).flatten() {
-            let Some(candidate_id) = usize::try_from(candidate.id).ok() else {
-                continue;
-            };
-            if self.import_status(candidate_id) != Some(RuntimeImportStatus::Imported) {
-                continue;
-            }
-            let Some(definition) = definition_by_type_key(candidate.type_key) else {
-                continue;
-            };
-            if definition.is_a("TransitionViewModelCondition") {
-                break;
-            }
-            if !definition.is_a("TransitionComparator") {
-                continue;
-            }
-            if comparators.left.is_none() {
-                comparators.left = Some(candidate);
-            } else {
-                comparators.right = Some(candidate);
-            }
-        }
-        comparators
+        importers::transition_viewmodel_condition_importer::comparators_for_condition(
+            &self.objects,
+            &self.import_statuses,
+            condition,
+        )
     }
 
     fn cpp_data_converter_output_type(

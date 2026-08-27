@@ -131,6 +131,22 @@ pub(crate) struct RuntimeOwnedViewModelArtboardState {
     pub(crate) bound_view_model_instance: Option<RuntimeOwnedViewModelHandle>,
 }
 
+/// Pinned `ViewModelInstanceArtboard::asset`, shared by the owned graph and
+/// runtime facade so both live consumers execute the nominal owner's exact
+/// write-before-dirt sequence.
+pub(super) fn view_model_instance_artboard_asset(
+    cell: &RuntimeViewModelCell,
+    state: &Rc<RefCell<RuntimeOwnedViewModelArtboardState>>,
+    value: Option<RuntimeBindableArtboard>,
+) {
+    if !matches!(cell.value(), RuntimeViewModelCellValue::Artboard(u32::MAX)) {
+        state.borrow_mut().bindable_artboard = None;
+    }
+    cell.set_value(RuntimeViewModelCellValue::Artboard(u32::MAX));
+    state.borrow_mut().bindable_artboard = value;
+    cell.notify_bindings_value_changed();
+}
+
 #[derive(Debug)]
 struct RuntimeOwnedViewModelArtboard {
     property_index: usize,
@@ -167,12 +183,61 @@ impl RuntimeOwnedViewModelArtboard {
         true
     }
 
-    fn runtime_state(&self) -> Rc<RefCell<RuntimeOwnedViewModelArtboardState>> {
-        Rc::clone(&self.runtime_state)
+    /// Pinned `ViewModelInstanceArtboard::asset`. The generated
+    /// `propertyValue(-1)` setter runs first and therefore clears the old
+    /// bindable before its first dirt cascade when the serialized value was
+    /// not already the sentinel. The new bindable is then installed and the
+    /// explicit second `Bindings` cascade always runs, including for the same
+    /// pointer and for `nullptr`.
+    fn set_asset(&mut self, value: Option<RuntimeBindableArtboard>) {
+        view_model_instance_artboard_asset(&self.cell, &self.runtime_state, value);
     }
 
-    fn notify_bindings_value_changed(&self) {
-        self.cell.notify_bindings_value_changed();
+    /// Pinned `ViewModelInstanceArtboard::boundViewModelInstance` retains the
+    /// supplied instance without publishing value dirt.
+    fn set_bound_view_model_instance(&self, value: Option<RuntimeOwnedViewModelHandle>) {
+        self.runtime_state.borrow_mut().bound_view_model_instance = value;
+    }
+
+    /// Pinned `ViewModelInstanceArtboard::advanced`: advance the retained
+    /// bound instance before acknowledging this artboard value itself.
+    fn advanced_data_context(&self) {
+        let bound = self
+            .runtime_state
+            .borrow()
+            .bound_view_model_instance
+            .clone();
+        if let Some(bound) = bound {
+            bound.borrow_mut().advanced_data_context();
+        }
+        self.cell.advanced();
+    }
+
+    /// Script-frame counterpart of `advanced_data_context`. Direct values of
+    /// the bound instance are advanced at the authored position; shared
+    /// descendants are returned to the existing graph walk.
+    fn advance_script_frame(
+        &self,
+        shared_children: &mut Vec<Rc<RefCell<RuntimeOwnedViewModelInstance>>>,
+    ) -> bool {
+        let mut changed = false;
+        let bound = self
+            .runtime_state
+            .borrow()
+            .bound_view_model_instance
+            .clone();
+        if let Some(bound) = bound {
+            let (bound_changed, mut bound_children) =
+                bound.borrow_mut().advance_script_frame_local();
+            changed |= bound_changed;
+            shared_children.append(&mut bound_children);
+        }
+        self.cell.advanced();
+        changed
+    }
+
+    fn runtime_state(&self) -> Rc<RefCell<RuntimeOwnedViewModelArtboardState>> {
+        Rc::clone(&self.runtime_state)
     }
 }
 

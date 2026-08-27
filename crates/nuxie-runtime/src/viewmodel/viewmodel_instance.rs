@@ -46,6 +46,10 @@ pub(crate) struct RuntimeOwnedViewModelAdvanceContext {
 enum RuntimeOwnedViewModelAdvanceEntry {
     Trigger(RuntimeViewModelCell),
     List(Rc<RefCell<RuntimeOwnedViewModelListValue>>),
+    Artboard {
+        cell: RuntimeViewModelCell,
+        state: Rc<RefCell<RuntimeOwnedViewModelArtboardState>>,
+    },
 }
 
 impl RuntimeOwnedViewModelAdvanceContext {
@@ -69,6 +73,15 @@ impl RuntimeOwnedViewModelAdvanceContext {
                             .push(RuntimeOwnedViewModelAdvanceEntry::List(Rc::clone(
                                 &list.value,
                             )));
+                    }
+                }
+                RuntimeOwnedViewModelValueKind::Artboard => {
+                    if let Some(artboard) = instance.artboards.get(occurrence.slot_index) {
+                        self.entries
+                            .push(RuntimeOwnedViewModelAdvanceEntry::Artboard {
+                                cell: artboard.cell.clone(),
+                                state: artboard.runtime_state(),
+                            });
                     }
                 }
                 RuntimeOwnedViewModelValueKind::ViewModel => {
@@ -107,6 +120,15 @@ impl RuntimeOwnedViewModelAdvanceContext {
                                 ));
                             }
                         }
+                        RuntimeOwnedViewModelValueKind::Artboard => {
+                            if let Some(artboard) = child.artboards.get(occurrence.slot_index) {
+                                self.entries
+                                    .push(RuntimeOwnedViewModelAdvanceEntry::Artboard {
+                                        cell: artboard.cell.clone(),
+                                        state: artboard.runtime_state(),
+                                    });
+                            }
+                        }
                         RuntimeOwnedViewModelValueKind::ViewModel => {
                             if let Some(grandchild) = child.children.get(occurrence.slot_index) {
                                 self.extend_view_model(grandchild);
@@ -142,6 +164,19 @@ impl RuntimeOwnedViewModelAdvanceContext {
                                 ));
                             }
                         }
+                        RuntimeOwnedViewModelValueKind::Artboard => {
+                            if let Some(artboard) = child
+                                .imported_artboards
+                                .get(&object_id)
+                                .and_then(|values| values.get(occurrence.slot_index))
+                            {
+                                self.entries
+                                    .push(RuntimeOwnedViewModelAdvanceEntry::Artboard {
+                                        cell: artboard.cell.clone(),
+                                        state: artboard.runtime_state(),
+                                    });
+                            }
+                        }
                         RuntimeOwnedViewModelValueKind::ViewModel => {
                             if let Some(grandchild) = child
                                 .imported_children
@@ -172,6 +207,13 @@ impl RuntimeOwnedViewModelAdvanceContext {
                             instance.borrow_mut().advanced_data_context();
                         }
                     }
+                }
+                RuntimeOwnedViewModelAdvanceEntry::Artboard { cell, state } => {
+                    let bound = state.borrow().bound_view_model_instance.clone();
+                    if let Some(bound) = bound {
+                        bound.borrow_mut().advanced_data_context();
+                    }
+                    cell.advanced();
                 }
             }
         }
@@ -2762,52 +2804,22 @@ impl RuntimeOwnedViewModelInstance {
     pub fn set_runtime_artboard_by_property_name(
         &mut self,
         property_name: &str,
-        artboard: Option<RuntimeBindableArtboard>,
+        value: Option<RuntimeBindableArtboard>,
     ) -> bool {
         let Some(property_index) = self.property_index_by_name(property_name) else {
             return false;
         };
-        let Some(state) = self.artboard_runtime_state_by_property_index(property_index) else {
+        let Some(artboard) = self
+            .artboards
+            .iter_mut()
+            .find(|artboard| artboard.property_index == property_index)
+        else {
             return false;
         };
-        let same = match (&state.borrow().bindable_artboard, &artboard) {
-            (Some(current), Some(next)) => current.ptr_eq(next),
-            (None, None) => true,
-            _ => false,
-        };
-        if same {
-            if artboard.is_some() {
-                state.borrow_mut().bound_view_model_instance.take();
-                if let Some(artboard) = self
-                    .artboards
-                    .iter()
-                    .find(|artboard| artboard.property_index == property_index)
-                {
-                    // C++ `ViewModelInstanceArtboard::asset` always adds
-                    // Bindings dirt, including when the stable BindableArtboard
-                    // pointer now carries a refreshed source occurrence.
-                    artboard.notify_bindings_value_changed();
-                }
-                return true;
-            }
-            return false;
-        }
-        let scalar_changed =
-            self.set_artboard_by_property_index(property_index, u64::from(u32::MAX));
-        let state = self
-            .artboard_runtime_state_by_property_index(property_index)
-            .expect("validated artboard property");
-        let mut state = state.borrow_mut();
-        state.bindable_artboard = artboard;
-        state.bound_view_model_instance.take();
-        if !scalar_changed
-            && let Some(artboard) = self
-                .artboards
-                .iter()
-                .find(|artboard| artboard.property_index == property_index)
-        {
-            artboard.notify_bindings_value_changed();
-        }
+        // Runtime rebinding clears the optional companion VMI before invoking
+        // the exact `ViewModelInstanceArtboard::asset` sequence.
+        artboard.set_bound_view_model_instance(None);
+        artboard.set_asset(value);
         true
     }
 
@@ -3087,6 +3099,11 @@ impl RuntimeOwnedViewModelInstance {
                         );
                     }
                 }
+                RuntimeOwnedViewModelValueKind::Artboard => {
+                    if let Some(artboard) = self.artboards.get(occurrence.slot_index) {
+                        changed |= artboard.advance_script_frame(&mut shared_children);
+                    }
+                }
                 RuntimeOwnedViewModelValueKind::ViewModel => {
                     if let Some(view_model) = self.view_models.get_mut(occurrence.slot_index) {
                         changed |= view_model.advance_script_frame(&mut shared_children);
@@ -3109,6 +3126,11 @@ impl RuntimeOwnedViewModelInstance {
                 RuntimeOwnedViewModelValueKind::List => {
                     if let Some(list) = self.lists.get(occurrence.slot_index) {
                         advance_runtime_owned_list_children(std::slice::from_ref(list));
+                    }
+                }
+                RuntimeOwnedViewModelValueKind::Artboard => {
+                    if let Some(artboard) = self.artboards.get(occurrence.slot_index) {
+                        artboard.advanced_data_context();
                     }
                 }
                 RuntimeOwnedViewModelValueKind::ViewModel => {

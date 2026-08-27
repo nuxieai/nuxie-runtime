@@ -1102,6 +1102,11 @@ impl RuntimeOwnedViewModelViewModel {
                                 );
                             }
                         }
+                        RuntimeOwnedViewModelValueKind::Artboard => {
+                            if let Some(artboard) = self.artboards.get(occurrence.slot_index) {
+                                changed |= artboard.advance_script_frame(shared_children);
+                            }
+                        }
                         RuntimeOwnedViewModelValueKind::ViewModel => {
                             if let Some(child) = self.children.get_mut(occurrence.slot_index) {
                                 changed |= child.advance_script_frame(shared_children);
@@ -1136,6 +1141,15 @@ impl RuntimeOwnedViewModelViewModel {
                                     std::slice::from_ref(list),
                                     shared_children,
                                 );
+                            }
+                        }
+                        RuntimeOwnedViewModelValueKind::Artboard => {
+                            if let Some(artboard) = self
+                                .imported_artboards
+                                .get(&object_id)
+                                .and_then(|values| values.get(occurrence.slot_index))
+                            {
+                                changed |= artboard.advance_script_frame(shared_children);
                             }
                         }
                         RuntimeOwnedViewModelValueKind::ViewModel => {
@@ -1178,6 +1192,11 @@ impl RuntimeOwnedViewModelViewModel {
                                 advance_runtime_owned_list_children(std::slice::from_ref(list));
                             }
                         }
+                        RuntimeOwnedViewModelValueKind::Artboard => {
+                            if let Some(artboard) = self.artboards.get(occurrence.slot_index) {
+                                artboard.advanced_data_context();
+                            }
+                        }
                         RuntimeOwnedViewModelValueKind::ViewModel => {
                             if let Some(child) = self.children.get_mut(occurrence.slot_index) {
                                 child.advanced_data_context();
@@ -1206,6 +1225,15 @@ impl RuntimeOwnedViewModelViewModel {
                                 .and_then(|values| values.get(occurrence.slot_index))
                             {
                                 advance_runtime_owned_list_children(std::slice::from_ref(list));
+                            }
+                        }
+                        RuntimeOwnedViewModelValueKind::Artboard => {
+                            if let Some(artboard) = self
+                                .imported_artboards
+                                .get(&object_id)
+                                .and_then(|values| values.get(occurrence.slot_index))
+                            {
+                                artboard.advanced_data_context();
                             }
                         }
                         RuntimeOwnedViewModelValueKind::ViewModel => {

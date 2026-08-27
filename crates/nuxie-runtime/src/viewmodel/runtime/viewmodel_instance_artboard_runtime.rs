@@ -24,35 +24,8 @@ impl ViewModelInstanceArtboardRuntime {
     }
 
     pub fn set_value(&self, artboard: Option<RuntimeBindableArtboard>) -> bool {
-        let same_artboard = match (&self.runtime_state.borrow().bindable_artboard, &artboard) {
-            (Some(current), Some(next)) => current.ptr_eq(next),
-            (None, None) => true,
-            _ => false,
-        };
-        self.runtime_state
-            .borrow_mut()
-            .bound_view_model_instance
-            .take();
-        if same_artboard {
-            let changed = self
-                .value
-                .cell()
-                .set_value(RuntimeViewModelCellValue::Artboard(u32::MAX));
-            if !changed {
-                // C++ `asset()` dirties bindings even when the retained
-                // BindableArtboard pointer is unchanged, including nullptr.
-                self.value.cell().notify_bindings_value_changed();
-            }
-            return true;
-        }
-        self.runtime_state.borrow_mut().bindable_artboard = artboard;
-        let changed = self
-            .value
-            .cell()
-            .set_value(RuntimeViewModelCellValue::Artboard(u32::MAX));
-        if !changed {
-            self.value.cell().notify_bindings_value_changed();
-        }
+        self.runtime_state.borrow_mut().bound_view_model_instance = None;
+        view_model_instance_artboard_asset(self.value.cell(), &self.runtime_state, artboard);
         true
     }
 
@@ -88,6 +61,7 @@ impl ViewModelInstanceArtboardRuntime {
 mod upstream_data_binding_artboard_tests {
     use super::*;
     use crate::ViewModelRuntime;
+    use crate::view_model_cell::RuntimeCellNotificationQueue;
     use nuxie_binary::read_runtime_file;
     use std::path::PathBuf;
 
@@ -163,10 +137,34 @@ mod upstream_data_binding_artboard_tests {
         assert!(property.set_value(None));
         assert!(property.testing_value().is_none());
 
+        let notifications = RuntimeCellNotificationQueue::default();
+        let listener = RuntimeCellDirtSink::reporting_listener(&notifications, 7);
+        property.value.cell().add_dependent(&listener);
+
         let dependent = RuntimeCellDirtSink::new();
         property.value.cell().add_dependent(&dependent);
 
         assert!(property.set_value(None));
         assert!(dependent.take_dirt().contains(RuntimeCellDirt::BINDINGS));
+        assert_eq!(notifications.len(), 1);
+    }
+
+    #[test]
+    fn assigning_an_artboard_from_a_non_sentinel_id_publishes_both_dirt_edges() {
+        let (_runtime, property) = artboard_property();
+        assert!(
+            property
+                .value
+                .cell()
+                .set_value(RuntimeViewModelCellValue::Artboard(7))
+        );
+
+        let notifications = RuntimeCellNotificationQueue::default();
+        let listener = RuntimeCellDirtSink::reporting_listener(&notifications, 11);
+        property.value.cell().add_dependent(&listener);
+
+        assert!(property.set_value(Some(RuntimeBindableArtboard::new("child"))));
+        assert_eq!(notifications.len(), 2);
+        assert_eq!(property.artboard_name(), "child");
     }
 }

@@ -311,6 +311,15 @@ impl StaticShapedTextLine {
                 .filter(|cluster| cluster.char_start < char_index && char_index < cluster.char_end);
             let x = if char_index <= self.char_start {
                 self.start_x
+            } else if let Some(cluster) = containing {
+                let part = char_index.saturating_sub(cluster.char_start);
+                let parts = cluster.char_end.saturating_sub(cluster.char_start);
+                let ratio = if parts == 0 {
+                    0.0
+                } else {
+                    part as f32 / parts as f32
+                };
+                cluster.start_x + (cluster.end_x - cluster.start_x) * ratio
             } else if let Some(cluster) = current {
                 if char_index <= cluster.char_start {
                     cluster.start_x
@@ -551,10 +560,13 @@ impl StaticShapedTextLine {
                 return cluster_x;
             }
             if char_index <= glyph_end && glyph_start < glyph_end {
-                return if char_index == glyph_start {
-                    cluster_x
+                let part = char_index.saturating_sub(glyph_start);
+                let parts = glyph_end.saturating_sub(glyph_start);
+                let ratio = part as f32 / parts as f32;
+                return if positioned.glyph.rtl {
+                    cluster_x + (cluster_end_x - cluster_x) * (1.0 - ratio)
                 } else {
-                    cluster_end_x
+                    cluster_x + (cluster_end_x - cluster_x) * ratio
                 };
             }
         }
@@ -580,8 +592,21 @@ impl StaticShapedTextLine {
                 }
             }
             if x <= cluster_end_x {
-                let midpoint = cluster_x + (cluster_end_x - cluster_x) / 2.0;
-                return if x < midpoint { glyph_start } else { glyph_end };
+                let parts = glyph_end.saturating_sub(glyph_start);
+                if parts == 0 || cluster_end_x == cluster_x {
+                    return if positioned.glyph.rtl {
+                        glyph_start
+                    } else {
+                        glyph_end
+                    };
+                }
+                let ratio = ((x - cluster_x) / (cluster_end_x - cluster_x)).clamp(0.0, 1.0);
+                let part = (ratio * parts as f32).round() as usize;
+                return if positioned.glyph.rtl {
+                    glyph_end.saturating_sub(part)
+                } else {
+                    glyph_start.saturating_add(part)
+                };
             }
         }
         self.char_end

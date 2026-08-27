@@ -567,7 +567,6 @@ impl<'factory> RawText<'factory> {
 
         let mut lines = standalone_break_lines(&text, &glyphs, self.sizing, self.max_width);
         standalone_measure_lines(&mut lines, &self.runs, self.paragraph_spacing);
-        standalone_reorder_bidi(&text, &mut lines);
 
         let measured_width = lines.iter().map(|line| line.width).fold(0.0f32, f32::max);
         let min_y = 0.0;
@@ -613,6 +612,10 @@ impl<'factory> RawText<'factory> {
         if self.sizing == TextSizing::Fixed && self.overflow == TextOverflow::Ellipsis {
             standalone_apply_ellipsis(&mut lines, &self.runs, self.max_width, self.max_height);
         }
+        // `OrderedLine` first constructs/replaces the logical ellipsis runs
+        // and only then applies bidi-level visual ordering to the completed
+        // run list.
+        standalone_reorder_bidi(&text, &mut lines);
         self.lines = lines;
         let lines = self.lines.clone();
         for line in &lines {
@@ -958,6 +961,16 @@ fn standalone_reorder_bidi(text: &str, lines: &mut [StandaloneLine]) {
             }
             visual.extend(matching);
         }
+        // Ellipsis glyphs are a synthesized level-0 run and deliberately sit
+        // outside the original text range. Pinned `OrderedLine` includes that
+        // run in its subsequent bidi reorder, after the visually ordered
+        // authored runs.
+        visual.extend(
+            original
+                .iter()
+                .filter(|glyph| glyph.char_index >= line.char_end)
+                .cloned(),
+        );
         if visual.len() == original.len() {
             line.glyphs = visual;
         }
@@ -982,7 +995,6 @@ fn standalone_apply_ellipsis(
     let Some(line) = lines.last_mut() else {
         return;
     };
-    let text = runs.iter().map(|run| run.text.as_str()).collect::<String>();
     let Some(style) = line
         .glyphs
         .last()
@@ -996,15 +1008,6 @@ fn standalone_apply_ellipsis(
     ellipsis_run.char_start = line.char_end;
     let ellipsis = shape_standalone_run(&ellipsis_run);
     let ellipsis_width = ellipsis.iter().map(|glyph| glyph.advance).sum::<f32>();
-    while line.glyphs.last().is_some_and(|glyph| {
-        text.chars()
-            .nth(glyph.char_index)
-            .is_some_and(char::is_whitespace)
-    }) {
-        if let Some(removed) = line.glyphs.pop() {
-            line.width -= removed.advance;
-        }
-    }
     while line.width + ellipsis_width > max_width && !line.glyphs.is_empty() {
         if let Some(removed) = line.glyphs.pop() {
             line.width -= removed.advance;

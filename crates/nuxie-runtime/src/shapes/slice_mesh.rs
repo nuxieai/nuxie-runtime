@@ -100,9 +100,31 @@ pub(super) fn runtime_prepare_slice_meshes(
             .and_then(|drawable| drawable.resolved_image_asset_global);
         let resolved_image_asset_global =
             instance.resolved_image_asset_global(Some(image_local), authored_image_asset_global);
-        let Some(image) = resolved_image_asset_global
-            .and_then(|asset_global| instance.runtime_render_image(asset_global))
-        else {
+        let image = instance
+            .image_render_overrides
+            .get(&image_local)
+            .and_then(|image| image.render_image())
+            .or_else(|| {
+                resolved_image_asset_global
+                    .and_then(|asset_global| instance.runtime_render_image(asset_global))
+            });
+        let image_size = image
+            .as_deref()
+            .map(|image| (image.width() as f32, image.height() as f32))
+            .or_else(|| {
+                let asset_global = resolved_image_asset_global?;
+                runtime
+                    .file_assets()
+                    .into_iter()
+                    .find(|asset| asset.id == asset_global)
+                    .map(|asset| {
+                        (
+                            asset.double_property("width").unwrap_or(0.0),
+                            asset.double_property("height").unwrap_or(0.0),
+                        )
+                    })
+            });
+        let Some((image_width, image_height)) = image_size else {
             continue;
         };
         let Some(owner) = instance.runtime_meshes.slice(details.local_id) else {
@@ -147,12 +169,15 @@ pub(super) fn runtime_prepare_slice_meshes(
                 runtime,
                 instance,
                 registered_details,
-                image.width() as f32,
-                image.height() as f32,
+                image_width,
+                image_height,
                 render_scale_x.abs(),
                 render_scale_y.abs(),
             );
-            owner.settled_update = Some(runtime_slice_mesh_update(geometry, image.uv_transform()));
+            let uv_transform = image
+                .as_deref()
+                .map_or(RenderMat2D::IDENTITY, RenderImage::uv_transform);
+            owner.settled_update = Some(runtime_slice_mesh_update(geometry, uv_transform));
             owner.dirty = false;
         }
         runtime_update_slice_mesh_render_buffers(factory, &mut owner, backend_context_id);
@@ -161,12 +186,10 @@ pub(super) fn runtime_prepare_slice_meshes(
 }
 
 /// Appends the fixed clockwise two-triangle topology used by every SliceMesh
-/// quad. Checked addition preserves the C++ u16 index boundary.
+/// quad. C++ converts each promoted sum back to `uint16_t`, so it wraps.
 pub(crate) fn push_triangulation(indices: &mut Vec<u16>, start: u16) {
     for offset in [0_u16, 1, 3, 1, 2, 3] {
-        if let Some(index) = start.checked_add(offset) {
-            indices.push(index);
-        }
+        indices.push(start.wrapping_add(offset));
     }
 }
 
@@ -214,7 +237,7 @@ pub(super) fn runtime_slice_mesh_geometry(
     let mut indices = Vec::new();
     let mut vertex_index = 0_u16;
 
-    'patches: for patch_y in 0..vs.len().saturating_sub(1) {
+    for patch_y in 0..vs.len().saturating_sub(1) {
         for patch_x in 0..us.len().saturating_sub(1) {
             let patch_index = details.patch_index(patch_x, patch_y).unwrap_or(u64::MAX);
             let tile_mode = details
@@ -253,19 +276,13 @@ pub(super) fn runtime_slice_mesh_geometry(
                     render_scale_x,
                     render_scale_y,
                 );
-                let Some(next) = vertex_index.checked_add(added) else {
-                    break 'patches;
-                };
-                vertex_index = next;
+                vertex_index = vertex_index.wrapping_add(added);
                 continue;
             }
 
-            let Some(next) = vertex_index.checked_add(4) else {
-                break 'patches;
-            };
             vertices.extend_from_slice(&patch_vertices);
             push_triangulation(&mut indices, vertex_index);
-            vertex_index = next;
+            vertex_index = vertex_index.wrapping_add(4);
         }
     }
 
@@ -346,9 +363,6 @@ pub(super) fn runtime_slice_mesh_tile_repeat(
         let mut cur_x = start_x;
         while cur_x < end_x && escape > 0 {
             escape -= 1;
-            if cur_vertex > u32::from(u16::MAX) - 3 {
-                return u16::MAX - start;
-            }
             let frac_x = if cur_x + size_x > end_x {
                 (end_x - cur_x) / size_x
             } else {
@@ -383,7 +397,7 @@ pub(super) fn runtime_slice_mesh_tile_repeat(
         }
         cur_y += size_y;
     }
-    u16::try_from(cur_vertex - u32::from(start)).unwrap_or(u16::MAX - start)
+    (cur_vertex - u32::from(start)) as u16
 }
 
 pub(super) fn runtime_slice_mesh_update(

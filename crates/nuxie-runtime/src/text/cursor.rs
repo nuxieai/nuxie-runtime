@@ -25,7 +25,7 @@ impl CursorPosition {
         let codepoint_index = if offset < 0 {
             self.codepoint_index.saturating_sub(offset.unsigned_abs())
         } else {
-            self.codepoint_index.saturating_add(offset as usize)
+            self.codepoint_index.wrapping_add(offset as usize)
         };
         Self::unresolved(codepoint_index)
     }

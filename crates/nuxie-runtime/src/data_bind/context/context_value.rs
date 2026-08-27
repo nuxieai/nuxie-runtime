@@ -11171,6 +11171,16 @@ impl RuntimeDataBindGraphSourceNode {
             RuntimeDataBindGraphValue::Boolean(crate::context_value_boolean::calculate_value(
                 &value,
             ))
+        } else if crate::context_value_enum::owns_output(
+            &self.default_value,
+            self.converter.as_ref(),
+        ) {
+            // `DataBindContextValueEnum::apply` selects its concrete owner
+            // before inspecting the target field, then writes the calculated
+            // enum payload through CoreUint for every non-Solo target.
+            RuntimeDataBindGraphValue::Integer(crate::context_value_enum::core_uint_value(
+                &value,
+            ))
         } else if crate::context_value_trigger::owns_output(
             &self.default_value,
             self.converter.as_ref(),
@@ -11520,18 +11530,6 @@ impl RuntimeDataBindGraphTargetsMut<'_> {
             ) => {
                 if let Some(target) = self
                     .colors
-                    .iter_mut()
-                    .find(|target| target.global_id == *global_id)
-                {
-                    target.set_value(*value);
-                }
-            }
-            (
-                RuntimeDataBindGraphTarget::Enum { global_id },
-                RuntimeDataBindGraphValue::Enum(value),
-            ) => {
-                if let Some(target) = self
-                    .enums
                     .iter_mut()
                     .find(|target| target.global_id == *global_id)
                 {
@@ -12195,6 +12193,38 @@ mod tests {
             ),
             Some(RuntimeDataBindGraphValue::Trigger(8)),
             "ContextValueAny preserves the concrete value; the uint dispatcher rejects Trigger",
+        );
+    }
+
+    #[test]
+    fn enum_default_zero_is_selected_before_target_kind_dispatch() {
+        let mut graph = graph_with_number_binding(0);
+        let source = &mut graph.sources[0];
+        source.default_value = RuntimeDataBindGraphValue::Enum(7);
+        source.value = RuntimeDataBindGraphValue::Enum(7);
+
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::String { global_id: 9 },
+                RuntimeDataBindGraphValue::Integer(7),
+            ),
+            Some(RuntimeDataBindGraphValue::Integer(0)),
+            "typed ContextValueEnum uses DataValueInteger::defaultValue before target dispatch",
+        );
+
+        source.converter = Some(RuntimeDataBindGraphConverter::Scripted {
+            global_id: 11,
+            serialized_implemented_methods: 0,
+            definition: Default::default(),
+            instance: None,
+        });
+        assert_eq!(
+            source.source_to_target_value_for_concrete_target(
+                RuntimeDataBindGraphTarget::Enum { global_id: 7 },
+                RuntimeDataBindGraphValue::Enum(8),
+            ),
+            Some(RuntimeDataBindGraphValue::Enum(8)),
+            "ContextValueAny preserves the concrete value; the uint dispatcher rejects Enum",
         );
     }
 

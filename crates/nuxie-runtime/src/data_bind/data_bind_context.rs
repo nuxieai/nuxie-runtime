@@ -8289,11 +8289,12 @@ impl ArtboardInstance {
                 .get(binding.path.as_slice())
                 .cloned()
         })?;
-        let (converted, string_owned, boolean_owned, trigger_owned) = if let Some(shared) = self
-            .artboard_authored_data_bind_states
-            .get_mut(binding.data_bind_index)
-            .and_then(|state| state.shared_converter.as_mut())
-        {
+        let (converted, string_owned, boolean_owned, enum_owned, trigger_owned) =
+            if let Some(shared) = self
+                .artboard_authored_data_bind_states
+                .get_mut(binding.data_bind_index)
+                .and_then(|state| state.shared_converter.as_mut())
+            {
             (
                 runtime_artboard_convert_property_binding_value(
                     &shared.converter,
@@ -8310,12 +8311,16 @@ impl ArtboardInstance {
                     &binding.default_value,
                     Some(&shared.converter),
                 ),
+                crate::context_value_enum::owns_output(
+                    &binding.default_value,
+                    Some(&shared.converter),
+                ),
                 crate::context_value_trigger::owns_output(
                     &binding.default_value,
                     Some(&shared.converter),
                 ),
             )
-        } else if let Some(converter) = binding.converter.as_ref() {
+            } else if let Some(converter) = binding.converter.as_ref() {
             (
                 runtime_artboard_convert_property_binding_value(
                     converter,
@@ -8326,16 +8331,18 @@ impl ArtboardInstance {
                 ),
                 crate::context_value_string::owns_output(&binding.default_value, Some(converter)),
                 crate::context_value_boolean::owns_output(&binding.default_value, Some(converter)),
+                crate::context_value_enum::owns_output(&binding.default_value, Some(converter)),
                 crate::context_value_trigger::owns_output(&binding.default_value, Some(converter)),
             )
-        } else {
+            } else {
             (
                 Some(value),
                 crate::context_value_string::owns_output(&binding.default_value, None),
                 crate::context_value_boolean::owns_output(&binding.default_value, None),
+                crate::context_value_enum::owns_output(&binding.default_value, None),
                 crate::context_value_trigger::owns_output(&binding.default_value, None),
             )
-        };
+            };
         let converted = converted?;
         let converted = if string_owned {
             RuntimeDataBindGraphValue::String(crate::context_value_string::calculate_value(
@@ -8343,6 +8350,10 @@ impl ArtboardInstance {
             ))
         } else if boolean_owned {
             RuntimeDataBindGraphValue::Boolean(crate::context_value_boolean::calculate_value(
+                &converted,
+            ))
+        } else if enum_owned {
+            RuntimeDataBindGraphValue::Integer(crate::context_value_enum::core_uint_value(
                 &converted,
             ))
         } else if trigger_owned {
@@ -8921,9 +8932,6 @@ impl ArtboardInstance {
             (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Integer(value))) => {
                 self.set_uint_property(target_local_id, property_key, value)
             }
-            (Some(FieldKind::Uint), Some(RuntimeDataBindGraphValue::Enum(value))) => {
-                self.set_uint_property(target_local_id, property_key, value)
-            }
             (Some(FieldKind::Double), Some(RuntimeDataBindGraphValue::SymbolListIndex(value))) => {
                 self.set_double_property(target_local_id, property_key, value as f32)
             }
@@ -9114,12 +9122,14 @@ impl ArtboardInstance {
                         RuntimeDataBindGraphValue::String(_) => RuntimeSoloBindingApply::Name(
                             crate::context_value_string::string_value(value)?.to_vec(),
                         ),
-                        RuntimeDataBindGraphValue::Enum(value) => {
-                            let value = usize::try_from(*value).ok()?;
-                            RuntimeSoloBindingApply::Name(
-                                binding.enum_value_names.get(value)?.clone(),
-                            )
-                        }
+                        RuntimeDataBindGraphValue::Enum(_) => RuntimeSoloBindingApply::Name(
+                            crate::context_value_enum::solo_value_name(
+                                value,
+                                crate::context_value_enum::calculate_value(value),
+                                &binding.enum_value_names,
+                            )?
+                            .to_vec(),
+                        ),
                         _ => return None,
                     };
                     Some((binding.target_local_id, apply))

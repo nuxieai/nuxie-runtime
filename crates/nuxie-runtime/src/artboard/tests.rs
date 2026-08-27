@@ -9228,7 +9228,7 @@
                 host_component_in_parent: Some(host),
             },
         ];
-        let mut traversal = ParentTraversal::new(&frames, start);
+        let mut traversal = ParentTraversal::new(&frames, Some(start));
         assert_eq!(
             child.component_local_id(traversal.next().unwrap().component),
             Some(1)

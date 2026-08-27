@@ -1431,7 +1431,7 @@ fn component_and_ancestors_allow_focus(artboard: &ArtboardInstance, start_local:
         artboard,
         host_component_in_parent: None,
     }];
-    let mut traversal = ParentTraversal::new(&frames, start);
+    let mut traversal = ParentTraversal::new(&frames, Some(start));
     while let Some(parent) = traversal.next() {
         if !allows_focus(parent.artboard, parent.component) {
             return false;

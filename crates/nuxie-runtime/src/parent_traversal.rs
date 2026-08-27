@@ -26,27 +26,32 @@ pub(crate) struct TraversedParent<'a> {
 /// ArtboardHost only if that host Component itself has a parent
 /// (`src/parent_traversal.cpp:9-61`).
 pub(crate) struct ParentTraversal<'a> {
-    frames: &'a [ParentTraversalFrame<'a>],
-    frame_index: usize,
     current: Option<ComponentHandle>,
+    current_artboard_index: Option<usize>,
     did_cross_boundary: bool,
     crossing_host: Option<ComponentHandle>,
     source_artboard_index: Option<usize>,
+    frames: &'a [ParentTraversalFrame<'a>],
 }
 
 impl<'a> ParentTraversal<'a> {
-    pub(crate) fn new(frames: &'a [ParentTraversalFrame<'a>], start: ComponentHandle) -> Self {
-        let frame_index = frames.len().saturating_sub(1);
-        let current = frames
-            .get(frame_index)
-            .and_then(|frame| frame.artboard.component_parent_handle(start));
+    pub(crate) fn new(
+        frames: &'a [ParentTraversalFrame<'a>],
+        start: Option<ComponentHandle>,
+    ) -> Self {
+        let current = start.and_then(|start| {
+            frames
+                .last()
+                .and_then(|frame| frame.artboard.component_parent_handle(start))
+        });
+        let current_artboard_index = start.and_then(|_| frames.len().checked_sub(1));
         Self {
-            frames,
-            frame_index,
             current,
+            current_artboard_index,
             did_cross_boundary: false,
             crossing_host: None,
             source_artboard_index: None,
+            frames,
         }
     }
 
@@ -56,7 +61,7 @@ impl<'a> ParentTraversal<'a> {
         self.source_artboard_index = None;
 
         let current = self.current?;
-        let result_frame_index = self.frame_index;
+        let result_frame_index = self.current_artboard_index?;
         let result_artboard = self.frames.get(result_frame_index)?.artboard;
 
         if let Some(parent) = result_artboard.component_parent_handle(current) {
@@ -73,8 +78,8 @@ impl<'a> ParentTraversal<'a> {
                 self.did_cross_boundary = true;
                 self.crossing_host = Some(host);
                 self.source_artboard_index = Some(result_frame_index);
-                self.frame_index = parent_frame_index;
                 self.current = Some(host_parent);
+                self.current_artboard_index = Some(parent_frame_index);
             } else {
                 self.current = None;
             }
@@ -89,8 +94,8 @@ impl<'a> ParentTraversal<'a> {
     }
 
     pub(crate) fn current_artboard(&self) -> Option<&'a ArtboardInstance> {
-        self.frames
-            .get(self.frame_index)
+        self.current_artboard_index
+            .and_then(|index| self.frames.get(index))
             .map(|frame| frame.artboard)
     }
 

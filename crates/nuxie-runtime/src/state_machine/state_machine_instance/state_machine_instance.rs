@@ -6918,8 +6918,13 @@ impl StateMachineInstance {
                     let Some(bindable_global_id) = action.bindable_global_id else {
                         continue;
                     };
+                    let data_context_present = self.data_bind_graph.data_context_present();
+                    let data_bind_to_source_present = self
+                        .data_bind_graph
+                        .bindable_data_bind_to_source_index(bindable_global_id)
+                        .is_some();
                     let value = {
-                        let targets = RuntimeScheduledListenerActionTargetsMut {
+                        let mut targets = RuntimeScheduledListenerActionTargetsMut {
                             inputs: &mut self.inputs,
                             reported_events: &mut self.reported_events,
                             bindable_numbers: &mut self.bindable_numbers,
@@ -6935,8 +6940,12 @@ impl StateMachineInstance {
                             bindable_booleans: &mut self.bindable_booleans,
                             transition_durations: &mut self.transition_durations,
                         };
-                        action
-                            .occurrence_value(&targets, self.data_bind_graph.data_context_present())
+                        action.write_data_context_root_to_occurrence(
+                            &mut targets,
+                            data_bind_to_source_present,
+                            data_context_present,
+                        );
+                        action.occurrence_value(&targets, data_context_present)
                     };
                     let Some(value) = value else {
                         continue;

@@ -108,6 +108,39 @@ impl RuntimeListenerViewModelChange {
         }
     }
 
+    /// Pinned C++ rewrites the cloned `BindablePropertyViewModel` target to
+    /// the state machine's main DataContext instance immediately before
+    /// `updateSourceBinding(true)`. Preserve that target-side mutation rather
+    /// than substituting `DataContextRoot` only in the temporary source value.
+    pub(crate) fn write_data_context_root_to_occurrence(
+        &self,
+        targets: &mut RuntimeScheduledListenerActionTargetsMut<'_>,
+        data_bind_to_source_present: bool,
+        data_context_present: bool,
+    ) {
+        if !data_bind_to_source_present || !data_context_present {
+            return;
+        }
+        if !matches!(
+            self.value.as_ref(),
+            Some(RuntimeListenerViewModelChangeValue::ViewModel(_))
+        ) {
+            return;
+        }
+        let Some(global_id) = self.bindable_global_id else {
+            return;
+        };
+        if let Some(target) = targets
+            .bindable_view_models
+            .iter_mut()
+            .find(|target| target.global_id == global_id)
+        {
+            // `RuntimeViewModelPointer` is the approved Rust adaptation for
+            // C++'s retained pointer plus `CoreRegistry::setUint(pointerKey)`.
+            target.set_value(RuntimeViewModelPointer::DataContextRoot);
+        }
+    }
+
     /// Execute the exact retained BindableProperty occurrence against the
     /// live state-machine DataContext.
     ///
@@ -120,12 +153,21 @@ impl RuntimeListenerViewModelChange {
         &self,
         executor: &mut RuntimeStateMachineListenerActionExecutor<'_>,
         artboard: &mut ArtboardInstance,
-        targets: RuntimeScheduledListenerActionTargetsMut<'_>,
+        mut targets: RuntimeScheduledListenerActionTargetsMut<'_>,
     ) -> bool {
         let data_context_present = executor.data_bind_graph.data_context_present();
         let Some(bindable_global_id) = self.bindable_global_id else {
             return false;
         };
+        let data_bind_to_source_present = executor
+            .data_bind_graph
+            .bindable_data_bind_to_source_index(bindable_global_id)
+            .is_some();
+        self.write_data_context_root_to_occurrence(
+            &mut targets,
+            data_bind_to_source_present,
+            data_context_present,
+        );
         let Some(value) = self.occurrence_value(&targets, data_context_present) else {
             return false;
         };

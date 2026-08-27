@@ -11,7 +11,9 @@ pub(crate) fn on_added_dirty(
     axis: &NSlicerAxisNode,
     parent_local: Option<usize>,
 ) -> Option<()> {
-    (is_axis(axis.type_name) && parent_local == Some(owner.local_id)).then(|| {
-        owner.add_axis_x(axis);
-    })
+    (is_axis(axis.type_name) && super::axis::on_added_dirty(owner, parent_local).is_some()).then(
+        || {
+            owner.add_axis_x(axis);
+        },
+    )
 }

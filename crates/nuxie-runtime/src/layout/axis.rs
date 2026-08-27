@@ -1,5 +1,16 @@
 use crate::{ArtboardInstance, ComponentDirt};
 
+/// Direct `Axis::onAddedDirty` body after Component Super has linked the
+/// occurrence to its retained parent. Only the two concrete
+/// `NSlicerDetails` owners are valid.
+pub(crate) fn on_added_dirty(
+    owner: &super::n_slicer_details::RuntimeNSlicerDetailsOwner,
+    parent_local: Option<usize>,
+) -> Option<()> {
+    (super::n_slicer_details::is_details(owner.type_name) && parent_local == Some(owner.local_id))
+        .then_some(())
+}
+
 /// Direct port of `Axis::offsetChanged`: an Axis never owns the mesh dirt;
 /// its `NSlicerDetails` parent does.
 pub(crate) fn offset_changed(instance: &mut ArtboardInstance, axis_local: usize) -> bool {

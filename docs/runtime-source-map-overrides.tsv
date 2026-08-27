@@ -37,3 +37,11 @@ animation/blend_state_1d_viewmodel.cpp	translated	crates/nuxie-runtime/src/anima
 assets/file_asset.cpp	translated	crates/nuxie-binary/src/assets/file_asset.rs	complete pinned owner translated under schema-owned field IDs
 event.cpp	translated	crates/nuxie-runtime/src/event.rs	complete pinned owner translated under owner-safe queued event representation
 importers/state_machine_importer.cpp	translated	crates/nuxie-binary/src/importers/state_machine_importer.rs	complete pinned owner translated
+animation/blend_state_1d_instance.cpp	translated	crates/nuxie-runtime/src/animation/blend_state_1d_instance.rs	complete pinned owner translated under handle-based occurrence ownership
+animation/cubic_interpolator_component.cpp	translated	crates/nuxie-runtime/src/animation/cubic_interpolator_component.rs	complete pinned owner translated with retained solver inputs
+assets/audio_asset.cpp	translated	crates/nuxie-runtime/src/assets/audio_asset.rs	complete pinned owner translated under approved Symphonia and owner-arena adaptation
+assets/manifest_asset.cpp	translated	crates/nuxie-binary/src/assets/manifest_asset.rs	complete pinned owner translated with source section ordering and Rust length safety boundary
+assets/shader_asset.cpp	translated	crates/nuxie-scripting/src/shader_asset.rs	complete pinned owner translated under backend validation and retained-storage adaptations
+bindable_artboard.cpp	translated	crates/nuxie-runtime/src/bindable_artboard.rs	complete pinned owner translated under opaque file authority and safe cloned accessors
+file.cpp	needs source correction	crates/nuxie/src/lib.rs,crates/nuxie-binary/src/lib.rs	complete owner remains packed across the active user-dirty facade/import monolith; no partial extraction landed
+layout/virtualizing_component.cpp	translated	crates/nuxie-runtime/src/artboard/virtualizing_component.rs	complete pinned owner translated under RuntimeScrollAxis enum representation

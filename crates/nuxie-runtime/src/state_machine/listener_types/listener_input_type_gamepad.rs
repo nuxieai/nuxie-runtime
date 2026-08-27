@@ -4,6 +4,11 @@ use nuxie_binary::RuntimeObject;
 const GAMEPAD_BUTTON_PHASE_DOWN: u32 = 1;
 const GAMEPAD_BUTTON_PHASE_UP: u32 = 2;
 const GAMEPAD_BUTTON_PHASE_ALL: u32 = GAMEPAD_BUTTON_PHASE_DOWN | GAMEPAD_BUTTON_PHASE_UP;
+const GAMEPAD_INPUT_KIND_BUTTON: u32 = 0;
+const GAMEPAD_INPUT_KIND_AXIS: u32 = 1;
+const GAMEPAD_INPUT_KIND_CONNECTED: u32 = 2;
+const GAMEPAD_INPUT_KIND_DISCONNECTED: u32 = 3;
+const GAMEPAD_INPUT_MAPPING_STANDARD: u32 = 0;
 
 /// Authored ListenerInputTypeGamepad definition shared by occurrences.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,14 +22,17 @@ impl RuntimeListenerInputTypeGamepad {
         input_type: &RuntimeObject,
         inputs: &[&RuntimeObject],
     ) -> Self {
-        Self {
+        let mut owner = Self {
             global_id: input_type.id,
-            gamepad_inputs: inputs
-                .iter()
-                .filter(|input| input.type_name == "GamepadInput")
-                .map(|input| RuntimeGamepadInput::from_imported(input))
-                .collect(),
+            gamepad_inputs: Vec::new(),
+        };
+        for input in inputs
+            .iter()
+            .filter(|input| input.type_name == "GamepadInput")
+        {
+            owner.add_gamepad_input(RuntimeGamepadInput::from_imported(input));
         }
+        owner
     }
 
     pub(crate) fn gamepad_input_count(&self) -> usize {
@@ -33,6 +41,17 @@ impl RuntimeListenerInputTypeGamepad {
 
     pub(crate) fn gamepad_input(&self, index: usize) -> Option<&RuntimeGamepadInput> {
         self.gamepad_inputs.get(index)
+    }
+
+    fn add_gamepad_input(&mut self, input: RuntimeGamepadInput) {
+        if self
+            .gamepad_inputs
+            .iter()
+            .any(|existing| existing.global_id == input.global_id)
+        {
+            return;
+        }
+        self.gamepad_inputs.push(input);
     }
 
     #[cfg(test)]
@@ -51,12 +70,55 @@ impl RuntimeListenerInputTypeGamepad {
             if input_type
                 .gamepad_inputs
                 .iter()
-                .any(|input| input.matches(event))
+                .any(|input| gamepad_input_matches(input, event))
             {
                 return true;
             }
         }
         false
+    }
+}
+
+fn gamepad_input_matches(
+    input: &RuntimeGamepadInput,
+    event: RuntimeGamepadInputEvent,
+) -> bool {
+    match (input.kind, event) {
+        (GAMEPAD_INPUT_KIND_CONNECTED, RuntimeGamepadInputEvent::Connected)
+        | (GAMEPAD_INPUT_KIND_DISCONNECTED, RuntimeGamepadInputEvent::Disconnected) => true,
+        (
+            GAMEPAD_INPUT_KIND_BUTTON,
+            RuntimeGamepadInputEvent::Button {
+                index,
+                value,
+                standard_intent,
+            },
+        ) => {
+            if !gamepad_input_index_matches(input, index, standard_intent) {
+                return false;
+            }
+            gamepad_button_phase_matches(input.button_phase, value >= 0.5)
+        }
+        (
+            GAMEPAD_INPUT_KIND_AXIS,
+            RuntimeGamepadInputEvent::Axis {
+                index,
+                standard_intent,
+            },
+        ) => gamepad_input_index_matches(input, index, standard_intent),
+        _ => false,
+    }
+}
+
+fn gamepad_input_index_matches(
+    input: &RuntimeGamepadInput,
+    raw_index: u32,
+    standard_intent: Option<u32>,
+) -> bool {
+    if input.mapping == GAMEPAD_INPUT_MAPPING_STANDARD {
+        standard_intent == Some(input.input_index)
+    } else {
+        raw_index == input.input_index
     }
 }
 
@@ -104,12 +166,12 @@ mod tests {
         assert!(gamepad_button_phase_matches(GAMEPAD_BUTTON_PHASE_UP, false,));
 
         let button = gamepad_input(0, 1, 3, GAMEPAD_BUTTON_PHASE_DOWN);
-        assert!(button.matches(RuntimeGamepadInputEvent::Button {
+        assert!(gamepad_input_matches(&button, RuntimeGamepadInputEvent::Button {
             index: 3,
             value: 0.5,
             standard_intent: None,
         }));
-        assert!(!button.matches(RuntimeGamepadInputEvent::Button {
+        assert!(!gamepad_input_matches(&button, RuntimeGamepadInputEvent::Button {
             index: 3,
             value: f32::NAN,
             standard_intent: None,
@@ -119,23 +181,23 @@ mod tests {
     #[test]
     fn standard_mapping_requires_matching_standard_intent() {
         let standard_button = gamepad_input(0, 0, 12, GAMEPAD_BUTTON_PHASE_DOWN);
-        assert!(standard_button.matches(RuntimeGamepadInputEvent::Button {
+        assert!(gamepad_input_matches(&standard_button, RuntimeGamepadInputEvent::Button {
             index: 99,
             value: 1.0,
             standard_intent: Some(12),
         }));
-        assert!(!standard_button.matches(RuntimeGamepadInputEvent::Button {
+        assert!(!gamepad_input_matches(&standard_button, RuntimeGamepadInputEvent::Button {
             index: 12,
             value: 1.0,
             standard_intent: None,
         }));
 
         let raw_axis = gamepad_input(1, 1, 4, GAMEPAD_BUTTON_PHASE_DOWN);
-        assert!(raw_axis.matches(RuntimeGamepadInputEvent::Axis {
+        assert!(gamepad_input_matches(&raw_axis, RuntimeGamepadInputEvent::Axis {
             index: 4,
             standard_intent: None,
         }));
-        assert!(!raw_axis.matches(RuntimeGamepadInputEvent::Axis {
+        assert!(!gamepad_input_matches(&raw_axis, RuntimeGamepadInputEvent::Axis {
             index: 5,
             standard_intent: Some(4),
         }));
@@ -143,10 +205,22 @@ mod tests {
 
     #[test]
     fn connected_disconnected_and_event_kinds_are_exact() {
-        assert!(gamepad_input(2, 0, 0, 1).matches(RuntimeGamepadInputEvent::Connected));
-        assert!(gamepad_input(3, 0, 0, 1).matches(RuntimeGamepadInputEvent::Disconnected));
-        assert!(!gamepad_input(2, 0, 0, 1).matches(RuntimeGamepadInputEvent::Disconnected));
-        assert!(!gamepad_input(99, 0, 0, 1).matches(RuntimeGamepadInputEvent::Connected));
+        assert!(gamepad_input_matches(
+            &gamepad_input(2, 0, 0, 1),
+            RuntimeGamepadInputEvent::Connected,
+        ));
+        assert!(gamepad_input_matches(
+            &gamepad_input(3, 0, 0, 1),
+            RuntimeGamepadInputEvent::Disconnected,
+        ));
+        assert!(!gamepad_input_matches(
+            &gamepad_input(2, 0, 0, 1),
+            RuntimeGamepadInputEvent::Disconnected,
+        ));
+        assert!(!gamepad_input_matches(
+            &gamepad_input(99, 0, 0, 1),
+            RuntimeGamepadInputEvent::Connected,
+        ));
     }
 
     #[test]

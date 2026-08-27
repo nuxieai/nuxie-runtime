@@ -26,7 +26,7 @@ mod ik_constraint;
 mod list_constraint;
 mod list_follow_path_constraint;
 pub(crate) mod rotation_constraint;
-mod scale_constraint;
+pub(crate) mod scale_constraint;
 pub(crate) mod targeted_constraint;
 mod transform_constraint;
 mod translation_constraint;
@@ -2699,11 +2699,8 @@ fn retain_constraint_component_a(
         RuntimeConstraintScratch::Rotation(rotation) => {
             rotation.retain_components_a(components);
         }
-        RuntimeConstraintScratch::Scale {
-            components_a: retained_a,
-            ..
-        } => {
-            *retained_a = components;
+        RuntimeConstraintScratch::Scale(scale) => {
+            scale.retain_components_a(components);
         }
         RuntimeConstraintScratch::None | RuntimeConstraintScratch::Transform { .. } => {}
     }
@@ -2725,11 +2722,8 @@ fn retain_constraint_component_b(
         RuntimeConstraintScratch::Rotation(rotation) => {
             rotation.retain_components_b(components);
         }
-        RuntimeConstraintScratch::Scale {
-            components_b: retained_b,
-            ..
-        } => {
-            *retained_b = components;
+        RuntimeConstraintScratch::Scale(scale) => {
+            scale.retain_components_b(components);
         }
         RuntimeConstraintScratch::None | RuntimeConstraintScratch::Transform { .. } => {}
     }

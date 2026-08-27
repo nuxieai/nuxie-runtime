@@ -2,6 +2,32 @@
 
 use super::*;
 
+/// Runtime-only fields owned by one pinned C++ `ScaleConstraint`.
+///
+/// The generated properties remain in the occurrence's generated backing
+/// store; these are the two private transform-component scratch values from
+/// `scale_constraint.hpp`.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(crate) struct RuntimeScaleConstraintState {
+    pub(crate) components_a: TransformComponents,
+    pub(crate) components_b: TransformComponents,
+}
+
+impl RuntimeScaleConstraintState {
+    pub(super) fn retain_components_a(&mut self, components: TransformComponents) {
+        self.components_a = components;
+    }
+
+    pub(super) fn retain_components_b(&mut self, components: TransformComponents) {
+        self.components_b = components;
+    }
+}
+
+/// Direct port of `ScaleConstraint::requiresTarget()` from the primary header.
+pub(crate) const fn requires_target() -> bool {
+    false
+}
+
 pub(super) fn apply(
     artboard: &mut ArtboardInstance,
     component_index: ComponentHandle,

@@ -1,6 +1,7 @@
 use crate::animation::RuntimeInterpolator;
 use crate::artboard::{RuntimeComponentListItemInstance, RuntimeComponentListLogicalItem};
 use crate::constraints::rotation_constraint::RuntimeRotationConstraintState;
+use crate::constraints::scale_constraint::RuntimeScaleConstraintState;
 use crate::draw::{RuntimePathCommand, RuntimePathMeasure};
 use crate::objects::{InstanceObjectArena, InstanceSlot};
 use crate::properties::{
@@ -840,10 +841,7 @@ impl RuntimeIkState {
 pub(crate) enum RuntimeConstraintScratch {
     None,
     Rotation(RuntimeRotationConstraintState),
-    Scale {
-        components_a: TransformComponents,
-        components_b: TransformComponents,
-    },
+    Scale(RuntimeScaleConstraintState),
     Transform {
         components_a: TransformComponents,
         components_b: TransformComponents,
@@ -1830,10 +1828,7 @@ impl RuntimeConstraintScratch {
             RuntimeConstraintKind::Rotation => {
                 Self::Rotation(RuntimeRotationConstraintState::default())
             }
-            RuntimeConstraintKind::Scale => Self::Scale {
-                components_a: TransformComponents::default(),
-                components_b: TransformComponents::default(),
-            },
+            RuntimeConstraintKind::Scale => Self::Scale(RuntimeScaleConstraintState::default()),
             RuntimeConstraintKind::Transform => Self::Transform {
                 components_a: TransformComponents::default(),
                 components_b: TransformComponents::default(),
@@ -1865,10 +1860,10 @@ impl RuntimeConstraintState {
         Self {
             kind,
             targeted: type_is_a(type_name, "TargetedConstraint"),
-            requires_target: if type_name == "RotationConstraint" {
-                crate::constraints::rotation_constraint::requires_target()
-            } else {
-                !matches!(type_name, "ScaleConstraint" | "TranslationConstraint")
+            requires_target: match type_name {
+                "RotationConstraint" => crate::constraints::rotation_constraint::requires_target(),
+                "ScaleConstraint" => crate::constraints::scale_constraint::requires_target(),
+                _ => type_name != "TranslationConstraint",
             },
             target: None,
             scratch: RuntimeConstraintScratch::for_kind(kind),
@@ -2720,7 +2715,7 @@ mod constraint_state_tests {
                         RuntimeConstraintScratch::Rotation(_)
                     ) | (
                         RuntimeConstraintKind::Scale,
-                        RuntimeConstraintScratch::Scale { .. }
+                        RuntimeConstraintScratch::Scale(_)
                     ) | (
                         RuntimeConstraintKind::Transform,
                         RuntimeConstraintScratch::Transform { .. }

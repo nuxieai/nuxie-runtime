@@ -253,7 +253,9 @@ impl RuntimeFile {
         // StateMachine importer until the same importer key is replaced
         // (`import_stack.hpp:23-68`; `listener_action.cpp:14-45`;
         // `listener_input_type.cpp:10-22`).
-        let mut current_listener: Option<RuntimeStateMachineListenerOwner> = None;
+        let mut current_listener: Option<
+            state_machine_listener_importer::StateMachineListenerImporter,
+        > = None;
         let mut current_keyboard_input_type: Option<RuntimeStateMachineListenerInputTypeOwner> =
             None;
         let mut current_gamepad_input_type: Option<
@@ -601,16 +603,22 @@ impl RuntimeFile {
             if definition.is_a("StateMachineListener") {
                 let listener_index =
                     state_machine_importer.add_listener(&mut state_machines, object);
-                current_listener = Some(RuntimeStateMachineListenerOwner {
-                    state_machine_index,
-                    listener_index,
-                });
+                let next = state_machine_listener_importer::StateMachineListenerImporter::new(
+                    RuntimeStateMachineListenerOwner {
+                        state_machine_index,
+                        listener_index,
+                    },
+                );
+                if let Some(previous) = current_listener.replace(next) {
+                    previous.resolve();
+                }
                 continue;
             }
 
             if definition.is_a("ListenerAction") {
                 if listener_action_parent_kind_is_listener(object) {
-                    if let Some(owner) = current_listener {
+                    if let Some(importer) = current_listener {
+                        let owner = importer.state_machine_listener();
                         let owner_artboard_slots = state_machine_artboard_owners
                             .get(owner.state_machine_index)
                             .copied()
@@ -618,16 +626,17 @@ impl RuntimeFile {
                             .and_then(|index| artboard_local_slots_by_index.get(index))
                             .map(Vec::as_slice)
                             .unwrap_or_default();
-                        state_machines[owner.state_machine_index].listeners[owner.listener_index]
-                            .actions
-                            .push(cpp_runtime_listener_action(
+                        importer.add_action(
+                            &mut state_machines,
+                            cpp_runtime_listener_action(
                                 object,
                                 owner_artboard_slots,
                                 &self.objects,
                                 (object.type_name == "ListenerViewModelChange")
                                     .then(|| self.latest_bindable_property_for_object(object))
                                     .flatten(),
-                            ));
+                            ),
+                        );
                     }
                 } else if let Some(owner) = current_layer_component {
                     match owner {
@@ -687,10 +696,10 @@ impl RuntimeFile {
             }
 
             if definition.is_a("ListenerInputType") {
-                if let Some(owner) = current_listener {
+                if let Some(importer) = current_listener {
                     let input_owner = Some(listener_input_type::import(
                         &mut state_machines,
-                        owner,
+                        importer,
                         object,
                     ));
                     match definition.name {
@@ -732,6 +741,9 @@ impl RuntimeFile {
 
         if let Some(state_machine_importer) = current_state_machine {
             state_machine_importer.resolve();
+        }
+        if let Some(listener_importer) = current_listener {
+            listener_importer.resolve();
         }
         if let Some(transition_importer) = current_transition {
             transition_importer.resolve();

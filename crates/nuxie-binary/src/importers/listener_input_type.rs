@@ -19,17 +19,8 @@ pub(super) fn imports_successfully(
 /// two-pass import adaptation has no later fallible superclass action to run.
 pub(super) fn import<'a>(
     state_machines: &mut [RuntimeStateMachine<'a>],
-    listener_owner: RuntimeStateMachineListenerOwner,
+    listener_importer: state_machine_listener_importer::StateMachineListenerImporter,
     input_type: &'a RuntimeObject,
 ) -> RuntimeStateMachineListenerInputTypeOwner {
-    let listener = &mut state_machines[listener_owner.state_machine_index].listeners
-        [listener_owner.listener_index];
-    listener.listener_input_types.push(input_type);
-    listener.listener_input_type_inputs.push(Vec::new());
-
-    RuntimeStateMachineListenerInputTypeOwner {
-        state_machine_index: listener_owner.state_machine_index,
-        listener_index: listener_owner.listener_index,
-        input_type_index: listener.listener_input_types.len() - 1,
-    }
+    listener_importer.add_listener_input_type(state_machines, input_type)
 }

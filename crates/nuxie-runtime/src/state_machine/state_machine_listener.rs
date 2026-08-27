@@ -159,23 +159,7 @@ pub(super) fn runtime_state_machine_listener(
     // Mirrors C++ StateMachineListener import/action wiring and the first
     // simple-shape branch of src/animation/state_machine_instance.cpp.
     let target_local_id = usize::try_from(listener.object.uint_property("targetId")?).ok()?;
-    let listener_types = runtime_listener_types(listener)
-        .into_iter()
-        .filter(|listener_type| {
-            listener_type.is_pointer_hit()
-                || matches!(
-                    listener_type,
-                    RuntimeListenerType::Event
-                        | RuntimeListenerType::ViewModel
-                        | RuntimeListenerType::Keyboard
-                        | RuntimeListenerType::Gamepad
-                        | RuntimeListenerType::Focus
-                        | RuntimeListenerType::Blur
-                        | RuntimeListenerType::TextInput
-                        | RuntimeListenerType::SemanticAction
-                )
-        })
-        .collect::<Vec<_>>();
+    let listener_types = runtime_listener_types(listener);
     // Pinned C++ transfers the StateMachineListener owner and its ordered
     // actions before inspecting any ListenerInputType
     // (`state_machine_listener.cpp:55-66`). An unknown or absent dispatch

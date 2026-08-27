@@ -228,7 +228,7 @@ impl RuntimeStateTransition {
         view_model_trigger_layer_id: u64,
     ) {
         for condition in &self.conditions {
-            condition.use_input(executor, inputs, layer_index, view_model_trigger_layer_id);
+            condition.use_in_layer(executor, inputs, layer_index, view_model_trigger_layer_id);
         }
     }
 }

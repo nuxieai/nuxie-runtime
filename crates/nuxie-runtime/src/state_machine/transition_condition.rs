@@ -26,9 +26,17 @@ pub(super) enum RuntimeTransitionCondition {
 }
 
 impl RuntimeTransitionCondition {
-    pub(super) fn is_direct_input(&self) -> bool {
-        matches!(self, Self::Bool(_) | Self::Number(_) | Self::Trigger(_))
-    }
+    /// Mechanical translation of `TransitionCondition::onAddedDirty`.
+    ///
+    /// The pinned callback unconditionally returns `StatusCode::Ok`; Rust's
+    /// infallible equivalent is `()`.
+    fn on_added_dirty(&self) {}
+
+    /// Mechanical translation of `TransitionCondition::onAddedClean`.
+    ///
+    /// The pinned callback unconditionally returns `StatusCode::Ok`; Rust's
+    /// infallible equivalent is `()`.
+    fn on_added_clean(&self) {}
 
     pub(super) fn from_object(
         file: &RuntimeFile,
@@ -36,36 +44,42 @@ impl RuntimeTransitionCondition {
         state_machine_inputs: &[Option<&RuntimeObject>],
         object: &RuntimeObject,
     ) -> Option<Self> {
-        match object.type_name {
-            "TransitionFocusCondition" => Some(Self::Focus(
-                RuntimeTransitionFocusCondition::from_object(file, object),
-            )),
-            "ScriptedTransitionCondition" => Some(Self::Scripted(
-                RuntimeScriptedTransitionCondition::from_object(object),
-            )),
-            "TransitionBoolCondition" => {
-                RuntimeTransitionBoolCondition::from_object(state_machine_inputs, object)
-                    .map(Self::Bool)
+        // The binary import-stack pass has already performed
+        // `TransitionCondition::import`: it requires the latest retained
+        // StateTransitionImporter, appends this exact object to that
+        // transition, and then delegates to Core's infallible import.
+        let condition = match object.type_name {
+            "TransitionFocusCondition" => {
+                Self::Focus(RuntimeTransitionFocusCondition::from_object(file, object))
             }
-            "TransitionNumberCondition" => {
-                RuntimeTransitionNumberCondition::from_object(state_machine_inputs, object)
-                    .map(Self::Number)
+            "ScriptedTransitionCondition" => {
+                Self::Scripted(RuntimeScriptedTransitionCondition::from_object(object))
             }
-            "TransitionTriggerCondition" => {
-                RuntimeTransitionTriggerCondition::from_object(state_machine_inputs, object)
-                    .map(Self::Trigger)
-            }
+            "TransitionBoolCondition" => Self::Bool(RuntimeTransitionBoolCondition::from_object(
+                state_machine_inputs,
+                object,
+            )?),
+            "TransitionNumberCondition" => Self::Number(
+                RuntimeTransitionNumberCondition::from_object(state_machine_inputs, object)?,
+            ),
+            "TransitionTriggerCondition" => Self::Trigger(
+                RuntimeTransitionTriggerCondition::from_object(state_machine_inputs, object)?,
+            ),
             "TransitionViewModelCondition" | "TransitionArtboardCondition" => {
                 // Pinned C++ retains the condition occurrence even when
                 // initialize() cannot form a compatible comparison. In that
                 // case it owns ConditionComparisonNone and evaluates false.
-                Some(Self::ViewModel(
+                Self::ViewModel(
                     RuntimeTransitionViewModelCondition::from_object(file, graph, object)
                         .unwrap_or(RuntimeTransitionViewModelCondition::NoComparison),
-                ))
+                )
             }
-            _ => None,
-        }
+            _ => return None,
+        };
+
+        condition.on_added_dirty();
+        condition.on_added_clean();
+        Some(condition)
     }
 
     pub(super) fn evaluate(
@@ -75,6 +89,9 @@ impl RuntimeTransitionCondition {
         inputs: &[StateMachineInputInstance],
         executor: &dyn RuntimeScheduledListenerActionExecutor,
     ) -> bool {
+        // The pinned base implementation returns true, but
+        // TransitionCondition is abstract and every constructible condition
+        // represented below overrides evaluate().
         match self {
             Self::Focus(condition) => condition.evaluate(executor),
             Self::Scripted(condition) => condition.evaluate(executor),
@@ -83,6 +100,34 @@ impl RuntimeTransitionCondition {
             Self::Trigger(condition) => condition.evaluate(inputs, context.layer_index),
             Self::ViewModel(condition) => condition.evaluate(context, artboard, inputs, executor),
         }
+    }
+
+    /// Mechanical dispatch for `TransitionCondition::useInLayer`.
+    pub(super) fn use_in_layer(
+        &self,
+        executor: &dyn RuntimeScheduledListenerActionExecutor,
+        inputs: &mut [StateMachineInputInstance],
+        layer_index: usize,
+        view_model_trigger_layer_id: u64,
+    ) {
+        match self {
+            Self::Trigger(condition) => condition.use_input(inputs, layer_index),
+            Self::ViewModel(condition) => {
+                condition.use_input(executor, inputs, layer_index, view_model_trigger_layer_id);
+            }
+            // Focus, scripted, bool, and number conditions inherit the pinned
+            // base implementation, whose body is intentionally empty.
+            _ => {}
+        }
+    }
+
+    // The pinned base `validateInputType` returns true. There is no callable
+    // Rust path to translate: TransitionCondition and TransitionInputCondition
+    // are abstract, while every constructible input condition overrides the
+    // validator and is checked by the binary import-stack pass.
+
+    pub(super) fn is_direct_input(&self) -> bool {
+        matches!(self, Self::Bool(_) | Self::Number(_) | Self::Trigger(_))
     }
 
     pub(super) fn evaluate_direct_input(
@@ -95,21 +140,6 @@ impl RuntimeTransitionCondition {
             Self::Number(condition) => Some(condition.evaluate(inputs)),
             Self::Trigger(condition) => Some(condition.evaluate(inputs, layer_index)),
             _ => None,
-        }
-    }
-
-    pub(super) fn use_input(
-        &self,
-        executor: &dyn RuntimeScheduledListenerActionExecutor,
-        inputs: &mut [StateMachineInputInstance],
-        layer_index: usize,
-        view_model_trigger_layer_id: u64,
-    ) {
-        if let Self::Trigger(condition) = self {
-            condition.use_input(inputs, layer_index);
-        }
-        if let Self::ViewModel(condition) = self {
-            condition.use_input(executor, inputs, layer_index, view_model_trigger_layer_id);
         }
     }
 }

@@ -57,11 +57,9 @@ impl FocusBounds {
     }
 
     fn is_valid(self) -> bool {
-        [self.min_x, self.min_y, self.max_x, self.max_y]
-            .into_iter()
-            .all(f32::is_finite)
-            && self.min_x < self.max_x
-            && self.min_y < self.max_y
+        // AABB::isEmptyOrNaN() uses inverse positive-width/height checks so
+        // either an empty extent or a NaN makes the bounds unavailable.
+        self.max_x - self.min_x > 0.0 && self.max_y - self.min_y > 0.0
     }
 }
 
@@ -102,14 +100,20 @@ impl FocusNode {
         }
     }
 
-    pub fn structural_scope() -> Self {
+    pub(crate) fn with_focusable(focusable: Option<RuntimeFocusable>) -> Self {
         Self {
-            focusable: None,
-            can_focus: false,
-            can_touch: false,
-            can_traverse: false,
+            focusable,
             ..Self::new()
         }
+    }
+
+    pub fn structural_scope() -> Self {
+        let mut node = Self::new();
+        // Keep the source setter order from makeStructuralScope().
+        node.set_can_focus(false);
+        node.set_can_traverse(false);
+        node.set_can_touch(false);
+        node
     }
 
     pub fn can_focus(&self) -> bool {
@@ -144,12 +148,12 @@ impl FocusNode {
         self.eligible = value;
     }
 
-    pub fn tab_index(&self) -> i16 {
-        self.tab_index
+    pub fn tab_index(&self) -> i32 {
+        i32::from(self.tab_index)
     }
 
-    pub fn set_tab_index(&mut self, value: i16) {
-        self.tab_index = value;
+    pub fn set_tab_index(&mut self, value: i32) {
+        self.tab_index = value as i16;
     }
 
     pub fn name(&self) -> &[u8] {
@@ -173,7 +177,19 @@ impl FocusNode {
     }
 
     pub fn set_bounds(&mut self, value: Option<FocusBounds>) {
-        self.bounds = value.filter(|bounds| bounds.is_valid());
+        self.bounds = value;
+    }
+
+    pub fn has_world_bounds(&self) -> bool {
+        self.valid_bounds().is_some()
+    }
+
+    pub fn clear_world_bounds(&mut self) {
+        self.bounds = None;
+    }
+
+    pub(crate) fn valid_bounds(&self) -> Option<FocusBounds> {
+        self.bounds.filter(|bounds| bounds.is_valid())
     }
 
     pub fn position(&self) -> Option<FocusPoint> {
@@ -186,6 +202,18 @@ impl FocusNode {
 
     pub fn has_focus(&self) -> bool {
         self.has_focus
+    }
+
+    pub fn parent(&self) -> Option<FocusNodeId> {
+        self.parent
+    }
+
+    pub fn children(&self) -> &[FocusNodeId] {
+        &self.children
+    }
+
+    pub fn is_scope(&self) -> bool {
+        !self.children.is_empty()
     }
 
     pub(crate) fn focusable(&self) -> Option<RuntimeFocusable> {

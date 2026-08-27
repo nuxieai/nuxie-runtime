@@ -1351,20 +1351,16 @@ fn authored_focus_node(
     inherited_eligible: bool,
     root_transform: Mat2D,
 ) -> FocusNode {
-    let mut node = FocusNode::new();
-    // C++ FocusData::onAddedDirty wires the authored FocusData through a
-    // Focusable into its FocusNode. A bare FocusNode starts with nullptr, but
-    // a node constructed from authored FocusData is therefore backed.
     let target_local = artboard
         .component_parent_local(focus_local)
         .unwrap_or(focus_local);
     // FocusData itself implements Focusable; `Focusable::from(Core*)` is a
     // separate conversion seam for TextInput/NestedArtboard callers.
-    node.set_focusable(RuntimeFocusable::new(
+    let mut node = FocusNode::with_focusable(Some(RuntimeFocusable::new(
         artboard.instance_identity(),
         target_local,
         focus_local,
-    ));
+    )));
     let focus_flags = property_key_for_name("FocusData", "focusFlags")
         .and_then(|property_key| artboard.objects.uint_property(focus_local, property_key))
         .unwrap_or(7);
@@ -2269,7 +2265,11 @@ mod tests {
 
         node.set_bounds(Some(FocusBounds::from_xywh(10.0, 20.0, 0.0, 5.0)));
 
-        assert_eq!(node.bounds(), None);
+        assert_eq!(
+            node.bounds(),
+            Some(FocusBounds::from_xywh(10.0, 20.0, 0.0, 5.0))
+        );
+        assert!(!node.has_world_bounds());
     }
 
     #[test]

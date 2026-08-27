@@ -601,7 +601,7 @@ impl FocusManager {
         current: FocusNodeId,
         direction: FocusDirection,
     ) -> Option<FocusNodeId> {
-        let current_bounds = self.nodes.get(&current).and_then(FocusNode::bounds);
+        let current_bounds = self.nodes.get(&current).and_then(FocusNode::valid_bounds);
         let current_position = current_bounds
             .map(FocusBounds::center)
             .or_else(|| self.nodes.get(&current).and_then(FocusNode::position))?;
@@ -615,13 +615,13 @@ impl FocusManager {
                 continue;
             }
             let candidate_node = self.nodes.get(&candidate).expect("collected node");
-            let score = match (current_bounds, candidate_node.bounds()) {
+            let score = match (current_bounds, candidate_node.valid_bounds()) {
                 (Some(current), Some(candidate)) => {
                     score_directional_bounds(current, candidate, direction)
                 }
                 _ => {
                     let Some(candidate_position) = candidate_node
-                        .bounds()
+                        .valid_bounds()
                         .map(FocusBounds::center)
                         .or(candidate_node.position())
                     else {

@@ -1,13 +1,4 @@
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GpuTextureFormat {
-    Rgba32,
-    Bc7,
-    Bc7Srgb,
-    Astc,
-    AstcSrgb,
-    Etc2,
-    Unknown,
-}
+use crate::mechanical_port::source::gpu_texture_format::GpuTextureFormat;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Ktx2HwSupport {
     pub bc: bool,

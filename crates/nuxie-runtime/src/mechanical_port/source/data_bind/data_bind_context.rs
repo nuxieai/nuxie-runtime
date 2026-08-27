@@ -1,0 +1,121 @@
+pub trait ContextDataResolver {
+    fn resolve_path(&self, id: u32) -> Vec<u32>;
+}
+pub trait ContextFile {
+    fn data_resolver(&self) -> Option<&dyn ContextDataResolver>;
+}
+pub trait BoundSource {}
+pub trait ContextData {
+    fn view_model_property(&self, path: &[u32]) -> Option<*mut dyn BoundSource>;
+    fn relative_view_model_property(
+        &self,
+        path: &[u32],
+        resolver: &dyn ContextDataResolver,
+    ) -> Option<*mut dyn BoundSource>;
+}
+pub trait ContextConverter {
+    fn bind_from_context(&mut self, context: &dyn ContextData, data_bind: *mut DataBindContext);
+}
+pub const RECONCILE_DIRT: u32 = 3;
+pub struct DataBindContext {
+    source_path_ids: Vec<u32>,
+    is_path_resolved: bool,
+    is_name_based: bool,
+    file: Option<*mut dyn ContextFile>,
+    source: Option<*mut dyn BoundSource>,
+    converter: Option<*mut dyn ContextConverter>,
+    dirt: u32,
+    bound: bool,
+}
+impl Default for DataBindContext {
+    fn default() -> Self {
+        Self {
+            source_path_ids: Vec::new(),
+            is_path_resolved: false,
+            is_name_based: false,
+            file: None,
+            source: None,
+            converter: None,
+            dirt: 0,
+            bound: false,
+        }
+    }
+}
+impl DataBindContext {
+    pub fn decode_source_path_ids(&mut self, bytes: &[u8]) {
+        let mut index = 0;
+        while index < bytes.len() {
+            let mut value = 0u32;
+            let mut shift = 0;
+            loop {
+                let byte = bytes[index];
+                index += 1;
+                value |= ((byte & 127) as u32) << shift;
+                if byte & 128 == 0 {
+                    break;
+                }
+                shift += 7;
+            }
+            self.source_path_ids.push(value);
+        }
+    }
+    pub fn copy_source_path_ids(&mut self, other: &Self) {
+        self.source_path_ids = other.source_path_ids.clone();
+        self.is_path_resolved = other.is_path_resolved
+    }
+    fn resolve_path(&mut self) {
+        if !self.is_name_based || self.is_path_resolved {
+            return;
+        }
+        self.is_path_resolved = true;
+        if let (Some(id), Some(file)) = (self.source_path_ids.first().copied(), self.file) {
+            if let Some(resolver) = unsafe { (&*file).data_resolver() } {
+                let path = resolver.resolve_path(id);
+                if !path.is_empty() {
+                    self.source_path_ids = path;
+                }
+            }
+        }
+    }
+    pub fn bind_from_context(&mut self, data_context: Option<&dyn ContextData>) {
+        let Some(data_context) = data_context else {
+            return;
+        };
+        self.resolve_path();
+        let source = if self.is_name_based {
+            self.file
+                .and_then(|file| unsafe { (&*file).data_resolver() })
+                .and_then(|resolver| {
+                    data_context.relative_view_model_property(&self.source_path_ids, resolver)
+                })
+        } else {
+            data_context.view_model_property(&self.source_path_ids)
+        };
+        if !same_ptr(self.source, source) {
+            if let Some(source) = source {
+                self.source = None;
+                self.source = Some(source);
+                self.bound = true;
+            } else {
+                self.bound = false;
+            }
+        } else {
+            self.dirt |= RECONCILE_DIRT;
+        }
+        if let Some(converter) = self.converter {
+            unsafe {
+                (&mut *converter).bind_from_context(data_context, self as *mut Self);
+            }
+        }
+    }
+    pub fn source_path_ids(&self) -> &[u32] {
+        &self.source_path_ids
+    }
+}
+fn same_ptr<T: ?Sized>(a: Option<*mut T>, b: Option<*mut T>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => core::ptr::addr_eq(a, b),
+        (None, None) => true,
+        _ => false,
+    }
+}

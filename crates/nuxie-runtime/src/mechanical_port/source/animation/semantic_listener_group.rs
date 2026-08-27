@@ -9,10 +9,11 @@ pub enum SemanticActionType {
 pub trait SemanticListenerGroupHost {
     fn add_semantic_listener(&mut self, listener: NonNull<SemanticListenerGroup>);
     fn remove_semantic_listener(&mut self, listener: NonNull<SemanticListenerGroup>);
+}
+pub trait SemanticListenerGroupStateMachine {
     fn constraints_met(&self, listener: *const (), action: SemanticActionType) -> bool;
     fn queue_semantic_event(
         &mut self,
-        machine: *mut (),
         group: NonNull<SemanticListenerGroup>,
         action: SemanticActionType,
     );
@@ -20,13 +21,13 @@ pub trait SemanticListenerGroupHost {
 pub struct SemanticListenerGroup {
     semantic_data: Option<NonNull<dyn SemanticListenerGroupHost>>,
     listener: *const (),
-    state_machine_instance: *mut (),
+    state_machine_instance: NonNull<dyn SemanticListenerGroupStateMachine>,
 }
 impl SemanticListenerGroup {
     pub fn new(
         semantic_data: Option<NonNull<dyn SemanticListenerGroupHost>>,
         listener: *const (),
-        state_machine_instance: *mut (),
+        state_machine_instance: NonNull<dyn SemanticListenerGroupStateMachine>,
     ) -> Box<Self> {
         let mut value = Box::new(Self {
             semantic_data,
@@ -48,16 +49,18 @@ impl SemanticListenerGroup {
         self.semantic_data
     }
     fn queue_if_listening(&mut self, action: SemanticActionType) {
-        let Some(mut data) = self.semantic_data else {
-            return;
-        };
         if !self.listener.is_null()
-            && unsafe { data.as_ref().constraints_met(self.listener, action) }
+            && unsafe {
+                self.state_machine_instance
+                    .as_ref()
+                    .constraints_met(self.listener, action)
+            }
         {
             let this = NonNull::from(&mut *self);
             unsafe {
-                data.as_mut()
-                    .queue_semantic_event(self.state_machine_instance, this, action)
+                self.state_machine_instance
+                    .as_mut()
+                    .queue_semantic_event(this, action)
             };
         }
     }

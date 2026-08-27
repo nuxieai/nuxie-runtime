@@ -18,20 +18,30 @@ pub trait TransitionRuntime {
     fn condition_added_dirty(&mut self, c: &mut TransitionCondition) -> StatusCode;
     fn condition_added_clean(&mut self, c: &mut TransitionCondition) -> StatusCode;
     fn evaluate_condition(&self, c: &TransitionCondition, machine: *mut (), layer: *mut ())
-    -> bool;
+        -> bool;
     fn use_condition_in_layer(&self, c: &TransitionCondition, machine: *mut (), layer: *mut ());
     fn animation_duration(&self, state: &LayerState) -> Option<f32>;
     fn exit_animation(&self, state: &LayerState) -> Option<(f32, f32)>;
     fn exit_instance_times(&self, from: *mut ()) -> Option<(f32, f32, f32, i32)>;
     fn set_exit_instance_time(&self, from: *mut (), time: f32);
 }
-#[derive(Default)]
 pub struct StateTransition {
     pub base: StateTransitionBase,
     state_to: Option<NonNull<LayerState>>,
     evaluated_random_weight: u32,
     interpolator: Option<*mut ()>,
     conditions: Vec<Box<TransitionCondition>>,
+}
+impl Default for StateTransition {
+    fn default() -> Self {
+        Self {
+            base: StateTransitionBase::default(),
+            state_to: None,
+            evaluated_random_weight: 1,
+            interpolator: None,
+            conditions: Vec::new(),
+        }
+    }
 }
 impl StateTransition {
     fn flags(&self) -> u32 {
@@ -44,11 +54,7 @@ impl StateTransition {
         self.interpolator
     }
     pub fn evaluated_random_weight(&self) -> u32 {
-        if self.evaluated_random_weight == 0 {
-            1
-        } else {
-            self.evaluated_random_weight
-        }
+        self.evaluated_random_weight
     }
     pub fn set_evaluated_random_weight(&mut self, v: u32) {
         self.evaluated_random_weight = v
@@ -150,7 +156,11 @@ impl StateTransition {
         }
         if self.enable_exit_time() {
             if let Some((last, total, duration, loop_value)) = r.exit_instance_times(from) {
-                let mut exit = self.base.exit_time() as f32 / 1000.0;
+                let mut exit = if self.flags() & 32 != 0 {
+                    self.base.exit_time() as f32 / 100.0 * duration
+                } else {
+                    self.base.exit_time() as f32 / 1000.0
+                };
                 if exit <= duration && loop_value != 0 {
                     exit += (last / duration).floor() * duration
                 }

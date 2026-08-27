@@ -89,6 +89,9 @@ impl NestedStateMachine {
     pub fn add_nested_input(&mut self, input: &mut NestedInput) {
         self.nested_inputs.push(NonNull::from(input));
     }
+    pub fn input_count(&self) -> usize {
+        self.nested_inputs.len()
+    }
     pub fn input(&mut self, index: usize) -> Option<&mut NestedInput> {
         self.nested_inputs
             .get_mut(index)

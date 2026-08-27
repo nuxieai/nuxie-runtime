@@ -179,6 +179,7 @@ pub trait StateMachineInstanceRuntime {
     fn artboard_reset(&mut self, artboard: Object);
     fn artboard_advance_scripted_view_models(&mut self, artboard: Object);
     fn artboard_resolve(&self, artboard: Object, id: u32) -> Object;
+    fn object_is_event(&self, object: Object) -> bool;
     fn artboard_file(&self, artboard: Object) -> Object;
     fn artboard_nested_artboards(&self, artboard: Object) -> Vec<Object>;
     fn artboard_component_lists(&self, artboard: Object) -> Vec<Object>;
@@ -216,6 +217,7 @@ pub trait StateMachineInstanceRuntime {
     fn component_ordered_indices(&self, component: Object) -> Vec<i32>;
     fn component_state_machine(&self, component: Object, index: i32) -> *mut StateMachineInstance;
     fn nested_animations(&self, nested_artboard: Object) -> Vec<Object>;
+    fn nested_artboard_instance(&self, nested_artboard: Object) -> Object;
     fn nested_is_state_machine(&self, animation: Object) -> bool;
     fn nested_state_machine_instance(&self, animation: Object) -> *mut StateMachineInstance;
     fn nested_add_event_listener(&mut self, animation: Object, listener: *mut ());
@@ -331,6 +333,12 @@ pub trait StateMachineInstanceRuntime {
     fn bind_data_binds_from_context(&mut self, machine: *mut (), context: Object);
     fn unbind_data_binds(&mut self, machine: *mut ());
     fn clone_data_bind(&mut self, bind: Object) -> Object;
+    fn data_bind_file(&self, bind: Object) -> Object;
+    fn data_bind_set_file(&mut self, bind: Object, file: Object);
+    fn data_bind_converter(&self, bind: Object) -> Object;
+    fn clone_data_converter(&mut self, converter: Object) -> Object;
+    fn data_bind_set_converter(&mut self, bind: Object, converter: Object);
+    fn data_bind_initialize(&mut self, bind: Object);
     fn data_bind_target(&self, bind: Object) -> Object;
     fn data_bind_flags(&self, bind: Object) -> u32;
     fn data_bind_property_key(&self, bind: Object) -> u32;
@@ -887,6 +895,10 @@ impl Drop for StateMachineLayerInstance {
 
 pub trait HitComponent {
     fn component(&self) -> Object;
+    #[cfg(feature = "testing")]
+    fn early_out_count(&self) -> i32 {
+        0
+    }
     fn process_event(
         &mut self,
         runtime: &mut dyn StateMachineInstanceRuntime,
@@ -937,6 +949,8 @@ struct HitDrawable {
     listeners: Vec<Object>,
     hit_path: bool,
     hit_clip: bool,
+    #[cfg(feature = "testing")]
+    early_out_count: i32,
 }
 
 type HitExpandable = HitDrawable;
@@ -966,6 +980,8 @@ impl HitDrawable {
             listeners: Vec::new(),
             hit_path,
             hit_clip,
+            #[cfg(feature = "testing")]
+            early_out_count: 0,
         }
     }
 
@@ -989,6 +1005,11 @@ impl HitComponent for HitDrawable {
         self.component
     }
 
+    #[cfg(feature = "testing")]
+    fn early_out_count(&self) -> i32 {
+        self.early_out_count
+    }
+
     fn hit_test(&self, runtime: &dyn StateMachineInstanceRuntime, position: Vec2D) -> bool {
         runtime.component_hit_test(self.component, position, self.hit_path, self.hit_clip)
     }
@@ -1004,6 +1025,10 @@ impl HitComponent for HitDrawable {
             && (hit_type != ListenerType::Down || !self.has_down_listener)
             && (hit_type != ListenerType::Up || !self.has_up_listener)
         {
+            #[cfg(feature = "testing")]
+            {
+                self.early_out_count += 1;
+            }
             return;
         }
         self.is_hovered = hit_type != ListenerType::Exit && self.hit_test(runtime, position);
@@ -1629,6 +1654,10 @@ impl StateMachineInstance {
             }
             instance.input_instances[index] =
                 instance.runtime.make_input_instance(input, machine_ptr);
+            #[cfg(feature = "rive_tools")]
+            if let Some(input_instance) = instance.input_instances[index] {
+                unsafe { (&mut *input_instance.base()).set_index(index as u64) };
+            }
         }
 
         let layer_count = instance.runtime.machine_layer_count(machine);
@@ -1667,6 +1696,13 @@ impl StateMachineInstance {
                 continue;
             }
             let clone = self.runtime.clone_data_bind(source);
+            self.runtime
+                .data_bind_set_file(clone, self.runtime.data_bind_file(source));
+            let converter = self.runtime.data_bind_converter(source);
+            if converter != 0 {
+                let converter_clone = self.runtime.clone_data_converter(converter);
+                self.runtime.data_bind_set_converter(clone, converter_clone);
+            }
             self.add_data_bind(clone);
             if self.runtime.data_bind_bindable_target(source) {
                 let property = *self
@@ -2539,7 +2575,7 @@ impl StateMachineInstance {
             let source_artboard = if source == 0 {
                 self.artboard_instance
             } else {
-                source
+                self.runtime.nested_artboard_instance(source)
             };
             for report in events {
                 if source == 0 {
@@ -2549,7 +2585,7 @@ impl StateMachineInstance {
                     );
                     if resolved_target != 0
                         && resolved_target != self.artboard_instance
-                        && resolved_target != report.event
+                        && !self.runtime.object_is_event(resolved_target)
                     {
                         continue;
                     }
@@ -2978,7 +3014,14 @@ impl StateMachineInstance {
                     let holder = runtime.make_keyframe_holder(keyframe_type);
                     runtime.add_keyframe_holder(animation_instance, keyframe, holder);
                     let clone = runtime.clone_data_bind(source_bind);
+                    runtime.data_bind_set_file(clone, runtime.data_bind_file(source_bind));
                     runtime.configure_data_bind_target(clone, holder, holder_property_key);
+                    runtime.data_bind_initialize(clone);
+                    let converter = runtime.data_bind_converter(source_bind);
+                    if converter != 0 {
+                        let converter_clone = runtime.clone_data_converter(converter);
+                        runtime.data_bind_set_converter(clone, converter_clone);
+                    }
                     runtime.add_data_bind(machine.cast(), clone);
                     unsafe {
                         (&mut *machine).data_binds.push(clone);

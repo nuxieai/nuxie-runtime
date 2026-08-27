@@ -8,7 +8,9 @@ use crate::mechanical_port::source::{
 };
 pub trait KeyedObjectContext {
     fn resolves_object(&self, id: u32) -> bool;
+    fn resolve_object(&mut self, id: u32) -> Option<*mut ()>;
     fn object_supports_property(&self, id: u32, key: u32) -> bool;
+    fn overrides_keyed_interpolation(&self, object: *mut (), key: u32) -> bool;
 }
 #[derive(Default)]
 pub struct KeyedObject {
@@ -29,14 +31,20 @@ impl KeyedObject {
         if !context.resolves_object(self.base.object_id()) {
             return StatusCode::MissingObject;
         }
-        self.keyed_properties.retain(|value| {
-            context.object_supports_property(self.base.object_id(), value.base.property_key())
-        });
-        for property in &mut self.keyed_properties {
-            let code = property.on_added_dirty(context);
+        let mut index = 0;
+        while index < self.keyed_properties.len() {
+            if !context.object_supports_property(
+                self.base.object_id(),
+                self.keyed_properties[index].base.property_key(),
+            ) {
+                self.keyed_properties.remove(index);
+                continue;
+            }
+            let code = self.keyed_properties[index].on_added_dirty(context);
             if code != StatusCode::Ok {
                 return code;
             }
+            index += 1;
         }
         StatusCode::Ok
     }
@@ -72,12 +80,14 @@ impl KeyedObject {
         mix: f32,
         context: *const (),
     ) {
-        if !artboard.resolves_object(self.base.object_id()) {
+        let Some(object) = artboard.resolve_object(self.base.object_id()) else {
             return;
-        }
+        };
         for property in &mut self.keyed_properties {
             if !property.is_callback() {
-                property.apply_to_object(self.base.object_id(), time, mix, context);
+                let override_mix =
+                    artboard.overrides_keyed_interpolation(object, property.base.property_key());
+                property.apply(object, time, mix, context, override_mix);
             }
         }
     }

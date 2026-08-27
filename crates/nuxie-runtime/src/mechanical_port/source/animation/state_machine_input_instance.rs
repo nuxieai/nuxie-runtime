@@ -41,6 +41,10 @@ impl SMIInput {
     pub fn input_core_type(&self) -> u16 {
         self.input().core_type()
     }
+    #[cfg(feature = "rive_tools")]
+    pub(crate) fn set_index(&mut self, index: u64) {
+        self.index = index;
+    }
     fn value_changed(&mut self) {
         unsafe {
             (&mut *self.machine).mark_needs_advance();

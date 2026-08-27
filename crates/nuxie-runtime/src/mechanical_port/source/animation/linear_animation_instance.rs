@@ -30,7 +30,15 @@ pub trait LinearAnimationInstanceArtboard {
     fn advance(&mut self, seconds: f32) -> bool;
     fn is_translucent(&self, instance: &LinearAnimationInstance) -> bool;
     fn remove_and_delete_data_bind(&mut self, bind: *mut ());
-    fn notify_event(&mut self, event: *mut (), delay: f32);
+    fn notify_event(&mut self, event: *mut ());
+    fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32);
+    fn clone_scripted_interpolator(&mut self, shared: *const ()) -> Option<Box<dyn std::any::Any>>;
+    fn scripted_interpolator_set_data_context(&mut self, clone: &mut dyn std::any::Any);
+    fn scripted_interpolator_data_binds(&self, clone: &dyn std::any::Any) -> Vec<*mut ()>;
+    fn scripted_interpolator_has_script_asset(&self, clone: &dyn std::any::Any) -> bool;
+    fn scripted_interpolator_user_init_done(&self, clone: &dyn std::any::Any) -> bool;
+    fn scripted_interpolator_init(&mut self, clone: &mut dyn std::any::Any);
+    fn scripted_interpolator_hydrate_inputs(&mut self, clone: &mut dyn std::any::Any);
 }
 pub struct LinearAnimationInstance {
     animation: *const dyn LinearAnimationInstanceDefinition,
@@ -192,8 +200,42 @@ impl LinearAnimationInstance {
             .insert(key as usize, value);
         self.cloned_artboard_data_binds.extend(binds)
     }
+    pub fn stateful_interpolator(
+        &mut self,
+        keyframe: *const (),
+        shared: *const (),
+    ) -> Option<*mut ()> {
+        if shared.is_null() || keyframe.is_null() {
+            return None;
+        }
+        let key = keyframe as usize;
+        if let Some(cached) = self
+            .scripted_interpolators
+            .as_mut()
+            .and_then(|instances| instances.get_mut(&key))
+        {
+            return Some(cached.as_mut() as *mut dyn std::any::Any as *mut ());
+        }
+        let artboard = unsafe { &mut *self.artboard };
+        let mut clone = artboard.clone_scripted_interpolator(shared)?;
+        artboard.scripted_interpolator_set_data_context(clone.as_mut());
+        self.cloned_artboard_data_binds
+            .extend(artboard.scripted_interpolator_data_binds(clone.as_ref()));
+        if artboard.scripted_interpolator_has_script_asset(clone.as_ref())
+            && !artboard.scripted_interpolator_user_init_done(clone.as_ref())
+        {
+            artboard.scripted_interpolator_init(clone.as_mut());
+            artboard.scripted_interpolator_hydrate_inputs(clone.as_mut());
+        }
+        let raw = clone.as_mut() as *mut dyn std::any::Any as *mut ();
+        self.scripted_interpolators
+            .get_or_insert_with(HashMap::new)
+            .insert(key, clone);
+        Some(raw)
+    }
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
-        let mut more = self.advance(seconds, None);
+        let self_pointer = self as *mut Self;
+        let mut more = self.advance(seconds, Some(unsafe { &mut *self_pointer }));
         self.apply(1.0);
         if unsafe { (&mut *self.artboard).advance(seconds) } {
             more = true
@@ -323,8 +365,15 @@ impl LinearAnimationInstance {
     pub fn is_translucent(&self) -> bool {
         unsafe { (&*self.artboard).is_translucent(self) }
     }
-    pub fn report_event(&mut self, event: *mut (), delay: f32) {
-        unsafe { (&mut *self.artboard).notify_event(event, delay) }
+    pub fn report_event(&mut self, event: *mut (), _delay: f32) {
+        unsafe { (&mut *self.artboard).notify_event(event) }
+    }
+}
+impl KeyedCallbackReporter for LinearAnimationInstance {
+    fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32) {
+        unsafe {
+            (&mut *self.artboard).report_keyed_callback(object_id, property_key, elapsed_seconds)
+        }
     }
 }
 impl Clone for LinearAnimationInstance {

@@ -3,6 +3,7 @@ use crate::mechanical_port::source::{
     generated::animation::{
         keyed_object_base::KeyedObjectBase, keyed_property_base::KeyedPropertyBase,
     },
+    generated::core_registry::CoreRegistry,
     importers::{import_stack::ImportStack, keyed_object_importer::KeyedObjectImporter},
     status_code::StatusCode,
 };
@@ -154,9 +155,6 @@ impl KeyedProperty {
         self.keyframes.get(i).map(Box::as_ref)
     }
     pub fn is_callback(&self) -> bool {
-        self.base.property_key() == 395
-    }
-    pub fn apply_to_object(&mut self, _id: u32, t: f32, m: f32, c: *const ()) {
-        self.apply(std::ptr::null_mut(), t, m, c, false)
+        CoreRegistry::is_callback(self.base.property_key())
     }
 }

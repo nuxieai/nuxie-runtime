@@ -31,9 +31,10 @@ impl StateMachineListenerSingle {
     }
 
     pub fn view_model_path_ids_buffer(&self) -> Vec<u32> {
-        let Some(path) = self.data_bind_path_referencer.data_bind_path() else {
-            return Vec::new();
-        };
+        let path = self
+            .data_bind_path_referencer
+            .data_bind_path()
+            .expect("state machine listener data-bind path must exist");
         let mut path = path.clone();
         path.path().clone()
     }

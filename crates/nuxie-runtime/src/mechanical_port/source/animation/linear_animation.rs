@@ -9,6 +9,11 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 use std::ptr::NonNull;
+#[cfg(feature = "testing")]
+use std::sync::atomic::{AtomicI32, Ordering};
+
+#[cfg(feature = "testing")]
+static DELETE_COUNT: AtomicI32 = AtomicI32::new(0);
 pub trait LinearAnimationArtboard {
     fn apply_keyed_object(
         &mut self,
@@ -24,6 +29,10 @@ pub struct LinearAnimation {
     keyed_objects: Vec<Box<KeyedObject>>,
 }
 impl LinearAnimation {
+    #[cfg(feature = "testing")]
+    pub fn delete_count() -> i32 {
+        DELETE_COUNT.load(Ordering::Relaxed)
+    }
     pub fn add_keyed_object(&mut self, v: Box<KeyedObject>) {
         self.keyed_objects.push(v)
     }
@@ -160,5 +169,12 @@ impl LinearAnimation {
                 o.report_keyed_callbacks(r, from, to, at_start)
             }
         }
+    }
+}
+
+impl Drop for LinearAnimation {
+    fn drop(&mut self) {
+        #[cfg(feature = "testing")]
+        DELETE_COUNT.fetch_add(1, Ordering::Relaxed);
     }
 }

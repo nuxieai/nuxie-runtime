@@ -46,8 +46,6 @@ pub struct KeyboardListenerGroup {
     focus_data: NonNull<dyn KeyboardListenerHost>,
     listener: *const (),
     machine: *mut (),
-    registered_keyboard: bool,
-    registered_text: bool,
 }
 impl KeyboardListenerGroup {
     pub fn new(
@@ -69,8 +67,6 @@ impl KeyboardListenerGroup {
             focus_data: focus,
             listener,
             machine,
-            registered_keyboard: keyboard,
-            registered_text: text,
         });
         let this = NonNull::from(value.as_mut());
         unsafe {
@@ -147,11 +143,25 @@ impl KeyboardListenerGroup {
 impl Drop for KeyboardListenerGroup {
     fn drop(&mut self) {
         let this = NonNull::from(&mut *self);
+        let keyboard = if self.listener.is_null() {
+            unsafe { self.focus_data.as_ref().scripted_wants_keyboard() }
+        } else {
+            unsafe {
+                self.focus_data
+                    .as_ref()
+                    .listener_wants_keyboard(self.listener)
+            }
+        };
+        let text = if self.listener.is_null() {
+            unsafe { self.focus_data.as_ref().scripted_wants_text() }
+        } else {
+            unsafe { self.focus_data.as_ref().listener_wants_text(self.listener) }
+        };
         unsafe {
-            if self.registered_keyboard {
+            if keyboard {
                 self.focus_data.as_mut().remove_keyboard(this);
             }
-            if self.registered_text {
+            if text {
                 self.focus_data.as_mut().remove_text(this);
             }
         }

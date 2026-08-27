@@ -1502,10 +1502,21 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if !trigger.set_value(value) {
+        if !trigger.apply_value(value) {
             return false;
         }
         true
+    }
+
+    fn fire_trigger_by_property_index(&mut self, property_index: usize) -> bool {
+        let Some(trigger) = self
+            .triggers
+            .iter_mut()
+            .find(|trigger| trigger.property_index == property_index)
+        else {
+            return false;
+        };
+        trigger.fire()
     }
 
     fn sync_number_by_property_index(&mut self, property_index: usize, value: f32) -> bool {
@@ -1785,7 +1796,7 @@ impl RuntimeOwnedViewModelViewModel {
         else {
             return false;
         };
-        if !current.set_value(value) {
+        if !current.apply_value(value) {
             return false;
         }
         true

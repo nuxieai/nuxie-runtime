@@ -1605,9 +1605,6 @@ impl ScriptViewModel {
     /// does: increment the backing counter and leave consumption/reset to the
     /// end-of-frame `advanced()` pass.
     pub fn fire_trigger(&self, name: &str) -> bool {
-        let Some(value) = self.trigger(name) else {
-            return false;
-        };
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
@@ -1615,7 +1612,7 @@ impl ScriptViewModel {
             self.context
                 .root_handle()
                 .borrow_mut()
-                .set_trigger_by_property_path(&path, u64::from((value as u32).wrapping_add(1)))
+                .fire_trigger_by_property_path(&path)
         });
         self.finish_property_change(&path, changed)
     }

@@ -27,6 +27,21 @@ impl RuntimeOwnedViewModelTrigger {
             .set_value(RuntimeViewModelCellValue::Trigger(value))
     }
 
+    /// `ViewModelInstanceTrigger::fire(const CallbackData&)`.
+    fn fire(&mut self) -> bool {
+        self.trigger()
+    }
+
+    /// `ViewModelInstanceTrigger::trigger()`.
+    fn trigger(&mut self) -> bool {
+        self.cell.fire_trigger()
+    }
+
+    /// `ViewModelInstanceTrigger::applyValue(DataValueInteger*)`.
+    fn apply_value(&mut self, data_value: u64) -> bool {
+        self.set_value(data_value)
+    }
+
     fn advanced(&self) {
         self.cell.advanced();
     }

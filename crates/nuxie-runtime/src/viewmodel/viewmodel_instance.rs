@@ -1266,12 +1266,8 @@ impl RuntimeOwnedViewModelTransaction {
         let Some(cell) = instance.cell_by_property_path(source.path()) else {
             return false;
         };
-        let Some(value) = instance.trigger_value_by_property_name_path(path) else {
-            return false;
-        };
-        let next = u64::from((value as u32).wrapping_add(1));
         self.capture_cell(cell);
-        instance.set_trigger_by_source_handle(&source, next)
+        instance.fire_trigger_by_property_path(source.path())
     }
 
     pub fn set_list_index(
@@ -5572,10 +5568,21 @@ impl RuntimeOwnedViewModelInstance {
         else {
             return false;
         };
-        if !trigger.set_value(value) {
+        if !trigger.apply_value(value) {
             return false;
         }
         true
+    }
+
+    fn fire_trigger_by_property_index(&mut self, property_index: usize) -> bool {
+        let Some(trigger) = self
+            .triggers
+            .iter_mut()
+            .find(|trigger| trigger.property_index == property_index)
+        else {
+            return false;
+        };
+        trigger.fire()
     }
 
     pub fn set_trigger_by_property_name(&mut self, property_name: &str, value: u64) -> bool {
@@ -5680,6 +5687,30 @@ impl RuntimeOwnedViewModelInstance {
         }
         let changed = view_model.set_trigger_by_property_index(*trigger_index, value);
         changed
+    }
+
+    pub(crate) fn fire_trigger_by_property_path(&mut self, property_path: &[usize]) -> bool {
+        if let Some(changed) = self.mutate_linked_by_property_path(property_path, |linked, path| {
+            linked.fire_trigger_by_property_path(path)
+        }) {
+            return changed;
+        }
+        if property_path.len() == 1 {
+            return self.fire_trigger_by_property_index(property_path[0]);
+        }
+        let Some((trigger_index, view_model_path)) = property_path.split_last() else {
+            return false;
+        };
+        let Some(view_model) = self.view_model_by_property_path_mut(view_model_path) else {
+            return false;
+        };
+        if !matches!(
+            view_model.endpoint.value(),
+            RuntimeViewModelPointer::OwnedGenerated { .. }
+        ) {
+            return false;
+        }
+        view_model.fire_trigger_by_property_index(*trigger_index)
     }
 
     fn trigger_property_path_by_names(&self, property_path: &[&str]) -> Option<Vec<usize>> {

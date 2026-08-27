@@ -236,6 +236,10 @@ fn object_imports_successfully(
     definition: &'static Definition,
     context: &ImportContext,
 ) -> bool {
+    if !crate::assets::file_asset_referencer::register_referencer_succeeds(definition, context) {
+        return false;
+    }
+
     if let Some(decision) =
         enum_importer::dispatch_imports_successfully(object, definition, context)
     {

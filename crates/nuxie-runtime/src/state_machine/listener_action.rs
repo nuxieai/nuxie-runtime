@@ -181,6 +181,15 @@ impl RuntimeScheduledListenerAction {
         action_owner.uint(super::listener_action_owner::LISTENER_FLAGS_KEY)
     }
 
+    /// Mechanical translation of
+    /// `ListenerAction::matchesScheduledOccurrence` from the primary header.
+    pub(crate) fn matches_scheduled_occurrence(
+        &self,
+        occurrence: StateMachineFireOccurrence,
+    ) -> bool {
+        self.flags() & 1 == occurrence.value()
+    }
+
     pub(crate) fn validates_for_import(
         graph: &ArtboardGraph,
         state_machine_inputs: &[Option<&RuntimeObject>],
@@ -293,7 +302,7 @@ pub(crate) fn perform_scheduled_listener_actions(
 ) -> Result<bool, ScriptError> {
     let mut changed = false;
     for action in listener_actions {
-        if action.flags() & 1 != occurrence.value() {
+        if !action.matches_scheduled_occurrence(occurrence) {
             continue;
         }
         match action {

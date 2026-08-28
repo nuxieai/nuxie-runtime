@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait TransitionValueConditionBaseCallbacks {
+pub trait TransitionValueConditionBaseCallbacks: crate::mechanical_port::source::generated::animation::transition_input_condition_base::TransitionInputConditionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn op_value_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl TransitionValueConditionBase {
         value: u32,
         callbacks: &mut impl TransitionValueConditionBaseCallbacks,
     ) {
-        if self.op_value == value {
+        if !self.set_op_value_value(value) {
             return;
         }
-        self.op_value = value;
         callbacks.op_value_changed();
         callbacks.notify_property_changed(Self::OP_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_op_value_value(&mut self, value: u32) -> bool {
+        if self.op_value == value {
+            return false;
+        }
+        self.op_value = value;
+        true
     }
     pub fn copy(
         &mut self,
@@ -68,5 +75,19 @@ impl TransitionValueConditionBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TransitionValueConditionBase {
+    type Target = TransitionInputCondition;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionValueConditionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -64,45 +64,73 @@ impl StateTransitionBase {
         value: u32,
         callbacks: &mut impl StateTransitionBaseCallbacks,
     ) {
-        if self.state_to_id == value {
+        if !self.set_state_to_id_value(value) {
             return;
         }
-        self.state_to_id = value;
         callbacks.state_to_id_changed();
         callbacks.notify_property_changed(Self::STATE_TO_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_state_to_id_value(&mut self, value: u32) -> bool {
+        if self.state_to_id == value {
+            return false;
+        }
+        self.state_to_id = value;
+        true
     }
     pub fn flags(&self) -> u32 {
         self.flags
     }
     pub fn set_flags(&mut self, value: u32, callbacks: &mut impl StateTransitionBaseCallbacks) {
-        if self.flags == value {
+        if !self.set_flags_value(value) {
             return;
         }
-        self.flags = value;
         callbacks.flags_changed();
         callbacks.notify_property_changed(Self::FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_flags_value(&mut self, value: u32) -> bool {
+        if self.flags == value {
+            return false;
+        }
+        self.flags = value;
+        true
     }
     pub fn duration(&self) -> u32 {
         self.duration
     }
     pub fn set_duration(&mut self, value: u32, callbacks: &mut impl StateTransitionBaseCallbacks) {
-        if self.duration == value {
+        if !self.set_duration_value(value) {
             return;
         }
-        self.duration = value;
         callbacks.duration_changed();
         callbacks.notify_property_changed(Self::DURATION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_duration_value(&mut self, value: u32) -> bool {
+        if self.duration == value {
+            return false;
+        }
+        self.duration = value;
+        true
     }
     pub fn exit_time(&self) -> u32 {
         self.exit_time
     }
     pub fn set_exit_time(&mut self, value: u32, callbacks: &mut impl StateTransitionBaseCallbacks) {
-        if self.exit_time == value {
+        if !self.set_exit_time_value(value) {
             return;
         }
-        self.exit_time = value;
         callbacks.exit_time_changed();
         callbacks.notify_property_changed(Self::EXIT_TIME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_exit_time_value(&mut self, value: u32) -> bool {
+        if self.exit_time == value {
+            return false;
+        }
+        self.exit_time = value;
+        true
     }
     pub fn interpolation_type(&self) -> u32 {
         self.interpolation_type
@@ -112,12 +140,19 @@ impl StateTransitionBase {
         value: u32,
         callbacks: &mut impl StateTransitionBaseCallbacks,
     ) {
-        if self.interpolation_type == value {
+        if !self.set_interpolation_type_value(value) {
             return;
         }
-        self.interpolation_type = value;
         callbacks.interpolation_type_changed();
         callbacks.notify_property_changed(Self::INTERPOLATION_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interpolation_type_value(&mut self, value: u32) -> bool {
+        if self.interpolation_type == value {
+            return false;
+        }
+        self.interpolation_type = value;
+        true
     }
     pub fn interpolator_id(&self) -> u32 {
         self.interpolator_id
@@ -127,12 +162,19 @@ impl StateTransitionBase {
         value: u32,
         callbacks: &mut impl StateTransitionBaseCallbacks,
     ) {
-        if self.interpolator_id == value {
+        if !self.set_interpolator_id_value(value) {
             return;
         }
-        self.interpolator_id = value;
         callbacks.interpolator_id_changed();
         callbacks.notify_property_changed(Self::INTERPOLATOR_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interpolator_id_value(&mut self, value: u32) -> bool {
+        if self.interpolator_id == value {
+            return false;
+        }
+        self.interpolator_id = value;
+        true
     }
     pub fn random_weight(&self) -> u32 {
         self.random_weight
@@ -142,12 +184,19 @@ impl StateTransitionBase {
         value: u32,
         callbacks: &mut impl StateTransitionBaseCallbacks,
     ) {
-        if self.random_weight == value {
+        if !self.set_random_weight_value(value) {
             return;
         }
-        self.random_weight = value;
         callbacks.random_weight_changed();
         callbacks.notify_property_changed(Self::RANDOM_WEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_random_weight_value(&mut self, value: u32) -> bool {
+        if self.random_weight == value {
+            return false;
+        }
+        self.random_weight = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl StateTransitionBaseCallbacks) -> StateTransition {
         let mut cloned = StateTransition::default();
@@ -162,7 +211,7 @@ impl StateTransitionBase {
         self.interpolation_type = object.interpolation_type;
         self.interpolator_id = object.interpolator_id;
         self.random_weight = object.random_weight;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -199,7 +248,21 @@ impl StateTransitionBase {
                 self.random_weight = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for StateTransitionBase {
+    type Target = StateMachineLayerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StateTransitionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

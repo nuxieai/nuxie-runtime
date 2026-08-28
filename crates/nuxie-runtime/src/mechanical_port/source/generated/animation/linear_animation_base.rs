@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait LinearAnimationBaseCallbacks {
+pub trait LinearAnimationBaseCallbacks:
+    crate::mechanical_port::source::generated::animation::animation_base::AnimationBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn fps_changed(&mut self) {}
     fn duration_changed(&mut self) {}
@@ -64,34 +66,55 @@ impl LinearAnimationBase {
         self.fps
     }
     pub fn set_fps(&mut self, value: u32, callbacks: &mut impl LinearAnimationBaseCallbacks) {
-        if self.fps == value {
+        if !self.set_fps_value(value) {
             return;
         }
-        self.fps = value;
         callbacks.fps_changed();
         callbacks.notify_property_changed(Self::FPS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_fps_value(&mut self, value: u32) -> bool {
+        if self.fps == value {
+            return false;
+        }
+        self.fps = value;
+        true
     }
     pub fn duration(&self) -> u32 {
         self.duration
     }
     pub fn set_duration(&mut self, value: u32, callbacks: &mut impl LinearAnimationBaseCallbacks) {
-        if self.duration == value {
+        if !self.set_duration_value(value) {
             return;
         }
-        self.duration = value;
         callbacks.duration_changed();
         callbacks.notify_property_changed(Self::DURATION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_duration_value(&mut self, value: u32) -> bool {
+        if self.duration == value {
+            return false;
+        }
+        self.duration = value;
+        true
     }
     pub fn speed(&self) -> f32 {
         self.speed
     }
     pub fn set_speed(&mut self, value: f32, callbacks: &mut impl LinearAnimationBaseCallbacks) {
-        if self.speed == value {
+        if !self.set_speed_value(value) {
             return;
         }
-        self.speed = value;
         callbacks.speed_changed();
         callbacks.notify_property_changed(Self::SPEED_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_speed_value(&mut self, value: f32) -> bool {
+        if self.speed == value {
+            return false;
+        }
+        self.speed = value;
+        true
     }
     pub fn loop_value(&self) -> u32 {
         self.loop_value
@@ -101,12 +124,19 @@ impl LinearAnimationBase {
         value: u32,
         callbacks: &mut impl LinearAnimationBaseCallbacks,
     ) {
-        if self.loop_value == value {
+        if !self.set_loop_value_value(value) {
             return;
         }
-        self.loop_value = value;
         callbacks.loop_value_changed();
         callbacks.notify_property_changed(Self::LOOP_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_loop_value_value(&mut self, value: u32) -> bool {
+        if self.loop_value == value {
+            return false;
+        }
+        self.loop_value = value;
+        true
     }
     pub fn work_start(&self) -> u32 {
         self.work_start
@@ -116,23 +146,37 @@ impl LinearAnimationBase {
         value: u32,
         callbacks: &mut impl LinearAnimationBaseCallbacks,
     ) {
-        if self.work_start == value {
+        if !self.set_work_start_value(value) {
             return;
         }
-        self.work_start = value;
         callbacks.work_start_changed();
         callbacks.notify_property_changed(Self::WORK_START_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_work_start_value(&mut self, value: u32) -> bool {
+        if self.work_start == value {
+            return false;
+        }
+        self.work_start = value;
+        true
     }
     pub fn work_end(&self) -> u32 {
         self.work_end
     }
     pub fn set_work_end(&mut self, value: u32, callbacks: &mut impl LinearAnimationBaseCallbacks) {
-        if self.work_end == value {
+        if !self.set_work_end_value(value) {
             return;
         }
-        self.work_end = value;
         callbacks.work_end_changed();
         callbacks.notify_property_changed(Self::WORK_END_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_work_end_value(&mut self, value: u32) -> bool {
+        if self.work_end == value {
+            return false;
+        }
+        self.work_end = value;
+        true
     }
     pub fn enable_work_area(&self) -> bool {
         self.enable_work_area
@@ -142,23 +186,37 @@ impl LinearAnimationBase {
         value: bool,
         callbacks: &mut impl LinearAnimationBaseCallbacks,
     ) {
-        if self.enable_work_area == value {
+        if !self.set_enable_work_area_value(value) {
             return;
         }
-        self.enable_work_area = value;
         callbacks.enable_work_area_changed();
         callbacks.notify_property_changed(Self::ENABLE_WORK_AREA_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_enable_work_area_value(&mut self, value: bool) -> bool {
+        if self.enable_work_area == value {
+            return false;
+        }
+        self.enable_work_area = value;
+        true
     }
     pub fn quantize(&self) -> bool {
         self.quantize
     }
     pub fn set_quantize(&mut self, value: bool, callbacks: &mut impl LinearAnimationBaseCallbacks) {
-        if self.quantize == value {
+        if !self.set_quantize_value(value) {
             return;
         }
-        self.quantize = value;
         callbacks.quantize_changed();
         callbacks.notify_property_changed(Self::QUANTIZE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_quantize_value(&mut self, value: bool) -> bool {
+        if self.quantize == value {
+            return false;
+        }
+        self.quantize = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl LinearAnimationBaseCallbacks) -> LinearAnimation {
         let mut cloned = LinearAnimation::default();
@@ -217,5 +275,19 @@ impl LinearAnimationBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for LinearAnimationBase {
+    type Target = Animation;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LinearAnimationBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

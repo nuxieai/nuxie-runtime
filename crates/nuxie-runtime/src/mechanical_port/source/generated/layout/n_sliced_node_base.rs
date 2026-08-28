@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, layout::n_sliced_node::NSlicedNode, node::Node,
 };
 
-pub trait NSlicedNodeBaseCallbacks {
+pub trait NSlicedNodeBaseCallbacks:
+    crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn initial_width_changed(&mut self) {}
     fn initial_height_changed(&mut self) {}
@@ -47,12 +49,19 @@ impl NSlicedNodeBase {
         self.initial_width
     }
     pub fn set_initial_width(&mut self, value: f32, callbacks: &mut impl NSlicedNodeBaseCallbacks) {
-        if self.initial_width == value {
+        if !self.set_initial_width_value(value) {
             return;
         }
-        self.initial_width = value;
         callbacks.initial_width_changed();
         callbacks.notify_property_changed(Self::INITIAL_WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_initial_width_value(&mut self, value: f32) -> bool {
+        if self.initial_width == value {
+            return false;
+        }
+        self.initial_width = value;
+        true
     }
     pub fn initial_height(&self) -> f32 {
         self.initial_height
@@ -62,34 +71,55 @@ impl NSlicedNodeBase {
         value: f32,
         callbacks: &mut impl NSlicedNodeBaseCallbacks,
     ) {
-        if self.initial_height == value {
+        if !self.set_initial_height_value(value) {
             return;
         }
-        self.initial_height = value;
         callbacks.initial_height_changed();
         callbacks.notify_property_changed(Self::INITIAL_HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_initial_height_value(&mut self, value: f32) -> bool {
+        if self.initial_height == value {
+            return false;
+        }
+        self.initial_height = value;
+        true
     }
     pub fn width(&self) -> f32 {
         self.width
     }
     pub fn set_width(&mut self, value: f32, callbacks: &mut impl NSlicedNodeBaseCallbacks) {
-        if self.width == value {
+        if !self.set_width_value(value) {
             return;
         }
-        self.width = value;
         callbacks.width_changed();
         callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
+        if self.width == value {
+            return false;
+        }
+        self.width = value;
+        true
     }
     pub fn height(&self) -> f32 {
         self.height
     }
     pub fn set_height(&mut self, value: f32, callbacks: &mut impl NSlicedNodeBaseCallbacks) {
-        if self.height == value {
+        if !self.set_height_value(value) {
             return;
         }
-        self.height = value;
         callbacks.height_changed();
         callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
+        if self.height == value {
+            return false;
+        }
+        self.height = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl NSlicedNodeBaseCallbacks) -> NSlicedNode {
         let mut cloned = NSlicedNode::default();
@@ -128,5 +158,19 @@ impl NSlicedNodeBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NSlicedNodeBase {
+    type Target = Node;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NSlicedNodeBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

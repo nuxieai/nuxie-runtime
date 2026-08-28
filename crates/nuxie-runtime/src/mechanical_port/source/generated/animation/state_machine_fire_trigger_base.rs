@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait StateMachineFireTriggerBaseCallbacks {
+pub trait StateMachineFireTriggerBaseCallbacks: crate::mechanical_port::source::generated::animation::state_machine_fire_action_base::StateMachineFireActionBaseCallbacks {
     fn view_model_path_ids_changed(&mut self) {}
     fn decode_view_model_path_ids(&mut self, value: &[u8]);
     fn copy_view_model_path_ids(&mut self, object: &StateMachineFireTriggerBase);
@@ -62,5 +62,19 @@ impl StateMachineFireTriggerBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for StateMachineFireTriggerBase {
+    type Target = StateMachineFireAction;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StateMachineFireTriggerBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

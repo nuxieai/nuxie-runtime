@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait ArtboardListMapRuleBaseCallbacks {
+pub trait ArtboardListMapRuleBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn artboard_id_changed(&mut self) {}
     fn view_model_id_changed(&mut self) {}
@@ -44,12 +46,19 @@ impl ArtboardListMapRuleBase {
         value: u32,
         callbacks: &mut impl ArtboardListMapRuleBaseCallbacks,
     ) {
-        if self.artboard_id == value {
+        if !self.set_artboard_id_value(value) {
             return;
         }
-        self.artboard_id = value;
         callbacks.artboard_id_changed();
         callbacks.notify_property_changed(Self::ARTBOARD_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_artboard_id_value(&mut self, value: u32) -> bool {
+        if self.artboard_id == value {
+            return false;
+        }
+        self.artboard_id = value;
+        true
     }
     pub fn view_model_id(&self) -> u32 {
         self.view_model_id
@@ -59,12 +68,19 @@ impl ArtboardListMapRuleBase {
         value: u32,
         callbacks: &mut impl ArtboardListMapRuleBaseCallbacks,
     ) {
-        if self.view_model_id == value {
+        if !self.set_view_model_id_value(value) {
             return;
         }
-        self.view_model_id = value;
         callbacks.view_model_id_changed();
         callbacks.notify_property_changed(Self::VIEW_MODEL_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_view_model_id_value(&mut self, value: u32) -> bool {
+        if self.view_model_id == value {
+            return false;
+        }
+        self.view_model_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -96,5 +112,19 @@ impl ArtboardListMapRuleBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ArtboardListMapRuleBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ArtboardListMapRuleBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

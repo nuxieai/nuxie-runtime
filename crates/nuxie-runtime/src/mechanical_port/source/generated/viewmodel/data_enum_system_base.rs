@@ -36,12 +36,19 @@ impl DataEnumSystemBase {
         self.enum_type
     }
     pub fn set_enum_type(&mut self, value: u32, callbacks: &mut impl DataEnumSystemBaseCallbacks) {
-        if self.enum_type == value {
+        if !self.set_enum_type_value(value) {
             return;
         }
-        self.enum_type = value;
         callbacks.enum_type_changed();
         callbacks.notify_property_changed(Self::ENUM_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_enum_type_value(&mut self, value: u32) -> bool {
+        if self.enum_type == value {
+            return false;
+        }
+        self.enum_type = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl DataEnumSystemBaseCallbacks) -> DataEnumSystem {
         let mut cloned = DataEnumSystem::default();
@@ -50,7 +57,7 @@ impl DataEnumSystemBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl DataEnumSystemBaseCallbacks) {
         self.enum_type = object.enum_type;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -63,7 +70,21 @@ impl DataEnumSystemBase {
                 self.enum_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for DataEnumSystemBase {
+    type Target = DataEnum;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataEnumSystemBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

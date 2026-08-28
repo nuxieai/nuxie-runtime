@@ -31,3 +31,17 @@ impl ListenerViewModelChangeBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ListenerViewModelChangeBase {
+    type Target = ListenerAction;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListenerViewModelChangeBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

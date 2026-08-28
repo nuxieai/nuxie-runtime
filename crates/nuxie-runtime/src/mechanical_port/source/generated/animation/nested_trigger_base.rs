@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait NestedTriggerBaseCallbacks {
+pub trait NestedTriggerBaseCallbacks:
+    crate::mechanical_port::source::generated::animation::nested_input_base::NestedInputBaseCallbacks
+{
     fn fire(&mut self, value: &mut CallbackData<'_>);
 }
 
@@ -33,5 +35,19 @@ impl NestedTriggerBase {
         let mut cloned = NestedTrigger::default();
         cloned.base.copy(self, callbacks);
         cloned
+    }
+}
+
+impl std::ops::Deref for NestedTriggerBase {
+    type Target = NestedInput;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedTriggerBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

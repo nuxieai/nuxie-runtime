@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait ListFollowPathConstraintBaseCallbacks {
+pub trait ListFollowPathConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::follow_path_constraint_base::FollowPathConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn distance_end_changed(&mut self) {}
     fn distance_offset_changed(&mut self) {}
@@ -45,12 +45,19 @@ impl ListFollowPathConstraintBase {
         value: f32,
         callbacks: &mut impl ListFollowPathConstraintBaseCallbacks,
     ) {
-        if self.distance_end == value {
+        if !self.set_distance_end_value(value) {
             return;
         }
-        self.distance_end = value;
         callbacks.distance_end_changed();
         callbacks.notify_property_changed(Self::DISTANCE_END_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_distance_end_value(&mut self, value: f32) -> bool {
+        if self.distance_end == value {
+            return false;
+        }
+        self.distance_end = value;
+        true
     }
     pub fn distance_offset(&self) -> f32 {
         self.distance_offset
@@ -60,12 +67,19 @@ impl ListFollowPathConstraintBase {
         value: f32,
         callbacks: &mut impl ListFollowPathConstraintBaseCallbacks,
     ) {
-        if self.distance_offset == value {
+        if !self.set_distance_offset_value(value) {
             return;
         }
-        self.distance_offset = value;
         callbacks.distance_offset_changed();
         callbacks.notify_property_changed(Self::DISTANCE_OFFSET_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_distance_offset_value(&mut self, value: f32) -> bool {
+        if self.distance_offset == value {
+            return false;
+        }
+        self.distance_offset = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -101,5 +115,19 @@ impl ListFollowPathConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ListFollowPathConstraintBase {
+    type Target = FollowPathConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListFollowPathConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

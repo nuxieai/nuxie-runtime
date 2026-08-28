@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     data_bind::converters::data_converter_to_string::DataConverterToString,
 };
 
-pub trait DataConverterToStringBaseCallbacks {
+pub trait DataConverterToStringBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn flags_changed(&mut self) {}
     fn decimals_changed(&mut self) {}
@@ -48,12 +48,19 @@ impl DataConverterToStringBase {
         value: u32,
         callbacks: &mut impl DataConverterToStringBaseCallbacks,
     ) {
-        if self.flags == value {
+        if !self.set_flags_value(value) {
             return;
         }
-        self.flags = value;
         callbacks.flags_changed();
         callbacks.notify_property_changed(Self::FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_flags_value(&mut self, value: u32) -> bool {
+        if self.flags == value {
+            return false;
+        }
+        self.flags = value;
+        true
     }
     pub fn decimals(&self) -> u32 {
         self.decimals
@@ -63,12 +70,19 @@ impl DataConverterToStringBase {
         value: u32,
         callbacks: &mut impl DataConverterToStringBaseCallbacks,
     ) {
-        if self.decimals == value {
+        if !self.set_decimals_value(value) {
             return;
         }
-        self.decimals = value;
         callbacks.decimals_changed();
         callbacks.notify_property_changed(Self::DECIMALS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_decimals_value(&mut self, value: u32) -> bool {
+        if self.decimals == value {
+            return false;
+        }
+        self.decimals = value;
+        true
     }
     pub fn color_format(&self) -> &str {
         &self.color_format
@@ -78,12 +92,19 @@ impl DataConverterToStringBase {
         value: String,
         callbacks: &mut impl DataConverterToStringBaseCallbacks,
     ) {
-        if self.color_format == value {
+        if !self.set_color_format_value(value) {
             return;
         }
-        self.color_format = value;
         callbacks.color_format_changed();
         callbacks.notify_property_changed(Self::COLOR_FORMAT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_color_format_value(&mut self, value: String) -> bool {
+        if self.color_format == value {
+            return false;
+        }
+        self.color_format = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -120,5 +141,19 @@ impl DataConverterToStringBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterToStringBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterToStringBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

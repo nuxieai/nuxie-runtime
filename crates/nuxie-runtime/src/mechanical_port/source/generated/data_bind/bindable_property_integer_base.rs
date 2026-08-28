@@ -40,12 +40,19 @@ impl BindablePropertyIntegerBase {
         value: u32,
         callbacks: &mut impl BindablePropertyIntegerBaseCallbacks,
     ) {
-        if self.property_value == value {
+        if !self.set_property_value_value(value) {
             return;
         }
-        self.property_value = value;
         callbacks.property_value_changed();
         callbacks.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_property_value_value(&mut self, value: u32) -> bool {
+        if self.property_value == value {
+            return false;
+        }
+        self.property_value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -61,7 +68,7 @@ impl BindablePropertyIntegerBase {
         callbacks: &mut impl BindablePropertyIntegerBaseCallbacks,
     ) {
         self.property_value = object.property_value;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -74,7 +81,21 @@ impl BindablePropertyIntegerBase {
                 self.property_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for BindablePropertyIntegerBase {
+    type Target = BindableProperty;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BindablePropertyIntegerBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

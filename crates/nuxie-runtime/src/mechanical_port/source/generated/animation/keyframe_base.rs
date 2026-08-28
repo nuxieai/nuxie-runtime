@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
 
 pub trait KeyFrameBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
@@ -33,12 +33,19 @@ impl KeyFrameBase {
         self.frame
     }
     pub fn set_frame(&mut self, value: u32, callbacks: &mut impl KeyFrameBaseCallbacks) {
-        if self.frame == value {
+        if !self.set_frame_value(value) {
             return;
         }
-        self.frame = value;
         callbacks.frame_changed();
         callbacks.notify_property_changed(Self::FRAME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_frame_value(&mut self, value: u32) -> bool {
+        if self.frame == value {
+            return false;
+        }
+        self.frame = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl KeyFrameBaseCallbacks) {
         self.frame = object.frame;
@@ -56,5 +63,19 @@ impl KeyFrameBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for KeyFrameBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for KeyFrameBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -30,3 +30,17 @@ impl CubicValueInterpolatorBase {
         cloned
     }
 }
+
+impl std::ops::Deref for CubicValueInterpolatorBase {
+    type Target = CubicInterpolator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicValueInterpolatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

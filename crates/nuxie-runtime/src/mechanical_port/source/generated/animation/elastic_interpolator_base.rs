@@ -48,12 +48,19 @@ impl ElasticInterpolatorBase {
         value: u32,
         callbacks: &mut impl ElasticInterpolatorBaseCallbacks,
     ) {
-        if self.easing_value == value {
+        if !self.set_easing_value_value(value) {
             return;
         }
-        self.easing_value = value;
         callbacks.easing_value_changed();
         callbacks.notify_property_changed(Self::EASING_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_easing_value_value(&mut self, value: u32) -> bool {
+        if self.easing_value == value {
+            return false;
+        }
+        self.easing_value = value;
+        true
     }
     pub fn amplitude(&self) -> f32 {
         self.amplitude
@@ -63,12 +70,19 @@ impl ElasticInterpolatorBase {
         value: f32,
         callbacks: &mut impl ElasticInterpolatorBaseCallbacks,
     ) {
-        if self.amplitude == value {
+        if !self.set_amplitude_value(value) {
             return;
         }
-        self.amplitude = value;
         callbacks.amplitude_changed();
         callbacks.notify_property_changed(Self::AMPLITUDE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_amplitude_value(&mut self, value: f32) -> bool {
+        if self.amplitude == value {
+            return false;
+        }
+        self.amplitude = value;
+        true
     }
     pub fn period(&self) -> f32 {
         self.period
@@ -78,12 +92,19 @@ impl ElasticInterpolatorBase {
         value: f32,
         callbacks: &mut impl ElasticInterpolatorBaseCallbacks,
     ) {
-        if self.period == value {
+        if !self.set_period_value(value) {
             return;
         }
-        self.period = value;
         callbacks.period_changed();
         callbacks.notify_property_changed(Self::PERIOD_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_period_value(&mut self, value: f32) -> bool {
+        if self.period == value {
+            return false;
+        }
+        self.period = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -97,7 +118,7 @@ impl ElasticInterpolatorBase {
         self.easing_value = object.easing_value;
         self.amplitude = object.amplitude;
         self.period = object.period;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -118,7 +139,21 @@ impl ElasticInterpolatorBase {
                 self.period = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for ElasticInterpolatorBase {
+    type Target = KeyFrameInterpolator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ElasticInterpolatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

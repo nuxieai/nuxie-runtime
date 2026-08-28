@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait StateMachineListenerSingleBaseCallbacks {
+pub trait StateMachineListenerSingleBaseCallbacks: crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn listener_type_value_changed(&mut self) {}
     fn event_id_changed(&mut self) {}
@@ -49,12 +49,19 @@ impl StateMachineListenerSingleBase {
         value: u32,
         callbacks: &mut impl StateMachineListenerSingleBaseCallbacks,
     ) {
-        if self.listener_type_value == value {
+        if !self.set_listener_type_value_value(value) {
             return;
         }
-        self.listener_type_value = value;
         callbacks.listener_type_value_changed();
         callbacks.notify_property_changed(Self::LISTENER_TYPE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_listener_type_value_value(&mut self, value: u32) -> bool {
+        if self.listener_type_value == value {
+            return false;
+        }
+        self.listener_type_value = value;
+        true
     }
     pub fn event_id(&self) -> u32 {
         self.event_id
@@ -64,12 +71,19 @@ impl StateMachineListenerSingleBase {
         value: u32,
         callbacks: &mut impl StateMachineListenerSingleBaseCallbacks,
     ) {
-        if self.event_id == value {
+        if !self.set_event_id_value(value) {
             return;
         }
-        self.event_id = value;
         callbacks.event_id_changed();
         callbacks.notify_property_changed(Self::EVENT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_event_id_value(&mut self, value: u32) -> bool {
+        if self.event_id == value {
+            return false;
+        }
+        self.event_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -111,5 +125,19 @@ impl StateMachineListenerSingleBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for StateMachineListenerSingleBase {
+    type Target = StateMachineListener;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StateMachineListenerSingleBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

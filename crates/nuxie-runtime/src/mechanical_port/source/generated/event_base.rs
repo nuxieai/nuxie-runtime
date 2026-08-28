@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     custom_property_group::CustomPropertyGroup, event::Event,
 };
 
-pub trait EventBaseCallbacks {
+pub trait EventBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn trigger(&mut self, value: &mut CallbackData<'_>);
 }
 
@@ -33,5 +35,19 @@ impl EventBase {
         let mut cloned = Event::default();
         cloned.base.copy(self);
         cloned
+    }
+}
+
+impl std::ops::Deref for EventBase {
+    type Target = CustomPropertyGroup;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for EventBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -30,3 +30,17 @@ impl NestedStateMachineBase {
         cloned
     }
 }
+
+impl std::ops::Deref for NestedStateMachineBase {
+    type Target = NestedAnimation;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedStateMachineBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

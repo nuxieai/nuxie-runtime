@@ -31,3 +31,17 @@ impl ViewModelPropertyArtboardBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ViewModelPropertyArtboardBase {
+    type Target = ViewModelProperty;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelPropertyArtboardBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

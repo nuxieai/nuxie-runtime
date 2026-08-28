@@ -7,7 +7,9 @@ use crate::mechanical_port::source::{
     },
 };
 
-pub trait TendonBaseCallbacks {
+pub trait TendonBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn bone_id_changed(&mut self) {}
     fn xx_changed(&mut self) {}
     fn yx_changed(&mut self) {}
@@ -82,60 +84,109 @@ impl TendonBase {
     }
 
     pub fn set_bone_id<C: TendonBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.bone_id == value {
+        if !self.set_bone_id_value(value) {
             return;
         }
-        self.bone_id = value;
         c.bone_id_changed();
         c.notify_property_changed(Self::BONE_ID_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_bone_id_value(&mut self, value: u32) -> bool {
+        if self.bone_id == value {
+            return false;
+        }
+        self.bone_id = value;
+        true
+    }
     pub fn set_xx<C: TendonBaseCallbacks>(&mut self, value: f32, c: &mut C) {
-        if self.xx == value {
+        if !self.set_xx_value(value) {
             return;
         }
-        self.xx = value;
         c.xx_changed();
         c.notify_property_changed(Self::XX_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_xx_value(&mut self, value: f32) -> bool {
+        if self.xx == value {
+            return false;
+        }
+        self.xx = value;
+        true
+    }
     pub fn set_yx<C: TendonBaseCallbacks>(&mut self, value: f32, c: &mut C) {
-        if self.yx == value {
+        if !self.set_yx_value(value) {
             return;
         }
-        self.yx = value;
         c.yx_changed();
         c.notify_property_changed(Self::YX_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_yx_value(&mut self, value: f32) -> bool {
+        if self.yx == value {
+            return false;
+        }
+        self.yx = value;
+        true
+    }
     pub fn set_xy<C: TendonBaseCallbacks>(&mut self, value: f32, c: &mut C) {
-        if self.xy == value {
+        if !self.set_xy_value(value) {
             return;
         }
-        self.xy = value;
         c.xy_changed();
         c.notify_property_changed(Self::XY_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_xy_value(&mut self, value: f32) -> bool {
+        if self.xy == value {
+            return false;
+        }
+        self.xy = value;
+        true
+    }
     pub fn set_yy<C: TendonBaseCallbacks>(&mut self, value: f32, c: &mut C) {
-        if self.yy == value {
+        if !self.set_yy_value(value) {
             return;
         }
-        self.yy = value;
         c.yy_changed();
         c.notify_property_changed(Self::YY_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_yy_value(&mut self, value: f32) -> bool {
+        if self.yy == value {
+            return false;
+        }
+        self.yy = value;
+        true
+    }
     pub fn set_tx<C: TendonBaseCallbacks>(&mut self, value: f32, c: &mut C) {
-        if self.tx == value {
+        if !self.set_tx_value(value) {
             return;
         }
-        self.tx = value;
         c.tx_changed();
         c.notify_property_changed(Self::TX_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_tx_value(&mut self, value: f32) -> bool {
+        if self.tx == value {
+            return false;
+        }
+        self.tx = value;
+        true
+    }
     pub fn set_ty<C: TendonBaseCallbacks>(&mut self, value: f32, c: &mut C) {
-        if self.ty == value {
+        if !self.set_ty_value(value) {
             return;
         }
-        self.ty = value;
         c.ty_changed();
         c.notify_property_changed(Self::TY_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_ty_value(&mut self, value: f32) -> bool {
+        if self.ty == value {
+            return false;
+        }
+        self.ty = value;
+        true
     }
 
     pub fn clone_into<C: TendonBaseCallbacks>(&self, c: &mut C) -> Tendon {
@@ -190,5 +241,19 @@ impl TendonBase {
             }
             _ => self.base.deserialize(key, reader, c),
         }
+    }
+}
+
+impl std::ops::Deref for TendonBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TendonBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

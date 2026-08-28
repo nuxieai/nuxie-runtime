@@ -30,3 +30,17 @@ impl StateMachineLayerBase {
         cloned
     }
 }
+
+impl std::ops::Deref for StateMachineLayerBase {
+    type Target = StateMachineComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StateMachineLayerBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

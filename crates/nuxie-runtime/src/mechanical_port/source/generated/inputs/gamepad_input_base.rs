@@ -57,36 +57,64 @@ impl GamepadInputBase {
     }
 
     pub fn set_kind<C: GamepadInputBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.kind == value {
+        if !self.set_kind_value(value) {
             return;
         }
-        self.kind = value;
         c.kind_changed();
         c.notify_property_changed(Self::KIND_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_kind_value(&mut self, value: u32) -> bool {
+        if self.kind == value {
+            return false;
+        }
+        self.kind = value;
+        true
+    }
     pub fn set_mapping<C: GamepadInputBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.mapping == value {
+        if !self.set_mapping_value(value) {
             return;
         }
-        self.mapping = value;
         c.mapping_changed();
         c.notify_property_changed(Self::MAPPING_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_mapping_value(&mut self, value: u32) -> bool {
+        if self.mapping == value {
+            return false;
+        }
+        self.mapping = value;
+        true
+    }
     pub fn set_input_index<C: GamepadInputBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.input_index == value {
+        if !self.set_input_index_value(value) {
             return;
         }
-        self.input_index = value;
         c.input_index_changed();
         c.notify_property_changed(Self::INPUT_INDEX_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_input_index_value(&mut self, value: u32) -> bool {
+        if self.input_index == value {
+            return false;
+        }
+        self.input_index = value;
+        true
+    }
     pub fn set_button_phase<C: GamepadInputBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.button_phase == value {
+        if !self.set_button_phase_value(value) {
             return;
         }
-        self.button_phase = value;
         c.button_phase_changed();
         c.notify_property_changed(Self::BUTTON_PHASE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_button_phase_value(&mut self, value: u32) -> bool {
+        if self.button_phase == value {
+            return false;
+        }
+        self.button_phase = value;
+        true
     }
 
     pub fn clone_into<C: GamepadInputBaseCallbacks>(&self, c: &mut C) -> GamepadInput {
@@ -126,5 +154,19 @@ impl GamepadInputBase {
             }
             _ => self.base.base.deserialize(key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for GamepadInputBase {
+    type Target = UserInput;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for GamepadInputBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

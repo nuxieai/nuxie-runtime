@@ -31,3 +31,17 @@ impl BlendState1DViewModelBase {
         cloned
     }
 }
+
+impl std::ops::Deref for BlendState1DViewModelBase {
+    type Target = BlendState1D;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BlendState1DViewModelBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

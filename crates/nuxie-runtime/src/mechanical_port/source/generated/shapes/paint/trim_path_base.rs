@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, core::binary_reader::BinaryReader, shapes::paint::trim_path::TrimPath,
 };
 
-pub trait TrimPathBaseCallbacks {
+pub trait TrimPathBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn start_changed(&mut self) {}
     fn end_changed(&mut self) {}
@@ -47,45 +49,73 @@ impl TrimPathBase {
         self.start
     }
     pub fn set_start(&mut self, value: f32, callbacks: &mut impl TrimPathBaseCallbacks) {
-        if self.start == value {
+        if !self.set_start_value(value) {
             return;
         }
-        self.start = value;
         callbacks.start_changed();
         callbacks.notify_property_changed(Self::START_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_start_value(&mut self, value: f32) -> bool {
+        if self.start == value {
+            return false;
+        }
+        self.start = value;
+        true
     }
     pub fn end(&self) -> f32 {
         self.end
     }
     pub fn set_end(&mut self, value: f32, callbacks: &mut impl TrimPathBaseCallbacks) {
-        if self.end == value {
+        if !self.set_end_value(value) {
             return;
         }
-        self.end = value;
         callbacks.end_changed();
         callbacks.notify_property_changed(Self::END_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_end_value(&mut self, value: f32) -> bool {
+        if self.end == value {
+            return false;
+        }
+        self.end = value;
+        true
     }
     pub fn offset(&self) -> f32 {
         self.offset
     }
     pub fn set_offset(&mut self, value: f32, callbacks: &mut impl TrimPathBaseCallbacks) {
-        if self.offset == value {
+        if !self.set_offset_value(value) {
             return;
         }
-        self.offset = value;
         callbacks.offset_changed();
         callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_offset_value(&mut self, value: f32) -> bool {
+        if self.offset == value {
+            return false;
+        }
+        self.offset = value;
+        true
     }
     pub fn mode_value(&self) -> u32 {
         self.mode_value
     }
     pub fn set_mode_value(&mut self, value: u32, callbacks: &mut impl TrimPathBaseCallbacks) {
-        if self.mode_value == value {
+        if !self.set_mode_value_value(value) {
             return;
         }
-        self.mode_value = value;
         callbacks.mode_value_changed();
         callbacks.notify_property_changed(Self::MODE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_mode_value_value(&mut self, value: u32) -> bool {
+        if self.mode_value == value {
+            return false;
+        }
+        self.mode_value = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl TrimPathBaseCallbacks) -> TrimPath {
         let mut cloned = TrimPath::default();
@@ -124,5 +154,19 @@ impl TrimPathBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TrimPathBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TrimPathBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

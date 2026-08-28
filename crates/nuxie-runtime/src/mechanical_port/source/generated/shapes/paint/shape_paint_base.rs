@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     container_component::ContainerComponent, core::binary_reader::BinaryReader,
 };
 
-pub trait ShapePaintBaseCallbacks {
+pub trait ShapePaintBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn is_visible_changed(&mut self) {}
     fn blend_mode_value_changed(&mut self) {}
@@ -39,12 +41,19 @@ impl ShapePaintBase {
         self.is_visible
     }
     pub fn set_is_visible(&mut self, value: bool, callbacks: &mut impl ShapePaintBaseCallbacks) {
-        if self.is_visible == value {
+        if !self.set_is_visible_value(value) {
             return;
         }
-        self.is_visible = value;
         callbacks.is_visible_changed();
         callbacks.notify_property_changed(Self::IS_VISIBLE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_is_visible_value(&mut self, value: bool) -> bool {
+        if self.is_visible == value {
+            return false;
+        }
+        self.is_visible = value;
+        true
     }
     pub fn blend_mode_value(&self) -> u32 {
         self.blend_mode_value
@@ -54,12 +63,19 @@ impl ShapePaintBase {
         value: u32,
         callbacks: &mut impl ShapePaintBaseCallbacks,
     ) {
-        if self.blend_mode_value == value {
+        if !self.set_blend_mode_value_value(value) {
             return;
         }
-        self.blend_mode_value = value;
         callbacks.blend_mode_value_changed();
         callbacks.notify_property_changed(Self::BLEND_MODE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_blend_mode_value_value(&mut self, value: u32) -> bool {
+        if self.blend_mode_value == value {
+            return false;
+        }
+        self.blend_mode_value = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ShapePaintBaseCallbacks) {
         self.is_visible = object.is_visible;
@@ -83,5 +99,19 @@ impl ShapePaintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ShapePaintBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ShapePaintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

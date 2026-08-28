@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, event::Event, open_url_event::OpenUrlEvent,
 };
 
-pub trait OpenUrlEventBaseCallbacks {
+pub trait OpenUrlEventBaseCallbacks:
+    crate::mechanical_port::source::generated::event_base::EventBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn url_changed(&mut self) {}
     fn target_value_changed(&mut self) {}
@@ -39,23 +41,37 @@ impl OpenUrlEventBase {
         &self.url
     }
     pub fn set_url(&mut self, value: String, callbacks: &mut impl OpenUrlEventBaseCallbacks) {
-        if self.url == value {
+        if !self.set_url_value(value) {
             return;
         }
-        self.url = value;
         callbacks.url_changed();
         callbacks.notify_property_changed(Self::URL_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_url_value(&mut self, value: String) -> bool {
+        if self.url == value {
+            return false;
+        }
+        self.url = value;
+        true
     }
     pub fn target_value(&self) -> u32 {
         self.target_value
     }
     pub fn set_target_value(&mut self, value: u32, callbacks: &mut impl OpenUrlEventBaseCallbacks) {
-        if self.target_value == value {
+        if !self.set_target_value_value(value) {
             return;
         }
-        self.target_value = value;
         callbacks.target_value_changed();
         callbacks.notify_property_changed(Self::TARGET_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_target_value_value(&mut self, value: u32) -> bool {
+        if self.target_value == value {
+            return false;
+        }
+        self.target_value = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl OpenUrlEventBaseCallbacks) -> OpenUrlEvent {
         let mut cloned = OpenUrlEvent::default();
@@ -84,5 +100,19 @@ impl OpenUrlEventBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for OpenUrlEventBase {
+    type Target = Event;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for OpenUrlEventBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

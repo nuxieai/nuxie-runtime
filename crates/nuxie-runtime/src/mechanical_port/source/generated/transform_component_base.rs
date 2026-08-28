@@ -2,7 +2,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, world_transform_component::WorldTransformComponent,
 };
 
-pub trait TransformComponentBaseCallbacks {
+pub trait TransformComponentBaseCallbacks: crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn rotation_changed(&mut self) {}
     fn scale_x_changed(&mut self) {}
@@ -47,12 +47,19 @@ impl TransformComponentBase {
         value: f32,
         callbacks: &mut impl TransformComponentBaseCallbacks,
     ) {
-        if self.rotation == value {
+        if !self.set_rotation_value(value) {
             return;
         }
-        self.rotation = value;
         callbacks.rotation_changed();
         callbacks.notify_property_changed(Self::ROTATION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_rotation_value(&mut self, value: f32) -> bool {
+        if self.rotation == value {
+            return false;
+        }
+        self.rotation = value;
+        true
     }
     pub fn scale_x(&self) -> f32 {
         self.scale_x
@@ -62,12 +69,19 @@ impl TransformComponentBase {
         value: f32,
         callbacks: &mut impl TransformComponentBaseCallbacks,
     ) {
-        if self.scale_x == value {
+        if !self.set_scale_x_value(value) {
             return;
         }
-        self.scale_x = value;
         callbacks.scale_x_changed();
         callbacks.notify_property_changed(Self::SCALE_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_scale_x_value(&mut self, value: f32) -> bool {
+        if self.scale_x == value {
+            return false;
+        }
+        self.scale_x = value;
+        true
     }
     pub fn scale_y(&self) -> f32 {
         self.scale_y
@@ -77,12 +91,19 @@ impl TransformComponentBase {
         value: f32,
         callbacks: &mut impl TransformComponentBaseCallbacks,
     ) {
-        if self.scale_y == value {
+        if !self.set_scale_y_value(value) {
             return;
         }
-        self.scale_y = value;
         callbacks.scale_y_changed();
         callbacks.notify_property_changed(Self::SCALE_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_scale_y_value(&mut self, value: f32) -> bool {
+        if self.scale_y == value {
+            return false;
+        }
+        self.scale_y = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TransformComponentBaseCallbacks) {
         self.rotation = object.rotation;
@@ -111,5 +132,19 @@ impl TransformComponentBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TransformComponentBase {
+    type Target = WorldTransformComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransformComponentBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

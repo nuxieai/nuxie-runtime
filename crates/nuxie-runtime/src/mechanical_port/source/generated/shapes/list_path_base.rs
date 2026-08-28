@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     shapes::points_common_path::PointsCommonPath,
 };
 
-pub trait ListPathBaseCallbacks {
+pub trait ListPathBaseCallbacks: crate::mechanical_port::source::generated::shapes::points_common_path_base::PointsCommonPathBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn list_source_changed(&mut self) {}
 }
@@ -36,12 +36,19 @@ impl ListPathBase {
         self.list_source
     }
     pub fn set_list_source(&mut self, value: u32, callbacks: &mut impl ListPathBaseCallbacks) {
-        if self.list_source == value {
+        if !self.set_list_source_value(value) {
             return;
         }
-        self.list_source = value;
         callbacks.list_source_changed();
         callbacks.notify_property_changed(Self::LIST_SOURCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_list_source_value(&mut self, value: u32) -> bool {
+        if self.list_source == value {
+            return false;
+        }
+        self.list_source = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl ListPathBaseCallbacks) -> ListPath {
         let mut cloned = ListPath::default();
@@ -65,5 +72,19 @@ impl ListPathBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ListPathBase {
+    type Target = PointsCommonPath;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListPathBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

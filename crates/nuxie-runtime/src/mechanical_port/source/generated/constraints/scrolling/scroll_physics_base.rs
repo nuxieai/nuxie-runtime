@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{component::Component, core::binary_reader::BinaryReader};
 
-pub trait ScrollPhysicsBaseCallbacks {
+pub trait ScrollPhysicsBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn constraint_id_changed(&mut self) {}
 }
@@ -37,12 +39,19 @@ impl ScrollPhysicsBase {
         value: u32,
         callbacks: &mut impl ScrollPhysicsBaseCallbacks,
     ) {
-        if self.constraint_id == value {
+        if !self.set_constraint_id_value(value) {
             return;
         }
-        self.constraint_id = value;
         callbacks.constraint_id_changed();
         callbacks.notify_property_changed(Self::CONSTRAINT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_constraint_id_value(&mut self, value: u32) -> bool {
+        if self.constraint_id == value {
+            return false;
+        }
+        self.constraint_id = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ScrollPhysicsBaseCallbacks) {
         self.constraint_id = object.constraint_id;
@@ -61,5 +70,19 @@ impl ScrollPhysicsBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ScrollPhysicsBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScrollPhysicsBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

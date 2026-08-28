@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, drawable::Drawable, shapes::shape::Shape,
 };
 
-pub trait ShapeBaseCallbacks {
+pub trait ShapeBaseCallbacks:
+    crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
+{
     fn length_changed(&mut self) {}
     fn set_length(&mut self, value: f32);
     fn length(&mut self) -> f32;
@@ -34,5 +36,19 @@ impl ShapeBase {
         let mut cloned = Shape::default();
         cloned.base.copy(self, callbacks);
         cloned
+    }
+}
+
+impl std::ops::Deref for ShapeBase {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ShapeBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

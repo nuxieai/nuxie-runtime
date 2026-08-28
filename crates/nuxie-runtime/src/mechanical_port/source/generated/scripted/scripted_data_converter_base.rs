@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     scripted::scripted_data_converter::ScriptedDataConverter,
 };
 
-pub trait ScriptedDataConverterBaseCallbacks {
+pub trait ScriptedDataConverterBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn script_asset_id_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
 }
@@ -41,12 +41,19 @@ impl ScriptedDataConverterBase {
         value: u32,
         c: &mut C,
     ) {
-        if self.script_asset_id == value {
+        if !self.set_script_asset_id_value(value) {
             return;
         }
-        self.script_asset_id = value;
         c.script_asset_id_changed();
         c.notify_property_changed(Self::SCRIPT_ASSET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_script_asset_id_value(&mut self, value: u32) -> bool {
+        if self.script_asset_id == value {
+            return false;
+        }
+        self.script_asset_id = value;
+        true
     }
 
     pub fn clone_into<C: ScriptedDataConverterBaseCallbacks>(
@@ -74,5 +81,19 @@ impl ScriptedDataConverterBase {
             }
             _ => self.base.base.deserialize(key, reader, c),
         }
+    }
+}
+
+impl std::ops::Deref for ScriptedDataConverterBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptedDataConverterBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

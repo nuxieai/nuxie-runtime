@@ -41,12 +41,19 @@ impl TransitionPropertyArtboardComparatorBase {
         value: u32,
         callbacks: &mut impl TransitionPropertyArtboardComparatorBaseCallbacks,
     ) {
-        if self.property_type == value {
+        if !self.set_property_type_value(value) {
             return;
         }
-        self.property_type = value;
         callbacks.property_type_changed();
         callbacks.notify_property_changed(Self::PROPERTY_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_property_type_value(&mut self, value: u32) -> bool {
+        if self.property_type == value {
+            return false;
+        }
+        self.property_type = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -62,7 +69,7 @@ impl TransitionPropertyArtboardComparatorBase {
         callbacks: &mut impl TransitionPropertyArtboardComparatorBaseCallbacks,
     ) {
         self.property_type = object.property_type;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -75,7 +82,21 @@ impl TransitionPropertyArtboardComparatorBase {
                 self.property_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for TransitionPropertyArtboardComparatorBase {
+    type Target = TransitionPropertyComparator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionPropertyArtboardComparatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

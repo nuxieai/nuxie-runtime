@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{core::binary_reader::BinaryReader, node::Node, solo::Solo};
 
-pub trait SoloBaseCallbacks {
+pub trait SoloBaseCallbacks:
+    crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn active_component_id_changed(&mut self) {}
 }
@@ -33,12 +35,19 @@ impl SoloBase {
         self.active_component_id
     }
     pub fn set_active_component_id(&mut self, value: u32, callbacks: &mut impl SoloBaseCallbacks) {
-        if self.active_component_id == value {
+        if !self.set_active_component_id_value(value) {
             return;
         }
-        self.active_component_id = value;
         callbacks.active_component_id_changed();
         callbacks.notify_property_changed(Self::ACTIVE_COMPONENT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_active_component_id_value(&mut self, value: u32) -> bool {
+        if self.active_component_id == value {
+            return false;
+        }
+        self.active_component_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl SoloBaseCallbacks) -> Solo {
         let mut cloned = Solo::default();
@@ -62,5 +71,19 @@ impl SoloBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for SoloBase {
+    type Target = Node;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for SoloBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

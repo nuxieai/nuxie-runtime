@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     constraints::constraint::Constraint, core::binary_reader::BinaryReader,
 };
 
-pub trait TargetedConstraintBaseCallbacks {
+pub trait TargetedConstraintBaseCallbacks:
+    crate::mechanical_port::source::generated::constraints::constraint_base::ConstraintBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn target_id_changed(&mut self) {}
 }
@@ -39,12 +41,19 @@ impl TargetedConstraintBase {
         value: u32,
         callbacks: &mut impl TargetedConstraintBaseCallbacks,
     ) {
-        if self.target_id == value {
+        if !self.set_target_id_value(value) {
             return;
         }
-        self.target_id = value;
         callbacks.target_id_changed();
         callbacks.notify_property_changed(Self::TARGET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_target_id_value(&mut self, value: u32) -> bool {
+        if self.target_id == value {
+            return false;
+        }
+        self.target_id = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TargetedConstraintBaseCallbacks) {
         self.target_id = object.target_id;
@@ -63,5 +72,19 @@ impl TargetedConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TargetedConstraintBase {
+    type Target = Constraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TargetedConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

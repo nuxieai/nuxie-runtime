@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem;
 
-use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
 
 pub trait ViewModelInstanceListItemBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
@@ -43,12 +43,19 @@ impl ViewModelInstanceListItemBase {
         value: u32,
         callbacks: &mut impl ViewModelInstanceListItemBaseCallbacks,
     ) {
-        if self.view_model_id == value {
+        if !self.set_view_model_id_value(value) {
             return;
         }
-        self.view_model_id = value;
         callbacks.view_model_id_changed();
         callbacks.notify_property_changed(Self::VIEW_MODEL_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_view_model_id_value(&mut self, value: u32) -> bool {
+        if self.view_model_id == value {
+            return false;
+        }
+        self.view_model_id = value;
+        true
     }
     pub fn view_model_instance_id(&self) -> u32 {
         self.view_model_instance_id
@@ -58,12 +65,19 @@ impl ViewModelInstanceListItemBase {
         value: u32,
         callbacks: &mut impl ViewModelInstanceListItemBaseCallbacks,
     ) {
-        if self.view_model_instance_id == value {
+        if !self.set_view_model_instance_id_value(value) {
             return;
         }
-        self.view_model_instance_id = value;
         callbacks.view_model_instance_id_changed();
         callbacks.notify_property_changed(Self::VIEW_MODEL_INSTANCE_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_view_model_instance_id_value(&mut self, value: u32) -> bool {
+        if self.view_model_instance_id == value {
+            return false;
+        }
+        self.view_model_instance_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -98,5 +112,19 @@ impl ViewModelInstanceListItemBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for ViewModelInstanceListItemBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelInstanceListItemBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

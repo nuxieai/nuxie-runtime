@@ -31,3 +31,17 @@ impl FormulaTokenParenthesisCloseBase {
         cloned
     }
 }
+
+impl std::ops::Deref for FormulaTokenParenthesisCloseBase {
+    type Target = FormulaTokenParenthesis;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FormulaTokenParenthesisCloseBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

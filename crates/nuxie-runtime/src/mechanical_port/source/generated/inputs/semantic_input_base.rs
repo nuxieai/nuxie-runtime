@@ -42,12 +42,19 @@ impl SemanticInputBase {
         value: u32,
         callbacks: &mut C,
     ) {
-        if self.action_type == value {
+        if !self.set_action_type_value(value) {
             return;
         }
-        self.action_type = value;
         callbacks.action_type_changed();
         callbacks.notify_property_changed(Self::ACTION_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_action_type_value(&mut self, value: u32) -> bool {
+        if self.action_type == value {
+            return false;
+        }
+        self.action_type = value;
+        true
     }
 
     pub fn clone_into<C: SemanticInputBaseCallbacks>(&self, callbacks: &mut C) -> SemanticInput {
@@ -74,5 +81,19 @@ impl SemanticInputBase {
             }
             _ => self.base.base.deserialize(key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for SemanticInputBase {
+    type Target = UserInput;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for SemanticInputBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

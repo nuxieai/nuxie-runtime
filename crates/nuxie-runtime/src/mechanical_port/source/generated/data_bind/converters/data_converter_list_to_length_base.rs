@@ -30,3 +30,17 @@ impl DataConverterListToLengthBase {
         cloned
     }
 }
+
+impl std::ops::Deref for DataConverterListToLengthBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterListToLengthBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

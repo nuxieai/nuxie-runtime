@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::Core, core::binary_reader::BinaryReader, data_bind::data_bind_path::DataBindPath,
+    core::binary_reader::BinaryReader, core::Core, data_bind::data_bind_path::DataBindPath,
 };
 
 pub trait DataBindPathBaseCallbacks {
@@ -43,12 +43,19 @@ impl DataBindPathBase {
         self.is_relative
     }
     pub fn set_is_relative(&mut self, value: bool, callbacks: &mut impl DataBindPathBaseCallbacks) {
-        if self.is_relative == value {
+        if !self.set_is_relative_value(value) {
             return;
         }
-        self.is_relative = value;
         callbacks.is_relative_changed();
         callbacks.notify_property_changed(Self::IS_RELATIVE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_is_relative_value(&mut self, value: bool) -> bool {
+        if self.is_relative == value {
+            return false;
+        }
+        self.is_relative = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl DataBindPathBaseCallbacks) -> DataBindPath {
         let mut cloned = DataBindPath::default();
@@ -77,5 +84,19 @@ impl DataBindPathBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for DataBindPathBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataBindPathBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

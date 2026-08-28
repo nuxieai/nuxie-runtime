@@ -31,3 +31,17 @@ impl ViewModelPropertyAssetFontBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ViewModelPropertyAssetFontBase {
+    type Target = ViewModelPropertyAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelPropertyAssetFontBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

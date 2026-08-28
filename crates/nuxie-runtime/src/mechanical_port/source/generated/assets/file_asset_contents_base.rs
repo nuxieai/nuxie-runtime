@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     assets::file_asset_contents::FileAssetContents,
-    core::{binary_reader::BinaryReader, field_types::core_bytes_type::CoreBytesType},
+    core::{binary_reader::BinaryReader, field_types::core_bytes_type::CoreBytesType, Core},
 };
 
 pub trait FileAssetContentsBaseCallbacks {
@@ -13,7 +13,9 @@ pub trait FileAssetContentsBaseCallbacks {
 }
 
 #[derive(Default)]
-pub struct FileAssetContentsBase;
+pub struct FileAssetContentsBase {
+    pub base: Core,
+}
 
 impl FileAssetContentsBase {
     pub const TYPE_KEY: u16 = 106;
@@ -59,5 +61,19 @@ impl FileAssetContentsBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for FileAssetContentsBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FileAssetContentsBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

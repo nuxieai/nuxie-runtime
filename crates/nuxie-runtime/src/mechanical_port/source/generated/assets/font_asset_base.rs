@@ -38,3 +38,17 @@ impl FontAssetBase {
         cloned
     }
 }
+
+impl std::ops::Deref for FontAssetBase {
+    type Target = FileAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FontAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

@@ -5,7 +5,7 @@ use crate::mechanical_port::source::{
     data_bind::converters::data_converter_operation::DataConverterOperation,
 };
 
-pub trait DataConverterOperationViewModelBaseCallbacks {
+pub trait DataConverterOperationViewModelBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_operation_base::DataConverterOperationBaseCallbacks {
     fn source_path_ids_changed(&mut self) {}
     fn decode_source_path_ids(&mut self, value: &[u8]);
     fn copy_source_path_ids(&mut self, object: &DataConverterOperationViewModelBase);
@@ -63,5 +63,19 @@ impl DataConverterOperationViewModelBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterOperationViewModelBase {
+    type Target = DataConverterOperation;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterOperationViewModelBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

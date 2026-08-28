@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     container_component::ContainerComponent, core::binary_reader::BinaryReader,
 };
 
-pub trait VertexBaseCallbacks {
+pub trait VertexBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn x_changed(&mut self) {}
     fn y_changed(&mut self) {}
@@ -39,23 +41,37 @@ impl VertexBase {
         self.x
     }
     pub fn set_x(&mut self, value: f32, callbacks: &mut impl VertexBaseCallbacks) {
-        if self.x == value {
+        if !self.set_x_value(value) {
             return;
         }
-        self.x = value;
         callbacks.x_changed();
         callbacks.notify_property_changed(Self::X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
+        if self.x == value {
+            return false;
+        }
+        self.x = value;
+        true
     }
     pub fn y(&self) -> f32 {
         self.y
     }
     pub fn set_y(&mut self, value: f32, callbacks: &mut impl VertexBaseCallbacks) {
-        if self.y == value {
+        if !self.set_y_value(value) {
             return;
         }
-        self.y = value;
         callbacks.y_changed();
         callbacks.notify_property_changed(Self::Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_y_value(&mut self, value: f32) -> bool {
+        if self.y == value {
+            return false;
+        }
+        self.y = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl VertexBaseCallbacks) {
         self.x = object.x;
@@ -79,5 +95,19 @@ impl VertexBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for VertexBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for VertexBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     constraints::scrolling::scroll_physics::ScrollPhysics, core::binary_reader::BinaryReader,
 };
 
-pub trait ElasticScrollPhysicsBaseCallbacks {
+pub trait ElasticScrollPhysicsBaseCallbacks: crate::mechanical_port::source::generated::constraints::scrolling::scroll_physics_base::ScrollPhysicsBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn friction_changed(&mut self) {}
     fn speed_multiplier_changed(&mut self) {}
@@ -48,12 +48,19 @@ impl ElasticScrollPhysicsBase {
         value: f32,
         callbacks: &mut impl ElasticScrollPhysicsBaseCallbacks,
     ) {
-        if self.friction == value {
+        if !self.set_friction_value(value) {
             return;
         }
-        self.friction = value;
         callbacks.friction_changed();
         callbacks.notify_property_changed(Self::FRICTION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_friction_value(&mut self, value: f32) -> bool {
+        if self.friction == value {
+            return false;
+        }
+        self.friction = value;
+        true
     }
     pub fn speed_multiplier(&self) -> f32 {
         self.speed_multiplier
@@ -63,12 +70,19 @@ impl ElasticScrollPhysicsBase {
         value: f32,
         callbacks: &mut impl ElasticScrollPhysicsBaseCallbacks,
     ) {
-        if self.speed_multiplier == value {
+        if !self.set_speed_multiplier_value(value) {
             return;
         }
-        self.speed_multiplier = value;
         callbacks.speed_multiplier_changed();
         callbacks.notify_property_changed(Self::SPEED_MULTIPLIER_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_speed_multiplier_value(&mut self, value: f32) -> bool {
+        if self.speed_multiplier == value {
+            return false;
+        }
+        self.speed_multiplier = value;
+        true
     }
     pub fn elastic_factor(&self) -> f32 {
         self.elastic_factor
@@ -78,12 +92,19 @@ impl ElasticScrollPhysicsBase {
         value: f32,
         callbacks: &mut impl ElasticScrollPhysicsBaseCallbacks,
     ) {
-        if self.elastic_factor == value {
+        if !self.set_elastic_factor_value(value) {
             return;
         }
-        self.elastic_factor = value;
         callbacks.elastic_factor_changed();
         callbacks.notify_property_changed(Self::ELASTIC_FACTOR_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_elastic_factor_value(&mut self, value: f32) -> bool {
+        if self.elastic_factor == value {
+            return false;
+        }
+        self.elastic_factor = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -120,5 +141,19 @@ impl ElasticScrollPhysicsBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ElasticScrollPhysicsBase {
+    type Target = ScrollPhysics;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ElasticScrollPhysicsBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

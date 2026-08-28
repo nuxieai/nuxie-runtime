@@ -24,3 +24,17 @@ impl BlendStateBase {
         Self::TYPE_KEY
     }
 }
+
+impl std::ops::Deref for BlendStateBase {
+    type Target = LayerState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BlendStateBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

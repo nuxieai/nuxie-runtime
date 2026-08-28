@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::Core, core::binary_reader::BinaryReader, viewmodel::data_enum::DataEnum,
+    core::binary_reader::BinaryReader, core::Core, viewmodel::data_enum::DataEnum,
 };
 
 pub struct DataEnumBase {
@@ -31,5 +31,19 @@ impl DataEnumBase {
     pub fn copy(&mut self, object: &Self) {}
     pub fn deserialize(&mut self, property_key: u16, reader: &mut BinaryReader<'_>) -> bool {
         false
+    }
+}
+
+impl std::ops::Deref for DataEnumBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataEnumBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

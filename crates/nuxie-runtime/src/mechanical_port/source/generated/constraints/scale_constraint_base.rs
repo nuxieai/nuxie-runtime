@@ -27,7 +27,22 @@ impl ScaleConstraintBase {
     }
     pub fn clone_into(&self) -> ScaleConstraint {
         let mut cloned = ScaleConstraint::default();
-        cloned.base.copy(self);
+        let mut callbacks = ScaleConstraint::default();
+        cloned.base.copy(self, &mut callbacks);
         cloned
+    }
+}
+
+impl std::ops::Deref for ScaleConstraintBase {
+    type Target = TransformComponentConstraintY;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScaleConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

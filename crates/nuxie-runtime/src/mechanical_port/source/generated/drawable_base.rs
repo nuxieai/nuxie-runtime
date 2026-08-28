@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{core::binary_reader::BinaryReader, node::Node};
 
-pub trait DrawableBaseCallbacks {
+pub trait DrawableBaseCallbacks:
+    crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn blend_mode_value_changed(&mut self) {}
     fn drawable_flags_changed(&mut self) {}
@@ -37,23 +39,37 @@ impl DrawableBase {
         self.blend_mode_value
     }
     pub fn set_blend_mode_value(&mut self, value: u32, callbacks: &mut impl DrawableBaseCallbacks) {
-        if self.blend_mode_value == value {
+        if !self.set_blend_mode_value_value(value) {
             return;
         }
-        self.blend_mode_value = value;
         callbacks.blend_mode_value_changed();
         callbacks.notify_property_changed(Self::BLEND_MODE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_blend_mode_value_value(&mut self, value: u32) -> bool {
+        if self.blend_mode_value == value {
+            return false;
+        }
+        self.blend_mode_value = value;
+        true
     }
     pub fn drawable_flags(&self) -> u32 {
         self.drawable_flags
     }
     pub fn set_drawable_flags(&mut self, value: u32, callbacks: &mut impl DrawableBaseCallbacks) {
-        if self.drawable_flags == value {
+        if !self.set_drawable_flags_value(value) {
             return;
         }
-        self.drawable_flags = value;
         callbacks.drawable_flags_changed();
         callbacks.notify_property_changed(Self::DRAWABLE_FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_drawable_flags_value(&mut self, value: u32) -> bool {
+        if self.drawable_flags == value {
+            return false;
+        }
+        self.drawable_flags = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl DrawableBaseCallbacks) {
         self.blend_mode_value = object.blend_mode_value;
@@ -77,5 +93,19 @@ impl DrawableBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DrawableBase {
+    type Target = Node;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DrawableBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

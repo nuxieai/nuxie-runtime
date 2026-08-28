@@ -30,3 +30,17 @@ impl ContourMeshVertexBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ContourMeshVertexBase {
+    type Target = MeshVertex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ContourMeshVertexBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::paint::dash_path::DashPath,
 };
 
-pub trait DashPathBaseCallbacks {
+pub trait DashPathBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn offset_changed(&mut self) {}
     fn offset_is_percentage_changed(&mut self) {}
@@ -40,12 +42,19 @@ impl DashPathBase {
         self.offset
     }
     pub fn set_offset(&mut self, value: f32, callbacks: &mut impl DashPathBaseCallbacks) {
-        if self.offset == value {
+        if !self.set_offset_value(value) {
             return;
         }
-        self.offset = value;
         callbacks.offset_changed();
         callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_offset_value(&mut self, value: f32) -> bool {
+        if self.offset == value {
+            return false;
+        }
+        self.offset = value;
+        true
     }
     pub fn offset_is_percentage(&self) -> bool {
         self.offset_is_percentage
@@ -55,12 +64,19 @@ impl DashPathBase {
         value: bool,
         callbacks: &mut impl DashPathBaseCallbacks,
     ) {
-        if self.offset_is_percentage == value {
+        if !self.set_offset_is_percentage_value(value) {
             return;
         }
-        self.offset_is_percentage = value;
         callbacks.offset_is_percentage_changed();
         callbacks.notify_property_changed(Self::OFFSET_IS_PERCENTAGE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_offset_is_percentage_value(&mut self, value: bool) -> bool {
+        if self.offset_is_percentage == value {
+            return false;
+        }
+        self.offset_is_percentage = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl DashPathBaseCallbacks) -> DashPath {
         let mut cloned = DashPath::default();
@@ -89,5 +105,19 @@ impl DashPathBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DashPathBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DashPathBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

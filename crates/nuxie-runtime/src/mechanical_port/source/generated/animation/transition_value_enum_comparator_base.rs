@@ -31,3 +31,17 @@ impl TransitionValueEnumComparatorBase {
         cloned
     }
 }
+
+impl std::ops::Deref for TransitionValueEnumComparatorBase {
+    type Target = TransitionValueIdComparator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionValueEnumComparatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

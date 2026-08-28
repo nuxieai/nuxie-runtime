@@ -31,3 +31,17 @@ impl ViewModelPropertyEnumBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ViewModelPropertyEnumBase {
+    type Target = ViewModelProperty;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelPropertyEnumBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

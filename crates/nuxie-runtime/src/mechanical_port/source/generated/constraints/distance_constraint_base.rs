@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     constraints::targeted_constraint::TargetedConstraint, core::binary_reader::BinaryReader,
 };
 
-pub trait DistanceConstraintBaseCallbacks {
+pub trait DistanceConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::targeted_constraint_base::TargetedConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn distance_changed(&mut self) {}
     fn mode_value_changed(&mut self) {}
@@ -44,12 +44,19 @@ impl DistanceConstraintBase {
         value: f32,
         callbacks: &mut impl DistanceConstraintBaseCallbacks,
     ) {
-        if self.distance == value {
+        if !self.set_distance_value(value) {
             return;
         }
-        self.distance = value;
         callbacks.distance_changed();
         callbacks.notify_property_changed(Self::DISTANCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_distance_value(&mut self, value: f32) -> bool {
+        if self.distance == value {
+            return false;
+        }
+        self.distance = value;
+        true
     }
     pub fn mode_value(&self) -> u32 {
         self.mode_value
@@ -59,12 +66,19 @@ impl DistanceConstraintBase {
         value: u32,
         callbacks: &mut impl DistanceConstraintBaseCallbacks,
     ) {
-        if self.mode_value == value {
+        if !self.set_mode_value_value(value) {
             return;
         }
-        self.mode_value = value;
         callbacks.mode_value_changed();
         callbacks.notify_property_changed(Self::MODE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_mode_value_value(&mut self, value: u32) -> bool {
+        if self.mode_value == value {
+            return false;
+        }
+        self.mode_value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -96,5 +110,19 @@ impl DistanceConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DistanceConstraintBase {
+    type Target = TargetedConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DistanceConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

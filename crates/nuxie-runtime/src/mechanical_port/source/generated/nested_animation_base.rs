@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     container_component::ContainerComponent, core::binary_reader::BinaryReader,
 };
 
-pub trait NestedAnimationBaseCallbacks {
+pub trait NestedAnimationBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn animation_id_changed(&mut self) {}
 }
@@ -39,12 +41,19 @@ impl NestedAnimationBase {
         value: u32,
         callbacks: &mut impl NestedAnimationBaseCallbacks,
     ) {
-        if self.animation_id == value {
+        if !self.set_animation_id_value(value) {
             return;
         }
-        self.animation_id = value;
         callbacks.animation_id_changed();
         callbacks.notify_property_changed(Self::ANIMATION_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_animation_id_value(&mut self, value: u32) -> bool {
+        if self.animation_id == value {
+            return false;
+        }
+        self.animation_id = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl NestedAnimationBaseCallbacks) {
         self.animation_id = object.animation_id;
@@ -63,5 +72,19 @@ impl NestedAnimationBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NestedAnimationBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedAnimationBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

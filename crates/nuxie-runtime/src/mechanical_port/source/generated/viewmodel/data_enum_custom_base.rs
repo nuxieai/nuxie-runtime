@@ -36,12 +36,19 @@ impl DataEnumCustomBase {
         &self.name
     }
     pub fn set_name(&mut self, value: String, callbacks: &mut impl DataEnumCustomBaseCallbacks) {
-        if self.name == value {
+        if !self.set_name_value(value) {
             return;
         }
-        self.name = value;
         callbacks.name_changed();
         callbacks.notify_property_changed(Self::NAME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_name_value(&mut self, value: String) -> bool {
+        if self.name == value {
+            return false;
+        }
+        self.name = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl DataEnumCustomBaseCallbacks) -> DataEnumCustom {
         let mut cloned = DataEnumCustom::default();
@@ -50,7 +57,7 @@ impl DataEnumCustomBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl DataEnumCustomBaseCallbacks) {
         self.name.clone_from(&object.name);
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -63,7 +70,21 @@ impl DataEnumCustomBase {
                 self.name = crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for DataEnumCustomBase {
+    type Target = DataEnum;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataEnumCustomBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

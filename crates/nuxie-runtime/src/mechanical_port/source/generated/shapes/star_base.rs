@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, shapes::polygon::Polygon, shapes::star::Star,
 };
 
-pub trait StarBaseCallbacks {
+pub trait StarBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::polygon_base::PolygonBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn inner_radius_changed(&mut self) {}
 }
@@ -38,12 +40,19 @@ impl StarBase {
         self.inner_radius
     }
     pub fn set_inner_radius(&mut self, value: f32, callbacks: &mut impl StarBaseCallbacks) {
-        if self.inner_radius == value {
+        if !self.set_inner_radius_value(value) {
             return;
         }
-        self.inner_radius = value;
         callbacks.inner_radius_changed();
         callbacks.notify_property_changed(Self::INNER_RADIUS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_inner_radius_value(&mut self, value: f32) -> bool {
+        if self.inner_radius == value {
+            return false;
+        }
+        self.inner_radius = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl StarBaseCallbacks) -> Star {
         let mut cloned = Star::default();
@@ -67,5 +76,19 @@ impl StarBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for StarBase {
+    type Target = Polygon;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StarBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

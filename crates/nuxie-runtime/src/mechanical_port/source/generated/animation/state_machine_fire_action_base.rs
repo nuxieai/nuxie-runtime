@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
-    animation::state_machine_fire_action::StateMachineFireAction, core::Core,
-    core::binary_reader::BinaryReader,
+    animation::state_machine_fire_action::StateMachineFireAction,
+    core::binary_reader::BinaryReader, core::Core,
 };
 
 pub trait StateMachineFireActionBaseCallbacks {
@@ -40,12 +40,19 @@ impl StateMachineFireActionBase {
         value: u32,
         callbacks: &mut impl StateMachineFireActionBaseCallbacks,
     ) {
-        if self.occurs_value == value {
+        if !self.set_occurs_value_value(value) {
             return;
         }
-        self.occurs_value = value;
         callbacks.occurs_value_changed();
         callbacks.notify_property_changed(Self::OCCURS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_occurs_value_value(&mut self, value: u32) -> bool {
+        if self.occurs_value == value {
+            return false;
+        }
+        self.occurs_value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -75,5 +82,19 @@ impl StateMachineFireActionBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for StateMachineFireActionBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StateMachineFireActionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

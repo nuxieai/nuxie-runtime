@@ -35,3 +35,17 @@ impl ImageAssetBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ImageAssetBase {
+    type Target = DrawableAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ImageAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

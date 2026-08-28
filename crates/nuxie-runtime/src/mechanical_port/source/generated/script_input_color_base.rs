@@ -29,3 +29,17 @@ impl ScriptInputColorBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ScriptInputColorBase {
+    type Target = CustomPropertyColor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptInputColorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

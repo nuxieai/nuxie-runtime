@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     custom_property_enum::CustomPropertyEnum,
 };
 
-pub trait CustomPropertyEnumBaseCallbacks {
+pub trait CustomPropertyEnumBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn property_value_changed(&mut self) {}
     fn enum_id_changed(&mut self) {}
@@ -44,12 +46,19 @@ impl CustomPropertyEnumBase {
         value: u32,
         callbacks: &mut impl CustomPropertyEnumBaseCallbacks,
     ) {
-        if self.property_value == value {
+        if !self.set_property_value_value(value) {
             return;
         }
-        self.property_value = value;
         callbacks.property_value_changed();
         callbacks.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_property_value_value(&mut self, value: u32) -> bool {
+        if self.property_value == value {
+            return false;
+        }
+        self.property_value = value;
+        true
     }
     pub fn enum_id(&self) -> u32 {
         self.enum_id
@@ -59,12 +68,19 @@ impl CustomPropertyEnumBase {
         value: u32,
         callbacks: &mut impl CustomPropertyEnumBaseCallbacks,
     ) {
-        if self.enum_id == value {
+        if !self.set_enum_id_value(value) {
             return;
         }
-        self.enum_id = value;
         callbacks.enum_id_changed();
         callbacks.notify_property_changed(Self::ENUM_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_enum_id_value(&mut self, value: u32) -> bool {
+        if self.enum_id == value {
+            return false;
+        }
+        self.enum_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -96,5 +112,19 @@ impl CustomPropertyEnumBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for CustomPropertyEnumBase {
+    type Target = CustomProperty;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CustomPropertyEnumBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

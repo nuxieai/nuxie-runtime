@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     animation::listener_align_target::ListenerAlignTarget, core::binary_reader::BinaryReader,
 };
 
-pub trait ListenerAlignTargetBaseCallbacks {
+pub trait ListenerAlignTargetBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn target_id_changed(&mut self) {}
     fn preserve_offset_changed(&mut self) {}
@@ -44,12 +44,19 @@ impl ListenerAlignTargetBase {
         value: u32,
         callbacks: &mut impl ListenerAlignTargetBaseCallbacks,
     ) {
-        if self.target_id == value {
+        if !self.set_target_id_value(value) {
             return;
         }
-        self.target_id = value;
         callbacks.target_id_changed();
         callbacks.notify_property_changed(Self::TARGET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_target_id_value(&mut self, value: u32) -> bool {
+        if self.target_id == value {
+            return false;
+        }
+        self.target_id = value;
+        true
     }
     pub fn preserve_offset(&self) -> bool {
         self.preserve_offset
@@ -59,12 +66,19 @@ impl ListenerAlignTargetBase {
         value: bool,
         callbacks: &mut impl ListenerAlignTargetBaseCallbacks,
     ) {
-        if self.preserve_offset == value {
+        if !self.set_preserve_offset_value(value) {
             return;
         }
-        self.preserve_offset = value;
         callbacks.preserve_offset_changed();
         callbacks.notify_property_changed(Self::PRESERVE_OFFSET_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_preserve_offset_value(&mut self, value: bool) -> bool {
+        if self.preserve_offset == value {
+            return false;
+        }
+        self.preserve_offset = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -96,5 +110,19 @@ impl ListenerAlignTargetBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ListenerAlignTargetBase {
+    type Target = ListenerAction;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListenerAlignTargetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

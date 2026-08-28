@@ -30,3 +30,17 @@ impl BindablePropertyAssetBase {
         cloned
     }
 }
+
+impl std::ops::Deref for BindablePropertyAssetBase {
+    type Target = BindablePropertyId;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BindablePropertyAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     layout::grid_item_placement::GridItemPlacement,
 };
 
-pub trait GridItemPlacementBaseCallbacks {
+pub trait GridItemPlacementBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn grid_column_changed(&mut self) {}
     fn grid_row_changed(&mut self) {}
@@ -52,12 +54,19 @@ impl GridItemPlacementBase {
         value: i16,
         callbacks: &mut impl GridItemPlacementBaseCallbacks,
     ) {
-        if self.grid_column == value {
+        if !self.set_grid_column_value(value) {
             return;
         }
-        self.grid_column = value;
         callbacks.grid_column_changed();
         callbacks.notify_property_changed(Self::GRID_COLUMN_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_grid_column_value(&mut self, value: i16) -> bool {
+        if self.grid_column == value {
+            return false;
+        }
+        self.grid_column = value;
+        true
     }
     pub fn grid_row(&self) -> i16 {
         self.grid_row
@@ -67,12 +76,19 @@ impl GridItemPlacementBase {
         value: i16,
         callbacks: &mut impl GridItemPlacementBaseCallbacks,
     ) {
-        if self.grid_row == value {
+        if !self.set_grid_row_value(value) {
             return;
         }
-        self.grid_row = value;
         callbacks.grid_row_changed();
         callbacks.notify_property_changed(Self::GRID_ROW_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_grid_row_value(&mut self, value: i16) -> bool {
+        if self.grid_row == value {
+            return false;
+        }
+        self.grid_row = value;
+        true
     }
     pub fn grid_column_span(&self) -> u16 {
         self.grid_column_span
@@ -82,12 +98,19 @@ impl GridItemPlacementBase {
         value: u16,
         callbacks: &mut impl GridItemPlacementBaseCallbacks,
     ) {
-        if self.grid_column_span == value {
+        if !self.set_grid_column_span_value(value) {
             return;
         }
-        self.grid_column_span = value;
         callbacks.grid_column_span_changed();
         callbacks.notify_property_changed(Self::GRID_COLUMN_SPAN_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_grid_column_span_value(&mut self, value: u16) -> bool {
+        if self.grid_column_span == value {
+            return false;
+        }
+        self.grid_column_span = value;
+        true
     }
     pub fn grid_row_span(&self) -> u16 {
         self.grid_row_span
@@ -97,12 +120,19 @@ impl GridItemPlacementBase {
         value: u16,
         callbacks: &mut impl GridItemPlacementBaseCallbacks,
     ) {
-        if self.grid_row_span == value {
+        if !self.set_grid_row_span_value(value) {
             return;
         }
-        self.grid_row_span = value;
         callbacks.grid_row_span_changed();
         callbacks.notify_property_changed(Self::GRID_ROW_SPAN_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_grid_row_span_value(&mut self, value: u16) -> bool {
+        if self.grid_row_span == value {
+            return false;
+        }
+        self.grid_row_span = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -144,5 +174,19 @@ impl GridItemPlacementBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for GridItemPlacementBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for GridItemPlacementBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

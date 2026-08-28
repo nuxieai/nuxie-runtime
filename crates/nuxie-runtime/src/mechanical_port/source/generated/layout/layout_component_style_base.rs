@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     layout::layout_sizing_style::LayoutSizingStyle,
 };
 
-pub trait LayoutComponentStyleBaseCallbacks {
+pub trait LayoutComponentStyleBaseCallbacks: crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn gap_horizontal_changed(&mut self) {}
     fn gap_vertical_changed(&mut self) {}
@@ -264,12 +264,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.gap_horizontal == value {
+        if !self.set_gap_horizontal_value(value) {
             return;
         }
-        self.gap_horizontal = value;
         callbacks.gap_horizontal_changed();
         callbacks.notify_property_changed(Self::GAP_HORIZONTAL_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_gap_horizontal_value(&mut self, value: f32) -> bool {
+        if self.gap_horizontal == value {
+            return false;
+        }
+        self.gap_horizontal = value;
+        true
     }
     pub fn gap_vertical(&self) -> f32 {
         self.gap_vertical
@@ -279,12 +286,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.gap_vertical == value {
+        if !self.set_gap_vertical_value(value) {
             return;
         }
-        self.gap_vertical = value;
         callbacks.gap_vertical_changed();
         callbacks.notify_property_changed(Self::GAP_VERTICAL_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_gap_vertical_value(&mut self, value: f32) -> bool {
+        if self.gap_vertical == value {
+            return false;
+        }
+        self.gap_vertical = value;
+        true
     }
     pub fn border_left(&self) -> f32 {
         self.border_left
@@ -294,12 +308,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.border_left == value {
+        if !self.set_border_left_value(value) {
             return;
         }
-        self.border_left = value;
         callbacks.border_left_changed();
         callbacks.notify_property_changed(Self::BORDER_LEFT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_border_left_value(&mut self, value: f32) -> bool {
+        if self.border_left == value {
+            return false;
+        }
+        self.border_left = value;
+        true
     }
     pub fn border_right(&self) -> f32 {
         self.border_right
@@ -309,12 +330,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.border_right == value {
+        if !self.set_border_right_value(value) {
             return;
         }
-        self.border_right = value;
         callbacks.border_right_changed();
         callbacks.notify_property_changed(Self::BORDER_RIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_border_right_value(&mut self, value: f32) -> bool {
+        if self.border_right == value {
+            return false;
+        }
+        self.border_right = value;
+        true
     }
     pub fn border_top(&self) -> f32 {
         self.border_top
@@ -324,12 +352,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.border_top == value {
+        if !self.set_border_top_value(value) {
             return;
         }
-        self.border_top = value;
         callbacks.border_top_changed();
         callbacks.notify_property_changed(Self::BORDER_TOP_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_border_top_value(&mut self, value: f32) -> bool {
+        if self.border_top == value {
+            return false;
+        }
+        self.border_top = value;
+        true
     }
     pub fn border_bottom(&self) -> f32 {
         self.border_bottom
@@ -339,12 +374,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.border_bottom == value {
+        if !self.set_border_bottom_value(value) {
             return;
         }
-        self.border_bottom = value;
         callbacks.border_bottom_changed();
         callbacks.notify_property_changed(Self::BORDER_BOTTOM_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_border_bottom_value(&mut self, value: f32) -> bool {
+        if self.border_bottom == value {
+            return false;
+        }
+        self.border_bottom = value;
+        true
     }
     pub fn margin_left(&self) -> f32 {
         self.margin_left
@@ -354,12 +396,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.margin_left == value {
+        if !self.set_margin_left_value(value) {
             return;
         }
-        self.margin_left = value;
         callbacks.margin_left_changed();
         callbacks.notify_property_changed(Self::MARGIN_LEFT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_margin_left_value(&mut self, value: f32) -> bool {
+        if self.margin_left == value {
+            return false;
+        }
+        self.margin_left = value;
+        true
     }
     pub fn margin_right(&self) -> f32 {
         self.margin_right
@@ -369,12 +418,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.margin_right == value {
+        if !self.set_margin_right_value(value) {
             return;
         }
-        self.margin_right = value;
         callbacks.margin_right_changed();
         callbacks.notify_property_changed(Self::MARGIN_RIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_margin_right_value(&mut self, value: f32) -> bool {
+        if self.margin_right == value {
+            return false;
+        }
+        self.margin_right = value;
+        true
     }
     pub fn margin_top(&self) -> f32 {
         self.margin_top
@@ -384,12 +440,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.margin_top == value {
+        if !self.set_margin_top_value(value) {
             return;
         }
-        self.margin_top = value;
         callbacks.margin_top_changed();
         callbacks.notify_property_changed(Self::MARGIN_TOP_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_margin_top_value(&mut self, value: f32) -> bool {
+        if self.margin_top == value {
+            return false;
+        }
+        self.margin_top = value;
+        true
     }
     pub fn margin_bottom(&self) -> f32 {
         self.margin_bottom
@@ -399,12 +462,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.margin_bottom == value {
+        if !self.set_margin_bottom_value(value) {
             return;
         }
-        self.margin_bottom = value;
         callbacks.margin_bottom_changed();
         callbacks.notify_property_changed(Self::MARGIN_BOTTOM_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_margin_bottom_value(&mut self, value: f32) -> bool {
+        if self.margin_bottom == value {
+            return false;
+        }
+        self.margin_bottom = value;
+        true
     }
     pub fn padding_left(&self) -> f32 {
         self.padding_left
@@ -414,12 +484,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.padding_left == value {
+        if !self.set_padding_left_value(value) {
             return;
         }
-        self.padding_left = value;
         callbacks.padding_left_changed();
         callbacks.notify_property_changed(Self::PADDING_LEFT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_padding_left_value(&mut self, value: f32) -> bool {
+        if self.padding_left == value {
+            return false;
+        }
+        self.padding_left = value;
+        true
     }
     pub fn padding_right(&self) -> f32 {
         self.padding_right
@@ -429,12 +506,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.padding_right == value {
+        if !self.set_padding_right_value(value) {
             return;
         }
-        self.padding_right = value;
         callbacks.padding_right_changed();
         callbacks.notify_property_changed(Self::PADDING_RIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_padding_right_value(&mut self, value: f32) -> bool {
+        if self.padding_right == value {
+            return false;
+        }
+        self.padding_right = value;
+        true
     }
     pub fn padding_top(&self) -> f32 {
         self.padding_top
@@ -444,12 +528,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.padding_top == value {
+        if !self.set_padding_top_value(value) {
             return;
         }
-        self.padding_top = value;
         callbacks.padding_top_changed();
         callbacks.notify_property_changed(Self::PADDING_TOP_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_padding_top_value(&mut self, value: f32) -> bool {
+        if self.padding_top == value {
+            return false;
+        }
+        self.padding_top = value;
+        true
     }
     pub fn padding_bottom(&self) -> f32 {
         self.padding_bottom
@@ -459,12 +550,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.padding_bottom == value {
+        if !self.set_padding_bottom_value(value) {
             return;
         }
-        self.padding_bottom = value;
         callbacks.padding_bottom_changed();
         callbacks.notify_property_changed(Self::PADDING_BOTTOM_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_padding_bottom_value(&mut self, value: f32) -> bool {
+        if self.padding_bottom == value {
+            return false;
+        }
+        self.padding_bottom = value;
+        true
     }
     pub fn position_left(&self) -> f32 {
         self.position_left
@@ -474,12 +572,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.position_left == value {
+        if !self.set_position_left_value(value) {
             return;
         }
-        self.position_left = value;
         callbacks.position_left_changed();
         callbacks.notify_property_changed(Self::POSITION_LEFT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_left_value(&mut self, value: f32) -> bool {
+        if self.position_left == value {
+            return false;
+        }
+        self.position_left = value;
+        true
     }
     pub fn position_right(&self) -> f32 {
         self.position_right
@@ -489,12 +594,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.position_right == value {
+        if !self.set_position_right_value(value) {
             return;
         }
-        self.position_right = value;
         callbacks.position_right_changed();
         callbacks.notify_property_changed(Self::POSITION_RIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_right_value(&mut self, value: f32) -> bool {
+        if self.position_right == value {
+            return false;
+        }
+        self.position_right = value;
+        true
     }
     pub fn position_top(&self) -> f32 {
         self.position_top
@@ -504,12 +616,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.position_top == value {
+        if !self.set_position_top_value(value) {
             return;
         }
-        self.position_top = value;
         callbacks.position_top_changed();
         callbacks.notify_property_changed(Self::POSITION_TOP_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_top_value(&mut self, value: f32) -> bool {
+        if self.position_top == value {
+            return false;
+        }
+        self.position_top = value;
+        true
     }
     pub fn position_bottom(&self) -> f32 {
         self.position_bottom
@@ -519,12 +638,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.position_bottom == value {
+        if !self.set_position_bottom_value(value) {
             return;
         }
-        self.position_bottom = value;
         callbacks.position_bottom_changed();
         callbacks.notify_property_changed(Self::POSITION_BOTTOM_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_bottom_value(&mut self, value: f32) -> bool {
+        if self.position_bottom == value {
+            return false;
+        }
+        self.position_bottom = value;
+        true
     }
     pub fn flex_basis(&self) -> f32 {
         self.flex_basis
@@ -534,12 +660,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.flex_basis == value {
+        if !self.set_flex_basis_value(value) {
             return;
         }
-        self.flex_basis = value;
         callbacks.flex_basis_changed();
         callbacks.notify_property_changed(Self::FLEX_BASIS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_flex_basis_value(&mut self, value: f32) -> bool {
+        if self.flex_basis == value {
+            return false;
+        }
+        self.flex_basis = value;
+        true
     }
     pub fn aspect_ratio(&self) -> f32 {
         self.aspect_ratio
@@ -549,12 +682,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.aspect_ratio == value {
+        if !self.set_aspect_ratio_value(value) {
             return;
         }
-        self.aspect_ratio = value;
         callbacks.aspect_ratio_changed();
         callbacks.notify_property_changed(Self::ASPECT_RATIO_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_aspect_ratio_value(&mut self, value: f32) -> bool {
+        if self.aspect_ratio == value {
+            return false;
+        }
+        self.aspect_ratio = value;
+        true
     }
     pub fn interpolator_id(&self) -> u32 {
         self.interpolator_id
@@ -564,12 +704,19 @@ impl LayoutComponentStyleBase {
         value: u32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.interpolator_id == value {
+        if !self.set_interpolator_id_value(value) {
             return;
         }
-        self.interpolator_id = value;
         callbacks.interpolator_id_changed();
         callbacks.notify_property_changed(Self::INTERPOLATOR_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interpolator_id_value(&mut self, value: u32) -> bool {
+        if self.interpolator_id == value {
+            return false;
+        }
+        self.interpolator_id = value;
+        true
     }
     pub fn interpolation_time(&self) -> f32 {
         self.interpolation_time
@@ -579,12 +726,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.interpolation_time == value {
+        if !self.set_interpolation_time_value(value) {
             return;
         }
-        self.interpolation_time = value;
         callbacks.interpolation_time_changed();
         callbacks.notify_property_changed(Self::INTERPOLATION_TIME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interpolation_time_value(&mut self, value: f32) -> bool {
+        if self.interpolation_time == value {
+            return false;
+        }
+        self.interpolation_time = value;
+        true
     }
     pub fn flex_basis_units_value(&self) -> u8 {
         self.flex_basis_units_value
@@ -594,12 +748,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.flex_basis_units_value == value {
+        if !self.set_flex_basis_units_value_value(value) {
             return;
         }
-        self.flex_basis_units_value = value;
         callbacks.flex_basis_units_value_changed();
         callbacks.notify_property_changed(Self::FLEX_BASIS_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_flex_basis_units_value_value(&mut self, value: u8) -> bool {
+        if self.flex_basis_units_value == value {
+            return false;
+        }
+        self.flex_basis_units_value = value;
+        true
     }
     pub fn layout_alignment_type(&self) -> u8 {
         self.layout_alignment_type
@@ -609,12 +770,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.layout_alignment_type == value {
+        if !self.set_layout_alignment_type_value(value) {
             return;
         }
-        self.layout_alignment_type = value;
         callbacks.layout_alignment_type_changed();
         callbacks.notify_property_changed(Self::LAYOUT_ALIGNMENT_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_layout_alignment_type_value(&mut self, value: u8) -> bool {
+        if self.layout_alignment_type == value {
+            return false;
+        }
+        self.layout_alignment_type = value;
+        true
     }
     pub fn animation_style_type(&self) -> u8 {
         self.animation_style_type
@@ -624,12 +792,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.animation_style_type == value {
+        if !self.set_animation_style_type_value(value) {
             return;
         }
-        self.animation_style_type = value;
         callbacks.animation_style_type_changed();
         callbacks.notify_property_changed(Self::ANIMATION_STYLE_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_animation_style_type_value(&mut self, value: u8) -> bool {
+        if self.animation_style_type == value {
+            return false;
+        }
+        self.animation_style_type = value;
+        true
     }
     pub fn interpolation_type(&self) -> u8 {
         self.interpolation_type
@@ -639,12 +814,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.interpolation_type == value {
+        if !self.set_interpolation_type_value(value) {
             return;
         }
-        self.interpolation_type = value;
         callbacks.interpolation_type_changed();
         callbacks.notify_property_changed(Self::INTERPOLATION_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interpolation_type_value(&mut self, value: u8) -> bool {
+        if self.interpolation_type == value {
+            return false;
+        }
+        self.interpolation_type = value;
+        true
     }
     pub fn position_type_value(&self) -> u8 {
         self.position_type_value
@@ -654,12 +836,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.position_type_value == value {
+        if !self.set_position_type_value_value(value) {
             return;
         }
-        self.position_type_value = value;
         callbacks.position_type_value_changed();
         callbacks.notify_property_changed(Self::POSITION_TYPE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_type_value_value(&mut self, value: u8) -> bool {
+        if self.position_type_value == value {
+            return false;
+        }
+        self.position_type_value = value;
+        true
     }
     pub fn flex_direction_value(&self) -> u8 {
         self.flex_direction_value
@@ -669,12 +858,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.flex_direction_value == value {
+        if !self.set_flex_direction_value_value(value) {
             return;
         }
-        self.flex_direction_value = value;
         callbacks.flex_direction_value_changed();
         callbacks.notify_property_changed(Self::FLEX_DIRECTION_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_flex_direction_value_value(&mut self, value: u8) -> bool {
+        if self.flex_direction_value == value {
+            return false;
+        }
+        self.flex_direction_value = value;
+        true
     }
     pub fn direction_value(&self) -> u8 {
         self.direction_value
@@ -684,12 +880,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.direction_value == value {
+        if !self.set_direction_value_value(value) {
             return;
         }
-        self.direction_value = value;
         callbacks.direction_value_changed();
         callbacks.notify_property_changed(Self::DIRECTION_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_direction_value_value(&mut self, value: u8) -> bool {
+        if self.direction_value == value {
+            return false;
+        }
+        self.direction_value = value;
+        true
     }
     pub fn flex_wrap_value(&self) -> u8 {
         self.flex_wrap_value
@@ -699,12 +902,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.flex_wrap_value == value {
+        if !self.set_flex_wrap_value_value(value) {
             return;
         }
-        self.flex_wrap_value = value;
         callbacks.flex_wrap_value_changed();
         callbacks.notify_property_changed(Self::FLEX_WRAP_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_flex_wrap_value_value(&mut self, value: u8) -> bool {
+        if self.flex_wrap_value == value {
+            return false;
+        }
+        self.flex_wrap_value = value;
+        true
     }
     pub fn overflow_value(&self) -> u8 {
         self.overflow_value
@@ -714,12 +924,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.overflow_value == value {
+        if !self.set_overflow_value_value(value) {
             return;
         }
-        self.overflow_value = value;
         callbacks.overflow_value_changed();
         callbacks.notify_property_changed(Self::OVERFLOW_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_overflow_value_value(&mut self, value: u8) -> bool {
+        if self.overflow_value == value {
+            return false;
+        }
+        self.overflow_value = value;
+        true
     }
     pub fn intrinsically_sized_value(&self) -> bool {
         self.intrinsically_sized_value
@@ -729,12 +946,19 @@ impl LayoutComponentStyleBase {
         value: bool,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.intrinsically_sized_value == value {
+        if !self.set_intrinsically_sized_value_value(value) {
             return;
         }
-        self.intrinsically_sized_value = value;
         callbacks.intrinsically_sized_value_changed();
         callbacks.notify_property_changed(Self::INTRINSICALLY_SIZED_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_intrinsically_sized_value_value(&mut self, value: bool) -> bool {
+        if self.intrinsically_sized_value == value {
+            return false;
+        }
+        self.intrinsically_sized_value = value;
+        true
     }
     pub fn border_left_units_value(&self) -> u8 {
         self.border_left_units_value
@@ -744,12 +968,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.border_left_units_value == value {
+        if !self.set_border_left_units_value_value(value) {
             return;
         }
-        self.border_left_units_value = value;
         callbacks.border_left_units_value_changed();
         callbacks.notify_property_changed(Self::BORDER_LEFT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_border_left_units_value_value(&mut self, value: u8) -> bool {
+        if self.border_left_units_value == value {
+            return false;
+        }
+        self.border_left_units_value = value;
+        true
     }
     pub fn border_right_units_value(&self) -> u8 {
         self.border_right_units_value
@@ -759,12 +990,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.border_right_units_value == value {
+        if !self.set_border_right_units_value_value(value) {
             return;
         }
-        self.border_right_units_value = value;
         callbacks.border_right_units_value_changed();
         callbacks.notify_property_changed(Self::BORDER_RIGHT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_border_right_units_value_value(&mut self, value: u8) -> bool {
+        if self.border_right_units_value == value {
+            return false;
+        }
+        self.border_right_units_value = value;
+        true
     }
     pub fn border_top_units_value(&self) -> u8 {
         self.border_top_units_value
@@ -774,12 +1012,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.border_top_units_value == value {
+        if !self.set_border_top_units_value_value(value) {
             return;
         }
-        self.border_top_units_value = value;
         callbacks.border_top_units_value_changed();
         callbacks.notify_property_changed(Self::BORDER_TOP_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_border_top_units_value_value(&mut self, value: u8) -> bool {
+        if self.border_top_units_value == value {
+            return false;
+        }
+        self.border_top_units_value = value;
+        true
     }
     pub fn border_bottom_units_value(&self) -> u8 {
         self.border_bottom_units_value
@@ -789,12 +1034,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.border_bottom_units_value == value {
+        if !self.set_border_bottom_units_value_value(value) {
             return;
         }
-        self.border_bottom_units_value = value;
         callbacks.border_bottom_units_value_changed();
         callbacks.notify_property_changed(Self::BORDER_BOTTOM_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_border_bottom_units_value_value(&mut self, value: u8) -> bool {
+        if self.border_bottom_units_value == value {
+            return false;
+        }
+        self.border_bottom_units_value = value;
+        true
     }
     pub fn margin_left_units_value(&self) -> u8 {
         self.margin_left_units_value
@@ -804,12 +1056,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.margin_left_units_value == value {
+        if !self.set_margin_left_units_value_value(value) {
             return;
         }
-        self.margin_left_units_value = value;
         callbacks.margin_left_units_value_changed();
         callbacks.notify_property_changed(Self::MARGIN_LEFT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_margin_left_units_value_value(&mut self, value: u8) -> bool {
+        if self.margin_left_units_value == value {
+            return false;
+        }
+        self.margin_left_units_value = value;
+        true
     }
     pub fn margin_right_units_value(&self) -> u8 {
         self.margin_right_units_value
@@ -819,12 +1078,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.margin_right_units_value == value {
+        if !self.set_margin_right_units_value_value(value) {
             return;
         }
-        self.margin_right_units_value = value;
         callbacks.margin_right_units_value_changed();
         callbacks.notify_property_changed(Self::MARGIN_RIGHT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_margin_right_units_value_value(&mut self, value: u8) -> bool {
+        if self.margin_right_units_value == value {
+            return false;
+        }
+        self.margin_right_units_value = value;
+        true
     }
     pub fn margin_top_units_value(&self) -> u8 {
         self.margin_top_units_value
@@ -834,12 +1100,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.margin_top_units_value == value {
+        if !self.set_margin_top_units_value_value(value) {
             return;
         }
-        self.margin_top_units_value = value;
         callbacks.margin_top_units_value_changed();
         callbacks.notify_property_changed(Self::MARGIN_TOP_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_margin_top_units_value_value(&mut self, value: u8) -> bool {
+        if self.margin_top_units_value == value {
+            return false;
+        }
+        self.margin_top_units_value = value;
+        true
     }
     pub fn margin_bottom_units_value(&self) -> u8 {
         self.margin_bottom_units_value
@@ -849,12 +1122,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.margin_bottom_units_value == value {
+        if !self.set_margin_bottom_units_value_value(value) {
             return;
         }
-        self.margin_bottom_units_value = value;
         callbacks.margin_bottom_units_value_changed();
         callbacks.notify_property_changed(Self::MARGIN_BOTTOM_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_margin_bottom_units_value_value(&mut self, value: u8) -> bool {
+        if self.margin_bottom_units_value == value {
+            return false;
+        }
+        self.margin_bottom_units_value = value;
+        true
     }
     pub fn padding_left_units_value(&self) -> u8 {
         self.padding_left_units_value
@@ -864,12 +1144,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.padding_left_units_value == value {
+        if !self.set_padding_left_units_value_value(value) {
             return;
         }
-        self.padding_left_units_value = value;
         callbacks.padding_left_units_value_changed();
         callbacks.notify_property_changed(Self::PADDING_LEFT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_padding_left_units_value_value(&mut self, value: u8) -> bool {
+        if self.padding_left_units_value == value {
+            return false;
+        }
+        self.padding_left_units_value = value;
+        true
     }
     pub fn padding_right_units_value(&self) -> u8 {
         self.padding_right_units_value
@@ -879,12 +1166,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.padding_right_units_value == value {
+        if !self.set_padding_right_units_value_value(value) {
             return;
         }
-        self.padding_right_units_value = value;
         callbacks.padding_right_units_value_changed();
         callbacks.notify_property_changed(Self::PADDING_RIGHT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_padding_right_units_value_value(&mut self, value: u8) -> bool {
+        if self.padding_right_units_value == value {
+            return false;
+        }
+        self.padding_right_units_value = value;
+        true
     }
     pub fn padding_top_units_value(&self) -> u8 {
         self.padding_top_units_value
@@ -894,12 +1188,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.padding_top_units_value == value {
+        if !self.set_padding_top_units_value_value(value) {
             return;
         }
-        self.padding_top_units_value = value;
         callbacks.padding_top_units_value_changed();
         callbacks.notify_property_changed(Self::PADDING_TOP_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_padding_top_units_value_value(&mut self, value: u8) -> bool {
+        if self.padding_top_units_value == value {
+            return false;
+        }
+        self.padding_top_units_value = value;
+        true
     }
     pub fn padding_bottom_units_value(&self) -> u8 {
         self.padding_bottom_units_value
@@ -909,12 +1210,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.padding_bottom_units_value == value {
+        if !self.set_padding_bottom_units_value_value(value) {
             return;
         }
-        self.padding_bottom_units_value = value;
         callbacks.padding_bottom_units_value_changed();
         callbacks.notify_property_changed(Self::PADDING_BOTTOM_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_padding_bottom_units_value_value(&mut self, value: u8) -> bool {
+        if self.padding_bottom_units_value == value {
+            return false;
+        }
+        self.padding_bottom_units_value = value;
+        true
     }
     pub fn position_left_units_value(&self) -> u8 {
         self.position_left_units_value
@@ -924,12 +1232,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.position_left_units_value == value {
+        if !self.set_position_left_units_value_value(value) {
             return;
         }
-        self.position_left_units_value = value;
         callbacks.position_left_units_value_changed();
         callbacks.notify_property_changed(Self::POSITION_LEFT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_left_units_value_value(&mut self, value: u8) -> bool {
+        if self.position_left_units_value == value {
+            return false;
+        }
+        self.position_left_units_value = value;
+        true
     }
     pub fn position_right_units_value(&self) -> u8 {
         self.position_right_units_value
@@ -939,12 +1254,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.position_right_units_value == value {
+        if !self.set_position_right_units_value_value(value) {
             return;
         }
-        self.position_right_units_value = value;
         callbacks.position_right_units_value_changed();
         callbacks.notify_property_changed(Self::POSITION_RIGHT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_right_units_value_value(&mut self, value: u8) -> bool {
+        if self.position_right_units_value == value {
+            return false;
+        }
+        self.position_right_units_value = value;
+        true
     }
     pub fn position_top_units_value(&self) -> u8 {
         self.position_top_units_value
@@ -954,12 +1276,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.position_top_units_value == value {
+        if !self.set_position_top_units_value_value(value) {
             return;
         }
-        self.position_top_units_value = value;
         callbacks.position_top_units_value_changed();
         callbacks.notify_property_changed(Self::POSITION_TOP_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_top_units_value_value(&mut self, value: u8) -> bool {
+        if self.position_top_units_value == value {
+            return false;
+        }
+        self.position_top_units_value = value;
+        true
     }
     pub fn position_bottom_units_value(&self) -> u8 {
         self.position_bottom_units_value
@@ -969,12 +1298,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.position_bottom_units_value == value {
+        if !self.set_position_bottom_units_value_value(value) {
             return;
         }
-        self.position_bottom_units_value = value;
         callbacks.position_bottom_units_value_changed();
         callbacks.notify_property_changed(Self::POSITION_BOTTOM_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_bottom_units_value_value(&mut self, value: u8) -> bool {
+        if self.position_bottom_units_value == value {
+            return false;
+        }
+        self.position_bottom_units_value = value;
+        true
     }
     pub fn gap_horizontal_units_value(&self) -> u8 {
         self.gap_horizontal_units_value
@@ -984,12 +1320,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.gap_horizontal_units_value == value {
+        if !self.set_gap_horizontal_units_value_value(value) {
             return;
         }
-        self.gap_horizontal_units_value = value;
         callbacks.gap_horizontal_units_value_changed();
         callbacks.notify_property_changed(Self::GAP_HORIZONTAL_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_gap_horizontal_units_value_value(&mut self, value: u8) -> bool {
+        if self.gap_horizontal_units_value == value {
+            return false;
+        }
+        self.gap_horizontal_units_value = value;
+        true
     }
     pub fn gap_vertical_units_value(&self) -> u8 {
         self.gap_vertical_units_value
@@ -999,12 +1342,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.gap_vertical_units_value == value {
+        if !self.set_gap_vertical_units_value_value(value) {
             return;
         }
-        self.gap_vertical_units_value = value;
         callbacks.gap_vertical_units_value_changed();
         callbacks.notify_property_changed(Self::GAP_VERTICAL_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_gap_vertical_units_value_value(&mut self, value: u8) -> bool {
+        if self.gap_vertical_units_value == value {
+            return false;
+        }
+        self.gap_vertical_units_value = value;
+        true
     }
     pub fn link_corner_radius(&self) -> bool {
         self.link_corner_radius
@@ -1014,12 +1364,19 @@ impl LayoutComponentStyleBase {
         value: bool,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.link_corner_radius == value {
+        if !self.set_link_corner_radius_value(value) {
             return;
         }
-        self.link_corner_radius = value;
         callbacks.link_corner_radius_changed();
         callbacks.notify_property_changed(Self::LINK_CORNER_RADIUS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_link_corner_radius_value(&mut self, value: bool) -> bool {
+        if self.link_corner_radius == value {
+            return false;
+        }
+        self.link_corner_radius = value;
+        true
     }
     pub fn justify_items_value(&self) -> u8 {
         self.justify_items_value
@@ -1029,12 +1386,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.justify_items_value == value {
+        if !self.set_justify_items_value_value(value) {
             return;
         }
-        self.justify_items_value = value;
         callbacks.justify_items_value_changed();
         callbacks.notify_property_changed(Self::JUSTIFY_ITEMS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_justify_items_value_value(&mut self, value: u8) -> bool {
+        if self.justify_items_value == value {
+            return false;
+        }
+        self.justify_items_value = value;
+        true
     }
     pub fn layout_type_value(&self) -> u8 {
         self.layout_type_value
@@ -1044,12 +1408,19 @@ impl LayoutComponentStyleBase {
         value: u8,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.layout_type_value == value {
+        if !self.set_layout_type_value_value(value) {
             return;
         }
-        self.layout_type_value = value;
         callbacks.layout_type_value_changed();
         callbacks.notify_property_changed(Self::LAYOUT_TYPE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_layout_type_value_value(&mut self, value: u8) -> bool {
+        if self.layout_type_value == value {
+            return false;
+        }
+        self.layout_type_value = value;
+        true
     }
     pub fn corner_radius_tl(&self) -> f32 {
         self.corner_radius_tl
@@ -1059,12 +1430,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.corner_radius_tl == value {
+        if !self.set_corner_radius_tl_value(value) {
             return;
         }
-        self.corner_radius_tl = value;
         callbacks.corner_radius_tl_changed();
         callbacks.notify_property_changed(Self::CORNER_RADIUS_TL_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_corner_radius_tl_value(&mut self, value: f32) -> bool {
+        if self.corner_radius_tl == value {
+            return false;
+        }
+        self.corner_radius_tl = value;
+        true
     }
     pub fn corner_radius_tr(&self) -> f32 {
         self.corner_radius_tr
@@ -1074,12 +1452,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.corner_radius_tr == value {
+        if !self.set_corner_radius_tr_value(value) {
             return;
         }
-        self.corner_radius_tr = value;
         callbacks.corner_radius_tr_changed();
         callbacks.notify_property_changed(Self::CORNER_RADIUS_TR_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_corner_radius_tr_value(&mut self, value: f32) -> bool {
+        if self.corner_radius_tr == value {
+            return false;
+        }
+        self.corner_radius_tr = value;
+        true
     }
     pub fn corner_radius_bl(&self) -> f32 {
         self.corner_radius_bl
@@ -1089,12 +1474,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.corner_radius_bl == value {
+        if !self.set_corner_radius_bl_value(value) {
             return;
         }
-        self.corner_radius_bl = value;
         callbacks.corner_radius_bl_changed();
         callbacks.notify_property_changed(Self::CORNER_RADIUS_BL_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_corner_radius_bl_value(&mut self, value: f32) -> bool {
+        if self.corner_radius_bl == value {
+            return false;
+        }
+        self.corner_radius_bl = value;
+        true
     }
     pub fn corner_radius_br(&self) -> f32 {
         self.corner_radius_br
@@ -1104,12 +1496,19 @@ impl LayoutComponentStyleBase {
         value: f32,
         callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
     ) {
-        if self.corner_radius_br == value {
+        if !self.set_corner_radius_br_value(value) {
             return;
         }
-        self.corner_radius_br = value;
         callbacks.corner_radius_br_changed();
         callbacks.notify_property_changed(Self::CORNER_RADIUS_BR_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_corner_radius_br_value(&mut self, value: f32) -> bool {
+        if self.corner_radius_br == value {
+            return false;
+        }
+        self.corner_radius_br = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -1416,5 +1815,19 @@ impl LayoutComponentStyleBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for LayoutComponentStyleBase {
+    type Target = LayoutSizingStyle;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LayoutComponentStyleBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

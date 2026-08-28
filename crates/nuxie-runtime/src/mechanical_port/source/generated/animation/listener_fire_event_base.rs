@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait ListenerFireEventBaseCallbacks {
+pub trait ListenerFireEventBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn event_id_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl ListenerFireEventBase {
         value: u32,
         callbacks: &mut impl ListenerFireEventBaseCallbacks,
     ) {
-        if self.event_id == value {
+        if !self.set_event_id_value(value) {
             return;
         }
-        self.event_id = value;
         callbacks.event_id_changed();
         callbacks.notify_property_changed(Self::EVENT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_event_id_value(&mut self, value: u32) -> bool {
+        if self.event_id == value {
+            return false;
+        }
+        self.event_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -72,5 +79,19 @@ impl ListenerFireEventBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ListenerFireEventBase {
+    type Target = ListenerAction;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListenerFireEventBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

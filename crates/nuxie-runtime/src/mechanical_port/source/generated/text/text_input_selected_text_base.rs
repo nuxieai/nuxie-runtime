@@ -30,3 +30,17 @@ impl TextInputSelectedTextBase {
         cloned
     }
 }
+
+impl std::ops::Deref for TextInputSelectedTextBase {
+    type Target = TextInputDrawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextInputSelectedTextBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

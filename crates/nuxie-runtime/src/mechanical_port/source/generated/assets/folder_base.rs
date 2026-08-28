@@ -36,3 +36,17 @@ impl FolderBase {
         cloned
     }
 }
+
+impl std::ops::Deref for FolderBase {
+    type Target = Asset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FolderBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

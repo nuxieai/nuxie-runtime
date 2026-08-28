@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::core::{
-    binary_reader::BinaryReader, field_types::core_string_type::CoreStringType,
+    binary_reader::BinaryReader, field_types::core_string_type::CoreStringType, Core,
 };
 
 pub trait AssetBaseCallbacks {
@@ -9,6 +9,7 @@ pub trait AssetBaseCallbacks {
 
 #[derive(Default)]
 pub struct AssetBase {
+    pub base: Core,
     name: String,
 }
 
@@ -29,12 +30,19 @@ impl AssetBase {
     }
 
     pub fn set_name<C: AssetBaseCallbacks>(&mut self, value: String, callbacks: &mut C) {
-        if self.name == value {
+        if !self.set_name_value(value) {
             return;
         }
-        self.name = value;
         callbacks.name_changed();
         callbacks.notify_property_changed(Self::NAME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_name_value(&mut self, value: String) -> bool {
+        if self.name == value {
+            return false;
+        }
+        self.name = value;
+        true
     }
 
     pub fn copy(&mut self, object: &Self) {
@@ -49,5 +57,19 @@ impl AssetBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for AssetBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

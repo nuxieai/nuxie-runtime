@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{core::binary_reader::BinaryReader, node::Node};
 
-pub trait PathBaseCallbacks {
+pub trait PathBaseCallbacks:
+    crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn path_flags_changed(&mut self) {}
     fn is_hole_changed(&mut self) {}
@@ -37,23 +39,37 @@ impl PathBase {
         self.path_flags
     }
     pub fn set_path_flags(&mut self, value: u32, callbacks: &mut impl PathBaseCallbacks) {
-        if self.path_flags == value {
+        if !self.set_path_flags_value(value) {
             return;
         }
-        self.path_flags = value;
         callbacks.path_flags_changed();
         callbacks.notify_property_changed(Self::PATH_FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_path_flags_value(&mut self, value: u32) -> bool {
+        if self.path_flags == value {
+            return false;
+        }
+        self.path_flags = value;
+        true
     }
     pub fn is_hole(&self) -> bool {
         self.is_hole
     }
     pub fn set_is_hole(&mut self, value: bool, callbacks: &mut impl PathBaseCallbacks) {
-        if self.is_hole == value {
+        if !self.set_is_hole_value(value) {
             return;
         }
-        self.is_hole = value;
         callbacks.is_hole_changed();
         callbacks.notify_property_changed(Self::IS_HOLE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_is_hole_value(&mut self, value: bool) -> bool {
+        if self.is_hole == value {
+            return false;
+        }
+        self.is_hole = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl PathBaseCallbacks) {
         self.path_flags = object.path_flags;
@@ -77,5 +93,19 @@ impl PathBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for PathBase {
+    type Target = Node;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for PathBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

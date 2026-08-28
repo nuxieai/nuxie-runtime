@@ -27,7 +27,22 @@ impl RotationConstraintBase {
     }
     pub fn clone_into(&self) -> RotationConstraint {
         let mut cloned = RotationConstraint::default();
-        cloned.base.copy(self);
+        let mut callbacks = RotationConstraint::default();
+        cloned.base.copy(self, &mut callbacks);
         cloned
+    }
+}
+
+impl std::ops::Deref for RotationConstraintBase {
+    type Target = TransformComponentConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for RotationConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -31,3 +31,17 @@ impl DataConverterSystemDegsToRadsBase {
         cloned
     }
 }
+
+impl std::ops::Deref for DataConverterSystemDegsToRadsBase {
+    type Target = DataConverterOperationValue;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterSystemDegsToRadsBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

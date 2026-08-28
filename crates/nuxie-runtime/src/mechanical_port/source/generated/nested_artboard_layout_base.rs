@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     nested_artboard_layout::NestedArtboardLayout,
 };
 
-pub trait NestedArtboardLayoutBaseCallbacks {
+pub trait NestedArtboardLayoutBaseCallbacks:
+    crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn instance_width_changed(&mut self) {}
     fn instance_height_changed(&mut self) {}
@@ -60,12 +62,19 @@ impl NestedArtboardLayoutBase {
         value: f32,
         callbacks: &mut impl NestedArtboardLayoutBaseCallbacks,
     ) {
-        if self.instance_width == value {
+        if !self.set_instance_width_value(value) {
             return;
         }
-        self.instance_width = value;
         callbacks.instance_width_changed();
         callbacks.notify_property_changed(Self::INSTANCE_WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_width_value(&mut self, value: f32) -> bool {
+        if self.instance_width == value {
+            return false;
+        }
+        self.instance_width = value;
+        true
     }
     pub fn instance_height(&self) -> f32 {
         self.instance_height
@@ -75,12 +84,19 @@ impl NestedArtboardLayoutBase {
         value: f32,
         callbacks: &mut impl NestedArtboardLayoutBaseCallbacks,
     ) {
-        if self.instance_height == value {
+        if !self.set_instance_height_value(value) {
             return;
         }
-        self.instance_height = value;
         callbacks.instance_height_changed();
         callbacks.notify_property_changed(Self::INSTANCE_HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_height_value(&mut self, value: f32) -> bool {
+        if self.instance_height == value {
+            return false;
+        }
+        self.instance_height = value;
+        true
     }
     pub fn instance_width_units_value(&self) -> u32 {
         self.instance_width_units_value
@@ -90,12 +106,19 @@ impl NestedArtboardLayoutBase {
         value: u32,
         callbacks: &mut impl NestedArtboardLayoutBaseCallbacks,
     ) {
-        if self.instance_width_units_value == value {
+        if !self.set_instance_width_units_value_value(value) {
             return;
         }
-        self.instance_width_units_value = value;
         callbacks.instance_width_units_value_changed();
         callbacks.notify_property_changed(Self::INSTANCE_WIDTH_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_width_units_value_value(&mut self, value: u32) -> bool {
+        if self.instance_width_units_value == value {
+            return false;
+        }
+        self.instance_width_units_value = value;
+        true
     }
     pub fn instance_height_units_value(&self) -> u32 {
         self.instance_height_units_value
@@ -105,12 +128,19 @@ impl NestedArtboardLayoutBase {
         value: u32,
         callbacks: &mut impl NestedArtboardLayoutBaseCallbacks,
     ) {
-        if self.instance_height_units_value == value {
+        if !self.set_instance_height_units_value_value(value) {
             return;
         }
-        self.instance_height_units_value = value;
         callbacks.instance_height_units_value_changed();
         callbacks.notify_property_changed(Self::INSTANCE_HEIGHT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_height_units_value_value(&mut self, value: u32) -> bool {
+        if self.instance_height_units_value == value {
+            return false;
+        }
+        self.instance_height_units_value = value;
+        true
     }
     pub fn instance_width_scale_type(&self) -> u32 {
         self.instance_width_scale_type
@@ -120,12 +150,19 @@ impl NestedArtboardLayoutBase {
         value: u32,
         callbacks: &mut impl NestedArtboardLayoutBaseCallbacks,
     ) {
-        if self.instance_width_scale_type == value {
+        if !self.set_instance_width_scale_type_value(value) {
             return;
         }
-        self.instance_width_scale_type = value;
         callbacks.instance_width_scale_type_changed();
         callbacks.notify_property_changed(Self::INSTANCE_WIDTH_SCALE_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_width_scale_type_value(&mut self, value: u32) -> bool {
+        if self.instance_width_scale_type == value {
+            return false;
+        }
+        self.instance_width_scale_type = value;
+        true
     }
     pub fn instance_height_scale_type(&self) -> u32 {
         self.instance_height_scale_type
@@ -135,12 +172,19 @@ impl NestedArtboardLayoutBase {
         value: u32,
         callbacks: &mut impl NestedArtboardLayoutBaseCallbacks,
     ) {
-        if self.instance_height_scale_type == value {
+        if !self.set_instance_height_scale_type_value(value) {
             return;
         }
-        self.instance_height_scale_type = value;
         callbacks.instance_height_scale_type_changed();
         callbacks.notify_property_changed(Self::INSTANCE_HEIGHT_SCALE_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_height_scale_type_value(&mut self, value: u32) -> bool {
+        if self.instance_height_scale_type == value {
+            return false;
+        }
+        self.instance_height_scale_type = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -192,5 +236,19 @@ impl NestedArtboardLayoutBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NestedArtboardLayoutBase {
+    type Target = NestedArtboard;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedArtboardLayoutBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

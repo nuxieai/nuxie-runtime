@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::straight_vertex::StraightVertex,
 };
 
-pub trait StraightVertexBaseCallbacks {
+pub trait StraightVertexBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::vertex_base::VertexBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn radius_changed(&mut self) {}
 }
@@ -36,12 +38,19 @@ impl StraightVertexBase {
         self.radius
     }
     pub fn set_radius(&mut self, value: f32, callbacks: &mut impl StraightVertexBaseCallbacks) {
-        if self.radius == value {
+        if !self.set_radius_value(value) {
             return;
         }
-        self.radius = value;
         callbacks.radius_changed();
         callbacks.notify_property_changed(Self::RADIUS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_radius_value(&mut self, value: f32) -> bool {
+        if self.radius == value {
+            return false;
+        }
+        self.radius = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl StraightVertexBaseCallbacks) -> StraightVertex {
         let mut cloned = StraightVertex::default();
@@ -65,5 +74,19 @@ impl StraightVertexBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for StraightVertexBase {
+    type Target = PathVertex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StraightVertexBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -29,3 +29,17 @@ impl KeyFrameCallbackBase {
         cloned
     }
 }
+
+impl std::ops::Deref for KeyFrameCallbackBase {
+    type Target = KeyFrame;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for KeyFrameCallbackBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

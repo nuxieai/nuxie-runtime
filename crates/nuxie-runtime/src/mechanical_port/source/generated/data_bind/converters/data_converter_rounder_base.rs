@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     data_bind::converters::data_converter_rounder::DataConverterRounder,
 };
 
-pub trait DataConverterRounderBaseCallbacks {
+pub trait DataConverterRounderBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn decimals_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl DataConverterRounderBase {
         value: u32,
         callbacks: &mut impl DataConverterRounderBaseCallbacks,
     ) {
-        if self.decimals == value {
+        if !self.set_decimals_value(value) {
             return;
         }
-        self.decimals = value;
         callbacks.decimals_changed();
         callbacks.notify_property_changed(Self::DECIMALS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_decimals_value(&mut self, value: u32) -> bool {
+        if self.decimals == value {
+            return false;
+        }
+        self.decimals = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -72,5 +79,19 @@ impl DataConverterRounderBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterRounderBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterRounderBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

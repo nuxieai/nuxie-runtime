@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, component_origin::ComponentOrigin, core::binary_reader::BinaryReader,
 };
 
-pub trait ComponentOriginBaseCallbacks {
+pub trait ComponentOriginBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn origin_x_changed(&mut self) {}
     fn origin_y_changed(&mut self) {}
@@ -39,23 +41,37 @@ impl ComponentOriginBase {
         self.origin_x
     }
     pub fn set_origin_x(&mut self, value: f32, callbacks: &mut impl ComponentOriginBaseCallbacks) {
-        if self.origin_x == value {
+        if !self.set_origin_x_value(value) {
             return;
         }
-        self.origin_x = value;
         callbacks.origin_x_changed();
         callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
+        if self.origin_x == value {
+            return false;
+        }
+        self.origin_x = value;
+        true
     }
     pub fn origin_y(&self) -> f32 {
         self.origin_y
     }
     pub fn set_origin_y(&mut self, value: f32, callbacks: &mut impl ComponentOriginBaseCallbacks) {
-        if self.origin_y == value {
+        if !self.set_origin_y_value(value) {
             return;
         }
-        self.origin_y = value;
         callbacks.origin_y_changed();
         callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
+        if self.origin_y == value {
+            return false;
+        }
+        self.origin_y = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl ComponentOriginBaseCallbacks) -> ComponentOrigin {
         let mut cloned = ComponentOrigin::default();
@@ -84,5 +100,19 @@ impl ComponentOriginBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ComponentOriginBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ComponentOriginBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

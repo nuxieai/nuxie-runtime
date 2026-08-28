@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     layout::artboard_component_list_override::ArtboardComponentListOverride,
 };
 
-pub trait ArtboardComponentListOverrideBaseCallbacks {
+pub trait ArtboardComponentListOverrideBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn artboard_id_changed(&mut self) {}
     fn instance_width_changed(&mut self) {}
@@ -64,12 +66,19 @@ impl ArtboardComponentListOverrideBase {
         value: u32,
         callbacks: &mut impl ArtboardComponentListOverrideBaseCallbacks,
     ) {
-        if self.artboard_id == value {
+        if !self.set_artboard_id_value(value) {
             return;
         }
-        self.artboard_id = value;
         callbacks.artboard_id_changed();
         callbacks.notify_property_changed(Self::ARTBOARD_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_artboard_id_value(&mut self, value: u32) -> bool {
+        if self.artboard_id == value {
+            return false;
+        }
+        self.artboard_id = value;
+        true
     }
     pub fn instance_width(&self) -> f32 {
         self.instance_width
@@ -79,12 +88,19 @@ impl ArtboardComponentListOverrideBase {
         value: f32,
         callbacks: &mut impl ArtboardComponentListOverrideBaseCallbacks,
     ) {
-        if self.instance_width == value {
+        if !self.set_instance_width_value(value) {
             return;
         }
-        self.instance_width = value;
         callbacks.instance_width_changed();
         callbacks.notify_property_changed(Self::INSTANCE_WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_width_value(&mut self, value: f32) -> bool {
+        if self.instance_width == value {
+            return false;
+        }
+        self.instance_width = value;
+        true
     }
     pub fn instance_height(&self) -> f32 {
         self.instance_height
@@ -94,12 +110,19 @@ impl ArtboardComponentListOverrideBase {
         value: f32,
         callbacks: &mut impl ArtboardComponentListOverrideBaseCallbacks,
     ) {
-        if self.instance_height == value {
+        if !self.set_instance_height_value(value) {
             return;
         }
-        self.instance_height = value;
         callbacks.instance_height_changed();
         callbacks.notify_property_changed(Self::INSTANCE_HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_height_value(&mut self, value: f32) -> bool {
+        if self.instance_height == value {
+            return false;
+        }
+        self.instance_height = value;
+        true
     }
     pub fn instance_width_units_value(&self) -> u32 {
         self.instance_width_units_value
@@ -109,12 +132,19 @@ impl ArtboardComponentListOverrideBase {
         value: u32,
         callbacks: &mut impl ArtboardComponentListOverrideBaseCallbacks,
     ) {
-        if self.instance_width_units_value == value {
+        if !self.set_instance_width_units_value_value(value) {
             return;
         }
-        self.instance_width_units_value = value;
         callbacks.instance_width_units_value_changed();
         callbacks.notify_property_changed(Self::INSTANCE_WIDTH_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_width_units_value_value(&mut self, value: u32) -> bool {
+        if self.instance_width_units_value == value {
+            return false;
+        }
+        self.instance_width_units_value = value;
+        true
     }
     pub fn instance_height_units_value(&self) -> u32 {
         self.instance_height_units_value
@@ -124,12 +154,19 @@ impl ArtboardComponentListOverrideBase {
         value: u32,
         callbacks: &mut impl ArtboardComponentListOverrideBaseCallbacks,
     ) {
-        if self.instance_height_units_value == value {
+        if !self.set_instance_height_units_value_value(value) {
             return;
         }
-        self.instance_height_units_value = value;
         callbacks.instance_height_units_value_changed();
         callbacks.notify_property_changed(Self::INSTANCE_HEIGHT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_height_units_value_value(&mut self, value: u32) -> bool {
+        if self.instance_height_units_value == value {
+            return false;
+        }
+        self.instance_height_units_value = value;
+        true
     }
     pub fn instance_width_scale_type(&self) -> u32 {
         self.instance_width_scale_type
@@ -139,12 +176,19 @@ impl ArtboardComponentListOverrideBase {
         value: u32,
         callbacks: &mut impl ArtboardComponentListOverrideBaseCallbacks,
     ) {
-        if self.instance_width_scale_type == value {
+        if !self.set_instance_width_scale_type_value(value) {
             return;
         }
-        self.instance_width_scale_type = value;
         callbacks.instance_width_scale_type_changed();
         callbacks.notify_property_changed(Self::INSTANCE_WIDTH_SCALE_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_width_scale_type_value(&mut self, value: u32) -> bool {
+        if self.instance_width_scale_type == value {
+            return false;
+        }
+        self.instance_width_scale_type = value;
+        true
     }
     pub fn instance_height_scale_type(&self) -> u32 {
         self.instance_height_scale_type
@@ -154,12 +198,19 @@ impl ArtboardComponentListOverrideBase {
         value: u32,
         callbacks: &mut impl ArtboardComponentListOverrideBaseCallbacks,
     ) {
-        if self.instance_height_scale_type == value {
+        if !self.set_instance_height_scale_type_value(value) {
             return;
         }
-        self.instance_height_scale_type = value;
         callbacks.instance_height_scale_type_changed();
         callbacks.notify_property_changed(Self::INSTANCE_HEIGHT_SCALE_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_instance_height_scale_type_value(&mut self, value: u32) -> bool {
+        if self.instance_height_scale_type == value {
+            return false;
+        }
+        self.instance_height_scale_type = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -220,5 +271,19 @@ impl ArtboardComponentListOverrideBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ArtboardComponentListOverrideBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ArtboardComponentListOverrideBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

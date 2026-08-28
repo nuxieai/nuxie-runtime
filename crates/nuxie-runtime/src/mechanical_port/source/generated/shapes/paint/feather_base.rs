@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::paint::feather::Feather,
 };
 
-pub trait FeatherBaseCallbacks {
+pub trait FeatherBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn space_value_changed(&mut self) {}
     fn strength_changed(&mut self) {}
@@ -52,56 +54,91 @@ impl FeatherBase {
         self.space_value
     }
     pub fn set_space_value(&mut self, value: u32, callbacks: &mut impl FeatherBaseCallbacks) {
-        if self.space_value == value {
+        if !self.set_space_value_value(value) {
             return;
         }
-        self.space_value = value;
         callbacks.space_value_changed();
         callbacks.notify_property_changed(Self::SPACE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_space_value_value(&mut self, value: u32) -> bool {
+        if self.space_value == value {
+            return false;
+        }
+        self.space_value = value;
+        true
     }
     pub fn strength(&self) -> f32 {
         self.strength
     }
     pub fn set_strength(&mut self, value: f32, callbacks: &mut impl FeatherBaseCallbacks) {
-        if self.strength == value {
+        if !self.set_strength_value(value) {
             return;
         }
-        self.strength = value;
         callbacks.strength_changed();
         callbacks.notify_property_changed(Self::STRENGTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_strength_value(&mut self, value: f32) -> bool {
+        if self.strength == value {
+            return false;
+        }
+        self.strength = value;
+        true
     }
     pub fn offset_x(&self) -> f32 {
         self.offset_x
     }
     pub fn set_offset_x(&mut self, value: f32, callbacks: &mut impl FeatherBaseCallbacks) {
-        if self.offset_x == value {
+        if !self.set_offset_x_value(value) {
             return;
         }
-        self.offset_x = value;
         callbacks.offset_x_changed();
         callbacks.notify_property_changed(Self::OFFSET_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_offset_x_value(&mut self, value: f32) -> bool {
+        if self.offset_x == value {
+            return false;
+        }
+        self.offset_x = value;
+        true
     }
     pub fn offset_y(&self) -> f32 {
         self.offset_y
     }
     pub fn set_offset_y(&mut self, value: f32, callbacks: &mut impl FeatherBaseCallbacks) {
-        if self.offset_y == value {
+        if !self.set_offset_y_value(value) {
             return;
         }
-        self.offset_y = value;
         callbacks.offset_y_changed();
         callbacks.notify_property_changed(Self::OFFSET_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_offset_y_value(&mut self, value: f32) -> bool {
+        if self.offset_y == value {
+            return false;
+        }
+        self.offset_y = value;
+        true
     }
     pub fn inner(&self) -> bool {
         self.inner
     }
     pub fn set_inner(&mut self, value: bool, callbacks: &mut impl FeatherBaseCallbacks) {
-        if self.inner == value {
+        if !self.set_inner_value(value) {
             return;
         }
-        self.inner = value;
         callbacks.inner_changed();
         callbacks.notify_property_changed(Self::INNER_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_inner_value(&mut self, value: bool) -> bool {
+        if self.inner == value {
+            return false;
+        }
+        self.inner = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl FeatherBaseCallbacks) -> Feather {
         let mut cloned = Feather::default();
@@ -145,5 +182,19 @@ impl FeatherBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for FeatherBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FeatherBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

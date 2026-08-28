@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::Core, core::binary_reader::BinaryReader,
+    core::binary_reader::BinaryReader, core::Core,
     data_bind::converters::data_converter_group_item::DataConverterGroupItem,
 };
 
@@ -40,12 +40,19 @@ impl DataConverterGroupItemBase {
         value: u32,
         callbacks: &mut impl DataConverterGroupItemBaseCallbacks,
     ) {
-        if self.converter_id == value {
+        if !self.set_converter_id_value(value) {
             return;
         }
-        self.converter_id = value;
         callbacks.converter_id_changed();
         callbacks.notify_property_changed(Self::CONVERTER_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_converter_id_value(&mut self, value: u32) -> bool {
+        if self.converter_id == value {
+            return false;
+        }
+        self.converter_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -75,5 +82,19 @@ impl DataConverterGroupItemBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterGroupItemBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterGroupItemBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

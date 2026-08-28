@@ -1,7 +1,12 @@
-use crate::mechanical_port::source::{backboard::Backboard, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{
+    backboard::Backboard,
+    core::{binary_reader::BinaryReader, Core},
+};
 
 #[derive(Default)]
-pub struct BackboardBase;
+pub struct BackboardBase {
+    pub base: Core,
+}
 
 impl BackboardBase {
     pub const TYPE_KEY: u16 = 23;
@@ -19,5 +24,19 @@ impl BackboardBase {
         let mut cloned = Backboard::default();
         cloned.base.copy(self);
         cloned
+    }
+}
+
+impl std::ops::Deref for BackboardBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BackboardBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

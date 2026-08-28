@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{component::Component, core::binary_reader::BinaryReader};
 
-pub trait ConstraintBaseCallbacks {
+pub trait ConstraintBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn strength_changed(&mut self) {}
 }
@@ -33,12 +35,19 @@ impl ConstraintBase {
         self.strength
     }
     pub fn set_strength(&mut self, value: f32, callbacks: &mut impl ConstraintBaseCallbacks) {
-        if self.strength == value {
+        if !self.set_strength_value(value) {
             return;
         }
-        self.strength = value;
         callbacks.strength_changed();
         callbacks.notify_property_changed(Self::STRENGTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_strength_value(&mut self, value: f32) -> bool {
+        if self.strength == value {
+            return false;
+        }
+        self.strength = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ConstraintBaseCallbacks) {
         self.strength = object.strength;
@@ -57,5 +66,19 @@ impl ConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ConstraintBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

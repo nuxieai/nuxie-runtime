@@ -30,3 +30,17 @@ impl StateMachineTriggerBase {
         cloned
     }
 }
+
+impl std::ops::Deref for StateMachineTriggerBase {
+    type Target = StateMachineInput;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StateMachineTriggerBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

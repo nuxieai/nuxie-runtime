@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     audio_event::AudioEvent, core::binary_reader::BinaryReader, event::Event,
 };
 
-pub trait AudioEventBaseCallbacks {
+pub trait AudioEventBaseCallbacks:
+    crate::mechanical_port::source::generated::event_base::EventBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn asset_id_changed(&mut self) {}
 }
@@ -35,12 +37,19 @@ impl AudioEventBase {
         self.asset_id
     }
     pub fn set_asset_id(&mut self, value: u32, callbacks: &mut impl AudioEventBaseCallbacks) {
-        if self.asset_id == value {
+        if !self.set_asset_id_value(value) {
             return;
         }
-        self.asset_id = value;
         callbacks.asset_id_changed();
         callbacks.notify_property_changed(Self::ASSET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_asset_id_value(&mut self, value: u32) -> bool {
+        if self.asset_id == value {
+            return false;
+        }
+        self.asset_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl AudioEventBaseCallbacks) -> AudioEvent {
         let mut cloned = AudioEvent::default();
@@ -64,5 +73,19 @@ impl AudioEventBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for AudioEventBase {
+    type Target = Event;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AudioEventBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

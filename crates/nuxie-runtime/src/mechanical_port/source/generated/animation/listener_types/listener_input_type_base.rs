@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
-    animation::listener_types::listener_input_type::ListenerInputType, core::Core,
-    core::binary_reader::BinaryReader,
+    animation::listener_types::listener_input_type::ListenerInputType,
+    core::binary_reader::BinaryReader, core::Core,
 };
 
 pub trait ListenerInputTypeBaseCallbacks {
@@ -40,12 +40,19 @@ impl ListenerInputTypeBase {
         value: u32,
         callbacks: &mut impl ListenerInputTypeBaseCallbacks,
     ) {
-        if self.listener_type_value == value {
+        if !self.set_listener_type_value_value(value) {
             return;
         }
-        self.listener_type_value = value;
         callbacks.listener_type_value_changed();
         callbacks.notify_property_changed(Self::LISTENER_TYPE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_listener_type_value_value(&mut self, value: u32) -> bool {
+        if self.listener_type_value == value {
+            return false;
+        }
+        self.listener_type_value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -71,5 +78,19 @@ impl ListenerInputTypeBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for ListenerInputTypeBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListenerInputTypeBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

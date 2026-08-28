@@ -29,3 +29,17 @@ impl ScriptInputBooleanBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ScriptInputBooleanBase {
+    type Target = CustomPropertyBoolean;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptInputBooleanBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

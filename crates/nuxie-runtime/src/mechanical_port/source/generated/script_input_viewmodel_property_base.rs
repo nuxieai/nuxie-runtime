@@ -4,9 +4,10 @@ use crate::mechanical_port::source::{
     script_input_viewmodel_property::ScriptInputViewModelProperty,
 };
 
-pub trait ScriptInputViewModelPropertyBaseCallbacks {
+pub trait ScriptInputViewModelPropertyBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn decode_data_bind_path_ids(&mut self, value: &[u8]);
-    fn copy_data_bind_path_ids(&mut self, object: &ScriptInputViewModelPropertyBase);
     fn data_bind_path_ids_changed(&mut self) {}
 }
 
@@ -30,7 +31,6 @@ impl ScriptInputViewModelPropertyBase {
         Self::TYPE_KEY
     }
     pub fn copy<C: ScriptInputViewModelPropertyBaseCallbacks>(&mut self, object: &Self, c: &mut C) {
-        c.copy_data_bind_path_ids(object);
         self.base.base.copy(&object.base.base, c);
     }
     pub fn deserialize<C: ScriptInputViewModelPropertyBaseCallbacks>(
@@ -54,5 +54,19 @@ impl ScriptInputViewModelPropertyBase {
         let mut cloned = ScriptInputViewModelProperty::default();
         cloned.base.copy(self, c);
         cloned
+    }
+}
+
+impl std::ops::Deref for ScriptInputViewModelPropertyBase {
+    type Target = CustomProperty;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptInputViewModelPropertyBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

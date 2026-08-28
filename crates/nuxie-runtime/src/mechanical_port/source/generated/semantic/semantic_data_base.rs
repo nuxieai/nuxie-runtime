@@ -7,7 +7,9 @@ use crate::mechanical_port::source::{
     semantic::semantic_data::SemanticData,
 };
 
-pub trait SemanticDataBaseCallbacks {
+pub trait SemanticDataBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn role_changed(&mut self) {}
     fn label_changed(&mut self) {}
     fn value_changed(&mut self) {}
@@ -125,60 +127,109 @@ impl SemanticDataBase {
     }
 
     pub fn set_role<C: SemanticDataBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.role == value {
+        if !self.set_role_value(value) {
             return;
         }
-        self.role = value;
         c.role_changed();
         c.notify_property_changed(Self::ROLE_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_role_value(&mut self, value: u32) -> bool {
+        if self.role == value {
+            return false;
+        }
+        self.role = value;
+        true
+    }
     pub fn set_label<C: SemanticDataBaseCallbacks>(&mut self, value: String, c: &mut C) {
-        if self.label == value {
+        if !self.set_label_value(value) {
             return;
         }
-        self.label = value;
         c.label_changed();
         c.notify_property_changed(Self::LABEL_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_label_value(&mut self, value: String) -> bool {
+        if self.label == value {
+            return false;
+        }
+        self.label = value;
+        true
+    }
     pub fn set_value<C: SemanticDataBaseCallbacks>(&mut self, value: String, c: &mut C) {
-        if self.value == value {
+        if !self.set_value_value(value) {
             return;
         }
-        self.value = value;
         c.value_changed();
         c.notify_property_changed(Self::VALUE_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_value_value(&mut self, value: String) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
+    }
     pub fn set_hint<C: SemanticDataBaseCallbacks>(&mut self, value: String, c: &mut C) {
-        if self.hint == value {
+        if !self.set_hint_value(value) {
             return;
         }
-        self.hint = value;
         c.hint_changed();
         c.notify_property_changed(Self::HINT_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_hint_value(&mut self, value: String) -> bool {
+        if self.hint == value {
+            return false;
+        }
+        self.hint = value;
+        true
+    }
     pub fn set_heading_level<C: SemanticDataBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.heading_level == value {
+        if !self.set_heading_level_value(value) {
             return;
         }
-        self.heading_level = value;
         c.heading_level_changed();
         c.notify_property_changed(Self::HEADING_LEVEL_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_heading_level_value(&mut self, value: u32) -> bool {
+        if self.heading_level == value {
+            return false;
+        }
+        self.heading_level = value;
+        true
+    }
     pub fn set_trait_flags<C: SemanticDataBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.trait_flags == value {
+        if !self.set_trait_flags_value(value) {
             return;
         }
-        self.trait_flags = value;
         c.trait_flags_changed();
         c.notify_property_changed(Self::TRAIT_FLAGS_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_trait_flags_value(&mut self, value: u32) -> bool {
+        if self.trait_flags == value {
+            return false;
+        }
+        self.trait_flags = value;
+        true
+    }
     pub fn set_state_flags<C: SemanticDataBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.state_flags == value {
+        if !self.set_state_flags_value(value) {
             return;
         }
-        self.state_flags = value;
         c.state_flags_changed();
         c.notify_property_changed(Self::STATE_FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_state_flags_value(&mut self, value: u32) -> bool {
+        if self.state_flags == value {
+            return false;
+        }
+        self.state_flags = value;
+        true
     }
 
     pub fn clone_into<C: SemanticDataBaseCallbacks>(&self, c: &mut C) -> SemanticData {
@@ -233,5 +284,19 @@ impl SemanticDataBase {
             }
             _ => self.base.deserialize(key, reader, c),
         }
+    }
+}
+
+impl std::ops::Deref for SemanticDataBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for SemanticDataBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

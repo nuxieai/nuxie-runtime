@@ -30,3 +30,17 @@ impl RadialGradientBase {
         cloned
     }
 }
+
+impl std::ops::Deref for RadialGradientBase {
+    type Target = LinearGradient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for RadialGradientBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

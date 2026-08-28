@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait FollowPathConstraintBaseCallbacks {
+pub trait FollowPathConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::transform_space_constraint_base::TransformSpaceConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn distance_changed(&mut self) {}
     fn orient_changed(&mut self) {}
@@ -49,12 +49,19 @@ impl FollowPathConstraintBase {
         value: f32,
         callbacks: &mut impl FollowPathConstraintBaseCallbacks,
     ) {
-        if self.distance == value {
+        if !self.set_distance_value(value) {
             return;
         }
-        self.distance = value;
         callbacks.distance_changed();
         callbacks.notify_property_changed(Self::DISTANCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_distance_value(&mut self, value: f32) -> bool {
+        if self.distance == value {
+            return false;
+        }
+        self.distance = value;
+        true
     }
     pub fn orient(&self) -> bool {
         self.orient
@@ -64,12 +71,19 @@ impl FollowPathConstraintBase {
         value: bool,
         callbacks: &mut impl FollowPathConstraintBaseCallbacks,
     ) {
-        if self.orient == value {
+        if !self.set_orient_value(value) {
             return;
         }
-        self.orient = value;
         callbacks.orient_changed();
         callbacks.notify_property_changed(Self::ORIENT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_orient_value(&mut self, value: bool) -> bool {
+        if self.orient == value {
+            return false;
+        }
+        self.orient = value;
+        true
     }
     pub fn offset(&self) -> bool {
         self.offset
@@ -79,12 +93,19 @@ impl FollowPathConstraintBase {
         value: bool,
         callbacks: &mut impl FollowPathConstraintBaseCallbacks,
     ) {
-        if self.offset == value {
+        if !self.set_offset_value(value) {
             return;
         }
-        self.offset = value;
         callbacks.offset_changed();
         callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_offset_value(&mut self, value: bool) -> bool {
+        if self.offset == value {
+            return false;
+        }
+        self.offset = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -121,5 +142,19 @@ impl FollowPathConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for FollowPathConstraintBase {
+    type Target = TransformSpaceConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FollowPathConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

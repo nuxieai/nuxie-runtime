@@ -24,3 +24,17 @@ impl ViewModelInstanceSymbolBase {
         Self::TYPE_KEY
     }
 }
+
+impl std::ops::Deref for ViewModelInstanceSymbolBase {
+    type Target = ViewModelInstanceValue;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelInstanceSymbolBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

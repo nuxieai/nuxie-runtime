@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::polygon::Polygon,
 };
 
-pub trait PolygonBaseCallbacks {
+pub trait PolygonBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::parametric_path_base::ParametricPathBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn points_changed(&mut self) {}
     fn corner_radius_changed(&mut self) {}
@@ -40,23 +42,37 @@ impl PolygonBase {
         self.points
     }
     pub fn set_points(&mut self, value: u32, callbacks: &mut impl PolygonBaseCallbacks) {
-        if self.points == value {
+        if !self.set_points_value(value) {
             return;
         }
-        self.points = value;
         callbacks.points_changed();
         callbacks.notify_property_changed(Self::POINTS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_points_value(&mut self, value: u32) -> bool {
+        if self.points == value {
+            return false;
+        }
+        self.points = value;
+        true
     }
     pub fn corner_radius(&self) -> f32 {
         self.corner_radius
     }
     pub fn set_corner_radius(&mut self, value: f32, callbacks: &mut impl PolygonBaseCallbacks) {
-        if self.corner_radius == value {
+        if !self.set_corner_radius_value(value) {
             return;
         }
-        self.corner_radius = value;
         callbacks.corner_radius_changed();
         callbacks.notify_property_changed(Self::CORNER_RADIUS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_corner_radius_value(&mut self, value: f32) -> bool {
+        if self.corner_radius == value {
+            return false;
+        }
+        self.corner_radius = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl PolygonBaseCallbacks) -> Polygon {
         let mut cloned = Polygon::default();
@@ -85,5 +101,19 @@ impl PolygonBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for PolygonBase {
+    type Target = ParametricPath;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for PolygonBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, core::binary_reader::BinaryReader, layout::grid_track::GridTrack,
 };
 
-pub trait GridTrackBaseCallbacks {
+pub trait GridTrackBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn track_value_changed(&mut self) {}
     fn track_max_value_changed(&mut self) {}
@@ -51,56 +53,91 @@ impl GridTrackBase {
         self.track_value
     }
     pub fn set_track_value(&mut self, value: f32, callbacks: &mut impl GridTrackBaseCallbacks) {
-        if self.track_value == value {
+        if !self.set_track_value_value(value) {
             return;
         }
-        self.track_value = value;
         callbacks.track_value_changed();
         callbacks.notify_property_changed(Self::TRACK_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_track_value_value(&mut self, value: f32) -> bool {
+        if self.track_value == value {
+            return false;
+        }
+        self.track_value = value;
+        true
     }
     pub fn track_max_value(&self) -> f32 {
         self.track_max_value
     }
     pub fn set_track_max_value(&mut self, value: f32, callbacks: &mut impl GridTrackBaseCallbacks) {
-        if self.track_max_value == value {
+        if !self.set_track_max_value_value(value) {
             return;
         }
-        self.track_max_value = value;
         callbacks.track_max_value_changed();
         callbacks.notify_property_changed(Self::TRACK_MAX_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_track_max_value_value(&mut self, value: f32) -> bool {
+        if self.track_max_value == value {
+            return false;
+        }
+        self.track_max_value = value;
+        true
     }
     pub fn collection(&self) -> u8 {
         self.collection
     }
     pub fn set_collection(&mut self, value: u8, callbacks: &mut impl GridTrackBaseCallbacks) {
-        if self.collection == value {
+        if !self.set_collection_value(value) {
             return;
         }
-        self.collection = value;
         callbacks.collection_changed();
         callbacks.notify_property_changed(Self::COLLECTION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_collection_value(&mut self, value: u8) -> bool {
+        if self.collection == value {
+            return false;
+        }
+        self.collection = value;
+        true
     }
     pub fn track_type(&self) -> u8 {
         self.track_type
     }
     pub fn set_track_type(&mut self, value: u8, callbacks: &mut impl GridTrackBaseCallbacks) {
-        if self.track_type == value {
+        if !self.set_track_type_value(value) {
             return;
         }
-        self.track_type = value;
         callbacks.track_type_changed();
         callbacks.notify_property_changed(Self::TRACK_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_track_type_value(&mut self, value: u8) -> bool {
+        if self.track_type == value {
+            return false;
+        }
+        self.track_type = value;
+        true
     }
     pub fn track_max_type(&self) -> u8 {
         self.track_max_type
     }
     pub fn set_track_max_type(&mut self, value: u8, callbacks: &mut impl GridTrackBaseCallbacks) {
-        if self.track_max_type == value {
+        if !self.set_track_max_type_value(value) {
             return;
         }
-        self.track_max_type = value;
         callbacks.track_max_type_changed();
         callbacks.notify_property_changed(Self::TRACK_MAX_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_track_max_type_value(&mut self, value: u8) -> bool {
+        if self.track_max_type == value {
+            return false;
+        }
+        self.track_max_type = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl GridTrackBaseCallbacks) -> GridTrack {
         let mut cloned = GridTrack::default();
@@ -144,5 +181,19 @@ impl GridTrackBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for GridTrackBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for GridTrackBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

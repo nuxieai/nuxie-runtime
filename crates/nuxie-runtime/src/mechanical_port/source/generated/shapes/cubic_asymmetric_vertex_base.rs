@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::cubic_vertex::CubicVertex,
 };
 
-pub trait CubicAsymmetricVertexBaseCallbacks {
+pub trait CubicAsymmetricVertexBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::vertex_base::VertexBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn rotation_changed(&mut self) {}
     fn in_distance_changed(&mut self) {}
@@ -48,12 +50,19 @@ impl CubicAsymmetricVertexBase {
         value: f32,
         callbacks: &mut impl CubicAsymmetricVertexBaseCallbacks,
     ) {
-        if self.rotation == value {
+        if !self.set_rotation_value(value) {
             return;
         }
-        self.rotation = value;
         callbacks.rotation_changed();
         callbacks.notify_property_changed(Self::ROTATION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_rotation_value(&mut self, value: f32) -> bool {
+        if self.rotation == value {
+            return false;
+        }
+        self.rotation = value;
+        true
     }
     pub fn in_distance(&self) -> f32 {
         self.in_distance
@@ -63,12 +72,19 @@ impl CubicAsymmetricVertexBase {
         value: f32,
         callbacks: &mut impl CubicAsymmetricVertexBaseCallbacks,
     ) {
-        if self.in_distance == value {
+        if !self.set_in_distance_value(value) {
             return;
         }
-        self.in_distance = value;
         callbacks.in_distance_changed();
         callbacks.notify_property_changed(Self::IN_DISTANCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_in_distance_value(&mut self, value: f32) -> bool {
+        if self.in_distance == value {
+            return false;
+        }
+        self.in_distance = value;
+        true
     }
     pub fn out_distance(&self) -> f32 {
         self.out_distance
@@ -78,12 +94,19 @@ impl CubicAsymmetricVertexBase {
         value: f32,
         callbacks: &mut impl CubicAsymmetricVertexBaseCallbacks,
     ) {
-        if self.out_distance == value {
+        if !self.set_out_distance_value(value) {
             return;
         }
-        self.out_distance = value;
         callbacks.out_distance_changed();
         callbacks.notify_property_changed(Self::OUT_DISTANCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_out_distance_value(&mut self, value: f32) -> bool {
+        if self.out_distance == value {
+            return false;
+        }
+        self.out_distance = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -120,5 +143,19 @@ impl CubicAsymmetricVertexBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for CubicAsymmetricVertexBase {
+    type Target = CubicVertex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicAsymmetricVertexBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

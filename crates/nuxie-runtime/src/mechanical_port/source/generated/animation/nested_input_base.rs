@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{component::Component, core::binary_reader::BinaryReader};
 
-pub trait NestedInputBaseCallbacks {
+pub trait NestedInputBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn input_id_changed(&mut self) {}
 }
@@ -33,12 +35,19 @@ impl NestedInputBase {
         self.input_id
     }
     pub fn set_input_id(&mut self, value: u32, callbacks: &mut impl NestedInputBaseCallbacks) {
-        if self.input_id == value {
+        if !self.set_input_id_value(value) {
             return;
         }
-        self.input_id = value;
         callbacks.input_id_changed();
         callbacks.notify_property_changed(Self::INPUT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_input_id_value(&mut self, value: u32) -> bool {
+        if self.input_id == value {
+            return false;
+        }
+        self.input_id = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl NestedInputBaseCallbacks) {
         self.input_id = object.input_id;
@@ -57,5 +66,19 @@ impl NestedInputBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NestedInputBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedInputBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

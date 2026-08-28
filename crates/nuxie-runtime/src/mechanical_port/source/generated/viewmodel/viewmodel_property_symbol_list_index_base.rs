@@ -31,3 +31,17 @@ impl ViewModelPropertySymbolListIndexBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ViewModelPropertySymbolListIndexBase {
+    type Target = ViewModelPropertySymbol;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelPropertySymbolListIndexBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

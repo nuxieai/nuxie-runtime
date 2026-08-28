@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::Core, core::binary_reader::BinaryReader, viewmodel::data_enum_value::DataEnumValue,
+    core::binary_reader::BinaryReader, core::Core, viewmodel::data_enum_value::DataEnumValue,
 };
 
 pub trait DataEnumValueBaseCallbacks {
@@ -39,23 +39,37 @@ impl DataEnumValueBase {
         &self.key
     }
     pub fn set_key(&mut self, value: String, callbacks: &mut impl DataEnumValueBaseCallbacks) {
-        if self.key == value {
+        if !self.set_key_value(value) {
             return;
         }
-        self.key = value;
         callbacks.key_changed();
         callbacks.notify_property_changed(Self::KEY_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_key_value(&mut self, value: String) -> bool {
+        if self.key == value {
+            return false;
+        }
+        self.key = value;
+        true
     }
     pub fn value(&self) -> &str {
         &self.value
     }
     pub fn set_value(&mut self, value: String, callbacks: &mut impl DataEnumValueBaseCallbacks) {
-        if self.value == value {
+        if !self.set_value_value(value) {
             return;
         }
-        self.value = value;
         callbacks.value_changed();
         callbacks.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_value_value(&mut self, value: String) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl DataEnumValueBaseCallbacks) -> DataEnumValue {
         let mut cloned = DataEnumValue::default();
@@ -83,5 +97,19 @@ impl DataEnumValueBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for DataEnumValueBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataEnumValueBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

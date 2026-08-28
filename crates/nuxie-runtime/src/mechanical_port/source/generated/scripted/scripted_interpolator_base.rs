@@ -40,12 +40,19 @@ impl ScriptedInterpolatorBase {
         value: u32,
         c: &mut C,
     ) {
-        if self.script_asset_id == value {
+        if !self.set_script_asset_id_value(value) {
             return;
         }
-        self.script_asset_id = value;
         c.script_asset_id_changed();
         c.notify_property_changed(Self::SCRIPT_ASSET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_script_asset_id_value(&mut self, value: u32) -> bool {
+        if self.script_asset_id == value {
+            return false;
+        }
+        self.script_asset_id = value;
+        true
     }
     pub fn clone_into<C: ScriptedInterpolatorBaseCallbacks>(
         &self,
@@ -72,5 +79,19 @@ impl ScriptedInterpolatorBase {
             }
             _ => self.base.base.deserialize(key, reader, c),
         }
+    }
+}
+
+impl std::ops::Deref for ScriptedInterpolatorBase {
+    type Target = KeyFrameInterpolator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptedInterpolatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

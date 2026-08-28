@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, core::binary_reader::BinaryReader, text::text_style_axis::TextStyleAxis,
 };
 
-pub trait TextStyleAxisBaseCallbacks {
+pub trait TextStyleAxisBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn tag_changed(&mut self) {}
     fn axis_value_changed(&mut self) {}
@@ -39,23 +41,37 @@ impl TextStyleAxisBase {
         self.tag
     }
     pub fn set_tag(&mut self, value: u32, callbacks: &mut impl TextStyleAxisBaseCallbacks) {
-        if self.tag == value {
+        if !self.set_tag_value(value) {
             return;
         }
-        self.tag = value;
         callbacks.tag_changed();
         callbacks.notify_property_changed(Self::TAG_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_tag_value(&mut self, value: u32) -> bool {
+        if self.tag == value {
+            return false;
+        }
+        self.tag = value;
+        true
     }
     pub fn axis_value(&self) -> f32 {
         self.axis_value
     }
     pub fn set_axis_value(&mut self, value: f32, callbacks: &mut impl TextStyleAxisBaseCallbacks) {
-        if self.axis_value == value {
+        if !self.set_axis_value_value(value) {
             return;
         }
-        self.axis_value = value;
         callbacks.axis_value_changed();
         callbacks.notify_property_changed(Self::AXIS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_axis_value_value(&mut self, value: f32) -> bool {
+        if self.axis_value == value {
+            return false;
+        }
+        self.axis_value = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl TextStyleAxisBaseCallbacks) -> TextStyleAxis {
         let mut cloned = TextStyleAxis::default();
@@ -84,5 +100,19 @@ impl TextStyleAxisBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextStyleAxisBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextStyleAxisBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

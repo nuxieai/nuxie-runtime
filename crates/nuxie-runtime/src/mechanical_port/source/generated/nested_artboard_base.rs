@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, drawable::Drawable, nested_artboard::NestedArtboard,
 };
 
-pub trait NestedArtboardBaseCallbacks {
+pub trait NestedArtboardBaseCallbacks:
+    crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn artboard_id_changed(&mut self) {}
     fn data_bind_path_ids_changed(&mut self) {}
@@ -11,7 +13,6 @@ pub trait NestedArtboardBaseCallbacks {
     fn quantize_changed(&mut self) {}
     fn is_stateful_changed(&mut self) {}
     fn decode_data_bind_path_ids(&mut self, value: &[u8]);
-    fn copy_data_bind_path_ids(&mut self, object: &NestedArtboardBase);
 }
 
 pub struct NestedArtboardBase {
@@ -59,45 +60,73 @@ impl NestedArtboardBase {
         value: u32,
         callbacks: &mut impl NestedArtboardBaseCallbacks,
     ) {
-        if self.artboard_id == value {
+        if !self.set_artboard_id_value(value) {
             return;
         }
-        self.artboard_id = value;
         callbacks.artboard_id_changed();
         callbacks.notify_property_changed(Self::ARTBOARD_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_artboard_id_value(&mut self, value: u32) -> bool {
+        if self.artboard_id == value {
+            return false;
+        }
+        self.artboard_id = value;
+        true
     }
     pub fn is_paused(&self) -> bool {
         self.is_paused
     }
     pub fn set_is_paused(&mut self, value: bool, callbacks: &mut impl NestedArtboardBaseCallbacks) {
-        if self.is_paused == value {
+        if !self.set_is_paused_value(value) {
             return;
         }
-        self.is_paused = value;
         callbacks.is_paused_changed();
         callbacks.notify_property_changed(Self::IS_PAUSED_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_is_paused_value(&mut self, value: bool) -> bool {
+        if self.is_paused == value {
+            return false;
+        }
+        self.is_paused = value;
+        true
     }
     pub fn speed(&self) -> f32 {
         self.speed
     }
     pub fn set_speed(&mut self, value: f32, callbacks: &mut impl NestedArtboardBaseCallbacks) {
-        if self.speed == value {
+        if !self.set_speed_value(value) {
             return;
         }
-        self.speed = value;
         callbacks.speed_changed();
         callbacks.notify_property_changed(Self::SPEED_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_speed_value(&mut self, value: f32) -> bool {
+        if self.speed == value {
+            return false;
+        }
+        self.speed = value;
+        true
     }
     pub fn quantize(&self) -> f32 {
         self.quantize
     }
     pub fn set_quantize(&mut self, value: f32, callbacks: &mut impl NestedArtboardBaseCallbacks) {
-        if self.quantize == value {
+        if !self.set_quantize_value(value) {
             return;
         }
-        self.quantize = value;
         callbacks.quantize_changed();
         callbacks.notify_property_changed(Self::QUANTIZE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_quantize_value(&mut self, value: f32) -> bool {
+        if self.quantize == value {
+            return false;
+        }
+        self.quantize = value;
+        true
     }
     pub fn is_stateful(&self) -> bool {
         self.is_stateful
@@ -107,12 +136,19 @@ impl NestedArtboardBase {
         value: bool,
         callbacks: &mut impl NestedArtboardBaseCallbacks,
     ) {
-        if self.is_stateful == value {
+        if !self.set_is_stateful_value(value) {
             return;
         }
-        self.is_stateful = value;
         callbacks.is_stateful_changed();
         callbacks.notify_property_changed(Self::IS_STATEFUL_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_is_stateful_value(&mut self, value: bool) -> bool {
+        if self.is_stateful == value {
+            return false;
+        }
+        self.is_stateful = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl NestedArtboardBaseCallbacks) -> NestedArtboard {
         let mut cloned = NestedArtboard::default();
@@ -121,7 +157,6 @@ impl NestedArtboardBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl NestedArtboardBaseCallbacks) {
         self.artboard_id = object.artboard_id;
-        callbacks.copy_data_bind_path_ids(object);
         self.is_paused = object.is_paused;
         self.speed = object.speed;
         self.quantize = object.quantize;
@@ -162,5 +197,19 @@ impl NestedArtboardBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NestedArtboardBase {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedArtboardBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -4,7 +4,9 @@ use crate::mechanical_port::source::{
     custom_property_boolean::CustomPropertyBoolean,
 };
 
-pub trait CustomPropertyBooleanBaseCallbacks {
+pub trait CustomPropertyBooleanBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn property_value_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
 }
@@ -37,12 +39,19 @@ impl CustomPropertyBooleanBase {
         value: bool,
         c: &mut C,
     ) {
-        if self.property_value == value {
+        if !self.set_property_value_value(value) {
             return;
         }
-        self.property_value = value;
         c.property_value_changed();
         c.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_property_value_value(&mut self, value: bool) -> bool {
+        if self.property_value == value {
+            return false;
+        }
+        self.property_value = value;
+        true
     }
     pub fn copy<C: CustomPropertyBooleanBaseCallbacks>(&mut self, object: &Self, c: &mut C) {
         self.property_value = object.property_value;
@@ -69,5 +78,19 @@ impl CustomPropertyBooleanBase {
         let mut cloned = CustomPropertyBoolean::default();
         cloned.base.copy(self, c);
         cloned
+    }
+}
+
+impl std::ops::Deref for CustomPropertyBooleanBase {
+    type Target = CustomProperty;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CustomPropertyBooleanBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

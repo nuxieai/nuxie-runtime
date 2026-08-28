@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{component::Component, core::binary_reader::BinaryReader};
 
-pub trait LayoutSizingStyleBaseCallbacks {
+pub trait LayoutSizingStyleBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn min_width_changed(&mut self) {}
     fn max_width_changed(&mut self) {}
@@ -89,12 +91,19 @@ impl LayoutSizingStyleBase {
         value: f32,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.min_width == value {
+        if !self.set_min_width_value(value) {
             return;
         }
-        self.min_width = value;
         callbacks.min_width_changed();
         callbacks.notify_property_changed(Self::MIN_WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_min_width_value(&mut self, value: f32) -> bool {
+        if self.min_width == value {
+            return false;
+        }
+        self.min_width = value;
+        true
     }
     pub fn max_width(&self) -> f32 {
         self.max_width
@@ -104,12 +113,19 @@ impl LayoutSizingStyleBase {
         value: f32,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.max_width == value {
+        if !self.set_max_width_value(value) {
             return;
         }
-        self.max_width = value;
         callbacks.max_width_changed();
         callbacks.notify_property_changed(Self::MAX_WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_max_width_value(&mut self, value: f32) -> bool {
+        if self.max_width == value {
+            return false;
+        }
+        self.max_width = value;
+        true
     }
     pub fn min_height(&self) -> f32 {
         self.min_height
@@ -119,12 +135,19 @@ impl LayoutSizingStyleBase {
         value: f32,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.min_height == value {
+        if !self.set_min_height_value(value) {
             return;
         }
-        self.min_height = value;
         callbacks.min_height_changed();
         callbacks.notify_property_changed(Self::MIN_HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_min_height_value(&mut self, value: f32) -> bool {
+        if self.min_height == value {
+            return false;
+        }
+        self.min_height = value;
+        true
     }
     pub fn max_height(&self) -> f32 {
         self.max_height
@@ -134,12 +157,19 @@ impl LayoutSizingStyleBase {
         value: f32,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.max_height == value {
+        if !self.set_max_height_value(value) {
             return;
         }
-        self.max_height = value;
         callbacks.max_height_changed();
         callbacks.notify_property_changed(Self::MAX_HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_max_height_value(&mut self, value: f32) -> bool {
+        if self.max_height == value {
+            return false;
+        }
+        self.max_height = value;
+        true
     }
     pub fn layout_width_scale_type(&self) -> u8 {
         self.layout_width_scale_type
@@ -149,12 +179,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.layout_width_scale_type == value {
+        if !self.set_layout_width_scale_type_value(value) {
             return;
         }
-        self.layout_width_scale_type = value;
         callbacks.layout_width_scale_type_changed();
         callbacks.notify_property_changed(Self::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_layout_width_scale_type_value(&mut self, value: u8) -> bool {
+        if self.layout_width_scale_type == value {
+            return false;
+        }
+        self.layout_width_scale_type = value;
+        true
     }
     pub fn layout_height_scale_type(&self) -> u8 {
         self.layout_height_scale_type
@@ -164,12 +201,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.layout_height_scale_type == value {
+        if !self.set_layout_height_scale_type_value(value) {
             return;
         }
-        self.layout_height_scale_type = value;
         callbacks.layout_height_scale_type_changed();
         callbacks.notify_property_changed(Self::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_layout_height_scale_type_value(&mut self, value: u8) -> bool {
+        if self.layout_height_scale_type == value {
+            return false;
+        }
+        self.layout_height_scale_type = value;
+        true
     }
     pub fn width_units_value(&self) -> u8 {
         self.width_units_value
@@ -179,12 +223,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.width_units_value == value {
+        if !self.set_width_units_value_value(value) {
             return;
         }
-        self.width_units_value = value;
         callbacks.width_units_value_changed();
         callbacks.notify_property_changed(Self::WIDTH_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_width_units_value_value(&mut self, value: u8) -> bool {
+        if self.width_units_value == value {
+            return false;
+        }
+        self.width_units_value = value;
+        true
     }
     pub fn height_units_value(&self) -> u8 {
         self.height_units_value
@@ -194,12 +245,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.height_units_value == value {
+        if !self.set_height_units_value_value(value) {
             return;
         }
-        self.height_units_value = value;
         callbacks.height_units_value_changed();
         callbacks.notify_property_changed(Self::HEIGHT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_height_units_value_value(&mut self, value: u8) -> bool {
+        if self.height_units_value == value {
+            return false;
+        }
+        self.height_units_value = value;
+        true
     }
     pub fn min_width_units_value(&self) -> u8 {
         self.min_width_units_value
@@ -209,12 +267,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.min_width_units_value == value {
+        if !self.set_min_width_units_value_value(value) {
             return;
         }
-        self.min_width_units_value = value;
         callbacks.min_width_units_value_changed();
         callbacks.notify_property_changed(Self::MIN_WIDTH_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_min_width_units_value_value(&mut self, value: u8) -> bool {
+        if self.min_width_units_value == value {
+            return false;
+        }
+        self.min_width_units_value = value;
+        true
     }
     pub fn max_width_units_value(&self) -> u8 {
         self.max_width_units_value
@@ -224,12 +289,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.max_width_units_value == value {
+        if !self.set_max_width_units_value_value(value) {
             return;
         }
-        self.max_width_units_value = value;
         callbacks.max_width_units_value_changed();
         callbacks.notify_property_changed(Self::MAX_WIDTH_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_max_width_units_value_value(&mut self, value: u8) -> bool {
+        if self.max_width_units_value == value {
+            return false;
+        }
+        self.max_width_units_value = value;
+        true
     }
     pub fn min_height_units_value(&self) -> u8 {
         self.min_height_units_value
@@ -239,12 +311,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.min_height_units_value == value {
+        if !self.set_min_height_units_value_value(value) {
             return;
         }
-        self.min_height_units_value = value;
         callbacks.min_height_units_value_changed();
         callbacks.notify_property_changed(Self::MIN_HEIGHT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_min_height_units_value_value(&mut self, value: u8) -> bool {
+        if self.min_height_units_value == value {
+            return false;
+        }
+        self.min_height_units_value = value;
+        true
     }
     pub fn max_height_units_value(&self) -> u8 {
         self.max_height_units_value
@@ -254,12 +333,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.max_height_units_value == value {
+        if !self.set_max_height_units_value_value(value) {
             return;
         }
-        self.max_height_units_value = value;
         callbacks.max_height_units_value_changed();
         callbacks.notify_property_changed(Self::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_max_height_units_value_value(&mut self, value: u8) -> bool {
+        if self.max_height_units_value == value {
+            return false;
+        }
+        self.max_height_units_value = value;
+        true
     }
     pub fn justify_self_value(&self) -> u8 {
         self.justify_self_value
@@ -269,12 +355,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.justify_self_value == value {
+        if !self.set_justify_self_value_value(value) {
             return;
         }
-        self.justify_self_value = value;
         callbacks.justify_self_value_changed();
         callbacks.notify_property_changed(Self::JUSTIFY_SELF_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_justify_self_value_value(&mut self, value: u8) -> bool {
+        if self.justify_self_value == value {
+            return false;
+        }
+        self.justify_self_value = value;
+        true
     }
     pub fn display_value(&self) -> u8 {
         self.display_value
@@ -284,12 +377,19 @@ impl LayoutSizingStyleBase {
         value: u8,
         callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
     ) {
-        if self.display_value == value {
+        if !self.set_display_value_value(value) {
             return;
         }
-        self.display_value = value;
         callbacks.display_value_changed();
         callbacks.notify_property_changed(Self::DISPLAY_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_display_value_value(&mut self, value: u8) -> bool {
+        if self.display_value == value {
+            return false;
+        }
+        self.display_value = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl LayoutSizingStyleBaseCallbacks) {
         self.min_width = object.min_width;
@@ -373,5 +473,19 @@ impl LayoutSizingStyleBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for LayoutSizingStyleBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LayoutSizingStyleBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

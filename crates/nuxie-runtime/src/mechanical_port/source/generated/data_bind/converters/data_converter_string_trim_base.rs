@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     data_bind::converters::data_converter_string_trim::DataConverterStringTrim,
 };
 
-pub trait DataConverterStringTrimBaseCallbacks {
+pub trait DataConverterStringTrimBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn trim_type_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl DataConverterStringTrimBase {
         value: u32,
         callbacks: &mut impl DataConverterStringTrimBaseCallbacks,
     ) {
-        if self.trim_type == value {
+        if !self.set_trim_type_value(value) {
             return;
         }
-        self.trim_type = value;
         callbacks.trim_type_changed();
         callbacks.notify_property_changed(Self::TRIM_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_trim_type_value(&mut self, value: u32) -> bool {
+        if self.trim_type == value {
+            return false;
+        }
+        self.trim_type = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -76,5 +83,19 @@ impl DataConverterStringTrimBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterStringTrimBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterStringTrimBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

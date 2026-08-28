@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     text::text_style_feature::TextStyleFeature,
 };
 
-pub trait TextStyleFeatureBaseCallbacks {
+pub trait TextStyleFeatureBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn tag_changed(&mut self) {}
     fn feature_value_changed(&mut self) {}
@@ -40,12 +42,19 @@ impl TextStyleFeatureBase {
         self.tag
     }
     pub fn set_tag(&mut self, value: u32, callbacks: &mut impl TextStyleFeatureBaseCallbacks) {
-        if self.tag == value {
+        if !self.set_tag_value(value) {
             return;
         }
-        self.tag = value;
         callbacks.tag_changed();
         callbacks.notify_property_changed(Self::TAG_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_tag_value(&mut self, value: u32) -> bool {
+        if self.tag == value {
+            return false;
+        }
+        self.tag = value;
+        true
     }
     pub fn feature_value(&self) -> u32 {
         self.feature_value
@@ -55,12 +64,19 @@ impl TextStyleFeatureBase {
         value: u32,
         callbacks: &mut impl TextStyleFeatureBaseCallbacks,
     ) {
-        if self.feature_value == value {
+        if !self.set_feature_value_value(value) {
             return;
         }
-        self.feature_value = value;
         callbacks.feature_value_changed();
         callbacks.notify_property_changed(Self::FEATURE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_feature_value_value(&mut self, value: u32) -> bool {
+        if self.feature_value == value {
+            return false;
+        }
+        self.feature_value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -92,5 +108,19 @@ impl TextStyleFeatureBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextStyleFeatureBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextStyleFeatureBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

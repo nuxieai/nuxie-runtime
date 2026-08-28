@@ -43,12 +43,19 @@ impl RootBoneBase {
     }
 
     pub fn set_x<C: RootBoneBaseCallbacks>(&mut self, value: f32, callbacks: &mut C) {
-        if self.x == value {
+        if !self.set_x_value(value) {
             return;
         }
-        self.x = value;
         callbacks.x_changed();
         callbacks.notify_property_changed(Self::X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
+        if self.x == value {
+            return false;
+        }
+        self.x = value;
+        true
     }
 
     pub fn y(&self) -> f32 {
@@ -56,12 +63,19 @@ impl RootBoneBase {
     }
 
     pub fn set_y<C: RootBoneBaseCallbacks>(&mut self, value: f32, callbacks: &mut C) {
-        if self.y == value {
+        if !self.set_y_value(value) {
             return;
         }
-        self.y = value;
         callbacks.y_changed();
         callbacks.notify_property_changed(Self::Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_y_value(&mut self, value: f32) -> bool {
+        if self.y == value {
+            return false;
+        }
+        self.y = value;
+        true
     }
 
     pub fn clone_into<C: RootBoneBaseCallbacks>(&self, callbacks: &mut C) -> RootBone {
@@ -93,5 +107,19 @@ impl RootBoneBase {
             }
             _ => self.base.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for RootBoneBase {
+    type Target = Bone;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for RootBoneBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

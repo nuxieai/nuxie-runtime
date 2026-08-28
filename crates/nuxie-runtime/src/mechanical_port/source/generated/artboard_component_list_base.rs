@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     drawable::Drawable,
 };
 
-pub trait ArtboardComponentListBaseCallbacks {
+pub trait ArtboardComponentListBaseCallbacks:
+    crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn list_source_changed(&mut self) {}
 }
@@ -40,12 +42,19 @@ impl ArtboardComponentListBase {
         value: u32,
         callbacks: &mut impl ArtboardComponentListBaseCallbacks,
     ) {
-        if self.list_source == value {
+        if !self.set_list_source_value(value) {
             return;
         }
-        self.list_source = value;
         callbacks.list_source_changed();
         callbacks.notify_property_changed(Self::LIST_SOURCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_list_source_value(&mut self, value: u32) -> bool {
+        if self.list_source == value {
+            return false;
+        }
+        self.list_source = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -72,5 +81,19 @@ impl ArtboardComponentListBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ArtboardComponentListBase {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ArtboardComponentListBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

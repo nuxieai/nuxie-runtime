@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::keyed_object::KeyedObject, core::Core, core::binary_reader::BinaryReader,
+    animation::keyed_object::KeyedObject, core::binary_reader::BinaryReader, core::Core,
 };
 
 pub trait KeyedObjectBaseCallbacks {
@@ -35,12 +35,19 @@ impl KeyedObjectBase {
         self.object_id
     }
     pub fn set_object_id(&mut self, value: u32, callbacks: &mut impl KeyedObjectBaseCallbacks) {
-        if self.object_id == value {
+        if !self.set_object_id_value(value) {
             return;
         }
-        self.object_id = value;
         callbacks.object_id_changed();
         callbacks.notify_property_changed(Self::OBJECT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_object_id_value(&mut self, value: u32) -> bool {
+        if self.object_id == value {
+            return false;
+        }
+        self.object_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl KeyedObjectBaseCallbacks) -> KeyedObject {
         let mut cloned = KeyedObject::default();
@@ -63,5 +70,19 @@ impl KeyedObjectBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for KeyedObjectBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for KeyedObjectBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

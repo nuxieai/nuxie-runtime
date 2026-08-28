@@ -30,3 +30,17 @@ impl TextStylePaintBase {
         cloned
     }
 }
+
+impl std::ops::Deref for TextStylePaintBase {
+    type Target = TextStyle;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextStylePaintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

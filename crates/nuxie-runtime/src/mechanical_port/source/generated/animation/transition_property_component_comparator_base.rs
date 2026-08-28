@@ -45,12 +45,19 @@ impl TransitionPropertyComponentComparatorBase {
         value: u32,
         callbacks: &mut impl TransitionPropertyComponentComparatorBaseCallbacks,
     ) {
-        if self.object_id == value {
+        if !self.set_object_id_value(value) {
             return;
         }
-        self.object_id = value;
         callbacks.object_id_changed();
         callbacks.notify_property_changed(Self::OBJECT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_object_id_value(&mut self, value: u32) -> bool {
+        if self.object_id == value {
+            return false;
+        }
+        self.object_id = value;
+        true
     }
     pub fn property_key(&self) -> u32 {
         self.property_key
@@ -60,12 +67,19 @@ impl TransitionPropertyComponentComparatorBase {
         value: u32,
         callbacks: &mut impl TransitionPropertyComponentComparatorBaseCallbacks,
     ) {
-        if self.property_key == value {
+        if !self.set_property_key_value(value) {
             return;
         }
-        self.property_key = value;
         callbacks.property_key_changed();
         callbacks.notify_property_changed(Self::PROPERTY_KEY_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_property_key_value(&mut self, value: u32) -> bool {
+        if self.property_key == value {
+            return false;
+        }
+        self.property_key = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -82,7 +96,7 @@ impl TransitionPropertyComponentComparatorBase {
     ) {
         self.object_id = object.object_id;
         self.property_key = object.property_key;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -99,7 +113,21 @@ impl TransitionPropertyComponentComparatorBase {
                 self.property_key = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for TransitionPropertyComponentComparatorBase {
+    type Target = TransitionPropertyComparator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionPropertyComponentComparatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

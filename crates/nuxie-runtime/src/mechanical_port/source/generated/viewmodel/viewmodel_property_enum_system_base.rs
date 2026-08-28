@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, view_model_property_enum::ViewModelPropertyEnum,
 };
 
-pub trait ViewModelPropertyEnumSystemBaseCallbacks {
+pub trait ViewModelPropertyEnumSystemBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn enum_type_changed(&mut self) {}
 }
@@ -41,12 +41,19 @@ impl ViewModelPropertyEnumSystemBase {
         value: u32,
         callbacks: &mut impl ViewModelPropertyEnumSystemBaseCallbacks,
     ) {
-        if self.enum_type == value {
+        if !self.set_enum_type_value(value) {
             return;
         }
-        self.enum_type = value;
         callbacks.enum_type_changed();
         callbacks.notify_property_changed(Self::ENUM_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_enum_type_value(&mut self, value: u32) -> bool {
+        if self.enum_type == value {
+            return false;
+        }
+        self.enum_type = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -77,5 +84,19 @@ impl ViewModelPropertyEnumSystemBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ViewModelPropertyEnumSystemBase {
+    type Target = ViewModelPropertyEnum;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelPropertyEnumSystemBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

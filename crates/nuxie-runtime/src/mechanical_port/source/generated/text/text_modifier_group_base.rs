@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     text::text_modifier_group::TextModifierGroup,
 };
 
-pub trait TextModifierGroupBaseCallbacks {
+pub trait TextModifierGroupBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn modifier_flags_changed(&mut self) {}
     fn origin_x_changed(&mut self) {}
@@ -72,12 +74,19 @@ impl TextModifierGroupBase {
         value: u32,
         callbacks: &mut impl TextModifierGroupBaseCallbacks,
     ) {
-        if self.modifier_flags == value {
+        if !self.set_modifier_flags_value(value) {
             return;
         }
-        self.modifier_flags = value;
         callbacks.modifier_flags_changed();
         callbacks.notify_property_changed(Self::MODIFIER_FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_modifier_flags_value(&mut self, value: u32) -> bool {
+        if self.modifier_flags == value {
+            return false;
+        }
+        self.modifier_flags = value;
+        true
     }
     pub fn origin_x(&self) -> f32 {
         self.origin_x
@@ -87,12 +96,19 @@ impl TextModifierGroupBase {
         value: f32,
         callbacks: &mut impl TextModifierGroupBaseCallbacks,
     ) {
-        if self.origin_x == value {
+        if !self.set_origin_x_value(value) {
             return;
         }
-        self.origin_x = value;
         callbacks.origin_x_changed();
         callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
+        if self.origin_x == value {
+            return false;
+        }
+        self.origin_x = value;
+        true
     }
     pub fn origin_y(&self) -> f32 {
         self.origin_y
@@ -102,45 +118,73 @@ impl TextModifierGroupBase {
         value: f32,
         callbacks: &mut impl TextModifierGroupBaseCallbacks,
     ) {
-        if self.origin_y == value {
+        if !self.set_origin_y_value(value) {
             return;
         }
-        self.origin_y = value;
         callbacks.origin_y_changed();
         callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
+        if self.origin_y == value {
+            return false;
+        }
+        self.origin_y = value;
+        true
     }
     pub fn opacity(&self) -> f32 {
         self.opacity
     }
     pub fn set_opacity(&mut self, value: f32, callbacks: &mut impl TextModifierGroupBaseCallbacks) {
-        if self.opacity == value {
+        if !self.set_opacity_value(value) {
             return;
         }
-        self.opacity = value;
         callbacks.opacity_changed();
         callbacks.notify_property_changed(Self::OPACITY_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_opacity_value(&mut self, value: f32) -> bool {
+        if self.opacity == value {
+            return false;
+        }
+        self.opacity = value;
+        true
     }
     pub fn x(&self) -> f32 {
         self.x
     }
     pub fn set_x(&mut self, value: f32, callbacks: &mut impl TextModifierGroupBaseCallbacks) {
-        if self.x == value {
+        if !self.set_x_value(value) {
             return;
         }
-        self.x = value;
         callbacks.x_changed();
         callbacks.notify_property_changed(Self::X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
+        if self.x == value {
+            return false;
+        }
+        self.x = value;
+        true
     }
     pub fn y(&self) -> f32 {
         self.y
     }
     pub fn set_y(&mut self, value: f32, callbacks: &mut impl TextModifierGroupBaseCallbacks) {
-        if self.y == value {
+        if !self.set_y_value(value) {
             return;
         }
-        self.y = value;
         callbacks.y_changed();
         callbacks.notify_property_changed(Self::Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_y_value(&mut self, value: f32) -> bool {
+        if self.y == value {
+            return false;
+        }
+        self.y = value;
+        true
     }
     pub fn rotation(&self) -> f32 {
         self.rotation
@@ -150,34 +194,55 @@ impl TextModifierGroupBase {
         value: f32,
         callbacks: &mut impl TextModifierGroupBaseCallbacks,
     ) {
-        if self.rotation == value {
+        if !self.set_rotation_value(value) {
             return;
         }
-        self.rotation = value;
         callbacks.rotation_changed();
         callbacks.notify_property_changed(Self::ROTATION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_rotation_value(&mut self, value: f32) -> bool {
+        if self.rotation == value {
+            return false;
+        }
+        self.rotation = value;
+        true
     }
     pub fn scale_x(&self) -> f32 {
         self.scale_x
     }
     pub fn set_scale_x(&mut self, value: f32, callbacks: &mut impl TextModifierGroupBaseCallbacks) {
-        if self.scale_x == value {
+        if !self.set_scale_x_value(value) {
             return;
         }
-        self.scale_x = value;
         callbacks.scale_x_changed();
         callbacks.notify_property_changed(Self::SCALE_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_scale_x_value(&mut self, value: f32) -> bool {
+        if self.scale_x == value {
+            return false;
+        }
+        self.scale_x = value;
+        true
     }
     pub fn scale_y(&self) -> f32 {
         self.scale_y
     }
     pub fn set_scale_y(&mut self, value: f32, callbacks: &mut impl TextModifierGroupBaseCallbacks) {
-        if self.scale_y == value {
+        if !self.set_scale_y_value(value) {
             return;
         }
-        self.scale_y = value;
         callbacks.scale_y_changed();
         callbacks.notify_property_changed(Self::SCALE_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_scale_y_value(&mut self, value: f32) -> bool {
+        if self.scale_y == value {
+            return false;
+        }
+        self.scale_y = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -244,5 +309,19 @@ impl TextModifierGroupBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextModifierGroupBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextModifierGroupBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

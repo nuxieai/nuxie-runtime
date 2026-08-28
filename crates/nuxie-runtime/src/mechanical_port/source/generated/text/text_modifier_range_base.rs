@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     text::text_modifier_range::TextModifierRange,
 };
 
-pub trait TextModifierRangeBaseCallbacks {
+pub trait TextModifierRangeBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn modify_from_changed(&mut self) {}
     fn modify_to_changed(&mut self) {}
@@ -80,12 +82,19 @@ impl TextModifierRangeBase {
         value: f32,
         callbacks: &mut impl TextModifierRangeBaseCallbacks,
     ) {
-        if self.modify_from == value {
+        if !self.set_modify_from_value(value) {
             return;
         }
-        self.modify_from = value;
         callbacks.modify_from_changed();
         callbacks.notify_property_changed(Self::MODIFY_FROM_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_modify_from_value(&mut self, value: f32) -> bool {
+        if self.modify_from == value {
+            return false;
+        }
+        self.modify_from = value;
+        true
     }
     pub fn modify_to(&self) -> f32 {
         self.modify_to
@@ -95,12 +104,19 @@ impl TextModifierRangeBase {
         value: f32,
         callbacks: &mut impl TextModifierRangeBaseCallbacks,
     ) {
-        if self.modify_to == value {
+        if !self.set_modify_to_value(value) {
             return;
         }
-        self.modify_to = value;
         callbacks.modify_to_changed();
         callbacks.notify_property_changed(Self::MODIFY_TO_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_modify_to_value(&mut self, value: f32) -> bool {
+        if self.modify_to == value {
+            return false;
+        }
+        self.modify_to = value;
+        true
     }
     pub fn strength(&self) -> f32 {
         self.strength
@@ -110,12 +126,19 @@ impl TextModifierRangeBase {
         value: f32,
         callbacks: &mut impl TextModifierRangeBaseCallbacks,
     ) {
-        if self.strength == value {
+        if !self.set_strength_value(value) {
             return;
         }
-        self.strength = value;
         callbacks.strength_changed();
         callbacks.notify_property_changed(Self::STRENGTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_strength_value(&mut self, value: f32) -> bool {
+        if self.strength == value {
+            return false;
+        }
+        self.strength = value;
+        true
     }
     pub fn units_value(&self) -> u32 {
         self.units_value
@@ -125,12 +148,19 @@ impl TextModifierRangeBase {
         value: u32,
         callbacks: &mut impl TextModifierRangeBaseCallbacks,
     ) {
-        if self.units_value == value {
+        if !self.set_units_value_value(value) {
             return;
         }
-        self.units_value = value;
         callbacks.units_value_changed();
         callbacks.notify_property_changed(Self::UNITS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_units_value_value(&mut self, value: u32) -> bool {
+        if self.units_value == value {
+            return false;
+        }
+        self.units_value = value;
+        true
     }
     pub fn type_value(&self) -> u32 {
         self.type_value
@@ -140,12 +170,19 @@ impl TextModifierRangeBase {
         value: u32,
         callbacks: &mut impl TextModifierRangeBaseCallbacks,
     ) {
-        if self.type_value == value {
+        if !self.set_type_value_value(value) {
             return;
         }
-        self.type_value = value;
         callbacks.type_value_changed();
         callbacks.notify_property_changed(Self::TYPE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_type_value_value(&mut self, value: u32) -> bool {
+        if self.type_value == value {
+            return false;
+        }
+        self.type_value = value;
+        true
     }
     pub fn mode_value(&self) -> u32 {
         self.mode_value
@@ -155,23 +192,37 @@ impl TextModifierRangeBase {
         value: u32,
         callbacks: &mut impl TextModifierRangeBaseCallbacks,
     ) {
-        if self.mode_value == value {
+        if !self.set_mode_value_value(value) {
             return;
         }
-        self.mode_value = value;
         callbacks.mode_value_changed();
         callbacks.notify_property_changed(Self::MODE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_mode_value_value(&mut self, value: u32) -> bool {
+        if self.mode_value == value {
+            return false;
+        }
+        self.mode_value = value;
+        true
     }
     pub fn clamp(&self) -> bool {
         self.clamp
     }
     pub fn set_clamp(&mut self, value: bool, callbacks: &mut impl TextModifierRangeBaseCallbacks) {
-        if self.clamp == value {
+        if !self.set_clamp_value(value) {
             return;
         }
-        self.clamp = value;
         callbacks.clamp_changed();
         callbacks.notify_property_changed(Self::CLAMP_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_clamp_value(&mut self, value: bool) -> bool {
+        if self.clamp == value {
+            return false;
+        }
+        self.clamp = value;
+        true
     }
     pub fn falloff_from(&self) -> f32 {
         self.falloff_from
@@ -181,12 +232,19 @@ impl TextModifierRangeBase {
         value: f32,
         callbacks: &mut impl TextModifierRangeBaseCallbacks,
     ) {
-        if self.falloff_from == value {
+        if !self.set_falloff_from_value(value) {
             return;
         }
-        self.falloff_from = value;
         callbacks.falloff_from_changed();
         callbacks.notify_property_changed(Self::FALLOFF_FROM_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_falloff_from_value(&mut self, value: f32) -> bool {
+        if self.falloff_from == value {
+            return false;
+        }
+        self.falloff_from = value;
+        true
     }
     pub fn falloff_to(&self) -> f32 {
         self.falloff_to
@@ -196,34 +254,55 @@ impl TextModifierRangeBase {
         value: f32,
         callbacks: &mut impl TextModifierRangeBaseCallbacks,
     ) {
-        if self.falloff_to == value {
+        if !self.set_falloff_to_value(value) {
             return;
         }
-        self.falloff_to = value;
         callbacks.falloff_to_changed();
         callbacks.notify_property_changed(Self::FALLOFF_TO_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_falloff_to_value(&mut self, value: f32) -> bool {
+        if self.falloff_to == value {
+            return false;
+        }
+        self.falloff_to = value;
+        true
     }
     pub fn offset(&self) -> f32 {
         self.offset
     }
     pub fn set_offset(&mut self, value: f32, callbacks: &mut impl TextModifierRangeBaseCallbacks) {
-        if self.offset == value {
+        if !self.set_offset_value(value) {
             return;
         }
-        self.offset = value;
         callbacks.offset_changed();
         callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_offset_value(&mut self, value: f32) -> bool {
+        if self.offset == value {
+            return false;
+        }
+        self.offset = value;
+        true
     }
     pub fn run_id(&self) -> u32 {
         self.run_id
     }
     pub fn set_run_id(&mut self, value: u32, callbacks: &mut impl TextModifierRangeBaseCallbacks) {
-        if self.run_id == value {
+        if !self.set_run_id_value(value) {
             return;
         }
-        self.run_id = value;
         callbacks.run_id_changed();
         callbacks.notify_property_changed(Self::RUN_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_run_id_value(&mut self, value: u32) -> bool {
+        if self.run_id == value {
+            return false;
+        }
+        self.run_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -300,5 +379,19 @@ impl TextModifierRangeBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextModifierRangeBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextModifierRangeBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

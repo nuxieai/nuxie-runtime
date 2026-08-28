@@ -41,12 +41,19 @@ impl TransitionViewModelConditionBase {
         value: u32,
         callbacks: &mut impl TransitionViewModelConditionBaseCallbacks,
     ) {
-        if self.op_value == value {
+        if !self.set_op_value_value(value) {
             return;
         }
-        self.op_value = value;
         callbacks.op_value_changed();
         callbacks.notify_property_changed(Self::OP_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_op_value_value(&mut self, value: u32) -> bool {
+        if self.op_value == value {
+            return false;
+        }
+        self.op_value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -62,7 +69,7 @@ impl TransitionViewModelConditionBase {
         callbacks: &mut impl TransitionViewModelConditionBaseCallbacks,
     ) {
         self.op_value = object.op_value;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -75,7 +82,21 @@ impl TransitionViewModelConditionBase {
                 self.op_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for TransitionViewModelConditionBase {
+    type Target = TransitionCondition;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionViewModelConditionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

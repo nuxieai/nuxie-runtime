@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
 
 pub struct TransitionComparatorBase {
     pub base: Core,
@@ -24,5 +24,19 @@ impl TransitionComparatorBase {
     pub fn copy(&mut self, object: &Self) {}
     pub fn deserialize(&mut self, property_key: u16, reader: &mut BinaryReader<'_>) -> bool {
         false
+    }
+}
+
+impl std::ops::Deref for TransitionComparatorBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionComparatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     data_bind::converters::data_converter_string_pad::DataConverterStringPad,
 };
 
-pub trait DataConverterStringPadBaseCallbacks {
+pub trait DataConverterStringPadBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn length_changed(&mut self) {}
     fn text_changed(&mut self) {}
@@ -48,12 +48,19 @@ impl DataConverterStringPadBase {
         value: u32,
         callbacks: &mut impl DataConverterStringPadBaseCallbacks,
     ) {
-        if self.length == value {
+        if !self.set_length_value(value) {
             return;
         }
-        self.length = value;
         callbacks.length_changed();
         callbacks.notify_property_changed(Self::LENGTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_length_value(&mut self, value: u32) -> bool {
+        if self.length == value {
+            return false;
+        }
+        self.length = value;
+        true
     }
     pub fn text(&self) -> &str {
         &self.text
@@ -63,12 +70,19 @@ impl DataConverterStringPadBase {
         value: String,
         callbacks: &mut impl DataConverterStringPadBaseCallbacks,
     ) {
-        if self.text == value {
+        if !self.set_text_value(value) {
             return;
         }
-        self.text = value;
         callbacks.text_changed();
         callbacks.notify_property_changed(Self::TEXT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_text_value(&mut self, value: String) -> bool {
+        if self.text == value {
+            return false;
+        }
+        self.text = value;
+        true
     }
     pub fn pad_type(&self) -> u32 {
         self.pad_type
@@ -78,12 +92,19 @@ impl DataConverterStringPadBase {
         value: u32,
         callbacks: &mut impl DataConverterStringPadBaseCallbacks,
     ) {
-        if self.pad_type == value {
+        if !self.set_pad_type_value(value) {
             return;
         }
-        self.pad_type = value;
         callbacks.pad_type_changed();
         callbacks.notify_property_changed(Self::PAD_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_pad_type_value(&mut self, value: u32) -> bool {
+        if self.pad_type == value {
+            return false;
+        }
+        self.pad_type = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -124,5 +145,19 @@ impl DataConverterStringPadBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterStringPadBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterStringPadBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

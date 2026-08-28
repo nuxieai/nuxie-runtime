@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
 
 pub trait ComponentBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
@@ -37,23 +37,37 @@ impl ComponentBase {
         &self.name
     }
     pub fn set_name(&mut self, value: String, callbacks: &mut impl ComponentBaseCallbacks) {
-        if self.name == value {
+        if !self.set_name_value(value) {
             return;
         }
-        self.name = value;
         callbacks.name_changed();
         callbacks.notify_property_changed(Self::NAME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_name_value(&mut self, value: String) -> bool {
+        if self.name == value {
+            return false;
+        }
+        self.name = value;
+        true
     }
     pub fn parent_id(&self) -> u32 {
         self.parent_id
     }
     pub fn set_parent_id(&mut self, value: u32, callbacks: &mut impl ComponentBaseCallbacks) {
-        if self.parent_id == value {
+        if !self.set_parent_id_value(value) {
             return;
         }
-        self.parent_id = value;
         callbacks.parent_id_changed();
         callbacks.notify_property_changed(Self::PARENT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_parent_id_value(&mut self, value: u32) -> bool {
+        if self.parent_id == value {
+            return false;
+        }
+        self.parent_id = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ComponentBaseCallbacks) {
         self.name.clone_from(&object.name);
@@ -76,5 +90,19 @@ impl ComponentBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for ComponentBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ComponentBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

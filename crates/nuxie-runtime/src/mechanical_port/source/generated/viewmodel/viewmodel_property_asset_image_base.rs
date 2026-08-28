@@ -31,3 +31,17 @@ impl ViewModelPropertyAssetImageBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ViewModelPropertyAssetImageBase {
+    type Target = ViewModelPropertyAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelPropertyAssetImageBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     script_input_artboard::ScriptInputArtboard,
 };
 
-pub trait ScriptInputArtboardBaseCallbacks {
+pub trait ScriptInputArtboardBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn artboard_id_changed(&mut self) {}
 }
@@ -40,12 +42,19 @@ impl ScriptInputArtboardBase {
         value: u32,
         callbacks: &mut impl ScriptInputArtboardBaseCallbacks,
     ) {
-        if self.artboard_id == value {
+        if !self.set_artboard_id_value(value) {
             return;
         }
-        self.artboard_id = value;
         callbacks.artboard_id_changed();
         callbacks.notify_property_changed(Self::ARTBOARD_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_artboard_id_value(&mut self, value: u32) -> bool {
+        if self.artboard_id == value {
+            return false;
+        }
+        self.artboard_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -72,5 +81,19 @@ impl ScriptInputArtboardBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ScriptInputArtboardBase {
+    type Target = CustomProperty;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptInputArtboardBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

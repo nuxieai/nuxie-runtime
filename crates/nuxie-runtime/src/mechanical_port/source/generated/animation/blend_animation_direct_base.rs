@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     animation::blend_animation_direct::BlendAnimationDirect, core::binary_reader::BinaryReader,
 };
 
-pub trait BlendAnimationDirectBaseCallbacks {
+pub trait BlendAnimationDirectBaseCallbacks: crate::mechanical_port::source::generated::animation::blend_animation_base::BlendAnimationBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn input_id_changed(&mut self) {}
     fn mix_value_changed(&mut self) {}
@@ -48,12 +48,19 @@ impl BlendAnimationDirectBase {
         value: u32,
         callbacks: &mut impl BlendAnimationDirectBaseCallbacks,
     ) {
-        if self.input_id == value {
+        if !self.set_input_id_value(value) {
             return;
         }
-        self.input_id = value;
         callbacks.input_id_changed();
         callbacks.notify_property_changed(Self::INPUT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_input_id_value(&mut self, value: u32) -> bool {
+        if self.input_id == value {
+            return false;
+        }
+        self.input_id = value;
+        true
     }
     pub fn mix_value(&self) -> f32 {
         self.mix_value
@@ -63,12 +70,19 @@ impl BlendAnimationDirectBase {
         value: f32,
         callbacks: &mut impl BlendAnimationDirectBaseCallbacks,
     ) {
-        if self.mix_value == value {
+        if !self.set_mix_value_value(value) {
             return;
         }
-        self.mix_value = value;
         callbacks.mix_value_changed();
         callbacks.notify_property_changed(Self::MIX_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_mix_value_value(&mut self, value: f32) -> bool {
+        if self.mix_value == value {
+            return false;
+        }
+        self.mix_value = value;
+        true
     }
     pub fn blend_source(&self) -> u32 {
         self.blend_source
@@ -78,12 +92,19 @@ impl BlendAnimationDirectBase {
         value: u32,
         callbacks: &mut impl BlendAnimationDirectBaseCallbacks,
     ) {
-        if self.blend_source == value {
+        if !self.set_blend_source_value(value) {
             return;
         }
-        self.blend_source = value;
         callbacks.blend_source_changed();
         callbacks.notify_property_changed(Self::BLEND_SOURCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_blend_source_value(&mut self, value: u32) -> bool {
+        if self.blend_source == value {
+            return false;
+        }
+        self.blend_source = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -120,5 +141,19 @@ impl BlendAnimationDirectBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for BlendAnimationDirectBase {
+    type Target = BlendAnimation;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BlendAnimationDirectBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

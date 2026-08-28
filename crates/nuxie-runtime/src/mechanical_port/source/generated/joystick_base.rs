@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, core::binary_reader::BinaryReader, joystick::Joystick,
 };
 
-pub trait JoystickBaseCallbacks {
+pub trait JoystickBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn x_changed(&mut self) {}
     fn y_changed(&mut self) {}
@@ -79,133 +81,217 @@ impl JoystickBase {
         self.x
     }
     pub fn set_x(&mut self, value: f32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.x == value {
+        if !self.set_x_value(value) {
             return;
         }
-        self.x = value;
         callbacks.x_changed();
         callbacks.notify_property_changed(Self::X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
+        if self.x == value {
+            return false;
+        }
+        self.x = value;
+        true
     }
     pub fn y(&self) -> f32 {
         self.y
     }
     pub fn set_y(&mut self, value: f32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.y == value {
+        if !self.set_y_value(value) {
             return;
         }
-        self.y = value;
         callbacks.y_changed();
         callbacks.notify_property_changed(Self::Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_y_value(&mut self, value: f32) -> bool {
+        if self.y == value {
+            return false;
+        }
+        self.y = value;
+        true
     }
     pub fn pos_x(&self) -> f32 {
         self.pos_x
     }
     pub fn set_pos_x(&mut self, value: f32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.pos_x == value {
+        if !self.set_pos_x_value(value) {
             return;
         }
-        self.pos_x = value;
         callbacks.pos_x_changed();
         callbacks.notify_property_changed(Self::POS_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_pos_x_value(&mut self, value: f32) -> bool {
+        if self.pos_x == value {
+            return false;
+        }
+        self.pos_x = value;
+        true
     }
     pub fn pos_y(&self) -> f32 {
         self.pos_y
     }
     pub fn set_pos_y(&mut self, value: f32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.pos_y == value {
+        if !self.set_pos_y_value(value) {
             return;
         }
-        self.pos_y = value;
         callbacks.pos_y_changed();
         callbacks.notify_property_changed(Self::POS_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_pos_y_value(&mut self, value: f32) -> bool {
+        if self.pos_y == value {
+            return false;
+        }
+        self.pos_y = value;
+        true
     }
     pub fn origin_x(&self) -> f32 {
         self.origin_x
     }
     pub fn set_origin_x(&mut self, value: f32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.origin_x == value {
+        if !self.set_origin_x_value(value) {
             return;
         }
-        self.origin_x = value;
         callbacks.origin_x_changed();
         callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
+        if self.origin_x == value {
+            return false;
+        }
+        self.origin_x = value;
+        true
     }
     pub fn origin_y(&self) -> f32 {
         self.origin_y
     }
     pub fn set_origin_y(&mut self, value: f32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.origin_y == value {
+        if !self.set_origin_y_value(value) {
             return;
         }
-        self.origin_y = value;
         callbacks.origin_y_changed();
         callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
+        if self.origin_y == value {
+            return false;
+        }
+        self.origin_y = value;
+        true
     }
     pub fn width(&self) -> f32 {
         self.width
     }
     pub fn set_width(&mut self, value: f32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.width == value {
+        if !self.set_width_value(value) {
             return;
         }
-        self.width = value;
         callbacks.width_changed();
         callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
+        if self.width == value {
+            return false;
+        }
+        self.width = value;
+        true
     }
     pub fn height(&self) -> f32 {
         self.height
     }
     pub fn set_height(&mut self, value: f32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.height == value {
+        if !self.set_height_value(value) {
             return;
         }
-        self.height = value;
         callbacks.height_changed();
         callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
+        if self.height == value {
+            return false;
+        }
+        self.height = value;
+        true
     }
     pub fn x_id(&self) -> u32 {
         self.x_id
     }
     pub fn set_x_id(&mut self, value: u32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.x_id == value {
+        if !self.set_x_id_value(value) {
             return;
         }
-        self.x_id = value;
         callbacks.x_id_changed();
         callbacks.notify_property_changed(Self::X_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_x_id_value(&mut self, value: u32) -> bool {
+        if self.x_id == value {
+            return false;
+        }
+        self.x_id = value;
+        true
     }
     pub fn y_id(&self) -> u32 {
         self.y_id
     }
     pub fn set_y_id(&mut self, value: u32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.y_id == value {
+        if !self.set_y_id_value(value) {
             return;
         }
-        self.y_id = value;
         callbacks.y_id_changed();
         callbacks.notify_property_changed(Self::Y_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_y_id_value(&mut self, value: u32) -> bool {
+        if self.y_id == value {
+            return false;
+        }
+        self.y_id = value;
+        true
     }
     pub fn joystick_flags(&self) -> u32 {
         self.joystick_flags
     }
     pub fn set_joystick_flags(&mut self, value: u32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.joystick_flags == value {
+        if !self.set_joystick_flags_value(value) {
             return;
         }
-        self.joystick_flags = value;
         callbacks.joystick_flags_changed();
         callbacks.notify_property_changed(Self::JOYSTICK_FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_joystick_flags_value(&mut self, value: u32) -> bool {
+        if self.joystick_flags == value {
+            return false;
+        }
+        self.joystick_flags = value;
+        true
     }
     pub fn handle_source_id(&self) -> u32 {
         self.handle_source_id
     }
     pub fn set_handle_source_id(&mut self, value: u32, callbacks: &mut impl JoystickBaseCallbacks) {
-        if self.handle_source_id == value {
+        if !self.set_handle_source_id_value(value) {
             return;
         }
-        self.handle_source_id = value;
         callbacks.handle_source_id_changed();
         callbacks.notify_property_changed(Self::HANDLE_SOURCE_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_handle_source_id_value(&mut self, value: u32) -> bool {
+        if self.handle_source_id == value {
+            return false;
+        }
+        self.handle_source_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl JoystickBaseCallbacks) -> Joystick {
         let mut cloned = Joystick::default();
@@ -284,5 +370,19 @@ impl JoystickBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for JoystickBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for JoystickBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -47,12 +47,18 @@ impl ExportAudioBase {
     }
 
     pub fn set_volume<C: ExportAudioBaseCallbacks>(&mut self, value: f32, callbacks: &mut C) {
-        if self.volume == value {
+        if !self.set_volume_value(value) {
             return;
         }
-        self.volume = value;
         callbacks.volume_changed();
         callbacks.notify_property_changed(Self::VOLUME_PROPERTY_KEY);
+    }
+    pub(crate) fn set_volume_value(&mut self, value: f32) -> bool {
+        if self.volume == value {
+            return false;
+        }
+        self.volume = value;
+        true
     }
 
     pub fn copy<C: ExportAudioBaseCallbacks>(&mut self, object: &Self, callbacks: &mut C) {
@@ -73,5 +79,19 @@ impl ExportAudioBase {
             }
             _ => self.base.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ExportAudioBase {
+    type Target = FileAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ExportAudioBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

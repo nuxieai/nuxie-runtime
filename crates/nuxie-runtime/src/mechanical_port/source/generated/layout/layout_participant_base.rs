@@ -30,3 +30,17 @@ impl LayoutParticipantBase {
         cloned
     }
 }
+
+impl std::ops::Deref for LayoutParticipantBase {
+    type Target = LayoutNodeStyle;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LayoutParticipantBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

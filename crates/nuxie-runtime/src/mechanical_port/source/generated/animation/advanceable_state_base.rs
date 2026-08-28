@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     animation::layer_state::LayerState, core::binary_reader::BinaryReader,
 };
 
-pub trait AdvanceableStateBaseCallbacks {
+pub trait AdvanceableStateBaseCallbacks:
+    crate::mechanical_port::source::generated::animation::layer_state_base::LayerStateBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn speed_changed(&mut self) {}
 }
@@ -35,12 +37,19 @@ impl AdvanceableStateBase {
         self.speed
     }
     pub fn set_speed(&mut self, value: f32, callbacks: &mut impl AdvanceableStateBaseCallbacks) {
-        if self.speed == value {
+        if !self.set_speed_value(value) {
             return;
         }
-        self.speed = value;
         callbacks.speed_changed();
         callbacks.notify_property_changed(Self::SPEED_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_speed_value(&mut self, value: f32) -> bool {
+        if self.speed == value {
+            return false;
+        }
+        self.speed = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl AdvanceableStateBaseCallbacks) {
         self.speed = object.speed;
@@ -59,5 +68,19 @@ impl AdvanceableStateBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for AdvanceableStateBase {
+    type Target = LayerState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AdvanceableStateBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait FocusActionTraversalBaseCallbacks {
+pub trait FocusActionTraversalBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn traversal_kind_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl FocusActionTraversalBase {
         value: u32,
         callbacks: &mut impl FocusActionTraversalBaseCallbacks,
     ) {
-        if self.traversal_kind == value {
+        if !self.set_traversal_kind_value(value) {
             return;
         }
-        self.traversal_kind = value;
         callbacks.traversal_kind_changed();
         callbacks.notify_property_changed(Self::TRAVERSAL_KIND_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_traversal_kind_value(&mut self, value: u32) -> bool {
+        if self.traversal_kind == value {
+            return false;
+        }
+        self.traversal_kind = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -72,5 +79,19 @@ impl FocusActionTraversalBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for FocusActionTraversalBase {
+    type Target = FocusAction;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FocusActionTraversalBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

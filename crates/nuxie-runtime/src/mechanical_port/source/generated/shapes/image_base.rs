@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, drawable::Drawable, shapes::image::Image,
 };
 
-pub trait ImageBaseCallbacks {
+pub trait ImageBaseCallbacks:
+    crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn asset_id_changed(&mut self) {}
     fn origin_x_changed(&mut self) {}
@@ -55,67 +57,109 @@ impl ImageBase {
         self.asset_id
     }
     pub fn set_asset_id(&mut self, value: u32, callbacks: &mut impl ImageBaseCallbacks) {
-        if self.asset_id == value {
+        if !self.set_asset_id_value(value) {
             return;
         }
-        self.asset_id = value;
         callbacks.asset_id_changed();
         callbacks.notify_property_changed(Self::ASSET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_asset_id_value(&mut self, value: u32) -> bool {
+        if self.asset_id == value {
+            return false;
+        }
+        self.asset_id = value;
+        true
     }
     pub fn origin_x(&self) -> f32 {
         self.origin_x
     }
     pub fn set_origin_x(&mut self, value: f32, callbacks: &mut impl ImageBaseCallbacks) {
-        if self.origin_x == value {
+        if !self.set_origin_x_value(value) {
             return;
         }
-        self.origin_x = value;
         callbacks.origin_x_changed();
         callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
+        if self.origin_x == value {
+            return false;
+        }
+        self.origin_x = value;
+        true
     }
     pub fn origin_y(&self) -> f32 {
         self.origin_y
     }
     pub fn set_origin_y(&mut self, value: f32, callbacks: &mut impl ImageBaseCallbacks) {
-        if self.origin_y == value {
+        if !self.set_origin_y_value(value) {
             return;
         }
-        self.origin_y = value;
         callbacks.origin_y_changed();
         callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
+        if self.origin_y == value {
+            return false;
+        }
+        self.origin_y = value;
+        true
     }
     pub fn fit(&self) -> u32 {
         self.fit
     }
     pub fn set_fit(&mut self, value: u32, callbacks: &mut impl ImageBaseCallbacks) {
-        if self.fit == value {
+        if !self.set_fit_value(value) {
             return;
         }
-        self.fit = value;
         callbacks.fit_changed();
         callbacks.notify_property_changed(Self::FIT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_fit_value(&mut self, value: u32) -> bool {
+        if self.fit == value {
+            return false;
+        }
+        self.fit = value;
+        true
     }
     pub fn alignment_x(&self) -> f32 {
         self.alignment_x
     }
     pub fn set_alignment_x(&mut self, value: f32, callbacks: &mut impl ImageBaseCallbacks) {
-        if self.alignment_x == value {
+        if !self.set_alignment_x_value(value) {
             return;
         }
-        self.alignment_x = value;
         callbacks.alignment_x_changed();
         callbacks.notify_property_changed(Self::ALIGNMENT_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_alignment_x_value(&mut self, value: f32) -> bool {
+        if self.alignment_x == value {
+            return false;
+        }
+        self.alignment_x = value;
+        true
     }
     pub fn alignment_y(&self) -> f32 {
         self.alignment_y
     }
     pub fn set_alignment_y(&mut self, value: f32, callbacks: &mut impl ImageBaseCallbacks) {
-        if self.alignment_y == value {
+        if !self.set_alignment_y_value(value) {
             return;
         }
-        self.alignment_y = value;
         callbacks.alignment_y_changed();
         callbacks.notify_property_changed(Self::ALIGNMENT_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_alignment_y_value(&mut self, value: f32) -> bool {
+        if self.alignment_y == value {
+            return false;
+        }
+        self.alignment_y = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl ImageBaseCallbacks) -> Image {
         let mut cloned = Image::default();
@@ -164,5 +208,19 @@ impl ImageBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ImageBase {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ImageBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

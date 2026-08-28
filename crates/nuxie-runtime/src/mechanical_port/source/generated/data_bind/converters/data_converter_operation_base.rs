@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     data_bind::converters::data_converter_operation::DataConverterOperation,
 };
 
-pub trait DataConverterOperationBaseCallbacks {
+pub trait DataConverterOperationBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn operation_type_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl DataConverterOperationBase {
         value: u32,
         callbacks: &mut impl DataConverterOperationBaseCallbacks,
     ) {
-        if self.operation_type == value {
+        if !self.set_operation_type_value(value) {
             return;
         }
-        self.operation_type = value;
         callbacks.operation_type_changed();
         callbacks.notify_property_changed(Self::OPERATION_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_operation_type_value(&mut self, value: u32) -> bool {
+        if self.operation_type == value {
+            return false;
+        }
+        self.operation_type = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -76,5 +83,19 @@ impl DataConverterOperationBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterOperationBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterOperationBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

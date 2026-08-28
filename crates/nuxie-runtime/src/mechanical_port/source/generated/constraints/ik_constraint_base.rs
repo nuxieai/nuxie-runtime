@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait IKConstraintBaseCallbacks {
+pub trait IKConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::targeted_constraint_base::TargetedConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn invert_direction_changed(&mut self) {}
     fn parent_bone_count_changed(&mut self) {}
@@ -44,12 +44,19 @@ impl IKConstraintBase {
         value: bool,
         callbacks: &mut impl IKConstraintBaseCallbacks,
     ) {
-        if self.invert_direction == value {
+        if !self.set_invert_direction_value(value) {
             return;
         }
-        self.invert_direction = value;
         callbacks.invert_direction_changed();
         callbacks.notify_property_changed(Self::INVERT_DIRECTION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_invert_direction_value(&mut self, value: bool) -> bool {
+        if self.invert_direction == value {
+            return false;
+        }
+        self.invert_direction = value;
+        true
     }
     pub fn parent_bone_count(&self) -> u32 {
         self.parent_bone_count
@@ -59,12 +66,19 @@ impl IKConstraintBase {
         value: u32,
         callbacks: &mut impl IKConstraintBaseCallbacks,
     ) {
-        if self.parent_bone_count == value {
+        if !self.set_parent_bone_count_value(value) {
             return;
         }
-        self.parent_bone_count = value;
         callbacks.parent_bone_count_changed();
         callbacks.notify_property_changed(Self::PARENT_BONE_COUNT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_parent_bone_count_value(&mut self, value: u32) -> bool {
+        if self.parent_bone_count == value {
+            return false;
+        }
+        self.parent_bone_count = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl IKConstraintBaseCallbacks) -> IKConstraint {
         let mut cloned = IKConstraint::default();
@@ -93,5 +107,19 @@ impl IKConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for IKConstraintBase {
+    type Target = TargetedConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for IKConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

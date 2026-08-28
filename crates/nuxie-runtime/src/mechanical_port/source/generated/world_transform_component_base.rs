@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     container_component::ContainerComponent, core::binary_reader::BinaryReader,
 };
 
-pub trait WorldTransformComponentBaseCallbacks {
+pub trait WorldTransformComponentBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn opacity_changed(&mut self) {}
 }
@@ -39,12 +41,19 @@ impl WorldTransformComponentBase {
         value: f32,
         callbacks: &mut impl WorldTransformComponentBaseCallbacks,
     ) {
-        if self.opacity == value {
+        if !self.set_opacity_value(value) {
             return;
         }
-        self.opacity = value;
         callbacks.opacity_changed();
         callbacks.notify_property_changed(Self::OPACITY_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_opacity_value(&mut self, value: f32) -> bool {
+        if self.opacity == value {
+            return false;
+        }
+        self.opacity = value;
+        true
     }
     pub fn copy(
         &mut self,
@@ -67,5 +76,19 @@ impl WorldTransformComponentBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for WorldTransformComponentBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for WorldTransformComponentBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

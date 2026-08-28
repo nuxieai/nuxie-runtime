@@ -4,7 +4,9 @@ use crate::mechanical_port::source::{
     scripted::scripted_drawable::ScriptedDrawable,
 };
 
-pub trait ScriptedDrawableBaseCallbacks {
+pub trait ScriptedDrawableBaseCallbacks:
+    crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
+{
     fn script_asset_id_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
 }
@@ -36,12 +38,19 @@ impl ScriptedDrawableBase {
         self.script_asset_id
     }
     pub fn set_script_asset_id<C: ScriptedDrawableBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.script_asset_id == value {
+        if !self.set_script_asset_id_value(value) {
             return;
         }
-        self.script_asset_id = value;
         c.script_asset_id_changed();
         c.notify_property_changed(Self::SCRIPT_ASSET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_script_asset_id_value(&mut self, value: u32) -> bool {
+        if self.script_asset_id == value {
+            return false;
+        }
+        self.script_asset_id = value;
+        true
     }
     pub fn clone_into<C: ScriptedDrawableBaseCallbacks>(&self, c: &mut C) -> ScriptedDrawable {
         let mut cloned = ScriptedDrawable::default();
@@ -65,5 +74,19 @@ impl ScriptedDrawableBase {
             }
             _ => self.base.base.deserialize(key, reader, c),
         }
+    }
+}
+
+impl std::ops::Deref for ScriptedDrawableBase {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptedDrawableBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
 
 pub trait BlendAnimationBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
@@ -37,12 +37,19 @@ impl BlendAnimationBase {
         value: u32,
         callbacks: &mut impl BlendAnimationBaseCallbacks,
     ) {
-        if self.animation_id == value {
+        if !self.set_animation_id_value(value) {
             return;
         }
-        self.animation_id = value;
         callbacks.animation_id_changed();
         callbacks.notify_property_changed(Self::ANIMATION_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_animation_id_value(&mut self, value: u32) -> bool {
+        if self.animation_id == value {
+            return false;
+        }
+        self.animation_id = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl BlendAnimationBaseCallbacks) {
         self.animation_id = object.animation_id;
@@ -60,5 +67,19 @@ impl BlendAnimationBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for BlendAnimationBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BlendAnimationBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

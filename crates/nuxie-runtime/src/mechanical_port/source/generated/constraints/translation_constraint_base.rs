@@ -26,7 +26,22 @@ impl TranslationConstraintBase {
     }
     pub fn clone_into(&self) -> TranslationConstraint {
         let mut cloned = TranslationConstraint::default();
-        cloned.base.copy(self);
+        let mut callbacks = TranslationConstraint::default();
+        cloned.base.copy(self, &mut callbacks);
         cloned
+    }
+}
+
+impl std::ops::Deref for TranslationConstraintBase {
+    type Target = TransformComponentConstraintY;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TranslationConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

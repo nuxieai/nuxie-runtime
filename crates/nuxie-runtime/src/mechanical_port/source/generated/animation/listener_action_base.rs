@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
 
 pub trait ListenerActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
@@ -33,12 +33,19 @@ impl ListenerActionBase {
         self.flags
     }
     pub fn set_flags(&mut self, value: u32, callbacks: &mut impl ListenerActionBaseCallbacks) {
-        if self.flags == value {
+        if !self.set_flags_value(value) {
             return;
         }
-        self.flags = value;
         callbacks.flags_changed();
         callbacks.notify_property_changed(Self::FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_flags_value(&mut self, value: u32) -> bool {
+        if self.flags == value {
+            return false;
+        }
+        self.flags = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ListenerActionBaseCallbacks) {
         self.flags = object.flags;
@@ -56,5 +63,19 @@ impl ListenerActionBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for ListenerActionBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListenerActionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::paint::stroke::Stroke,
 };
 
-pub trait StrokeBaseCallbacks {
+pub trait StrokeBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn thickness_changed(&mut self) {}
     fn cap_changed(&mut self) {}
@@ -48,34 +50,55 @@ impl StrokeBase {
         self.thickness
     }
     pub fn set_thickness(&mut self, value: f32, callbacks: &mut impl StrokeBaseCallbacks) {
-        if self.thickness == value {
+        if !self.set_thickness_value(value) {
             return;
         }
-        self.thickness = value;
         callbacks.thickness_changed();
         callbacks.notify_property_changed(Self::THICKNESS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_thickness_value(&mut self, value: f32) -> bool {
+        if self.thickness == value {
+            return false;
+        }
+        self.thickness = value;
+        true
     }
     pub fn cap(&self) -> u32 {
         self.cap
     }
     pub fn set_cap(&mut self, value: u32, callbacks: &mut impl StrokeBaseCallbacks) {
-        if self.cap == value {
+        if !self.set_cap_value(value) {
             return;
         }
-        self.cap = value;
         callbacks.cap_changed();
         callbacks.notify_property_changed(Self::CAP_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_cap_value(&mut self, value: u32) -> bool {
+        if self.cap == value {
+            return false;
+        }
+        self.cap = value;
+        true
     }
     pub fn join(&self) -> u32 {
         self.join
     }
     pub fn set_join(&mut self, value: u32, callbacks: &mut impl StrokeBaseCallbacks) {
-        if self.join == value {
+        if !self.set_join_value(value) {
             return;
         }
-        self.join = value;
         callbacks.join_changed();
         callbacks.notify_property_changed(Self::JOIN_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_join_value(&mut self, value: u32) -> bool {
+        if self.join == value {
+            return false;
+        }
+        self.join = value;
+        true
     }
     pub fn transform_affects_stroke(&self) -> bool {
         self.transform_affects_stroke
@@ -85,12 +108,19 @@ impl StrokeBase {
         value: bool,
         callbacks: &mut impl StrokeBaseCallbacks,
     ) {
-        if self.transform_affects_stroke == value {
+        if !self.set_transform_affects_stroke_value(value) {
             return;
         }
-        self.transform_affects_stroke = value;
         callbacks.transform_affects_stroke_changed();
         callbacks.notify_property_changed(Self::TRANSFORM_AFFECTS_STROKE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_transform_affects_stroke_value(&mut self, value: bool) -> bool {
+        if self.transform_affects_stroke == value {
+            return false;
+        }
+        self.transform_affects_stroke = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl StrokeBaseCallbacks) -> Stroke {
         let mut cloned = Stroke::default();
@@ -129,5 +159,19 @@ impl StrokeBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for StrokeBase {
+    type Target = ShapePaint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StrokeBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

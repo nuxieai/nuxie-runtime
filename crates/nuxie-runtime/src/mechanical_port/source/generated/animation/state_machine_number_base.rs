@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     animation::state_machine_number::StateMachineNumber, core::binary_reader::BinaryReader,
 };
 
-pub trait StateMachineNumberBaseCallbacks {
+pub trait StateMachineNumberBaseCallbacks: crate::mechanical_port::source::generated::animation::state_machine_component_base::StateMachineComponentBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn value_changed(&mut self) {}
 }
@@ -36,12 +36,19 @@ impl StateMachineNumberBase {
         self.value
     }
     pub fn set_value(&mut self, value: f32, callbacks: &mut impl StateMachineNumberBaseCallbacks) {
-        if self.value == value {
+        if !self.set_value_value(value) {
             return;
         }
-        self.value = value;
         callbacks.value_changed();
         callbacks.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_value_value(&mut self, value: f32) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -68,5 +75,19 @@ impl StateMachineNumberBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for StateMachineNumberBase {
+    type Target = StateMachineInput;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for StateMachineNumberBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

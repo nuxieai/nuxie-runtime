@@ -30,3 +30,17 @@ impl PointsPathBase {
         cloned
     }
 }
+
+impl std::ops::Deref for PointsPathBase {
+    type Target = PointsCommonPath;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for PointsPathBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

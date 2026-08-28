@@ -35,3 +35,17 @@ impl ManifestAssetBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ManifestAssetBase {
+    type Target = FileAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ManifestAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

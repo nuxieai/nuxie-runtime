@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     text::text_style::TextStyle,
 };
 
-pub trait TextStyleBaseCallbacks {
+pub trait TextStyleBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn font_size_changed(&mut self) {}
     fn line_height_changed(&mut self) {}
@@ -48,45 +50,73 @@ impl TextStyleBase {
         self.font_size
     }
     pub fn set_font_size(&mut self, value: f32, callbacks: &mut impl TextStyleBaseCallbacks) {
-        if self.font_size == value {
+        if !self.set_font_size_value(value) {
             return;
         }
-        self.font_size = value;
         callbacks.font_size_changed();
         callbacks.notify_property_changed(Self::FONT_SIZE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_font_size_value(&mut self, value: f32) -> bool {
+        if self.font_size == value {
+            return false;
+        }
+        self.font_size = value;
+        true
     }
     pub fn line_height(&self) -> f32 {
         self.line_height
     }
     pub fn set_line_height(&mut self, value: f32, callbacks: &mut impl TextStyleBaseCallbacks) {
-        if self.line_height == value {
+        if !self.set_line_height_value(value) {
             return;
         }
-        self.line_height = value;
         callbacks.line_height_changed();
         callbacks.notify_property_changed(Self::LINE_HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_line_height_value(&mut self, value: f32) -> bool {
+        if self.line_height == value {
+            return false;
+        }
+        self.line_height = value;
+        true
     }
     pub fn letter_spacing(&self) -> f32 {
         self.letter_spacing
     }
     pub fn set_letter_spacing(&mut self, value: f32, callbacks: &mut impl TextStyleBaseCallbacks) {
-        if self.letter_spacing == value {
+        if !self.set_letter_spacing_value(value) {
             return;
         }
-        self.letter_spacing = value;
         callbacks.letter_spacing_changed();
         callbacks.notify_property_changed(Self::LETTER_SPACING_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_letter_spacing_value(&mut self, value: f32) -> bool {
+        if self.letter_spacing == value {
+            return false;
+        }
+        self.letter_spacing = value;
+        true
     }
     pub fn font_asset_id(&self) -> u32 {
         self.font_asset_id
     }
     pub fn set_font_asset_id(&mut self, value: u32, callbacks: &mut impl TextStyleBaseCallbacks) {
-        if self.font_asset_id == value {
+        if !self.set_font_asset_id_value(value) {
             return;
         }
-        self.font_asset_id = value;
         callbacks.font_asset_id_changed();
         callbacks.notify_property_changed(Self::FONT_ASSET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_font_asset_id_value(&mut self, value: u32) -> bool {
+        if self.font_asset_id == value {
+            return false;
+        }
+        self.font_asset_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl TextStyleBaseCallbacks) -> TextStyle {
         let mut cloned = TextStyle::default();
@@ -125,5 +155,19 @@ impl TextStyleBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextStyleBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextStyleBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

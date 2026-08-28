@@ -9,7 +9,9 @@ use crate::mechanical_port::source::{
     },
 };
 
-pub trait FileAssetBaseCallbacks {
+pub trait FileAssetBaseCallbacks:
+    crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks
+{
     fn asset_id_changed(&mut self) {}
     fn cdn_uuid_changed(&mut self) {}
     fn cdn_base_url_changed(&mut self) {}
@@ -57,12 +59,18 @@ impl FileAssetBase {
     }
 
     pub fn set_asset_id<C: FileAssetBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
-        if self.asset_id == value {
+        if !self.set_asset_id_value(value) {
             return;
         }
-        self.asset_id = value;
         callbacks.asset_id_changed();
         callbacks.notify_property_changed(Self::ASSET_ID_PROPERTY_KEY);
+    }
+    pub(crate) fn set_asset_id_value(&mut self, value: u32) -> bool {
+        if self.asset_id == value {
+            return false;
+        }
+        self.asset_id = value;
+        true
     }
 
     pub fn cdn_base_url(&self) -> &str {
@@ -74,12 +82,18 @@ impl FileAssetBase {
         value: String,
         callbacks: &mut C,
     ) {
-        if self.cdn_base_url == value {
+        if !self.set_cdn_base_url_value(value) {
             return;
         }
-        self.cdn_base_url = value;
         callbacks.cdn_base_url_changed();
         callbacks.notify_property_changed(Self::CDN_BASE_URL_PROPERTY_KEY);
+    }
+    pub(crate) fn set_cdn_base_url_value(&mut self, value: String) -> bool {
+        if self.cdn_base_url == value {
+            return false;
+        }
+        self.cdn_base_url = value;
+        true
     }
 
     pub fn copy<C: FileAssetBaseCallbacks>(&mut self, object: &Self, callbacks: &mut C) {
@@ -110,5 +124,19 @@ impl FileAssetBase {
             }
             _ => self.base.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for FileAssetBase {
+    type Target = Asset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FileAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

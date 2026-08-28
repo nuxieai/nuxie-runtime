@@ -30,3 +30,17 @@ impl EllipseBase {
         cloned
     }
 }
+
+impl std::ops::Deref for EllipseBase {
+    type Target = ParametricPath;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for EllipseBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

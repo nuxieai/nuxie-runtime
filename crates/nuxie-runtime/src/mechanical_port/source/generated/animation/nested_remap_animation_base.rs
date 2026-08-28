@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     animation::nested_remap_animation::NestedRemapAnimation, core::binary_reader::BinaryReader,
 };
 
-pub trait NestedRemapAnimationBaseCallbacks {
+pub trait NestedRemapAnimationBaseCallbacks: crate::mechanical_port::source::generated::animation::nested_linear_animation_base::NestedLinearAnimationBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn time_changed(&mut self) {}
 }
@@ -36,12 +36,19 @@ impl NestedRemapAnimationBase {
         self.time
     }
     pub fn set_time(&mut self, value: f32, callbacks: &mut impl NestedRemapAnimationBaseCallbacks) {
-        if self.time == value {
+        if !self.set_time_value(value) {
             return;
         }
-        self.time = value;
         callbacks.time_changed();
         callbacks.notify_property_changed(Self::TIME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_time_value(&mut self, value: f32) -> bool {
+        if self.time == value {
+            return false;
+        }
+        self.time = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -68,5 +75,19 @@ impl NestedRemapAnimationBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NestedRemapAnimationBase {
+    type Target = NestedLinearAnimation;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedRemapAnimationBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -1,9 +1,12 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, inputs::user_input::UserInput,
+    core::{binary_reader::BinaryReader, Core},
+    inputs::user_input::UserInput,
 };
 
 #[derive(Default)]
-pub struct UserInputBase;
+pub struct UserInputBase {
+    pub base: Core,
+}
 
 impl UserInputBase {
     pub const TYPE_KEY: u16 = 663;
@@ -26,5 +29,19 @@ impl UserInputBase {
 
     pub fn deserialize(&mut self, _property_key: u16, _reader: &mut BinaryReader<'_>) -> bool {
         false
+    }
+}
+
+impl std::ops::Deref for UserInputBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for UserInputBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

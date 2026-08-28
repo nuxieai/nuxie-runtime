@@ -41,12 +41,19 @@ impl TransitionValueNumberComparatorBase {
         value: f32,
         callbacks: &mut impl TransitionValueNumberComparatorBaseCallbacks,
     ) {
-        if self.value == value {
+        if !self.set_value_value(value) {
             return;
         }
-        self.value = value;
         callbacks.value_changed();
         callbacks.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_value_value(&mut self, value: f32) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -62,7 +69,7 @@ impl TransitionValueNumberComparatorBase {
         callbacks: &mut impl TransitionValueNumberComparatorBaseCallbacks,
     ) {
         self.value = object.value;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -75,7 +82,21 @@ impl TransitionValueNumberComparatorBase {
                 self.value = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for TransitionValueNumberComparatorBase {
+    type Target = TransitionValueComparator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionValueNumberComparatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

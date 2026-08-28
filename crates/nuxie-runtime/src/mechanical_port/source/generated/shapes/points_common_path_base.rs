@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{core::binary_reader::BinaryReader, shapes::path::Path};
 
-pub trait PointsCommonPathBaseCallbacks {
+pub trait PointsCommonPathBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::path_base::PathBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn is_closed_changed(&mut self) {}
 }
@@ -37,12 +39,19 @@ impl PointsCommonPathBase {
         value: bool,
         callbacks: &mut impl PointsCommonPathBaseCallbacks,
     ) {
-        if self.is_closed == value {
+        if !self.set_is_closed_value(value) {
             return;
         }
-        self.is_closed = value;
         callbacks.is_closed_changed();
         callbacks.notify_property_changed(Self::IS_CLOSED_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_is_closed_value(&mut self, value: bool) -> bool {
+        if self.is_closed == value {
+            return false;
+        }
+        self.is_closed = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl PointsCommonPathBaseCallbacks) {
         self.is_closed = object.is_closed;
@@ -61,5 +70,19 @@ impl PointsCommonPathBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for PointsCommonPathBase {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for PointsCommonPathBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

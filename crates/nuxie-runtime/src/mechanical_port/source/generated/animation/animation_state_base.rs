@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait AnimationStateBaseCallbacks {
+pub trait AnimationStateBaseCallbacks: crate::mechanical_port::source::generated::animation::advanceable_state_base::AdvanceableStateBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn animation_id_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl AnimationStateBase {
         value: u32,
         callbacks: &mut impl AnimationStateBaseCallbacks,
     ) {
-        if self.animation_id == value {
+        if !self.set_animation_id_value(value) {
             return;
         }
-        self.animation_id = value;
         callbacks.animation_id_changed();
         callbacks.notify_property_changed(Self::ANIMATION_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_animation_id_value(&mut self, value: u32) -> bool {
+        if self.animation_id == value {
+            return false;
+        }
+        self.animation_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl AnimationStateBaseCallbacks) -> AnimationState {
         let mut cloned = AnimationState::default();
@@ -69,5 +76,19 @@ impl AnimationStateBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for AnimationStateBase {
+    type Target = AdvanceableState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AnimationStateBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

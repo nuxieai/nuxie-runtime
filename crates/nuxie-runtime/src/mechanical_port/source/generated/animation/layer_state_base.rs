@@ -36,16 +36,23 @@ impl LayerStateBase {
         self.flags
     }
     pub fn set_flags(&mut self, value: u32, callbacks: &mut impl LayerStateBaseCallbacks) {
-        if self.flags == value {
+        if !self.set_flags_value(value) {
             return;
         }
-        self.flags = value;
         callbacks.flags_changed();
         callbacks.notify_property_changed(Self::FLAGS_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_flags_value(&mut self, value: u32) -> bool {
+        if self.flags == value {
+            return false;
+        }
+        self.flags = value;
+        true
+    }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl LayerStateBaseCallbacks) {
         self.flags = object.flags;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -58,7 +65,21 @@ impl LayerStateBase {
                 self.flags = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for LayerStateBase {
+    type Target = StateMachineLayerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LayerStateBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

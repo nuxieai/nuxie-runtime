@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_component::ViewModelComponent;
 
-use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
 
 pub trait ViewModelComponentBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
@@ -39,12 +39,19 @@ impl ViewModelComponentBase {
         value: String,
         callbacks: &mut impl ViewModelComponentBaseCallbacks,
     ) {
-        if self.name == value {
+        if !self.set_name_value(value) {
             return;
         }
-        self.name = value;
         callbacks.name_changed();
         callbacks.notify_property_changed(Self::NAME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_name_value(&mut self, value: String) -> bool {
+        if self.name == value {
+            return false;
+        }
+        self.name = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -70,5 +77,19 @@ impl ViewModelComponentBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for ViewModelComponentBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelComponentBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

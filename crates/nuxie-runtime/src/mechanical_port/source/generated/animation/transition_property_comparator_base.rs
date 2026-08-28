@@ -24,3 +24,17 @@ impl TransitionPropertyComparatorBase {
         Self::TYPE_KEY
     }
 }
+
+impl std::ops::Deref for TransitionPropertyComparatorBase {
+    type Target = TransitionComparator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionPropertyComparatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

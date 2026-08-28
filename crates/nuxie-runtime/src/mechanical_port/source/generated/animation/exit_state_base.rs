@@ -30,3 +30,17 @@ impl ExitStateBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ExitStateBase {
+    type Target = LayerState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ExitStateBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

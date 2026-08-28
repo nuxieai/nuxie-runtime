@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, core::binary_reader::BinaryReader, draw_target::DrawTarget,
 };
 
-pub trait DrawTargetBaseCallbacks {
+pub trait DrawTargetBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn drawable_id_changed(&mut self) {}
     fn placement_value_changed(&mut self) {}
@@ -39,12 +41,19 @@ impl DrawTargetBase {
         self.drawable_id
     }
     pub fn set_drawable_id(&mut self, value: u32, callbacks: &mut impl DrawTargetBaseCallbacks) {
-        if self.drawable_id == value {
+        if !self.set_drawable_id_value(value) {
             return;
         }
-        self.drawable_id = value;
         callbacks.drawable_id_changed();
         callbacks.notify_property_changed(Self::DRAWABLE_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_drawable_id_value(&mut self, value: u32) -> bool {
+        if self.drawable_id == value {
+            return false;
+        }
+        self.drawable_id = value;
+        true
     }
     pub fn placement_value(&self) -> u32 {
         self.placement_value
@@ -54,12 +63,19 @@ impl DrawTargetBase {
         value: u32,
         callbacks: &mut impl DrawTargetBaseCallbacks,
     ) {
-        if self.placement_value == value {
+        if !self.set_placement_value_value(value) {
             return;
         }
-        self.placement_value = value;
         callbacks.placement_value_changed();
         callbacks.notify_property_changed(Self::PLACEMENT_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_placement_value_value(&mut self, value: u32) -> bool {
+        if self.placement_value == value {
+            return false;
+        }
+        self.placement_value = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl DrawTargetBaseCallbacks) -> DrawTarget {
         let mut cloned = DrawTarget::default();
@@ -88,5 +104,19 @@ impl DrawTargetBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DrawTargetBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DrawTargetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -4,7 +4,9 @@ use crate::mechanical_port::source::{
     scripted::scripted_path_effect::ScriptedPathEffect,
 };
 
-pub trait ScriptedPathEffectBaseCallbacks {
+pub trait ScriptedPathEffectBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn script_asset_id_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
 }
@@ -40,12 +42,19 @@ impl ScriptedPathEffectBase {
         value: u32,
         c: &mut C,
     ) {
-        if self.script_asset_id == value {
+        if !self.set_script_asset_id_value(value) {
             return;
         }
-        self.script_asset_id = value;
         c.script_asset_id_changed();
         c.notify_property_changed(Self::SCRIPT_ASSET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_script_asset_id_value(&mut self, value: u32) -> bool {
+        if self.script_asset_id == value {
+            return false;
+        }
+        self.script_asset_id = value;
+        true
     }
     pub fn clone_into<C: ScriptedPathEffectBaseCallbacks>(&self, c: &mut C) -> ScriptedPathEffect {
         let mut cloned = ScriptedPathEffect::default();
@@ -69,5 +78,19 @@ impl ScriptedPathEffectBase {
             }
             _ => self.base.deserialize(key, reader, c),
         }
+    }
+}
+
+impl std::ops::Deref for ScriptedPathEffectBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptedPathEffectBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

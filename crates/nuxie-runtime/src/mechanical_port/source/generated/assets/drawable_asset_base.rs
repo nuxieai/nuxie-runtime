@@ -51,12 +51,18 @@ impl DrawableAssetBase {
     }
 
     pub fn set_height<C: DrawableAssetBaseCallbacks>(&mut self, value: f32, callbacks: &mut C) {
-        if self.height == value {
+        if !self.set_height_value(value) {
             return;
         }
-        self.height = value;
         callbacks.height_changed();
         callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+    }
+    pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
+        if self.height == value {
+            return false;
+        }
+        self.height = value;
+        true
     }
 
     pub fn width(&self) -> f32 {
@@ -64,12 +70,18 @@ impl DrawableAssetBase {
     }
 
     pub fn set_width<C: DrawableAssetBaseCallbacks>(&mut self, value: f32, callbacks: &mut C) {
-        if self.width == value {
+        if !self.set_width_value(value) {
             return;
         }
-        self.width = value;
         callbacks.width_changed();
         callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+    }
+    pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
+        if self.width == value {
+            return false;
+        }
+        self.width = value;
+        true
     }
 
     pub fn copy<C: DrawableAssetBaseCallbacks>(&mut self, object: &Self, callbacks: &mut C) {
@@ -95,5 +107,19 @@ impl DrawableAssetBase {
             }
             _ => self.base.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DrawableAssetBase {
+    type Target = FileAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DrawableAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

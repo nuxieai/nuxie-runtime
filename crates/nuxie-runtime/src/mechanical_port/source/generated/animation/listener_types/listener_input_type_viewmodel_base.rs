@@ -5,7 +5,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait ListenerInputTypeViewModelBaseCallbacks {
+pub trait ListenerInputTypeViewModelBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBaseCallbacks {
     fn view_model_path_ids_changed(&mut self) {}
     fn decode_view_model_path_ids(&mut self, value: &[u8]);
     fn copy_view_model_path_ids(&mut self, object: &ListenerInputTypeViewModelBase);
@@ -63,5 +63,19 @@ impl ListenerInputTypeViewModelBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ListenerInputTypeViewModelBase {
+    type Target = ListenerInputType;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListenerInputTypeViewModelBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

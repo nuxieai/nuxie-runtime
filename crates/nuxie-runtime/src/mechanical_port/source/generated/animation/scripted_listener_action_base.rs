@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     animation::scripted_listener_action::ScriptedListenerAction, core::binary_reader::BinaryReader,
 };
 
-pub trait ScriptedListenerActionBaseCallbacks {
+pub trait ScriptedListenerActionBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn script_asset_id_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl ScriptedListenerActionBase {
         value: u32,
         callbacks: &mut impl ScriptedListenerActionBaseCallbacks,
     ) {
-        if self.script_asset_id == value {
+        if !self.set_script_asset_id_value(value) {
             return;
         }
-        self.script_asset_id = value;
         callbacks.script_asset_id_changed();
         callbacks.notify_property_changed(Self::SCRIPT_ASSET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_script_asset_id_value(&mut self, value: u32) -> bool {
+        if self.script_asset_id == value {
+            return false;
+        }
+        self.script_asset_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -76,5 +83,19 @@ impl ScriptedListenerActionBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ScriptedListenerActionBase {
+    type Target = ListenerAction;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptedListenerActionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait NestedBoolBaseCallbacks {
+pub trait NestedBoolBaseCallbacks:
+    crate::mechanical_port::source::generated::animation::nested_input_base::NestedInputBaseCallbacks
+{
     fn nested_value_changed(&mut self) {}
     fn nested_value_bool(&mut self, value: bool);
 }
@@ -57,5 +59,19 @@ impl NestedBoolBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NestedBoolBase {
+    type Target = NestedInput;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedBoolBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

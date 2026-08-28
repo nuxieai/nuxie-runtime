@@ -26,7 +26,22 @@ impl ClampedScrollPhysicsBase {
     }
     pub fn clone_into(&self) -> ClampedScrollPhysics {
         let mut cloned = ClampedScrollPhysics::default();
-        cloned.base.copy(self);
+        let mut callbacks = ClampedScrollPhysics::default();
+        cloned.base.copy(self, &mut callbacks);
         cloned
+    }
+}
+
+impl std::ops::Deref for ClampedScrollPhysicsBase {
+    type Target = ScrollPhysics;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ClampedScrollPhysicsBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

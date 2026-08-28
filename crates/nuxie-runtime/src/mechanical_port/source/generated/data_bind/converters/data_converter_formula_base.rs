@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     data_bind::converters::data_converter_formula::DataConverterFormula,
 };
 
-pub trait DataConverterFormulaBaseCallbacks {
+pub trait DataConverterFormulaBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn random_mode_value_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl DataConverterFormulaBase {
         value: u32,
         callbacks: &mut impl DataConverterFormulaBaseCallbacks,
     ) {
-        if self.random_mode_value == value {
+        if !self.set_random_mode_value_value(value) {
             return;
         }
-        self.random_mode_value = value;
         callbacks.random_mode_value_changed();
         callbacks.notify_property_changed(Self::RANDOM_MODE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_random_mode_value_value(&mut self, value: u32) -> bool {
+        if self.random_mode_value == value {
+            return false;
+        }
+        self.random_mode_value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -72,5 +79,19 @@ impl DataConverterFormulaBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterFormulaBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterFormulaBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

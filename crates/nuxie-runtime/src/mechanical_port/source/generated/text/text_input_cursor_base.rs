@@ -30,3 +30,17 @@ impl TextInputCursorBase {
         cloned
     }
 }
+
+impl std::ops::Deref for TextInputCursorBase {
+    type Target = TextInputDrawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextInputCursorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

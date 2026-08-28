@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     data_bind::converters::data_converter_range_mapper::DataConverterRangeMapper,
 };
 
-pub trait DataConverterRangeMapperBaseCallbacks {
+pub trait DataConverterRangeMapperBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn interpolation_type_changed(&mut self) {}
     fn interpolator_id_changed(&mut self) {}
@@ -64,12 +64,19 @@ impl DataConverterRangeMapperBase {
         value: u32,
         callbacks: &mut impl DataConverterRangeMapperBaseCallbacks,
     ) {
-        if self.interpolation_type == value {
+        if !self.set_interpolation_type_value(value) {
             return;
         }
-        self.interpolation_type = value;
         callbacks.interpolation_type_changed();
         callbacks.notify_property_changed(Self::INTERPOLATION_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interpolation_type_value(&mut self, value: u32) -> bool {
+        if self.interpolation_type == value {
+            return false;
+        }
+        self.interpolation_type = value;
+        true
     }
     pub fn interpolator_id(&self) -> u32 {
         self.interpolator_id
@@ -79,12 +86,19 @@ impl DataConverterRangeMapperBase {
         value: u32,
         callbacks: &mut impl DataConverterRangeMapperBaseCallbacks,
     ) {
-        if self.interpolator_id == value {
+        if !self.set_interpolator_id_value(value) {
             return;
         }
-        self.interpolator_id = value;
         callbacks.interpolator_id_changed();
         callbacks.notify_property_changed(Self::INTERPOLATOR_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interpolator_id_value(&mut self, value: u32) -> bool {
+        if self.interpolator_id == value {
+            return false;
+        }
+        self.interpolator_id = value;
+        true
     }
     pub fn flags(&self) -> u32 {
         self.flags
@@ -94,12 +108,19 @@ impl DataConverterRangeMapperBase {
         value: u32,
         callbacks: &mut impl DataConverterRangeMapperBaseCallbacks,
     ) {
-        if self.flags == value {
+        if !self.set_flags_value(value) {
             return;
         }
-        self.flags = value;
         callbacks.flags_changed();
         callbacks.notify_property_changed(Self::FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_flags_value(&mut self, value: u32) -> bool {
+        if self.flags == value {
+            return false;
+        }
+        self.flags = value;
+        true
     }
     pub fn min_input(&self) -> f32 {
         self.min_input
@@ -109,12 +130,19 @@ impl DataConverterRangeMapperBase {
         value: f32,
         callbacks: &mut impl DataConverterRangeMapperBaseCallbacks,
     ) {
-        if self.min_input == value {
+        if !self.set_min_input_value(value) {
             return;
         }
-        self.min_input = value;
         callbacks.min_input_changed();
         callbacks.notify_property_changed(Self::MIN_INPUT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_min_input_value(&mut self, value: f32) -> bool {
+        if self.min_input == value {
+            return false;
+        }
+        self.min_input = value;
+        true
     }
     pub fn max_input(&self) -> f32 {
         self.max_input
@@ -124,12 +152,19 @@ impl DataConverterRangeMapperBase {
         value: f32,
         callbacks: &mut impl DataConverterRangeMapperBaseCallbacks,
     ) {
-        if self.max_input == value {
+        if !self.set_max_input_value(value) {
             return;
         }
-        self.max_input = value;
         callbacks.max_input_changed();
         callbacks.notify_property_changed(Self::MAX_INPUT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_max_input_value(&mut self, value: f32) -> bool {
+        if self.max_input == value {
+            return false;
+        }
+        self.max_input = value;
+        true
     }
     pub fn min_output(&self) -> f32 {
         self.min_output
@@ -139,12 +174,19 @@ impl DataConverterRangeMapperBase {
         value: f32,
         callbacks: &mut impl DataConverterRangeMapperBaseCallbacks,
     ) {
-        if self.min_output == value {
+        if !self.set_min_output_value(value) {
             return;
         }
-        self.min_output = value;
         callbacks.min_output_changed();
         callbacks.notify_property_changed(Self::MIN_OUTPUT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_min_output_value(&mut self, value: f32) -> bool {
+        if self.min_output == value {
+            return false;
+        }
+        self.min_output = value;
+        true
     }
     pub fn max_output(&self) -> f32 {
         self.max_output
@@ -154,12 +196,19 @@ impl DataConverterRangeMapperBase {
         value: f32,
         callbacks: &mut impl DataConverterRangeMapperBaseCallbacks,
     ) {
-        if self.max_output == value {
+        if !self.set_max_output_value(value) {
             return;
         }
-        self.max_output = value;
         callbacks.max_output_changed();
         callbacks.notify_property_changed(Self::MAX_OUTPUT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_max_output_value(&mut self, value: f32) -> bool {
+        if self.max_output == value {
+            return false;
+        }
+        self.max_output = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -220,5 +269,19 @@ impl DataConverterRangeMapperBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterRangeMapperBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterRangeMapperBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

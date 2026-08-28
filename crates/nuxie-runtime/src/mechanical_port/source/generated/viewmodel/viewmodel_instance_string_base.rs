@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, view_model_instance_value::ViewModelInstanceValue,
 };
 
-pub trait ViewModelInstanceStringBaseCallbacks {
+pub trait ViewModelInstanceStringBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn property_value_changed(&mut self) {}
 }
@@ -41,12 +41,19 @@ impl ViewModelInstanceStringBase {
         value: String,
         callbacks: &mut impl ViewModelInstanceStringBaseCallbacks,
     ) {
-        if self.property_value == value {
+        if !self.set_property_value_value(value) {
             return;
         }
-        self.property_value = value;
         callbacks.property_value_changed();
         callbacks.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_property_value_value(&mut self, value: String) -> bool {
+        if self.property_value == value {
+            return false;
+        }
+        self.property_value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -77,5 +84,19 @@ impl ViewModelInstanceStringBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ViewModelInstanceStringBase {
+    type Target = ViewModelInstanceValue;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelInstanceStringBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -31,3 +31,17 @@ impl BindablePropertyViewModelBase {
         cloned
     }
 }
+
+impl std::ops::Deref for BindablePropertyViewModelBase {
+    type Target = BindablePropertyId;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BindablePropertyViewModelBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

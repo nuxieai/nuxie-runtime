@@ -30,3 +30,17 @@ impl BlendStateDirectBase {
         cloned
     }
 }
+
+impl std::ops::Deref for BlendStateDirectBase {
+    type Target = BlendState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BlendStateDirectBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

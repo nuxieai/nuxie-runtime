@@ -29,3 +29,17 @@ impl ForegroundLayoutDrawableBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ForegroundLayoutDrawableBase {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ForegroundLayoutDrawableBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

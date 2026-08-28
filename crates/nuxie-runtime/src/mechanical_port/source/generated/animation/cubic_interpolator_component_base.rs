@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait CubicInterpolatorComponentBaseCallbacks {
+pub trait CubicInterpolatorComponentBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn x1_changed(&mut self) {}
     fn y1_changed(&mut self) {}
@@ -52,12 +54,19 @@ impl CubicInterpolatorComponentBase {
         value: f32,
         callbacks: &mut impl CubicInterpolatorComponentBaseCallbacks,
     ) {
-        if self.x1 == value {
+        if !self.set_x1_value(value) {
             return;
         }
-        self.x1 = value;
         callbacks.x1_changed();
         callbacks.notify_property_changed(Self::X1_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_x1_value(&mut self, value: f32) -> bool {
+        if self.x1 == value {
+            return false;
+        }
+        self.x1 = value;
+        true
     }
     pub fn y1(&self) -> f32 {
         self.y1
@@ -67,12 +76,19 @@ impl CubicInterpolatorComponentBase {
         value: f32,
         callbacks: &mut impl CubicInterpolatorComponentBaseCallbacks,
     ) {
-        if self.y1 == value {
+        if !self.set_y1_value(value) {
             return;
         }
-        self.y1 = value;
         callbacks.y1_changed();
         callbacks.notify_property_changed(Self::Y1_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_y1_value(&mut self, value: f32) -> bool {
+        if self.y1 == value {
+            return false;
+        }
+        self.y1 = value;
+        true
     }
     pub fn x2(&self) -> f32 {
         self.x2
@@ -82,12 +98,19 @@ impl CubicInterpolatorComponentBase {
         value: f32,
         callbacks: &mut impl CubicInterpolatorComponentBaseCallbacks,
     ) {
-        if self.x2 == value {
+        if !self.set_x2_value(value) {
             return;
         }
-        self.x2 = value;
         callbacks.x2_changed();
         callbacks.notify_property_changed(Self::X2_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_x2_value(&mut self, value: f32) -> bool {
+        if self.x2 == value {
+            return false;
+        }
+        self.x2 = value;
+        true
     }
     pub fn y2(&self) -> f32 {
         self.y2
@@ -97,12 +120,19 @@ impl CubicInterpolatorComponentBase {
         value: f32,
         callbacks: &mut impl CubicInterpolatorComponentBaseCallbacks,
     ) {
-        if self.y2 == value {
+        if !self.set_y2_value(value) {
             return;
         }
-        self.y2 = value;
         callbacks.y2_changed();
         callbacks.notify_property_changed(Self::Y2_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_y2_value(&mut self, value: f32) -> bool {
+        if self.y2 == value {
+            return false;
+        }
+        self.y2 = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -148,5 +178,19 @@ impl CubicInterpolatorComponentBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for CubicInterpolatorComponentBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicInterpolatorComponentBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

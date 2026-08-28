@@ -54,12 +54,18 @@ impl ScriptAssetBase {
         value: u32,
         callbacks: &mut C,
     ) {
-        if self.generator_function_ref == value {
+        if !self.set_generator_function_ref_value(value) {
             return;
         }
-        self.generator_function_ref = value;
         callbacks.generator_function_ref_changed();
         callbacks.notify_property_changed(Self::GENERATOR_FUNCTION_REF_PROPERTY_KEY);
+    }
+    pub(crate) fn set_generator_function_ref_value(&mut self, value: u32) -> bool {
+        if self.generator_function_ref == value {
+            return false;
+        }
+        self.generator_function_ref = value;
+        true
     }
 
     pub fn is_module(&self) -> bool {
@@ -67,12 +73,18 @@ impl ScriptAssetBase {
     }
 
     pub fn set_is_module<C: ScriptAssetBaseCallbacks>(&mut self, value: bool, callbacks: &mut C) {
-        if self.is_module == value {
+        if !self.set_is_module_value(value) {
             return;
         }
-        self.is_module = value;
         callbacks.is_module_changed();
         callbacks.notify_property_changed(Self::IS_MODULE_PROPERTY_KEY);
+    }
+    pub(crate) fn set_is_module_value(&mut self, value: bool) -> bool {
+        if self.is_module == value {
+            return false;
+        }
+        self.is_module = value;
+        true
     }
 
     pub fn serialized_implemented_methods(&self) -> u32 {
@@ -84,12 +96,18 @@ impl ScriptAssetBase {
         value: u32,
         callbacks: &mut C,
     ) {
-        if self.serialized_implemented_methods == value {
+        if !self.set_serialized_implemented_methods_value(value) {
             return;
         }
-        self.serialized_implemented_methods = value;
         callbacks.serialized_implemented_methods_changed();
         callbacks.notify_property_changed(Self::SERIALIZED_IMPLEMENTED_METHODS_PROPERTY_KEY);
+    }
+    pub(crate) fn set_serialized_implemented_methods_value(&mut self, value: u32) -> bool {
+        if self.serialized_implemented_methods == value {
+            return false;
+        }
+        self.serialized_implemented_methods = value;
+        true
     }
 
     pub fn clone_into<C: ScriptAssetBaseCallbacks>(&self, callbacks: &mut C) -> ScriptAsset {
@@ -126,5 +144,19 @@ impl ScriptAssetBase {
             }
             _ => self.base.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ScriptAssetBase {
+    type Target = TextAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

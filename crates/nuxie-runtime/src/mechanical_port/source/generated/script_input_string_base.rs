@@ -29,3 +29,17 @@ impl ScriptInputStringBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ScriptInputStringBase {
+    type Target = CustomPropertyString;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptInputStringBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

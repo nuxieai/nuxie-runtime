@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, view_model_component::ViewModelComponent,
 };
 
-pub trait ViewModelPropertyBaseCallbacks {
+pub trait ViewModelPropertyBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_component_base::ViewModelComponentBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn symbol_type_value_changed(&mut self) {}
     fn component_props_changed(&mut self) {}
@@ -45,12 +45,19 @@ impl ViewModelPropertyBase {
         value: u32,
         callbacks: &mut impl ViewModelPropertyBaseCallbacks,
     ) {
-        if self.symbol_type_value == value {
+        if !self.set_symbol_type_value_value(value) {
             return;
         }
-        self.symbol_type_value = value;
         callbacks.symbol_type_value_changed();
         callbacks.notify_property_changed(Self::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_symbol_type_value_value(&mut self, value: u32) -> bool {
+        if self.symbol_type_value == value {
+            return false;
+        }
+        self.symbol_type_value = value;
+        true
     }
     pub fn component_props(&self) -> u32 {
         self.component_props
@@ -60,12 +67,19 @@ impl ViewModelPropertyBase {
         value: u32,
         callbacks: &mut impl ViewModelPropertyBaseCallbacks,
     ) {
-        if self.component_props == value {
+        if !self.set_component_props_value(value) {
             return;
         }
-        self.component_props = value;
         callbacks.component_props_changed();
         callbacks.notify_property_changed(Self::COMPONENT_PROPS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_component_props_value(&mut self, value: u32) -> bool {
+        if self.component_props == value {
+            return false;
+        }
+        self.component_props = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -97,5 +111,19 @@ impl ViewModelPropertyBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ViewModelPropertyBase {
+    type Target = ViewModelComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelPropertyBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

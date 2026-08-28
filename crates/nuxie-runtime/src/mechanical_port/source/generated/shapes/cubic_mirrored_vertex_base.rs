@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::cubic_vertex::CubicVertex,
 };
 
-pub trait CubicMirroredVertexBaseCallbacks {
+pub trait CubicMirroredVertexBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::vertex_base::VertexBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn rotation_changed(&mut self) {}
     fn distance_changed(&mut self) {}
@@ -44,12 +46,19 @@ impl CubicMirroredVertexBase {
         value: f32,
         callbacks: &mut impl CubicMirroredVertexBaseCallbacks,
     ) {
-        if self.rotation == value {
+        if !self.set_rotation_value(value) {
             return;
         }
-        self.rotation = value;
         callbacks.rotation_changed();
         callbacks.notify_property_changed(Self::ROTATION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_rotation_value(&mut self, value: f32) -> bool {
+        if self.rotation == value {
+            return false;
+        }
+        self.rotation = value;
+        true
     }
     pub fn distance(&self) -> f32 {
         self.distance
@@ -59,12 +68,19 @@ impl CubicMirroredVertexBase {
         value: f32,
         callbacks: &mut impl CubicMirroredVertexBaseCallbacks,
     ) {
-        if self.distance == value {
+        if !self.set_distance_value(value) {
             return;
         }
-        self.distance = value;
         callbacks.distance_changed();
         callbacks.notify_property_changed(Self::DISTANCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_distance_value(&mut self, value: f32) -> bool {
+        if self.distance == value {
+            return false;
+        }
+        self.distance = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -96,5 +112,19 @@ impl CubicMirroredVertexBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for CubicMirroredVertexBase {
+    type Target = CubicVertex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicMirroredVertexBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

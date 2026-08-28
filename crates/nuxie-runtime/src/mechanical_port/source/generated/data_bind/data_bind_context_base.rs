@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     data_bind::data_bind_context::DataBindContext,
 };
 
-pub trait DataBindContextBaseCallbacks {
+pub trait DataBindContextBaseCallbacks:
+    crate::mechanical_port::source::generated::data_bind::data_bind_base::DataBindBaseCallbacks
+{
     fn source_path_ids_changed(&mut self) {}
     fn decode_source_path_ids(&mut self, value: &[u8]);
     fn copy_source_path_ids(&mut self, object: &DataBindContextBase);
@@ -58,5 +60,19 @@ impl DataBindContextBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataBindContextBase {
+    type Target = DataBind;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataBindContextBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -31,3 +31,17 @@ impl ScriptedLayoutBase {
         self.base.base.copy(&object.base.base);
     }
 }
+
+impl std::ops::Deref for ScriptedLayoutBase {
+    type Target = ScriptedDrawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptedLayoutBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

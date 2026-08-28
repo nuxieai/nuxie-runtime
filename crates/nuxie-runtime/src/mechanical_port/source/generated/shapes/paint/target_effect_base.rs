@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::paint::target_effect::TargetEffect,
 };
 
-pub trait TargetEffectBaseCallbacks {
+pub trait TargetEffectBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn target_id_changed(&mut self) {}
 }
@@ -36,12 +38,19 @@ impl TargetEffectBase {
         self.target_id
     }
     pub fn set_target_id(&mut self, value: u32, callbacks: &mut impl TargetEffectBaseCallbacks) {
-        if self.target_id == value {
+        if !self.set_target_id_value(value) {
             return;
         }
-        self.target_id = value;
         callbacks.target_id_changed();
         callbacks.notify_property_changed(Self::TARGET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_target_id_value(&mut self, value: u32) -> bool {
+        if self.target_id == value {
+            return false;
+        }
+        self.target_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl TargetEffectBaseCallbacks) -> TargetEffect {
         let mut cloned = TargetEffect::default();
@@ -65,5 +74,19 @@ impl TargetEffectBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TargetEffectBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TargetEffectBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

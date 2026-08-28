@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::paint::gradient_stop::GradientStop,
 };
 
-pub trait GradientStopBaseCallbacks {
+pub trait GradientStopBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn color_value_changed(&mut self) {}
     fn position_changed(&mut self) {}
@@ -40,23 +42,37 @@ impl GradientStopBase {
         self.color_value
     }
     pub fn set_color_value(&mut self, value: i32, callbacks: &mut impl GradientStopBaseCallbacks) {
-        if self.color_value == value {
+        if !self.set_color_value_value(value) {
             return;
         }
-        self.color_value = value;
         callbacks.color_value_changed();
         callbacks.notify_property_changed(Self::COLOR_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_color_value_value(&mut self, value: i32) -> bool {
+        if self.color_value == value {
+            return false;
+        }
+        self.color_value = value;
+        true
     }
     pub fn position(&self) -> f32 {
         self.position
     }
     pub fn set_position(&mut self, value: f32, callbacks: &mut impl GradientStopBaseCallbacks) {
-        if self.position == value {
+        if !self.set_position_value(value) {
             return;
         }
-        self.position = value;
         callbacks.position_changed();
         callbacks.notify_property_changed(Self::POSITION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_value(&mut self, value: f32) -> bool {
+        if self.position == value {
+            return false;
+        }
+        self.position = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl GradientStopBaseCallbacks) -> GradientStop {
         let mut cloned = GradientStop::default();
@@ -85,5 +101,19 @@ impl GradientStopBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for GradientStopBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for GradientStopBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

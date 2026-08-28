@@ -31,3 +31,17 @@ impl TransitionSelfComparatorBase {
         cloned
     }
 }
+
+impl std::ops::Deref for TransitionSelfComparatorBase {
+    type Target = TransitionComparator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionSelfComparatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

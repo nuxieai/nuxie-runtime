@@ -22,3 +22,17 @@ impl TextInputDrawableBase {
         Self::TYPE_KEY
     }
 }
+
+impl std::ops::Deref for TextInputDrawableBase {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextInputDrawableBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

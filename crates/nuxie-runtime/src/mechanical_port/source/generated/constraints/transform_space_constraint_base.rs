@@ -2,7 +2,7 @@ use crate::mechanical_port::source::{
     constraints::targeted_constraint::TargetedConstraint, core::binary_reader::BinaryReader,
 };
 
-pub trait TransformSpaceConstraintBaseCallbacks {
+pub trait TransformSpaceConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::targeted_constraint_base::TargetedConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn source_space_value_changed(&mut self) {}
     fn dest_space_value_changed(&mut self) {}
@@ -43,12 +43,19 @@ impl TransformSpaceConstraintBase {
         value: u32,
         callbacks: &mut impl TransformSpaceConstraintBaseCallbacks,
     ) {
-        if self.source_space_value == value {
+        if !self.set_source_space_value_value(value) {
             return;
         }
-        self.source_space_value = value;
         callbacks.source_space_value_changed();
         callbacks.notify_property_changed(Self::SOURCE_SPACE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_source_space_value_value(&mut self, value: u32) -> bool {
+        if self.source_space_value == value {
+            return false;
+        }
+        self.source_space_value = value;
+        true
     }
     pub fn dest_space_value(&self) -> u32 {
         self.dest_space_value
@@ -58,12 +65,19 @@ impl TransformSpaceConstraintBase {
         value: u32,
         callbacks: &mut impl TransformSpaceConstraintBaseCallbacks,
     ) {
-        if self.dest_space_value == value {
+        if !self.set_dest_space_value_value(value) {
             return;
         }
-        self.dest_space_value = value;
         callbacks.dest_space_value_changed();
         callbacks.notify_property_changed(Self::DEST_SPACE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_dest_space_value_value(&mut self, value: u32) -> bool {
+        if self.dest_space_value == value {
+            return false;
+        }
+        self.dest_space_value = value;
+        true
     }
     pub fn copy(
         &mut self,
@@ -91,5 +105,19 @@ impl TransformSpaceConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TransformSpaceConstraintBase {
+    type Target = TargetedConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransformSpaceConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

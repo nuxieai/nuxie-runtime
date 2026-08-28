@@ -22,3 +22,17 @@ impl PathVertexBase {
         Self::TYPE_KEY
     }
 }
+
+impl std::ops::Deref for PathVertexBase {
+    type Target = Vertex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for PathVertexBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

@@ -30,3 +30,17 @@ impl TriangleBase {
         cloned
     }
 }
+
+impl std::ops::Deref for TriangleBase {
+    type Target = ParametricPath;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TriangleBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

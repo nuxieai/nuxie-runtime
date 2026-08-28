@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait TransformComponentConstraintYBaseCallbacks {
+pub trait TransformComponentConstraintYBaseCallbacks: crate::mechanical_port::source::generated::constraints::transform_component_constraint_base::TransformComponentConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn copy_factor_y_changed(&mut self) {}
     fn min_value_y_changed(&mut self) {}
@@ -60,12 +60,19 @@ impl TransformComponentConstraintYBase {
         value: f32,
         callbacks: &mut impl TransformComponentConstraintYBaseCallbacks,
     ) {
-        if self.copy_factor_y == value {
+        if !self.set_copy_factor_y_value(value) {
             return;
         }
-        self.copy_factor_y = value;
         callbacks.copy_factor_y_changed();
         callbacks.notify_property_changed(Self::COPY_FACTOR_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_copy_factor_y_value(&mut self, value: f32) -> bool {
+        if self.copy_factor_y == value {
+            return false;
+        }
+        self.copy_factor_y = value;
+        true
     }
     pub fn min_value_y(&self) -> f32 {
         self.min_value_y
@@ -75,12 +82,19 @@ impl TransformComponentConstraintYBase {
         value: f32,
         callbacks: &mut impl TransformComponentConstraintYBaseCallbacks,
     ) {
-        if self.min_value_y == value {
+        if !self.set_min_value_y_value(value) {
             return;
         }
-        self.min_value_y = value;
         callbacks.min_value_y_changed();
         callbacks.notify_property_changed(Self::MIN_VALUE_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_min_value_y_value(&mut self, value: f32) -> bool {
+        if self.min_value_y == value {
+            return false;
+        }
+        self.min_value_y = value;
+        true
     }
     pub fn max_value_y(&self) -> f32 {
         self.max_value_y
@@ -90,12 +104,19 @@ impl TransformComponentConstraintYBase {
         value: f32,
         callbacks: &mut impl TransformComponentConstraintYBaseCallbacks,
     ) {
-        if self.max_value_y == value {
+        if !self.set_max_value_y_value(value) {
             return;
         }
-        self.max_value_y = value;
         callbacks.max_value_y_changed();
         callbacks.notify_property_changed(Self::MAX_VALUE_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_max_value_y_value(&mut self, value: f32) -> bool {
+        if self.max_value_y == value {
+            return false;
+        }
+        self.max_value_y = value;
+        true
     }
     pub fn does_copy_y(&self) -> bool {
         self.does_copy_y
@@ -105,12 +126,19 @@ impl TransformComponentConstraintYBase {
         value: bool,
         callbacks: &mut impl TransformComponentConstraintYBaseCallbacks,
     ) {
-        if self.does_copy_y == value {
+        if !self.set_does_copy_y_value(value) {
             return;
         }
-        self.does_copy_y = value;
         callbacks.does_copy_y_changed();
         callbacks.notify_property_changed(Self::DOES_COPY_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_does_copy_y_value(&mut self, value: bool) -> bool {
+        if self.does_copy_y == value {
+            return false;
+        }
+        self.does_copy_y = value;
+        true
     }
     pub fn min_y(&self) -> bool {
         self.min_y
@@ -120,12 +148,19 @@ impl TransformComponentConstraintYBase {
         value: bool,
         callbacks: &mut impl TransformComponentConstraintYBaseCallbacks,
     ) {
-        if self.min_y == value {
+        if !self.set_min_y_value(value) {
             return;
         }
-        self.min_y = value;
         callbacks.min_y_changed();
         callbacks.notify_property_changed(Self::MIN_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_min_y_value(&mut self, value: bool) -> bool {
+        if self.min_y == value {
+            return false;
+        }
+        self.min_y = value;
+        true
     }
     pub fn max_y(&self) -> bool {
         self.max_y
@@ -135,12 +170,19 @@ impl TransformComponentConstraintYBase {
         value: bool,
         callbacks: &mut impl TransformComponentConstraintYBaseCallbacks,
     ) {
-        if self.max_y == value {
+        if !self.set_max_y_value(value) {
             return;
         }
-        self.max_y = value;
         callbacks.max_y_changed();
         callbacks.notify_property_changed(Self::MAX_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_max_y_value(&mut self, value: bool) -> bool {
+        if self.max_y == value {
+            return false;
+        }
+        self.max_y = value;
+        true
     }
     pub fn copy(
         &mut self,
@@ -188,5 +230,19 @@ impl TransformComponentConstraintYBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TransformComponentConstraintYBase {
+    type Target = TransformComponentConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransformComponentConstraintYBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

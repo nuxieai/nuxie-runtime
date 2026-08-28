@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::rectangle::Rectangle,
 };
 
-pub trait RectangleBaseCallbacks {
+pub trait RectangleBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::parametric_path_base::ParametricPathBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn link_corner_radius_changed(&mut self) {}
     fn corner_radius_tl_changed(&mut self) {}
@@ -56,12 +58,19 @@ impl RectangleBase {
         value: bool,
         callbacks: &mut impl RectangleBaseCallbacks,
     ) {
-        if self.link_corner_radius == value {
+        if !self.set_link_corner_radius_value(value) {
             return;
         }
-        self.link_corner_radius = value;
         callbacks.link_corner_radius_changed();
         callbacks.notify_property_changed(Self::LINK_CORNER_RADIUS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_link_corner_radius_value(&mut self, value: bool) -> bool {
+        if self.link_corner_radius == value {
+            return false;
+        }
+        self.link_corner_radius = value;
+        true
     }
     pub fn corner_radius_tl(&self) -> f32 {
         self.corner_radius_tl
@@ -71,12 +80,19 @@ impl RectangleBase {
         value: f32,
         callbacks: &mut impl RectangleBaseCallbacks,
     ) {
-        if self.corner_radius_tl == value {
+        if !self.set_corner_radius_tl_value(value) {
             return;
         }
-        self.corner_radius_tl = value;
         callbacks.corner_radius_tl_changed();
         callbacks.notify_property_changed(Self::CORNER_RADIUS_TL_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_corner_radius_tl_value(&mut self, value: f32) -> bool {
+        if self.corner_radius_tl == value {
+            return false;
+        }
+        self.corner_radius_tl = value;
+        true
     }
     pub fn corner_radius_tr(&self) -> f32 {
         self.corner_radius_tr
@@ -86,12 +102,19 @@ impl RectangleBase {
         value: f32,
         callbacks: &mut impl RectangleBaseCallbacks,
     ) {
-        if self.corner_radius_tr == value {
+        if !self.set_corner_radius_tr_value(value) {
             return;
         }
-        self.corner_radius_tr = value;
         callbacks.corner_radius_tr_changed();
         callbacks.notify_property_changed(Self::CORNER_RADIUS_TR_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_corner_radius_tr_value(&mut self, value: f32) -> bool {
+        if self.corner_radius_tr == value {
+            return false;
+        }
+        self.corner_radius_tr = value;
+        true
     }
     pub fn corner_radius_bl(&self) -> f32 {
         self.corner_radius_bl
@@ -101,12 +124,19 @@ impl RectangleBase {
         value: f32,
         callbacks: &mut impl RectangleBaseCallbacks,
     ) {
-        if self.corner_radius_bl == value {
+        if !self.set_corner_radius_bl_value(value) {
             return;
         }
-        self.corner_radius_bl = value;
         callbacks.corner_radius_bl_changed();
         callbacks.notify_property_changed(Self::CORNER_RADIUS_BL_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_corner_radius_bl_value(&mut self, value: f32) -> bool {
+        if self.corner_radius_bl == value {
+            return false;
+        }
+        self.corner_radius_bl = value;
+        true
     }
     pub fn corner_radius_br(&self) -> f32 {
         self.corner_radius_br
@@ -116,12 +146,19 @@ impl RectangleBase {
         value: f32,
         callbacks: &mut impl RectangleBaseCallbacks,
     ) {
-        if self.corner_radius_br == value {
+        if !self.set_corner_radius_br_value(value) {
             return;
         }
-        self.corner_radius_br = value;
         callbacks.corner_radius_br_changed();
         callbacks.notify_property_changed(Self::CORNER_RADIUS_BR_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_corner_radius_br_value(&mut self, value: f32) -> bool {
+        if self.corner_radius_br == value {
+            return false;
+        }
+        self.corner_radius_br = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl RectangleBaseCallbacks) -> Rectangle {
         let mut cloned = Rectangle::default();
@@ -165,5 +202,19 @@ impl RectangleBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for RectangleBase {
+    type Target = ParametricPath;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for RectangleBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

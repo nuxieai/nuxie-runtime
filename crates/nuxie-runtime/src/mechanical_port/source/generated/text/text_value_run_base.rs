@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, core::binary_reader::BinaryReader, text::text_value_run::TextValueRun,
 };
 
-pub trait TextValueRunBaseCallbacks {
+pub trait TextValueRunBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn style_id_changed(&mut self) {}
     fn text_changed(&mut self) {}
@@ -39,23 +41,37 @@ impl TextValueRunBase {
         self.style_id
     }
     pub fn set_style_id(&mut self, value: u32, callbacks: &mut impl TextValueRunBaseCallbacks) {
-        if self.style_id == value {
+        if !self.set_style_id_value(value) {
             return;
         }
-        self.style_id = value;
         callbacks.style_id_changed();
         callbacks.notify_property_changed(Self::STYLE_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_style_id_value(&mut self, value: u32) -> bool {
+        if self.style_id == value {
+            return false;
+        }
+        self.style_id = value;
+        true
     }
     pub fn text(&self) -> &str {
         &self.text
     }
     pub fn set_text(&mut self, value: String, callbacks: &mut impl TextValueRunBaseCallbacks) {
-        if self.text == value {
+        if !self.set_text_value(value) {
             return;
         }
-        self.text = value;
         callbacks.text_changed();
         callbacks.notify_property_changed(Self::TEXT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_text_value(&mut self, value: String) -> bool {
+        if self.text == value {
+            return false;
+        }
+        self.text = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl TextValueRunBaseCallbacks) -> TextValueRun {
         let mut cloned = TextValueRun::default();
@@ -84,5 +100,19 @@ impl TextValueRunBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextValueRunBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextValueRunBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

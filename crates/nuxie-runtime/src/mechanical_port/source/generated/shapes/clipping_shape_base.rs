@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, core::binary_reader::BinaryReader, shapes::clipping_shape::ClippingShape,
 };
 
-pub trait ClippingShapeBaseCallbacks {
+pub trait ClippingShapeBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn source_id_changed(&mut self) {}
     fn fill_rule_changed(&mut self) {}
@@ -43,34 +45,55 @@ impl ClippingShapeBase {
         self.source_id
     }
     pub fn set_source_id(&mut self, value: u32, callbacks: &mut impl ClippingShapeBaseCallbacks) {
-        if self.source_id == value {
+        if !self.set_source_id_value(value) {
             return;
         }
-        self.source_id = value;
         callbacks.source_id_changed();
         callbacks.notify_property_changed(Self::SOURCE_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_source_id_value(&mut self, value: u32) -> bool {
+        if self.source_id == value {
+            return false;
+        }
+        self.source_id = value;
+        true
     }
     pub fn fill_rule(&self) -> u32 {
         self.fill_rule
     }
     pub fn set_fill_rule(&mut self, value: u32, callbacks: &mut impl ClippingShapeBaseCallbacks) {
-        if self.fill_rule == value {
+        if !self.set_fill_rule_value(value) {
             return;
         }
-        self.fill_rule = value;
         callbacks.fill_rule_changed();
         callbacks.notify_property_changed(Self::FILL_RULE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_fill_rule_value(&mut self, value: u32) -> bool {
+        if self.fill_rule == value {
+            return false;
+        }
+        self.fill_rule = value;
+        true
     }
     pub fn is_visible(&self) -> bool {
         self.is_visible
     }
     pub fn set_is_visible(&mut self, value: bool, callbacks: &mut impl ClippingShapeBaseCallbacks) {
-        if self.is_visible == value {
+        if !self.set_is_visible_value(value) {
             return;
         }
-        self.is_visible = value;
         callbacks.is_visible_changed();
         callbacks.notify_property_changed(Self::IS_VISIBLE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_is_visible_value(&mut self, value: bool) -> bool {
+        if self.is_visible == value {
+            return false;
+        }
+        self.is_visible = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl ClippingShapeBaseCallbacks) -> ClippingShape {
         let mut cloned = ClippingShape::default();
@@ -104,5 +127,19 @@ impl ClippingShapeBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ClippingShapeBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ClippingShapeBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

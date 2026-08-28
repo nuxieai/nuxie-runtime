@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     animation::listener_number_change::ListenerNumberChange, core::binary_reader::BinaryReader,
 };
 
-pub trait ListenerNumberChangeBaseCallbacks {
+pub trait ListenerNumberChangeBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_input_change_base::ListenerInputChangeBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn value_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl ListenerNumberChangeBase {
         value: f32,
         callbacks: &mut impl ListenerNumberChangeBaseCallbacks,
     ) {
-        if self.value == value {
+        if !self.set_value_value(value) {
             return;
         }
-        self.value = value;
         callbacks.value_changed();
         callbacks.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_value_value(&mut self, value: f32) -> bool {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -72,5 +79,19 @@ impl ListenerNumberChangeBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ListenerNumberChangeBase {
+    type Target = ListenerInputChange;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListenerNumberChangeBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

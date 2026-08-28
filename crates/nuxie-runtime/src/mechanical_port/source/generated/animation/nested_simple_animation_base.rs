@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     animation::nested_simple_animation::NestedSimpleAnimation, core::binary_reader::BinaryReader,
 };
 
-pub trait NestedSimpleAnimationBaseCallbacks {
+pub trait NestedSimpleAnimationBaseCallbacks: crate::mechanical_port::source::generated::animation::nested_linear_animation_base::NestedLinearAnimationBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn speed_changed(&mut self) {}
     fn is_playing_changed(&mut self) {}
@@ -44,12 +44,19 @@ impl NestedSimpleAnimationBase {
         value: f32,
         callbacks: &mut impl NestedSimpleAnimationBaseCallbacks,
     ) {
-        if self.speed == value {
+        if !self.set_speed_value(value) {
             return;
         }
-        self.speed = value;
         callbacks.speed_changed();
         callbacks.notify_property_changed(Self::SPEED_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_speed_value(&mut self, value: f32) -> bool {
+        if self.speed == value {
+            return false;
+        }
+        self.speed = value;
+        true
     }
     pub fn is_playing(&self) -> bool {
         self.is_playing
@@ -59,12 +66,19 @@ impl NestedSimpleAnimationBase {
         value: bool,
         callbacks: &mut impl NestedSimpleAnimationBaseCallbacks,
     ) {
-        if self.is_playing == value {
+        if !self.set_is_playing_value(value) {
             return;
         }
-        self.is_playing = value;
         callbacks.is_playing_changed();
         callbacks.notify_property_changed(Self::IS_PLAYING_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_is_playing_value(&mut self, value: bool) -> bool {
+        if self.is_playing == value {
+            return false;
+        }
+        self.is_playing = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -96,5 +110,19 @@ impl NestedSimpleAnimationBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NestedSimpleAnimationBase {
+    type Target = NestedLinearAnimation;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedSimpleAnimationBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

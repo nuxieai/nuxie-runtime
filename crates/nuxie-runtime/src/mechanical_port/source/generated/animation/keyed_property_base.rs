@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::keyed_property::KeyedProperty, core::Core, core::binary_reader::BinaryReader,
+    animation::keyed_property::KeyedProperty, core::binary_reader::BinaryReader, core::Core,
 };
 
 pub trait KeyedPropertyBaseCallbacks {
@@ -39,12 +39,19 @@ impl KeyedPropertyBase {
         value: u32,
         callbacks: &mut impl KeyedPropertyBaseCallbacks,
     ) {
-        if self.property_key == value {
+        if !self.set_property_key_value(value) {
             return;
         }
-        self.property_key = value;
         callbacks.property_key_changed();
         callbacks.notify_property_changed(Self::PROPERTY_KEY_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_property_key_value(&mut self, value: u32) -> bool {
+        if self.property_key == value {
+            return false;
+        }
+        self.property_key = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl KeyedPropertyBaseCallbacks) -> KeyedProperty {
         let mut cloned = KeyedProperty::default();
@@ -67,5 +74,19 @@ impl KeyedPropertyBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for KeyedPropertyBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for KeyedPropertyBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

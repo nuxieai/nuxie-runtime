@@ -4,7 +4,9 @@ use crate::mechanical_port::source::{
     core::{binary_reader::BinaryReader, field_types::core_uint_type::CoreUintType},
 };
 
-pub trait WeightBaseCallbacks {
+pub trait WeightBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn values_changed(&mut self) {}
     fn indices_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
@@ -46,21 +48,35 @@ impl WeightBase {
     }
 
     pub fn set_values<C: WeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
-        if self.values == value {
+        if !self.set_values_value(value) {
             return;
         }
-        self.values = value;
         callbacks.values_changed();
         callbacks.notify_property_changed(Self::VALUES_PROPERTY_KEY);
     }
 
+    pub(crate) fn set_values_value(&mut self, value: u32) -> bool {
+        if self.values == value {
+            return false;
+        }
+        self.values = value;
+        true
+    }
+
     pub fn set_indices<C: WeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
-        if self.indices == value {
+        if !self.set_indices_value(value) {
             return;
         }
-        self.indices = value;
         callbacks.indices_changed();
         callbacks.notify_property_changed(Self::INDICES_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_indices_value(&mut self, value: u32) -> bool {
+        if self.indices == value {
+            return false;
+        }
+        self.indices = value;
+        true
     }
 
     pub fn clone_into<C: WeightBaseCallbacks>(&self, callbacks: &mut C) -> Weight {
@@ -92,5 +108,19 @@ impl WeightBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for WeightBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for WeightBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

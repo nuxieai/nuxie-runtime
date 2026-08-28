@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     layout::n_slicer_tile_mode::NSlicerTileMode,
 };
 
-pub trait NSlicerTileModeBaseCallbacks {
+pub trait NSlicerTileModeBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn patch_index_changed(&mut self) {}
     fn style_changed(&mut self) {}
@@ -44,23 +46,37 @@ impl NSlicerTileModeBase {
         value: u32,
         callbacks: &mut impl NSlicerTileModeBaseCallbacks,
     ) {
-        if self.patch_index == value {
+        if !self.set_patch_index_value(value) {
             return;
         }
-        self.patch_index = value;
         callbacks.patch_index_changed();
         callbacks.notify_property_changed(Self::PATCH_INDEX_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_patch_index_value(&mut self, value: u32) -> bool {
+        if self.patch_index == value {
+            return false;
+        }
+        self.patch_index = value;
+        true
     }
     pub fn style(&self) -> u32 {
         self.style
     }
     pub fn set_style(&mut self, value: u32, callbacks: &mut impl NSlicerTileModeBaseCallbacks) {
-        if self.style == value {
+        if !self.set_style_value(value) {
             return;
         }
-        self.style = value;
         callbacks.style_changed();
         callbacks.notify_property_changed(Self::STYLE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_style_value(&mut self, value: u32) -> bool {
+        if self.style == value {
+            return false;
+        }
+        self.style = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl NSlicerTileModeBaseCallbacks) -> NSlicerTileMode {
         let mut cloned = NSlicerTileMode::default();
@@ -89,5 +105,19 @@ impl NSlicerTileModeBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NSlicerTileModeBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NSlicerTileModeBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

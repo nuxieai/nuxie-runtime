@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     constraints::scrolling::scroll_constraint::ScrollConstraint, core::binary_reader::BinaryReader,
 };
 
-pub trait ScrollConstraintBaseCallbacks {
+pub trait ScrollConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::draggable_constraint_base::DraggableConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn scroll_offset_x_changed(&mut self) {}
     fn scroll_offset_y_changed(&mut self) {}
@@ -108,12 +108,19 @@ impl ScrollConstraintBase {
         value: f32,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
-        if self.scroll_offset_x == value {
+        if !self.set_scroll_offset_x_value(value) {
             return;
         }
-        self.scroll_offset_x = value;
         callbacks.scroll_offset_x_changed();
         callbacks.notify_property_changed(Self::SCROLL_OFFSET_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_scroll_offset_x_value(&mut self, value: f32) -> bool {
+        if self.scroll_offset_x == value {
+            return false;
+        }
+        self.scroll_offset_x = value;
+        true
     }
     pub fn scroll_offset_y(&self) -> f32 {
         self.scroll_offset_y
@@ -123,23 +130,37 @@ impl ScrollConstraintBase {
         value: f32,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
-        if self.scroll_offset_y == value {
+        if !self.set_scroll_offset_y_value(value) {
             return;
         }
-        self.scroll_offset_y = value;
         callbacks.scroll_offset_y_changed();
         callbacks.notify_property_changed(Self::SCROLL_OFFSET_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_scroll_offset_y_value(&mut self, value: f32) -> bool {
+        if self.scroll_offset_y == value {
+            return false;
+        }
+        self.scroll_offset_y = value;
+        true
     }
     pub fn snap(&self) -> bool {
         self.snap
     }
     pub fn set_snap(&mut self, value: bool, callbacks: &mut impl ScrollConstraintBaseCallbacks) {
-        if self.snap == value {
+        if !self.set_snap_value(value) {
             return;
         }
-        self.snap = value;
         callbacks.snap_changed();
         callbacks.notify_property_changed(Self::SNAP_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_snap_value(&mut self, value: bool) -> bool {
+        if self.snap == value {
+            return false;
+        }
+        self.snap = value;
+        true
     }
     pub fn physics_type_value(&self) -> u32 {
         self.physics_type_value
@@ -149,12 +170,19 @@ impl ScrollConstraintBase {
         value: u32,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
-        if self.physics_type_value == value {
+        if !self.set_physics_type_value_value(value) {
             return;
         }
-        self.physics_type_value = value;
         callbacks.physics_type_value_changed();
         callbacks.notify_property_changed(Self::PHYSICS_TYPE_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_physics_type_value_value(&mut self, value: u32) -> bool {
+        if self.physics_type_value == value {
+            return false;
+        }
+        self.physics_type_value = value;
+        true
     }
     pub fn physics_id(&self) -> u32 {
         self.physics_id
@@ -164,12 +192,19 @@ impl ScrollConstraintBase {
         value: u32,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
-        if self.physics_id == value {
+        if !self.set_physics_id_value(value) {
             return;
         }
-        self.physics_id = value;
         callbacks.physics_id_changed();
         callbacks.notify_property_changed(Self::PHYSICS_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_physics_id_value(&mut self, value: u32) -> bool {
+        if self.physics_id == value {
+            return false;
+        }
+        self.physics_id = value;
+        true
     }
     pub fn virtualize(&self) -> bool {
         self.virtualize
@@ -179,12 +214,19 @@ impl ScrollConstraintBase {
         value: bool,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
-        if self.virtualize == value {
+        if !self.set_virtualize_value(value) {
             return;
         }
-        self.virtualize = value;
         callbacks.virtualize_changed();
         callbacks.notify_property_changed(Self::VIRTUALIZE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_virtualize_value(&mut self, value: bool) -> bool {
+        if self.virtualize == value {
+            return false;
+        }
+        self.virtualize = value;
+        true
     }
     pub fn infinite(&self) -> bool {
         self.infinite
@@ -194,12 +236,19 @@ impl ScrollConstraintBase {
         value: bool,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
-        if self.infinite == value {
+        if !self.set_infinite_value(value) {
             return;
         }
-        self.infinite = value;
         callbacks.infinite_changed();
         callbacks.notify_property_changed(Self::INFINITE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_infinite_value(&mut self, value: bool) -> bool {
+        if self.infinite == value {
+            return false;
+        }
+        self.infinite = value;
+        true
     }
     pub fn interactive(&self) -> bool {
         self.interactive
@@ -209,12 +258,19 @@ impl ScrollConstraintBase {
         value: bool,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
-        if self.interactive == value {
+        if !self.set_interactive_value(value) {
             return;
         }
-        self.interactive = value;
         callbacks.interactive_changed();
         callbacks.notify_property_changed(Self::INTERACTIVE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interactive_value(&mut self, value: bool) -> bool {
+        if self.interactive == value {
+            return false;
+        }
+        self.interactive = value;
+        true
     }
     pub fn threshold(&self) -> f32 {
         self.threshold
@@ -224,12 +280,19 @@ impl ScrollConstraintBase {
         value: f32,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
-        if self.threshold == value {
+        if !self.set_threshold_value(value) {
             return;
         }
-        self.threshold = value;
         callbacks.threshold_changed();
         callbacks.notify_property_changed(Self::THRESHOLD_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_threshold_value(&mut self, value: f32) -> bool {
+        if self.threshold == value {
+            return false;
+        }
+        self.threshold = value;
+        true
     }
     pub fn drag_multiplier(&self) -> f32 {
         self.drag_multiplier
@@ -239,12 +302,19 @@ impl ScrollConstraintBase {
         value: f32,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
-        if self.drag_multiplier == value {
+        if !self.set_drag_multiplier_value(value) {
             return;
         }
-        self.drag_multiplier = value;
         callbacks.drag_multiplier_changed();
         callbacks.notify_property_changed(Self::DRAG_MULTIPLIER_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_drag_multiplier_value(&mut self, value: f32) -> bool {
+        if self.drag_multiplier == value {
+            return false;
+        }
+        self.drag_multiplier = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -316,5 +386,19 @@ impl ScrollConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ScrollConstraintBase {
+    type Target = DraggableConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScrollConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

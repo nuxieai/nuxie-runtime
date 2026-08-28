@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::animation::Animation, core::Core, core::binary_reader::BinaryReader,
+    animation::animation::Animation, core::binary_reader::BinaryReader, core::Core,
 };
 
 pub trait AnimationBaseCallbacks {
@@ -35,12 +35,19 @@ impl AnimationBase {
         &self.name
     }
     pub fn set_name(&mut self, value: String, callbacks: &mut impl AnimationBaseCallbacks) {
-        if self.name == value {
+        if !self.set_name_value(value) {
             return;
         }
-        self.name = value;
         callbacks.name_changed();
         callbacks.notify_property_changed(Self::NAME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_name_value(&mut self, value: String) -> bool {
+        if self.name == value {
+            return false;
+        }
+        self.name = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl AnimationBaseCallbacks) -> Animation {
         let mut cloned = Animation::default();
@@ -63,5 +70,19 @@ impl AnimationBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for AnimationBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AnimationBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

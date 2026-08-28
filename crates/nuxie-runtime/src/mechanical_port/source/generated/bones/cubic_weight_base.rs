@@ -57,36 +57,64 @@ impl CubicWeightBase {
     }
 
     pub fn set_in_values<C: CubicWeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
-        if self.in_values == value {
+        if !self.set_in_values_value(value) {
             return;
         }
-        self.in_values = value;
         callbacks.in_values_changed();
         callbacks.notify_property_changed(Self::IN_VALUES_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_in_values_value(&mut self, value: u32) -> bool {
+        if self.in_values == value {
+            return false;
+        }
+        self.in_values = value;
+        true
+    }
     pub fn set_in_indices<C: CubicWeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
-        if self.in_indices == value {
+        if !self.set_in_indices_value(value) {
             return;
         }
-        self.in_indices = value;
         callbacks.in_indices_changed();
         callbacks.notify_property_changed(Self::IN_INDICES_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_in_indices_value(&mut self, value: u32) -> bool {
+        if self.in_indices == value {
+            return false;
+        }
+        self.in_indices = value;
+        true
+    }
     pub fn set_out_values<C: CubicWeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
-        if self.out_values == value {
+        if !self.set_out_values_value(value) {
             return;
         }
-        self.out_values = value;
         callbacks.out_values_changed();
         callbacks.notify_property_changed(Self::OUT_VALUES_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_out_values_value(&mut self, value: u32) -> bool {
+        if self.out_values == value {
+            return false;
+        }
+        self.out_values = value;
+        true
+    }
     pub fn set_out_indices<C: CubicWeightBaseCallbacks>(&mut self, value: u32, callbacks: &mut C) {
-        if self.out_indices == value {
+        if !self.set_out_indices_value(value) {
             return;
         }
-        self.out_indices = value;
         callbacks.out_indices_changed();
         callbacks.notify_property_changed(Self::OUT_INDICES_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_out_indices_value(&mut self, value: u32) -> bool {
+        if self.out_indices == value {
+            return false;
+        }
+        self.out_indices = value;
+        true
     }
 
     pub fn clone_into<C: CubicWeightBaseCallbacks>(&self, callbacks: &mut C) -> CubicWeight {
@@ -126,5 +154,19 @@ impl CubicWeightBase {
             }
             _ => self.base.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for CubicWeightBase {
+    type Target = Weight;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicWeightBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

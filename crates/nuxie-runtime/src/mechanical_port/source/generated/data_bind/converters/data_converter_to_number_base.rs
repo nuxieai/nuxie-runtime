@@ -30,3 +30,17 @@ impl DataConverterToNumberBase {
         cloned
     }
 }
+
+impl std::ops::Deref for DataConverterToNumberBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterToNumberBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

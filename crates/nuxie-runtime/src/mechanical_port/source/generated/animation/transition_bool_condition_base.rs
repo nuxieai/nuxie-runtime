@@ -31,3 +31,17 @@ impl TransitionBoolConditionBase {
         cloned
     }
 }
+
+impl std::ops::Deref for TransitionBoolConditionBase {
+    type Target = TransitionValueCondition;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionBoolConditionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

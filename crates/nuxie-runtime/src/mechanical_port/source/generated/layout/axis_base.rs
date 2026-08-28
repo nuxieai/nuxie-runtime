@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{component::Component, core::binary_reader::BinaryReader};
 
-pub trait AxisBaseCallbacks {
+pub trait AxisBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn offset_changed(&mut self) {}
     fn normalized_changed(&mut self) {}
@@ -37,23 +39,37 @@ impl AxisBase {
         self.offset
     }
     pub fn set_offset(&mut self, value: f32, callbacks: &mut impl AxisBaseCallbacks) {
-        if self.offset == value {
+        if !self.set_offset_value(value) {
             return;
         }
-        self.offset = value;
         callbacks.offset_changed();
         callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_offset_value(&mut self, value: f32) -> bool {
+        if self.offset == value {
+            return false;
+        }
+        self.offset = value;
+        true
     }
     pub fn normalized(&self) -> bool {
         self.normalized
     }
     pub fn set_normalized(&mut self, value: bool, callbacks: &mut impl AxisBaseCallbacks) {
-        if self.normalized == value {
+        if !self.set_normalized_value(value) {
             return;
         }
-        self.normalized = value;
         callbacks.normalized_changed();
         callbacks.notify_property_changed(Self::NORMALIZED_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_normalized_value(&mut self, value: bool) -> bool {
+        if self.normalized == value {
+            return false;
+        }
+        self.normalized = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl AxisBaseCallbacks) {
         self.offset = object.offset;
@@ -77,5 +93,19 @@ impl AxisBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for AxisBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AxisBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

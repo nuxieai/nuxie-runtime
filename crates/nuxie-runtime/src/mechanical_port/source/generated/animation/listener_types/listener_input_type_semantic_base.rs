@@ -31,3 +31,17 @@ impl ListenerInputTypeSemanticBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ListenerInputTypeSemanticBase {
+    type Target = ListenerInputType;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListenerInputTypeSemanticBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

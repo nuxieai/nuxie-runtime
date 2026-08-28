@@ -47,12 +47,18 @@ impl TextAssetBase {
     }
 
     pub fn set_folder_path<C: TextAssetBaseCallbacks>(&mut self, value: String, callbacks: &mut C) {
-        if self.folder_path == value {
+        if !self.set_folder_path_value(value) {
             return;
         }
-        self.folder_path = value;
         callbacks.folder_path_changed();
         callbacks.notify_property_changed(Self::FOLDER_PATH_PROPERTY_KEY);
+    }
+    pub(crate) fn set_folder_path_value(&mut self, value: String) -> bool {
+        if self.folder_path == value {
+            return false;
+        }
+        self.folder_path = value;
+        true
     }
 
     pub fn copy<C: TextAssetBaseCallbacks>(&mut self, object: &Self, callbacks: &mut C) {
@@ -73,5 +79,19 @@ impl TextAssetBase {
             }
             _ => self.base.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextAssetBase {
+    type Target = FileAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

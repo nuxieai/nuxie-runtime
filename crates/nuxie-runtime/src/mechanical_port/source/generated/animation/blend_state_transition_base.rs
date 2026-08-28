@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     animation::state_transition::StateTransition, core::binary_reader::BinaryReader,
 };
 
-pub trait BlendStateTransitionBaseCallbacks {
+pub trait BlendStateTransitionBaseCallbacks: crate::mechanical_port::source::generated::animation::state_transition_base::StateTransitionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn exit_blend_animation_id_changed(&mut self) {}
 }
@@ -40,12 +40,19 @@ impl BlendStateTransitionBase {
         value: u32,
         callbacks: &mut impl BlendStateTransitionBaseCallbacks,
     ) {
-        if self.exit_blend_animation_id == value {
+        if !self.set_exit_blend_animation_id_value(value) {
             return;
         }
-        self.exit_blend_animation_id = value;
         callbacks.exit_blend_animation_id_changed();
         callbacks.notify_property_changed(Self::EXIT_BLEND_ANIMATION_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_exit_blend_animation_id_value(&mut self, value: u32) -> bool {
+        if self.exit_blend_animation_id == value {
+            return false;
+        }
+        self.exit_blend_animation_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -72,5 +79,19 @@ impl BlendStateTransitionBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for BlendStateTransitionBase {
+    type Target = StateTransition;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BlendStateTransitionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

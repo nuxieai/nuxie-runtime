@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, nested_animation::NestedAnimation,
 };
 
-pub trait NestedLinearAnimationBaseCallbacks {
+pub trait NestedLinearAnimationBaseCallbacks:
+    crate::mechanical_port::source::generated::nested_animation_base::NestedAnimationBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn mix_changed(&mut self) {}
 }
@@ -35,12 +37,19 @@ impl NestedLinearAnimationBase {
         self.mix
     }
     pub fn set_mix(&mut self, value: f32, callbacks: &mut impl NestedLinearAnimationBaseCallbacks) {
-        if self.mix == value {
+        if !self.set_mix_value(value) {
             return;
         }
-        self.mix = value;
         callbacks.mix_changed();
         callbacks.notify_property_changed(Self::MIX_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_mix_value(&mut self, value: f32) -> bool {
+        if self.mix == value {
+            return false;
+        }
+        self.mix = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl NestedLinearAnimationBaseCallbacks) {
         self.mix = object.mix;
@@ -59,5 +68,19 @@ impl NestedLinearAnimationBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NestedLinearAnimationBase {
+    type Target = NestedAnimation;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedLinearAnimationBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

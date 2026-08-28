@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, core::binary_reader::BinaryReader, shapes::paint::dash::Dash,
 };
 
-pub trait DashBaseCallbacks {
+pub trait DashBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn length_changed(&mut self) {}
     fn length_is_percentage_changed(&mut self) {}
@@ -39,12 +41,19 @@ impl DashBase {
         self.length
     }
     pub fn set_length(&mut self, value: f32, callbacks: &mut impl DashBaseCallbacks) {
-        if self.length == value {
+        if !self.set_length_value(value) {
             return;
         }
-        self.length = value;
         callbacks.length_changed();
         callbacks.notify_property_changed(Self::LENGTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_length_value(&mut self, value: f32) -> bool {
+        if self.length == value {
+            return false;
+        }
+        self.length = value;
+        true
     }
     pub fn length_is_percentage(&self) -> bool {
         self.length_is_percentage
@@ -54,12 +63,19 @@ impl DashBase {
         value: bool,
         callbacks: &mut impl DashBaseCallbacks,
     ) {
-        if self.length_is_percentage == value {
+        if !self.set_length_is_percentage_value(value) {
             return;
         }
-        self.length_is_percentage = value;
         callbacks.length_is_percentage_changed();
         callbacks.notify_property_changed(Self::LENGTH_IS_PERCENTAGE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_length_is_percentage_value(&mut self, value: bool) -> bool {
+        if self.length_is_percentage == value {
+            return false;
+        }
+        self.length_is_percentage = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl DashBaseCallbacks) -> Dash {
         let mut cloned = Dash::default();
@@ -88,5 +104,19 @@ impl DashBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DashBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DashBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

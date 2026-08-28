@@ -4,7 +4,9 @@ use crate::mechanical_port::source::{
     container_component::ContainerComponent, core::binary_reader::BinaryReader,
 };
 
-pub trait ViewModelInstanceBaseCallbacks {
+pub trait ViewModelInstanceBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn view_model_id_changed(&mut self) {}
 }
@@ -41,12 +43,19 @@ impl ViewModelInstanceBase {
         value: u32,
         callbacks: &mut impl ViewModelInstanceBaseCallbacks,
     ) {
-        if self.view_model_id == value {
+        if !self.set_view_model_id_value(value) {
             return;
         }
-        self.view_model_id = value;
         callbacks.view_model_id_changed();
         callbacks.notify_property_changed(Self::VIEW_MODEL_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_view_model_id_value(&mut self, value: u32) -> bool {
+        if self.view_model_id == value {
+            return false;
+        }
+        self.view_model_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -73,5 +82,19 @@ impl ViewModelInstanceBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ViewModelInstanceBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelInstanceBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

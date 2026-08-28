@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     core::{binary_reader::BinaryReader, field_types::core_double_type::CoreDoubleType},
 };
 
-pub trait BoneBaseCallbacks {
+pub trait BoneBaseCallbacks:
+    crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks
+{
     fn length_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
 }
@@ -39,12 +41,19 @@ impl BoneBase {
     }
 
     pub fn set_length<C: BoneBaseCallbacks>(&mut self, value: f32, callbacks: &mut C) {
-        if self.length == value {
+        if !self.set_length_value(value) {
             return;
         }
-        self.length = value;
         callbacks.length_changed();
         callbacks.notify_property_changed(Self::LENGTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_length_value(&mut self, value: f32) -> bool {
+        if self.length == value {
+            return false;
+        }
+        self.length = value;
+        true
     }
 
     pub fn clone_into<C: BoneBaseCallbacks>(&self, callbacks: &mut C) -> Bone {
@@ -75,5 +84,19 @@ impl BoneBase {
                 .base
                 .deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for BoneBase {
+    type Target = SkeletalComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BoneBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

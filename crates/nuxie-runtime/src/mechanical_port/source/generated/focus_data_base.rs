@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     component::Component, core::binary_reader::BinaryReader, focus_data::FocusData,
 };
 
-pub trait FocusDataBaseCallbacks {
+pub trait FocusDataBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn focus_flags_changed(&mut self) {}
     fn edge_behavior_value_changed(&mut self) {}
@@ -45,12 +47,19 @@ impl FocusDataBase {
         self.focus_flags
     }
     pub fn set_focus_flags(&mut self, value: u32, callbacks: &mut impl FocusDataBaseCallbacks) {
-        if self.focus_flags == value {
+        if !self.set_focus_flags_value(value) {
             return;
         }
-        self.focus_flags = value;
         callbacks.focus_flags_changed();
         callbacks.notify_property_changed(Self::FOCUS_FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_focus_flags_value(&mut self, value: u32) -> bool {
+        if self.focus_flags == value {
+            return false;
+        }
+        self.focus_flags = value;
+        true
     }
     pub fn edge_behavior_value(&self) -> u32 {
         self.edge_behavior_value
@@ -60,12 +69,19 @@ impl FocusDataBase {
         value: u32,
         callbacks: &mut impl FocusDataBaseCallbacks,
     ) {
-        if self.edge_behavior_value == value {
+        if !self.set_edge_behavior_value_value(value) {
             return;
         }
-        self.edge_behavior_value = value;
         callbacks.edge_behavior_value_changed();
         callbacks.notify_property_changed(Self::EDGE_BEHAVIOR_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_edge_behavior_value_value(&mut self, value: u32) -> bool {
+        if self.edge_behavior_value == value {
+            return false;
+        }
+        self.edge_behavior_value = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl FocusDataBaseCallbacks) -> FocusData {
         let mut cloned = FocusData::default();
@@ -94,5 +110,19 @@ impl FocusDataBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for FocusDataBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FocusDataBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

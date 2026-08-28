@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::paint::shape_paint::ShapePaint,
 };
 
-pub trait FillBaseCallbacks {
+pub trait FillBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn fill_rule_changed(&mut self) {}
 }
@@ -36,12 +38,19 @@ impl FillBase {
         self.fill_rule
     }
     pub fn set_fill_rule(&mut self, value: u32, callbacks: &mut impl FillBaseCallbacks) {
-        if self.fill_rule == value {
+        if !self.set_fill_rule_value(value) {
             return;
         }
-        self.fill_rule = value;
         callbacks.fill_rule_changed();
         callbacks.notify_property_changed(Self::FILL_RULE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_fill_rule_value(&mut self, value: u32) -> bool {
+        if self.fill_rule == value {
+            return false;
+        }
+        self.fill_rule = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl FillBaseCallbacks) -> Fill {
         let mut cloned = Fill::default();
@@ -65,5 +74,19 @@ impl FillBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for FillBase {
+    type Target = ShapePaint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FillBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

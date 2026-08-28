@@ -47,52 +47,80 @@ impl CubicInterpolatorBase {
         self.x1
     }
     pub fn set_x1(&mut self, value: f32, callbacks: &mut impl CubicInterpolatorBaseCallbacks) {
-        if self.x1 == value {
+        if !self.set_x1_value(value) {
             return;
         }
-        self.x1 = value;
         callbacks.x1_changed();
         callbacks.notify_property_changed(Self::X1_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_x1_value(&mut self, value: f32) -> bool {
+        if self.x1 == value {
+            return false;
+        }
+        self.x1 = value;
+        true
     }
     pub fn y1(&self) -> f32 {
         self.y1
     }
     pub fn set_y1(&mut self, value: f32, callbacks: &mut impl CubicInterpolatorBaseCallbacks) {
-        if self.y1 == value {
+        if !self.set_y1_value(value) {
             return;
         }
-        self.y1 = value;
         callbacks.y1_changed();
         callbacks.notify_property_changed(Self::Y1_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_y1_value(&mut self, value: f32) -> bool {
+        if self.y1 == value {
+            return false;
+        }
+        self.y1 = value;
+        true
     }
     pub fn x2(&self) -> f32 {
         self.x2
     }
     pub fn set_x2(&mut self, value: f32, callbacks: &mut impl CubicInterpolatorBaseCallbacks) {
-        if self.x2 == value {
+        if !self.set_x2_value(value) {
             return;
         }
-        self.x2 = value;
         callbacks.x2_changed();
         callbacks.notify_property_changed(Self::X2_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_x2_value(&mut self, value: f32) -> bool {
+        if self.x2 == value {
+            return false;
+        }
+        self.x2 = value;
+        true
     }
     pub fn y2(&self) -> f32 {
         self.y2
     }
     pub fn set_y2(&mut self, value: f32, callbacks: &mut impl CubicInterpolatorBaseCallbacks) {
-        if self.y2 == value {
+        if !self.set_y2_value(value) {
             return;
         }
-        self.y2 = value;
         callbacks.y2_changed();
         callbacks.notify_property_changed(Self::Y2_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_y2_value(&mut self, value: f32) -> bool {
+        if self.y2 == value {
+            return false;
+        }
+        self.y2 = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl CubicInterpolatorBaseCallbacks) {
         self.x1 = object.x1;
         self.y1 = object.y1;
         self.x2 = object.x2;
         self.y2 = object.y2;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -117,7 +145,21 @@ impl CubicInterpolatorBase {
                 self.y2 = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for CubicInterpolatorBase {
+    type Target = KeyFrameInterpolator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicInterpolatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

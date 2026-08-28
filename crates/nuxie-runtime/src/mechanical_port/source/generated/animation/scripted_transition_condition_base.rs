@@ -40,12 +40,19 @@ impl ScriptedTransitionConditionBase {
         value: u32,
         callbacks: &mut impl ScriptedTransitionConditionBaseCallbacks,
     ) {
-        if self.script_asset_id == value {
+        if !self.set_script_asset_id_value(value) {
             return;
         }
-        self.script_asset_id = value;
         callbacks.script_asset_id_changed();
         callbacks.notify_property_changed(Self::SCRIPT_ASSET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_script_asset_id_value(&mut self, value: u32) -> bool {
+        if self.script_asset_id == value {
+            return false;
+        }
+        self.script_asset_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -61,7 +68,7 @@ impl ScriptedTransitionConditionBase {
         callbacks: &mut impl ScriptedTransitionConditionBaseCallbacks,
     ) {
         self.script_asset_id = object.script_asset_id;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -74,7 +81,21 @@ impl ScriptedTransitionConditionBase {
                 self.script_asset_id = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for ScriptedTransitionConditionBase {
+    type Target = TransitionCondition;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptedTransitionConditionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

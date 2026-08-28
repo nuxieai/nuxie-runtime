@@ -36,3 +36,17 @@ impl AudioAssetBase {
         cloned
     }
 }
+
+impl std::ops::Deref for AudioAssetBase {
+    type Target = ExportAudio;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AudioAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

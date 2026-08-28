@@ -30,3 +30,17 @@ impl DataConverterGroupBase {
         cloned
     }
 }
+
+impl std::ops::Deref for DataConverterGroupBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterGroupBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

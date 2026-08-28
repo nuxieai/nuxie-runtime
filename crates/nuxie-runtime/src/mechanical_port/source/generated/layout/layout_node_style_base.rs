@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     layout::layout_sizing_style::LayoutSizingStyle,
 };
 
-pub trait LayoutNodeStyleBaseCallbacks {
+pub trait LayoutNodeStyleBaseCallbacks: crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn width_changed(&mut self) {}
     fn height_changed(&mut self) {}
@@ -48,23 +48,37 @@ impl LayoutNodeStyleBase {
         self.width
     }
     pub fn set_width(&mut self, value: f32, callbacks: &mut impl LayoutNodeStyleBaseCallbacks) {
-        if self.width == value {
+        if !self.set_width_value(value) {
             return;
         }
-        self.width = value;
         callbacks.width_changed();
         callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
+        if self.width == value {
+            return false;
+        }
+        self.width = value;
+        true
     }
     pub fn height(&self) -> f32 {
         self.height
     }
     pub fn set_height(&mut self, value: f32, callbacks: &mut impl LayoutNodeStyleBaseCallbacks) {
-        if self.height == value {
+        if !self.set_height_value(value) {
             return;
         }
-        self.height = value;
         callbacks.height_changed();
         callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
+        if self.height == value {
+            return false;
+        }
+        self.height = value;
+        true
     }
     pub fn fractional_width(&self) -> f32 {
         self.fractional_width
@@ -74,12 +88,19 @@ impl LayoutNodeStyleBase {
         value: f32,
         callbacks: &mut impl LayoutNodeStyleBaseCallbacks,
     ) {
-        if self.fractional_width == value {
+        if !self.set_fractional_width_value(value) {
             return;
         }
-        self.fractional_width = value;
         callbacks.fractional_width_changed();
         callbacks.notify_property_changed(Self::FRACTIONAL_WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_fractional_width_value(&mut self, value: f32) -> bool {
+        if self.fractional_width == value {
+            return false;
+        }
+        self.fractional_width = value;
+        true
     }
     pub fn fractional_height(&self) -> f32 {
         self.fractional_height
@@ -89,12 +110,19 @@ impl LayoutNodeStyleBase {
         value: f32,
         callbacks: &mut impl LayoutNodeStyleBaseCallbacks,
     ) {
-        if self.fractional_height == value {
+        if !self.set_fractional_height_value(value) {
             return;
         }
-        self.fractional_height = value;
         callbacks.fractional_height_changed();
         callbacks.notify_property_changed(Self::FRACTIONAL_HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_fractional_height_value(&mut self, value: f32) -> bool {
+        if self.fractional_height == value {
+            return false;
+        }
+        self.fractional_height = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl LayoutNodeStyleBaseCallbacks) -> LayoutNodeStyle {
         let mut cloned = LayoutNodeStyle::default();
@@ -133,5 +161,19 @@ impl LayoutNodeStyleBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for LayoutNodeStyleBase {
+    type Target = LayoutSizingStyle;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LayoutNodeStyleBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

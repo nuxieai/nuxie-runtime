@@ -32,3 +32,17 @@ impl ShaderAssetBase {
         cloned
     }
 }
+
+impl std::ops::Deref for ShaderAssetBase {
+    type Target = TextAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ShaderAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

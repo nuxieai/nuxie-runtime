@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
 };
 
-pub trait ScrollBarConstraintBaseCallbacks {
+pub trait ScrollBarConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::draggable_constraint_base::DraggableConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn scroll_constraint_id_changed(&mut self) {}
     fn auto_size_changed(&mut self) {}
@@ -45,12 +45,19 @@ impl ScrollBarConstraintBase {
         value: u32,
         callbacks: &mut impl ScrollBarConstraintBaseCallbacks,
     ) {
-        if self.scroll_constraint_id == value {
+        if !self.set_scroll_constraint_id_value(value) {
             return;
         }
-        self.scroll_constraint_id = value;
         callbacks.scroll_constraint_id_changed();
         callbacks.notify_property_changed(Self::SCROLL_CONSTRAINT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_scroll_constraint_id_value(&mut self, value: u32) -> bool {
+        if self.scroll_constraint_id == value {
+            return false;
+        }
+        self.scroll_constraint_id = value;
+        true
     }
     pub fn auto_size(&self) -> bool {
         self.auto_size
@@ -60,12 +67,19 @@ impl ScrollBarConstraintBase {
         value: bool,
         callbacks: &mut impl ScrollBarConstraintBaseCallbacks,
     ) {
-        if self.auto_size == value {
+        if !self.set_auto_size_value(value) {
             return;
         }
-        self.auto_size = value;
         callbacks.auto_size_changed();
         callbacks.notify_property_changed(Self::AUTO_SIZE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_auto_size_value(&mut self, value: bool) -> bool {
+        if self.auto_size == value {
+            return false;
+        }
+        self.auto_size = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -97,5 +111,19 @@ impl ScrollBarConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ScrollBarConstraintBase {
+    type Target = DraggableConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScrollBarConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

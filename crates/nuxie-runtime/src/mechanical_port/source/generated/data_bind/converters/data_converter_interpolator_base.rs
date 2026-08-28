@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     data_bind::converters::data_converter_interpolator::DataConverterInterpolator,
 };
 
-pub trait DataConverterInterpolatorBaseCallbacks {
+pub trait DataConverterInterpolatorBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn interpolation_type_changed(&mut self) {}
     fn interpolator_id_changed(&mut self) {}
@@ -48,12 +48,19 @@ impl DataConverterInterpolatorBase {
         value: u32,
         callbacks: &mut impl DataConverterInterpolatorBaseCallbacks,
     ) {
-        if self.interpolation_type == value {
+        if !self.set_interpolation_type_value(value) {
             return;
         }
-        self.interpolation_type = value;
         callbacks.interpolation_type_changed();
         callbacks.notify_property_changed(Self::INTERPOLATION_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interpolation_type_value(&mut self, value: u32) -> bool {
+        if self.interpolation_type == value {
+            return false;
+        }
+        self.interpolation_type = value;
+        true
     }
     pub fn interpolator_id(&self) -> u32 {
         self.interpolator_id
@@ -63,12 +70,19 @@ impl DataConverterInterpolatorBase {
         value: u32,
         callbacks: &mut impl DataConverterInterpolatorBaseCallbacks,
     ) {
-        if self.interpolator_id == value {
+        if !self.set_interpolator_id_value(value) {
             return;
         }
-        self.interpolator_id = value;
         callbacks.interpolator_id_changed();
         callbacks.notify_property_changed(Self::INTERPOLATOR_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_interpolator_id_value(&mut self, value: u32) -> bool {
+        if self.interpolator_id == value {
+            return false;
+        }
+        self.interpolator_id = value;
+        true
     }
     pub fn duration(&self) -> f32 {
         self.duration
@@ -78,12 +92,19 @@ impl DataConverterInterpolatorBase {
         value: f32,
         callbacks: &mut impl DataConverterInterpolatorBaseCallbacks,
     ) {
-        if self.duration == value {
+        if !self.set_duration_value(value) {
             return;
         }
-        self.duration = value;
         callbacks.duration_changed();
         callbacks.notify_property_changed(Self::DURATION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_duration_value(&mut self, value: f32) -> bool {
+        if self.duration == value {
+            return false;
+        }
+        self.duration = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -124,5 +145,19 @@ impl DataConverterInterpolatorBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterInterpolatorBase {
+    type Target = DataConverter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterInterpolatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

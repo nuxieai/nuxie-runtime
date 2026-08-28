@@ -22,3 +22,17 @@ impl ContainerComponentBase {
         Self::TYPE_KEY
     }
 }
+
+impl std::ops::Deref for ContainerComponentBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ContainerComponentBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

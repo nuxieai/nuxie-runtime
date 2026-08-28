@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
 
 pub trait DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
@@ -33,12 +33,19 @@ impl DataConverterBase {
         &self.name
     }
     pub fn set_name(&mut self, value: String, callbacks: &mut impl DataConverterBaseCallbacks) {
-        if self.name == value {
+        if !self.set_name_value(value) {
             return;
         }
-        self.name = value;
         callbacks.name_changed();
         callbacks.notify_property_changed(Self::NAME_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_name_value(&mut self, value: String) -> bool {
+        if self.name == value {
+            return false;
+        }
+        self.name = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl DataConverterBaseCallbacks) {
         self.name.clone_from(&object.name);
@@ -56,5 +63,19 @@ impl DataConverterBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for DataConverterBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataConverterBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

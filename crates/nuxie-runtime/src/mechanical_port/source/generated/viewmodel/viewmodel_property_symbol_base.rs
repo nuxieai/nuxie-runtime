@@ -24,3 +24,17 @@ impl ViewModelPropertySymbolBase {
         Self::TYPE_KEY
     }
 }
+
+impl std::ops::Deref for ViewModelPropertySymbolBase {
+    type Target = ViewModelProperty;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ViewModelPropertySymbolBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

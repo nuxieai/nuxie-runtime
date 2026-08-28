@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, drawable::Drawable, text::text_input::TextInput,
 };
 
-pub trait TextInputBaseCallbacks {
+pub trait TextInputBaseCallbacks:
+    crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn text_changed(&mut self) {}
     fn selection_radius_changed(&mut self) {}
@@ -43,12 +45,19 @@ impl TextInputBase {
         &self.text
     }
     pub fn set_text(&mut self, value: String, callbacks: &mut impl TextInputBaseCallbacks) {
-        if self.text == value {
+        if !self.set_text_value(value) {
             return;
         }
-        self.text = value;
         callbacks.text_changed();
         callbacks.notify_property_changed(Self::TEXT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_text_value(&mut self, value: String) -> bool {
+        if self.text == value {
+            return false;
+        }
+        self.text = value;
+        true
     }
     pub fn selection_radius(&self) -> f32 {
         self.selection_radius
@@ -58,23 +67,37 @@ impl TextInputBase {
         value: f32,
         callbacks: &mut impl TextInputBaseCallbacks,
     ) {
-        if self.selection_radius == value {
+        if !self.set_selection_radius_value(value) {
             return;
         }
-        self.selection_radius = value;
         callbacks.selection_radius_changed();
         callbacks.notify_property_changed(Self::SELECTION_RADIUS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_selection_radius_value(&mut self, value: f32) -> bool {
+        if self.selection_radius == value {
+            return false;
+        }
+        self.selection_radius = value;
+        true
     }
     pub fn multiline(&self) -> bool {
         self.multiline
     }
     pub fn set_multiline(&mut self, value: bool, callbacks: &mut impl TextInputBaseCallbacks) {
-        if self.multiline == value {
+        if !self.set_multiline_value(value) {
             return;
         }
-        self.multiline = value;
         callbacks.multiline_changed();
         callbacks.notify_property_changed(Self::MULTILINE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_multiline_value(&mut self, value: bool) -> bool {
+        if self.multiline == value {
+            return false;
+        }
+        self.multiline = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl TextInputBaseCallbacks) -> TextInput {
         let mut cloned = TextInput::default();
@@ -108,5 +131,19 @@ impl TextInputBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextInputBase {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextInputBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

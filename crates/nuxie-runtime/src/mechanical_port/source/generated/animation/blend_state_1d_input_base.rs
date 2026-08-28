@@ -4,7 +4,9 @@ use crate::mechanical_port::source::{
     blend_state1_d::BlendState1D, core::binary_reader::BinaryReader,
 };
 
-pub trait BlendState1DInputBaseCallbacks {
+pub trait BlendState1DInputBaseCallbacks:
+    crate::mechanical_port::source::generated::animation::layer_state_base::LayerStateBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn input_id_changed(&mut self) {}
 }
@@ -41,12 +43,19 @@ impl BlendState1DInputBase {
         value: u32,
         callbacks: &mut impl BlendState1DInputBaseCallbacks,
     ) {
-        if self.input_id == value {
+        if !self.set_input_id_value(value) {
             return;
         }
-        self.input_id = value;
         callbacks.input_id_changed();
         callbacks.notify_property_changed(Self::INPUT_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_input_id_value(&mut self, value: u32) -> bool {
+        if self.input_id == value {
+            return false;
+        }
+        self.input_id = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -73,5 +82,19 @@ impl BlendState1DInputBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for BlendState1DInputBase {
+    type Target = BlendState1D;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BlendState1DInputBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

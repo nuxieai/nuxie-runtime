@@ -31,3 +31,17 @@ impl TransitionTriggerConditionBase {
         cloned
     }
 }
+
+impl std::ops::Deref for TransitionTriggerConditionBase {
+    type Target = TransitionInputCondition;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionTriggerConditionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

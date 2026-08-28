@@ -31,3 +31,17 @@ impl CustomPropertyGroupBase {
         cloned
     }
 }
+
+impl std::ops::Deref for CustomPropertyGroupBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CustomPropertyGroupBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{core::binary_reader::BinaryReader, shapes::path::Path};
 
-pub trait ParametricPathBaseCallbacks {
+pub trait ParametricPathBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::path_base::PathBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn width_changed(&mut self) {}
     fn height_changed(&mut self) {}
@@ -45,45 +47,73 @@ impl ParametricPathBase {
         self.width
     }
     pub fn set_width(&mut self, value: f32, callbacks: &mut impl ParametricPathBaseCallbacks) {
-        if self.width == value {
+        if !self.set_width_value(value) {
             return;
         }
-        self.width = value;
         callbacks.width_changed();
         callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
+        if self.width == value {
+            return false;
+        }
+        self.width = value;
+        true
     }
     pub fn height(&self) -> f32 {
         self.height
     }
     pub fn set_height(&mut self, value: f32, callbacks: &mut impl ParametricPathBaseCallbacks) {
-        if self.height == value {
+        if !self.set_height_value(value) {
             return;
         }
-        self.height = value;
         callbacks.height_changed();
         callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
+        if self.height == value {
+            return false;
+        }
+        self.height = value;
+        true
     }
     pub fn origin_x(&self) -> f32 {
         self.origin_x
     }
     pub fn set_origin_x(&mut self, value: f32, callbacks: &mut impl ParametricPathBaseCallbacks) {
-        if self.origin_x == value {
+        if !self.set_origin_x_value(value) {
             return;
         }
-        self.origin_x = value;
         callbacks.origin_x_changed();
         callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
+        if self.origin_x == value {
+            return false;
+        }
+        self.origin_x = value;
+        true
     }
     pub fn origin_y(&self) -> f32 {
         self.origin_y
     }
     pub fn set_origin_y(&mut self, value: f32, callbacks: &mut impl ParametricPathBaseCallbacks) {
-        if self.origin_y == value {
+        if !self.set_origin_y_value(value) {
             return;
         }
-        self.origin_y = value;
         callbacks.origin_y_changed();
         callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
+        if self.origin_y == value {
+            return false;
+        }
+        self.origin_y = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ParametricPathBaseCallbacks) {
         self.width = object.width;
@@ -117,5 +147,19 @@ impl ParametricPathBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ParametricPathBase {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ParametricPathBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

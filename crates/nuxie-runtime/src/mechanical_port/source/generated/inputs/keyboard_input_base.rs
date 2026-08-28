@@ -50,28 +50,49 @@ impl KeyboardInputBase {
     }
 
     pub fn set_key_type<C: KeyboardInputBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.key_type == value {
+        if !self.set_key_type_value(value) {
             return;
         }
-        self.key_type = value;
         c.key_type_changed();
         c.notify_property_changed(Self::KEY_TYPE_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_key_type_value(&mut self, value: u32) -> bool {
+        if self.key_type == value {
+            return false;
+        }
+        self.key_type = value;
+        true
+    }
     pub fn set_key_phase<C: KeyboardInputBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.key_phase == value {
+        if !self.set_key_phase_value(value) {
             return;
         }
-        self.key_phase = value;
         c.key_phase_changed();
         c.notify_property_changed(Self::KEY_PHASE_PROPERTY_KEY);
     }
+
+    pub(crate) fn set_key_phase_value(&mut self, value: u32) -> bool {
+        if self.key_phase == value {
+            return false;
+        }
+        self.key_phase = value;
+        true
+    }
     pub fn set_modifiers<C: KeyboardInputBaseCallbacks>(&mut self, value: u32, c: &mut C) {
-        if self.modifiers == value {
+        if !self.set_modifiers_value(value) {
             return;
         }
-        self.modifiers = value;
         c.modifiers_changed();
         c.notify_property_changed(Self::MODIFIERS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_modifiers_value(&mut self, value: u32) -> bool {
+        if self.modifiers == value {
+            return false;
+        }
+        self.modifiers = value;
+        true
     }
 
     pub fn clone_into<C: KeyboardInputBaseCallbacks>(&self, c: &mut C) -> KeyboardInput {
@@ -106,5 +127,19 @@ impl KeyboardInputBase {
             }
             _ => self.base.base.deserialize(key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for KeyboardInputBase {
+    type Target = UserInput;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for KeyboardInputBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

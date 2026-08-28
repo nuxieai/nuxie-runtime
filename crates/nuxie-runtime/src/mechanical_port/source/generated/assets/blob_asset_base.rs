@@ -40,3 +40,17 @@ impl BlobAssetBase {
         cloned
     }
 }
+
+impl std::ops::Deref for BlobAssetBase {
+    type Target = FileAsset;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for BlobAssetBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

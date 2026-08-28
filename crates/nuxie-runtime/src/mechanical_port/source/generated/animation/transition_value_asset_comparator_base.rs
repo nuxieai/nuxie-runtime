@@ -31,3 +31,17 @@ impl TransitionValueAssetComparatorBase {
         cloned
     }
 }
+
+impl std::ops::Deref for TransitionValueAssetComparatorBase {
+    type Target = TransitionValueIdComparator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionValueAssetComparatorBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     constraints::constraint::Constraint, core::binary_reader::BinaryReader,
 };
 
-pub trait DraggableConstraintBaseCallbacks {
+pub trait DraggableConstraintBaseCallbacks:
+    crate::mechanical_port::source::generated::constraints::constraint_base::ConstraintBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn direction_value_changed(&mut self) {}
 }
@@ -39,12 +41,19 @@ impl DraggableConstraintBase {
         value: u32,
         callbacks: &mut impl DraggableConstraintBaseCallbacks,
     ) {
-        if self.direction_value == value {
+        if !self.set_direction_value_value(value) {
             return;
         }
-        self.direction_value = value;
         callbacks.direction_value_changed();
         callbacks.notify_property_changed(Self::DIRECTION_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_direction_value_value(&mut self, value: u32) -> bool {
+        if self.direction_value == value {
+            return false;
+        }
+        self.direction_value = value;
+        true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl DraggableConstraintBaseCallbacks) {
         self.direction_value = object.direction_value;
@@ -63,5 +72,19 @@ impl DraggableConstraintBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DraggableConstraintBase {
+    type Target = Constraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DraggableConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

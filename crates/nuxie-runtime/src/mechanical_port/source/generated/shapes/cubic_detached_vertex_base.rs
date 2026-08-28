@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::cubic_vertex::CubicVertex,
 };
 
-pub trait CubicDetachedVertexBaseCallbacks {
+pub trait CubicDetachedVertexBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::vertex_base::VertexBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn in_rotation_changed(&mut self) {}
     fn in_distance_changed(&mut self) {}
@@ -52,12 +54,19 @@ impl CubicDetachedVertexBase {
         value: f32,
         callbacks: &mut impl CubicDetachedVertexBaseCallbacks,
     ) {
-        if self.in_rotation == value {
+        if !self.set_in_rotation_value(value) {
             return;
         }
-        self.in_rotation = value;
         callbacks.in_rotation_changed();
         callbacks.notify_property_changed(Self::IN_ROTATION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_in_rotation_value(&mut self, value: f32) -> bool {
+        if self.in_rotation == value {
+            return false;
+        }
+        self.in_rotation = value;
+        true
     }
     pub fn in_distance(&self) -> f32 {
         self.in_distance
@@ -67,12 +76,19 @@ impl CubicDetachedVertexBase {
         value: f32,
         callbacks: &mut impl CubicDetachedVertexBaseCallbacks,
     ) {
-        if self.in_distance == value {
+        if !self.set_in_distance_value(value) {
             return;
         }
-        self.in_distance = value;
         callbacks.in_distance_changed();
         callbacks.notify_property_changed(Self::IN_DISTANCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_in_distance_value(&mut self, value: f32) -> bool {
+        if self.in_distance == value {
+            return false;
+        }
+        self.in_distance = value;
+        true
     }
     pub fn out_rotation(&self) -> f32 {
         self.out_rotation
@@ -82,12 +98,19 @@ impl CubicDetachedVertexBase {
         value: f32,
         callbacks: &mut impl CubicDetachedVertexBaseCallbacks,
     ) {
-        if self.out_rotation == value {
+        if !self.set_out_rotation_value(value) {
             return;
         }
-        self.out_rotation = value;
         callbacks.out_rotation_changed();
         callbacks.notify_property_changed(Self::OUT_ROTATION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_out_rotation_value(&mut self, value: f32) -> bool {
+        if self.out_rotation == value {
+            return false;
+        }
+        self.out_rotation = value;
+        true
     }
     pub fn out_distance(&self) -> f32 {
         self.out_distance
@@ -97,12 +120,19 @@ impl CubicDetachedVertexBase {
         value: f32,
         callbacks: &mut impl CubicDetachedVertexBaseCallbacks,
     ) {
-        if self.out_distance == value {
+        if !self.set_out_distance_value(value) {
             return;
         }
-        self.out_distance = value;
         callbacks.out_distance_changed();
         callbacks.notify_property_changed(Self::OUT_DISTANCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_out_distance_value(&mut self, value: f32) -> bool {
+        if self.out_distance == value {
+            return false;
+        }
+        self.out_distance = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -144,5 +174,19 @@ impl CubicDetachedVertexBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for CubicDetachedVertexBase {
+    type Target = CubicVertex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicDetachedVertexBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

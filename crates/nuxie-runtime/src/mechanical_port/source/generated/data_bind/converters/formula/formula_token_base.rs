@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::Core, core::binary_reader::BinaryReader,
+    core::binary_reader::BinaryReader, core::Core,
     data_bind::converters::formula::formula_token::FormulaToken,
 };
 
@@ -32,5 +32,19 @@ impl FormulaTokenBase {
     pub fn copy(&mut self, object: &Self) {}
     pub fn deserialize(&mut self, property_key: u16, reader: &mut BinaryReader<'_>) -> bool {
         false
+    }
+}
+
+impl std::ops::Deref for FormulaTokenBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FormulaTokenBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

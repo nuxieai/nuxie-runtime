@@ -29,3 +29,17 @@ impl AxisXBase {
         cloned
     }
 }
+
+impl std::ops::Deref for AxisXBase {
+    type Target = Axis;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AxisXBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

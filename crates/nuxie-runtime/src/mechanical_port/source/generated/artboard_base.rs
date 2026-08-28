@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     artboard::Artboard, core::binary_reader::BinaryReader, layout_component::LayoutComponent,
 };
 
-pub trait ArtboardBaseCallbacks {
+pub trait ArtboardBaseCallbacks:
+    crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn origin_x_changed(&mut self) {}
     fn origin_y_changed(&mut self) {}
@@ -47,23 +49,37 @@ impl ArtboardBase {
         self.origin_x
     }
     pub fn set_origin_x(&mut self, value: f32, callbacks: &mut impl ArtboardBaseCallbacks) {
-        if self.origin_x == value {
+        if !self.set_origin_x_value(value) {
             return;
         }
-        self.origin_x = value;
         callbacks.origin_x_changed();
         callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
+        if self.origin_x == value {
+            return false;
+        }
+        self.origin_x = value;
+        true
     }
     pub fn origin_y(&self) -> f32 {
         self.origin_y
     }
     pub fn set_origin_y(&mut self, value: f32, callbacks: &mut impl ArtboardBaseCallbacks) {
-        if self.origin_y == value {
+        if !self.set_origin_y_value(value) {
             return;
         }
-        self.origin_y = value;
         callbacks.origin_y_changed();
         callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
+        if self.origin_y == value {
+            return false;
+        }
+        self.origin_y = value;
+        true
     }
     pub fn default_state_machine_id(&self) -> u32 {
         self.default_state_machine_id
@@ -73,23 +89,37 @@ impl ArtboardBase {
         value: u32,
         callbacks: &mut impl ArtboardBaseCallbacks,
     ) {
-        if self.default_state_machine_id == value {
+        if !self.set_default_state_machine_id_value(value) {
             return;
         }
-        self.default_state_machine_id = value;
         callbacks.default_state_machine_id_changed();
         callbacks.notify_property_changed(Self::DEFAULT_STATE_MACHINE_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_default_state_machine_id_value(&mut self, value: u32) -> bool {
+        if self.default_state_machine_id == value {
+            return false;
+        }
+        self.default_state_machine_id = value;
+        true
     }
     pub fn view_model_id(&self) -> u32 {
         self.view_model_id
     }
     pub fn set_view_model_id(&mut self, value: u32, callbacks: &mut impl ArtboardBaseCallbacks) {
-        if self.view_model_id == value {
+        if !self.set_view_model_id_value(value) {
             return;
         }
-        self.view_model_id = value;
         callbacks.view_model_id_changed();
         callbacks.notify_property_changed(Self::VIEW_MODEL_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_view_model_id_value(&mut self, value: u32) -> bool {
+        if self.view_model_id == value {
+            return false;
+        }
+        self.view_model_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl ArtboardBaseCallbacks) -> Artboard {
         let mut cloned = Artboard::default();
@@ -128,5 +158,19 @@ impl ArtboardBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for ArtboardBase {
+    type Target = LayoutComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ArtboardBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

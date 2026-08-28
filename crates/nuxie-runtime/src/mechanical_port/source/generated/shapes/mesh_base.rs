@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     container_component::ContainerComponent, core::binary_reader::BinaryReader, shapes::mesh::Mesh,
 };
 
-pub trait MeshBaseCallbacks {
+pub trait MeshBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn triangle_index_bytes_changed(&mut self) {}
     fn decode_triangle_index_bytes(&mut self, value: &[u8]);
     fn copy_triangle_index_bytes(&mut self, object: &MeshBase);
@@ -53,5 +55,19 @@ impl MeshBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for MeshBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for MeshBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

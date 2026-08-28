@@ -40,12 +40,19 @@ impl FormulaTokenOperationBase {
         value: u32,
         callbacks: &mut impl FormulaTokenOperationBaseCallbacks,
     ) {
-        if self.operation_type == value {
+        if !self.set_operation_type_value(value) {
             return;
         }
-        self.operation_type = value;
         callbacks.operation_type_changed();
         callbacks.notify_property_changed(Self::OPERATION_TYPE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_operation_type_value(&mut self, value: u32) -> bool {
+        if self.operation_type == value {
+            return false;
+        }
+        self.operation_type = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -57,7 +64,7 @@ impl FormulaTokenOperationBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl FormulaTokenOperationBaseCallbacks) {
         self.operation_type = object.operation_type;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,
@@ -70,7 +77,21 @@ impl FormulaTokenOperationBase {
                 self.operation_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.deserialize(property_key, reader, callbacks),
+            _ => self.base.deserialize(property_key, reader),
         }
+    }
+}
+
+impl std::ops::Deref for FormulaTokenOperationBase {
+    type Target = FormulaToken;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FormulaTokenOperationBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     draw_rules::DrawRules,
 };
 
-pub trait DrawRulesBaseCallbacks {
+pub trait DrawRulesBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn draw_target_id_changed(&mut self) {}
 }
@@ -36,12 +38,19 @@ impl DrawRulesBase {
         self.draw_target_id
     }
     pub fn set_draw_target_id(&mut self, value: u32, callbacks: &mut impl DrawRulesBaseCallbacks) {
-        if self.draw_target_id == value {
+        if !self.set_draw_target_id_value(value) {
             return;
         }
-        self.draw_target_id = value;
         callbacks.draw_target_id_changed();
         callbacks.notify_property_changed(Self::DRAW_TARGET_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_draw_target_id_value(&mut self, value: u32) -> bool {
+        if self.draw_target_id == value {
+            return false;
+        }
+        self.draw_target_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl DrawRulesBaseCallbacks) -> DrawRules {
         let mut cloned = DrawRules::default();
@@ -65,5 +74,19 @@ impl DrawRulesBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for DrawRulesBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DrawRulesBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

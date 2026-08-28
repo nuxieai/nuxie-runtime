@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, drawable::Drawable, text::text::Text,
 };
 
-pub trait TextBaseCallbacks {
+pub trait TextBaseCallbacks:
+    crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn align_value_changed(&mut self) {}
     fn sizing_value_changed(&mut self) {}
@@ -93,155 +95,253 @@ impl TextBase {
         self.align_value
     }
     pub fn set_align_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.align_value == value {
+        if !self.set_align_value_value(value) {
             return;
         }
-        self.align_value = value;
         callbacks.align_value_changed();
         callbacks.notify_property_changed(Self::ALIGN_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_align_value_value(&mut self, value: u32) -> bool {
+        if self.align_value == value {
+            return false;
+        }
+        self.align_value = value;
+        true
     }
     pub fn sizing_value(&self) -> u32 {
         self.sizing_value
     }
     pub fn set_sizing_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.sizing_value == value {
+        if !self.set_sizing_value_value(value) {
             return;
         }
-        self.sizing_value = value;
         callbacks.sizing_value_changed();
         callbacks.notify_property_changed(Self::SIZING_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_sizing_value_value(&mut self, value: u32) -> bool {
+        if self.sizing_value == value {
+            return false;
+        }
+        self.sizing_value = value;
+        true
     }
     pub fn overflow_value(&self) -> u32 {
         self.overflow_value
     }
     pub fn set_overflow_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.overflow_value == value {
+        if !self.set_overflow_value_value(value) {
             return;
         }
-        self.overflow_value = value;
         callbacks.overflow_value_changed();
         callbacks.notify_property_changed(Self::OVERFLOW_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_overflow_value_value(&mut self, value: u32) -> bool {
+        if self.overflow_value == value {
+            return false;
+        }
+        self.overflow_value = value;
+        true
     }
     pub fn width(&self) -> f32 {
         self.width
     }
     pub fn set_width(&mut self, value: f32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.width == value {
+        if !self.set_width_value(value) {
             return;
         }
-        self.width = value;
         callbacks.width_changed();
         callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
+        if self.width == value {
+            return false;
+        }
+        self.width = value;
+        true
     }
     pub fn height(&self) -> f32 {
         self.height
     }
     pub fn set_height(&mut self, value: f32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.height == value {
+        if !self.set_height_value(value) {
             return;
         }
-        self.height = value;
         callbacks.height_changed();
         callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
+        if self.height == value {
+            return false;
+        }
+        self.height = value;
+        true
     }
     pub fn origin_x(&self) -> f32 {
         self.origin_x
     }
     pub fn set_origin_x(&mut self, value: f32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.origin_x == value {
+        if !self.set_origin_x_value(value) {
             return;
         }
-        self.origin_x = value;
         callbacks.origin_x_changed();
         callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
+        if self.origin_x == value {
+            return false;
+        }
+        self.origin_x = value;
+        true
     }
     pub fn origin_y(&self) -> f32 {
         self.origin_y
     }
     pub fn set_origin_y(&mut self, value: f32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.origin_y == value {
+        if !self.set_origin_y_value(value) {
             return;
         }
-        self.origin_y = value;
         callbacks.origin_y_changed();
         callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
+        if self.origin_y == value {
+            return false;
+        }
+        self.origin_y = value;
+        true
     }
     pub fn paragraph_spacing(&self) -> f32 {
         self.paragraph_spacing
     }
     pub fn set_paragraph_spacing(&mut self, value: f32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.paragraph_spacing == value {
+        if !self.set_paragraph_spacing_value(value) {
             return;
         }
-        self.paragraph_spacing = value;
         callbacks.paragraph_spacing_changed();
         callbacks.notify_property_changed(Self::PARAGRAPH_SPACING_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_paragraph_spacing_value(&mut self, value: f32) -> bool {
+        if self.paragraph_spacing == value {
+            return false;
+        }
+        self.paragraph_spacing = value;
+        true
     }
     pub fn origin_value(&self) -> u32 {
         self.origin_value
     }
     pub fn set_origin_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.origin_value == value {
+        if !self.set_origin_value_value(value) {
             return;
         }
-        self.origin_value = value;
         callbacks.origin_value_changed();
         callbacks.notify_property_changed(Self::ORIGIN_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_origin_value_value(&mut self, value: u32) -> bool {
+        if self.origin_value == value {
+            return false;
+        }
+        self.origin_value = value;
+        true
     }
     pub fn wrap_value(&self) -> u32 {
         self.wrap_value
     }
     pub fn set_wrap_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.wrap_value == value {
+        if !self.set_wrap_value_value(value) {
             return;
         }
-        self.wrap_value = value;
         callbacks.wrap_value_changed();
         callbacks.notify_property_changed(Self::WRAP_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_wrap_value_value(&mut self, value: u32) -> bool {
+        if self.wrap_value == value {
+            return false;
+        }
+        self.wrap_value = value;
+        true
     }
     pub fn vertical_align_value(&self) -> u32 {
         self.vertical_align_value
     }
     pub fn set_vertical_align_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.vertical_align_value == value {
+        if !self.set_vertical_align_value_value(value) {
             return;
         }
-        self.vertical_align_value = value;
         callbacks.vertical_align_value_changed();
         callbacks.notify_property_changed(Self::VERTICAL_ALIGN_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_vertical_align_value_value(&mut self, value: u32) -> bool {
+        if self.vertical_align_value == value {
+            return false;
+        }
+        self.vertical_align_value = value;
+        true
     }
     pub fn fit_from_baseline(&self) -> bool {
         self.fit_from_baseline
     }
     pub fn set_fit_from_baseline(&mut self, value: bool, callbacks: &mut impl TextBaseCallbacks) {
-        if self.fit_from_baseline == value {
+        if !self.set_fit_from_baseline_value(value) {
             return;
         }
-        self.fit_from_baseline = value;
         callbacks.fit_from_baseline_changed();
         callbacks.notify_property_changed(Self::FIT_FROM_BASELINE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_fit_from_baseline_value(&mut self, value: bool) -> bool {
+        if self.fit_from_baseline == value {
+            return false;
+        }
+        self.fit_from_baseline = value;
+        true
     }
     pub fn text_run_list_source(&self) -> u32 {
         self.text_run_list_source
     }
     pub fn set_text_run_list_source(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.text_run_list_source == value {
+        if !self.set_text_run_list_source_value(value) {
             return;
         }
-        self.text_run_list_source = value;
         callbacks.text_run_list_source_changed();
         callbacks.notify_property_changed(Self::TEXT_RUN_LIST_SOURCE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_text_run_list_source_value(&mut self, value: u32) -> bool {
+        if self.text_run_list_source == value {
+            return false;
+        }
+        self.text_run_list_source = value;
+        true
     }
     pub fn vertical_trim_value(&self) -> u32 {
         self.vertical_trim_value
     }
     pub fn set_vertical_trim_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
-        if self.vertical_trim_value == value {
+        if !self.set_vertical_trim_value_value(value) {
             return;
         }
-        self.vertical_trim_value = value;
         callbacks.vertical_trim_value_changed();
         callbacks.notify_property_changed(Self::VERTICAL_TRIM_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_vertical_trim_value_value(&mut self, value: u32) -> bool {
+        if self.vertical_trim_value == value {
+            return false;
+        }
+        self.vertical_trim_value = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl TextBaseCallbacks) -> Text {
         let mut cloned = Text::default();
@@ -330,5 +430,19 @@ impl TextBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextBase {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     text::text_variation_modifier::TextVariationModifier,
 };
 
-pub trait TextVariationModifierBaseCallbacks {
+pub trait TextVariationModifierBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn axis_tag_changed(&mut self) {}
     fn axis_value_changed(&mut self) {}
@@ -44,12 +46,19 @@ impl TextVariationModifierBase {
         value: u32,
         callbacks: &mut impl TextVariationModifierBaseCallbacks,
     ) {
-        if self.axis_tag == value {
+        if !self.set_axis_tag_value(value) {
             return;
         }
-        self.axis_tag = value;
         callbacks.axis_tag_changed();
         callbacks.notify_property_changed(Self::AXIS_TAG_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_axis_tag_value(&mut self, value: u32) -> bool {
+        if self.axis_tag == value {
+            return false;
+        }
+        self.axis_tag = value;
+        true
     }
     pub fn axis_value(&self) -> f32 {
         self.axis_value
@@ -59,12 +68,19 @@ impl TextVariationModifierBase {
         value: f32,
         callbacks: &mut impl TextVariationModifierBaseCallbacks,
     ) {
-        if self.axis_value == value {
+        if !self.set_axis_value_value(value) {
             return;
         }
-        self.axis_value = value;
         callbacks.axis_value_changed();
         callbacks.notify_property_changed(Self::AXIS_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_axis_value_value(&mut self, value: f32) -> bool {
+        if self.axis_value == value {
+            return false;
+        }
+        self.axis_value = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -96,5 +112,19 @@ impl TextVariationModifierBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for TextVariationModifierBase {
+    type Target = TextShapeModifier;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextVariationModifierBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

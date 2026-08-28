@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::Core, core::binary_reader::BinaryReader, data_bind::data_bind::DataBind,
+    core::binary_reader::BinaryReader, core::Core, data_bind::data_bind::DataBind,
 };
 
 pub trait DataBindBaseCallbacks {
@@ -43,34 +43,55 @@ impl DataBindBase {
         self.property_key
     }
     pub fn set_property_key(&mut self, value: u32, callbacks: &mut impl DataBindBaseCallbacks) {
-        if self.property_key == value {
+        if !self.set_property_key_value(value) {
             return;
         }
-        self.property_key = value;
         callbacks.property_key_changed();
         callbacks.notify_property_changed(Self::PROPERTY_KEY_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_property_key_value(&mut self, value: u32) -> bool {
+        if self.property_key == value {
+            return false;
+        }
+        self.property_key = value;
+        true
     }
     pub fn flags(&self) -> u32 {
         self.flags
     }
     pub fn set_flags(&mut self, value: u32, callbacks: &mut impl DataBindBaseCallbacks) {
-        if self.flags == value {
+        if !self.set_flags_value(value) {
             return;
         }
-        self.flags = value;
         callbacks.flags_changed();
         callbacks.notify_property_changed(Self::FLAGS_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_flags_value(&mut self, value: u32) -> bool {
+        if self.flags == value {
+            return false;
+        }
+        self.flags = value;
+        true
     }
     pub fn converter_id(&self) -> u32 {
         self.converter_id
     }
     pub fn set_converter_id(&mut self, value: u32, callbacks: &mut impl DataBindBaseCallbacks) {
-        if self.converter_id == value {
+        if !self.set_converter_id_value(value) {
             return;
         }
-        self.converter_id = value;
         callbacks.converter_id_changed();
         callbacks.notify_property_changed(Self::CONVERTER_ID_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_converter_id_value(&mut self, value: u32) -> bool {
+        if self.converter_id == value {
+            return false;
+        }
+        self.converter_id = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl DataBindBaseCallbacks) -> DataBind {
         let mut cloned = DataBind::default();
@@ -103,5 +124,19 @@ impl DataBindBase {
             }
             _ => false,
         }
+    }
+}
+
+impl std::ops::Deref for DataBindBase {
+    type Target = Core;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DataBindBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

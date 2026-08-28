@@ -2,7 +2,9 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, shapes::mesh_vertex::MeshVertex, shapes::vertex::Vertex,
 };
 
-pub trait MeshVertexBaseCallbacks {
+pub trait MeshVertexBaseCallbacks:
+    crate::mechanical_port::source::generated::shapes::vertex_base::VertexBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn u_changed(&mut self) {}
     fn v_changed(&mut self) {}
@@ -39,23 +41,37 @@ impl MeshVertexBase {
         self.u
     }
     pub fn set_u(&mut self, value: f32, callbacks: &mut impl MeshVertexBaseCallbacks) {
-        if self.u == value {
+        if !self.set_u_value(value) {
             return;
         }
-        self.u = value;
         callbacks.u_changed();
         callbacks.notify_property_changed(Self::U_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_u_value(&mut self, value: f32) -> bool {
+        if self.u == value {
+            return false;
+        }
+        self.u = value;
+        true
     }
     pub fn v(&self) -> f32 {
         self.v
     }
     pub fn set_v(&mut self, value: f32, callbacks: &mut impl MeshVertexBaseCallbacks) {
-        if self.v == value {
+        if !self.set_v_value(value) {
             return;
         }
-        self.v = value;
         callbacks.v_changed();
         callbacks.notify_property_changed(Self::V_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_v_value(&mut self, value: f32) -> bool {
+        if self.v == value {
+            return false;
+        }
+        self.v = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl MeshVertexBaseCallbacks) -> MeshVertex {
         let mut cloned = MeshVertex::default();
@@ -84,5 +100,19 @@ impl MeshVertexBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for MeshVertexBase {
+    type Target = Vertex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for MeshVertexBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

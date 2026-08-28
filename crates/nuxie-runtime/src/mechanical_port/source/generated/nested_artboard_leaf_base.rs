@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     nested_artboard_leaf::NestedArtboardLeaf,
 };
 
-pub trait NestedArtboardLeafBaseCallbacks {
+pub trait NestedArtboardLeafBaseCallbacks:
+    crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn fit_changed(&mut self) {}
     fn alignment_x_changed(&mut self) {}
@@ -44,12 +46,19 @@ impl NestedArtboardLeafBase {
         self.fit
     }
     pub fn set_fit(&mut self, value: u32, callbacks: &mut impl NestedArtboardLeafBaseCallbacks) {
-        if self.fit == value {
+        if !self.set_fit_value(value) {
             return;
         }
-        self.fit = value;
         callbacks.fit_changed();
         callbacks.notify_property_changed(Self::FIT_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_fit_value(&mut self, value: u32) -> bool {
+        if self.fit == value {
+            return false;
+        }
+        self.fit = value;
+        true
     }
     pub fn alignment_x(&self) -> f32 {
         self.alignment_x
@@ -59,12 +68,19 @@ impl NestedArtboardLeafBase {
         value: f32,
         callbacks: &mut impl NestedArtboardLeafBaseCallbacks,
     ) {
-        if self.alignment_x == value {
+        if !self.set_alignment_x_value(value) {
             return;
         }
-        self.alignment_x = value;
         callbacks.alignment_x_changed();
         callbacks.notify_property_changed(Self::ALIGNMENT_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_alignment_x_value(&mut self, value: f32) -> bool {
+        if self.alignment_x == value {
+            return false;
+        }
+        self.alignment_x = value;
+        true
     }
     pub fn alignment_y(&self) -> f32 {
         self.alignment_y
@@ -74,12 +90,19 @@ impl NestedArtboardLeafBase {
         value: f32,
         callbacks: &mut impl NestedArtboardLeafBaseCallbacks,
     ) {
-        if self.alignment_y == value {
+        if !self.set_alignment_y_value(value) {
             return;
         }
-        self.alignment_y = value;
         callbacks.alignment_y_changed();
         callbacks.notify_property_changed(Self::ALIGNMENT_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_alignment_y_value(&mut self, value: f32) -> bool {
+        if self.alignment_y == value {
+            return false;
+        }
+        self.alignment_y = value;
+        true
     }
     pub fn clone_into(
         &self,
@@ -116,5 +139,19 @@ impl NestedArtboardLeafBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for NestedArtboardLeafBase {
+    type Target = NestedArtboard;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedArtboardLeafBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -3,7 +3,9 @@ use crate::mechanical_port::source::{
     shapes::paint::linear_gradient::LinearGradient,
 };
 
-pub trait LinearGradientBaseCallbacks {
+pub trait LinearGradientBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
     fn notify_property_changed(&mut self, property_key: u16);
     fn start_x_changed(&mut self) {}
     fn start_y_changed(&mut self) {}
@@ -52,56 +54,91 @@ impl LinearGradientBase {
         self.start_x
     }
     pub fn set_start_x(&mut self, value: f32, callbacks: &mut impl LinearGradientBaseCallbacks) {
-        if self.start_x == value {
+        if !self.set_start_x_value(value) {
             return;
         }
-        self.start_x = value;
         callbacks.start_x_changed();
         callbacks.notify_property_changed(Self::START_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_start_x_value(&mut self, value: f32) -> bool {
+        if self.start_x == value {
+            return false;
+        }
+        self.start_x = value;
+        true
     }
     pub fn start_y(&self) -> f32 {
         self.start_y
     }
     pub fn set_start_y(&mut self, value: f32, callbacks: &mut impl LinearGradientBaseCallbacks) {
-        if self.start_y == value {
+        if !self.set_start_y_value(value) {
             return;
         }
-        self.start_y = value;
         callbacks.start_y_changed();
         callbacks.notify_property_changed(Self::START_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_start_y_value(&mut self, value: f32) -> bool {
+        if self.start_y == value {
+            return false;
+        }
+        self.start_y = value;
+        true
     }
     pub fn end_x(&self) -> f32 {
         self.end_x
     }
     pub fn set_end_x(&mut self, value: f32, callbacks: &mut impl LinearGradientBaseCallbacks) {
-        if self.end_x == value {
+        if !self.set_end_x_value(value) {
             return;
         }
-        self.end_x = value;
         callbacks.end_x_changed();
         callbacks.notify_property_changed(Self::END_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_end_x_value(&mut self, value: f32) -> bool {
+        if self.end_x == value {
+            return false;
+        }
+        self.end_x = value;
+        true
     }
     pub fn end_y(&self) -> f32 {
         self.end_y
     }
     pub fn set_end_y(&mut self, value: f32, callbacks: &mut impl LinearGradientBaseCallbacks) {
-        if self.end_y == value {
+        if !self.set_end_y_value(value) {
             return;
         }
-        self.end_y = value;
         callbacks.end_y_changed();
         callbacks.notify_property_changed(Self::END_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_end_y_value(&mut self, value: f32) -> bool {
+        if self.end_y == value {
+            return false;
+        }
+        self.end_y = value;
+        true
     }
     pub fn opacity(&self) -> f32 {
         self.opacity
     }
     pub fn set_opacity(&mut self, value: f32, callbacks: &mut impl LinearGradientBaseCallbacks) {
-        if self.opacity == value {
+        if !self.set_opacity_value(value) {
             return;
         }
-        self.opacity = value;
         callbacks.opacity_changed();
         callbacks.notify_property_changed(Self::OPACITY_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_opacity_value(&mut self, value: f32) -> bool {
+        if self.opacity == value {
+            return false;
+        }
+        self.opacity = value;
+        true
     }
     pub fn clone_into(&self, callbacks: &mut impl LinearGradientBaseCallbacks) -> LinearGradient {
         let mut cloned = LinearGradient::default();
@@ -145,5 +182,19 @@ impl LinearGradientBase {
             }
             _ => self.base.deserialize(property_key, reader, callbacks),
         }
+    }
+}
+
+impl std::ops::Deref for LinearGradientBase {
+    type Target = ContainerComponent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LinearGradientBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

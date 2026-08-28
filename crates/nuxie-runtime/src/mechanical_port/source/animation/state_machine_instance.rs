@@ -10,6 +10,7 @@ use crate::mechanical_port::source::{
     artboard::RuntimeArtboardInstanceWeakHandle,
     core::CoreHandle,
     data_bind::data_context::RuntimeDataContextHandle,
+    focus_data::FocusData,
     generated::{
         animation::{
             keyframe_bool_base::KeyFrameBoolBase, keyframe_color_base::KeyFrameColorBase,
@@ -24,11 +25,17 @@ use crate::mechanical_port::source::{
         },
     },
     hit_result::HitResult,
-    input::focus_manager::RuntimeFocusManagerHandle,
+    input::{
+        focus_manager::{FocusManager, RuntimeFocusManagerHandle},
+        focus_node::FocusNodeRef,
+    },
     listener_type::ListenerType,
     math::{random::RandomProvider, vec2d::Vec2D},
     process_event_result::ProcessEventResult,
-    semantic::semantic_manager::RuntimeSemanticManagerHandle,
+    semantic::{
+        semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
+        semantic_node::SemanticNodeRef,
+    },
 };
 use std::{
     cell::{Cell, RefCell, RefMut},
@@ -357,22 +364,6 @@ pub trait StateMachineInstanceRuntime {
         artboard: &RuntimeArtboardInstanceWeakHandle,
     ) -> Vec<CoreHandle>;
     fn artboard_name(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> String;
-    fn artboard_cleanup_focus_tree(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
-    fn artboard_build_focus_tree(
-        &mut self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        manager: Object,
-        parent: Object,
-    );
-    fn artboard_focus_manager(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Object;
-    fn artboard_cleanup_semantic_tree(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
-    fn artboard_build_semantic_tree(
-        &mut self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        manager: Object,
-        parent: Object,
-    );
-    fn artboard_semantic_manager(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Object;
     fn component_id(&self, component: &CoreHandle) -> u32;
     fn component_is_artboard(&self, component: &CoreHandle) -> bool;
     fn component_hit_test(
@@ -591,19 +582,6 @@ pub trait StateMachineInstanceRuntime {
     fn semantic_data_remove_listener(&mut self, semantic_data: &CoreHandle, group: Object);
     fn listener_for_focus_group(&self, group: Object) -> Option<CoreHandle>;
     fn listener_for_semantic_group(&self, group: Object) -> Option<CoreHandle>;
-    fn focus_manager_new(&mut self) -> Object;
-    fn focus_manager_set_focus(&mut self, manager: Object, focus_data: Object);
-    fn focus_manager_clear(&mut self, manager: Object);
-    fn focus_manager_state(&self, manager: Object) -> FocusState;
-    fn focus_manager_drop_hidden(&mut self, manager: Object);
-    fn focus_manager_has_content(&self, manager: Object) -> bool;
-    fn focus_manager_next(&mut self, manager: Object) -> bool;
-    fn focus_manager_previous(&mut self, manager: Object) -> bool;
-    fn semantic_manager_new(&mut self) -> Object;
-    fn semantic_fire_action(&mut self, manager: Object, node: u32, action: u8);
-    fn retain_focus_manager(&mut self, manager: RuntimeFocusManagerHandle) -> Object;
-    fn retain_semantic_manager(&mut self, manager: RuntimeSemanticManagerHandle) -> Object;
-    fn retain_semantic_node(&mut self, node: Option<CoreHandle>) -> Object;
     fn retain_view_model_instance(&mut self, instance: CoreHandle) -> Object;
     fn retain_data_context(&mut self, context: RuntimeDataContextHandle) -> Object;
     fn data_context_advanced(&mut self, context: Object);
@@ -2083,15 +2061,15 @@ pub struct StateMachineInstance {
     transition_property_instances: HashMap<CoreHandle, HashMap<u32, CoreHandle>>,
     state_keyframe_data_binds: HashMap<RuntimeStateInstanceHandle, Vec<CoreHandle>>,
     draw_order_change_counter: u8,
-    focus_manager: Object,
-    external_focus_manager: Object,
+    focus_manager: RuntimeFocusManagerHandle,
+    external_focus_manager: Option<RuntimeFocusManagerHandle>,
     focus_listener_groups: Vec<Object>,
     keyboard_listener_groups: Vec<Object>,
     gamepad_listener_groups: Vec<Object>,
     gamepad_scripted_drawables: Vec<CoreHandle>,
     embedder_gamepads: HashMap<i32, Object>,
-    semantic_manager: Object,
-    external_semantic_manager: Object,
+    semantic_manager: Option<RuntimeSemanticManagerHandle>,
+    external_semantic_manager: Option<RuntimeSemanticManagerHandle>,
     queued_focus_events: Vec<QueuedFocusEvent>,
     semantic_listener_groups: Vec<Object>,
     queued_semantic_events: Vec<QueuedSemanticEvent>,
@@ -2135,15 +2113,15 @@ impl StateMachineInstance {
             transition_property_instances: HashMap::new(),
             state_keyframe_data_binds: HashMap::new(),
             draw_order_change_counter: 0,
-            focus_manager: RuntimeObjectHandle::NONE,
-            external_focus_manager: RuntimeObjectHandle::NONE,
+            focus_manager: RuntimeFocusManagerHandle::new(FocusManager::new()),
+            external_focus_manager: None,
             focus_listener_groups: Vec::new(),
             keyboard_listener_groups: Vec::new(),
             gamepad_listener_groups: Vec::new(),
             gamepad_scripted_drawables: Vec::new(),
             embedder_gamepads: HashMap::new(),
-            semantic_manager: RuntimeObjectHandle::NONE,
-            external_semantic_manager: RuntimeObjectHandle::NONE,
+            semantic_manager: None,
+            external_semantic_manager: None,
             queued_focus_events: Vec::new(),
             semantic_listener_groups: Vec::new(),
             queued_semantic_events: Vec::new(),
@@ -2155,7 +2133,6 @@ impl StateMachineInstance {
         let handle = RuntimeStateMachineInstanceHandle::new(instance);
         handle.with_instance_mut(|instance| {
             instance.occurrence = handle.downgrade();
-            instance.focus_manager = instance.runtime.borrow_mut().focus_manager_new();
             let mut input_notifier = InputInstanceNotifier::new(Rc::clone(&instance.needs_advance));
             #[cfg(feature = "tools")]
             input_notifier.set_machine(handle.downgrade());
@@ -2219,10 +2196,9 @@ impl StateMachineInstance {
             instance.initialize_scripted_objects();
             instance.sort_hit_components();
             let manager = instance.focus_manager();
-            instance
-                .runtime
-                .borrow_mut()
-                .artboard_build_focus_tree(&artboard_instance, manager, 0);
+            let _ = artboard_instance.with_artboard_mut(|artboard| {
+                artboard.build_focus_tree(Some(manager), None);
+            });
         });
         handle
     }
@@ -2873,110 +2849,93 @@ impl StateMachineInstance {
         }
     }
 
-    pub fn set_external_focus_manager(&mut self, manager: Object) {
-        if self.external_focus_manager == manager {
+    pub fn set_external_focus_manager(&mut self, manager: Option<RuntimeFocusManagerHandle>) {
+        let unchanged = match (&self.external_focus_manager, &manager) {
+            (Some(current), Some(manager)) => current.ptr_eq(manager),
+            (None, None) => true,
+            _ => false,
+        };
+        if unchanged {
             return;
         }
-        if self.artboard_instance.upgrade().is_some()
-            && self
-                .runtime
-                .borrow_mut()
-                .artboard_focus_manager(&self.artboard_instance)
-                != 0
-        {
-            self.runtime
-                .borrow_mut()
-                .artboard_cleanup_focus_tree(&self.artboard_instance);
-        }
+        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
+            if artboard.focus_manager().is_some() {
+                artboard.cleanup_focus_tree();
+            }
+        });
         self.external_focus_manager = manager;
-        if self.artboard_instance.upgrade().is_some() {
-            let focus_manager = self.focus_manager();
-            self.runtime.borrow_mut().artboard_build_focus_tree(
-                &self.artboard_instance,
-                focus_manager,
-                0,
-            );
-        }
+        let focus_manager = self.focus_manager();
+        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
+            artboard.build_focus_tree(Some(focus_manager), None);
+        });
     }
 
     pub fn set_external_focus_manager_handle(&mut self, manager: RuntimeFocusManagerHandle) {
-        let retained = self.runtime.borrow_mut().retain_focus_manager(manager);
-        self.set_external_focus_manager(retained);
+        self.set_external_focus_manager(Some(manager));
     }
 
-    pub fn focus_manager(&self) -> Object {
-        if self.external_focus_manager != 0 {
-            self.external_focus_manager
-        } else {
-            self.focus_manager
-        }
+    pub fn focus_manager(&self) -> RuntimeFocusManagerHandle {
+        self.external_focus_manager
+            .clone()
+            .unwrap_or_else(|| self.focus_manager.clone())
     }
 
-    pub fn internal_focus_manager(&self) -> Object {
-        self.focus_manager
+    pub fn internal_focus_manager(&self) -> RuntimeFocusManagerHandle {
+        self.focus_manager.clone()
     }
 
     pub fn has_external_focus_manager(&self) -> bool {
-        self.external_focus_manager != 0
+        self.external_focus_manager.is_some()
     }
 
     pub fn enable_semantics(&mut self) {
-        if self.semantic_manager() != 0 {
+        if self.semantic_manager().is_some() {
             return;
         }
-        self.semantic_manager = self.runtime.borrow_mut().semantic_manager_new();
-        if self.artboard_instance.upgrade().is_some() {
-            let manager = self.semantic_manager();
-            self.runtime.borrow_mut().artboard_build_semantic_tree(
-                &self.artboard_instance,
-                manager,
-                0,
-            );
-        }
+        self.semantic_manager = Some(RuntimeSemanticManagerHandle::new(SemanticManager::new()));
+        let manager = self.semantic_manager();
+        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
+            artboard.build_semantic_tree(manager, None);
+        });
     }
 
-    pub fn semantic_manager(&self) -> Object {
-        if self.external_semantic_manager != 0 {
-            self.external_semantic_manager
-        } else {
-            self.semantic_manager
-        }
+    pub fn semantic_manager(&self) -> Option<RuntimeSemanticManagerHandle> {
+        self.external_semantic_manager
+            .clone()
+            .or_else(|| self.semantic_manager.clone())
     }
 
-    pub fn set_external_semantic_manager(&mut self, manager: Object, parent_node: Object) {
-        if self.external_semantic_manager == manager {
+    pub fn set_external_semantic_manager(
+        &mut self,
+        manager: Option<RuntimeSemanticManagerHandle>,
+        parent_node: Option<SemanticNodeRef>,
+    ) {
+        let unchanged = match (&self.external_semantic_manager, &manager) {
+            (Some(current), Some(manager)) => current.ptr_eq(manager),
+            (None, None) => true,
+            _ => false,
+        };
+        if unchanged {
             return;
         }
-        if self.artboard_instance.upgrade().is_some()
-            && self
-                .runtime
-                .borrow_mut()
-                .artboard_semantic_manager(&self.artboard_instance)
-                != 0
-        {
-            self.runtime
-                .borrow_mut()
-                .artboard_cleanup_semantic_tree(&self.artboard_instance);
-        }
+        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
+            if artboard.semantic_manager().is_some() {
+                artboard.cleanup_semantic_tree();
+            }
+        });
         self.external_semantic_manager = manager;
-        if self.artboard_instance.upgrade().is_some() {
-            let manager = self.semantic_manager();
-            self.runtime.borrow_mut().artboard_build_semantic_tree(
-                &self.artboard_instance,
-                manager,
-                parent_node,
-            );
-        }
+        let manager = self.semantic_manager();
+        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
+            artboard.build_semantic_tree(manager, parent_node);
+        });
     }
 
     pub fn set_external_semantic_manager_handle(
         &mut self,
         manager: RuntimeSemanticManagerHandle,
-        parent_node: Option<CoreHandle>,
+        parent_node: Option<SemanticNodeRef>,
     ) {
-        let manager = self.runtime.borrow_mut().retain_semantic_manager(manager);
-        let parent_node = self.runtime.borrow_mut().retain_semantic_node(parent_node);
-        self.set_external_semantic_manager(manager, parent_node);
+        self.set_external_semantic_manager(Some(manager), parent_node);
     }
 
     pub fn queue_focus_event(&mut self, group: Object, is_focus: bool) {
@@ -2985,21 +2944,29 @@ impl StateMachineInstance {
         self.needs_advance.set(true);
     }
 
-    pub fn set_focus(&mut self, focus_data: Object) {
+    pub fn set_focus(&mut self, focus_data: Option<CoreHandle>) {
         let manager = self.focus_manager();
-        if focus_data != 0 {
-            self.runtime
-                .borrow_mut()
-                .focus_manager_set_focus(manager, focus_data);
+        if let Some(node) = focus_data.and_then(|focus_data| {
+            focus_data.with_downcast_mut::<FocusData, _>(FocusData::focus_node)
+        }) {
+            manager.with_focus_manager_mut(|manager| manager.set_focus(node));
         } else {
-            self.runtime.borrow_mut().focus_manager_clear(manager);
+            manager.with_focus_manager_mut(FocusManager::clear_focus);
         }
     }
 
     pub fn focus_state(&self) -> FocusState {
-        self.runtime
-            .borrow_mut()
-            .focus_manager_state(self.focus_manager())
+        self.focus_manager().with_focus_manager(|manager| {
+            let primary = manager.primary_focus();
+            let expects_keyboard_input = primary
+                .as_ref()
+                .and_then(|node| node.borrow().focusable())
+                .is_some_and(|focusable| focusable.borrow().accepts_keyboard_input());
+            FocusState {
+                has_focus: primary.is_some(),
+                expects_keyboard_input,
+            }
+        })
     }
 
     fn process_focus_events(&mut self) {
@@ -3066,12 +3033,26 @@ impl StateMachineInstance {
     }
 
     pub fn fire_semantic_action(&mut self, node_id: u32, action_type: u8) {
-        let manager = self.semantic_manager();
-        if manager != 0 {
-            self.runtime
-                .borrow_mut()
-                .semantic_fire_action(manager, node_id, action_type);
-        }
+        let Some(manager) = self.semantic_manager() else {
+            return;
+        };
+        let semantic_data = manager
+            .with_semantic_manager(|manager| manager.node_by_id(node_id))
+            .and_then(|node| node.borrow().semantic_data.clone());
+        let Some(semantic_data) = semantic_data else {
+            return;
+        };
+        semantic_data.with_mut(|semantic_data| {
+            let Some(semantic_data) = semantic_data.as_semantic_data_mut() else {
+                return;
+            };
+            match SemanticActionType::from_raw(action_type as u32) {
+                Some(SemanticActionType::Tap) => semantic_data.fire_semantic_tap(),
+                Some(SemanticActionType::Increase) => semantic_data.fire_semantic_increase(),
+                Some(SemanticActionType::Decrease) => semantic_data.fire_semantic_decrease(),
+                None => {}
+            }
+        });
     }
 
     pub fn advance(&mut self, seconds: f32, new_frame: bool) -> bool {
@@ -3145,7 +3126,7 @@ impl StateMachineInstance {
         const NEW_FRAME: u32 = 8;
         let mut keep_going = self.advance(seconds, true) || seconds == 0.0;
         let manager = self.focus_manager();
-        self.runtime.borrow_mut().focus_manager_drop_hidden(manager);
+        manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
         if self.runtime.borrow_mut().artboard_advance_internal(
             &self.artboard_instance,
             seconds,
@@ -3603,24 +3584,23 @@ impl StateMachineInstance {
     }
 
     pub fn has_focus_nodes(&self) -> bool {
-        self.runtime
-            .borrow_mut()
-            .focus_manager_has_content(self.focus_manager())
+        self.focus_manager()
+            .with_focus_manager_mut(FocusManager::has_focusable_content)
     }
 
     pub fn focus_next(&mut self) -> bool {
-        let manager = self.focus_manager();
-        self.runtime.borrow_mut().focus_manager_next(manager)
+        self.focus_manager()
+            .with_focus_manager_mut(FocusManager::focus_next)
     }
 
     pub fn focus_previous(&mut self) -> bool {
-        let manager = self.focus_manager();
-        self.runtime.borrow_mut().focus_manager_previous(manager)
+        self.focus_manager()
+            .with_focus_manager_mut(FocusManager::focus_previous)
     }
 
     pub fn clear_focus(&mut self) {
-        let manager = self.focus_manager();
-        self.runtime.borrow_mut().focus_manager_clear(manager);
+        self.focus_manager()
+            .with_focus_manager_mut(FocusManager::clear_focus);
     }
 
     pub fn submit_gamepads_from_buffer(&mut self, data: &[u8]) -> bool {
@@ -4188,18 +4168,15 @@ impl StateMachineInstance {
 
 impl Drop for StateMachineInstance {
     fn drop(&mut self) {
-        if self.external_focus_manager == 0 && self.artboard_instance.upgrade().is_some() {
-            self.runtime
-                .borrow_mut()
-                .artboard_cleanup_focus_tree(&self.artboard_instance);
+        if self.external_focus_manager.is_none() {
+            let _ = self
+                .artboard_instance
+                .with_artboard_mut(|artboard| artboard.cleanup_focus_tree());
         }
-        if self.external_semantic_manager == 0
-            && self.semantic_manager != 0
-            && self.artboard_instance.upgrade().is_some()
-        {
-            self.runtime
-                .borrow_mut()
-                .artboard_cleanup_semantic_tree(&self.artboard_instance);
+        if self.external_semantic_manager.is_none() && self.semantic_manager.is_some() {
+            let _ = self
+                .artboard_instance
+                .with_artboard_mut(|artboard| artboard.cleanup_semantic_tree());
         }
         self.embedder_gamepads.clear();
         self.unbind();

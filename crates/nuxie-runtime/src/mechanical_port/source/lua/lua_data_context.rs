@@ -1,31 +1,33 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::{
     data_bind::data_context::DataContext,
-    lua::rive_lua_libs::{LuaAtoms, LuaState, ScriptedDataContext, ScriptedViewModel},
+    lua::rive_lua_libs::{
+        LuaAtoms, LuaState, ScriptedDataContext, ScriptedDataContextHandle, ScriptedViewModel,
+    },
 };
 impl ScriptedDataContext {
-    pub fn new(state: *mut LuaState, data_context: DataContext) -> Self {
-        Self {
-            state,
-            data_context,
-        }
+    pub fn new(data_context: ScriptedDataContextHandle) -> Self {
+        Self { data_context }
     }
-    pub fn push_parent(&self) -> i32 {
-        let state = unsafe { &mut *self.state };
+    pub fn push_parent(&self, state: &mut LuaState) -> i32 {
         if let Some(parent) = self.data_context.parent() {
-            state.new_rive(ScriptedDataContext::new(self.state, parent.clone()));
+            state.new_rive(ScriptedDataContext::new(ScriptedDataContextHandle::Shared(
+                parent,
+            )));
         } else {
             state.push_nil();
         }
         1
     }
-    pub fn push_viewmodel(&self) -> i32 {
-        let state = unsafe { &mut *self.state };
-        if let Some(instance) = self.data_context.main_viewmodel_instance() {
-            state.new_rive(ScriptedViewModel::new(
-                instance.viewmodel(),
-                instance.clone(),
-            ));
+    pub fn push_viewmodel(&self, state: &mut LuaState) -> i32 {
+        if let Some(instance) = self.data_context.main_view_model_instance() {
+            let model = instance
+                .with(|instance| {
+                    instance
+                        .as_view_model_instance()
+                        .and_then(|instance| instance.get_view_model())
+                })
+                .flatten();
+            state.new_rive(ScriptedViewModel::new(state, model, Some(instance)));
         } else {
             state.push_nil();
         }
@@ -38,12 +40,10 @@ fn data_context_namecall(state: &mut LuaState) -> i32 {
         let context = state.to_rive::<ScriptedDataContext>(1);
         match atom {
             LuaAtoms::Parent => {
-                assert!(std::ptr::eq(context.state(), state));
-                return context.push_parent();
+                return context.push_parent(state);
             }
             LuaAtoms::ViewModel => {
-                assert!(std::ptr::eq(context.state(), state));
-                return context.push_viewmodel();
+                return context.push_viewmodel(state);
             }
             _ => {}
         }

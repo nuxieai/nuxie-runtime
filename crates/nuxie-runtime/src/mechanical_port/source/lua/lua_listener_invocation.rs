@@ -1,5 +1,3 @@
-#![cfg(feature = "rive_scripting")]
-
 use crate::mechanical_port::source::{
     animation::listener_invocation::{ListenerInvocation, ListenerInvocationKind},
     input::{

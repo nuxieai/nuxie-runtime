@@ -1,30 +1,39 @@
-use super::viewmodel_instance_value_runtime::{
-    DataType, ViewModelInstanceValue, ViewModelInstanceValueRuntime,
-};
-use std::rc::Rc;
-pub trait AssetBlobValue: ViewModelInstanceValue {
-    type Blob;
-    fn set_value(&self, value: *mut Self::Blob);
-    #[cfg(feature = "testing")]
-    fn asset_value(&self) -> *mut Self::Blob;
+use std::sync::Arc;
+
+use super::viewmodel_instance_value_runtime::{DataType, ViewModelInstanceValueRuntime};
+use crate::RuntimeBlobAsset;
+
+#[derive(Clone)]
+pub struct ViewModelInstanceAssetBlobRuntime {
+    base: ViewModelInstanceValueRuntime,
 }
-pub struct ViewModelInstanceAssetBlobRuntime<T: AssetBlobValue> {
-    base: ViewModelInstanceValueRuntime<T>,
-}
-impl<T: AssetBlobValue> ViewModelInstanceAssetBlobRuntime<T> {
-    pub fn new(value: Rc<T>) -> Self {
-        Self {
-            base: ViewModelInstanceValueRuntime::new(value),
-        }
+
+impl ViewModelInstanceAssetBlobRuntime {
+    pub fn new(base: ViewModelInstanceValueRuntime) -> Option<Self> {
+        (base.data_type() == DataType::AssetBlob).then_some(Self { base })
     }
-    pub fn set_value(&self, value: *mut T::Blob) {
-        self.base.value().set_value(value)
+    pub fn set_value(&self, value: Option<Arc<RuntimeBlobAsset>>) {
+        self.base.handle().with_mut(|property| {
+            if let Some(property) = property.as_view_model_instance_asset_blob_mut() {
+                property.set_value(value);
+            }
+        });
+    }
+    #[cfg(any(test, feature = "tools"))]
+    pub fn testing_value(&self) -> Option<Arc<RuntimeBlobAsset>> {
+        self.base
+            .handle()
+            .with(|property| {
+                property
+                    .as_view_model_instance_asset_blob()
+                    .and_then(|property| property.asset())
+            })
+            .flatten()
     }
     pub fn data_type(&self) -> DataType {
         DataType::AssetBlob
     }
-    #[cfg(feature = "testing")]
-    pub fn testing_value(&self) -> *mut T::Blob {
-        self.base.value().asset_value()
+    pub fn value_runtime(&self) -> &ViewModelInstanceValueRuntime {
+        &self.base
     }
 }

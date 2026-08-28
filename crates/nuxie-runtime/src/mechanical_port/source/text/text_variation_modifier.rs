@@ -25,9 +25,12 @@ impl TextVariationModifier {
         font_size
     }
     pub fn axis_value_changed(&mut self) {
-        self.base
-            .parent_as_text_modifier_group()
-            .expect("TextVariationModifier parent")
-            .shape_modifier_changed();
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(group) = parent.as_text_modifier_group_mut() {
+                    group.shape_modifier_changed();
+                }
+            });
+        }
     }
 }

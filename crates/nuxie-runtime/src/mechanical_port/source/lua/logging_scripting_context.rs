@@ -14,14 +14,12 @@ pub enum ScriptingLogLevel {
 
 pub type ScriptingLogSink = Box<dyn FnMut(ScriptingLogLevel, &[u8])>;
 
-#[cfg(feature = "rive_scripting")]
 pub struct LoggingScriptingContext {
     pub base: CPPRuntimeScriptingContext,
     sink: ScriptingLogSink,
     line: Vec<u8>,
 }
 
-#[cfg(feature = "rive_scripting")]
 impl LoggingScriptingContext {
     pub fn new(factory: &mut Factory, sink: ScriptingLogSink) -> Self {
         Self {
@@ -32,7 +30,6 @@ impl LoggingScriptingContext {
     }
 }
 
-#[cfg(feature = "rive_scripting")]
 impl ScriptingContext for LoggingScriptingContext {
     fn print_begin_line(&mut self, _state: &mut LuaState) {
         self.line.clear();
@@ -54,7 +51,6 @@ impl ScriptingContext for LoggingScriptingContext {
     }
 }
 
-#[cfg(feature = "rive_scripting")]
 pub fn make_logging_scripting_context_factory(
     sink: Option<ScriptingLogSink>,
 ) -> Option<ScriptingContextFactory> {
@@ -62,11 +58,4 @@ pub fn make_logging_scripting_context_factory(
     Some(Box::new(move |factory| {
         Box::new(LoggingScriptingContext::new(factory, sink))
     }))
-}
-
-#[cfg(not(feature = "rive_scripting"))]
-pub fn make_logging_scripting_context_factory(
-    _sink: Option<ScriptingLogSink>,
-) -> Option<ScriptingContextFactory> {
-    None
 }

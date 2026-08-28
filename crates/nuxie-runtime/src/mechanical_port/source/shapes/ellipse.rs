@@ -6,13 +6,14 @@ use crate::mechanical_port::source::{
 };
 pub struct Ellipse {
     pub base: EllipseBase,
-    vertices: [Box<CubicDetachedVertex>; 4],
+    vertices: [Rc<RefCell<CubicDetachedVertex>>; 4],
 }
 impl Ellipse {
     pub fn new(mut base: EllipseBase) -> Self {
-        let mut vertices = std::array::from_fn(|_| Box::new(CubicDetachedVertex::default()));
-        for vertex in &mut vertices {
-            base.add_vertex(&mut **vertex);
+        let vertices =
+            std::array::from_fn(|_| Rc::new(RefCell::new(CubicDetachedVertex::default())));
+        for vertex in &vertices {
+            base.add_runtime_cubic_vertex(vertex.clone());
         }
         Self { base, vertices }
     }
@@ -22,32 +23,52 @@ impl Ellipse {
             let ry = self.base.height() / 2.0;
             let ox = -self.base.origin_x() * self.base.width() + rx;
             let oy = -self.base.origin_y() * self.base.height() + ry;
-            let v = &mut self.vertices;
-            v[0].base.set_x(ox);
-            v[0].base.set_y(oy - ry);
-            v[0].base
-                .set_in_point(Vec2D::new(ox - rx * CIRCLE_CONSTANT, oy - ry));
-            v[0].base
-                .set_out_point(Vec2D::new(ox + rx * CIRCLE_CONSTANT, oy - ry));
-            v[1].base.set_x(ox + rx);
-            v[1].base.set_y(oy);
-            v[1].base
-                .set_in_point(Vec2D::new(ox + rx, oy + CIRCLE_CONSTANT * -ry));
-            v[1].base
-                .set_out_point(Vec2D::new(ox + rx, oy + CIRCLE_CONSTANT * ry));
-            v[2].base.set_x(ox);
-            v[2].base.set_y(oy + ry);
-            v[2].base
-                .set_in_point(Vec2D::new(ox + rx * CIRCLE_CONSTANT, oy + ry));
-            v[2].base
-                .set_out_point(Vec2D::new(ox - rx * CIRCLE_CONSTANT, oy + ry));
-            v[3].base.set_x(ox - rx);
-            v[3].base.set_y(oy);
-            v[3].base
-                .set_in_point(Vec2D::new(ox - rx, oy + ry * CIRCLE_CONSTANT));
-            v[3].base
-                .set_out_point(Vec2D::new(ox - rx, oy - ry * CIRCLE_CONSTANT));
+            {
+                let mut vertex = self.vertices[0].borrow_mut();
+                vertex.base.set_x(ox);
+                vertex.base.set_y(oy - ry);
+                vertex
+                    .base
+                    .set_in_point(Vec2D::new(ox - rx * CIRCLE_CONSTANT, oy - ry));
+                vertex
+                    .base
+                    .set_out_point(Vec2D::new(ox + rx * CIRCLE_CONSTANT, oy - ry));
+            }
+            {
+                let mut vertex = self.vertices[1].borrow_mut();
+                vertex.base.set_x(ox + rx);
+                vertex.base.set_y(oy);
+                vertex
+                    .base
+                    .set_in_point(Vec2D::new(ox + rx, oy + CIRCLE_CONSTANT * -ry));
+                vertex
+                    .base
+                    .set_out_point(Vec2D::new(ox + rx, oy + CIRCLE_CONSTANT * ry));
+            }
+            {
+                let mut vertex = self.vertices[2].borrow_mut();
+                vertex.base.set_x(ox);
+                vertex.base.set_y(oy + ry);
+                vertex
+                    .base
+                    .set_in_point(Vec2D::new(ox + rx * CIRCLE_CONSTANT, oy + ry));
+                vertex
+                    .base
+                    .set_out_point(Vec2D::new(ox - rx * CIRCLE_CONSTANT, oy + ry));
+            }
+            {
+                let mut vertex = self.vertices[3].borrow_mut();
+                vertex.base.set_x(ox - rx);
+                vertex.base.set_y(oy);
+                vertex
+                    .base
+                    .set_in_point(Vec2D::new(ox - rx, oy + ry * CIRCLE_CONSTANT));
+                vertex
+                    .base
+                    .set_out_point(Vec2D::new(ox - rx, oy - ry * CIRCLE_CONSTANT));
+            }
         }
         self.base.update(value);
     }
 }
+use std::{cell::RefCell, rc::Rc};

@@ -1,20 +1,31 @@
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StatusCode {
-    Ok,
-    MissingObject,
-}
-pub trait DataBind {}
+use crate::mechanical_port::source::{
+    core::CoreHandle,
+    generated::data_bind::converters::formula::formula_token_base::FormulaTokenBase,
+    importers::{
+        data_converter_formula_importer::DataConverterFormulaImporter, import_stack::ImportStack,
+    },
+    status_code::StatusCode,
+};
+
 pub trait DataConverterFormula {
-    fn add_token(&mut self, token: *mut FormulaToken);
-    fn add_data_bind(&mut self, data_bind: *mut dyn DataBind);
-}
-pub trait FormulaImportStack {
-    fn latest_formula(&mut self) -> Option<&mut dyn DataConverterFormula>;
-    fn import_formula_token_super(&mut self, token: &mut FormulaToken) -> StatusCode;
+    fn add_token(&mut self, token: CoreHandle);
+    fn add_data_bind(&mut self, data_bind: CoreHandle);
 }
 pub struct FormulaToken {
     pub base: FormulaTokenBase,
-    formula: Option<*mut dyn DataConverterFormula>,
+    formula: Option<CoreHandle>,
+}
+
+impl std::ops::Deref for FormulaToken {
+    type Target = FormulaTokenBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for FormulaToken {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
 }
 impl Default for FormulaToken {
     fn default() -> Self {
@@ -25,21 +36,35 @@ impl Default for FormulaToken {
     }
 }
 impl FormulaToken {
-    pub fn import(&mut self, stack: &mut dyn FormulaImportStack) -> StatusCode {
-        let Some(formula) = stack.latest_formula() else {
+    fn handle(&self) -> Option<CoreHandle> {
+        self.base.base.handle()
+    }
+
+    pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
+        let Some(importer) = stack.latest::<DataConverterFormulaImporter>(
+            crate::mechanical_port::source::generated::data_bind::converters::data_converter_formula_base::DataConverterFormulaBase::TYPE_KEY,
+        ) else {
             return StatusCode::MissingObject;
         };
-        let formula_ptr = formula as *mut dyn DataConverterFormula;
-        formula.add_token(self as *mut Self);
-        self.formula = Some(formula_ptr);
-        stack.import_formula_token_super(self)
-    }
-    pub fn add_data_bind(&mut self, data_bind: *mut dyn DataBind) {
-        if let Some(formula) = self.formula {
-            unsafe {
-                (&mut *formula).add_data_bind(data_bind);
+        let Some(token) = self.handle() else {
+            return StatusCode::MissingObject;
+        };
+        let formula = importer.formula();
+        formula.with_mut(|formula| {
+            if let Some(formula) = formula.as_data_converter_formula_mut() {
+                formula.add_token(token);
             }
+        });
+        self.formula = Some(formula);
+        self.base.base.import(stack)
+    }
+    pub fn add_data_bind(&mut self, data_bind: CoreHandle) {
+        if let Some(formula) = self.formula.as_ref() {
+            formula.with_mut(|formula| {
+                if let Some(formula) = formula.as_data_converter_formula_mut() {
+                    formula.add_data_bind(data_bind);
+                }
+            });
         }
     }
 }
-use crate::mechanical_port::source::generated::data_bind::converters::formula::formula_token_base::FormulaTokenBase;

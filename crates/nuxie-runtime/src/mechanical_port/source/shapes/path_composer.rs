@@ -33,9 +33,16 @@ impl PathComposer {
     }
 
     pub fn build_dependencies(&mut self) {
-        self.shape.add_dependent(&mut self.component);
-        for path in self.shape.paths_mut() {
-            path.add_dependent(&mut self.component);
+        let Some(dependent) = self.component.handle() else {
+            return;
+        };
+        self.shape.add_dependent(dependent.clone());
+        for path in self.shape.paths() {
+            path.with_mut(|path| {
+                if let Some(path) = path.as_path_mut() {
+                    path.add_dependent(dependent.clone());
+                }
+            });
         }
     }
 
@@ -59,44 +66,59 @@ impl PathComposer {
             self.local_path.rewind();
             let inverse_world = self.shape.world_transform().invert_or_identity();
             for path in self.shape.paths() {
-                if !path.is_hidden() && !path.is_collapsed() {
-                    let local_transform = inverse_world * path.path_transform();
-                    self.local_path.add_path(path.raw_path(), local_transform);
-                }
+                path.with(|path| {
+                    let Some(path) = path.as_path() else {
+                        return;
+                    };
+                    if !path.is_hidden() && !path.is_collapsed() {
+                        let local_transform = inverse_world * path.path_transform();
+                        self.local_path.add_path(path.raw_path(), local_transform);
+                    }
+                });
             }
         }
         if self.shape.is_flagged(PathFlags::LOCAL_CLOCKWISE) {
             self.local_clockwise_path.rewind();
             let inverse_world = self.shape.world_transform().invert_or_identity();
             for path in self.shape.paths() {
-                if path.is_hidden() || path.is_collapsed() {
-                    continue;
-                }
-                let local_transform = inverse_world * path.path_transform();
-                let is_not_clockwise = path
-                    .as_points_path()
-                    .map(|points: &PointsPath| {
-                        local_transform.determinant()
-                            * if points.is_clockwise() { 1.0 } else { -1.0 }
-                            < 0.0
-                    })
-                    .unwrap_or(false);
-                if is_not_clockwise != path.is_hole() {
-                    self.local_clockwise_path
-                        .add_path_backwards(path.raw_path(), local_transform);
-                } else {
-                    self.local_clockwise_path
-                        .add_path(path.raw_path(), local_transform);
-                }
+                path.with(|object| {
+                    let Some(path) = object.as_path() else {
+                        return;
+                    };
+                    if path.is_hidden() || path.is_collapsed() {
+                        return;
+                    }
+                    let local_transform = inverse_world * path.path_transform();
+                    let is_not_clockwise = object
+                        .as_points_path()
+                        .map(|points: &PointsPath| {
+                            local_transform.determinant()
+                                * if points.is_clockwise() { 1.0 } else { -1.0 }
+                                < 0.0
+                        })
+                        .unwrap_or(false);
+                    if is_not_clockwise != path.is_hole() {
+                        self.local_clockwise_path
+                            .add_path_backwards(path.raw_path(), local_transform);
+                    } else {
+                        self.local_clockwise_path
+                            .add_path(path.raw_path(), local_transform);
+                    }
+                });
             }
         }
         if self.shape.is_flagged(PathFlags::WORLD) {
             self.world_path.rewind();
             for path in self.shape.paths() {
-                if !path.is_hidden() && !path.is_collapsed() {
-                    self.world_path
-                        .add_path(path.raw_path(), path.path_transform());
-                }
+                path.with(|path| {
+                    let Some(path) = path.as_path() else {
+                        return;
+                    };
+                    if !path.is_hidden() && !path.is_collapsed() {
+                        self.world_path
+                            .add_path(path.raw_path(), path.path_transform());
+                    }
+                });
             }
         }
         self.shape.mark_bounds_dirty();

@@ -1,17 +1,15 @@
 use crate::mechanical_port::source::data_bind::data_values::{
-    data_type::DataType,
-    data_value::DataValue,
-    data_value_asset_blob::{BlobAsset, DataValueAssetBlob},
-    data_value_asset_font::{DataValueAssetFont, Font},
-    data_value_asset_image::{DataValueAssetImage, RenderImage},
-    data_value_boolean::DataValueBoolean,
-    data_value_color::DataValueColor,
-    data_value_integer::DataValueInteger,
-    data_value_number::DataValueNumber,
-    data_value_string::DataValueString,
-    data_value_viewmodel::DataValueViewModel,
+    data_type::DataType, data_value::DataValue, data_value_asset_blob::DataValueAssetBlob,
+    data_value_asset_font::DataValueAssetFont, data_value_asset_image::DataValueAssetImage,
+    data_value_boolean::DataValueBoolean, data_value_color::DataValueColor,
+    data_value_integer::DataValueInteger, data_value_number::DataValueNumber,
+    data_value_string::DataValueString, data_value_viewmodel::DataValueViewModel,
 };
+use crate::mechanical_port::source::text_engine::FontRef;
+use crate::{RuntimeBlobAsset, mechanical_port::source::core::CoreHandle};
+use nuxie_render_api::RenderImage;
 use std::rc::Rc;
+use std::sync::Arc;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FieldType {
     Uint,
@@ -60,9 +58,9 @@ pub trait TargetBinding {
     fn active_child_index(&self) -> u32;
     fn enum_index_for_name(&self, name: &str) -> Option<u32>;
     fn image_value(&self) -> Option<Rc<dyn RenderImage>>;
-    fn font_value(&self) -> Option<Rc<dyn Font>>;
-    fn blob_value(&self) -> Option<Rc<dyn BlobAsset>>;
-    fn view_model_value(&self) -> *mut ();
+    fn font_value(&self) -> Option<FontRef>;
+    fn blob_value(&self) -> Option<Arc<RuntimeBlobAsset>>;
+    fn view_model_value(&self) -> Option<CoreHandle>;
 }
 #[derive(Default)]
 pub struct DataBindContextTargetValue {

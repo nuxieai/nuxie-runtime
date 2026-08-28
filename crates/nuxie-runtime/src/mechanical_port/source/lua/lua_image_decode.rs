@@ -1,13 +1,12 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::lua::rive_lua_libs::{
     LuaState, ScriptedPromise, ScriptingContext,
 };
-#[cfg(all(not(target_family = "wasm"), feature = "rive_decoders"))]
+#[cfg(not(target_family = "wasm"))]
 use crate::mechanical_port::source::{
     async_work::{WorkPool, WorkTask},
     decoders::bitmap_decoder::{Bitmap, PixelFormat},
 };
-#[cfg(all(not(target_family = "wasm"), feature = "rive_decoders"))]
+#[cfg(not(target_family = "wasm"))]
 pub struct ImageDecodeTask {
     encoded_data: Vec<u8>,
     width: u32,
@@ -18,7 +17,7 @@ pub struct ImageDecodeTask {
     error_message: String,
     owner_id: u64,
 }
-#[cfg(all(not(target_family = "wasm"), feature = "rive_decoders"))]
+#[cfg(not(target_family = "wasm"))]
 impl WorkTask for ImageDecodeTask {
     fn execute(&mut self) -> bool {
         let Some(mut bitmap) = Bitmap::decode(&self.encoded_data) else {
@@ -92,39 +91,32 @@ pub fn context_decode_image_impl(state: &mut LuaState) -> i32 {
     if data.is_empty() {
         return state.error("decodeImage: empty buffer");
     }
-    #[cfg(not(feature = "rive_decoders"))]
-    {
-        return state.error("decodeImage: not supported on this platform");
-    }
-    #[cfg(feature = "rive_decoders")]
-    {
-        let context = state.thread_data::<dyn ScriptingContext>();
-        let main = state.main_thread();
-        let promise = ScriptedPromise::new(main);
-        let promise_index = state.new_rive(promise);
-        state.push_value(promise_index);
-        let promise_ref = state.reference(-1);
-        state.pop(1);
-        let task = ImageDecodeTask {
-            encoded_data: data,
-            width: 0,
-            height: 0,
-            state: Some(main),
-            promise_ref: Some(promise_ref),
-            bitmap: None,
-            error_message: String::new(),
-            owner_id: context.owner_id(),
-        };
-        let task_ref = context.work_pool().submit_retained(task);
-        state
-            .to_rive_mut::<ScriptedPromise>(promise_index)
-            .set_on_cancel(move |state| {
-                task_ref.cancel();
-                state.unref(promise_ref);
-            });
-        state.push_value(promise_index);
-        1
-    }
+    let context = state.thread_data::<dyn ScriptingContext>();
+    let main = state.main_thread();
+    let promise = ScriptedPromise::new(main);
+    let promise_index = state.new_rive(promise);
+    state.push_value(promise_index);
+    let promise_ref = state.reference(-1);
+    state.pop(1);
+    let task = ImageDecodeTask {
+        encoded_data: data,
+        width: 0,
+        height: 0,
+        state: Some(main),
+        promise_ref: Some(promise_ref),
+        bitmap: None,
+        error_message: String::new(),
+        owner_id: context.owner_id(),
+    };
+    let task_ref = context.work_pool().submit_retained(task);
+    state
+        .to_rive_mut::<ScriptedPromise>(promise_index)
+        .set_on_cancel(move |state| {
+            task_ref.cancel();
+            state.unref(promise_ref);
+        });
+    state.push_value(promise_index);
+    1
 }
 #[cfg(target_family = "wasm")]
 use std::{cell::RefCell, collections::HashMap};

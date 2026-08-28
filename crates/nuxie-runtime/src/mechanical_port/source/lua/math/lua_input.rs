@@ -1,4 +1,3 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::{
     animation::listener_type::ListenerType, hit_info::HitResult, lua::rive_lua_libs::*,
     math::vec2d::Vec2D,

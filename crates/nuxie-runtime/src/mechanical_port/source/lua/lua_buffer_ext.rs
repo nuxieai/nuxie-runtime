@@ -1,4 +1,3 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::lua::rive_lua_libs::LuaState;
 fn half_to_float(h: u16) -> f32 {
     let sign = ((h >> 15) as u32) << 31;

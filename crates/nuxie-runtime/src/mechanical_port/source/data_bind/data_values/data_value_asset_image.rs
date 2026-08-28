@@ -1,7 +1,7 @@
 use super::{data_type::DataType, data_value::DataValue, data_value_integer::DataValueInteger};
 use core::any::Any;
+use nuxie_render_api::RenderImage;
 use std::{cell::RefCell, rc::Rc};
-pub trait RenderImage: Any {}
 pub struct ImageAsset {
     image: RefCell<Option<Rc<dyn RenderImage>>>,
 }

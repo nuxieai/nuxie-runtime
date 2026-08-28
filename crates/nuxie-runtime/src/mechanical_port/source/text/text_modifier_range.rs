@@ -2,21 +2,20 @@ use super::{glyph_lookup::GlyphLookup, text_value_run::TextValueRun};
 use crate::mechanical_port::source::{
     animation::cubic_interpolator_component::CubicInterpolatorComponent,
     component::Component,
+    core::CoreHandle,
     core_context::CoreContext,
     generated::text::text_modifier_range_base::TextModifierRangeBase,
     status_code::StatusCode,
     text_engine::{GlyphLine, Paragraph},
 };
-use std::ptr::NonNull;
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TextRangeUnits {
     Characters,
     CharactersExcludingSpaces,
     Words,
     Lines,
+    Unknown(u32),
 }
-#[repr(u8)]
 #[derive(Clone, Copy)]
 pub enum TextRangeMode {
     Add,
@@ -25,12 +24,13 @@ pub enum TextRangeMode {
     Min,
     Max,
     Difference,
+    Unknown(u32),
 }
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TextRangeType {
     Percentage,
     UnitIndex,
+    Unknown(u32),
 }
 #[repr(u8)]
 pub enum TextRangeInterpolator {
@@ -175,47 +175,81 @@ pub struct TextModifierRange {
     index_to: f32,
     index_falloff_from: f32,
     index_falloff_to: f32,
-    interpolator: Option<NonNull<CubicInterpolatorComponent>>,
-    run: Option<NonNull<TextValueRun>>,
+    interpolator: Option<CoreHandle>,
+    run: Option<CoreHandle>,
 }
 impl TextModifierRange {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
         if self.base.run_id() != crate::mechanical_port::source::core::EMPTY_ID {
-            let Some(run) = context
-                .resolve(self.base.run_id())
-                .and_then(|v| v.as_text_value_run())
-            else {
+            let Some(run) = context.resolve(self.base.run_id()).filter(|run| {
+                run.with(|run| run.as_text_value_run().is_some())
+                    .unwrap_or(false)
+            }) else {
                 return StatusCode::MissingObject;
             };
             self.run = Some(run);
         }
-        let Some(mut group) = self.base.parent_as_text_modifier_group() else {
+        let (Some(group), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::MissingObject;
         };
-        unsafe { group.as_mut() }.add_modifier_range(self);
+        let added = group
+            .with_mut(|group| {
+                group
+                    .as_text_modifier_group_mut()
+                    .map(|group| group.add_modifier_range(this))
+            })
+            .flatten()
+            .is_some();
+        if !added {
+            return StatusCode::MissingObject;
+        }
         StatusCode::Ok
     }
     pub fn add_child(&mut self, component: &mut Component) {
-        self.base.add_child(component);
-        if let Some(interpolator) = component.as_cubic_interpolator() {
-            self.interpolator = Some(interpolator);
+        let Some(component) = component.handle() else {
+            return;
+        };
+        self.base.add_child(component.clone());
+        if component
+            .with_downcast::<CubicInterpolatorComponent, _>(|_| ())
+            .is_some()
+        {
+            self.interpolator = Some(component);
         }
     }
     pub fn clear_range_map(&mut self) {
         self.mapper.clear();
     }
     pub fn units(&self) -> TextRangeUnits {
-        unsafe { std::mem::transmute(self.base.units_value() as u8) }
+        match self.base.units_value() {
+            1 => TextRangeUnits::CharactersExcludingSpaces,
+            2 => TextRangeUnits::Words,
+            3 => TextRangeUnits::Lines,
+            value @ 4.. => TextRangeUnits::Unknown(value),
+            0 => TextRangeUnits::Characters,
+        }
     }
     pub fn range_type(&self) -> TextRangeType {
-        unsafe { std::mem::transmute(self.base.type_value() as u8) }
+        match self.base.type_value() {
+            1 => TextRangeType::UnitIndex,
+            value @ 2.. => TextRangeType::Unknown(value),
+            0 => TextRangeType::Percentage,
+        }
     }
     pub fn mode(&self) -> TextRangeMode {
-        unsafe { std::mem::transmute(self.base.mode_value() as u8) }
+        match self.base.mode_value() {
+            1 => TextRangeMode::Subtract,
+            2 => TextRangeMode::Multiply,
+            3 => TextRangeMode::Min,
+            4 => TextRangeMode::Max,
+            5 => TextRangeMode::Difference,
+            value @ 6.. => TextRangeMode::Unknown(value),
+            0 => TextRangeMode::Add,
+        }
     }
     pub fn compute_range(
         &mut self,
@@ -228,9 +262,17 @@ impl TextModifierRange {
             return;
         }
         let (mut start, mut end) = (0, text.len() as u32);
-        if let Some(mut run) = self.run {
-            start = unsafe { run.as_mut() }.offset();
-            end = start + unsafe { run.as_mut() }.length();
+        if let Some(run) = &self.run {
+            if let Some((offset, length)) = run
+                .with_mut(|run| {
+                    run.as_text_value_run_mut()
+                        .map(|run| (run.offset(), run.length()))
+                })
+                .flatten()
+            {
+                start = offset;
+                end = start + length;
+            }
         }
         match self.units() {
             TextRangeUnits::CharactersExcludingSpaces => {
@@ -241,6 +283,9 @@ impl TextModifierRange {
                 .mapper
                 .from_lines(text, start, end, shape, lines, lookup),
             TextRangeUnits::Characters => {
+                self.mapper.from_characters(text, start, end, lookup, false)
+            }
+            TextRangeUnits::Unknown(_) => {
                 self.mapper.from_characters(text, start, end, lookup, false)
             }
         }
@@ -266,9 +311,14 @@ impl TextModifierRange {
         } else {
             1.0
         };
-        if (t < self.index_falloff_from || t > self.index_falloff_to) && self.interpolator.is_some()
+        if (t < self.index_falloff_from || t > self.index_falloff_to)
+            && let Some(interpolator) = &self.interpolator
         {
-            c = unsafe { self.interpolator.unwrap().as_ref() }.transform(c);
+            c = interpolator
+                .with_downcast::<CubicInterpolatorComponent, _>(|interpolator| {
+                    interpolator.transform(c)
+                })
+                .unwrap_or(c);
         }
         c
     }
@@ -289,15 +339,21 @@ impl TextModifierRange {
             return;
         }
         let count = self.mapper.unit_count();
-        let scale = if self.range_type() == TextRangeType::Percentage {
-            count as f32
-        } else {
-            1.0
-        };
-        self.index_from = scale * self.offset_modify_from();
-        self.index_to = scale * self.offset_modify_to();
-        self.index_falloff_from = scale * self.offset_falloff_from();
-        self.index_falloff_to = scale * self.offset_falloff_to();
+        match self.range_type() {
+            TextRangeType::Percentage => {
+                self.index_from = count as f32 * self.offset_modify_from();
+                self.index_to = count as f32 * self.offset_modify_to();
+                self.index_falloff_from = count as f32 * self.offset_falloff_from();
+                self.index_falloff_to = count as f32 * self.offset_falloff_to();
+            }
+            TextRangeType::UnitIndex => {
+                self.index_from = self.offset_modify_from();
+                self.index_to = self.offset_modify_to();
+                self.index_falloff_from = self.offset_falloff_from();
+                self.index_falloff_to = self.offset_falloff_to();
+            }
+            TextRangeType::Unknown(_) => {}
+        }
         for unit in 0..count {
             let len = self.mapper.unit_length(unit);
             let index = self.mapper.unit_character_index(unit);
@@ -311,6 +367,7 @@ impl TextModifierRange {
                     TextRangeMode::Min => current.min(c),
                     TextRangeMode::Multiply => *current * c,
                     TextRangeMode::Difference => (*current - c).abs(),
+                    TextRangeMode::Unknown(_) => *current,
                 };
                 if self.base.clamp() {
                     *current = current.clamp(0.0, 1.0);
@@ -324,7 +381,13 @@ impl TextModifierRange {
         }
     }
     fn range_changed(&mut self) {
-        self.base.parent_text_modifier_group_mut().range_changed();
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(parent) = parent.as_text_modifier_group_mut() {
+                    parent.range_changed();
+                }
+            });
+        }
     }
     pub fn modify_from_changed(&mut self) {
         self.range_changed();
@@ -336,9 +399,13 @@ impl TextModifierRange {
         self.range_changed();
     }
     pub fn units_value_changed(&mut self) {
-        self.base
-            .parent_text_modifier_group_mut()
-            .range_type_changed();
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(parent) = parent.as_text_modifier_group_mut() {
+                    parent.range_type_changed();
+                }
+            });
+        }
     }
     pub fn type_value_changed(&mut self) {
         self.range_changed();

@@ -1,27 +1,16 @@
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StatusCode {
-    Ok,
-    MissingObject,
-}
-pub trait DataResolver {
-    fn resolve_path(&self, id: u32) -> Vec<u32>;
-}
-pub trait PathFile {
-    fn data_resolver(&self) -> Option<&dyn DataResolver>;
-}
 pub trait PathImporter {
-    fn file(&mut self) -> Option<*mut dyn PathFile>;
+    fn file(&mut self) -> Option<RuntimeFileWeakHandle>;
     fn import_super(&mut self, path: &mut DataBindPath) -> StatusCode;
 }
 pub struct DataBindPath {
     pub base: DataBindPathBase,
-    file: Option<*mut dyn PathFile>,
+    file: RuntimeFileWeakHandle,
 }
 impl Default for DataBindPath {
     fn default() -> Self {
         Self {
             base: DataBindPathBase::default(),
-            file: None,
+            file: RuntimeFileWeakHandle::default(),
         }
     }
 }
@@ -51,7 +40,10 @@ impl DataBindPath {
         let Some(importer) = importer else {
             return StatusCode::MissingObject;
         };
-        self.file = importer.file();
+        let Some(file) = importer.file() else {
+            return StatusCode::MissingObject;
+        };
+        self.file = file;
         importer.import_super(self)
     }
     pub fn path(&mut self) -> &mut Vec<u32> {
@@ -62,23 +54,34 @@ impl DataBindPath {
     }
     pub fn resolved_path(&mut self) -> &[u32] {
         if !self.base.resolved {
-            let Some(file) = self.file else {
+            if self.file.upgrade().is_none() {
                 return &self.base.path_buffer;
-            };
+            }
             if self.base.path_buffer.len() == 1 {
-                if let Some(resolver) = unsafe { (&*file).data_resolver() } {
-                    self.base.path_buffer = resolver.resolve_path(self.base.path_buffer[0]);
+                let path_id = self.base.path_buffer[0];
+                let resolved = self
+                    .file
+                    .with_file(|file| {
+                        file.manifest()?
+                            .with_downcast::<ManifestAsset, _>(|resolver| {
+                                resolver.resolve_path(path_id as i32).to_vec()
+                            })
+                    })
+                    .flatten()
+                    .flatten();
+                if let Some(resolved) = resolved {
+                    self.base.path_buffer = resolved;
                 }
             }
             self.base.resolved = true;
         }
         &self.base.path_buffer
     }
-    pub fn set_file(&mut self, file: Option<*mut dyn PathFile>) {
+    pub fn set_file(&mut self, file: RuntimeFileWeakHandle) {
         self.file = file
     }
-    pub fn file(&self) -> Option<*mut dyn PathFile> {
-        self.file
+    pub fn file(&self) -> RuntimeFileWeakHandle {
+        self.file.clone()
     }
     pub fn set_resolved(&mut self, value: bool) {
         self.base.resolved = value
@@ -99,6 +102,9 @@ impl DataBindPathBaseCallbacks for DataBindPath {
         self.base.resolved = object.resolved;
     }
 }
-use crate::mechanical_port::source::generated::data_bind::data_bind_path_base::{
-    DataBindPathBase, DataBindPathBaseCallbacks,
+use crate::mechanical_port::source::{
+    assets::manifest_asset::ManifestAsset,
+    file::RuntimeFileWeakHandle,
+    generated::data_bind::data_bind_path_base::{DataBindPathBase, DataBindPathBaseCallbacks},
+    status_code::StatusCode,
 };

@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::{
     artboard::Artboard,
     component::{Component, ComponentDirt, has_dirt},
-    core::{Core, CoreContext, StatusCode},
+    core::{Core, CoreContext, CoreHandle, StatusCode},
     drawable::DrawableFlag,
     hit_info::HitInfo,
     hittest_command_path::HitTestCommandPath,
@@ -24,11 +24,11 @@ pub struct Shape {
     pub base: ShapeBase,
     pub paint_container: ShapePaintContainer,
     path_composer: Box<PathComposer>,
-    paths: Vec<*mut Path>,
+    paths: Vec<CoreHandle>,
     world_bounds: Aabb,
     world_length: f32,
     want_difference_path: bool,
-    deformer: Option<*mut dyn RenderPathDeformer>,
+    deformer: Option<CoreHandle>,
 }
 
 impl Shape {
@@ -53,17 +53,13 @@ impl Shape {
         value
     }
 
-    pub fn add_path(&mut self, path: &mut Path) {
-        let pointer = path as *mut Path;
-        assert!(!self.paths.contains(&pointer));
-        self.paths.push(pointer);
+    pub fn add_path(&mut self, path: CoreHandle) {
+        assert!(!self.paths.contains(&path));
+        self.paths.push(path);
         self.invalidate_intrinsic_bounds();
     }
-    pub fn paths(&self) -> impl Iterator<Item = &Path> {
-        self.paths.iter().map(|p| unsafe { &**p })
-    }
-    pub fn paths_mut(&mut self) -> impl Iterator<Item = &mut Path> {
-        self.paths.iter().map(|p| unsafe { &mut **p })
+    pub fn paths(&self) -> Vec<CoreHandle> {
+        self.paths.clone()
     }
     pub fn add_flags(&mut self, flags: PathFlags) {
         self.paint_container.add_path_flags(flags);
@@ -74,8 +70,8 @@ impl Shape {
     pub fn want_difference_path(&self) -> bool {
         self.want_difference_path
     }
-    pub fn deformer(&self) -> Option<&dyn RenderPathDeformer> {
-        self.deformer.map(|p| unsafe { &*p })
+    pub fn deformer(&self) -> Option<CoreHandle> {
+        self.deformer.clone()
     }
 
     pub fn can_defer_path_update(&self) -> bool {
@@ -113,21 +109,31 @@ impl Shape {
         if self.world_length < 0.0 {
             let mut length = 0.0;
             for path in self.paths() {
-                let dirty = path.base.has_dirt(
-                    ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
-                );
-                let mut temporary = RawPath::default();
-                let base = if dirty {
-                    path.build_path(&mut temporary);
-                    &temporary
-                } else {
-                    path.raw_path()
-                };
-                let source = base.transform(path.path_transform());
-                let mut iter = ContourMeasureIter::new(&source);
-                while let Some(contour) = iter.next() {
-                    length += contour.length();
-                }
+                length += path
+                    .with(|path| {
+                        let path = path.as_path()?;
+                        let dirty = path.base.has_dirt(
+                            ComponentDirt::PATH
+                                | ComponentDirt::WORLD_TRANSFORM
+                                | ComponentDirt::N_SLICER,
+                        );
+                        let mut temporary = RawPath::default();
+                        let base = if dirty {
+                            path.build_path(&mut temporary);
+                            &temporary
+                        } else {
+                            path.raw_path()
+                        };
+                        let source = base.transform(path.path_transform());
+                        let mut length = 0.0;
+                        let mut iter = ContourMeasureIter::new(&source);
+                        while let Some(contour) = iter.next() {
+                            length += contour.length();
+                        }
+                        Some(length)
+                    })
+                    .flatten()
+                    .unwrap_or_default();
             }
             self.world_length = length;
         }
@@ -203,10 +209,14 @@ impl Shape {
         .round();
         let mut tester = HitTestCommandPath::new(area);
         for path in self.paths() {
-            if !path.base.is_collapsed() {
-                tester.set_xform(path.path_transform());
-                path.raw_path().add_to(&mut tester);
-            }
+            path.with(|path| {
+                if let Some(path) = path.as_path()
+                    && !path.base.is_collapsed()
+                {
+                    tester.set_xform(path.path_transform());
+                    path.raw_path().add_to(&mut tester);
+                }
+            });
         }
         tester.was_hit()
     }
@@ -228,12 +238,17 @@ impl Shape {
             };
             let mut tester = HitTestCommandPath::new(hinfo.area());
             for path in self.paths() {
-                tester.set_xform(if shape_local {
-                    xform * path.path_transform()
-                } else {
-                    matrix * path.path_transform()
+                path.with(|path| {
+                    let Some(path) = path.as_path() else {
+                        return;
+                    };
+                    tester.set_xform(if shape_local {
+                        xform * path.path_transform()
+                    } else {
+                        matrix * path.path_transform()
+                    });
+                    path.raw_path().add_to(&mut tester);
                 });
-                path.raw_path().add_to(&mut tester);
             }
             if tester.was_hit() {
                 return Some(self.base.as_core());
@@ -268,32 +283,47 @@ impl Shape {
             paint.blend_mode(blend);
         }
     }
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
         self.path_composer.component.on_added_dirty(context)
     }
-    pub fn on_added_clean(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
         }
         self.deformer = None;
-        let mut parent = self.base.parent_mut();
+        let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
-            if let Some(deformer) = render_path_deformer_from(current) {
-                self.deformer = Some(deformer as *mut _);
+            if current
+                .with(|current| {
+                    current
+                        .as_component()
+                        .and_then(render_path_deformer_from)
+                        .is_some()
+                })
+                .unwrap_or(false)
+            {
+                self.deformer = Some(current);
                 return StatusCode::Ok;
             }
-            parent = current.parent_mut();
+            parent = current
+                .with(|current| current.component_parent_handle())
+                .flatten();
         }
         StatusCode::Ok
     }
     pub fn is_empty(&self) -> bool {
-        self.paths()
-            .all(|path| path.is_hidden() || path.base.is_collapsed())
+        self.paths().iter().all(|path| {
+            path.with(|path| {
+                path.as_path()
+                    .is_none_or(|path| path.is_hidden() || path.base.is_collapsed())
+            })
+            .unwrap_or(true)
+        })
     }
     pub fn will_draw(&self) -> bool {
         self.base.will_draw() && self.base.render_opacity() != 0.0
@@ -316,7 +346,6 @@ impl Shape {
             self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.bits(),
         );
         self.world_length = -1.0;
-        #[cfg(feature = "with_rive_layout")]
         if let Some(participant) = self.layout_participant_mut() {
             participant.mark_layout_node_dirty();
         }
@@ -326,21 +355,26 @@ impl Shape {
         let mut result = Aabb::for_expansion();
         let mut first = true;
         for path in self.paths() {
-            if path.base.is_collapsed() {
-                continue;
-            }
-            let mut raw = path.raw_path().clone();
-            let matrix = xform
-                .map(|x| path.path_transform() * x)
-                .unwrap_or_else(|| path.path_transform());
-            raw.transform_in_place(matrix);
-            let bounds = raw.bounds();
-            if first {
-                first = false;
-                result = bounds;
-            } else {
-                result.expand(bounds);
-            }
+            path.with(|path| {
+                let Some(path) = path.as_path() else {
+                    return;
+                };
+                if path.base.is_collapsed() {
+                    return;
+                }
+                let mut raw = path.raw_path().clone();
+                let matrix = xform
+                    .map(|x| path.path_transform() * x)
+                    .unwrap_or_else(|| path.path_transform());
+                raw.transform_in_place(matrix);
+                let bounds = raw.bounds();
+                if first {
+                    first = false;
+                    result = bounds;
+                } else {
+                    result.expand(bounds);
+                }
+            });
         }
         result
     }
@@ -360,34 +394,39 @@ impl Shape {
         let mut result = Aabb::for_expansion();
         let mut used_pending = false;
         for path in self.paths() {
-            if path.base.is_collapsed() {
-                continue;
-            }
-            let bounds = if !path.needs_path_build() {
-                let mut raw = path.raw_path().clone();
-                raw.transform_in_place(path.base.transform());
-                raw.precise_bounds()
-            } else {
-                let mut property = Aabb::default();
-                used_pending = true;
-                if path.try_property_bounds(&mut property) {
-                    path.base.transform().map_bounding_box(property)
-                } else {
-                    let mut pending = RawPath::default();
-                    path.build_path(&mut pending);
-                    pending.transform_in_place(path.base.transform());
-                    pending.precise_bounds()
+            path.with(|path| {
+                let Some(path) = path.as_path() else {
+                    return;
+                };
+                if path.base.is_collapsed() {
+                    return;
                 }
-            };
-            if !(bounds.width() >= 0.0 && bounds.height() >= 0.0) {
-                continue;
-            }
-            if first {
-                first = false;
-                result = bounds;
-            } else {
-                result.expand(bounds);
-            }
+                let bounds = if !path.needs_path_build() {
+                    let mut raw = path.raw_path().clone();
+                    raw.transform_in_place(path.base.transform());
+                    raw.precise_bounds()
+                } else {
+                    let mut property = Aabb::default();
+                    used_pending = true;
+                    if path.try_property_bounds(&mut property) {
+                        path.base.transform().map_bounding_box(property)
+                    } else {
+                        let mut pending = RawPath::default();
+                        path.build_path(&mut pending);
+                        pending.transform_in_place(path.base.transform());
+                        pending.precise_bounds()
+                    }
+                };
+                if !(bounds.width() >= 0.0 && bounds.height() >= 0.0) {
+                    return;
+                }
+                if first {
+                    first = false;
+                    result = bounds;
+                } else {
+                    result.expand(bounds);
+                }
+            });
         }
         let bounds = if first { Aabb::default() } else { result };
         if let Some(participant) = participant {
@@ -408,15 +447,20 @@ impl Shape {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
-        #[cfg(feature = "with_rive_layout")]
         if self.is_participating_in_layout() {
             let bounds = self.compute_intrinsic_bounds();
             return Vec2D::new(bounds.width(), bounds.height());
         }
-        self.paths().fold(Vec2D::default(), |size, path| {
+        self.paths().iter().fold(Vec2D::default(), |size, path| {
             let measured = path
-                .base
-                .measure_layout(width, width_mode, height, height_mode);
+                .with(|path| {
+                    path.as_path().map(|path| {
+                        path.base
+                            .measure_layout(width, width_mode, height, height_mode)
+                    })
+                })
+                .flatten()
+                .unwrap_or_default();
             Vec2D::new(size.x.max(measured.x), size.y.max(measured.y))
         })
     }
@@ -427,13 +471,23 @@ impl Shape {
         height: LayoutScaleType,
         direction: LayoutDirection,
     ) {
-        #[cfg(feature = "with_rive_layout")]
         if self.is_participating_in_layout() {
             self.update_layout_scale(size);
             return;
         }
-        if let Some(path) = self.paths_mut().find_map(Path::as_parametric_path_mut) {
-            path.control_size(size, width, height, direction);
+        for path in self.paths() {
+            let controlled = path
+                .with_mut(|path| {
+                    let Some(path) = path.as_parametric_path_mut() else {
+                        return false;
+                    };
+                    path.control_size(size, width, height, direction);
+                    true
+                })
+                .unwrap_or(false);
+            if controlled {
+                break;
+            }
         }
     }
     fn update_layout_scale(&mut self, size: Vec2D) {
@@ -467,7 +521,6 @@ impl Shape {
         self.layout_participant().is_some()
     }
     pub fn compose_world_transform(&mut self) {
-        #[cfg(feature = "with_rive_layout")]
         if let (Some(participant), Some(parent)) = (
             self.layout_participant(),
             self.base.parent_transform_component(),

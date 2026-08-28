@@ -1,16 +1,18 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::mechanical_port::source::{
     component::{ComponentDirt, has_dirt},
-    core::{CoreContext, StatusCode},
-    drawable::{Drawable, HitInfo},
+    core::{CoreContext, CoreHandle, StatusCode},
+    drawable::{DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
     math::mat2d::Mat2D,
-    renderer::Renderer,
-    shapes::{path_flags::PathFlags, shape::Shape, shape_paint_path::ShapePaintPath},
+    shapes::{path_flags::PathFlags, shape_paint_path::ShapePaintPath},
 };
+use nuxie_render_api::Renderer;
 
 pub trait ClippingShapeOperation {
-    fn draw(&mut self, renderer: &mut Renderer, needs_save_operation: bool);
+    fn draw(&mut self, renderer: &mut dyn Renderer, needs_save_operation: bool);
     fn empty_clip_count(&mut self) -> i32;
-    fn set_clipping_shape(&mut self, shape: *mut ClippingShape);
+    fn set_clipping_shape(&mut self, shape: CoreHandle);
     fn is_start(&self) -> bool {
         false
     }
@@ -21,36 +23,44 @@ pub trait ClippingShapeOperation {
 
 #[derive(Default)]
 pub struct ClippingShapeStart {
-    clipping_shape: Option<*mut ClippingShape>,
+    clipping_shape: Option<CoreHandle>,
 }
 
 impl ClippingShapeOperation for ClippingShapeStart {
-    fn draw(&mut self, renderer: &mut Renderer, needs_save_operation: bool) {
-        let shape = unsafe { &mut *self.clipping_shape.unwrap() };
-        if !shape.base.is_visible() {
-            return;
-        }
-        if needs_save_operation {
-            renderer.save();
-        }
-        if let Some(path) = shape.path() {
-            let render_path = path.render_path(shape);
-            renderer.clip_path(render_path);
+    fn draw(&mut self, renderer: &mut dyn Renderer, needs_save_operation: bool) {
+        if let Some(shape) = self.clipping_shape.as_ref() {
+            shape.with_downcast_mut::<ClippingShape, _>(|shape| {
+                if !shape.base.is_visible() {
+                    return;
+                }
+                if needs_save_operation {
+                    renderer.save();
+                }
+                if shape.clip_path {
+                    let factory = shape
+                        .base
+                        .with_artboard(|artboard| artboard.factory())
+                        .flatten();
+                    if let Some(factory) = factory {
+                        renderer.clip_path(shape.path.render_path(&factory));
+                    }
+                }
+            });
         }
     }
 
     fn empty_clip_count(&mut self) -> i32 {
-        let Some(pointer) = self.clipping_shape else {
+        let Some(shape) = self.clipping_shape.as_ref() else {
             return 0;
         };
-        let shape = unsafe { &mut *pointer };
-        if shape.base.is_visible() && shape.path().is_none() {
-            return 1;
-        }
-        0
+        shape
+            .with_downcast_mut::<ClippingShape, _>(|shape| {
+                i32::from(shape.base.is_visible() && shape.path().is_none())
+            })
+            .unwrap_or_default()
     }
 
-    fn set_clipping_shape(&mut self, shape: *mut ClippingShape) {
+    fn set_clipping_shape(&mut self, shape: CoreHandle) {
         self.clipping_shape = Some(shape);
     }
 
@@ -60,162 +70,202 @@ impl ClippingShapeOperation for ClippingShapeStart {
 
     fn is_visible(&self) -> bool {
         self.clipping_shape
-            .map(|shape| unsafe { (&*shape).base.is_visible() })
+            .as_ref()
+            .and_then(|shape| {
+                shape.with_downcast::<ClippingShape, _>(|shape| shape.base.is_visible())
+            })
             .unwrap_or(false)
     }
 }
 
 #[derive(Default)]
 pub struct ClippingShapeEnd {
-    clipping_shape: Option<*mut ClippingShape>,
+    clipping_shape: Option<CoreHandle>,
 }
 
 impl ClippingShapeOperation for ClippingShapeEnd {
-    fn draw(&mut self, renderer: &mut Renderer, needs_save_operation: bool) {
-        let shape = unsafe { &*self.clipping_shape.unwrap() };
-        if !shape.base.is_visible() || !needs_save_operation {
-            return;
+    fn draw(&mut self, renderer: &mut dyn Renderer, needs_save_operation: bool) {
+        if self
+            .clipping_shape
+            .as_ref()
+            .and_then(|shape| {
+                shape.with_downcast::<ClippingShape, _>(|shape| shape.base.is_visible())
+            })
+            .unwrap_or(false)
+            && needs_save_operation
+        {
+            renderer.restore();
         }
-        renderer.restore();
     }
 
     fn empty_clip_count(&mut self) -> i32 {
-        let Some(pointer) = self.clipping_shape else {
+        let Some(shape) = self.clipping_shape.as_ref() else {
             return 0;
         };
-        let shape = unsafe { &mut *pointer };
-        if shape.base.is_visible() && shape.path().is_none() {
-            return -1;
-        }
-        0
+        shape
+            .with_downcast_mut::<ClippingShape, _>(|shape| {
+                if shape.base.is_visible() && shape.path().is_none() {
+                    -1
+                } else {
+                    0
+                }
+            })
+            .unwrap_or_default()
     }
 
-    fn set_clipping_shape(&mut self, shape: *mut ClippingShape) {
+    fn set_clipping_shape(&mut self, shape: CoreHandle) {
         self.clipping_shape = Some(shape);
     }
 }
 
-pub struct ClippingShapeProxyDrawable {
-    pub drawable: Drawable,
-    operation: Box<dyn ClippingShapeOperation>,
+pub struct ClippingShapeProxyDrawing {
+    owner: CoreHandle,
+    operation: Rc<RefCell<Box<dyn ClippingShapeOperation>>>,
 }
 
-impl ClippingShapeProxyDrawable {
-    pub fn new(operation: Box<dyn ClippingShapeOperation>) -> Self {
-        Self {
-            drawable: Drawable::default(),
-            operation,
-        }
-    }
-
-    pub fn draw(&mut self, renderer: &mut Renderer) {
+impl ProxyDrawing for ClippingShapeProxyDrawing {
+    fn draw_proxy(&mut self, renderer: &mut dyn Renderer, needs_save_operation: bool) {
         self.operation
-            .draw(renderer, self.drawable.needs_save_operation());
+            .borrow_mut()
+            .draw(renderer, needs_save_operation);
     }
 
-    pub fn empty_clip_count(&mut self) -> i32 {
-        self.operation.empty_clip_count()
-    }
-
-    pub fn is_hidden(&self) -> bool {
+    fn is_proxy_hidden(&self) -> bool {
         false
     }
 
-    pub fn hittable_component(&self) -> Option<&Drawable> {
-        None
+    fn owner_handle(&self) -> CoreHandle {
+        self.owner.clone()
     }
 
-    pub fn is_target_opaque(&self) -> bool {
-        false
+    fn empty_clip_count(&mut self) -> i32 {
+        self.operation.borrow_mut().empty_clip_count()
     }
 
-    pub fn hit_test(&self, _info: &mut HitInfo, _transform: Mat2D) -> Option<&Core> {
-        None
+    fn is_clip_start(&self) -> bool {
+        self.operation.borrow().is_start()
     }
 
-    pub fn set_operation(&mut self, operation: Box<dyn ClippingShapeOperation>) {
-        self.operation = operation;
+    fn is_clip_end(&self) -> bool {
+        !self.operation.borrow().is_start()
     }
 
-    pub fn is_proxy(&self) -> bool {
-        true
+    fn will_clip(&self) -> bool {
+        self.operation.borrow().is_visible()
     }
+}
 
-    pub fn is_clip_start(&self) -> bool {
-        self.operation.is_start()
-    }
-
-    pub fn is_clip_end(&self) -> bool {
-        !self.operation.is_start()
-    }
-
-    pub fn will_clip(&self) -> bool {
-        self.operation.is_visible()
-    }
+struct ClippingShapeProxy {
+    drawable: Rc<RefCell<DrawableProxy>>,
+    operation: Rc<RefCell<Box<dyn ClippingShapeOperation>>>,
 }
 
 pub struct ClippingShape {
     pub base: ClippingShapeBase,
-    shapes: Vec<Shape>,
-    proxy_drawables: Vec<ClippingShapeProxyDrawable>,
-    pooled_proxy_drawables: Vec<ClippingShapeProxyDrawable>,
-    source: Option<Node>,
+    shapes: Vec<CoreHandle>,
+    proxy_drawables: Vec<ClippingShapeProxy>,
+    pooled_proxy_drawables: Vec<ClippingShapeProxy>,
+    source: Option<CoreHandle>,
     path: ShapePaintPath,
     clip_path: bool,
     pub clip_start: ClippingShapeStart,
     pub clip_end: ClippingShapeEnd,
 }
 
+impl Default for ClippingShape {
+    fn default() -> Self {
+        Self {
+            base: ClippingShapeBase::default(),
+            shapes: Vec::new(),
+            proxy_drawables: Vec::new(),
+            pooled_proxy_drawables: Vec::new(),
+            source: None,
+            path: ShapePaintPath::new(false),
+            clip_path: false,
+            clip_start: ClippingShapeStart::default(),
+            clip_end: ClippingShapeEnd::default(),
+        }
+    }
+}
+
 impl ClippingShape {
-    pub fn source(&self) -> Option<&Node> {
-        self.source.as_ref()
+    pub fn source(&self) -> Option<CoreHandle> {
+        self.source.clone()
     }
 
-    pub fn shapes(&self) -> &[Shape] {
+    pub fn shapes(&self) -> &[CoreHandle] {
         &self.shapes
     }
 
-    pub fn on_added_clean(&mut self, _context: &mut CoreContext) -> StatusCode {
-        self.base.parent_mut().for_all(|component| {
-            if let Some(drawable) = component.as_drawable_mut() {
-                drawable.add_clipping_shape(self);
-            }
-            true
-        });
-        if let Some(source) = self.source.as_mut() {
-            source.for_all(|component| {
-                if let Some(shape) = component.as_shape_mut() {
-                    shape.add_flags(PathFlags::WORLD | PathFlags::CLIPPING);
-                    self.shapes.push(shape.clone());
+    pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
+        let Some(this) = self.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(parent) = parent.as_container_component_mut() {
+                    parent.for_all(|component| {
+                        component.with_mut(|component| {
+                            if let Some(drawable) = component.as_drawable_mut() {
+                                drawable.add_clipping_shape(this.clone());
+                            }
+                        });
+                        true
+                    });
                 }
-                true
+            });
+        }
+        if let Some(source) = self.source.clone() {
+            source.with_mut(|source| {
+                if let Some(source) = source.as_container_component_mut() {
+                    source.for_all(|component| {
+                        let handle = component.clone();
+                        component.with_mut(|component| {
+                            if let Some(shape) = component.as_shape_mut() {
+                                shape.add_flags(PathFlags::WORLD | PathFlags::CLIPPING);
+                                self.shapes.push(handle);
+                            }
+                        });
+                        true
+                    });
+                }
             });
         }
         StatusCode::Ok
     }
 
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
         let Some(source) = context
-            .resolve(self.base.source_id())
-            .and_then(Core::as_node)
+            .resolve_handle(self.base.source_id())
+            .filter(|source| {
+                source
+                    .with(|source| source.as_node().is_some())
+                    .unwrap_or(false)
+            })
         else {
             return StatusCode::MissingObject;
         };
-        self.source = Some(source.clone());
+        self.source = Some(source);
         StatusCode::Ok
     }
 
     pub fn build_dependencies(&mut self) {
-        for shape in &mut self.shapes {
-            shape.path_composer_mut().add_dependent(&mut self.base);
+        let Some(this) = self.base.handle() else {
+            return;
+        };
+        for shape in &self.shapes {
+            shape.with_mut(|shape| {
+                if let Some(shape) = shape.as_shape_mut() {
+                    shape.path_composer_mut().add_dependent(this.clone());
+                }
+            });
         }
-        let pointer = self as *mut ClippingShape;
-        self.clip_start.set_clipping_shape(pointer);
-        self.clip_end.set_clipping_shape(pointer);
+        self.clip_start.set_clipping_shape(this.clone());
+        self.clip_end.set_clipping_shape(this);
     }
 
     pub fn update(&mut self, value: ComponentDirt) {
@@ -223,21 +273,27 @@ impl ClippingShape {
             value,
             ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
         ) {
-            self.path.rewind_with_rule(false, self.base.fill_rule());
+            self.path.rewind_as(false, self.base.fill_rule().into());
             self.clip_path = false;
-            for shape in &mut self.shapes {
-                if !shape.is_empty() {
-                    if let Some(path) = shape.path_composer_mut().world_path_option() {
-                        self.path.add_path(path, Mat2D::identity());
+            for shape in &self.shapes {
+                shape.with_mut(|shape| {
+                    if let Some(shape) = shape.as_shape_mut()
+                        && !shape.is_empty()
+                    {
+                        let path = shape.world_path();
+                        self.path
+                            .add_shape_paint_path(path, Some(&Mat2D::identity()));
                         self.clip_path = true;
                     }
-                }
+                });
             }
         }
     }
 
     pub fn is_visible_changed(&mut self) {
-        self.base.artboard_mut().add_dirt(ComponentDirt::CLIPPING);
+        self.base.with_artboard_mut(|artboard| {
+            artboard.add_dirt(ComponentDirt::CLIPPING);
+        });
     }
 
     pub fn path(&mut self) -> Option<&mut ShapePaintPath> {
@@ -252,15 +308,31 @@ impl ClippingShape {
     pub fn create_proxy_drawable(
         &mut self,
         operation: Box<dyn ClippingShapeOperation>,
-    ) -> &mut ClippingShapeProxyDrawable {
-        let drawable = if let Some(mut drawable) = self.pooled_proxy_drawables.pop() {
-            drawable.set_operation(operation);
-            drawable.drawable.set_needs_save_operation(true);
-            drawable
+    ) -> Option<RuntimeDrawableOccurrence> {
+        let proxy = if let Some(proxy) = self.pooled_proxy_drawables.pop() {
+            *proxy.operation.borrow_mut() = operation;
+            proxy
+                .drawable
+                .borrow_mut()
+                .base
+                .set_needs_save_operation(true);
+            proxy
         } else {
-            ClippingShapeProxyDrawable::new(operation)
+            let owner = self.base.handle()?;
+            let operation = Rc::new(RefCell::new(operation));
+            let drawable = Rc::new(RefCell::new(DrawableProxy::new(Box::new(
+                ClippingShapeProxyDrawing {
+                    owner,
+                    operation: operation.clone(),
+                },
+            ))));
+            ClippingShapeProxy {
+                drawable,
+                operation,
+            }
         };
-        self.proxy_drawables.push(drawable);
-        self.proxy_drawables.last_mut().unwrap()
+        let drawable = proxy.drawable.clone();
+        self.proxy_drawables.push(proxy);
+        Some(RuntimeDrawableOccurrence::runtime_proxy(drawable))
     }
 }

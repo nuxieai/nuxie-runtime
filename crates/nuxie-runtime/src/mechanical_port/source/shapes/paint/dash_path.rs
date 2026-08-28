@@ -1,22 +1,26 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::mechanical_port::source::{
+    core::CoreHandle,
     core_context::{CoreContext, StatusCode},
     generated::shapes::paint::dash_path_base::DashPathBase,
     math::{path_measure::PathMeasure, raw_path::RawPath},
     shapes::paint::{
         dash::Dash,
         effects_container::{self, EffectsContainer},
-        shape_paint::{ShapePaint, ShapePaintPath, ShapePaintType},
+        shape_paint::{ShapePaint, ShapePaintType},
+        shape_paint_path::ShapePaintPath,
         stroke_effect::{EffectPath, PathProvider, StrokeEffect, StrokeEffectState},
     },
 };
 pub struct DashEffectPath {
-    path: ShapePaintPath,
+    path: Rc<RefCell<ShapePaintPath>>,
     path_measure: PathMeasure,
 }
 impl DashEffectPath {
     pub fn new() -> Self {
         Self {
-            path: ShapePaintPath::new(true),
+            path: Rc::new(RefCell::new(ShapePaintPath::new(true))),
             path_measure: PathMeasure::default(),
         }
     }
@@ -26,10 +30,10 @@ impl DashEffectPath {
 }
 impl EffectPath for DashEffectPath {
     fn invalidate_effect(&mut self) {
-        self.path.rewind();
+        self.path.borrow_mut().rewind();
     }
-    fn path(&mut self) -> Option<&mut ShapePaintPath> {
-        Some(&mut self.path)
+    fn path(&mut self) -> Option<Rc<RefCell<ShapePaintPath>>> {
+        Some(self.path.clone())
     }
     fn as_dash_mut(&mut self) -> Option<&mut DashEffectPath> {
         Some(self)
@@ -43,7 +47,7 @@ pub trait PathDasher {
         source: &RawPath,
         measure: &mut PathMeasure,
         offset: &Dash,
-        dashes: &mut [*mut Dash],
+        dashes: &[CoreHandle],
     ) -> &'a mut ShapePaintPath {
         if destination.has_render_path() {
             return destination;
@@ -56,12 +60,14 @@ pub trait PathDasher {
         _source: &RawPath,
         measure: &mut PathMeasure,
         offset: &Dash,
-        dashes: &mut [*mut Dash],
+        dashes: &[CoreHandle],
     ) -> &'a mut ShapePaintPath {
-        let valid = dashes
-            .iter()
-            .copied()
-            .any(|dash| unsafe { (*dash).normalized_length(measure.length(), false) > 0.0 });
+        let valid = dashes.iter().any(|dash| {
+            dash.with_downcast::<Dash, _>(|dash| {
+                dash.normalized_length(measure.length(), false) > 0.0
+            })
+            .unwrap_or(false)
+        });
         if valid {
             let mut dash_index = 0usize;
             let raw = destination.mutable_raw_path();
@@ -69,9 +75,13 @@ pub trait PathDasher {
             let mut distance = offset.normalized_length(measure.length(), true);
             let mut draw = true;
             while dashed < measure.length() {
-                let dash = unsafe { &*dashes[dash_index % dashes.len()] };
+                let dash = &dashes[dash_index % dashes.len()];
                 dash_index += 1;
-                let mut length = dash.normalized_length(measure.length(), false);
+                let mut length = dash
+                    .with_downcast::<Dash, _>(|dash| {
+                        dash.normalized_length(measure.length(), false)
+                    })
+                    .unwrap_or_default();
                 if length > measure.length() {
                     length = measure.length();
                 }
@@ -101,18 +111,40 @@ pub trait PathDasher {
 pub struct DashPath {
     pub base: DashPathBase,
     stroke: StrokeEffectState,
-    dashes: Vec<*mut Dash>,
+    dashes: Vec<CoreHandle>,
+}
+
+impl Default for DashPath {
+    fn default() -> Self {
+        Self {
+            base: DashPathBase::default(),
+            stroke: StrokeEffectState::default(),
+            dashes: Vec::new(),
+        }
+    }
 }
 impl DashPath {
-    pub fn on_added_clean(&mut self, _context: &mut CoreContext) -> StatusCode {
-        let Some(container) = effects_container::from(self.base.parent_mut()) else {
+    pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
+        let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::InvalidObject;
         };
-        container.add_stroke_effect(self as *mut _ as *mut dyn StrokeEffect);
+        let added = parent
+            .with_mut(|parent| {
+                parent
+                    .as_effects_container_mut()
+                    .map(|container| container.add_stroke_effect(this.clone()))
+            })
+            .is_some();
+        if !added {
+            return StatusCode::InvalidObject;
+        }
         self.dashes.clear();
-        for child in self.base.children_mut() {
-            if let Some(dash) = child.as_mut::<Dash>() {
-                self.dashes.push(dash);
+        for child in self.base.children() {
+            if child
+                .with(|child| child.as_dash().is_some())
+                .unwrap_or(false)
+            {
+                self.dashes.push(child.clone());
             }
         }
         StatusCode::Ok
@@ -125,24 +157,24 @@ impl DashPath {
     }
     pub fn update_effect(
         &mut self,
-        provider: &mut PathProvider,
+        provider: &PathProvider,
         source: &ShapePaintPath,
         paint: &ShapePaint,
     ) {
         let Some(effect) = self
             .stroke
             .effect_paths
-            .get_mut(&(provider as *mut _))
+            .get_mut(&provider.identity())
             .and_then(|path| path.as_dash_mut())
         else {
             return;
         };
-        if effect.path.has_render_path() {
+        if effect.path.borrow().has_render_path() {
             return;
         }
-        effect.path.rewind_local(source.is_local());
+        effect.path.borrow_mut().rewind_local(source.is_local());
         if paint.paint_type() == ShapePaintType::Fill {
-            effect.path.add_shape_paint_path(source, None);
+            effect.path.borrow_mut().add_shape_paint_path(source, None);
         } else {
             let offset = Dash::with_value(
                 Default::default(),
@@ -151,11 +183,11 @@ impl DashPath {
             );
             effect.create_path_measure(source.raw_path());
             Self::apply_dash(
-                &mut effect.path,
+                &mut effect.path.borrow_mut(),
                 source.raw_path(),
                 &mut effect.path_measure,
                 &offset,
-                &mut self.dashes,
+                &self.dashes,
             );
         }
     }
@@ -172,11 +204,14 @@ impl StrokeEffect for DashPath {
     fn stroke_effect_state(&mut self) -> &mut StrokeEffectState {
         &mut self.stroke
     }
-    fn update_effect(&mut self, p: &mut PathProvider, s: &ShapePaintPath, paint: &ShapePaint) {
+    fn stroke_effect_handle(&self) -> Option<CoreHandle> {
+        self.base.handle()
+    }
+    fn update_effect(&mut self, p: &PathProvider, s: &ShapePaintPath, paint: &ShapePaint) {
         DashPath::update_effect(self, p, s, paint);
     }
-    fn parent_paint(&mut self) -> Option<&mut dyn EffectsContainer> {
-        effects_container::from(self.base.parent_mut())
+    fn parent_paint_handle(&self) -> Option<CoreHandle> {
+        self.base.parent_handle()
     }
     fn create_effect_path(&mut self) -> Box<dyn EffectPath> {
         Box::new(DashEffectPath::new())

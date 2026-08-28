@@ -1,24 +1,96 @@
-use std::ptr::NonNull;
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
 
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
+    core::CoreHandle,
     core_context::CoreContext,
+    data_bind::data_bind_context::BoundSource,
     generated::viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBase,
     importers::{
         artboard_importer::ArtboardImporter, import_stack::ImportStack,
         viewmodel_instance_importer::ViewModelInstanceImporter,
     },
-    refcnt::RiveRc,
     status_code::StatusCode,
 };
 
 use super::{
-    symbol_type::SymbolType, viewmodel_instance::ViewModelInstance,
-    viewmodel_property::ViewModelProperty, viewmodel_value_dependent::ViewModelValueDependent,
+    symbol_type::SymbolType, viewmodel_instance_value::ValueDependentHandle::Runtime,
+    viewmodel_value_dependent::ViewModelValueDependent,
 };
 
 pub trait ViewModelInstanceValueDelegate {
     fn value_changed(&mut self);
+}
+
+pub type ViewModelInstanceValueDelegateHandle = Rc<RefCell<dyn ViewModelInstanceValueDelegate>>;
+type ViewModelInstanceValueDelegateWeakHandle = Weak<RefCell<dyn ViewModelInstanceValueDelegate>>;
+
+#[derive(Clone)]
+pub enum ValueDependentHandle {
+    Core(CoreHandle),
+    Runtime(Weak<RefCell<dyn ViewModelValueDependent>>),
+}
+
+impl ValueDependentHandle {
+    pub fn core(value: CoreHandle) -> Self {
+        Self::Core(value)
+    }
+
+    pub fn runtime(value: &Rc<RefCell<dyn ViewModelValueDependent>>) -> Self {
+        Runtime(Rc::downgrade(value))
+    }
+
+    fn same_identity(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Core(left), Self::Core(right)) => left == right,
+            (Self::Runtime(left), Self::Runtime(right)) => Weak::ptr_eq(left, right),
+            _ => false,
+        }
+    }
+
+    fn add_dirt(&self, value: ComponentDirt) {
+        match self {
+            Self::Core(dependent) => {
+                dependent.with_mut(|dependent| {
+                    if let Some(dependent) = dependent.as_data_bind_mut() {
+                        dependent.add_dirt(u32::from(value.0), true);
+                    }
+                });
+            }
+            Self::Runtime(dependent) => {
+                if let Some(dependent) = dependent.upgrade() {
+                    dependent.borrow_mut().add_dirt(value, true);
+                }
+            }
+        }
+    }
+
+    fn relink(&self) {
+        match self {
+            Self::Core(dependent) => {
+                dependent.with_mut(|dependent| {
+                    if let Some(dependent) = dependent.as_data_bind_mut() {
+                        dependent.relink_data_bind();
+                    }
+                });
+            }
+            Self::Runtime(dependent) => {
+                if let Some(dependent) = dependent.upgrade() {
+                    dependent.borrow_mut().relink_data_bind();
+                }
+            }
+        }
+    }
+
+    fn is_alive(&self) -> bool {
+        match self {
+            Self::Core(value) => value.is_alive(),
+            Self::Runtime(value) => value.strong_count() != 0,
+        }
+    }
 }
 
 #[repr(u8)]
@@ -33,33 +105,63 @@ enum ValueFlags {
 
 pub struct ViewModelInstanceValue {
     pub base: ViewModelInstanceValueBase,
-    view_model_property: Option<NonNull<ViewModelProperty>>,
+    view_model_property: Option<CoreHandle>,
     change_flags: u8,
-    delegates: Vec<NonNull<dyn ViewModelInstanceValueDelegate>>,
-    delegates_copy: Vec<NonNull<dyn ViewModelInstanceValueDelegate>>,
-    dependents: Vec<NonNull<dyn ViewModelValueDependent>>,
-    view_model_instance: Option<NonNull<ViewModelInstance>>,
+    delegates: Vec<ViewModelInstanceValueDelegateWeakHandle>,
+    delegates_copy: Vec<ViewModelInstanceValueDelegateWeakHandle>,
+    dependents: Vec<ValueDependentHandle>,
+    view_model_instance: Option<CoreHandle>,
+}
+
+impl std::ops::Deref for ViewModelInstanceValue {
+    type Target = ViewModelInstanceValueBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ViewModelInstanceValue {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Default for ViewModelInstanceValue {
+    fn default() -> Self {
+        Self {
+            base: ViewModelInstanceValueBase::default(),
+            view_model_property: None,
+            change_flags: 0,
+            delegates: Vec::new(),
+            delegates_copy: Vec::new(),
+            dependents: Vec::new(),
+            view_model_instance: None,
+        }
+    }
 }
 
 impl ViewModelInstanceValue {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    fn handle(&self) -> Option<CoreHandle> {
+        self.base.base.base.base.handle()
+    }
+
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let result = self.base.on_added_dirty(context);
         if result != StatusCode::Ok {
             return result;
-        }
-        if let Some(mut parent) = self.base.parent_as_view_model_instance() {
-            unsafe { parent.as_mut() }.add_value(NonNull::from(&mut *self));
         }
         StatusCode::Ok
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
+        let Some(value) = self.handle() else {
+            return StatusCode::MissingObject;
+        };
         let Some(importer) = import_stack.latest::<ViewModelInstanceImporter>(
             crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase::TYPE_KEY,
         ) else {
             return StatusCode::MissingObject;
         };
-        importer.add_value(NonNull::from(&mut *self));
+        importer.add_value(value);
         if import_stack
             .latest::<ArtboardImporter>(
                 crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
@@ -77,52 +179,89 @@ impl ViewModelInstanceValue {
     }
 
     fn register_symbol(&mut self) {
-        let (Some(property), Some(mut instance)) =
-            (self.view_model_property, self.view_model_instance)
-        else {
+        let (Some(property), Some(instance), Some(value)) = (
+            self.view_model_property.as_ref(),
+            self.view_model_instance.as_ref(),
+            self.handle(),
+        ) else {
             return;
         };
-        let property = unsafe { property.as_ref() };
-        if property.is_symbol_list_index() {
-            unsafe { instance.as_mut() }
-                .set_property_symbol(SymbolType::ItemIndex, NonNull::from(&mut *self));
-        } else if let Some(symbol) = SymbolType::from_i32(property.base.symbol_type_value()) {
-            if symbol != SymbolType::None {
-                unsafe { instance.as_mut() }.set_property_symbol(symbol, NonNull::from(&mut *self));
-            }
+        let (is_list_index, symbol) = property
+            .with(|property| {
+                let property = property.as_view_model_property()?;
+                Some((
+                    property.is_symbol_list_index(),
+                    SymbolType::from_i32(property.base.symbol_type_value()),
+                ))
+            })
+            .flatten()
+            .unwrap_or((false, None));
+        let symbol = if is_list_index {
+            Some(SymbolType::ItemIndex)
+        } else {
+            symbol.filter(|symbol| *symbol != SymbolType::None)
+        };
+        if let Some(symbol) = symbol {
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.set_property_symbol(symbol, value);
+                }
+            });
         }
     }
 
-    pub fn set_view_model_property(&mut self, value: NonNull<ViewModelProperty>) {
+    pub fn set_view_model_property(&mut self, value: CoreHandle) {
         self.view_model_property = Some(value);
         self.register_symbol();
     }
 
-    pub fn view_model_property(&self) -> Option<NonNull<ViewModelProperty>> {
-        self.view_model_property
+    pub fn view_model_property(&self) -> Option<CoreHandle> {
+        self.view_model_property.clone()
     }
 
-    pub fn add_dependent(&mut self, value: NonNull<dyn ViewModelValueDependent>) {
-        self.dependents.push(value);
-    }
-
-    pub fn remove_dependent(&mut self, value: NonNull<dyn ViewModelValueDependent>) {
-        self.dependents
-            .retain(|candidate| !std::ptr::addr_eq(candidate.as_ptr(), value.as_ptr()));
-    }
-
-    pub fn add_dirt(&mut self, value: ComponentDirt) {
-        for dependent in &mut self.dependents {
-            unsafe { dependent.as_mut() }.add_dirt(value, true);
+    pub fn add_dependent(&mut self, value: ValueDependentHandle) {
+        if !self
+            .dependents
+            .iter()
+            .any(|candidate| candidate.same_identity(&value))
+        {
+            self.dependents.push(value);
         }
     }
 
-    pub fn set_root(&mut self, _value: RiveRc<ViewModelInstance>) {}
+    pub fn remove_dependent(&mut self, value: &ValueDependentHandle) {
+        self.dependents
+            .retain(|candidate| !candidate.same_identity(value));
+    }
 
-    pub fn name(&self) -> &str {
+    pub fn add_dirt(&mut self, value: ComponentDirt) {
+        self.dependents.retain(ValueDependentHandle::is_alive);
+        for dependent in &self.dependents {
+            dependent.add_dirt(value);
+        }
+    }
+
+    pub fn relink_dependents(&mut self) {
+        self.dependents.retain(ValueDependentHandle::is_alive);
+        for dependent in &self.dependents {
+            dependent.relink();
+        }
+    }
+
+    pub fn set_root(&mut self, _value: CoreHandle) {}
+
+    pub fn name(&self) -> String {
         self.view_model_property
-            .map(|property| unsafe { property.as_ref() }.const_name())
-            .unwrap_or("")
+            .as_ref()
+            .and_then(|property| {
+                property.with(|property| {
+                    property
+                        .as_view_model_property()
+                        .map(|property| property.const_name().to_owned())
+                })
+            })
+            .flatten()
+            .unwrap_or_default()
     }
 
     pub fn advanced(&mut self) {
@@ -130,24 +269,25 @@ impl ViewModelInstanceValue {
         self.clear_flag(ValueFlags::ValueChanged);
     }
 
-    pub fn set_view_model_instance(&mut self, value: NonNull<ViewModelInstance>) {
+    pub fn set_view_model_instance(&mut self, value: CoreHandle) {
         self.view_model_instance = Some(value);
         self.register_symbol();
     }
 
-    pub fn view_model_instance(&self) -> Option<NonNull<ViewModelInstance>> {
-        self.view_model_instance
+    pub fn view_model_instance(&self) -> Option<CoreHandle> {
+        self.view_model_instance.clone()
     }
 
-    pub fn add_delegate(&mut self, delegate: NonNull<dyn ViewModelInstanceValueDelegate>) {
-        self.delegates.push(delegate);
+    pub fn add_delegate(&mut self, delegate: &ViewModelInstanceValueDelegateHandle) {
+        self.delegates.push(Rc::downgrade(delegate));
         self.set_flag(ValueFlags::DelegatesChanged);
     }
 
-    pub fn remove_delegate(&mut self, delegate: NonNull<dyn ViewModelInstanceValueDelegate>) {
+    pub fn remove_delegate(&mut self, delegate: &ViewModelInstanceValueDelegateHandle) {
+        let identity = Rc::downgrade(delegate);
         let old_len = self.delegates.len();
         self.delegates
-            .retain(|candidate| !std::ptr::addr_eq(candidate.as_ptr(), delegate.as_ptr()));
+            .retain(|candidate| !Weak::ptr_eq(candidate, &identity));
         if self.delegates.len() != old_len {
             self.set_flag(ValueFlags::DelegatesChanged);
         }
@@ -167,6 +307,8 @@ impl ViewModelInstanceValue {
 
     pub fn on_value_changed(&mut self) {
         self.set_flag(ValueFlags::ValueChanged);
+        self.delegates
+            .retain(|delegate| delegate.strong_count() != 0);
         if self.delegates.is_empty() {
             return;
         }
@@ -178,14 +320,16 @@ impl ViewModelInstanceValue {
             return;
         }
         self.set_flag(ValueFlags::Delegating);
-        for delegate in &mut self.delegates_copy {
-            unsafe { delegate.as_mut() }.value_changed();
+        for delegate in &self.delegates_copy {
+            if let Some(delegate) = delegate.upgrade() {
+                delegate.borrow_mut().value_changed();
+            }
         }
         self.clear_flag(ValueFlags::Delegating);
     }
 
-    pub fn dependents(&self) -> &[NonNull<dyn ViewModelValueDependent>] {
-        &self.dependents
+    pub fn dependents(&self) -> Vec<ValueDependentHandle> {
+        self.dependents.clone()
     }
 
     fn has_flag(&self, flag: ValueFlags) -> bool {
@@ -201,14 +345,89 @@ impl ViewModelInstanceValue {
     }
 }
 
+impl BoundSource for ViewModelInstanceValue {}
+
+macro_rules! impl_bind_source {
+    ($owner:path, $data_type:expr) => {
+        impl crate::mechanical_port::source::data_bind::data_bind::BindSource for $owner {
+            fn data_type(
+                &self,
+            ) -> crate::mechanical_port::source::data_bind::data_values::data_type::DataType {
+                $data_type
+            }
+        }
+    };
+}
+
+use crate::mechanical_port::source::data_bind::data_values::data_type::DataType;
+
+impl_bind_source!(
+    super::viewmodel_instance_artboard::ViewModelInstanceArtboard,
+    DataType::Artboard
+);
+impl_bind_source!(
+    super::viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob,
+    DataType::AssetBlob
+);
+impl_bind_source!(
+    super::viewmodel_instance_asset_font::ViewModelInstanceAssetFont,
+    DataType::AssetFont
+);
+impl_bind_source!(
+    super::viewmodel_instance_asset_image::ViewModelInstanceAssetImage,
+    DataType::AssetImage
+);
+impl_bind_source!(
+    super::viewmodel_instance_boolean::ViewModelInstanceBoolean,
+    DataType::Boolean
+);
+impl_bind_source!(
+    super::viewmodel_instance_color::ViewModelInstanceColor,
+    DataType::Color
+);
+impl_bind_source!(
+    super::viewmodel_instance_enum::ViewModelInstanceEnum,
+    DataType::Enum
+);
+impl_bind_source!(
+    super::viewmodel_instance_list::ViewModelInstanceList,
+    DataType::List
+);
+impl_bind_source!(
+    super::viewmodel_instance_number::ViewModelInstanceNumber,
+    DataType::Number
+);
+impl_bind_source!(
+    super::viewmodel_instance_string::ViewModelInstanceString,
+    DataType::String
+);
+impl_bind_source!(
+    super::viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex,
+    DataType::SymbolListIndex
+);
+impl_bind_source!(
+    super::viewmodel_instance_trigger::ViewModelInstanceTrigger,
+    DataType::Trigger
+);
+impl_bind_source!(
+    super::viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
+    DataType::ViewModel
+);
+
 pub struct SuppressDelegation {
-    value: NonNull<ViewModelInstanceValue>,
+    value: CoreHandle,
     suppressed: bool,
 }
 
 impl SuppressDelegation {
-    pub fn new(mut value: NonNull<ViewModelInstanceValue>) -> Self {
-        let suppressed = unsafe { value.as_mut() }.suppress_delegation();
+    pub fn new(value: CoreHandle) -> Self {
+        let suppressed = value
+            .with_mut(|value| {
+                value
+                    .as_view_model_instance_value_mut()
+                    .is_some_and(ViewModelInstanceValue::suppress_delegation)
+            })
+            .unwrap_or(false);
         Self { value, suppressed }
     }
 }
@@ -216,7 +435,11 @@ impl SuppressDelegation {
 impl Drop for SuppressDelegation {
     fn drop(&mut self) {
         if self.suppressed {
-            unsafe { self.value.as_mut() }.restore_delegation();
+            self.value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.restore_delegation();
+                }
+            });
         }
     }
 }

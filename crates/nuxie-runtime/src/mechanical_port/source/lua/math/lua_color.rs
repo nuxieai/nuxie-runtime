@@ -1,4 +1,3 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::{
     lua::rive_lua_libs::{LuaReg, LuaState},
     shapes::paint::color::*,

@@ -1,4 +1,15 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+use crate::mechanical_port::source::{
+    assets::file_asset_referencer::FileAssetReferencer, core::CoreHandle,
+    data_bind::data_context::DataContext, importers::import_stack::ImportStack,
+    status_code::StatusCode,
+};
+
+use crate::scripting::{
+    NoopScriptHost, RuntimeScriptInstanceHandle, ScriptInstance as RuntimeScriptInstance,
+    ScriptMethod as RuntimeScriptMethod, ScriptValue as RuntimeScriptValue,
+};
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScriptProtocol {
@@ -13,13 +24,13 @@ pub enum ScriptProtocol {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum ScriptValue {
-    Artboard(usize),
+    Artboard(CoreHandle),
     Boolean(bool),
     Color(u32),
     Integer(i32),
     Number(f32),
     String(String),
-    ViewModel(usize),
+    ViewModel(CoreHandle),
     Trigger,
 }
 pub trait ScriptRuntime {
@@ -113,15 +124,25 @@ pub const WANTS_GAMEPAD_CONNECT_BIT: u32 = 1 << 18;
 pub const WANTS_GAMEPAD_DISCONNECT_BIT: u32 = 1 << 19;
 pub const WANTS_GAMEPAD_EVENT_BIT: u32 = 1 << 20;
 pub const METHOD_MASK: u32 = (1 << 21) - 1;
+
+/// One arena-owned scripted clone and the cloned bindings its runtime host
+/// must retain in its `DataBindContainer`.
+pub struct ScriptedObjectClone {
+    pub owner: CoreHandle,
+    pub data_binds: Vec<CoreHandle>,
+}
+
 pub struct ScriptedObject {
+    file_asset_referencer: FileAssetReferencer,
     self_ref: i32,
     context_ref: i32,
     runtime: Option<Box<dyn ScriptRuntime>>,
+    runtime_instance: Option<RuntimeScriptInstanceHandle>,
     asset_id: u32,
     asset: Option<Rc<[u8]>>,
     inputs: HashMap<String, ScriptValue>,
     tracked_properties: Vec<usize>,
-    data_context: Option<usize>,
+    data_context: Option<Rc<RefCell<DataContext>>>,
     in_update_phase: bool,
     user_init_done: bool,
     disposed: bool,
@@ -131,9 +152,11 @@ pub struct ScriptedObject {
 impl Default for ScriptedObject {
     fn default() -> Self {
         Self {
+            file_asset_referencer: FileAssetReferencer::default(),
             self_ref: 0,
             context_ref: 0,
             runtime: None,
+            runtime_instance: None,
             asset_id: u32::MAX,
             asset: None,
             inputs: HashMap::new(),
@@ -148,7 +171,24 @@ impl Default for ScriptedObject {
     }
 }
 impl ScriptedObject {
+    pub(crate) fn file_asset_referencer_mut(&mut self) -> &mut FileAssetReferencer {
+        &mut self.file_asset_referencer
+    }
+
+    pub fn install_script_instance(&mut self, instance: Box<dyn RuntimeScriptInstance>) {
+        self.script_dispose();
+        self.runtime = None;
+        self.runtime_instance = Some(RuntimeScriptInstanceHandle::new(instance));
+        self.self_ref = 1;
+        self.context_ref = 1;
+        self.user_init_done = false;
+        self.disposed = false;
+    }
+
     pub fn set_runtime(&mut self, r: Box<dyn ScriptRuntime>) {
+        {
+            self.runtime_instance = None;
+        }
         if let Some(runtime) = &mut self.runtime {
             runtime.dispose(self.self_ref, self.context_ref);
             for property in self.tracked_properties.clone() {
@@ -163,6 +203,16 @@ impl ScriptedObject {
         self.runtime = Some(r)
     }
     pub fn ensure_script_initialized(&mut self, protocol: ScriptProtocol) -> bool {
+        if let Some(instance) = &self.runtime_instance {
+            let mut instance = instance.borrow_mut();
+            if instance.prepare_init_retry().is_err() {
+                return false;
+            }
+            let live = instance.script_lifetime_valid();
+            self.self_ref = u32::from(live) as i32;
+            self.context_ref = u32::from(live) as i32;
+            return live;
+        }
         if self.self_ref != 0 {
             return true;
         }
@@ -185,6 +235,24 @@ impl ScriptedObject {
         }
     }
     pub fn hydrate_script_inputs(&mut self) -> bool {
+        if let Some(instance) = &self.runtime_instance {
+            let mut instance = instance.borrow_mut();
+            for (name, value) in &self.inputs {
+                let Some(value) = runtime_script_value(value) else {
+                    return false;
+                };
+                if instance.set_input(name, value).is_err() {
+                    return false;
+                }
+            }
+            if self.implemented_methods & INITS_BIT != 0 && !self.user_init_done {
+                match instance.call_init(&mut NoopScriptHost) {
+                    Ok(true) => self.user_init_done = true,
+                    Ok(false) | Err(_) => return false,
+                }
+            }
+            return true;
+        }
         let Some(runtime) = &mut self.runtime else {
             return true;
         };
@@ -213,6 +281,16 @@ impl ScriptedObject {
         true
     }
     fn set(&mut self, n: String, v: ScriptValue) {
+        if let Some(instance) = &self.runtime_instance {
+            let Some(value) = runtime_script_value(&v) else {
+                return;
+            };
+            if instance.borrow_mut().set_input(&n, value).is_ok() {
+                self.inputs.insert(n, v);
+                self.mark_needs_update();
+            }
+            return;
+        }
         let Some(runtime) = &mut self.runtime else {
             return;
         };
@@ -223,7 +301,7 @@ impl ScriptedObject {
         runtime.set_input(self.self_ref, &n, &v);
         self.mark_needs_update();
     }
-    pub fn set_artboard_input(&mut self, n: String, v: usize) {
+    pub fn set_artboard_input(&mut self, n: String, v: CoreHandle) {
         self.set(n, ScriptValue::Artboard(v))
     }
     pub fn set_boolean_input(&mut self, n: String, v: bool) {
@@ -238,10 +316,20 @@ impl ScriptedObject {
     pub fn set_string_input(&mut self, n: String, v: String) {
         self.set(n, ScriptValue::String(v))
     }
-    pub fn set_view_model_input(&mut self, n: String, v: usize) {
+    pub fn set_view_model_input(&mut self, n: String, v: CoreHandle) {
         self.set(n, ScriptValue::ViewModel(v))
     }
     pub fn trigger(&mut self, n: String) {
+        if let Some(instance) = &self.runtime_instance {
+            if instance
+                .borrow_mut()
+                .call_input_trigger(&n, &mut NoopScriptHost)
+                .is_ok()
+            {
+                self.mark_needs_update();
+            }
+            return;
+        }
         let Some(runtime) = &mut self.runtime else {
             return;
         };
@@ -253,6 +341,12 @@ impl ScriptedObject {
     pub fn script_advance(&mut self, e: f32) -> bool {
         if !self.advances() {
             return false;
+        }
+        if let Some(instance) = &self.runtime_instance {
+            return instance
+                .borrow_mut()
+                .call_advance_truthy(e, &mut NoopScriptHost)
+                .unwrap_or(false);
         }
         self.runtime
             .as_mut()
@@ -272,10 +366,19 @@ impl ScriptedObject {
         }
     }
     pub fn script_update(&mut self) {
-        if !self.updates() || self.runtime.is_none() {
+        if !self.updates() {
             return;
         }
         self.in_update_phase = true;
+        if let Some(instance) = &self.runtime_instance {
+            let _ = instance.borrow_mut().call_method(
+                RuntimeScriptMethod::Update,
+                &[],
+                &mut NoopScriptHost,
+            );
+            self.in_update_phase = false;
+            return;
+        }
         if let Some(r) = &mut self.runtime {
             r.update(self.self_ref)
         }
@@ -284,6 +387,9 @@ impl ScriptedObject {
     pub fn script_dispose(&mut self) {
         if self.disposed {
             return;
+        }
+        if let Some(instance) = &self.runtime_instance {
+            instance.borrow_mut().invalidate_for_init_retry();
         }
         if let Some(r) = &mut self.runtime {
             for (name, value) in &self.inputs {
@@ -305,7 +411,26 @@ impl ScriptedObject {
         self.disposed = false;
         self.user_init_done = false
     }
-    pub fn set_asset(&mut self, id: u32, a: Option<Rc<[u8]>>) {
+    pub fn script_asset(&self) -> Option<CoreHandle> {
+        self.file_asset_referencer.asset()
+    }
+    pub fn register_referencer(
+        &mut self,
+        owner: CoreHandle,
+        import_stack: &mut ImportStack,
+    ) -> StatusCode {
+        self.file_asset_referencer
+            .register_referencer(owner, import_stack)
+    }
+    pub fn set_asset(&mut self, owner: CoreHandle, asset: Option<CoreHandle>) {
+        self.script_dispose();
+        self.file_asset_referencer.set_asset(owner, asset);
+        self.disposed = false;
+    }
+    pub fn detach_asset(&mut self, owner: CoreHandle) {
+        self.file_asset_referencer.detach(owner);
+    }
+    pub fn set_script_payload(&mut self, id: u32, a: Option<Rc<[u8]>>) {
         self.script_dispose();
         self.asset_id = id;
         self.asset = a;
@@ -325,10 +450,10 @@ impl ScriptedObject {
     pub fn self_ref(&self) -> i32 {
         self.self_ref
     }
-    pub fn data_context(&self) -> Option<usize> {
-        self.data_context
+    pub fn data_context(&self) -> Option<Rc<RefCell<DataContext>>> {
+        self.data_context.clone()
     }
-    pub fn set_data_context(&mut self, v: Option<usize>) {
+    pub fn set_data_context(&mut self, v: Option<Rc<RefCell<DataContext>>>) {
         self.data_context = v
     }
     pub fn in_update_phase(&self) -> bool {
@@ -423,6 +548,9 @@ impl ScriptedObject {
     }
     pub fn clear_scripting_vm(&mut self) {
         self.runtime = None;
+        {
+            self.runtime_instance = None;
+        }
         self.self_ref = 0;
         self.context_ref = 0;
     }
@@ -461,6 +589,17 @@ impl ScriptedObject {
         self.runtime
             .as_mut()?
             .call_value(self.self_ref, method, value)
+    }
+}
+
+fn runtime_script_value(value: &ScriptValue) -> Option<RuntimeScriptValue> {
+    match value {
+        ScriptValue::Boolean(value) => Some(RuntimeScriptValue::Bool(*value)),
+        ScriptValue::Color(value) => Some(RuntimeScriptValue::Color(*value)),
+        ScriptValue::Integer(value) => Some(RuntimeScriptValue::Number(f64::from(*value))),
+        ScriptValue::Number(value) => Some(RuntimeScriptValue::Number(f64::from(*value))),
+        ScriptValue::String(value) => Some(RuntimeScriptValue::String(value.clone())),
+        ScriptValue::Artboard(_) | ScriptValue::ViewModel(_) | ScriptValue::Trigger => None,
     }
 }
 impl Drop for ScriptedObject {

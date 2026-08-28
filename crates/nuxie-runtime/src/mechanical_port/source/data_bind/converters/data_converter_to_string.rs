@@ -225,8 +225,7 @@ impl DataConverterToString {
             self.convert_number(value.value());
         } else if let Some(value) = input.as_any().downcast_ref::<DataValueEnum>() {
             if let Some(data_enum) = value.data_enum() {
-                self.output
-                    .set_value(unsafe { (&*data_enum).value(value.value()) });
+                self.output.set_value(data_enum.value(value.value()));
             }
         } else if let Some(value) = input.as_any().downcast_ref::<DataValueString>() {
             self.output.set_value(value.value().to_owned());
@@ -277,3 +276,5 @@ struct DataConverterToStringInitializationCallbacks;
 impl DataConverterToStringBaseCallbacks for DataConverterToStringInitializationCallbacks {
     fn notify_property_changed(&mut self, _property_key: u16) {}
 }
+
+crate::impl_data_converter_capability_forward!(DataConverterToString, base.base);

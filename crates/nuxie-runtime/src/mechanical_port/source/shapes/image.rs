@@ -2,7 +2,7 @@ use crate::mechanical_port::source::{
     assets::{
         file_asset::FileAsset, file_asset_referencer::FileAssetReferencer, image_asset::ImageAsset,
     },
-    core::{Core, StatusCode},
+    core::{Core, CoreHandle, StatusCode},
     hit_info::HitInfo,
     importers::import_stack::ImportStack,
     layout::{
@@ -11,10 +11,7 @@ use crate::mechanical_port::source::{
     },
     math::{aabb::Aabb, hit_test::HitTester, mat2d::Mat2D, vec2d::Vec2D},
     renderer::{BlendMode, ImageSampler, Renderer},
-    shapes::{
-        mesh::Mesh,
-        mesh_drawable::{MeshDrawable, MeshType},
-    },
+    shapes::mesh_drawable::MeshType,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -33,7 +30,7 @@ pub enum ImageFit {
 pub struct Image {
     pub base: ImageBase,
     pub file_asset_referencer: FileAssetReferencer,
-    mesh: Option<Box<dyn MeshDrawable>>,
+    mesh: Option<CoreHandle>,
     layout_width: f32,
     layout_height: f32,
     layout_offset_x: f32,
@@ -73,14 +70,16 @@ impl Image {
         }
         let width = render_image.width() as f32;
         let height = render_image.height() as f32;
-        if let Some(mesh) = self.mesh.as_mut() {
-            mesh.draw(
-                renderer,
-                render_image,
-                ImageSampler::linear_clamp(),
-                self.base.blend_mode(),
-                self.base.render_opacity(),
-            );
+        if let Some(mesh) = self.mesh.clone() {
+            mesh.with_mut(|mesh| {
+                mesh.mesh_drawable_draw(
+                    renderer,
+                    render_image,
+                    ImageSampler::linear_clamp(),
+                    self.base.blend_mode(),
+                    self.base.render_opacity(),
+                );
+            });
         } else {
             renderer.transform(self.base.world_transform());
             renderer.translate(
@@ -143,9 +142,12 @@ impl Image {
     pub fn set_asset(&mut self, asset: Option<FileAsset>) {
         if let Some(asset) = asset.filter(FileAsset::is_image_asset) {
             self.file_asset_referencer.set_asset(Some(asset));
-            if let Some(mesh) = self.mesh.as_mut() {
+            if let Some(mesh) = self.mesh.clone() {
                 if !self.base.artboard().is_instance() {
-                    mesh.on_asset_loaded(self.image_asset().and_then(ImageAsset::render_image));
+                    let render_image = self.image_asset().and_then(ImageAsset::render_image);
+                    mesh.with_mut(|mesh| {
+                        mesh.mesh_drawable_on_asset_loaded(render_image);
+                    });
                 }
             }
             self.update_image_scale();
@@ -166,8 +168,8 @@ impl Image {
         twin.into_core()
     }
 
-    pub fn set_mesh(&mut self, mesh: Option<Box<dyn MeshDrawable>>) {
-        if self.mesh.as_ref().map(|m| m.identity()) == mesh.as_ref().map(|m| m.identity()) {
+    pub fn set_mesh(&mut self, mesh: Option<CoreHandle>) {
+        if self.mesh == mesh {
             return;
         }
         self.mesh = mesh;
@@ -232,7 +234,6 @@ impl Image {
     }
 
     pub fn compose_world_transform(&mut self) {
-        #[cfg(feature = "with_rive_layout")]
         if let (Some(participant), Some(parent)) = (
             self.layout_participant(),
             self.base.parent_transform_component(),
@@ -334,11 +335,10 @@ impl Image {
             if fit != ImageFit::Resize || self.is_participating_in_layout() {
                 let mut bounds_left = -image_width * self.base.origin_x();
                 let mut bounds_top = -image_height * self.base.origin_y();
-                if self
-                    .mesh
-                    .as_ref()
-                    .is_some_and(|mesh| mesh.mesh_type() == MeshType::Vertex)
-                {
+                if self.mesh.as_ref().is_some_and(|mesh| {
+                    mesh.with(|mesh| mesh.mesh_drawable_type() == Some(MeshType::Vertex))
+                        .unwrap_or(false)
+                }) {
                     bounds_left = -image_width * 0.5;
                     bounds_top = -image_height * 0.5;
                 }
@@ -385,7 +385,7 @@ impl Image {
             .file_asset()
             .and_then(FileAsset::as_image_asset)
     }
-    pub fn mesh(&self) -> Option<&Mesh> {
-        self.mesh.as_ref().and_then(|mesh| mesh.as_mesh())
+    pub fn mesh(&self) -> Option<CoreHandle> {
+        self.mesh.clone()
     }
 }

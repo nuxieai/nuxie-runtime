@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
     component::Component,
+    core::CoreHandle,
     math::mat2d::Mat2D,
     shapes::{
         paint::shape_paint::ShapePaint, path_flags::PathFlags, shape_paint_path::ShapePaintPath,
@@ -8,7 +9,7 @@ use crate::mechanical_port::source::{
 
 pub struct ShapePaintContainer {
     path_flags: PathFlags,
-    shape_paints: Vec<ShapePaint>,
+    shape_paints: Vec<CoreHandle>,
 }
 
 impl Default for ShapePaintContainer {
@@ -21,6 +22,10 @@ impl Default for ShapePaintContainer {
 }
 
 impl ShapePaintContainer {
+    pub fn add_path_flags(&mut self, flags: PathFlags) {
+        self.path_flags |= flags;
+    }
+
     pub fn from_component(component: &Component) -> Option<&Self> {
         match component.core_type() {
             TYPE_ARTBOARD
@@ -51,34 +56,44 @@ impl ShapePaintContainer {
         }
     }
 
-    pub fn add_paint(&mut self, paint: ShapePaint) {
+    pub fn add_paint(&mut self, paint: CoreHandle) {
         self.shape_paints.push(paint);
     }
 
     pub fn path_flags(&self) -> PathFlags {
         self.shape_paints
             .iter()
-            .fold(self.path_flags, |flags, paint| flags | paint.path_flags())
+            .fold(self.path_flags, |flags, paint| {
+                flags
+                    | paint
+                        .with(|paint| paint.as_shape_paint().map(ShapePaint::path_flags))
+                        .flatten()
+                        .unwrap_or(PathFlags::NONE)
+            })
     }
 
     pub fn invalidate_stroke_effects(&mut self) {
-        for paint in &mut self.shape_paints {
-            paint.invalidate_effects();
+        for paint in self.shape_paints.iter().cloned() {
+            paint.with_mut(|paint| {
+                if let Some(paint) = paint.as_shape_paint_mut() {
+                    paint.invalidate_effects();
+                }
+            });
         }
     }
 
     pub fn propagate_opacity(&mut self, opacity: f32) {
-        for paint in &mut self.shape_paints {
-            paint.set_render_opacity(opacity);
+        for paint in self.shape_paints.iter().cloned() {
+            paint.with_mut(|paint| {
+                if let Some(paint) = paint.as_shape_paint_mut() {
+                    paint.set_render_opacity(opacity);
+                }
+            });
         }
     }
 
-    pub fn shape_paints(&self) -> &[ShapePaint] {
+    pub fn shape_paints(&self) -> &[CoreHandle] {
         &self.shape_paints
-    }
-
-    pub fn shape_paints_mut(&mut self) -> &mut [ShapePaint] {
-        &mut self.shape_paints
     }
 
     pub fn world_path(&mut self) -> Option<&mut ShapePaintPath> {

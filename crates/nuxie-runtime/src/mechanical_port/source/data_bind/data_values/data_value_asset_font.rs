@@ -1,9 +1,9 @@
 use super::{data_type::DataType, data_value::DataValue, data_value_integer::DataValueInteger};
+use crate::mechanical_port::source::text_engine::FontRef;
 use core::any::Any;
 use std::{cell::RefCell, rc::Rc};
-pub trait Font: Any {}
 pub struct FontAsset {
-    font: RefCell<Option<Rc<dyn Font>>>,
+    font: RefCell<Option<FontRef>>,
 }
 impl FontAsset {
     pub fn new() -> Self {
@@ -11,10 +11,10 @@ impl FontAsset {
             font: RefCell::new(None),
         }
     }
-    pub fn set_font(&self, font: Option<Rc<dyn Font>>) {
+    pub fn set_font(&self, font: Option<FontRef>) {
         *self.font.borrow_mut() = font
     }
-    pub fn font(&self) -> Option<Rc<dyn Font>> {
+    pub fn font(&self) -> Option<FontRef> {
         self.font.borrow().clone()
     }
 }
@@ -45,10 +45,10 @@ impl DataValueAssetFont {
     pub fn file_asset(&self) -> Rc<FontAsset> {
         self.file_asset.clone()
     }
-    pub fn set_font_value(&self, font: Option<Rc<dyn Font>>) {
+    pub fn set_font_value(&self, font: Option<FontRef>) {
         self.file_asset.set_font(font)
     }
-    pub fn font_value(&self) -> Option<Rc<dyn Font>> {
+    pub fn font_value(&self) -> Option<FontRef> {
         self.file_asset.font()
     }
 }

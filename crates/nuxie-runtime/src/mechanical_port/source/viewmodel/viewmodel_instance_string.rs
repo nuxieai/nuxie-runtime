@@ -9,14 +9,31 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub struct ViewModelInstanceString {
     pub base: ViewModelInstanceStringBase,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     changed_callback: Option<fn(&mut Self, &str)>,
 }
 
 impl ViewModelInstanceString {
+    pub fn value(&self) -> String {
+        self.base.property_value().to_owned()
+    }
+
+    pub fn set_value(&mut self, value: impl Into<String>) {
+        if self.base.set_property_value_value(value.into()) {
+            self.property_value_changed();
+            self.base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .notify_property_changed(ViewModelInstanceStringBase::PROPERTY_VALUE_PROPERTY_KEY);
+        }
+    }
+
     pub fn property_value_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::BINDINGS);
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             let value = self.base.property_value().to_owned();
             callback(self, &value);
@@ -24,14 +41,9 @@ impl ViewModelInstanceString {
         self.base.on_value_changed();
     }
     pub fn apply_value(&mut self, value: &DataValueString) {
-        let this = self as *mut Self;
-        unsafe {
-            (*this)
-                .base
-                .set_property_value(value.value().to_owned(), &mut *this)
-        };
+        self.set_value(value.value());
     }
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self, &str)>) {
         self.changed_callback = callback;
     }

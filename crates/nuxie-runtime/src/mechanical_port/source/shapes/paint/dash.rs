@@ -34,7 +34,7 @@ impl Dash {
             p
         }
     }
-    pub fn on_added_clean(&mut self, _context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
         if !self.base.parent().is::<DashPath>() {
             StatusCode::InvalidObject
         } else {

@@ -1,19 +1,23 @@
-#![cfg(feature = "with_rive_text")]
 use super::text::Text;
+use std::{cell::RefCell, rc::Rc};
+
 use crate::mechanical_port::source::{
     color::ColorInt,
-    factory::Factory,
+    factory::RuntimeFactoryHandle,
+    math::raw_path::PathDirection,
     math::{aabb::Aabb, mat2d::Mat2D},
-    refcnt::RiveRc,
-    renderer::{RenderPaint, RenderPath, Renderer},
     shapes::shape_paint_path::ShapePaintPath,
     text_engine::{
-        Font, GlyphLine, GlyphRun, OrderedLine, Paragraph, StyledText, TextAlign, TextOrigin,
+        FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, StyledText, TextAlign, TextOrigin,
         TextOverflow, TextSizing, TextWrap,
     },
 };
+use nuxie_render_api::{FillRule, RenderPaint, RenderPaintStyle, Renderer};
+
+type RuntimeRenderPaintHandle = Rc<RefCell<Box<dyn RenderPaint>>>;
+
 struct RenderStyle {
-    paint: Option<RiveRc<RenderPaint>>,
+    paint: Option<RuntimeRenderPaintHandle>,
     is_empty: bool,
     path: ShapePaintPath,
     foreground_color: ColorInt,
@@ -21,7 +25,7 @@ struct RenderStyle {
 enum DrawCommand {
     Style(usize),
     Color {
-        font: RiveRc<Font>,
+        font: FontRef,
         glyph_id: u16,
         transform: Mat2D,
         foreground_color: ColorInt,
@@ -31,7 +35,7 @@ pub struct RawText {
     shape: Vec<Paragraph>,
     lines: Vec<Vec<GlyphLine>>,
     styled: StyledText,
-    factory: *mut Factory,
+    factory: RuntimeFactoryHandle,
     styles: Vec<RenderStyle>,
     render_styles: Vec<usize>,
     dirty: bool,
@@ -46,11 +50,11 @@ pub struct RawText {
     ordered_lines: Vec<OrderedLine>,
     ellipsis_run: GlyphRun,
     bounds: Aabb,
-    clip_render_path: Option<RiveRc<RenderPath>>,
+    clip_render_path: Option<ShapePaintPath>,
     draw_commands: Vec<DrawCommand>,
 }
 impl RawText {
-    pub fn new(factory: &mut Factory) -> Self {
+    pub fn new(factory: RuntimeFactoryHandle) -> Self {
         Self {
             shape: Vec::new(),
             lines: Vec::new(),
@@ -80,8 +84,8 @@ impl RawText {
     pub fn append(
         &mut self,
         text: &str,
-        paint: Option<RiveRc<RenderPaint>>,
-        font: RiveRc<Font>,
+        paint: Option<RuntimeRenderPaintHandle>,
+        font: FontRef,
         size: f32,
         line_height: f32,
         letter_spacing: f32,
@@ -91,7 +95,7 @@ impl RawText {
             .styles
             .iter()
             .position(|s| match (&s.paint, &paint) {
-                (Some(a), Some(b)) => RiveRc::ptr_eq(a, b),
+                (Some(a), Some(b)) => Rc::ptr_eq(a, b),
                 (None, None) => true,
                 _ => false,
             })
@@ -231,19 +235,14 @@ impl RawText {
                 min_y.max(y - self.paragraph_spacing),
             ),
             TextSizing::Fixed => Aabb::new(0.0, min_y, self.max_width, min_y + self.max_height),
+            TextSizing::Unknown(_) => self.bounds,
         };
-        let factory = unsafe { &mut *self.factory };
         if self.overflow == TextOverflow::Clipped {
             let path = self
                 .clip_render_path
-                .get_or_insert_with(|| factory.make_empty_render_path());
+                .get_or_insert_with(|| ShapePaintPath::with_fill_rule(true, FillRule::NonZero));
             path.rewind();
-            path.add_rect(
-                self.bounds.min_x,
-                self.bounds.min_y,
-                self.bounds.width(),
-                self.bounds.height(),
-            );
+            path.add_rect(self.bounds, PathDirection::Clockwise);
         } else {
             self.clip_render_path = None;
         }
@@ -324,16 +323,24 @@ impl RawText {
         }
         self.bounds
     }
-    pub fn render(&mut self, renderer: &mut Renderer, override_paint: Option<RiveRc<RenderPaint>>) {
+    pub fn render(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        override_paint: Option<RuntimeRenderPaintHandle>,
+    ) {
         if self.dirty {
             self.update();
             self.dirty = false;
         }
         if self.overflow == TextOverflow::Clipped && self.clip_render_path.is_some() {
             renderer.save();
-            renderer.clip_path(self.clip_render_path.as_ref().unwrap());
+            let clip = self
+                .clip_render_path
+                .as_mut()
+                .expect("the clipped branch retains a clip path")
+                .render_path(&self.factory);
+            renderer.clip_path(clip);
         }
-        let factory = unsafe { &mut *self.factory };
         for command in &self.draw_commands {
             match command {
                 DrawCommand::Style(index) => {
@@ -341,7 +348,11 @@ impl RawText {
                         .as_ref()
                         .or(self.styles[*index].paint.as_ref())
                     {
-                        renderer.draw_path(self.styles[*index].path.render_path(factory), paint);
+                        let paint = paint.borrow();
+                        renderer.draw_path(
+                            self.styles[*index].path.render_path(&self.factory),
+                            paint.as_ref(),
+                        );
                     }
                 }
                 DrawCommand::Color {
@@ -353,18 +364,16 @@ impl RawText {
                     let mut layers = Vec::new();
                     if font.get_color_layers(*glyph_id, &mut layers, *foreground_color) > 0 {
                         renderer.save();
-                        renderer.transform(transform);
+                        renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
                         for layer in layers {
-                            let path = factory.make_render_path(
-                                &layer.path,
-                                crate::mechanical_port::source::renderer::FillRule::NonZero,
-                            );
-                            let mut paint = factory.make_render_paint();
-                            paint.set_style(
-                                crate::mechanical_port::source::renderer::RenderPaintStyle::Fill,
-                            );
+                            let mut path = ShapePaintPath::with_fill_rule(true, FillRule::NonZero);
+                            path.add_path(&layer.path, None);
+                            let mut paint = self
+                                .factory
+                                .with_factory_mut(|factory| factory.make_render_paint());
+                            paint.set_style(RenderPaintStyle::Fill);
                             paint.set_color(layer.color);
-                            renderer.draw_path(&path, &paint);
+                            renderer.draw_path(path.render_path(&self.factory), paint.as_ref());
                         }
                         renderer.restore();
                     }

@@ -1,13 +1,17 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
-    assets::image_asset::ImageAsset, component_dirt::ComponentDirt,
-    data_bind::data_values::data_value_integer::DataValueInteger,
+    component_dirt::ComponentDirt,
+    data_bind::data_values::{
+        data_value_asset_image::ImageAsset, data_value_integer::DataValueInteger,
+    },
     generated::viewmodel::viewmodel_instance_asset_image_base::ViewModelInstanceAssetImageBase,
-    refcnt::RiveRc, renderer::RenderImageRef,
 };
+use nuxie_render_api::RenderImage;
 
 pub struct ViewModelInstanceAssetImage {
     pub base: ViewModelInstanceAssetImageBase,
-    image_asset: RiveRc<ImageAsset>,
+    image_asset: Rc<ImageAsset>,
 }
 
 impl Default for ViewModelInstanceAssetImage {
@@ -20,42 +24,43 @@ impl ViewModelInstanceAssetImage {
     pub fn new() -> Self {
         Self {
             base: ViewModelInstanceAssetImageBase::default(),
-            image_asset: RiveRc::new(ImageAsset::default()),
+            image_asset: Rc::new(ImageAsset::new()),
         }
     }
 
     pub fn property_value_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::BINDINGS);
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         if let Some(callback) = self.base.changed_callback() {
             callback(self, self.base.property_value());
         }
         self.base.on_value_changed();
     }
 
-    pub fn set_value(&mut self, image: Option<RenderImageRef>) {
-        if self.image_asset.render_image().map(RenderImageRef::as_ptr)
-            == image.as_ref().map(RenderImageRef::as_ptr)
+    pub fn set_value(&mut self, image: Option<Rc<dyn RenderImage>>) {
+        let previous = self.image_asset.render_image();
+        if matches!((&previous, &image), (Some(left), Some(right)) if Rc::ptr_eq(left, right))
+            || previous.is_none() && image.is_none()
         {
             self.base.set_property_value(u32::MAX);
             return;
         }
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         let already_sentinel = self.base.property_value() == u32::MAX;
-        self.image_asset.set_render_image_direct(image);
-        #[cfg(feature = "rive_tools")]
+        self.image_asset.set_render_image(image);
+        #[cfg(feature = "tools")]
         if !already_sentinel {
             self.base.set_property_value(u32::MAX);
         } else if let Some(callback) = self.base.changed_callback() {
             callback(self, self.base.property_value());
         }
-        #[cfg(not(feature = "rive_tools"))]
+        #[cfg(not(feature = "tools"))]
         self.base.set_property_value(u32::MAX);
         self.base.add_dirt(ComponentDirt::BINDINGS);
         self.base.on_value_changed();
     }
 
-    pub fn asset(&self) -> RiveRc<ImageAsset> {
+    pub fn asset(&self) -> Rc<ImageAsset> {
         self.image_asset.clone()
     }
 

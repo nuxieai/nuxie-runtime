@@ -1,5 +1,4 @@
-use super::data_values::data_value_list::ViewModelInstanceListItem;
-use std::rc::Rc;
+use crate::mechanical_port::source::core::CoreHandle;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ListConsumerCoreType {
     ArtboardComponentList,
@@ -9,7 +8,7 @@ pub enum ListConsumerCoreType {
     Other,
 }
 pub trait DataBindListItemConsumer {
-    fn update_list(&mut self, list: &Vec<Rc<dyn ViewModelInstanceListItem>>);
+    fn update_list(&mut self, list: &[CoreHandle]);
 }
 pub trait ListConsumerCore {
     fn core_type(&self) -> ListConsumerCoreType;

@@ -1,22 +1,17 @@
-#![cfg(feature = "rive_scripting")]
-
 use crate::mechanical_port::source::{
     animation::listener_invocation::ListenerInvocation, lua::rive_lua_libs::*, math::mat2d::Mat2D,
 };
 
 impl ScriptReffedArtboard {
     pub fn new(
-        file: *mut File,
+        file: RuntimeFileWeakHandle,
         artboard: Box<ArtboardInstance>,
-        view_model_instance: Option<Rc<ViewModelInstance>>,
+        view_model_instance: Option<CoreHandle>,
         parent_data_context: Option<Rc<DataContext>>,
         scripting_context: *mut dyn ScriptingContext,
-        #[cfg(feature = "rive_tools")] file_pin: Option<Rc<File>>,
     ) -> Self {
         let mut result = Self {
             file,
-            #[cfg(feature = "rive_tools")]
-            file_pin,
             artboard: Some(artboard),
             state_machine: None,
             view_model_instance,
@@ -24,15 +19,18 @@ impl ScriptReffedArtboard {
         };
         result.state_machine = result.artboard_mut().default_state_machine();
         if result.view_model_instance.is_none() {
-            result.view_model_instance =
-                unsafe { &mut *file }.create_view_model_instance(result.artboard());
+            let artboard = result.artboard();
+            result.view_model_instance = result
+                .file
+                .with_file_mut(|file| file.create_view_model_instance(artboard))
+                .flatten();
         }
         if let (Some(machine), Some(view_model)) = (
             result.state_machine.as_mut(),
             result.view_model_instance.as_ref(),
         ) {
             if let Some(parent) = parent_data_context {
-                let mut context = DataContext::new(view_model.clone());
+                let mut context = DataContext::new(Some(view_model.clone()));
                 context.set_parent(Some(parent));
                 machine.bind_data_context(Rc::new(context));
             } else {
@@ -46,8 +44,8 @@ impl ScriptReffedArtboard {
         result
     }
 
-    pub fn file(&self) -> *mut File {
-        self.file
+    pub fn file(&self) -> RuntimeFileWeakHandle {
+        self.file.clone()
     }
 
     pub fn artboard(&self) -> &Artboard {
@@ -71,22 +69,20 @@ impl Drop for ScriptReffedArtboard {
     fn drop(&mut self) {
         if !self.scripting_context.is_null() {
             unsafe { &mut *self.scripting_context }
-                .untrack_view_model_instance(self.view_model_instance.as_deref());
+                .untrack_view_model_instance(self.view_model_instance.as_ref());
         }
         self.state_machine.take();
         self.artboard.take();
-        self.file = core::ptr::null_mut();
     }
 }
 
 impl ScriptedArtboard {
     pub fn new(
         state: &mut LuaState,
-        file: *mut File,
+        file: RuntimeFileWeakHandle,
         artboard: Box<ArtboardInstance>,
-        view_model: Option<Rc<ViewModelInstance>>,
+        view_model: Option<CoreHandle>,
         data_context: Option<Rc<DataContext>>,
-        #[cfg(feature = "rive_tools")] file_pin: Option<Rc<File>>,
     ) -> Self {
         let scripting_context = state.thread_data::<dyn ScriptingContext>();
         Self {
@@ -97,8 +93,6 @@ impl ScriptedArtboard {
                 view_model,
                 data_context.clone(),
                 scripting_context,
-                #[cfg(feature = "rive_tools")]
-                file_pin,
             ))),
             data_context,
             data_ref: 0,
@@ -119,11 +113,14 @@ impl ScriptedArtboard {
             return 1;
         }
         if let Some(view_model) = self.view_model_instance() {
-            state.new_rive(ScriptedViewModel::new(
-                state,
-                view_model.view_model_rc(),
-                view_model.clone(),
-            ));
+            let model = view_model
+                .with(|instance| {
+                    instance
+                        .as_view_model_instance()
+                        .and_then(ViewModelInstance::get_view_model)
+                })
+                .flatten();
+            state.new_rive(ScriptedViewModel::new(state, model, Some(view_model)));
         } else {
             state.push_nil();
         }
@@ -144,8 +141,6 @@ impl ScriptedArtboard {
             artboard,
             view_model,
             self.data_context.clone(),
-            #[cfg(feature = "rive_tools")]
-            self.script_reffed_artboard.file_pin(),
         ));
         1
     }
@@ -203,7 +198,7 @@ impl ScriptedAnimation {
 }
 
 impl ScriptedNode {
-    pub fn new(artboard: Rc<ScriptReffedArtboard>, component: *mut TransformComponent) -> Self {
+    pub fn new(artboard: Rc<ScriptReffedArtboard>, component: CoreHandle) -> Self {
         Self {
             artboard,
             component,
@@ -211,12 +206,12 @@ impl ScriptedNode {
         }
     }
 
-    pub fn shape_paint(&self) -> Option<&ShapePaint> {
-        if let Some(paint) = self.shape_paint.as_deref() {
-            Some(paint)
-        } else {
-            self.component.as_shape_paint()
-        }
+    pub fn shape_paint(&self) -> Option<CoreHandle> {
+        self.shape_paint.clone().or_else(|| {
+            self.component
+                .with(|component| component.as_shape_paint().map(|_| self.component.clone()))
+                .flatten()
+        })
     }
 }
 

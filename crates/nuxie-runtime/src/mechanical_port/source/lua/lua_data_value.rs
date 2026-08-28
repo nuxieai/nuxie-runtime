@@ -1,4 +1,3 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::{
     data_bind::data_values::{
         DataValue, DataValueBoolean, DataValueColor, DataValueNumber, DataValueString,
@@ -26,8 +25,8 @@ fn push_field(s: &mut LuaState, value: &ScriptedDataValue, atom: LuaAtoms) -> bo
 }
 fn index(s: &mut LuaState) -> i32 {
     let (name, atom) = s.to_string_atom(2);
-    let pointer = s.to_userdata::<ScriptedDataValue>(1);
-    if push_field(s, unsafe { &*pointer }, atom) {
+    let value = s.to_rive::<ScriptedDataValue>(1);
+    if push_field(s, value, atom) {
         1
     } else {
         s.error(format!(
@@ -42,7 +41,7 @@ fn newindex(s: &mut LuaState) -> i32 {
         return s.type_error(2, s.type_name(LuaType::String));
     }
     let tag = s.userdata_tag(1);
-    let value = unsafe { &mut *s.to_userdata::<ScriptedDataValue>(1) };
+    let value = s.to_rive_mut::<ScriptedDataValue>(1);
     match (atom, value.data_value.as_mut().unwrap()) {
         (LuaAtoms::Value, DataValue::Number(v)) => v.set_value(s.check_number(3) as f32),
         (LuaAtoms::Value, DataValue::String(v)) => v.set_value(s.check_string(3)),
@@ -75,7 +74,7 @@ fn color(s: &mut LuaState) -> i32 {
 }
 fn namecall(s: &mut LuaState) -> i32 {
     let (name, atom) = s.namecall_atom();
-    let v = unsafe { &*s.to_userdata::<ScriptedDataValue>(1) };
+    let v = s.to_rive::<ScriptedDataValue>(1);
     let result = match atom {
         LuaAtoms::IsNumber => v.is_number(),
         LuaAtoms::IsString => v.is_string(),

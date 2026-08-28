@@ -1,231 +1,178 @@
+use std::sync::{Arc, Mutex, MutexGuard};
+
 use crate::mechanical_port::source::audio::{
-    audio_sound::{AudioSound, AudioSoundRef},
-    audio_source::AudioSource,
+    audio_sound::AudioSoundRef, audio_source::AudioSource,
 };
-use std::{cell::RefCell, rc::Rc};
-pub type AudioEngineRef = Rc<RefCell<AudioEngine>>;
-pub const DEFAULT_NUM_CHANNELS: u32 = 2;
-pub const DEFAULT_SAMPLE_RATE: u32 = 48_000;
-thread_local! {
-    static RUNTIME_AUDIO_ENGINE: RefCell<Option<AudioEngineRef>> = const { RefCell::new(None) };
+
+pub type AudioEngineRef = Arc<AudioEngine>;
+pub const DEFAULT_NUM_CHANNELS: u32 = nuxie_audio::AudioEngine::DEFAULT_CHANNELS;
+pub const DEFAULT_SAMPLE_RATE: u32 = nuxie_audio::AudioEngine::DEFAULT_SAMPLE_RATE;
+
+static RUNTIME_AUDIO_ENGINE: Mutex<Option<AudioEngineRef>> = Mutex::new(None);
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
+
+#[derive(Debug, Clone)]
 pub struct AudioEngine {
-    channels: u32,
-    sample_rate: u32,
-    running: bool,
-    time_frames: u64,
-    playing: Vec<AudioSoundRef>,
-    completed: Vec<AudioSoundRef>,
-    #[cfg(feature = "rive_audio_tools")]
-    levels: Vec<f32>,
+    backend: nuxie_audio::AudioEngine,
 }
+
 impl AudioEngine {
     pub fn make(channels: u32, sample_rate: u32) -> Option<AudioEngineRef> {
-        if channels == 0 || sample_rate == 0 {
-            return None;
-        }
-        Some(Rc::new(RefCell::new(Self {
-            channels,
-            sample_rate,
-            running: false,
-            time_frames: 0,
-            playing: Vec::new(),
-            completed: Vec::new(),
-            #[cfg(feature = "rive_audio_tools")]
-            levels: vec![0.0; channels as usize],
-        })))
+        Some(Arc::new(Self {
+            backend: nuxie_audio::AudioEngine::new(channels, sample_rate).ok()?,
+        }))
     }
+
     pub fn channels(&self) -> u32 {
-        self.channels
+        self.backend.channels()
     }
+
     pub fn sample_rate(&self) -> u32 {
-        self.sample_rate
+        self.backend.sample_rate()
     }
+
     pub fn time_in_frames(&self) -> u64 {
-        self.time_frames
+        self.backend.time_in_frames()
     }
+
     pub fn time_in_seconds(&self) -> f32 {
-        self.time_frames as f32 / self.sample_rate as f32
+        self.backend.time_in_seconds()
     }
-    pub fn start(&mut self) {
-        self.running = true
+
+    pub fn start(&self) {
+        self.backend.start();
     }
-    pub fn stop(&mut self) {
-        self.running = false
+
+    pub fn stop(&self) {
+        self.backend.stop();
     }
-    pub fn stop_all(&mut self) {
-        for sound in self.playing.drain(..) {
-            sound.borrow_mut().stop(0);
-            self.completed.push(sound);
-        }
+
+    pub fn stop_all(&self) {
+        self.backend.stop_all_sounds();
     }
-    pub fn stop_artboard(&mut self, artboard: usize) {
-        let mut playing = Vec::with_capacity(self.playing.len());
-        for sound in self.playing.drain(..) {
-            if sound.borrow().artboard == Some(artboard) {
-                sound.borrow_mut().stop(0);
-                self.completed.push(sound);
-            } else {
-                playing.push(sound);
-            }
-        }
-        self.playing = playing;
+
+    pub fn stop_artboard(&self, artboard: usize) {
+        self.backend
+            .stop_artboard(nuxie_audio::AudioArtboardId(artboard as u64));
     }
+
     pub fn play(
         engine: &AudioEngineRef,
-        source: Rc<AudioSource>,
+        source: Arc<AudioSource>,
         start: u64,
         end: u64,
         sound_start: u64,
         artboard: Option<usize>,
     ) -> Option<AudioSoundRef> {
-        if end != 0 && start >= end {
-            return None;
-        }
-        Self::internal_play(engine, source, start, end, sound_start, artboard)
+        engine.backend.play(
+            source.backend()?,
+            start,
+            end,
+            sound_start,
+            artboard.map(|identity| nuxie_audio::AudioArtboardId(identity as u64)),
+        )
     }
-    fn internal_play(
-        engine: &AudioEngineRef,
-        source: Rc<AudioSource>,
-        start: u64,
-        end: u64,
-        sound_start: u64,
-        artboard: Option<usize>,
-    ) -> Option<AudioSoundRef> {
-        for sound in engine.borrow_mut().completed.drain(..) {
-            sound.borrow_mut().dispose();
-        }
-        let end = if end == 0 {
-            if source.sample_rate() == 0 {
-                u64::MAX
-            } else {
-                (source.duration() * source.sample_rate() as f32) as u64
-            }
-        } else {
-            end
-        };
-        let sound = AudioSound::new(engine, source, start, end, sound_start, artboard);
-        sound.borrow_mut().start_internal();
-        engine.borrow_mut().playing.insert(0, sound.clone());
-        Some(sound)
-    }
+
     pub fn play_seconds(
         engine: &AudioEngineRef,
-        source: Rc<AudioSource>,
+        source: Arc<AudioSource>,
         start: f32,
         end: u64,
         sound_start: u64,
         artboard: Option<usize>,
     ) -> Option<AudioSoundRef> {
-        if end != 0 && start >= end as f32 {
-            return None;
-        }
-        let frame = (start * engine.borrow().sample_rate() as f32) as u64;
-        Self::internal_play(engine, source, frame, end, sound_start, artboard)
+        engine.backend.play_seconds(
+            source.backend()?,
+            start,
+            end,
+            sound_start,
+            artboard.map(|identity| nuxie_audio::AudioArtboardId(identity as u64)),
+        )
     }
-    pub fn advance(&mut self, frames: u64) {
-        if !self.running {
-            return;
+
+    pub fn advance(&self, frames: u64) {
+        let sample_count = usize::try_from(frames)
+            .ok()
+            .and_then(|frames| frames.checked_mul(self.channels() as usize));
+        if let Some(sample_count) = sample_count {
+            self.backend.read_audio_frames(&mut vec![0.0; sample_count]);
         }
-        self.time_frames = self.time_frames.saturating_add(frames);
-        for s in &self.playing {
-            s.borrow_mut().advance(frames)
-        }
-        self.remove_disposed()
     }
-    pub(crate) fn remove_disposed(&mut self) {
-        let mut keep = Vec::new();
-        for s in self.playing.drain(..) {
-            if s.borrow().completed() {
-                self.completed.push(s)
-            } else {
-                keep.push(s)
-            }
-        }
-        self.playing = keep;
-    }
-    #[cfg(feature = "testing")]
+
+    #[cfg(any(test, feature = "tools"))]
     pub fn playing_sound_count(&self) -> usize {
-        self.playing.len()
+        self.backend.playing_sound_count()
     }
-    #[cfg(feature = "testing")]
+
+    #[cfg(any(test, feature = "tools"))]
     pub fn playing_sounds_head(&self) -> Option<AudioSoundRef> {
-        self.playing.first().cloned()
+        self.backend.playing_sounds_head()
     }
-    #[cfg(feature = "rive_audio_tools")]
-    pub fn measure_levels(&mut self, frames: &[f32], frame_count: u32) {
-        let mut samples = frames.iter().copied();
-        for _ in 0..frame_count {
-            for channel in 0..self.channels as usize {
-                let Some(sample) = samples.next() else {
-                    return;
-                };
-                self.levels[channel] = self.levels[channel].max(sample);
-            }
-        }
+
+    #[cfg(feature = "tools")]
+    pub fn measure_levels(&self, _frames: &[f32], _frame_count: u32) {}
+
+    #[cfg(feature = "tools")]
+    pub fn levels(&self, out: &mut [f32]) {
+        self.backend.levels(out);
     }
-    #[cfg(feature = "rive_audio_tools")]
-    pub fn levels(&mut self, out: &mut [f32]) {
-        for (o, v) in out.iter_mut().zip(&mut self.levels) {
-            *o = *v;
-            *v = 0.0;
-        }
+
+    #[cfg(feature = "tools")]
+    pub fn level(&self, channel: u32) -> f32 {
+        self.backend.level(channel)
     }
-    #[cfg(feature = "rive_audio_tools")]
-    pub fn level(&mut self, c: u32) -> f32 {
-        let Some(level) = self.levels.get_mut(c as usize) else {
-            return 0.0;
-        };
-        let value = *level;
-        *level = 0.0;
-        value
+
+    pub fn sum_audio_frames(&self, frames: &mut [f32], num_frames: u64) -> bool {
+        let expected = usize::try_from(num_frames)
+            .ok()
+            .and_then(|count| count.checked_mul(self.channels() as usize));
+        expected == Some(frames.len()) && self.backend.sum_audio_frames(frames) == num_frames
     }
-    #[cfg(feature = "external_rive_audio_engine")]
-    pub fn sum_audio_frames(&mut self, frames: &mut [f32], num_frames: u64) -> bool {
-        frames.fill(0.0);
-        self.advance(num_frames);
-        true
-    }
-    #[cfg(feature = "external_rive_audio_engine")]
+
     pub fn read_audio_frames(
-        &mut self,
+        &self,
         frames: &mut [f32],
         num_frames: u64,
         frames_read: Option<&mut u64>,
     ) -> bool {
-        let ok = self.sum_audio_frames(frames, num_frames);
-        if let Some(out) = frames_read {
-            *out = if ok { num_frames } else { 0 }
+        let expected = usize::try_from(num_frames)
+            .ok()
+            .and_then(|count| count.checked_mul(self.channels() as usize));
+        let read = if expected == Some(frames.len()) {
+            self.backend.read_audio_frames(frames)
+        } else {
+            0
+        };
+        if let Some(frames_read) = frames_read {
+            *frames_read = read;
         }
-        ok
+        read == num_frames
     }
+
     pub fn make_and_store(channels: u32, sample_rate: u32) -> Option<AudioEngineRef> {
-        let engine = Self::make(channels, sample_rate)?;
-        RUNTIME_AUDIO_ENGINE.with(|runtime| {
-            #[cfg(feature = "rive_tools")]
-            if let Some(previous) = runtime.borrow().as_ref() {
-                previous.borrow_mut().stop_all();
-            }
-            *runtime.borrow_mut() = Some(engine.clone());
-        });
+        let backend = nuxie_audio::AudioEngine::make_and_store(channels, sample_rate).ok()?;
+        let engine = Arc::new(Self { backend });
+        if let Some(previous) = lock(&RUNTIME_AUDIO_ENGINE).replace(engine.clone()) {
+            #[cfg(feature = "tools")]
+            previous.stop_all();
+            #[cfg(not(feature = "tools"))]
+            let _ = previous;
+        }
         Some(engine)
     }
+
     pub fn runtime_engine(make_when_necessary: bool) -> Option<AudioEngineRef> {
-        RUNTIME_AUDIO_ENGINE.with(|runtime| {
-            if make_when_necessary && runtime.borrow().is_none() {
-                *runtime.borrow_mut() = Self::make(DEFAULT_NUM_CHANNELS, DEFAULT_SAMPLE_RATE);
-            }
-            runtime.borrow().clone()
-        })
-    }
-}
-impl Drop for AudioEngine {
-    fn drop(&mut self) {
-        for sound in self.playing.drain(..) {
-            sound.borrow_mut().dispose();
+        let mut runtime = lock(&RUNTIME_AUDIO_ENGINE);
+        if runtime.is_none() && make_when_necessary {
+            *runtime = Some(Arc::new(Self {
+                backend: nuxie_audio::AudioEngine::runtime_engine(),
+            }));
         }
-        for sound in self.completed.drain(..) {
-            sound.borrow_mut().dispose();
-        }
+        runtime.clone()
     }
 }

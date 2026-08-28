@@ -1,9 +1,8 @@
-use std::{cell::Cell, ptr::NonNull};
+use std::cell::RefCell;
 
 use crate::mechanical_port::source::{
     assets::script_asset::{ScriptInput, ScriptInputBehavior},
     core_context::CoreContext,
-    custom_property::CustomProperty,
     data_bind::data_context::DataContext,
     data_bind_path_referencer::DataBindPathReferencer,
     generated::{
@@ -22,7 +21,7 @@ pub struct ScriptInputViewModelProperty {
     pub base: ScriptInputViewModelPropertyBase,
     script_input: ScriptInput,
     data_bind_path_referencer: DataBindPathReferencer,
-    view_model_instance_value: Cell<Option<NonNull<ViewModelInstanceValue>>>,
+    view_model_instance_value: RefCell<Option<crate::mechanical_port::source::core::CoreHandle>>,
 }
 
 impl Default for ScriptInputViewModelProperty {
@@ -31,16 +30,12 @@ impl Default for ScriptInputViewModelProperty {
             base: ScriptInputViewModelPropertyBase::default(),
             script_input: ScriptInput::default(),
             data_bind_path_referencer: DataBindPathReferencer::default(),
-            view_model_instance_value: Cell::new(None),
+            view_model_instance_value: RefCell::new(None),
         }
     }
 }
 
 impl ScriptInputViewModelProperty {
-    fn custom_property_mut(&mut self) -> &mut CustomProperty {
-        &mut self.base.base
-    }
-
     fn name(&self) -> &str {
         self.base.base.base.base.base.name()
     }
@@ -49,33 +44,39 @@ impl ScriptInputViewModelProperty {
         self.data_bind_path_referencer.decode_data_bind_path(value);
     }
 
-    pub fn copy_data_bind_path_ids(&mut self, object: &ScriptInputViewModelPropertyBase) {
-        let object = unsafe {
-            &*(object as *const ScriptInputViewModelPropertyBase
-                as *const ScriptInputViewModelProperty)
-        };
-        self.data_bind_path_referencer
-            .copy_data_bind_path(object.data_bind_path_referencer.data_bind_path());
+    pub fn clone_core(&self) -> Self {
+        let mut cloned = Self::default();
+        cloned
+            .data_bind_path_referencer
+            .copy_data_bind_path(&self.data_bind_path_referencer);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(&self.base, &mut cloned);
+        cloned.base = base;
+        cloned
     }
 
     pub fn init_scripted_value(&mut self) {
-        let Some(view_model_instance_value) = self.view_model_instance_value.get() else {
+        let Some(view_model_instance_value) = self.view_model_instance_value.borrow().clone()
+        else {
             return;
         };
         let name = self.name().to_owned();
-        if let Some(mut object) = self.script_input.scripted_object() {
-            unsafe { object.as_mut() }
-                .set_view_model_input(name, view_model_instance_value.as_ptr() as usize);
+        if let Some(object) = self.script_input.scripted_object() {
+            object.with_mut(|object| {
+                if let Some(object) = object.as_scripted_object_mut() {
+                    object.set_view_model_input(name, view_model_instance_value);
+                }
+            });
         }
     }
 
     pub fn validate_for_script_init(&self) -> bool {
-        self.view_model_instance_value.set(None);
+        *self.view_model_instance_value.borrow_mut() = None;
         true
     }
 
     pub fn validate_for_cold_script_init(&self) -> bool {
-        self.view_model_instance_value.set(None);
+        *self.view_model_instance_value.borrow_mut() = None;
         true
     }
 
@@ -83,41 +84,75 @@ impl ScriptInputViewModelProperty {
         let Some(object) = self.script_input.scripted_object() else {
             return false;
         };
-        let Some(data_context) = unsafe { object.as_ref() }.data_context() else {
-            return false;
-        };
-        let Some(data_bind_path) = self.data_bind_path_referencer.data_bind_path() else {
-            return false;
-        };
-        let Some(instance_value) = unsafe { (data_context as *mut DataContext).as_mut() }
-            .and_then(|context| context.get_view_model_property(data_bind_path))
+        let Some(data_context) = object
+            .with(|object| {
+                object
+                    .as_scripted_object()
+                    .and_then(|object| object.data_context())
+            })
+            .flatten()
         else {
             return false;
         };
-        instance_value.view_model_property().is_some()
+        let Some(data_bind_path) = self
+            .data_bind_path_referencer
+            .with_data_bind_path(|path| path.path().to_vec())
+        else {
+            return false;
+        };
+        let Some(instance_value) = data_context
+            .borrow()
+            .get_view_model_property(&data_bind_path)
+        else {
+            return false;
+        };
+        instance_value
+            .with(|value| {
+                value
+                    .as_view_model_instance_value()
+                    .is_some_and(|value| value.view_model_property().is_some())
+            })
+            .unwrap_or(false)
     }
 
     pub fn hydrate_script_input(&mut self) -> bool {
-        self.view_model_instance_value.set(None);
+        *self.view_model_instance_value.borrow_mut() = None;
         let Some(object) = self.script_input.scripted_object() else {
             return false;
         };
-        let Some(data_context) = unsafe { object.as_ref() }.data_context() else {
-            return false;
-        };
-        let Some(data_bind_path) = self.data_bind_path_referencer.data_bind_path() else {
-            return false;
-        };
-        let Some(instance_value) = unsafe { (data_context as *mut DataContext).as_mut() }
-            .and_then(|context| context.get_view_model_property(data_bind_path))
+        let Some(data_context) = object
+            .with(|object| {
+                object
+                    .as_scripted_object()
+                    .and_then(|object| object.data_context())
+            })
+            .flatten()
         else {
             return false;
         };
-        if instance_value.view_model_property().is_none() {
+        let Some(data_bind_path) = self
+            .data_bind_path_referencer
+            .with_data_bind_path(|path| path.path().to_vec())
+        else {
+            return false;
+        };
+        let Some(instance_value) = data_context
+            .borrow()
+            .get_view_model_property(&data_bind_path)
+        else {
+            return false;
+        };
+        if !instance_value
+            .with(|value| {
+                value
+                    .as_view_model_instance_value()
+                    .is_some_and(|value| value.view_model_property().is_some())
+            })
+            .unwrap_or(false)
+        {
             return false;
         }
-        self.view_model_instance_value
-            .set(Some(NonNull::from(instance_value.as_ref())));
+        *self.view_model_instance_value.borrow_mut() = Some(instance_value);
         self.init_scripted_value();
         true
     }
@@ -130,16 +165,16 @@ impl ScriptInputViewModelProperty {
         else {
             return StatusCode::MissingObject;
         };
-        importer.add_input(
-            NonNull::from(self.custom_property_mut()),
-            ScriptInputViewModelPropertyBase::TYPE_KEY.into(),
-        );
+        let Some(this) = self.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        importer.add_input(this, ScriptInputViewModelPropertyBase::TYPE_KEY.into());
 
-        if self
-            .script_input
-            .scripted_object()
-            .is_some_and(|object| unsafe { object.as_ref() }.component().is_some())
-        {
+        if self.script_input.scripted_object().is_some_and(|object| {
+            object
+                .with(|object| object.as_component().is_some())
+                .unwrap_or(false)
+        }) {
             return self.base.base.base.base.import(import_stack);
         }
         StatusCode::Ok
@@ -151,16 +186,8 @@ impl ScriptInputViewModelProperty {
             return code;
         }
 
-        let property = self.custom_property_mut() as *mut CustomProperty;
-        if let Some(parent) = self
-            .base
-            .base
-            .base
-            .base
-            .parent_mut()
-            .and_then(|parent| parent.as_scripted_object_mut())
-        {
-            parent.add_property(property);
+        if let (Some(this), Some(parent)) = (self.base.handle(), self.base.parent_handle()) {
+            parent.with_mut(|parent| parent.scripted_object_add_property(this));
         }
         StatusCode::Ok
     }
@@ -201,10 +228,6 @@ impl ScriptInputViewModelPropertyBaseCallbacks for ScriptInputViewModelProperty 
         ScriptInputViewModelProperty::decode_data_bind_path_ids(self, value);
     }
 
-    fn copy_data_bind_path_ids(&mut self, object: &ScriptInputViewModelPropertyBase) {
-        ScriptInputViewModelProperty::copy_data_bind_path_ids(self, object);
-    }
-
     fn notify_property_changed(&mut self, property_key: u16) {
         self.base
             .base
@@ -218,9 +241,24 @@ impl ScriptInputViewModelPropertyBaseCallbacks for ScriptInputViewModelProperty 
 
 impl Drop for ScriptInputViewModelProperty {
     fn drop(&mut self) {
-        let property = self.custom_property_mut() as *mut CustomProperty;
-        if let Some(mut object) = self.script_input.scripted_object() {
-            unsafe { object.as_mut() }.remove_property(property);
+        if let (Some(this), Some(object)) =
+            (self.base.handle(), self.script_input.scripted_object())
+        {
+            object.with_mut(|object| object.scripted_object_remove_property(&this));
         }
+    }
+}
+
+impl std::ops::Deref for ScriptInputViewModelProperty {
+    type Target = ScriptInputViewModelPropertyBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptInputViewModelProperty {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

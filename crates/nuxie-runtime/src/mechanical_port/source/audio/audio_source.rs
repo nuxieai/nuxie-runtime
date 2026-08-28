@@ -1,110 +1,113 @@
-use crate::mechanical_port::source::audio::{audio_format::AudioFormat, audio_reader::AudioReader};
-use std::rc::Rc;
-#[derive(Clone)]
-pub enum AudioBacking {
-    Encoded(Rc<[u8]>),
-    Borrowed(*const u8, usize),
-    Buffered(Rc<[f32]>),
-}
-#[derive(Clone)]
+use std::sync::Arc;
+
+use crate::mechanical_port::source::{
+    audio::{audio_format::AudioFormat, audio_reader::AudioReader},
+    simple_array::SimpleArray,
+};
+
+pub type AudioSourceRef = Arc<AudioSource>;
+
+#[derive(Debug)]
 pub struct AudioSource {
-    backing: AudioBacking,
-    channels: u32,
-    sample_rate: u32,
-    duration: f32,
+    backend: Option<Arc<nuxie_audio::AudioSource>>,
+    encoded_bytes: Arc<[u8]>,
     format: AudioFormat,
 }
+
 impl AudioSource {
-    pub fn make_audio_source(bytes: Rc<[u8]>) -> Option<Rc<Self>> {
-        let format = detect_format(&bytes);
-        if format == AudioFormat::Unknown {
-            return None;
-        }
-        Some(Rc::new(Self {
-            backing: AudioBacking::Encoded(bytes),
-            channels: 0,
-            sample_rate: 0,
-            duration: -1.0,
-            format,
+    pub fn make_audio_source(bytes: SimpleArray<u8>) -> Option<AudioSourceRef> {
+        Self::from_encoded(bytes.as_slice())
+    }
+
+    pub fn from_encoded(bytes: &[u8]) -> Option<AudioSourceRef> {
+        let backend = Arc::new(nuxie_audio::AudioSource::from_encoded(bytes.to_vec()).ok()?);
+        Some(Arc::new(Self {
+            format: backend.format().into(),
+            encoded_bytes: Arc::from(bytes),
+            backend: Some(backend),
         }))
     }
+
+    /// Safe-Rust adaptation of the C++ span constructor: the stored source
+    /// owns a copy because its lifetime is independent of the import buffer.
     pub fn from_borrowed(bytes: &mut [u8]) -> Self {
-        let format = detect_format(bytes);
+        let encoded_bytes = Arc::<[u8]>::from(&*bytes);
+        let backend = nuxie_audio::AudioSource::from_encoded(bytes.to_vec())
+            .ok()
+            .map(Arc::new);
+        let format = backend
+            .as_ref()
+            .map(|source| source.format().into())
+            .unwrap_or_else(|| nuxie_audio::AudioFormat::recognize(bytes).into());
         Self {
-            backing: AudioBacking::Borrowed(bytes.as_ptr(), bytes.len()),
-            channels: 0,
-            sample_rate: 0,
-            duration: -1.0,
+            backend,
+            encoded_bytes,
             format,
         }
     }
-    pub fn buffered(samples: Rc<[f32]>, channels: u32, sample_rate: u32) -> Self {
+
+    pub fn buffered(samples: Arc<[f32]>, channels: u32, sample_rate: u32) -> Self {
         assert!(channels != 0);
         assert!(sample_rate != 0);
-        Self {
-            backing: AudioBacking::Buffered(samples),
+        let backend = nuxie_audio::AudioSource::from_buffered(
+            samples.as_ref().to_vec(),
             channels,
             sample_rate,
-            duration: -1.0,
+        )
+        .expect("non-zero buffered audio dimensions are valid");
+        Self {
+            backend: Some(Arc::new(backend)),
+            encoded_bytes: Arc::from([]),
             format: AudioFormat::Buffered,
         }
     }
+
     pub fn channels(&self) -> u32 {
-        self.channels
+        self.backend.as_ref().map_or(0, |source| source.channels())
     }
+
     pub fn sample_rate(&self) -> u32 {
-        self.sample_rate
+        self.backend
+            .as_ref()
+            .map_or(0, |source| source.sample_rate())
     }
+
     pub fn duration(&self) -> f32 {
-        if self.duration >= 0.0 {
-            return self.duration;
-        }
-        match &self.backing {
-            AudioBacking::Buffered(samples) => {
-                samples.len() as f32 / (self.channels * self.sample_rate) as f32
-            }
-            AudioBacking::Encoded(_) | AudioBacking::Borrowed(_, _) => {
-                if self.sample_rate == 0 {
-                    0.0
-                } else {
-                    0.0 / self.sample_rate as f32
-                }
-            }
-        }
+        self.backend
+            .as_ref()
+            .map_or(0.0, |source| source.duration())
     }
+
     pub fn format(&self) -> AudioFormat {
         self.format
     }
+
     pub fn is_buffered(&self) -> bool {
-        matches!(self.backing, AudioBacking::Buffered(_))
+        self.format == AudioFormat::Buffered
     }
+
     pub fn bytes(&self) -> &[u8] {
-        match &self.backing {
-            AudioBacking::Encoded(v) => v,
-            AudioBacking::Borrowed(p, n) => unsafe { core::slice::from_raw_parts(*p, *n) },
-            AudioBacking::Buffered(_) => &[],
-        }
+        &self.encoded_bytes
     }
+
     pub fn buffered_samples(&self) -> &[f32] {
-        match &self.backing {
-            AudioBacking::Buffered(v) => v,
-            _ => &[],
-        }
+        self.backend
+            .as_ref()
+            .and_then(|source| source.buffered_samples())
+            .unwrap_or_default()
     }
-    pub fn make_reader(self: &Rc<Self>, channels: u32, sample_rate: u32) -> AudioReader {
-        AudioReader::new(self.clone(), channels, sample_rate)
+
+    pub fn make_reader(&self, channels: u32, sample_rate: u32) -> AudioReader {
+        AudioReader::new(
+            self.backend
+                .as_ref()
+                .and_then(|source| source.make_reader(channels, sample_rate)),
+            channels,
+            sample_rate,
+        )
     }
-}
-fn detect_format(b: &[u8]) -> AudioFormat {
-    if b.starts_with(b"RIFF") && b.get(8..12) == Some(b"WAVE") {
-        AudioFormat::Wav
-    } else if b.starts_with(b"fLaC") {
-        AudioFormat::Flac
-    } else if b.starts_with(b"OggS") {
-        AudioFormat::Vorbis
-    } else if b.starts_with(b"ID3") || b.first() == Some(&0xff) {
-        AudioFormat::Mp3
-    } else {
-        AudioFormat::Unknown
+
+    pub(crate) fn backend(&self) -> Option<Arc<nuxie_audio::AudioSource>> {
+        self.backend.clone()
     }
 }

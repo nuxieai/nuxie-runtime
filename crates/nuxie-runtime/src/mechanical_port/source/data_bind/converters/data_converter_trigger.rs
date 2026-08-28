@@ -23,3 +23,5 @@ impl DataConverterTrigger {
         &self.output
     }
 }
+
+crate::impl_data_converter_capability_forward!(DataConverterTrigger, base.base);

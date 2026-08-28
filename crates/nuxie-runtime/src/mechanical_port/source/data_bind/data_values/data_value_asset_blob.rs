@@ -1,10 +1,12 @@
 use super::{data_type::DataType, data_value::DataValue, data_value_integer::DataValueInteger};
 use core::any::Any;
-use std::rc::Rc;
-pub trait BlobAsset: Any {}
+use std::sync::Arc;
+
+use crate::RuntimeBlobAsset;
+
 pub struct DataValueAssetBlob {
     integer: DataValueInteger,
-    file_asset: Option<Rc<dyn BlobAsset>>,
+    file_asset: Option<Arc<RuntimeBlobAsset>>,
 }
 impl Default for DataValueAssetBlob {
     fn default() -> Self {
@@ -26,13 +28,13 @@ impl DataValueAssetBlob {
     pub fn set_value(&mut self, value: u32) {
         self.integer.set_value(value)
     }
-    pub fn file_asset(&self) -> Option<Rc<dyn BlobAsset>> {
+    pub fn file_asset(&self) -> Option<Arc<RuntimeBlobAsset>> {
         self.file_asset.clone()
     }
-    pub fn set_blob_value(&mut self, blob: Option<Rc<dyn BlobAsset>>) {
+    pub fn set_blob_value(&mut self, blob: Option<Arc<RuntimeBlobAsset>>) {
         self.file_asset = blob
     }
-    pub fn blob_value(&self) -> Option<&dyn BlobAsset> {
+    pub fn blob_value(&self) -> Option<&RuntimeBlobAsset> {
         self.file_asset.as_deref()
     }
 }

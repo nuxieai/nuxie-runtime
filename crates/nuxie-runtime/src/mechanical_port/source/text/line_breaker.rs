@@ -89,6 +89,7 @@ impl GlyphLine {
                 TextAlign::Right => line.start_x = width - line_width,
                 TextAlign::Left => line.start_x = 0.0,
                 TextAlign::Center => line.start_x = width / 2.0 - line_width / 2.0,
+                TextAlign::Unknown(_) => {}
             }
             let _ = line_height;
         }

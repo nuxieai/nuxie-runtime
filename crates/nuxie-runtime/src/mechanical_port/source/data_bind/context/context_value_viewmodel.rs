@@ -23,17 +23,17 @@ impl DataBindContextValueViewModel {
         let value = calculated
             .as_any()
             .downcast_ref::<DataValueViewModel>()
-            .map_or(DataValueViewModel::DEFAULT_VALUE, DataValueViewModel::value);
+            .and_then(DataValueViewModel::value);
         if binding.has_target() {
-            binding.update_view_model(value);
+            binding.update_view_model(value.clone());
             if binding.target_is_bindable_view_model() {
-                binding.set_bindable_view_model(value);
+                binding.set_bindable_view_model(value.clone());
                 let key = binding.bindable_view_model_property_key();
-                let pointer_key = if value.is_null() {
-                    BindablePropertyViewModel::DEFAULT_VALUE
-                } else {
-                    binding.pointer_key(value)
-                };
+                let pointer_key = value
+                    .as_ref()
+                    .map_or(BindablePropertyViewModel::DEFAULT_VALUE, |value| {
+                        binding.pointer_key(value)
+                    });
                 binding.set_uint(key, pointer_key);
             }
         }

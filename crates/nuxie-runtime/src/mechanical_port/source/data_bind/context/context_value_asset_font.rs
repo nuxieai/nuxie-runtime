@@ -11,7 +11,10 @@ impl DataBindContextValueAssetFont {
             base: DataBindContextValue::new(binding),
         }
     }
-    pub fn file_asset(&self, binding: &dyn ContextApplyBinding) -> *mut () {
+    pub fn file_asset(
+        &self,
+        binding: &dyn ContextApplyBinding,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
         binding.resolved_font_asset()
     }
     pub fn apply(
@@ -23,11 +26,12 @@ impl DataBindContextValueAssetFont {
         match binding.target_kind() {
             TargetKind::TextStyle => {
                 let resolved = self.file_asset(binding);
-                if !resolved.is_null() {
+                if let Some(resolved) = resolved {
                     binding.set_target_font_asset(resolved)
-                } else if !binding.source_font_asset().is_null() && !binding.source_font().is_null()
+                } else if binding.source_font().is_some()
+                    && let Some(source) = binding.source_font_asset()
                 {
-                    binding.set_target_font_asset(binding.source_font_asset())
+                    binding.set_target_font_asset(source)
                 }
             }
             TargetKind::BindableAsset => {

@@ -3,17 +3,16 @@ use crate::mechanical_port::source::{
     color::ColorInt,
     generated::text::text_style_paint_base::TextStylePaintBase,
     math::{mat2d::Mat2D, raw_path::RawPath},
-    refcnt::RiveRc,
-    renderer::{RenderPaint, Renderer},
     shapes::{shape_paint_container::ShapePaintContainer, shape_paint_path::ShapePaintPath},
 };
+use nuxie_render_api::{RenderPaint, Renderer};
 use std::collections::BTreeMap;
 pub struct TextStylePaint {
     pub base: TextStylePaintBase,
     pub paints: ShapePaintContainer,
     opacity_paths:
         BTreeMap<crate::mechanical_port::source::math::ordered_float::OrderedF32, ShapePaintPath>,
-    paint_pool: Vec<RiveRc<RenderPaint>>,
+    paint_pool: Vec<Box<dyn RenderPaint>>,
     path: ShapePaintPath,
     has_contents: bool,
 }
@@ -48,7 +47,7 @@ impl TextStylePaint {
         }
         !had
     }
-    pub fn draw(&mut self, renderer: &mut Renderer, world: &Mat2D) {
+    pub fn draw(&mut self, renderer: &mut dyn Renderer, world: &Mat2D) {
         for paint in self.paints.shape_paints_mut() {
             if !paint.should_draw() {
                 continue;

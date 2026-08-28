@@ -1,4 +1,6 @@
 use crate::mechanical_port::source::{
+    core::CoreHandle,
+    generated::scripted::scripted_drawable_base::ScriptedDrawableBase,
     input::focusable::{Key, KeyModifiers},
     scripted::scripted_object::{ScriptProtocol, ScriptedObject},
 };
@@ -15,9 +17,10 @@ pub enum HitResult {
     HitOpaque,
 }
 pub struct ScriptedDrawable {
+    pub base: ScriptedDrawableBase,
     pub scripted: ScriptedObject,
-    pub properties: Vec<usize>,
-    pub children: Vec<usize>,
+    pub properties: Vec<CoreHandle>,
+    pub children: Vec<CoreHandle>,
     pub inverse_world: [f32; 6],
     pub hidden: bool,
     pub collapsed: bool,
@@ -26,9 +29,22 @@ pub struct ScriptedDrawable {
     needs_update: bool,
     paint_dirty: bool,
 }
+
+impl std::ops::Deref for ScriptedDrawable {
+    type Target = ScriptedDrawableBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ScriptedDrawable {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
 impl Default for ScriptedDrawable {
     fn default() -> Self {
         Self {
+            base: ScriptedDrawableBase::default(),
             scripted: ScriptedObject::default(),
             properties: Vec::new(),
             children: Vec::new(),
@@ -43,6 +59,10 @@ impl Default for ScriptedDrawable {
     }
 }
 impl ScriptedDrawable {
+    pub fn asset_id(&self) -> u32 {
+        self.base.script_asset_id()
+    }
+
     pub fn did_hydrate_script_inputs(&mut self) {
         self.is_advance_active = true;
         self.paint_dirty = true;
@@ -82,8 +102,11 @@ impl ScriptedDrawable {
     pub fn add_scripted_dirt(&mut self) {
         self.mark_needs_update()
     }
-    pub fn add_property(&mut self, p: usize) {
+    pub fn add_property(&mut self, p: CoreHandle) {
         self.properties.push(p)
+    }
+    pub fn remove_property(&mut self, property: &CoreHandle) {
+        self.properties.retain(|item| item != property)
     }
     pub fn mark_needs_update(&mut self) {
         if self.scripted.in_update_phase() {

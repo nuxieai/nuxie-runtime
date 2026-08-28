@@ -8,7 +8,7 @@ use super::{
 };
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
-    core::Core,
+    core::{Core, CoreHandle},
     dirtyable::Dirtyable,
     generated::text::text_base::TextBase,
     hit_info::HitInfo,
@@ -22,25 +22,23 @@ use crate::mechanical_port::source::{
         transform_components::TransformComponents,
         vec2d::Vec2D,
     },
-    refcnt::RiveRc,
-    renderer::{BlendMode, ImageSampler, RenderImage, RenderPaintStyle, Renderer},
+    renderer::{BlendMode, ImageSampler, RenderPaintStyle, Renderer},
     shapes::{
         paint::color::{ColorInt, color_modulate_opacity},
         shape_paint_path::ShapePaintPath,
     },
     text_engine::{
-        Font, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin, TextOverflow,
+        FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin, TextOverflow,
         TextRun, TextSizing, TextTrimBottom, TextTrimTop, TextWrap, VerticalTextAlign,
     },
     viewmodel::{
-        symbol_type::SymbolType, viewmodel_instance::ViewModelInstance,
-        viewmodel_instance_list_item::ViewModelInstanceListItem,
+        symbol_type::SymbolType,
         viewmodel_instance_string::ViewModelInstanceString,
-        viewmodel_instance_value::ViewModelInstanceValue,
+        viewmodel_instance_value::{ValueDependentHandle, ViewModelInstanceValue},
         viewmodel_value_dependent::ViewModelValueDependent,
     },
 };
-use std::ptr::NonNull;
+use std::{cell::RefCell, rc::Rc};
 #[derive(Default)]
 pub struct StyledText {
     value: Vec<u32>,
@@ -56,7 +54,7 @@ impl StyledText {
     }
     pub fn append(
         &mut self,
-        font: RiveRc<Font>,
+        font: FontRef,
         size: f32,
         line_height: f32,
         letter_spacing: f32,
@@ -69,7 +67,7 @@ impl StyledText {
             self.value.push(Utf::next_utf8(&mut bytes));
         }
         self.runs.push(TextRun {
-            font,
+            font: Some(font),
             size,
             line_height,
             letter_spacing,
@@ -105,27 +103,51 @@ pub enum LineIter {
     YOutOfBounds,
 }
 
-#[cfg(feature = "with_rive_text")]
+#[derive(Clone)]
+pub enum TextValueRunHandle {
+    Core(CoreHandle),
+    Runtime(Rc<RefCell<TextValueRun>>),
+}
+
+impl TextValueRunHandle {
+    fn with<R>(&self, use_run: impl FnOnce(&TextValueRun) -> R) -> Option<R> {
+        match self {
+            Self::Core(run) => run
+                .with(|run| run.as_text_value_run().map(use_run))
+                .flatten(),
+            Self::Runtime(run) => Some(use_run(&run.borrow())),
+        }
+    }
+
+    fn with_mut<R>(&self, use_run: impl FnOnce(&mut TextValueRun) -> R) -> Option<R> {
+        match self {
+            Self::Core(run) => run
+                .with_mut(|run| run.as_text_value_run_mut().map(use_run))
+                .flatten(),
+            Self::Runtime(run) => Some(use_run(&mut run.borrow_mut())),
+        }
+    }
+}
+
 pub struct TextValueRunProperty {
-    text_value_run: NonNull<TextValueRun>,
-    text_value_run_listener: NonNull<TextValueRunListener>,
-    instance_value: NonNull<ViewModelInstanceValue>,
+    text_value_run: TextValueRunHandle,
+    text: CoreHandle,
+    instance_value: CoreHandle,
     property_key: u16,
     symbol_type: SymbolType,
 }
 
-#[cfg(feature = "with_rive_text")]
 impl TextValueRunProperty {
     fn new(
-        text_value_run: NonNull<TextValueRun>,
-        text_value_run_listener: NonNull<TextValueRunListener>,
-        instance_value: NonNull<ViewModelInstanceValue>,
+        text_value_run: TextValueRunHandle,
+        text: CoreHandle,
+        instance_value: CoreHandle,
         property_key: u16,
         symbol_type: SymbolType,
     ) -> Self {
         Self {
             text_value_run,
-            text_value_run_listener,
+            text,
             instance_value,
             property_key,
             symbol_type,
@@ -135,31 +157,39 @@ impl TextValueRunProperty {
     fn write_value(&mut self) {
         // The symbol lookup above guarantees the same concrete string value
         // that the upstream as<ViewModelInstanceString>() cast requires.
-        let instance_value = unsafe {
-            self.instance_value
-                .cast::<ViewModelInstanceString>()
-                .as_ref()
+        let Some(value) = self
+            .instance_value
+            .with_downcast::<ViewModelInstanceString, _>(|value| {
+                value.base.property_value().to_owned()
+            })
+        else {
+            return;
         };
-        let value = instance_value.base.property_value().to_owned();
         match self.symbol_type {
             SymbolType::TextContent => {
-                unsafe { self.text_value_run.as_mut() }.set_bound_text(value);
+                self.text_value_run
+                    .with_mut(|run| run.set_bound_text(value));
             }
             SymbolType::TextStyle => {
-                let style_paints = unsafe {
-                    self.text_value_run_listener
-                        .as_ref()
-                        .text()
-                        .as_ref()
-                        .text_style_paints()
-                };
-                for (index, style_paint) in style_paints.iter().copied().enumerate() {
-                    let style_paint_ref = unsafe { style_paint.as_ref() };
-                    if style_paint_ref.base.base.base.base.base.base.base.name() == value {
-                        unsafe { self.text_value_run.as_mut() }.set_style(style_paint);
-                        break;
-                    } else if index == 0 {
-                        unsafe { self.text_value_run.as_mut() }.set_style(style_paint);
+                let style_paints = self
+                    .text
+                    .with(|text| text.as_text().map(|text| text.text_style_paints().to_vec()))
+                    .flatten()
+                    .unwrap_or_default();
+                for (index, style_paint) in style_paints.into_iter().enumerate() {
+                    let matches = style_paint
+                        .with(|style| {
+                            style
+                                .as_text_style()
+                                .is_some_and(|style| style.base.name() == value)
+                        })
+                        .unwrap_or(false);
+                    if matches || index == 0 {
+                        self.text_value_run
+                            .with_mut(|run| run.set_style(style_paint.clone()));
+                        if matches {
+                            break;
+                        }
                     }
                 }
             }
@@ -168,43 +198,32 @@ impl TextValueRunProperty {
     }
 }
 
-#[cfg(feature = "with_rive_text")]
 impl Dirtyable for TextValueRunProperty {
     fn add_dirt(&mut self, _value: ComponentDirt, _recurse: bool) {
         self.write_value();
-        unsafe { self.text_value_run_listener.as_mut() }.mark_dirty();
+        self.text.with_mut(|text| {
+            if let Some(text) = text.as_text_mut() {
+                text.mark_shape_dirty();
+            }
+        });
     }
 }
 
-#[cfg(feature = "with_rive_text")]
 impl ViewModelValueDependent for TextValueRunProperty {
     fn relink_data_bind(&mut self) {}
 }
 
-#[cfg(feature = "with_rive_text")]
-impl Drop for TextValueRunProperty {
-    fn drop(&mut self) {
-        let dependent: &mut dyn ViewModelValueDependent = self;
-        unsafe { self.instance_value.as_mut() }.remove_dependent(NonNull::from(dependent));
-    }
-}
-
-#[cfg(feature = "with_rive_text")]
 pub struct TextValueRunListener {
-    text_value_run: Box<TextValueRun>,
-    instance: RiveRc<ViewModelInstance>,
-    text: NonNull<Text>,
-    properties: Vec<Box<TextValueRunProperty>>,
+    text_value_run: Rc<RefCell<TextValueRun>>,
+    instance: CoreHandle,
+    text: CoreHandle,
+    properties: Vec<Rc<RefCell<dyn ViewModelValueDependent>>>,
 }
 
-#[cfg(feature = "with_rive_text")]
 impl TextValueRunListener {
-    fn new(
-        mut text_value_run: Box<TextValueRun>,
-        instance: RiveRc<ViewModelInstance>,
-        text: NonNull<Text>,
-    ) -> Box<Self> {
-        text_value_run.set_text_component(text);
+    fn new(text_value_run: TextValueRun, instance: CoreHandle, text: CoreHandle) -> Box<Self> {
+        let text_value_run = Rc::new(RefCell::new(text_value_run));
+        text_value_run.borrow_mut().set_text_component(text.clone());
         let mut listener = Box::new(Self {
             text_value_run,
             instance,
@@ -216,19 +235,19 @@ impl TextValueRunListener {
     }
 
     fn mark_dirty(&mut self) {
-        unsafe { self.text.as_mut() }.mark_shape_dirty();
+        self.text.with_mut(|text| {
+            if let Some(text) = text.as_text_mut() {
+                text.mark_shape_dirty();
+            }
+        });
     }
 
-    fn text(&self) -> NonNull<Text> {
-        self.text
+    fn text_value_run(&self) -> TextValueRunHandle {
+        TextValueRunHandle::Runtime(Rc::clone(&self.text_value_run))
     }
 
-    fn text_value_run(&mut self) -> NonNull<TextValueRun> {
-        NonNull::from(self.text_value_run.as_mut())
-    }
-
-    fn remap(&mut self, instance: RiveRc<ViewModelInstance>) {
-        if !RiveRc::ptr_eq(&self.instance, &instance) {
+    fn remap(&mut self, instance: CoreHandle) {
+        if self.instance != instance {
             self.properties.clear();
             self.instance = instance;
             self.create_properties();
@@ -244,7 +263,7 @@ impl TextValueRunListener {
     fn create_single_property_listener(
         &mut self,
         symbol_type: SymbolType,
-    ) -> Option<Box<TextValueRunProperty>> {
+    ) -> Option<TextValueRunProperty> {
         let property_key = match symbol_type {
             SymbolType::TextStyle => {
                 crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBase::STYLE_ID_PROPERTY_KEY
@@ -254,31 +273,44 @@ impl TextValueRunListener {
             }
             _ => 0,
         };
-        let instance_value = self.instance.property_value_for_symbol(symbol_type)?;
-        Some(Box::new(TextValueRunProperty::new(
-            NonNull::from(self.text_value_run.as_mut()),
-            NonNull::from(&mut *self),
+        let instance_value = self
+            .instance
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()?
+                    .property_value_for_symbol(symbol_type)
+            })
+            .flatten()?;
+        Some(TextValueRunProperty::new(
+            self.text_value_run(),
+            self.text.clone(),
             instance_value,
             property_key,
             symbol_type,
-        )))
+        ))
     }
 
     fn create_property_listener(&mut self, symbol_type: SymbolType) {
-        let Some(mut listener) = self.create_single_property_listener(symbol_type) else {
+        let Some(listener) = self.create_single_property_listener(symbol_type) else {
             return;
         };
-        listener.write_value();
-        let dependent: &mut dyn ViewModelValueDependent = listener.as_mut();
-        unsafe { listener.instance_value.as_mut() }.add_dependent(NonNull::from(dependent));
-        self.properties.push(listener);
+        let instance_value = listener.instance_value.clone();
+        let listener = Rc::new(RefCell::new(listener));
+        listener.borrow_mut().write_value();
+        let dependent: Rc<RefCell<dyn ViewModelValueDependent>> = listener;
+        instance_value.with_mut(|instance_value| {
+            if let Some(instance_value) = instance_value.as_view_model_instance_value_mut() {
+                instance_value.add_dependent(ValueDependentHandle::runtime(&dependent));
+            }
+        });
+        self.properties.push(dependent);
     }
 }
 
 enum TextDrawCommand {
-    Style(NonNull<TextStylePaint>),
+    Style(CoreHandle),
     ColorGlyph {
-        font: RiveRc<Font>,
+        font: FontRef,
         glyph_id: u16,
         transform: Mat2D,
         foreground_color: ColorInt,
@@ -343,9 +375,9 @@ pub struct Text {
     pub base: TextBase,
     pub internal_transform: Mat2D,
     pub shape_world_transform: Mat2D,
-    runs: Vec<NonNull<TextValueRun>>,
-    all_runs: Vec<NonNull<TextValueRun>>,
-    render_styles: Vec<NonNull<TextStylePaint>>,
+    runs: Vec<CoreHandle>,
+    all_runs: Vec<TextValueRunHandle>,
+    render_styles: Vec<CoreHandle>,
     shape: Vec<Paragraph>,
     modifier_shape: Vec<Paragraph>,
     lines: Vec<Vec<GlyphLine>>,
@@ -355,19 +387,18 @@ pub struct Text {
     clip_rect: RawPath,
     clip_path: ShapePaintPath,
     bounds: Aabb,
-    modifier_groups: Vec<NonNull<TextModifierGroup>>,
+    modifier_groups: Vec<CoreHandle>,
     styled_text: StyledText,
     modifier_styled_text: StyledText,
     glyph_lookup: GlyphLookup,
-    text_style_paints: Vec<NonNull<TextStylePaint>>,
+    text_style_paints: Vec<CoreHandle>,
     layout_width: f32,
     layout_height: f32,
     layout_width_scale_type: u8,
     layout_height_scale_type: u8,
     layout_direction: LayoutDirection,
-    emoji_image_cache: Vec<((usize, u16), RiveRc<RenderImage>)>,
+    emoji_image_cache: Vec<(FontRef, u16, Rc<dyn nuxie_render_api::RenderImage>)>,
     draw_commands: Vec<TextDrawCommand>,
-    #[cfg(feature = "with_rive_text")]
     value_run_listeners: Vec<Box<TextValueRunListener>>,
 }
 
@@ -401,7 +432,6 @@ impl Default for Text {
             layout_direction: LayoutDirection::Inherit,
             emoji_image_cache: Vec::new(),
             draw_commands: Vec::new(),
-            #[cfg(feature = "with_rive_text")]
             value_run_listeners: Vec::new(),
         }
     }
@@ -412,53 +442,41 @@ impl Text {
         self.mark_shape_dirty_layout(true);
     }
     pub fn mark_shape_dirty_layout(&mut self, send_to_layout: bool) {
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = send_to_layout;
-            return;
-        }
         self.base.add_dirt(ComponentDirt::PATH);
         for group in &mut self.modifier_groups {
-            unsafe { group.as_mut() }.clear_range_maps();
+            group.with_mut(|group| {
+                if let Some(group) = group.as_text_modifier_group_mut() {
+                    group.clear_range_maps();
+                }
+            });
         }
         self.base.mark_world_transform_dirty();
-        #[cfg(feature = "with_rive_layout")]
         if send_to_layout {
             self.base.mark_layout_dirty();
         }
     }
     pub fn mark_paint_dirty(&mut self) {
-        #[cfg(not(feature = "with_rive_text"))]
-        return;
         self.base.add_dirt(ComponentDirt::PAINT);
     }
     pub fn modifier_shape_dirty(&mut self) {
-        #[cfg(not(feature = "with_rive_text"))]
-        return;
         self.base.add_dirt(ComponentDirt::PATH);
     }
-    pub fn add_run(&mut self, run: &mut TextValueRun) {
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = run;
-            return;
-        }
-        self.runs.push(NonNull::from(run));
-        self.all_runs.push(NonNull::from(run));
+    pub fn add_run(&mut self, run: CoreHandle) {
+        self.runs.push(run.clone());
+        self.all_runs.push(TextValueRunHandle::Core(run));
     }
-    pub fn add_modifier_group(&mut self, group: &mut TextModifierGroup) {
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = group;
-            return;
-        }
-        self.modifier_groups.push(NonNull::from(group));
+    pub fn add_modifier_group(&mut self, group: CoreHandle) {
+        self.modifier_groups.push(group);
     }
     pub fn sizing(&self) -> TextSizing {
-        unsafe { std::mem::transmute(self.base.sizing_value() as u8) }
+        match self.base.sizing_value() {
+            1 => TextSizing::AutoHeight,
+            2 => TextSizing::Fixed,
+            value @ 3.. => TextSizing::Unknown(value),
+            0 => TextSizing::AutoWidth,
+        }
     }
     pub fn effective_sizing(&self) -> TextSizing {
-        #[cfg(feature = "with_rive_layout")]
         if self.is_participating_in_layout() {
             let width_is_box = self.layout_width_scale_type == LayoutScaleType::Fixed as u8
                 || self.layout_width_scale_type == LayoutScaleType::Fill as u8;
@@ -483,13 +501,25 @@ impl Text {
         }
     }
     pub fn overflow(&self) -> TextOverflow {
-        unsafe { std::mem::transmute(self.base.overflow_value() as u8) }
+        match self.base.overflow_value() {
+            1 => TextOverflow::Hidden,
+            2 => TextOverflow::Clipped,
+            3 => TextOverflow::Ellipsis,
+            4 => TextOverflow::Fit,
+            5 => TextOverflow::FitFontSize,
+            value @ 6.. => TextOverflow::Unknown(value),
+            0 => TextOverflow::Visible,
+        }
     }
     pub fn overflow_visible(&self) -> bool {
         self.overflow() == TextOverflow::Visible
     }
     pub fn text_origin(&self) -> TextOrigin {
-        unsafe { std::mem::transmute(self.base.origin_value() as u8) }
+        match self.base.origin_value() {
+            1 => TextOrigin::Baseline,
+            value @ 2.. => TextOrigin::Unknown(value),
+            0 => TextOrigin::Top,
+        }
     }
     pub fn vertical_trim_top(&self) -> TextTrimTop {
         crate::mechanical_port::source::text_engine::text_trim_top(self.base.vertical_trim_value())
@@ -500,13 +530,27 @@ impl Text {
         )
     }
     pub fn wrap(&self) -> TextWrap {
-        unsafe { std::mem::transmute(self.base.wrap_value() as u8) }
+        match self.base.wrap_value() {
+            1 => TextWrap::NoWrap,
+            value @ 2.. => TextWrap::Unknown(value),
+            0 => TextWrap::Wrap,
+        }
     }
     pub fn vertical_align(&self) -> VerticalTextAlign {
-        unsafe { std::mem::transmute(self.base.vertical_align_value() as u8) }
+        match self.base.vertical_align_value() {
+            1 => VerticalTextAlign::Bottom,
+            2 => VerticalTextAlign::Middle,
+            value @ 3.. => VerticalTextAlign::Unknown(value),
+            0 => VerticalTextAlign::Top,
+        }
     }
     pub fn align(&self) -> TextAlign {
-        let value = unsafe { std::mem::transmute(self.base.align_value() as u8) };
+        let value = match self.base.align_value() {
+            1 => TextAlign::Right,
+            2 => TextAlign::Center,
+            value @ 3.. => TextAlign::Unknown(value),
+            0 => TextAlign::Left,
+        };
         if self.layout_direction == LayoutDirection::Inherit || value == TextAlign::Center {
             return value;
         }
@@ -533,34 +577,22 @@ impl Text {
     pub fn overflow_as_fixed(&self) -> bool {
         self.effective_sizing() == TextSizing::Fixed || !self.layout_width.is_nan()
     }
-    pub fn add_style_paint(&mut self, paint: &mut TextStylePaint) {
-        self.text_style_paints.push(NonNull::from(paint));
+    pub fn add_style_paint(&mut self, paint: CoreHandle) {
+        self.text_style_paints.push(paint);
     }
-    pub fn style_from_shaper_id(&self, id: u16) -> Option<NonNull<TextStylePaint>> {
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = id;
-            return None;
-        }
-        self.runs
-            .get(id as usize)
-            .and_then(|run| unsafe { run.as_ref() }.style())
+    pub fn style_from_shaper_id(&self, id: u16) -> Option<CoreHandle> {
+        self.runs.get(id as usize).and_then(|run| {
+            run.with(|run| run.as_text_value_run().and_then(TextValueRun::style))
+                .flatten()
+        })
     }
-    pub fn runs(&self) -> &[NonNull<TextValueRun>] {
+    pub fn runs(&self) -> &[TextValueRunHandle] {
         &self.all_runs
     }
     pub fn have_modifiers(&self) -> bool {
-        #[cfg(feature = "with_rive_text")]
-        {
-            !self.modifier_groups.is_empty()
-        }
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            false
-        }
+        !self.modifier_groups.is_empty()
     }
-    #[cfg(feature = "with_rive_text")]
-    pub fn text_style_paints(&self) -> &[NonNull<TextStylePaint>] {
+    pub fn text_style_paints(&self) -> &[CoreHandle] {
         &self.text_style_paints
     }
     pub fn ordered_lines(&self) -> &[OrderedLine] {
@@ -573,31 +605,48 @@ impl Text {
         font_scale: f32,
     ) -> bool {
         styled.clear();
-        for (run_index, run) in self.all_runs.iter().copied().enumerate() {
-            let run = unsafe { run.as_ref() };
-            let Some(style) = run.style() else {
+        for (run_index, run) in self.all_runs.iter().enumerate() {
+            let Some((style, text)) = run.with(|run| (run.style(), run.base.text().to_owned()))
+            else {
                 continue;
             };
-            let style = unsafe { style.as_ptr().as_mut().unwrap() };
-            let Some(font) = style.base.base.font() else {
+            let Some(style) = style else {
                 continue;
             };
-            if run.base.text().is_empty() {
+            let Some((font, font_size, line_height, letter_spacing)) = style
+                .with_mut(|style| {
+                    let style = style.as_text_style_mut()?;
+                    Some((
+                        style.font()?,
+                        style.base.font_size(),
+                        style.base.line_height(),
+                        style.base.letter_spacing(),
+                    ))
+                })
+                .flatten()
+                .flatten()
+            else {
+                continue;
+            };
+            if text.is_empty() {
                 continue;
             }
             styled.append(
                 font,
-                style.base.base.base.font_size() * font_scale,
-                style.base.base.base.line_height(),
-                style.base.base.base.letter_spacing(),
-                run.base.text(),
+                font_size * font_scale,
+                line_height,
+                letter_spacing,
+                &text,
                 run_index as u16,
             );
         }
         if with_modifiers {
-            let this = self as *const Text;
-            for group in &mut self.modifier_groups {
-                unsafe { group.as_mut() }.apply_shape_modifiers(unsafe { &*this }, styled);
+            for group in self.modifier_groups.clone() {
+                group.with_mut(|group| {
+                    if let Some(group) = group.as_text_modifier_group_mut() {
+                        group.apply_shape_modifiers(self, styled);
+                    }
+                });
             }
         }
         !styled.empty()
@@ -640,18 +689,17 @@ impl Text {
         lines
     }
     pub fn modifier_ranges_need_shape(&self) -> bool {
-        #[cfg(not(feature = "with_rive_text"))]
-        return false;
-        self.modifier_groups
-            .iter()
-            .any(|g| unsafe { g.as_ref() }.needs_shape())
+        self.modifier_groups.iter().any(|group| {
+            group
+                .with(|group| {
+                    group
+                        .as_text_modifier_group()
+                        .is_some_and(TextModifierGroup::needs_shape)
+                })
+                .unwrap_or(false)
+        })
     }
     pub fn update(&mut self, value: ComponentDirt) {
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = value;
-            return;
-        }
         self.base.update(value);
         if value.intersects(ComponentDirt::PATH) {
             let precompute_modifier_coverage = self.modifier_ranges_need_shape();
@@ -686,15 +734,18 @@ impl Text {
                     self.glyph_lookup
                         .compute(styled.unichars(), &self.modifier_shape);
                     let text_size = styled.unichars().len() as u32;
-                    for group in &mut self.modifier_groups {
-                        let group = unsafe { group.as_mut() };
-                        group.compute_range_map(
-                            styled.unichars(),
-                            &self.modifier_shape,
-                            &self.modifier_lines,
-                            &self.glyph_lookup,
-                        );
-                        group.compute_coverage(text_size);
+                    for group in self.modifier_groups.clone() {
+                        group.with_mut(|group| {
+                            if let Some(group) = group.as_text_modifier_group_mut() {
+                                group.compute_range_map(
+                                    styled.unichars(),
+                                    &self.modifier_shape,
+                                    &self.modifier_lines,
+                                    &self.glyph_lookup,
+                                );
+                                group.compute_coverage(text_size);
+                            }
+                        });
                     }
                 }
                 self.modifier_styled_text = styled;
@@ -719,15 +770,18 @@ impl Text {
                 if !precompute_modifier_coverage && !self.modifier_groups.is_empty() {
                     self.glyph_lookup.compute(styled.unichars(), &self.shape);
                     let text_size = styled.unichars().len() as u32;
-                    for group in &mut self.modifier_groups {
-                        let group = unsafe { group.as_mut() };
-                        group.compute_range_map(
-                            styled.unichars(),
-                            &self.shape,
-                            &self.lines,
-                            &self.glyph_lookup,
-                        );
-                        group.compute_coverage(text_size);
+                    for group in self.modifier_groups.clone() {
+                        group.with_mut(|group| {
+                            if let Some(group) = group.as_text_modifier_group_mut() {
+                                group.compute_range_map(
+                                    styled.unichars(),
+                                    &self.shape,
+                                    &self.lines,
+                                    &self.glyph_lookup,
+                                );
+                                group.compute_coverage(text_size);
+                            }
+                        });
                     }
                 }
             } else {
@@ -744,9 +798,9 @@ impl Text {
             self.build_render_styles();
         } else if value.intersects(ComponentDirt::RENDER_OPACITY) {
             for style in &mut self.render_styles {
-                unsafe { style.as_mut() }
-                    .paints
-                    .propagate_opacity(self.base.render_opacity());
+                style.with_downcast_mut::<TextStylePaint, _>(|style| {
+                    style.paints.propagate_opacity(self.base.render_opacity());
+                });
             }
         }
 
@@ -804,12 +858,12 @@ impl Text {
 
     fn clear_render_styles(&mut self) {
         for style in &mut self.render_styles {
-            unsafe { style.as_mut() }.rewind_path();
+            style.with_downcast_mut::<TextStylePaint, _>(TextStylePaint::rewind_path);
         }
         self.render_styles.clear();
         self.draw_commands.clear();
         for run in &mut self.all_runs {
-            unsafe { run.as_mut() }.reset_hit_test();
+            run.with_mut(TextValueRun::reset_hit_test);
         }
     }
 
@@ -883,14 +937,27 @@ impl Text {
 
     fn fit_font_scale(&mut self) -> f32 {
         let mut max_size = 0.0f32;
-        for value_run in self.all_runs.iter().copied() {
-            let value_run = unsafe { value_run.as_ref() };
-            let Some(mut style) = value_run.style() else {
+        for value_run in &self.all_runs {
+            let Some((style, has_text)) =
+                value_run.with(|value_run| (value_run.style(), !value_run.base.text().is_empty()))
+            else {
                 continue;
             };
-            let style = unsafe { style.as_mut() };
-            if style.base.base.font().is_some() && !value_run.base.text().is_empty() {
-                max_size = max_size.max(style.base.base.base.font_size());
+            let Some(style) = style else {
+                continue;
+            };
+            let Some((has_font, font_size)) = style
+                .with_mut(|style| {
+                    style
+                        .as_text_style_mut()
+                        .map(|style| (style.font().is_some(), style.base.font_size()))
+                })
+                .flatten()
+            else {
+                continue;
+            };
+            if has_font && has_text {
+                max_size = max_size.max(font_size);
             }
         }
         let sizing = self.effective_sizing();
@@ -1001,10 +1068,13 @@ impl Text {
         let has_modifiers = !self.modifier_groups.is_empty();
         if has_modifiers {
             let text_size = self.styled_text.unichars().len() as u32;
-            for group in &mut self.modifier_groups {
-                let group = unsafe { group.as_mut() };
-                group.compute_coverage(text_size);
-                group.reset_text_follow_path();
+            for group in self.modifier_groups.clone() {
+                group.with_mut(|group| {
+                    if let Some(group) = group.as_text_modifier_group_mut() {
+                        group.compute_coverage(text_size);
+                        group.reset_text_follow_path();
+                    }
+                });
             }
         }
 
@@ -1035,6 +1105,7 @@ impl Text {
                 self.effective_width(),
                 info.min_y + self.effective_height(),
             ),
+            TextSizing::Unknown(_) => self.bounds,
         };
 
         let vertical_align_offset = match self.vertical_align() {
@@ -1104,19 +1175,22 @@ impl Text {
                     if has_modifiers {
                         let text_index = run.text_indices[index];
                         let glyph_count = self.glyph_lookup.count(text_index);
-                        for group in &mut self.modifier_groups {
-                            let group = unsafe { group.as_mut() };
-                            let coverage = group.glyph_coverage(text_index, glyph_count);
-                            let mut argument = TransformGlyphArg::new(
-                                current_position,
-                                center_x,
-                                line_index_in_paragraph,
-                                paragraph_lines,
-                            );
-                            group.transform(coverage, &mut path_transform, &mut argument);
-                            if group.modifies_opacity() {
-                                opacity = group.compute_opacity(opacity, coverage);
-                            }
+                        for group in self.modifier_groups.clone() {
+                            group.with_mut(|group| {
+                                if let Some(group) = group.as_text_modifier_group_mut() {
+                                    let coverage = group.glyph_coverage(text_index, glyph_count);
+                                    let mut argument = TransformGlyphArg::new(
+                                        current_position,
+                                        center_x,
+                                        line_index_in_paragraph,
+                                        paragraph_lines,
+                                    );
+                                    group.transform(coverage, &mut path_transform, &mut argument);
+                                    if group.modifies_opacity() {
+                                        opacity = group.compute_opacity(opacity, coverage);
+                                    }
+                                }
+                            });
                         }
                     }
                     path_transform = Mat2D::from_translate(
@@ -1124,35 +1198,47 @@ impl Text {
                         current_position.y + offset.y,
                     ) * path_transform;
 
-                    let mut value_run = self.all_runs[run.style_id as usize];
-                    let value_run_ref = unsafe { value_run.as_mut() };
-                    let mut style = value_run_ref.style().expect("TextValueRun style");
+                    let value_run = self.all_runs[run.style_id as usize].clone();
+                    let style = value_run
+                        .with(TextValueRun::style)
+                        .flatten()
+                        .expect("TextValueRun style");
                     if run.font.is_color_glyph(glyph_id) {
+                        let foreground_color = style
+                            .with_downcast::<TextStylePaint, _>(TextStylePaint::foreground_color)
+                            .unwrap_or(0xff000000);
                         self.draw_commands.push(TextDrawCommand::ColorGlyph {
                             font: run.font.clone(),
                             glyph_id,
                             transform: path_transform,
-                            foreground_color: unsafe { style.as_ref() }.foreground_color(),
+                            foreground_color,
                             opacity,
                         });
                     } else {
                         let path = run.font.get_path(glyph_id).transform(path_transform);
-                        if unsafe { style.as_mut() }.add_path(&path, opacity) {
-                            self.render_styles.push(style);
-                            unsafe { style.as_mut() }
-                                .paints
-                                .propagate_opacity(self.base.render_opacity());
+                        let first_path = style
+                            .with_downcast_mut::<TextStylePaint, _>(|style| {
+                                style.add_path(&path, opacity)
+                            })
+                            .unwrap_or(false);
+                        if first_path {
+                            self.render_styles.push(style.clone());
+                            style.with_downcast_mut::<TextStylePaint, _>(|style| {
+                                style.paints.propagate_opacity(self.base.render_opacity());
+                            });
                             self.draw_commands.push(TextDrawCommand::Style(style));
                         }
                     }
-                    if value_run_ref.is_hit_target() {
-                        value_run_ref.add_hit_rect(Aabb::new(
-                            current_x,
-                            current_y + line.top,
-                            current_x + advance,
-                            current_y + line.bottom,
-                        ));
-                    }
+                    value_run.with_mut(|value_run| {
+                        if value_run.is_hit_target() {
+                            value_run.add_hit_rect(Aabb::new(
+                                current_x,
+                                current_y + line.top,
+                                current_x + advance,
+                                current_y + line.bottom,
+                            ));
+                        }
+                    });
                     current_x += advance;
                 }
                 if line_index == info.ellipsis_line {
@@ -1215,21 +1301,16 @@ impl Text {
         }
         self.internal_transform =
             Mat2D::from_scale_and_translation(scale, scale, x_offset, y_offset);
-        #[cfg(feature = "with_rive_layout")]
         self.base.mark_layout_dirty();
         for run in &mut self.all_runs {
-            let run = unsafe { run.as_mut() };
-            if run.is_hit_target() {
-                run.compute_hit_contours();
-            }
+            run.with_mut(|run| {
+                if run.is_hit_target() {
+                    run.compute_hit_contours();
+                }
+            });
         }
     }
     pub fn draw(&mut self, renderer: &mut Renderer) {
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = renderer;
-            return;
-        }
         if self.base.needs_save_operation() {
             renderer.save();
         }
@@ -1242,8 +1323,10 @@ impl Text {
         let world_transform = self.shape_world_transform;
         for index in 0..self.draw_commands.len() {
             match &self.draw_commands[index] {
-                TextDrawCommand::Style(mut style) => {
-                    unsafe { style.as_mut() }.draw(renderer, &world_transform);
+                TextDrawCommand::Style(style) => {
+                    style.with_downcast_mut::<TextStylePaint, _>(|style| {
+                        style.draw(renderer, &world_transform)
+                    });
                 }
                 TextDrawCommand::ColorGlyph {
                     font,
@@ -1270,7 +1353,7 @@ impl Text {
     fn draw_color_glyph(
         &mut self,
         renderer: &mut Renderer,
-        font: RiveRc<Font>,
+        font: FontRef,
         glyph_id: u16,
         transform: Mat2D,
         foreground_color: ColorInt,
@@ -1288,16 +1371,17 @@ impl Text {
             if layer.paint_type
                 == crate::mechanical_port::source::text_engine::ColorGlyphPaintType::Image
             {
-                let key = (font.as_ptr() as *const () as usize, glyph_id);
-                let image = if let Some((_, image)) = self
-                    .emoji_image_cache
-                    .iter()
-                    .find(|(cached_key, _)| *cached_key == key)
-                {
+                let image = if let Some((_, _, image)) =
+                    self.emoji_image_cache
+                        .iter()
+                        .find(|(cached_font, cached_glyph, _)| {
+                            Rc::ptr_eq(cached_font, &font) && *cached_glyph == glyph_id
+                        }) {
                     image.clone()
                 } else {
                     let image = factory.decode_image(&layer.image_bytes);
-                    self.emoji_image_cache.push((key, image.clone()));
+                    self.emoji_image_cache
+                        .push((font.clone(), glyph_id, image.clone()));
                     image
                 };
                 renderer.save();
@@ -1330,8 +1414,6 @@ impl Text {
         renderer.restore();
     }
     pub fn local_bounds(&self) -> Aabb {
-        #[cfg(not(feature = "with_rive_text"))]
-        return Aabb::default();
         let width = self.bounds.width();
         let height = self.bounds.height();
         Aabb::from_ltwh(
@@ -1357,24 +1439,24 @@ impl Text {
         self.bounds.height()
     }
     pub fn on_dirty(&mut self, value: ComponentDirt) {
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = value;
-            return;
-        }
         if value.intersects(ComponentDirt::WORLD_TRANSFORM) {
             for group in &mut self.modifier_groups {
-                unsafe { group.as_mut() }.on_text_world_transform_dirty();
+                group.with_mut(|group| {
+                    if let Some(group) = group.as_text_modifier_group_mut() {
+                        group.on_text_world_transform_dirty();
+                    }
+                });
             }
         }
         if value.intersects(ComponentDirt::PATH | ComponentDirt::PAINT) {
             for style in &mut self.render_styles {
-                unsafe { style.as_mut() }.paints.invalidate_stroke_effects();
+                style.with_downcast_mut::<TextStylePaint, _>(|style| {
+                    style.paints.invalidate_stroke_effects()
+                });
             }
         }
     }
     pub fn compose_world_transform(&mut self) {
-        #[cfg(feature = "with_rive_layout")]
         if let (Some(participant), Some(parent)) = (
             self.layout_participant(),
             self.base.parent_transform_component(),
@@ -1406,11 +1488,6 @@ impl Text {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = (width, width_mode, height, height_mode);
-            return Vec2D::default();
-        }
         let max = Vec2D::new(
             if width_mode == LayoutMeasureMode::Undefined {
                 f32::MAX
@@ -1432,11 +1509,6 @@ impl Text {
         h: LayoutScaleType,
         d: LayoutDirection,
     ) {
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = (size, w, h, d);
-            return;
-        }
         if self.layout_width != size.x
             || self.layout_height != size.y
             || self.layout_width_scale_type != w as u8
@@ -1463,6 +1535,7 @@ impl Text {
         let measuring_width = match self.effective_sizing() {
             TextSizing::AutoHeight | TextSizing::Fixed => self.base.width(),
             TextSizing::AutoWidth => f32::MAX,
+            TextSizing::Unknown(_) => f32::MAX,
         };
         let measuring_wrap =
             if max.x == f32::MAX && self.effective_sizing() != TextSizing::AutoHeight {
@@ -1525,6 +1598,7 @@ impl Text {
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
             TextSizing::Fixed => Vec2D::new(self.base.width(), min_y + self.base.height()),
+            TextSizing::Unknown(_) => Vec2D::default(),
         };
         self.styled_text = styled;
         Vec2D::new(max.x.min(bounds.x), max.y.min(bounds.y))
@@ -1554,40 +1628,42 @@ impl Text {
         self.mark_paint_dirty();
     }
     pub fn origin_value_changed(&mut self) {
-        #[cfg(not(feature = "with_rive_text"))]
-        return;
         self.mark_paint_dirty();
         self.base.mark_world_transform_dirty();
     }
     pub fn origin_x_changed(&mut self) {
-        #[cfg(not(feature = "with_rive_text"))]
-        return;
         self.mark_paint_dirty();
         self.base.mark_world_transform_dirty();
     }
     pub fn origin_y_changed(&mut self) {
-        #[cfg(not(feature = "with_rive_text"))]
-        return;
         self.mark_paint_dirty();
         self.base.mark_world_transform_dirty();
     }
     pub fn vertical_trim_value_changed(&mut self) {
         self.mark_shape_dirty();
     }
-    pub fn update_list(&mut self, list: Option<&[RiveRc<ViewModelInstanceListItem>]>) {
+    pub fn update_list(&mut self, list: Option<&[CoreHandle]>) {
         let Some(list) = list else {
             return;
         };
-        #[cfg(feature = "with_rive_text")]
         {
             self.build_text_style_paints();
             self.all_runs.clear();
-            self.all_runs.extend(self.runs.iter().copied());
+            self.all_runs
+                .extend(self.runs.iter().cloned().map(TextValueRunHandle::Core));
             let current_size = self.value_run_listeners.len();
             let mut index = 0usize;
-            let text = NonNull::from(&mut *self);
+            let Some(text) = self.base.handle() else {
+                return;
+            };
             for item in list {
-                let Some(instance) = item.view_model_instance() else {
+                let Some(instance) = item
+                    .with(|item| {
+                        item.as_view_model_instance_list_item()?
+                            .view_model_instance()
+                    })
+                    .flatten()
+                else {
                     continue;
                 };
                 let text_run = if index < current_size {
@@ -1595,11 +1671,8 @@ impl Text {
                     listener.remap(instance);
                     listener.text_value_run()
                 } else {
-                    let listener = TextValueRunListener::new(
-                        Box::new(TextValueRun::default()),
-                        instance,
-                        text,
-                    );
+                    let listener =
+                        TextValueRunListener::new(TextValueRun::default(), instance, text.clone());
                     self.value_run_listeners.push(listener);
                     self.value_run_listeners[index].text_value_run()
                 };
@@ -1609,14 +1682,12 @@ impl Text {
             self.value_run_listeners.truncate(index);
             self.mark_shape_dirty();
         }
-        #[cfg(not(feature = "with_rive_text"))]
-        let _ = list;
     }
     pub fn build_text_style_paints(&mut self) {
         if self.text_style_paints.is_empty() {
             for child in self.base.children() {
-                if let Some(style) = child.as_text_style_paint() {
-                    self.text_style_paints.push(style);
+                if child.with_downcast::<TextStylePaint, _>(|_| ()).is_some() {
+                    self.text_style_paints.push(child.clone());
                 }
             }
         }

@@ -25,6 +25,9 @@ impl DataConverterToNumber {
             CString::new(value.value())
                 .ok()
                 .map_or(self.output.value(), |text| unsafe {
+                    // SAFETY: `CString` guarantees a live NUL-terminated byte
+                    // sequence for this same-call C `atof` invocation. The C
+                    // function does not retain the pointer.
                     atof(text.as_ptr()) as f32
                 })
         } else if let Some(value) = input.as_any().downcast_ref::<DataValueEnum>() {
@@ -44,3 +47,5 @@ impl DataConverterToNumber {
         &self.output
     }
 }
+
+crate::impl_data_converter_capability_forward!(DataConverterToNumber, base.base);

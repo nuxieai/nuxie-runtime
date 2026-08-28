@@ -8,13 +8,23 @@ pub struct TextStyleFeature {
 }
 
 impl TextStyleFeature {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code == StatusCode::Ok {
-            let Some(mut style) = self.base.parent_as_text_style() else {
+            let (Some(style), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
                 return StatusCode::InvalidObject;
             };
-            unsafe { style.as_mut() }.add_feature(self);
+            let added = style
+                .with_mut(|style| {
+                    style
+                        .as_text_style_mut()
+                        .map(|style| style.add_feature(this))
+                })
+                .flatten()
+                .is_some();
+            if !added {
+                return StatusCode::InvalidObject;
+            }
         }
         code
     }

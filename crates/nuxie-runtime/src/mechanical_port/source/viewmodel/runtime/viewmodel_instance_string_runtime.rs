@@ -1,27 +1,31 @@
-use super::viewmodel_instance_value_runtime::{
-    DataType, ViewModelInstanceValue, ViewModelInstanceValueRuntime,
-};
-use std::rc::Rc;
-pub trait StringValue: ViewModelInstanceValue {
-    fn property_value(&self) -> &str;
-    fn set_property_value(&self, value: String);
+use super::viewmodel_instance_value_runtime::{DataType, ViewModelInstanceValueRuntime};
+use crate::mechanical_port::source::viewmodel::viewmodel_instance_string::ViewModelInstanceString;
+
+#[derive(Clone)]
+pub struct ViewModelInstanceStringRuntime {
+    base: ViewModelInstanceValueRuntime,
 }
-pub struct ViewModelInstanceStringRuntime<T: StringValue> {
-    base: ViewModelInstanceValueRuntime<T>,
-}
-impl<T: StringValue> ViewModelInstanceStringRuntime<T> {
-    pub fn new(value: Rc<T>) -> Self {
-        Self {
-            base: ViewModelInstanceValueRuntime::new(value),
-        }
+
+impl ViewModelInstanceStringRuntime {
+    pub fn new(base: ViewModelInstanceValueRuntime) -> Option<Self> {
+        (base.data_type() == DataType::String).then_some(Self { base })
     }
-    pub fn value(&self) -> &str {
-        self.base.value().property_value()
+    pub fn value(&self) -> String {
+        self.base
+            .handle()
+            .with_downcast::<ViewModelInstanceString, _>(ViewModelInstanceString::value)
+            .unwrap_or_default()
     }
-    pub fn set_value(&self, value: String) {
-        self.base.value().set_property_value(value)
+    pub fn set_value(&self, value: impl Into<String>) {
+        let value = value.into();
+        self.base
+            .handle()
+            .with_downcast_mut::<ViewModelInstanceString, _>(|property| property.set_value(value));
     }
     pub fn data_type(&self) -> DataType {
         DataType::String
+    }
+    pub fn value_runtime(&self) -> &ViewModelInstanceValueRuntime {
+        &self.base
     }
 }

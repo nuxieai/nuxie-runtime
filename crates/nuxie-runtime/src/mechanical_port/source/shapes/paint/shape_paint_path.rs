@@ -1,20 +1,23 @@
 use crate::mechanical_port::source::{
-    component::Component,
-    factory::Factory,
+    factory::RuntimeFactoryHandle,
     math::{
         aabb::Aabb,
         mat2d::Mat2D,
         raw_path::{PathDirection, RawPath},
     },
-    refcnt::Rcp,
-    renderer::{FillRule, RenderPath},
 };
+use nuxie_render_api::{FillRule, RawPath as RenderRawPath, RenderPath};
 pub struct ShapePaintPath {
     render_path_dirty: bool,
-    render_path: Option<Rcp<RenderPath>>,
+    render_path: Option<Box<dyn RenderPath>>,
     raw_path: RawPath,
     is_local: bool,
     fill_rule: FillRule,
+}
+impl Default for ShapePaintPath {
+    fn default() -> Self {
+        Self::new(true)
+    }
 }
 impl ShapePaintPath {
     pub fn new(is_local: bool) -> Self {
@@ -97,22 +100,56 @@ impl ShapePaintPath {
     pub fn has_render_path(&self) -> bool {
         self.render_path.is_some() && !self.render_path_dirty
     }
-    pub fn render_path_for_component(&mut self, component: &Component) -> &mut RenderPath {
-        self.render_path_for_factory(component.artboard().factory_mut())
+    fn render_raw_path(&self) -> RenderRawPath {
+        let mut result = RenderRawPath::new();
+        let mut point_index = 0;
+        for verb in self.raw_path.verbs() {
+            match verb {
+                crate::mechanical_port::source::math::path_types::PathVerb::Move => {
+                    let point = self.raw_path.points()[point_index];
+                    point_index += 1;
+                    result.move_to(point.x, point.y);
+                }
+                crate::mechanical_port::source::math::path_types::PathVerb::Line => {
+                    let point = self.raw_path.points()[point_index];
+                    point_index += 1;
+                    result.line_to(point.x, point.y);
+                }
+                crate::mechanical_port::source::math::path_types::PathVerb::Quad => {
+                    let control = self.raw_path.points()[point_index];
+                    let point = self.raw_path.points()[point_index + 1];
+                    point_index += 2;
+                    result.quad_to(control.x, control.y, point.x, point.y);
+                }
+                crate::mechanical_port::source::math::path_types::PathVerb::Cubic => {
+                    let out = self.raw_path.points()[point_index];
+                    let incoming = self.raw_path.points()[point_index + 1];
+                    let point = self.raw_path.points()[point_index + 2];
+                    point_index += 3;
+                    result.cubic_to(out.x, out.y, incoming.x, incoming.y, point.x, point.y);
+                }
+                crate::mechanical_port::source::math::path_types::PathVerb::Close => {
+                    result.close();
+                }
+            }
+        }
+        result
     }
-    pub fn render_path_for_factory(&mut self, factory: &mut Factory) -> &mut RenderPath {
+
+    pub fn render_path(&mut self, factory: &RuntimeFactoryHandle) -> &mut dyn RenderPath {
+        let raw_path = self.render_raw_path();
         if self.render_path.is_none() {
-            let mut path = factory.make_empty_render_path();
-            path.add_raw_path(&self.raw_path);
-            path.set_fill_rule(self.fill_rule);
+            let mut path = factory.with_factory_mut(|factory| factory.make_empty_render_path());
+            path.add_raw_path(&raw_path);
+            path.fill_rule(self.fill_rule);
             self.render_path = Some(path);
             self.render_path_dirty = false;
         } else if self.render_path_dirty {
             let path = self.render_path.as_mut().unwrap();
             path.rewind();
-            path.add_raw_path(&self.raw_path);
+            path.add_raw_path(&raw_path);
             self.render_path_dirty = false;
         }
-        self.render_path.as_mut().unwrap()
+        self.render_path.as_deref_mut().unwrap()
     }
 }

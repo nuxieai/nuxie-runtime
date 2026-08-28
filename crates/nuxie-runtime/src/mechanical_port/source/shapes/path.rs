@@ -1,17 +1,71 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::mechanical_port::source::{
     component::{ComponentDirt, has_dirt},
-    core::{CoreContext, StatusCode},
+    core::{CoreContext, CoreHandle, StatusCode},
     math::{aabb::Aabb, mat2d::Mat2D, math_types::PI, raw_path::RawPath, vec2d::Vec2D},
     shapes::{
-        cubic_vertex::CubicVertex, deformer::RenderPathDeformer, path_flags::PathFlags,
-        path_vertex::PathVertex, shape::Shape, straight_vertex::StraightVertex,
+        cubic_detached_vertex::CubicDetachedVertex, cubic_vertex::CubicVertexBehavior,
+        path_flags::PathFlags, path_vertex::PathVertex, shape::Shape,
+        straight_vertex::StraightVertex, vertex::VertexBehavior,
     },
 };
 
+#[derive(Clone)]
+pub enum PathVertexOccurrence {
+    Authored(CoreHandle),
+    RuntimeStraight(Rc<RefCell<StraightVertex>>),
+    RuntimeCubicDetached(Rc<RefCell<CubicDetachedVertex>>),
+}
+
+impl PathVertexOccurrence {
+    pub fn authored_handle(&self) -> Option<CoreHandle> {
+        match self {
+            Self::Authored(handle) => Some(handle.clone()),
+            Self::RuntimeStraight(_) | Self::RuntimeCubicDetached(_) => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum RenderVertex {
+    Cubic {
+        translation: Vec2D,
+        in_point: Vec2D,
+        out_point: Vec2D,
+    },
+    Straight {
+        translation: Vec2D,
+        radius: f32,
+    },
+}
+
+impl RenderVertex {
+    fn translation(self) -> Vec2D {
+        match self {
+            Self::Cubic { translation, .. } | Self::Straight { translation, .. } => translation,
+        }
+    }
+
+    fn incoming(self) -> Vec2D {
+        match self {
+            Self::Cubic { in_point, .. } => in_point,
+            Self::Straight { translation, .. } => translation,
+        }
+    }
+
+    fn outgoing(self) -> Vec2D {
+        match self {
+            Self::Cubic { out_point, .. } => out_point,
+            Self::Straight { translation, .. } => translation,
+        }
+    }
+}
+
 pub struct Path {
     pub base: PathBase,
-    shape: Option<*mut Shape>,
-    vertices: Vec<PathVertex>,
+    shape: Option<CoreHandle>,
+    vertices: Vec<PathVertexOccurrence>,
     deferred_path_dirt: bool,
     path_flags: PathFlags,
     raw_path: RawPath,
@@ -38,19 +92,31 @@ impl Path {
         )
     }
 
-    pub fn on_added_clean(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
         }
-        let mut parent = self.base.parent_mut();
+        let Some(this) = self.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
-            if let Some(shape) = current.as_shape_mut() {
-                self.shape = Some(shape);
-                shape.add_path(self);
+            if current
+                .with(|current| current.as_shape().is_some())
+                .unwrap_or(false)
+            {
+                self.shape = Some(current.clone());
+                current.with_mut(|shape| {
+                    if let Some(shape) = shape.as_shape_mut() {
+                        shape.add_path(this);
+                    }
+                });
                 return StatusCode::Ok;
             }
-            parent = current.parent_mut();
+            parent = current
+                .with(|current| current.component_parent_handle())
+                .flatten();
         }
         StatusCode::MissingObject
     }
@@ -58,8 +124,22 @@ impl Path {
     pub fn build_dependencies(&mut self) {
         self.base.build_dependencies();
     }
-    pub fn add_vertex(&mut self, vertex: PathVertex) {
-        self.vertices.push(vertex);
+    pub fn add_vertex(&mut self, vertex: CoreHandle) {
+        self.vertices.push(PathVertexOccurrence::Authored(vertex));
+    }
+    pub fn add_runtime_straight_vertex(&mut self, vertex: Rc<RefCell<StraightVertex>>) {
+        self.vertices
+            .push(PathVertexOccurrence::RuntimeStraight(vertex));
+    }
+    pub fn add_runtime_cubic_vertex(&mut self, vertex: Rc<RefCell<CubicDetachedVertex>>) {
+        self.vertices
+            .push(PathVertexOccurrence::RuntimeCubicDetached(vertex));
+    }
+    pub fn clear_vertices(&mut self) {
+        self.vertices.clear();
+    }
+    pub fn vertices(&self) -> &[PathVertexOccurrence] {
+        &self.vertices
     }
     pub fn pop_vertex(&mut self) {
         self.vertices.pop();
@@ -71,11 +151,21 @@ impl Path {
         !(self.path_flags & flags).is_empty()
     }
     pub fn can_defer_path_update(&self) -> bool {
-        self.shape.map(|p| unsafe { &*p }).is_some_and(|shape| {
-            shape.can_defer_path_update()
-                && !shape.is_flagged(PathFlags::FOLLOW_PATH)
-                && !self.is_flagged(PathFlags::FOLLOW_PATH | PathFlags::CLIPPING)
-        })
+        self.shape
+            .as_ref()
+            .and_then(|shape| {
+                shape.with(|shape| {
+                    shape.as_shape().is_some_and(|shape| {
+                        shape.can_defer_path_update()
+                            && !shape.is_flagged(PathFlags::FOLLOW_PATH)
+                            && !self.is_flagged(PathFlags::FOLLOW_PATH | PathFlags::CLIPPING)
+                    })
+                })
+            })
+            .unwrap_or(false)
+    }
+    pub fn shape_handle(&self) -> Option<CoreHandle> {
+        self.shape.clone()
     }
     pub fn path_transform(&self) -> Mat2D {
         self.base.world_transform()
@@ -97,6 +187,46 @@ impl Path {
     }
     pub fn is_hidden(&self) -> bool {
         self.base.path_flags() & 1 == 1
+    }
+
+    fn render_vertex(vertex: &PathVertexOccurrence) -> Option<RenderVertex> {
+        match vertex {
+            PathVertexOccurrence::Authored(vertex) => vertex
+                .with_mut(|vertex| {
+                    if let Some(cubic) = vertex.as_cubic_vertex_behavior_mut() {
+                        return Some(RenderVertex::Cubic {
+                            translation: cubic.render_translation(),
+                            in_point: cubic.render_in(),
+                            out_point: cubic.render_out(),
+                        });
+                    }
+                    let radius = vertex
+                        .as_straight_vertex()
+                        .map_or(0.0, |point| point.radius());
+                    vertex
+                        .as_vertex_behavior()
+                        .map(|vertex| RenderVertex::Straight {
+                            translation: vertex.render_translation(),
+                            radius,
+                        })
+                })
+                .flatten(),
+            PathVertexOccurrence::RuntimeStraight(vertex) => {
+                let vertex = vertex.borrow();
+                Some(RenderVertex::Straight {
+                    translation: vertex.render_translation(),
+                    radius: vertex.radius(),
+                })
+            }
+            PathVertexOccurrence::RuntimeCubicDetached(vertex) => {
+                let mut vertex = vertex.borrow_mut();
+                Some(RenderVertex::Cubic {
+                    translation: vertex.render_translation(),
+                    in_point: vertex.render_in(),
+                    out_point: vertex.render_out(),
+                })
+            }
+        }
     }
 
     pub fn add_rounded_rect(raw_path: &mut RawPath, bounds: Aabb, radii: [f32; 4]) {
@@ -161,43 +291,52 @@ impl Path {
 
     pub fn build_path(&self, raw_path: &mut RawPath) {
         let closed = self.is_path_closed();
-        let length = self.vertices.len();
+        let Some(vertices) = self
+            .vertices
+            .iter()
+            .map(Self::render_vertex)
+            .collect::<Option<Vec<_>>>()
+        else {
+            return;
+        };
+        let length = vertices.len();
         if length < 2 {
             return;
         }
-        let first = &self.vertices[0];
+        let first = vertices[0];
         let mut out;
         let mut previous_cubic;
         let start;
         let start_in;
         let start_cubic;
-        if let Some(cubic) = first.as_cubic_vertex() {
+        if let RenderVertex::Cubic {
+            translation,
+            in_point,
+            out_point,
+        } = first
+        {
             start_cubic = true;
             previous_cubic = true;
-            start_in = cubic.render_in();
-            out = cubic.render_out();
-            start = cubic.render_translation();
+            start_in = in_point;
+            out = out_point;
+            start = translation;
             raw_path.move_to(start);
         } else {
             start_cubic = false;
             previous_cubic = false;
-            let point = first.as_straight_vertex().unwrap();
-            let radius = point.radius();
+            let RenderVertex::Straight {
+                translation: position,
+                radius,
+            } = first
+            else {
+                unreachable!()
+            };
             if radius != 0.0 {
-                let previous = &self.vertices[length - 1];
-                let position = point.render_translation();
-                let mut to_prev = previous
-                    .as_cubic_vertex()
-                    .map(CubicVertex::render_out)
-                    .unwrap_or_else(|| previous.render_translation())
-                    - position;
+                let previous = vertices[length - 1];
+                let mut to_prev = previous.outgoing() - position;
                 let previous_length = to_prev.normalize_length();
-                let next = &self.vertices[1];
-                let mut to_next = next
-                    .as_cubic_vertex()
-                    .map(CubicVertex::render_in)
-                    .unwrap_or_else(|| next.render_translation())
-                    - position;
+                let next = vertices[1];
+                let mut to_next = next.incoming() - position;
                 let next_length = to_next.normalize_length();
                 let render_radius =
                     (previous_length / 2.0).min((next_length / 2.0).min(radius.abs()));
@@ -214,38 +353,37 @@ impl Path {
                 }
                 raw_path.cubic_to(out_point, in_point, out);
             } else {
-                out = point.render_translation();
+                out = position;
                 start = out;
                 start_in = out;
                 raw_path.move_to(out);
             }
         }
         for index in 1..length {
-            let vertex = &self.vertices[index];
-            if let Some(cubic) = vertex.as_cubic_vertex() {
-                let incoming = cubic.render_in();
-                let translation = cubic.render_translation();
+            let vertex = vertices[index];
+            if let RenderVertex::Cubic {
+                translation,
+                in_point: incoming,
+                out_point,
+            } = vertex
+            {
                 raw_path.cubic_to(out, incoming, translation);
                 previous_cubic = true;
-                out = cubic.render_out();
+                out = out_point;
             } else {
-                let point = vertex.as_straight_vertex().unwrap();
-                let position = point.render_translation();
-                let radius = point.radius();
+                let RenderVertex::Straight {
+                    translation: position,
+                    radius,
+                } = vertex
+                else {
+                    unreachable!()
+                };
                 if radius != 0.0 {
-                    let previous = &self.vertices[index - 1];
-                    let mut to_prev = previous
-                        .as_cubic_vertex()
-                        .map(CubicVertex::render_out)
-                        .unwrap_or_else(|| previous.render_translation())
-                        - position;
+                    let previous = vertices[index - 1];
+                    let mut to_prev = previous.outgoing() - position;
                     let previous_length = to_prev.normalize_length();
-                    let next = &self.vertices[(index + 1) % length];
-                    let mut to_next = next
-                        .as_cubic_vertex()
-                        .map(CubicVertex::render_in)
-                        .unwrap_or_else(|| next.render_translation())
-                        - position;
+                    let next = vertices[(index + 1) % length];
+                    let mut to_next = next.incoming() - position;
                     let next_length = to_next.normalize_length();
                     let render_radius =
                         (previous_length / 2.0).min((next_length / 2.0).min(radius.abs()));
@@ -287,17 +425,30 @@ impl Path {
         }
         if let Some(deformer) = self.deformer() {
             let transform = self.path_transform();
-            deformer.deform_local_render_path(raw_path, transform, transform.invert_or_identity());
+            deformer.with(|deformer| {
+                deformer.render_path_deformer_deform_local(
+                    raw_path,
+                    transform,
+                    transform.invert_or_identity(),
+                )
+            });
         }
     }
 
-    fn deformer(&self) -> Option<&dyn RenderPathDeformer> {
-        self.shape.map(|p| unsafe { &*p }).and_then(Shape::deformer)
+    fn deformer(&self) -> Option<CoreHandle> {
+        self.shape
+            .as_ref()
+            .and_then(|shape| shape.with(|shape| shape.as_shape().and_then(Shape::deformer)))
+            .flatten()
     }
     pub fn mark_path_dirty(&mut self, _send_to_layout: bool) {
         self.base.add_dirt(ComponentDirt::PATH);
-        if let Some(shape) = self.shape {
-            unsafe { &mut *shape }.path_changed();
+        if let Some(shape) = self.shape.as_ref() {
+            shape.with_mut(|shape| {
+                if let Some(shape) = shape.as_shape_mut() {
+                    shape.path_changed();
+                }
+            });
         }
     }
     pub fn on_dirty(&mut self, value: ComponentDirt) {
@@ -305,8 +456,12 @@ impl Path {
             value,
             ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
         ) {
-            if let Some(shape) = self.shape {
-                unsafe { &mut *shape }.path_changed();
+            if let Some(shape) = self.shape.as_ref() {
+                shape.with_mut(|shape| {
+                    if let Some(shape) = shape.as_shape_mut() {
+                        shape.path_changed();
+                    }
+                });
             }
         }
         if self.deferred_path_dirt {
@@ -336,8 +491,12 @@ impl Path {
     pub fn collapse(&mut self, value: bool) -> bool {
         let changed = self.base.collapse(value);
         if changed {
-            if let Some(shape) = self.shape {
-                unsafe { &mut *shape }.path_collapse_changed();
+            if let Some(shape) = self.shape.as_ref() {
+                shape.with_mut(|shape| {
+                    if let Some(shape) = shape.as_shape_mut() {
+                        shape.path_collapse_changed();
+                    }
+                });
             }
         }
         changed
@@ -365,31 +524,36 @@ fn rotate_points(
     ) + next;
 }
 
-#[cfg(feature = "enable_query_flat_vertices")]
+#[cfg(feature = "tools")]
 pub struct FlattenedPath {
     vertices: Vec<PathVertex>,
 }
-#[cfg(feature = "enable_query_flat_vertices")]
+#[cfg(feature = "tools")]
 impl FlattenedPath {
     pub fn vertices(&self) -> &[PathVertex] {
         &self.vertices
     }
-    pub fn add_vertex(&mut self, vertex: &PathVertex, transform: Mat2D) {
-        if let Some(cubic) = vertex.as_cubic_vertex() {
-            self.vertices.push(PathVertex::display_cubic(
-                transform * cubic.render_in(),
-                transform * cubic.render_out(),
-                transform * cubic.render_translation(),
-            ));
-        } else {
-            let translation = transform * vertex.render_translation();
-            self.vertices
-                .push(PathVertex::new(translation.x, translation.y));
+    fn add_vertex(&mut self, vertex: RenderVertex, transform: Mat2D) {
+        match vertex {
+            RenderVertex::Cubic {
+                translation,
+                in_point,
+                out_point,
+            } => self.vertices.push(PathVertex::display_cubic(
+                transform * in_point,
+                transform * out_point,
+                transform * translation,
+            )),
+            RenderVertex::Straight { translation, .. } => {
+                let translation = transform * translation;
+                self.vertices
+                    .push(PathVertex::new(translation.x, translation.y));
+            }
         }
     }
 }
 
-#[cfg(feature = "enable_query_flat_vertices")]
+#[cfg(feature = "tools")]
 impl Path {
     pub fn make_flat(&self, transform_to_parent: bool) -> Option<FlattenedPath> {
         if self.vertices.is_empty() {
@@ -404,45 +568,50 @@ impl Path {
         let mut flat = FlattenedPath {
             vertices: Vec::new(),
         };
-        let length = self.vertices.len();
-        let mut previous = self
-            .is_path_closed()
-            .then(|| self.vertices[length - 1].clone());
-        for (index, vertex) in self.vertices.iter().enumerate() {
-            if let Some(point) = vertex.as_straight_vertex().filter(|point| {
-                point.radius() > 0.0
-                    && (self.is_path_closed() || (index != 0 && index != length - 1))
-            }) {
-                let next = &self.vertices[(index + 1) % length];
-                let previous_vertex = previous.as_ref().unwrap();
-                let previous_point = previous_vertex
-                    .as_cubic_vertex()
-                    .map(CubicVertex::render_out)
-                    .unwrap_or_else(|| previous_vertex.render_translation());
-                let next_point = next
-                    .as_cubic_vertex()
-                    .map(CubicVertex::render_in)
-                    .unwrap_or_else(|| next.render_translation());
-                let position = point.render_translation();
-                let mut to_prev = previous_point - position;
+        let vertices = self
+            .vertices
+            .iter()
+            .map(Self::render_vertex)
+            .collect::<Option<Vec<_>>>()?;
+        let length = vertices.len();
+        let mut previous = self.is_path_closed().then(|| vertices[length - 1]);
+        for (index, vertex) in vertices.iter().copied().enumerate() {
+            if let RenderVertex::Straight {
+                translation: position,
+                radius,
+            } = vertex
+                && radius > 0.0
+                && (self.is_path_closed() || (index != 0 && index != length - 1))
+            {
+                let next = vertices[(index + 1) % length];
+                let previous_vertex = previous.unwrap();
+                let mut to_prev = previous_vertex.outgoing() - position;
                 let previous_length = to_prev.normalize_length();
-                let mut to_next = next_point - position;
+                let mut to_next = next.incoming() - position;
                 let next_length = to_next.normalize_length();
-                let radius = (previous_length / 2.0).min((next_length / 2.0).min(point.radius()));
+                let radius = (previous_length / 2.0).min((next_length / 2.0).min(radius));
                 let ideal = Self::compute_ideal_control_point_distance(to_prev, to_next, radius);
                 let translation = Vec2D::scale_and_add(position, to_prev, radius);
                 let out = Vec2D::scale_and_add(position, to_prev, radius - ideal);
                 flat.add_vertex(
-                    &PathVertex::display_cubic(translation, out, translation),
+                    RenderVertex::Cubic {
+                        translation,
+                        in_point: translation,
+                        out_point: out,
+                    },
                     transform,
                 );
                 let translation = Vec2D::scale_and_add(position, to_next, radius);
                 let incoming = Vec2D::scale_and_add(position, to_next, radius - ideal);
-                let generated = PathVertex::display_cubic(incoming, translation, translation);
-                flat.add_vertex(&generated, transform);
+                let generated = RenderVertex::Cubic {
+                    translation,
+                    in_point: incoming,
+                    out_point: translation,
+                };
+                flat.add_vertex(generated, transform);
                 previous = Some(generated);
             } else {
-                previous = Some(vertex.clone());
+                previous = Some(vertex);
                 flat.add_vertex(vertex, transform);
             }
         }

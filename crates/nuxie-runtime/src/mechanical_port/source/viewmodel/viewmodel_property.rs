@@ -3,7 +3,6 @@ use crate::mechanical_port::source::{
     importers::{import_stack::ImportStack, viewmodel_importer::ViewModelImporter},
     status_code::StatusCode,
 };
-use std::ptr::NonNull;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,6 +18,18 @@ pub struct ViewModelProperty {
     pub base: ViewModelPropertyBase,
 }
 
+impl std::ops::Deref for ViewModelProperty {
+    type Target = ViewModelPropertyBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ViewModelProperty {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
 impl ViewModelProperty {
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let Some(importer) = import_stack.latest::<ViewModelImporter>(
@@ -26,7 +37,10 @@ impl ViewModelProperty {
         ) else {
             return StatusCode::MissingObject;
         };
-        importer.add_property(NonNull::from(&mut *self));
+        let Some(property) = self.base.base.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        importer.add_property(property);
         self.base.import(import_stack)
     }
     pub fn const_name(&self) -> &str {

@@ -11,7 +11,10 @@ impl DataBindContextValueAssetImage {
             base: DataBindContextValue::new(binding),
         }
     }
-    pub fn file_asset(&self, binding: &dyn ContextApplyBinding) -> *mut () {
+    pub fn file_asset(
+        &self,
+        binding: &dyn ContextApplyBinding,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
         binding.resolved_image_asset()
     }
     pub fn apply(
@@ -23,12 +26,14 @@ impl DataBindContextValueAssetImage {
         match binding.target_kind() {
             TargetKind::Image => {
                 let resolved = self.file_asset(binding);
-                let asset = if resolved.is_null() {
+                let asset = if resolved.is_none() {
                     binding.source_image_asset()
                 } else {
                     resolved
                 };
-                binding.set_target_image_asset(asset);
+                if let Some(asset) = asset {
+                    binding.set_target_image_asset(asset);
+                }
             }
             TargetKind::BindableAsset => {
                 binding.set_bindable_image(binding.source_image());

@@ -1,5 +1,6 @@
 use super::data_converter_operation::ArithmeticOperation;
 use crate::mechanical_port::source::{
+    core::CoreHandle,
     data_bind::data_values::{
         data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
         data_value_symbol_list_index::DataValueSymbolListIndex,
@@ -8,8 +9,9 @@ use crate::mechanical_port::source::{
         DataConverterFormulaBase, DataConverterFormulaBaseCallbacks,
     },
     math::random::RandomProvider,
+    viewmodel::viewmodel_instance_value::{ValueDependentHandle, ViewModelInstanceValue},
 };
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RandomMode {
@@ -55,8 +57,8 @@ pub struct FormulaToken {
     pub kind: FormulaTokenKind,
 }
 pub trait FormulaSource {
-    fn add_dependent(&self, dependent: *mut DataConverterFormula);
-    fn remove_dependent(&self, dependent: *mut DataConverterFormula);
+    fn add_dependent(&mut self, dependent: CoreHandle);
+    fn remove_dependent(&mut self, dependent: &CoreHandle);
 }
 pub trait FormulaDataBind {
     fn target_token_id(&self) -> Option<usize>;
@@ -65,13 +67,14 @@ pub trait FormulaDataBind {
 pub struct DataConverterFormula {
     pub base: DataConverterFormulaBase,
     tokens: Vec<Rc<FormulaToken>>,
+    core_tokens: Vec<CoreHandle>,
     output_queue: Vec<Rc<FormulaToken>>,
     randoms: Vec<f32>,
     argument_counts: HashMap<usize, i32>,
     is_instance: bool,
-    source: Option<*mut dyn FormulaSource>,
+    source: Option<CoreHandle>,
     output: DataValueNumber,
-    data_binds: Vec<Box<dyn FormulaDataBind>>,
+    data_binds: Vec<CoreHandle>,
 }
 
 impl Default for DataConverterFormula {
@@ -79,6 +82,7 @@ impl Default for DataConverterFormula {
         Self {
             base: DataConverterFormulaBase::default(),
             tokens: Vec::new(),
+            core_tokens: Vec::new(),
             output_queue: Vec::new(),
             randoms: Vec::new(),
             argument_counts: HashMap::new(),
@@ -322,21 +326,51 @@ impl DataConverterFormula {
             let count = self.argument_counts.get(&token.id).copied().unwrap_or(0);
             clone.add_output_token(cloned.clone(), count);
             for (index, bind) in self.data_binds.iter().enumerate() {
-                if bind.target_token_id() == Some(token.id) {
-                    if let Some(cloned_bind) = clone.data_binds.get_mut(index) {
-                        cloned_bind.set_target_token_id(cloned.id);
-                    }
+                let targets_token = bind
+                    .with(|bind| {
+                        bind.as_formula_data_bind()
+                            .and_then(FormulaDataBind::target_token_id)
+                    })
+                    .flatten()
+                    == Some(token.id);
+                if targets_token && let Some(cloned_bind) = clone.data_binds.get(index) {
+                    cloned_bind.with_mut(|bind| {
+                        if let Some(bind) = bind.as_formula_data_bind_mut() {
+                            bind.set_target_token_id(cloned.id);
+                        }
+                    });
                 }
             }
         }
         clone
     }
-    pub fn bind_from_context(&mut self, source: Option<*mut dyn FormulaSource>) {
-        self.source = source;
+    pub fn bind_from_context(
+        &mut self,
+        data_context: Rc<
+            RefCell<crate::mechanical_port::source::data_bind::data_context::DataContext>,
+        >,
+        data_bind: CoreHandle,
+    ) {
+        self.base
+            .base
+            .bind_from_context(data_context, data_bind.clone());
+        let source = data_bind
+            .with(|data_bind| {
+                data_bind
+                    .as_data_bind()
+                    .and_then(|data_bind| data_bind.source())
+            })
+            .flatten();
+        self.source = source.clone();
+        let Some(dependent) = self.base.base.base.base.handle() else {
+            return;
+        };
         if let Some(source) = source {
-            unsafe {
-                (&*source).add_dependent(self as *mut Self);
-            }
+            source.with_mut(|source| {
+                if let Some(source) = source.as_view_model_instance_value_mut() {
+                    source.add_dependent(ValueDependentHandle::core(dependent));
+                }
+            });
         }
     }
     pub fn add_dirt(&mut self, _value: u32, _recurse: bool) {
@@ -346,9 +380,14 @@ impl DataConverterFormula {
     }
     pub fn unbind(&mut self) {
         if let Some(source) = self.source.take() {
-            unsafe {
-                (&*source).remove_dependent(self as *mut Self);
-            }
+            let Some(dependent) = self.base.base.base.base.handle() else {
+                return;
+            };
+            source.with_mut(|source| {
+                if let Some(source) = source.as_view_model_instance_value_mut() {
+                    source.remove_dependent(&ValueDependentHandle::core(dependent));
+                }
+            });
         }
     }
     pub fn set_is_instance(&mut self, value: bool) {
@@ -369,5 +408,84 @@ impl Drop for DataConverterFormula {
         } else {
             self.output_queue.clear();
         }
+    }
+}
+
+impl FormulaSource for ViewModelInstanceValue {
+    fn add_dependent(&mut self, dependent: CoreHandle) {
+        ViewModelInstanceValue::add_dependent(self, ValueDependentHandle::core(dependent));
+    }
+
+    fn remove_dependent(&mut self, dependent: &CoreHandle) {
+        ViewModelInstanceValue::remove_dependent(
+            self,
+            &ValueDependentHandle::core(dependent.clone()),
+        );
+    }
+}
+
+impl crate::mechanical_port::source::data_bind::converters::formula::formula_token::DataConverterFormula
+    for DataConverterFormula
+{
+    fn add_token(&mut self, token: CoreHandle) {
+        self.core_tokens.push(token);
+    }
+
+    fn add_data_bind(&mut self, data_bind: CoreHandle) {
+        self.base.base.add_data_bind(data_bind);
+    }
+}
+
+impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability
+    for DataConverterFormula
+{
+    fn convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(Self::convert(self, input));
+    }
+
+    fn reverse_convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(Self::reverse_convert(self, input));
+    }
+
+    fn output_type(&self) -> DataType {
+        Self::output_type(self)
+    }
+
+    fn bind_from_context(
+        &mut self,
+        context: std::rc::Rc<
+            std::cell::RefCell<
+                crate::mechanical_port::source::data_bind::data_context::DataContext,
+            >,
+        >,
+        data_bind: CoreHandle,
+    ) {
+        Self::bind_from_context(self, context, data_bind);
+    }
+
+    fn unbind(&mut self) {
+        Self::unbind(self);
+    }
+
+    fn update(&mut self) {
+        self.base.base.update();
+    }
+
+    fn reset(&mut self) {
+        self.base.base.reset();
+    }
+
+    fn advance(&mut self, elapsed: f32) -> bool {
+        self.base.base.advance(elapsed)
     }
 }

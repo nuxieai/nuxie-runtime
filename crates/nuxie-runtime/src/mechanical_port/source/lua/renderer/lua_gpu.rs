@@ -1,9 +1,3 @@
-#![cfg(all(
-    feature = "rive_scripting",
-    feature = "rive_canvas",
-    feature = "rive_ore"
-))]
-
 use crate::mechanical_port::source::{
     assets::{script_asset::ScriptAsset, shader_asset::ShaderAsset},
     lua::rive_lua_libs::*,
@@ -432,7 +426,7 @@ fn build_shader_entries(
     !output.entries.is_empty()
 }
 
-#[cfg(feature = "rive_tools")]
+#[cfg(feature = "tools")]
 fn make_shader_from_rstb(
     context: &mut OreContext,
     data: &[u8],
@@ -454,44 +448,47 @@ pub fn lua_gpu_load_shader_by_name(
     output: &mut ScriptedShader,
     context: Option<&mut dyn ScriptingContext>,
     reference: &ScopedAssetReference,
-    file_asset: Option<&ShaderAsset>,
+    file_asset: Option<CoreHandle>,
 ) -> bool {
     let Some(context) = context else {
         return false;
     };
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     if let (Some(rstb), Some(ore)) = (context.find_shader_rstb(reference), context.ore_context()) {
         return make_shader_from_rstb(ore, rstb, output);
     }
     match (file_asset, context.ore_context()) {
-        (Some(asset), Some(ore)) => build_shader_entries(ore, asset, output),
+        (Some(asset), Some(ore)) => asset
+            .with_downcast::<ShaderAsset, _>(|asset| build_shader_entries(ore, asset, output))
+            .unwrap_or(false),
         _ => false,
     }
 }
 
-pub fn lua_gpu_find_shader_asset<'a>(
-    file: Option<&'a File>,
+pub fn lua_gpu_find_shader_asset(
+    file: Option<RuntimeFileWeakHandle>,
     reference: &ScopedAssetReference,
-) -> Option<&'a ShaderAsset> {
-    let mut found = None;
-    let mut best_rank = 0;
-    for shader in file
-        .into_iter()
-        .flat_map(File::assets)
-        .filter_map(|asset| asset.as_shader_asset())
-    {
-        let registered = if shader.folder_path().is_empty() {
-            shader.name().to_owned()
-        } else {
-            format!("{}/{}", shader.folder_path(), shader.name())
-        };
-        let rank = reference.match_name(&registered, shader.name());
-        if rank > best_rank {
-            best_rank = rank;
-            found = Some(shader);
-        }
-    }
-    found
+) -> Option<CoreHandle> {
+    file?.with_file(|file| {
+        file.assets()
+            .iter()
+            .filter_map(|asset| {
+                asset.with_downcast::<ShaderAsset, _>(|shader| {
+                    let registered = if shader.folder_path().is_empty() {
+                        shader.name().to_owned()
+                    } else {
+                        format!("{}/{}", shader.folder_path(), shader.name())
+                    };
+                    (
+                        reference.match_name(&registered, shader.name()),
+                        asset.clone(),
+                    )
+                })
+            })
+            .max_by_key(|(rank, _)| *rank)
+            .filter(|(rank, _)| *rank > 0)
+            .map(|(_, asset)| asset)
+    })
 }
 
 pub fn lua_gpu_push_shader_by_name(state: &mut LuaState, name: &str) -> i32 {
@@ -499,9 +496,12 @@ pub fn lua_gpu_push_shader_by_name(state: &mut LuaState, name: &str) -> i32 {
     let context = state.thread_data::<dyn ScriptingContext>();
     let file_asset = context
         .current_scripted_object()
-        .and_then(|object| object.script_asset())
-        .and_then(ScriptAsset::file)
-        .and_then(|file| lua_gpu_find_shader_asset(Some(file), &reference));
+        .and_then(|object| {
+            object
+                .with(|object| object.scripted_object_file())
+                .flatten()
+        })
+        .and_then(|file| lua_gpu_find_shader_asset(file, &reference));
     let mut scripted = ScriptedShader::default();
     if !lua_gpu_load_shader_by_name(&mut scripted, Some(context), &reference, file_asset) {
         return 0;
@@ -1691,15 +1691,12 @@ fn gpu_render_pass_finish(state: &mut LuaState) -> i32 {
     validate_render_pass(state, pass);
     pass.pass.as_mut().unwrap().finish();
     pass.finished = true;
-    let pointer = pass
-        .pass
-        .as_deref()
-        .map(|pass| pass as *const OreRenderPass);
-    if let Some(context) = ore_context(state) {
+    if let (Some(pass), Some(context)) = (pass.pass.as_deref(), ore_context(state)) {
+        // Same-call identity check between two live shared borrows. Neither
+        // reference nor an address derived from it is retained.
         if context
             .active_render_pass()
-            .map(|pass| pass as *const OreRenderPass)
-            == pointer
+            .is_some_and(|active| std::ptr::eq(active, pass))
         {
             context.set_active_render_pass(None);
         }
@@ -2314,7 +2311,6 @@ pub fn rive_image_view_impl(state: &mut LuaState) -> i32 {
     }
     if image.cached_ore_view.is_none() {
         let mut texture_to_wrap = source_texture.clone();
-        #[cfg(feature = "ore_backend_gl")]
         {
             image.cached_mirror_image = get_canvas_import_mirror_gl(
                 scripting_context.render_context(),

@@ -9,24 +9,40 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub struct ViewModelInstanceBoolean {
     pub base: ViewModelInstanceBooleanBase,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     changed_callback: Option<fn(&mut Self, bool)>,
 }
 
 impl ViewModelInstanceBoolean {
+    pub fn value(&self) -> bool {
+        self.base.property_value()
+    }
+
+    pub fn set_value(&mut self, value: bool) {
+        if self.base.set_property_value_value(value) {
+            self.property_value_changed();
+            self.base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .notify_property_changed(ViewModelInstanceBooleanBase::PROPERTY_VALUE_PROPERTY_KEY);
+        }
+    }
+
     pub fn property_value_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::BINDINGS);
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             callback(self, self.base.property_value());
         }
         self.base.on_value_changed();
     }
     pub fn apply_value(&mut self, value: &DataValueBoolean) {
-        let this = self as *mut Self;
-        unsafe { (*this).base.set_property_value(value.value(), &mut *this) };
+        self.set_value(value.value());
     }
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self, bool)>) {
         self.changed_callback = callback;
     }

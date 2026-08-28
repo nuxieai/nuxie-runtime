@@ -1,22 +1,25 @@
 pub use crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBase;
+
 use crate::mechanical_port::source::{
     component::{ComponentDirt, has_dirt},
-    generated::shapes::paint::stroke_base::StrokeBase,
-    renderer::{RenderPaint, RenderPaintStyle},
+    core::CoreHandle,
     shapes::{
         paint::{
-            shape_paint::{ShapePaintPath, ShapePaintType},
+            shape_paint::{ShapePaint, ShapePaintBehavior, ShapePaintPathKind, ShapePaintType},
             shape_paint_mutator::ShapePaintMutator,
             stroke_cap::StrokeCap,
             stroke_join::StrokeJoin,
         },
         path_flags::PathFlags,
-        shape_paint_container::ShapePaintContainer,
     },
 };
+use nuxie_render_api::{RenderPaint, RenderPaintStyle};
+
+#[derive(Default)]
 pub struct Stroke {
     pub base: StrokeBase,
 }
+
 impl Stroke {
     pub fn path_flags(&self) -> PathFlags {
         if self.base.transform_affects_stroke() {
@@ -25,62 +28,118 @@ impl Stroke {
             PathFlags::WORLD
         }
     }
-    pub fn init_render_paint(&mut self, mutator: &mut dyn ShapePaintMutator) -> &mut RenderPaint {
-        let paint = self.base.init_render_paint(mutator);
-        paint.set_style(RenderPaintStyle::Stroke);
-        paint.set_thickness(self.base.thickness());
-        paint.set_cap(StrokeCap::from(self.base.cap()));
-        paint.set_join(StrokeJoin::from(self.base.join()));
-        paint
+
+    pub fn init_render_paint(&mut self, mutator: CoreHandle) -> bool {
+        if !self.base.init_render_paint(mutator) {
+            return false;
+        }
+        let thickness = self.base.thickness();
+        let cap: nuxie_render_api::StrokeCap = StrokeCap::from(self.base.cap()).into();
+        let join: nuxie_render_api::StrokeJoin = StrokeJoin::from(self.base.join()).into();
+        self.base.with_render_paint_mut(|paint| {
+            paint.style(RenderPaintStyle::Stroke);
+            paint.thickness(thickness);
+            paint.cap(cap);
+            paint.join(join);
+        });
+        true
     }
-    pub fn apply_to(&mut self, paint: &mut RenderPaint, opacity: f32) {
-        paint.set_style(RenderPaintStyle::Stroke);
-        paint.set_thickness(self.base.thickness());
-        paint.set_cap(StrokeCap::from(self.base.cap()));
-        paint.set_join(StrokeJoin::from(self.base.join()));
-        paint.set_shader(None);
-        self.base.paint_mutator_mut().apply_to(paint, opacity);
+
+    pub fn apply_to(&mut self, paint: &mut dyn RenderPaint, opacity: f32) {
+        paint.style(RenderPaintStyle::Stroke);
+        paint.thickness(self.base.thickness());
+        paint.cap(StrokeCap::from(self.base.cap()).into());
+        paint.join(StrokeJoin::from(self.base.join()).into());
+        paint.shader(None);
+        if let Some(mutator) = self.base.paint() {
+            mutator.with_mut(|mutator| {
+                if let Some(mutator) = mutator.as_shape_paint_mutator_mut() {
+                    mutator.apply_to(paint, opacity);
+                }
+            });
+        }
     }
+
     pub fn is_visible(&self) -> bool {
-        self.base.super_is_visible() && self.base.thickness() > 0.0
+        self.base.base.base.is_visible() && self.base.thickness() > 0.0
     }
+
     pub fn thickness_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::PAINT);
     }
+
     pub fn cap_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::PAINT);
     }
+
     pub fn join_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::PAINT);
     }
+
     pub fn update(&mut self, value: ComponentDirt) {
         self.base.update(value);
         if has_dirt(value, ComponentDirt::PAINT) {
-            let paint = self.base.render_paint_mut().unwrap();
-            paint.set_thickness(self.base.thickness());
-            paint.set_cap(StrokeCap::from(self.base.cap()));
-            paint.set_join(StrokeJoin::from(self.base.join()));
+            let thickness = self.base.thickness();
+            let cap = StrokeCap::from(self.base.cap()).into();
+            let join = StrokeJoin::from(self.base.join()).into();
+            self.base.with_render_paint_mut(|paint| {
+                paint.thickness(thickness);
+                paint.cap(cap);
+                paint.join(join);
+            });
         }
     }
+
     pub fn invalidate_rendering(&mut self) {
-        self.base.render_paint_mut().unwrap().invalidate_stroke();
-        self.base.super_invalidate_rendering();
+        self.base
+            .with_render_paint_mut(nuxie_render_api::RenderPaint::invalidate_stroke);
+        self.base.invalidate_rendering();
     }
-    pub fn pick_path<'a>(&self, shape: &'a mut ShapePaintContainer) -> &'a mut ShapePaintPath {
-        if self.base.transform_affects_stroke() {
-            shape.local_path_mut()
-        } else {
-            shape.world_path_mut()
-        }
-    }
+
     pub fn build_dependencies(&mut self) {
-        if let Some(container) = ShapePaintContainer::from(self.base.parent_mut()) {
-            container
-                .path_builder_mut()
-                .add_dependent(self.base.as_component_mut_ptr());
+        let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
+            return;
+        };
+        parent.with_mut(|parent| {
+            if let Some(shape) = parent.as_shape_mut() {
+                shape.path_composer_mut().add_dependent(this);
+            } else if let Some(component) = parent.as_component_mut() {
+                component.add_dependent(this);
+            }
+        });
+    }
+}
+
+impl ShapePaintBehavior for Stroke {
+    fn shape_paint(&self) -> &ShapePaint {
+        &self.base.base
+    }
+
+    fn shape_paint_mut(&mut self) -> &mut ShapePaint {
+        &mut self.base.base
+    }
+
+    fn path_flags(&self) -> PathFlags {
+        Stroke::path_flags(self)
+    }
+
+    fn paint_type(&self) -> ShapePaintType {
+        ShapePaintType::Stroke
+    }
+
+    fn pick_path_kind(&self) -> ShapePaintPathKind {
+        if self.base.transform_affects_stroke() {
+            ShapePaintPathKind::Local
+        } else {
+            ShapePaintPathKind::World
         }
     }
-    pub fn paint_type(&self) -> ShapePaintType {
-        ShapePaintType::Stroke
+
+    fn initialize_render_paint(&mut self, mutator: CoreHandle) -> bool {
+        self.init_render_paint(mutator)
+    }
+
+    fn apply_to(&mut self, paint: &mut dyn RenderPaint, opacity: f32) {
+        Stroke::apply_to(self, paint, opacity);
     }
 }

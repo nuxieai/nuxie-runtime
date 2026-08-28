@@ -1,5 +1,3 @@
-#![cfg(feature = "rive_scripting")]
-
 use crate::mechanical_port::source::{
     artboard::Artboard,
     lua::rive_lua_libs::*,
@@ -110,7 +108,7 @@ fn path_add(state: &mut LuaState) -> i32 {
 }
 
 fn path_command(state: &mut LuaState) -> i32 {
-    let path = unsafe { &*state.to_userdata::<ScriptedPathData>(1) };
+    let path = state.to_rive::<ScriptedPath>(1);
     let verb_index = state.check_number(2) as i32;
     let verbs = path.raw_path.verbs();
     let points = path.raw_path.points();
@@ -155,7 +153,7 @@ fn path_command(state: &mut LuaState) -> i32 {
 }
 
 fn path_contours(state: &mut LuaState) -> i32 {
-    let path = unsafe { &*state.to_userdata::<ScriptedPathData>(1) };
+    let path = state.to_rive::<ScriptedPath>(1);
     let mut iterator = RefCntContourMeasureIter::new(path.raw_path.clone());
     if let Some(first) = iterator.next() {
         state.new_rive(ScriptedContourMeasure::new(first, Some(iterator)));
@@ -166,7 +164,7 @@ fn path_contours(state: &mut LuaState) -> i32 {
 }
 
 fn path_measure(state: &mut LuaState) -> i32 {
-    let path = unsafe { &*state.to_userdata::<ScriptedPathData>(1) };
+    let path = state.to_rive::<ScriptedPath>(1);
     state.new_rive(ScriptedPathMeasure::new(PathMeasure::new(&path.raw_path)));
     1
 }
@@ -252,7 +250,7 @@ fn path_index(state: &mut LuaState) -> i32 {
 }
 
 fn path_length(state: &mut LuaState) -> i32 {
-    let path = unsafe { &*state.to_userdata::<ScriptedPathData>(1) };
+    let path = state.to_rive::<ScriptedPath>(1);
     state.push_number(path.total_commands() as f64);
     1
 }
@@ -356,7 +354,7 @@ fn path_measure_namecall(state: &mut LuaState) -> i32 {
 
 fn path_command_index(state: &mut LuaState) -> i32 {
     let (key, atom) = state.to_string_atom(2);
-    let command = unsafe { &*state.to_userdata::<ScriptedPathCommand>(1) };
+    let command = state.to_rive::<ScriptedPathCommand>(1);
     if key.is_none() {
         let index = state.check_integer(2) - 1;
         if index >= 0 && (index as usize) < command.points().len() {
@@ -376,7 +374,7 @@ fn path_command_index(state: &mut LuaState) -> i32 {
 }
 
 fn path_command_length(state: &mut LuaState) -> i32 {
-    let command = unsafe { &*state.to_userdata::<ScriptedPathCommand>(1) };
+    let command = state.to_rive::<ScriptedPathCommand>(1);
     state.push_number(command.points().len() as f64);
     1
 }

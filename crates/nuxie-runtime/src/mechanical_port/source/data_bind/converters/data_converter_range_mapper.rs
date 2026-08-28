@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    core::CoreHandle,
     data_bind::data_values::{
         data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
     },
@@ -6,16 +7,13 @@ use crate::mechanical_port::source::{
         DataConverterRangeMapperBase, DataConverterRangeMapperBaseCallbacks,
     },
 };
-pub trait KeyFrameInterpolator {
-    fn transform(&self, value: f32) -> f32;
-}
 pub const CLAMP_LOWER: u32 = 1;
 pub const CLAMP_UPPER: u32 = 2;
 pub const MODULO: u32 = 4;
 pub const REVERSE: u32 = 8;
 pub struct DataConverterRangeMapper {
     pub base: DataConverterRangeMapperBase,
-    interpolator: Option<*mut dyn KeyFrameInterpolator>,
+    interpolator: Option<CoreHandle>,
     output: DataValueNumber,
 }
 
@@ -89,9 +87,15 @@ impl DataConverterRangeMapper {
                 }
                 if let Some(interpolator) = self
                     .interpolator
+                    .as_ref()
                     .filter(|_| percentage > 0.0 && percentage < 1.0)
                 {
-                    percentage = unsafe { (&*interpolator).transform(percentage) }
+                    percentage = interpolator
+                        .with_mut(|interpolator| {
+                            interpolator.keyframe_interpolator_transform(percentage)
+                        })
+                        .flatten()
+                        .unwrap_or(percentage);
                 } else if self.base.interpolation_type() == 0 {
                     percentage = if percentage <= 0.0 { 0.0 } else { 1.0 };
                 }
@@ -121,14 +125,17 @@ impl DataConverterRangeMapper {
             self.base.max_input(),
         )
     }
-    pub fn set_interpolator(&mut self, value: Option<*mut dyn KeyFrameInterpolator>) {
+    pub fn interpolator_id(&self) -> u32 {
+        self.base.interpolator_id()
+    }
+    pub fn set_interpolator(&mut self, value: Option<CoreHandle>) {
         self.interpolator = value
     }
-    pub fn interpolator(&self) -> Option<*mut dyn KeyFrameInterpolator> {
-        self.interpolator
+    pub fn interpolator(&self) -> Option<CoreHandle> {
+        self.interpolator.clone()
     }
     pub fn copy(&mut self, other: &Self) {
-        self.interpolator = other.interpolator;
+        self.interpolator = other.interpolator.clone();
         self.base.copy(
             &other.base,
             &mut DataConverterRangeMapperInitializationCallbacks,
@@ -179,3 +186,5 @@ struct DataConverterRangeMapperInitializationCallbacks;
 impl DataConverterRangeMapperBaseCallbacks for DataConverterRangeMapperInitializationCallbacks {
     fn notify_property_changed(&mut self, _property_key: u16) {}
 }
+
+crate::impl_data_converter_capability_bidi!(DataConverterRangeMapper, base.base);

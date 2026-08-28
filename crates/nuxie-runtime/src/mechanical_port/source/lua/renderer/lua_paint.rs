@@ -1,5 +1,3 @@
-#![cfg(feature = "rive_scripting")]
-
 use crate::mechanical_port::source::{
     lua::rive_lua_libs::*,
     renderer::RenderPaintStyle,
@@ -252,7 +250,7 @@ fn paint_index(state: &mut LuaState) -> i32 {
     if key.is_none() {
         return state.type_error(2, state.type_name(LuaType::String));
     }
-    let paint = unsafe { &*state.to_userdata::<ScriptedPaintData>(1) };
+    let paint = state.to_rive::<ScriptedPaint>(1);
     match atom {
         LuaAtoms::Style => paint.push_style(state),
         LuaAtoms::Join => paint.push_join(state),

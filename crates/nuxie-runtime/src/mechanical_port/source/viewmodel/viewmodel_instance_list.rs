@@ -1,99 +1,107 @@
-use std::ptr::NonNull;
-
 use crate::mechanical_port::source::{
-    component_dirt::ComponentDirt,
-    generated::viewmodel::viewmodel_instance_list_base::ViewModelInstanceListBase, refcnt::RiveRc,
-};
-
-use super::{
-    viewmodel_instance::ViewModelInstance, viewmodel_instance_list_item::ViewModelInstanceListItem,
+    component_dirt::ComponentDirt, core::CoreHandle,
+    generated::viewmodel::viewmodel_instance_list_base::ViewModelInstanceListBase,
 };
 
 #[derive(Default)]
 pub struct ViewModelInstanceList {
     pub base: ViewModelInstanceListBase,
-    list_items: Vec<RiveRc<ViewModelInstanceListItem>>,
-    parent_view_model_instance: Option<NonNull<ViewModelInstance>>,
-    #[cfg(feature = "rive_tools")]
+    list_items: Vec<CoreHandle>,
+    parent_view_model_instance: Option<CoreHandle>,
+    #[cfg(feature = "tools")]
     changed_callback: Option<fn(&mut Self)>,
 }
 
 impl ViewModelInstanceList {
+    fn handle(&self) -> Option<CoreHandle> {
+        self.base.base.base.base.base.base.handle()
+    }
+
+    fn item_instance(item: &CoreHandle) -> Option<CoreHandle> {
+        item.with(|item| {
+            item.as_view_model_instance_list_item()
+                .and_then(|item| item.view_model_instance())
+        })
+        .flatten()
+    }
+
+    fn add_parent_to_item(&self, item: &CoreHandle) {
+        if let (Some(instance), Some(parent)) = (
+            Self::item_instance(item),
+            self.parent_view_model_instance.as_ref(),
+        ) {
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.add_parent(parent.clone());
+                }
+            });
+        }
+    }
+
+    fn remove_parent_from_item(&self, item: &CoreHandle) {
+        if let (Some(instance), Some(parent)) = (
+            Self::item_instance(item),
+            self.parent_view_model_instance.as_ref(),
+        ) {
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.remove_parent(parent);
+                }
+            });
+        }
+    }
+
     fn property_value_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::BINDINGS);
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             callback(self);
         }
         self.base.on_value_changed();
     }
 
-    pub fn add_item(&mut self, item: RiveRc<ViewModelInstanceListItem>) {
+    pub fn add_item(&mut self, item: CoreHandle) {
+        self.add_parent_to_item(&item);
         self.list_items.push(item);
-        let instance = self
-            .list_items
-            .last()
-            .and_then(|item| item.view_model_instance());
-        if let (Some(mut instance), Some(parent)) = (instance, self.parent_view_model_instance) {
-            instance.add_parent(parent);
-        }
         self.property_value_changed();
     }
 
-    pub fn add_item_at(&mut self, item: RiveRc<ViewModelInstanceListItem>, index: i32) -> bool {
+    pub fn add_item_at(&mut self, item: CoreHandle, index: i32) -> bool {
         if index < 0 || index as usize > self.list_items.len() {
             return false;
         }
+        self.add_parent_to_item(&item);
         self.list_items.insert(index as usize, item);
-        let instance = self.list_items[index as usize].view_model_instance();
-        if let (Some(mut instance), Some(parent)) = (instance, self.parent_view_model_instance) {
-            instance.add_parent(parent);
-        }
         self.property_value_changed();
         true
     }
 
-    pub fn internal_add_item(&mut self, item: RiveRc<ViewModelInstanceListItem>) {
+    pub fn internal_add_item(&mut self, item: CoreHandle) {
+        self.add_parent_to_item(&item);
         self.list_items.push(item);
-        let instance = self
-            .list_items
-            .last()
-            .and_then(|item| item.view_model_instance());
-        if let (Some(mut instance), Some(parent)) = (instance, self.parent_view_model_instance) {
-            instance.add_parent(parent);
-        }
     }
 
     pub fn remove_item_at(&mut self, index: i32) {
         if index < 0 || index as usize >= self.list_items.len() {
             return;
         }
-        let item = &self.list_items[index as usize];
-        if let (Some(mut instance), Some(parent)) =
-            (item.view_model_instance(), self.parent_view_model_instance)
-        {
-            instance.remove_parent(parent);
-        }
+        let item = self.list_items[index as usize].clone();
+        self.remove_parent_from_item(&item);
         self.list_items.remove(index as usize);
         self.property_value_changed();
     }
 
-    pub fn remove_item(&mut self, item: &RiveRc<ViewModelInstanceListItem>) {
-        self.list_items
-            .retain(|candidate| !RiveRc::ptr_eq(candidate, item));
-        if let (Some(mut instance), Some(parent)) =
-            (item.view_model_instance(), self.parent_view_model_instance)
-        {
-            instance.remove_parent(parent);
-        }
+    pub fn remove_item(&mut self, item: &CoreHandle) {
+        self.remove_parent_from_item(item);
+        self.list_items.retain(|candidate| candidate != item);
         self.property_value_changed();
     }
 
-    pub fn list_items(&self) -> &[RiveRc<ViewModelInstanceListItem>] {
+    pub fn list_items(&self) -> &[CoreHandle] {
         &self.list_items
     }
 
-    pub fn item(&self, index: u32) -> Option<RiveRc<ViewModelInstanceListItem>> {
+    pub fn item(&self, index: u32) -> Option<CoreHandle> {
         self.list_items.get(index as usize).cloned()
     }
 
@@ -105,13 +113,14 @@ impl ViewModelInstanceList {
         self.property_value_changed();
     }
 
-    pub fn pop(&mut self) -> Option<RiveRc<ViewModelInstanceListItem>> {
+    pub fn pop(&mut self) -> Option<CoreHandle> {
         let item = self.list_items.pop()?;
+        self.remove_parent_from_item(&item);
         self.property_value_changed();
         Some(item)
     }
 
-    pub fn shift(&mut self) -> Option<RiveRc<ViewModelInstanceListItem>> {
+    pub fn shift(&mut self) -> Option<CoreHandle> {
         let item = self.list_items.first()?.clone();
         self.remove_item_at(0);
         Some(item)
@@ -122,11 +131,7 @@ impl ViewModelInstanceList {
             return;
         }
         for item in &self.list_items {
-            if let (Some(mut instance), Some(parent)) =
-                (item.view_model_instance(), self.parent_view_model_instance)
-            {
-                instance.remove_parent(parent);
-            }
+            self.remove_parent_from_item(item);
         }
         self.list_items.clear();
         self.property_value_changed();
@@ -134,7 +139,7 @@ impl ViewModelInstanceList {
 
     pub fn remove_all_items_with_view_model_instance(
         &mut self,
-        view_model_instance: Option<NonNull<ViewModelInstance>>,
+        view_model_instance: Option<CoreHandle>,
     ) {
         let Some(target) = view_model_instance else {
             return;
@@ -142,15 +147,18 @@ impl ViewModelInstanceList {
         if self.list_items.is_empty() {
             return;
         }
+        let parent = self.parent_view_model_instance.clone();
         let mut changed = false;
-        let parent = self.parent_view_model_instance;
         self.list_items.retain(|item| {
-            let matches = item
-                .view_model_instance()
-                .is_some_and(|instance| std::ptr::eq(instance.as_ptr(), target.as_ptr()));
+            let instance = Self::item_instance(item);
+            let matches = instance.as_ref() == Some(&target);
             if matches {
-                if let (Some(mut instance), Some(parent)) = (item.view_model_instance(), parent) {
-                    instance.remove_parent(parent);
+                if let (Some(instance), Some(parent)) = (instance, parent.as_ref()) {
+                    instance.with_mut(|instance| {
+                        if let Some(instance) = instance.as_view_model_instance_mut() {
+                            instance.remove_parent(parent);
+                        }
+                    });
                 }
                 changed = true;
             }
@@ -161,62 +169,59 @@ impl ViewModelInstanceList {
         }
     }
 
-    pub fn update_list(&mut self, list: Option<&[RiveRc<ViewModelInstanceListItem>]>) {
+    pub fn update_list(&mut self, list: Option<&[CoreHandle]>) {
         let Some(list) = list else {
             return;
         };
-        if let Some(parent) = self.parent_view_model_instance {
-            for item in &self.list_items {
-                if let Some(mut instance) = item.view_model_instance() {
-                    instance.remove_parent(parent);
-                }
-            }
+        for item in &self.list_items {
+            self.remove_parent_from_item(item);
         }
         self.list_items.clear();
         self.list_items.reserve(list.len());
         for item in list {
+            self.add_parent_to_item(item);
             self.list_items.push(item.clone());
-            if let (Some(parent), Some(mut instance)) =
-                (self.parent_view_model_instance, item.view_model_instance())
-            {
-                instance.add_parent(parent);
-            }
         }
         self.property_value_changed();
     }
 
-    pub fn clone_value(&self) -> Box<Self> {
-        let mut cloned = Box::new(Self {
-            base: self.base.clone_base(),
-            list_items: Vec::new(),
-            parent_view_model_instance: None,
-            #[cfg(feature = "rive_tools")]
-            changed_callback: None,
-        });
+    pub fn clone_value(&self) -> Option<CoreHandle> {
+        let cloned = self.handle()?.clone_occurrence()?;
         for item in &self.list_items {
-            cloned.internal_add_item(item.clone_core_item());
+            let Some(item) = item.clone_occurrence() else {
+                continue;
+            };
+            cloned.with_mut(|cloned| {
+                if let Some(cloned) = cloned.as_view_model_instance_list_mut() {
+                    cloned.internal_add_item(item);
+                }
+            });
         }
-        cloned
+        Some(cloned)
     }
 
     pub fn advanced(&mut self) {
-        for item in &mut self.list_items {
-            if let Some(mut instance) = item.view_model_instance() {
-                instance.advanced();
+        for item in &self.list_items {
+            if let Some(instance) = Self::item_instance(item) {
+                instance.with_mut(|instance| {
+                    if let Some(instance) = instance.as_view_model_instance_mut() {
+                        instance.advanced();
+                    }
+                });
             }
         }
         self.base.advanced();
     }
 
-    pub fn set_parent_view_model_instance(&mut self, parent: Option<NonNull<ViewModelInstance>>) {
+    pub fn set_parent_view_model_instance(&mut self, parent: Option<CoreHandle>) {
         self.parent_view_model_instance = parent;
     }
 
-    pub fn parent_view_model_instance(&self) -> Option<NonNull<ViewModelInstance>> {
-        self.parent_view_model_instance
+    pub fn parent_view_model_instance(&self) -> Option<CoreHandle> {
+        self.parent_view_model_instance.clone()
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self)>) {
         self.changed_callback = callback;
     }
@@ -224,12 +229,8 @@ impl ViewModelInstanceList {
 
 impl Drop for ViewModelInstanceList {
     fn drop(&mut self) {
-        if let Some(parent) = self.parent_view_model_instance {
-            for item in &self.list_items {
-                if let Some(mut instance) = item.view_model_instance() {
-                    instance.remove_parent(parent);
-                }
-            }
+        for item in &self.list_items {
+            self.remove_parent_from_item(item);
         }
     }
 }

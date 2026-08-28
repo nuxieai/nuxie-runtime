@@ -1,4 +1,3 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::lua::rive_lua_libs::*;
 fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]

@@ -1,39 +1,26 @@
-pub trait ContextDataResolver {
-    fn resolve_path(&self, id: u32) -> Vec<u32>;
-}
-pub trait ContextFile {
-    fn data_resolver(&self) -> Option<&dyn ContextDataResolver>;
-}
+use std::{cell::RefCell, rc::Rc};
+
+use crate::mechanical_port::source::{
+    assets::manifest_asset::ManifestAsset,
+    core::CoreHandle,
+    data_bind::data_context::DataContext,
+    generated::data_bind::data_bind_context_base::{
+        DataBindContextBase, DataBindContextBaseCallbacks,
+    },
+};
+
 pub trait BoundSource {}
-pub trait ContextData {
-    fn view_model_property(&self, path: &[u32]) -> Option<*mut dyn BoundSource>;
-    fn relative_view_model_property(
-        &self,
-        path: &[u32],
-        resolver: &dyn ContextDataResolver,
-    ) -> Option<*mut dyn BoundSource>;
-}
 pub trait ContextConverter {
-    fn bind_from_context(&mut self, context: &dyn ContextData, data_bind: *mut DataBindContext);
+    fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle);
 }
 pub const RECONCILE_DIRT: u32 = 3;
 pub struct DataBindContext {
     pub base: DataBindContextBase,
-    file: Option<*mut dyn ContextFile>,
-    source: Option<*mut dyn BoundSource>,
-    converter: Option<*mut dyn ContextConverter>,
-    dirt: u32,
-    bound: bool,
 }
 impl Default for DataBindContext {
     fn default() -> Self {
         Self {
             base: DataBindContextBase::default(),
-            file: None,
-            source: None,
-            converter: None,
-            dirt: 0,
-            bound: false,
         }
     }
 }
@@ -66,47 +53,70 @@ impl DataBindContext {
             return;
         }
         self.base.is_path_resolved = true;
-        if let (Some(id), Some(file)) =
-            (self.base.source_path_ids_buffer.first().copied(), self.file)
-        {
-            if let Some(resolver) = unsafe { (&*file).data_resolver() } {
-                let path = resolver.resolve_path(id);
-                if !path.is_empty() {
-                    self.base.source_path_ids_buffer = path;
-                }
+        if let Some(id) = self.base.source_path_ids_buffer.first().copied() {
+            let resolved = self
+                .base
+                .base
+                .file()
+                .with_file(|file| {
+                    file.manifest()?
+                        .with_downcast::<ManifestAsset, _>(|resolver| {
+                            resolver.resolve_path(id as i32).to_vec()
+                        })
+                })
+                .flatten()
+                .flatten();
+            if let Some(path) = resolved.filter(|path| !path.is_empty()) {
+                self.base.source_path_ids_buffer = path;
             }
         }
     }
-    pub fn bind_from_context(&mut self, data_context: Option<&dyn ContextData>) {
+    pub fn bind_from_context(&mut self, data_context: Option<Rc<RefCell<DataContext>>>) {
         let Some(data_context) = data_context else {
             return;
         };
         self.resolve_path();
         let source = if self.base.base.is_name_based() {
-            self.file
-                .and_then(|file| unsafe { (&*file).data_resolver() })
-                .and_then(|resolver| {
-                    data_context
-                        .relative_view_model_property(&self.base.source_path_ids_buffer, resolver)
+            self.base
+                .base
+                .file()
+                .with_file(|file| {
+                    file.manifest()?
+                        .with_downcast::<ManifestAsset, _>(|resolver| {
+                            data_context.borrow().get_relative_view_model_property(
+                                &self.base.source_path_ids_buffer,
+                                Some(resolver),
+                            )
+                        })
                 })
+                .flatten()
+                .flatten()
         } else {
-            data_context.view_model_property(&self.base.source_path_ids_buffer)
+            data_context
+                .borrow()
+                .get_view_model_property(&self.base.source_path_ids_buffer)
         };
-        if !same_ptr(self.source, source) {
+        if self.base.base.source() != source {
             if let Some(source) = source {
-                self.source = None;
-                self.source = Some(source);
-                self.bound = true;
+                self.base.base.clear_source();
+                self.base.base.set_source(source);
             } else {
-                self.bound = false;
+                self.base.base.unbind();
             }
         } else {
-            self.dirt |= RECONCILE_DIRT;
+            self.base
+                .base
+                .add_dirt(self.base.base.reconcile_dirt(), true);
         }
-        if let Some(converter) = self.converter {
-            unsafe {
-                (&mut *converter).bind_from_context(data_context, self as *mut Self);
-            }
+        if let (Some(converter), Some(data_bind)) = (
+            self.base.base.converter(),
+            self.base.base.base.base.handle(),
+        ) {
+            converter.with_mut(|converter| {
+                if let Some(converter) = converter.as_context_converter_mut() {
+                    converter.bind_from_context(data_context, data_bind);
+                }
+            });
         }
     }
     pub fn source_path_ids(&self) -> &[u32] {
@@ -126,13 +136,3 @@ impl DataBindContextBaseCallbacks for DataBindContext {
         self.base.is_path_resolved = object.is_path_resolved;
     }
 }
-fn same_ptr<T: ?Sized>(a: Option<*mut T>, b: Option<*mut T>) -> bool {
-    match (a, b) {
-        (Some(a), Some(b)) => core::ptr::addr_eq(a, b),
-        (None, None) => true,
-        _ => false,
-    }
-}
-use crate::mechanical_port::source::generated::data_bind::data_bind_context_base::{
-    DataBindContextBase, DataBindContextBaseCallbacks,
-};

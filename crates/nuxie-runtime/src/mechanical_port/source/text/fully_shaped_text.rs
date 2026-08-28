@@ -1,4 +1,3 @@
-#![cfg(feature = "with_rive_text")]
 use super::{glyph_lookup::GlyphLookup, text::Text};
 use crate::mechanical_port::source::{
     math::aabb::Aabb,

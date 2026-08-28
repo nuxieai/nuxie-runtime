@@ -1,10 +1,8 @@
-#[cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::{
     lua::rive_lua_libs::{LuaState, ScriptedViewModel},
     viewmodel::viewmodel::ViewModel,
 };
 
-#[cfg(feature = "rive_scripting")]
 fn viewmodel_new(state: &mut LuaState) -> i32 {
     let Some(viewmodel) = state.upvalue_light_userdata::<ViewModel>(1) else {
         state.push_nil();
@@ -30,7 +28,6 @@ fn viewmodel_new(state: &mut LuaState) -> i32 {
     1
 }
 
-#[cfg(feature = "rive_scripting")]
 pub fn initialize_lua_data(state: Option<&mut LuaState>, viewmodels: &mut [&mut ViewModel]) {
     let Some(state) = state else { return };
     state.new_metatable("Data");

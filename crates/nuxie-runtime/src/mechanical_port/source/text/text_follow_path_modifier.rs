@@ -17,44 +17,61 @@ pub struct TextFollowPathModifier {
 }
 impl TextFollowPathModifier {
     pub fn build_dependencies(&mut self) {
-        if let Some(target) = self.base.target_mut() {
-            if let Some(shape) = target.as_shape_mut() {
-                shape.path_composer_mut().add_dependent(self);
-            } else if let Some(path) = target.as_path_mut() {
-                path.add_dependent(self);
-            }
+        let Some(dependent) = self.base.handle() else {
+            return;
+        };
+        if let Some(target) = self.base.target() {
+            target.with_mut(|target| {
+                if let Some(shape) = target.as_shape_mut() {
+                    shape.path_composer_mut().add_dependent(dependent.clone());
+                } else if let Some(path) = target.as_path_mut() {
+                    path.add_dependent(dependent.clone());
+                }
+            });
         }
-        if let Some(mut text) = self.base.text_component() {
-            self.base.add_dependent(unsafe { text.as_mut() });
+        if let Some(text) = self.base.text_component() {
+            self.base.add_dependent(text);
         }
     }
-    pub fn on_added_clean(&mut self, context: &mut CoreContext) -> StatusCode {
-        if let Some(target) = self.base.target_mut() {
-            if let Some(shape) = target.as_shape_mut() {
-                shape.add_follow_path_flag();
-            } else if let Some(path) = target.as_path_mut() {
-                path.add_follow_path_flag();
-            }
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        if let Some(target) = self.base.target() {
+            target.with_mut(|target| {
+                if let Some(shape) = target.as_shape_mut() {
+                    shape.add_follow_path_flag();
+                } else if let Some(path) = target.as_path_mut() {
+                    path.add_follow_path_flag();
+                }
+            });
         }
         self.base.on_added_clean(context)
     }
     pub fn update(&mut self, _value: ComponentDirt) {
         self.world_path.rewind();
         if let Some(target) = self.base.target() {
-            if let Some(shape) = target.as_shape() {
-                for path in shape.paths() {
+            target.with(|target| {
+                if let Some(shape) = target.as_shape() {
+                    for path in shape.paths() {
+                        path.with(|path| {
+                            if let Some(path) = path.as_path() {
+                                self.world_path
+                                    .add_path(path.raw_path(), Some(path.path_transform()));
+                            }
+                        });
+                    }
+                } else if let Some(path) = target.as_path() {
                     self.world_path
                         .add_path(path.raw_path(), Some(path.path_transform()));
                 }
-            } else if let Some(path) = target.as_path() {
-                self.world_path
-                    .add_path(path.raw_path(), Some(path.path_transform()));
-            }
+            });
         }
     }
     pub fn modifier_shape_dirty(&mut self) {
-        if let Some(mut text) = self.base.text_component() {
-            unsafe { text.as_mut() }.modifier_shape_dirty();
+        if let Some(text) = self.base.text_component() {
+            text.with_mut(|text| {
+                if let Some(text) = text.as_text_mut() {
+                    text.modifier_shape_dirty();
+                }
+            });
         }
     }
     pub fn radial_changed(&mut self) {

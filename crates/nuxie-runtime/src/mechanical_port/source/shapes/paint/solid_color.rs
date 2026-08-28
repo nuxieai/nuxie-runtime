@@ -12,7 +12,7 @@ pub struct SolidColor {
     pub flags: MutatorFlags,
 }
 impl SolidColor {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let mut code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;

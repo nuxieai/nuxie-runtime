@@ -1,11 +1,41 @@
 use crate::mechanical_port::source::{
-    generated::shapes::cubic_detached_vertex_base::CubicDetachedVertexBase, math::vec2d::Vec2D,
-    shapes::cubic_vertex::CubicVertexState,
+    generated::shapes::cubic_detached_vertex_base::CubicDetachedVertexBase,
+    math::vec2d::Vec2D,
+    shapes::{
+        cubic_vertex::{CubicVertex, CubicVertexBehavior},
+        vertex::{Vertex, VertexBehavior},
+    },
 };
 #[derive(Default)]
 pub struct CubicDetachedVertex {
     pub base: CubicDetachedVertexBase,
-    pub cubic: CubicVertexState,
+}
+
+impl VertexBehavior for CubicDetachedVertex {
+    fn vertex(&self) -> &Vertex {
+        self.base.base.vertex()
+    }
+    fn vertex_mut(&mut self) -> &mut Vertex {
+        self.base.base.vertex_mut()
+    }
+    fn mark_geometry_dirty(&mut self) {
+        self.base.mark_geometry_dirty();
+    }
+}
+
+impl CubicVertexBehavior for CubicDetachedVertex {
+    fn cubic_vertex(&self) -> &CubicVertex {
+        &self.base.base
+    }
+    fn cubic_vertex_mut(&mut self) -> &mut CubicVertex {
+        &mut self.base.base
+    }
+    fn compute_in(&mut self) {
+        CubicDetachedVertex::compute_in(self);
+    }
+    fn compute_out(&mut self) {
+        CubicDetachedVertex::compute_out(self);
+    }
 }
 impl CubicDetachedVertex {
     fn point(&self) -> Vec2D {
@@ -24,25 +54,25 @@ impl CubicDetachedVertex {
         )
     }
     pub fn compute_in(&mut self) {
-        self.cubic.in_point = self.point() + self.in_vector();
+        self.base.base.state.in_point = self.point() + self.in_vector();
     }
     pub fn compute_out(&mut self) {
-        self.cubic.out_point = self.point() + self.out_vector();
+        self.base.base.state.out_point = self.point() + self.out_vector();
     }
     pub fn in_rotation_changed(&mut self) {
-        self.cubic.in_valid = false;
+        self.base.base.state.in_valid = false;
         self.base.mark_geometry_dirty();
     }
     pub fn in_distance_changed(&mut self) {
-        self.cubic.in_valid = false;
+        self.base.base.state.in_valid = false;
         self.base.mark_geometry_dirty();
     }
     pub fn out_rotation_changed(&mut self) {
-        self.cubic.out_valid = false;
+        self.base.base.state.out_valid = false;
         self.base.mark_geometry_dirty();
     }
     pub fn out_distance_changed(&mut self) {
-        self.cubic.out_valid = false;
+        self.base.base.state.out_valid = false;
         self.base.mark_geometry_dirty();
     }
 }

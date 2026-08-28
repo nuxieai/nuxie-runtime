@@ -1,50 +1,47 @@
 use crate::mechanical_port::source::{
-    component::Component,
-    shapes::paint::{
-        fill::{Fill, FillBase},
-        group_effect::{GroupEffect, GroupEffectBase},
-        shape_paint::{ShapePaint, ShapePaintBase, ShapePaintPath},
-        stroke::{Stroke, StrokeBase},
-        stroke_effect::{PathProvider, StrokeEffect},
-    },
+    core::CoreHandle,
+    shapes::paint::{shape_paint_path::ShapePaintPath, stroke_effect::PathProvider},
 };
 #[derive(Default)]
 pub struct EffectsContainerState {
-    pub effects: Vec<*mut dyn StrokeEffect>,
+    pub effects: Vec<CoreHandle>,
 }
 pub trait EffectsContainer {
     fn effects_state(&mut self) -> &mut EffectsContainerState;
-    fn add_stroke_effect(&mut self, effect: *mut dyn StrokeEffect) {
+    fn add_stroke_effect(&mut self, effect: CoreHandle) {
         self.effects_state().effects.push(effect);
     }
-    fn invalidate_effects(&mut self, invalidating: Option<*mut dyn StrokeEffect>) {
+    fn invalidate_effects(&mut self, invalidating: Option<&CoreHandle>) {
         let mut found = invalidating.is_none();
-        for effect in self.effects_state().effects.iter().copied() {
+        for effect in self.effects_state().effects.iter().cloned() {
             if found {
-                unsafe { (*effect).invalidate_effect(None) };
+                effect.with_mut(|effect| {
+                    if let Some(effect) = effect.as_stroke_effect_mut() {
+                        effect.invalidate_effect(None);
+                    }
+                });
             }
-            if invalidating.is_some_and(|value| std::ptr::addr_eq(value, effect)) {
+            if invalidating == Some(&effect) {
                 found = true;
             }
         }
     }
-    fn last_effect_path(&mut self, provider: &mut PathProvider) -> Option<&mut ShapePaintPath> {
-        for effect in self.effects_state().effects.iter().rev().copied() {
-            if let Some(path) = unsafe { (*effect).effect_path(provider) } {
+    fn last_effect_path(
+        &mut self,
+        provider: &PathProvider,
+    ) -> Option<std::rc::Rc<std::cell::RefCell<ShapePaintPath>>> {
+        for effect in self.effects_state().effects.iter().rev() {
+            if let Some(path) = effect
+                .with_mut(|effect| {
+                    effect
+                        .as_stroke_effect_mut()
+                        .and_then(|effect| effect.effect_path(provider))
+                })
+                .flatten()
+            {
                 return Some(path);
             }
         }
         None
-    }
-}
-pub fn from(component: &mut Component) -> Option<&mut dyn EffectsContainer> {
-    match component.core_type() {
-        ShapePaintBase::TYPE_KEY | FillBase::TYPE_KEY | StrokeBase::TYPE_KEY => component
-            .as_mut::<ShapePaint>()
-            .map(|v| v as &mut dyn EffectsContainer),
-        GroupEffectBase::TYPE_KEY => component
-            .as_mut::<GroupEffect>()
-            .map(|v| v as &mut dyn EffectsContainer),
-        _ => None,
     }
 }

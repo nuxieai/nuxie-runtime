@@ -1,74 +1,110 @@
-use std::cell::Cell;
-use std::rc::Rc;
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DataType {
-    None,
-    String,
-    Number,
-    Boolean,
-    Color,
-    List,
-    Enum,
-    Trigger,
-    ViewModel,
-    SymbolListIndex,
-    AssetImage,
-    AssetFont,
-    AssetBlob,
-    Artboard,
+use crate::mechanical_port::source::{
+    core::CoreHandle,
+    viewmodel::viewmodel_instance_value::{
+        ViewModelInstanceValueDelegate, ViewModelInstanceValueDelegateHandle,
+    },
+};
+
+pub use crate::mechanical_port::source::data_bind::data_values::data_type::DataType;
+
+struct RuntimeValueChangeTracker {
+    changed: Rc<Cell<bool>>,
 }
 
-pub trait ViewModelInstanceValue {
-    fn name(&self) -> &str;
-    fn add_dependent(&self, dependent: *const ());
-    fn remove_dependent(&self, dependent: *const ());
+impl ViewModelInstanceValueDelegate for RuntimeValueChangeTracker {
+    fn value_changed(&mut self) {
+        self.changed.set(true);
+    }
 }
 
-pub struct ViewModelInstanceValueRuntime<T: ViewModelInstanceValue> {
-    value: Rc<T>,
-    dependent_identity: Rc<()>,
-    has_changed: Cell<bool>,
+struct RuntimeValueInner {
+    value: CoreHandle,
+    data_type: DataType,
+    changed: Rc<Cell<bool>>,
+    delegate: ViewModelInstanceValueDelegateHandle,
 }
 
-impl<T: ViewModelInstanceValue> ViewModelInstanceValueRuntime<T> {
-    pub fn new(value: Rc<T>) -> Self {
-        let dependent_identity = Rc::new(());
-        value.add_dependent(Rc::as_ptr(&dependent_identity));
-        Self {
-            value,
-            dependent_identity,
-            has_changed: Cell::new(false),
-        }
-    }
-    pub fn add_dirt(&self, _dirt: u32, _recurse: bool) {
-        self.has_changed.set(true);
-    }
-    pub fn clear_changes(&self) {
-        self.has_changed.set(false);
-    }
-    pub fn has_changed(&self) -> bool {
-        self.has_changed.get()
-    }
-    pub fn flush_changes(&self) -> bool {
-        if self.has_changed.replace(false) {
-            true
-        } else {
-            false
-        }
-    }
-    pub fn name(&self) -> &str {
-        self.value.name()
-    }
-    pub fn value(&self) -> &Rc<T> {
-        &self.value
-    }
-    pub fn relink_data_bind(&self) {}
-}
-
-impl<T: ViewModelInstanceValue> Drop for ViewModelInstanceValueRuntime<T> {
+impl Drop for RuntimeValueInner {
     fn drop(&mut self) {
-        self.value
-            .remove_dependent(Rc::as_ptr(&self.dependent_identity));
+        let _ = self.value.with_mut(|value| {
+            if let Some(value) = value.as_view_model_instance_value_mut() {
+                value.remove_delegate(&self.delegate);
+            }
+        });
+    }
+}
+
+#[derive(Clone)]
+pub struct ViewModelInstanceValueRuntime {
+    inner: Rc<RuntimeValueInner>,
+}
+
+impl ViewModelInstanceValueRuntime {
+    pub fn new(value: CoreHandle, data_type: DataType) -> Option<Self> {
+        let changed = Rc::new(Cell::new(false));
+        let delegate: ViewModelInstanceValueDelegateHandle =
+            Rc::new(RefCell::new(RuntimeValueChangeTracker {
+                changed: Rc::clone(&changed),
+            }));
+        value
+            .with_mut(|value| {
+                value
+                    .as_view_model_instance_value_mut()
+                    .map(|value| value.add_delegate(&delegate))
+            })
+            .flatten()?;
+        Some(Self {
+            inner: Rc::new(RuntimeValueInner {
+                value,
+                data_type,
+                changed,
+                delegate,
+            }),
+        })
+    }
+
+    pub fn handle(&self) -> CoreHandle {
+        self.inner.value.clone()
+    }
+
+    pub fn data_type(&self) -> DataType {
+        self.inner.data_type
+    }
+
+    pub fn clear_changes(&self) {
+        self.inner.changed.set(false);
+    }
+
+    pub fn has_changed(&self) -> bool {
+        self.inner.changed.get()
+    }
+
+    pub fn flush_changes(&self) -> bool {
+        self.inner.changed.replace(false)
+    }
+
+    pub fn name(&self) -> String {
+        self.inner
+            .value
+            .with(|value| {
+                value
+                    .as_view_model_instance_value()
+                    .map(|value| value.name())
+            })
+            .flatten()
+            .unwrap_or_default()
+    }
+
+    pub fn relink_data_bind(&self) {
+        let _ = self.inner.value.with_mut(|value| {
+            if let Some(value) = value.as_view_model_instance_value_mut() {
+                value.relink_dependents();
+            }
+        });
     }
 }

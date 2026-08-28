@@ -1,4 +1,3 @@
-#![cfg(feature = "with_rive_text")]
 use super::fully_shaped_text::FullyShapedText;
 use crate::mechanical_port::source::{
     math::{aabb::Aabb, vec2d::Vec2D},

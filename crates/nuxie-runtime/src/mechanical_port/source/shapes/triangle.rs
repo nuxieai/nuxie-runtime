@@ -5,13 +5,13 @@ use crate::mechanical_port::source::{
 };
 pub struct Triangle {
     pub base: TriangleBase,
-    vertices: [Box<StraightVertex>; 3],
+    vertices: [Rc<RefCell<StraightVertex>>; 3],
 }
 impl Triangle {
     pub fn new(mut base: TriangleBase) -> Self {
-        let mut vertices = std::array::from_fn(|_| Box::new(StraightVertex::default()));
-        for vertex in &mut vertices {
-            base.add_vertex(&mut **vertex);
+        let vertices = std::array::from_fn(|_| Rc::new(RefCell::new(StraightVertex::default())));
+        for vertex in &vertices {
+            base.add_runtime_straight_vertex(vertex.clone());
         }
         Self { base, vertices }
     }
@@ -21,13 +21,23 @@ impl Triangle {
             let oy = -self.base.origin_y() * self.base.height();
             let w = self.base.width();
             let h = self.base.height();
-            self.vertices[0].base.set_x(ox + w / 2.0);
-            self.vertices[0].base.set_y(oy);
-            self.vertices[1].base.set_x(ox + w);
-            self.vertices[1].base.set_y(oy + h);
-            self.vertices[2].base.set_x(ox);
-            self.vertices[2].base.set_y(oy + h);
+            {
+                let mut vertex = self.vertices[0].borrow_mut();
+                vertex.base.set_x(ox + w / 2.0);
+                vertex.base.set_y(oy);
+            }
+            {
+                let mut vertex = self.vertices[1].borrow_mut();
+                vertex.base.set_x(ox + w);
+                vertex.base.set_y(oy + h);
+            }
+            {
+                let mut vertex = self.vertices[2].borrow_mut();
+                vertex.base.set_x(ox);
+                vertex.base.set_y(oy + h);
+            }
         }
         self.base.update(value);
     }
 }
+use std::{cell::RefCell, rc::Rc};

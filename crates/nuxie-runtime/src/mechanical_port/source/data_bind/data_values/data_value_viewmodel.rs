@@ -1,23 +1,16 @@
 use super::{data_type::DataType, data_value::DataValue};
+use crate::mechanical_port::source::core::CoreHandle;
 use core::any::Any;
-#[derive(Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DataValueViewModel {
-    value: *mut (),
-}
-impl Default for DataValueViewModel {
-    fn default() -> Self {
-        Self {
-            value: core::ptr::null_mut(),
-        }
-    }
+    value: Option<CoreHandle>,
 }
 impl DataValueViewModel {
     pub const TYPE_KEY: DataType = DataType::ViewModel;
-    pub const DEFAULT_VALUE: *mut () = core::ptr::null_mut();
-    pub fn value(&self) -> *mut () {
-        self.value
+    pub fn value(&self) -> Option<CoreHandle> {
+        self.value.clone()
     }
-    pub fn set_value(&mut self, value: *mut ()) {
+    pub fn set_value(&mut self, value: Option<CoreHandle>) {
         self.value = value
     }
 }

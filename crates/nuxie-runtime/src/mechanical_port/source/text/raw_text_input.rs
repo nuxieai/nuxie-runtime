@@ -1,5 +1,3 @@
-#![cfg(feature = "with_rive_text")]
-
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
 use std::rc::Rc;
 
@@ -111,7 +109,7 @@ struct JournalEntry {
 }
 
 pub struct RawTextInput {
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "tools"))]
     pub measure_count: u32,
     cursor: Cursor,
     text_run: TextRun,
@@ -151,7 +149,7 @@ impl Default for RawTextInput {
 impl RawTextInput {
     pub fn new() -> Self {
         Self {
-            #[cfg(feature = "testing")]
+            #[cfg(any(test, feature = "tools"))]
             measure_count: 0,
             cursor: Cursor::at_start(),
             text_run: TextRun {
@@ -1016,7 +1014,7 @@ impl RawTextInput {
             );
             self.last_measure_max_width = max_width;
             self.last_measure_max_height = max_height;
-            #[cfg(feature = "testing")]
+            #[cfg(any(test, feature = "tools"))]
             {
                 self.measure_count += 1;
             }

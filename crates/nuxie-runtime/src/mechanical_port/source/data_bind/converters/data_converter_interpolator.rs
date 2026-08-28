@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    core::CoreHandle,
     data_bind::data_values::{
         data_type::DataType, data_value::DataValue, data_value_color::DataValueColor,
         data_value_number::DataValueNumber,
@@ -7,9 +8,6 @@ use crate::mechanical_port::source::{
         DataConverterInterpolatorBase, DataConverterInterpolatorBaseCallbacks,
     },
 };
-pub trait KeyFrameInterpolator {
-    fn transform(&self, value: f32) -> f32;
-}
 fn new_like(value: &dyn DataValue) -> Option<Box<dyn DataValue>> {
     if value.as_any().is::<DataValueNumber>() {
         Some(Box::new(DataValueNumber::default()))
@@ -129,7 +127,7 @@ impl InterpolatorAdvancer {
 }
 pub struct DataConverterInterpolator {
     pub base: DataConverterInterpolatorBase,
-    interpolator: Option<*mut dyn KeyFrameInterpolator>,
+    interpolator: Option<CoreHandle>,
     output: Option<Box<dyn DataValue>>,
     advance_count: u8,
     advancer: InterpolatorAdvancer,
@@ -159,8 +157,20 @@ impl DataConverterInterpolator {
     pub fn output_type(&self) -> DataType {
         DataType::Input
     }
-    pub fn set_interpolator(&mut self, value: Option<*mut dyn KeyFrameInterpolator>) {
+    pub fn interpolator_id(&self) -> u32 {
+        self.base.interpolator_id()
+    }
+    pub fn set_interpolator(&mut self, value: Option<CoreHandle>) {
         self.interpolator = value
+    }
+    fn transform_factor(interpolator: Option<&CoreHandle>, factor: f32) -> f32 {
+        interpolator
+            .and_then(|interpolator| {
+                interpolator
+                    .with_mut(|interpolator| interpolator.keyframe_interpolator_transform(factor))
+            })
+            .flatten()
+            .unwrap_or(factor)
     }
     pub fn advance(&mut self, elapsed: f32) -> bool {
         if self.advance_count < 2 && elapsed > 0.0 {
@@ -187,17 +197,7 @@ impl DataConverterInterpolator {
         self.advancer.current().elapsed_seconds < self.base.duration()
     }
     fn advance_animation_data(&mut self, elapsed: f32) {
-        let animation_data = if self.advancer.is_smoothing {
-            &mut self.advancer.animation_b as *mut InterpolatorAnimationData
-        } else {
-            &mut self.advancer.animation_a as *mut InterpolatorAnimationData
-        };
-        let transform = |mut f: f32, interpolator: Option<*mut dyn KeyFrameInterpolator>| {
-            if let Some(interpolator) = interpolator {
-                f = unsafe { (&*interpolator).transform(f) }
-            }
-            f
-        };
+        let use_animation_b = self.advancer.is_smoothing;
         if self.advancer.is_smoothing {
             let mut f = (if self.base.duration() > 0.0 {
                 self.advancer.animation_a.elapsed_seconds / self.base.duration()
@@ -205,7 +205,7 @@ impl DataConverterInterpolator {
                 1.0
             })
             .min(1.0);
-            f = transform(f, self.interpolator);
+            f = Self::transform_factor(self.interpolator.as_ref(), f);
             self.advancer
                 .animation_a
                 .interpolate(f, self.advancer.animation_b.from.as_deref_mut().unwrap());
@@ -218,7 +218,11 @@ impl DataConverterInterpolator {
                 self.advancer.animation_a.elapsed_seconds += elapsed;
             }
         }
-        let current = unsafe { &mut *animation_data };
+        let current = if use_animation_b {
+            &mut self.advancer.animation_b
+        } else {
+            &mut self.advancer.animation_a
+        };
         if current.elapsed_seconds >= self.base.duration() {
             current
                 .to
@@ -244,7 +248,7 @@ impl DataConverterInterpolator {
             1.0
         })
         .min(1.0);
-        f = transform(f, self.interpolator);
+        f = Self::transform_factor(self.interpolator.as_ref(), f);
         current.interpolate(f, self.advancer.current_value.as_deref_mut().unwrap());
     }
     pub fn convert<'a>(&'a mut self, input: &'a dyn DataValue) -> &'a dyn DataValue {
@@ -310,4 +314,58 @@ struct DataConverterInterpolatorInitializationCallbacks;
 
 impl DataConverterInterpolatorBaseCallbacks for DataConverterInterpolatorInitializationCallbacks {
     fn notify_property_changed(&mut self, _property_key: u16) {}
+}
+
+impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability
+    for DataConverterInterpolator
+{
+    fn convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(Self::convert(self, input));
+    }
+
+    fn reverse_convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(Self::reverse_convert(self, input));
+    }
+
+    fn output_type(&self) -> DataType {
+        Self::output_type(self)
+    }
+
+    fn bind_from_context(
+        &mut self,
+        context: std::rc::Rc<
+            std::cell::RefCell<
+                crate::mechanical_port::source::data_bind::data_context::DataContext,
+            >,
+        >,
+        data_bind: CoreHandle,
+    ) {
+        self.base.base.bind_from_context(context, data_bind);
+    }
+
+    fn unbind(&mut self) {
+        self.base.base.unbind();
+    }
+
+    fn update(&mut self) {
+        self.base.base.update();
+    }
+
+    fn reset(&mut self) {
+        Self::reset(self);
+    }
+
+    fn advance(&mut self, elapsed: f32) -> bool {
+        Self::advance(self, elapsed)
+    }
 }

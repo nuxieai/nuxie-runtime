@@ -1,6 +1,4 @@
-#![cfg(feature = "rive_scripting")]
-
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::mechanical_port::source::lua::rive_lua_libs::*;
 
@@ -8,95 +6,123 @@ fn scripting_context(state: &mut LuaState) -> Option<&mut dyn ScriptingContext> 
     state.thread_data_optional::<dyn ScriptingContext>()
 }
 
-fn push_view_model_instance_value(
-    state: &mut LuaState,
-    property_value: &mut ViewModelInstanceValue,
-) {
-    match property_value.core_type() {
-        ViewModelInstanceNumber::TYPE_KEY => state.new_rive(ScriptedPropertyNumber::new(
-            state,
-            property_value.as_number_rc(),
-        )),
-        ViewModelInstanceTrigger::TYPE_KEY => state.new_rive(ScriptedPropertyTrigger::new(
-            state,
-            property_value.as_trigger_rc(),
-        )),
-        ViewModelInstanceList::TYPE_KEY => state.new_rive(ScriptedPropertyList::new(
-            state,
-            property_value.as_list_rc(),
-        )),
-        ViewModelInstanceColor::TYPE_KEY => state.new_rive(ScriptedPropertyColor::new(
-            state,
-            property_value.as_color_rc(),
-        )),
-        ViewModelInstanceString::TYPE_KEY => state.new_rive(ScriptedPropertyString::new(
-            state,
-            property_value.as_string_rc(),
-        )),
-        ViewModelInstanceBoolean::TYPE_KEY => state.new_rive(ScriptedPropertyBoolean::new(
-            state,
-            property_value.as_boolean_rc(),
-        )),
-        ViewModelInstanceEnum::TYPE_KEY => state.new_rive(ScriptedPropertyEnum::new(
-            state,
-            property_value.as_enum_rc(),
-        )),
+fn push_view_model_instance_value(state: &mut LuaState, property_value: CoreHandle) {
+    let Some(core_type) = property_value.core_type() else {
+        state.push_nil();
+        return;
+    };
+    match core_type {
+        ViewModelInstanceNumber::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyNumber::new(state, Some(property_value)))
+        }
+        ViewModelInstanceTrigger::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyTrigger::new(state, Some(property_value)))
+        }
+        ViewModelInstanceList::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyList::new(state, Some(property_value)))
+        }
+        ViewModelInstanceColor::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyColor::new(state, Some(property_value)))
+        }
+        ViewModelInstanceString::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyString::new(state, Some(property_value)))
+        }
+        ViewModelInstanceBoolean::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyBoolean::new(state, Some(property_value)))
+        }
+        ViewModelInstanceEnum::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyEnum::new(state, Some(property_value)))
+        }
         ViewModelInstanceViewModel::TYPE_KEY => {
-            let value = property_value.as_view_model_rc();
-            let view_model = value
-                .reference_view_model_instance()
-                .map(|reference| reference.view_model_rc());
+            let view_model = property_value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_view_model()
+                        .and_then(ViewModelInstanceViewModel::reference_view_model_instance)
+                })
+                .flatten()
+                .and_then(|instance| {
+                    instance
+                        .with(|instance| {
+                            instance
+                                .as_view_model_instance()
+                                .and_then(ViewModelInstance::get_view_model)
+                        })
+                        .flatten()
+                });
             state.new_rive(ScriptedPropertyViewModel::new(
                 state,
                 view_model,
-                Some(value),
+                Some(property_value),
             ));
         }
         ViewModelInstanceSymbolListIndex::TYPE_KEY => {
-            state.push_integer(property_value.as_symbol_list_index().property_value() as i64)
+            let value = property_value
+                .with_downcast::<ViewModelInstanceSymbolListIndex, _>(|value| {
+                    value.property_value()
+                })
+                .unwrap_or_default();
+            state.push_integer(value as i64)
         }
-        ViewModelInstanceAssetImage::TYPE_KEY => state.new_rive(ScriptedPropertyImage::new(
-            state,
-            property_value.as_asset_image_rc(),
-        )),
-        ViewModelInstanceAssetFont::TYPE_KEY => state.new_rive(ScriptedPropertyFont::new(
-            state,
-            property_value.as_asset_font_rc(),
-        )),
-        ViewModelInstanceAssetBlob::TYPE_KEY => state.new_rive(ScriptedPropertyBlob::new(
-            state,
-            property_value.as_asset_blob_rc(),
-        )),
+        ViewModelInstanceAssetImage::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyImage::new(state, Some(property_value)))
+        }
+        ViewModelInstanceAssetFont::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyFont::new(state, Some(property_value)))
+        }
+        ViewModelInstanceAssetBlob::TYPE_KEY => {
+            state.new_rive(ScriptedPropertyBlob::new(state, Some(property_value)))
+        }
         _ => state.push_nil(),
     }
 }
 
+struct ScriptedPropertyDelegate {
+    runtime: Rc<RefCell<ScriptedPropertyRuntime>>,
+}
+
+impl ViewModelInstanceValueDelegate for ScriptedPropertyDelegate {
+    fn value_changed(&mut self) {
+        ScriptedProperty::notify_runtime(&self.runtime);
+    }
+}
+
 impl ScriptedProperty {
-    pub fn new(
-        state: &mut LuaState,
-        mut instance_value: Option<RiveRc<ViewModelInstanceValue>>,
-    ) -> Self {
-        let mut property = Self {
+    pub fn new(state: &mut LuaState, instance_value: Option<CoreHandle>) -> Self {
+        let runtime = Rc::new(RefCell::new(ScriptedPropertyRuntime {
             state,
-            instance_value: instance_value.take(),
             cached_value_ref: 0,
             listeners: Vec::new(),
+        }));
+        let delegate: ViewModelInstanceValueDelegateHandle =
+            Rc::new(RefCell::new(ScriptedPropertyDelegate {
+                runtime: runtime.clone(),
+            }));
+        let mut property = Self {
+            runtime,
+            delegate: Some(delegate.clone()),
+            instance_value,
             owner: None,
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             orphan_context: None,
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             orphan_owner_tag: 0,
             disposed: false,
         };
-        if let Some(value) = property.instance_value.as_mut() {
-            value.add_delegate(&mut property);
+        if let Some(value) = property.instance_value.as_ref() {
+            value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.add_delegate(&delegate);
+                }
+            });
         }
         if let Some(context) = scripting_context(state) {
             property.owner = context.current_scripted_object();
-            if let Some(owner) = property.owner {
-                unsafe { &mut *owner }.add_tracked_scripted_property(&mut property);
+            if let Some(owner) = property.owner.as_ref() {
+                let identity = Rc::as_ptr(&property.runtime) as usize;
+                owner.with_mut(|owner| owner.scripted_object_add_tracked_property(identity));
             } else {
-                #[cfg(feature = "rive_tools")]
+                #[cfg(feature = "tools")]
                 {
                     context.track_orphan_scripted_property(&mut property);
                     property.orphan_context = Some(context);
@@ -108,15 +134,17 @@ impl ScriptedProperty {
     }
 
     pub fn clear_cached_value_ref(&mut self) {
-        if self.cached_value_ref != 0 {
-            unsafe { &mut *self.state }.unref(self.cached_value_ref);
-            self.cached_value_ref = 0;
+        let mut runtime = self.runtime.borrow_mut();
+        if runtime.cached_value_ref != 0 {
+            unsafe { &mut *runtime.state }.unref(runtime.cached_value_ref);
+            runtime.cached_value_ref = 0;
         }
     }
 
     pub fn clear_listeners(&mut self) {
-        let state = unsafe { &mut *self.state };
-        for listener in self.listeners.drain(..) {
+        let mut runtime = self.runtime.borrow_mut();
+        let state = unsafe { &mut *runtime.state };
+        for listener in runtime.listeners.drain(..) {
             state.unref(listener.function);
             if listener.userdata != 0 {
                 state.unref(listener.userdata);
@@ -131,29 +159,44 @@ impl ScriptedProperty {
         }
         self.disposed = true;
         if let Some(owner) = self.owner.take() {
-            unsafe { &mut *owner }.remove_tracked_scripted_property(self);
+            let identity = Rc::as_ptr(&self.runtime) as usize;
+            owner.with_mut(|owner| owner.scripted_object_remove_tracked_property(identity));
         }
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         if let Some(context) = self.orphan_context.take() {
             unsafe { &mut *context }.untrack_orphan_scripted_property(self);
         }
-        if let Some(mut instance_value) = self.instance_value.take() {
-            instance_value.remove_delegate(self);
+        if let (Some(instance_value), Some(delegate)) =
+            (self.instance_value.take(), self.delegate.take())
+        {
+            instance_value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.remove_delegate(&delegate);
+                }
+            });
         }
         self.clear_cached_value_ref();
         self.clear_listeners();
     }
 
     pub fn value_changed(&mut self) {
-        self.clear_cached_value_ref();
-        if self.listeners.is_empty() {
+        Self::notify_runtime(&self.runtime);
+    }
+
+    fn notify_runtime(runtime: &Rc<RefCell<ScriptedPropertyRuntime>>) {
+        let mut runtime = runtime.borrow_mut();
+        if runtime.cached_value_ref != 0 {
+            unsafe { &mut *runtime.state }.unref(runtime.cached_value_ref);
+            runtime.cached_value_ref = 0;
+        }
+        if runtime.listeners.is_empty() {
             return;
         }
-        let state = unsafe { &mut *self.state };
-        if !state.check_stack((self.listeners.len() * 2 + LUA_MIN_STACK) as i32) {
+        let state = unsafe { &mut *runtime.state };
+        if !state.check_stack((runtime.listeners.len() * 2 + LUA_MIN_STACK) as i32) {
             return;
         }
-        for listener in self.listeners.iter().rev() {
+        for listener in runtime.listeners.iter().rev() {
             state.raw_get_i(LUA_REGISTRY_INDEX, listener.function);
             if listener.userdata != 0 {
                 state.raw_get_i(LUA_REGISTRY_INDEX, listener.userdata);
@@ -161,20 +204,21 @@ impl ScriptedProperty {
                 state.push_nil();
             }
         }
-        let calls = self.listeners.len();
+        let calls = runtime.listeners.len();
         for _ in 0..calls {
             state.pcall(1, 0, 0);
         }
     }
 
     pub fn add_listener(&mut self) -> i32 {
-        let state = unsafe { &mut *self.state };
+        let mut runtime = self.runtime.borrow_mut();
+        let state = unsafe { &mut *runtime.state };
         if state.is_function(2) {
             state.push_value(1);
             let property_self_ref = state.reference(-1);
             state.pop(1);
             let callback_ref = state.reference(2);
-            self.listeners.push(ScriptedListener {
+            runtime.listeners.push(ScriptedListener {
                 function: callback_ref,
                 userdata: 0,
                 property_self_ref,
@@ -187,7 +231,7 @@ impl ScriptedProperty {
             state.pop(1);
             let userdata_ref = state.reference(2);
             let callback_ref = state.reference(3);
-            self.listeners.push(ScriptedListener {
+            runtime.listeners.push(ScriptedListener {
                 function: callback_ref,
                 userdata: userdata_ref,
                 property_self_ref,
@@ -198,7 +242,8 @@ impl ScriptedProperty {
     }
 
     pub fn remove_listener(&mut self) -> i32 {
-        let state = unsafe { &mut *self.state };
+        let mut runtime = self.runtime.borrow_mut();
+        let state = unsafe { &mut *runtime.state };
         let check_index = if state.is_function(2) {
             2
         } else if state.is_function(3) {
@@ -208,11 +253,11 @@ impl ScriptedProperty {
             2
         };
         let mut index = 0;
-        while index < self.listeners.len() {
-            let listener = &self.listeners[index];
+        while index < runtime.listeners.len() {
+            let listener = &runtime.listeners[index];
             state.raw_get_i(LUA_REGISTRY_INDEX, listener.function);
             if state.raw_equal(-1, check_index) {
-                let listener = self.listeners.remove(index);
+                let listener = runtime.listeners.remove(index);
                 state.unref(listener.function);
                 if listener.userdata != 0 {
                     state.unref(listener.userdata);
@@ -227,19 +272,11 @@ impl ScriptedProperty {
     }
 
     pub fn state(&self) -> *mut LuaState {
-        self.state
+        self.runtime.borrow().state
     }
 
-    pub fn instance_value(&self) -> Option<&ViewModelInstanceValue> {
-        self.instance_value.as_deref()
-    }
-
-    pub fn instance_value_mut(&mut self) -> Option<&mut ViewModelInstanceValue> {
-        self.instance_value.as_deref_mut()
-    }
-
-    pub fn owner(&self) -> Option<*mut ScriptedObject> {
-        self.owner
+    pub fn owner(&self) -> Option<CoreHandle> {
+        self.owner.clone()
     }
 }
 
@@ -252,57 +289,72 @@ impl Drop for ScriptedProperty {
 impl ScriptedPropertyViewModel {
     pub fn new(
         state: &mut LuaState,
-        view_model: Option<RiveRc<ViewModel>>,
-        value: Option<RiveRc<ViewModelInstanceViewModel>>,
+        view_model: Option<CoreHandle>,
+        value: Option<CoreHandle>,
     ) -> Self {
         Self {
-            property: ScriptedProperty::new(state, value.map(RiveRc::into_base)),
+            property: ScriptedProperty::new(state, value),
             view_model,
             value_ref: 0,
         }
     }
 
-    pub fn set_value(&mut self, scripted_view_model: &mut ScriptedViewModel) {
-        if let Some(value) = self
-            .property
-            .instance_value_mut()
-            .and_then(ViewModelInstanceValue::as_view_model_mut)
-        {
-            let parent = value.parent_view_model_instance();
-            let replacement = scripted_view_model.mutable_view_model_instance();
-            parent.replace_view_model_by_property(value, replacement);
+    pub fn set_value(&mut self, replacement: Option<CoreHandle>) {
+        if let Some(value) = self.property.instance_value_mut() {
+            let parent = value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_view_model()
+                        .and_then(ViewModelInstanceViewModel::parent_view_model_instance)
+                })
+                .flatten();
+            if let (Some(parent), Some(replacement)) = (parent, replacement) {
+                parent.with_mut(|parent| {
+                    if let Some(parent) = parent.as_view_model_instance_mut() {
+                        parent.replace_view_model_property_handle(value, replacement);
+                    }
+                });
+            }
         }
     }
 
     pub fn dispose(&mut self) {
-        if let Some(value) = self.property.instance_value_mut() {
-            value.remove_dependent(self);
-        }
         self.clear_ref();
         self.property.dispose();
     }
 
     pub fn clear_ref(&mut self) {
         if self.value_ref != 0 {
-            unsafe { &mut *self.property.state }.unref(self.value_ref);
+            unsafe { &mut *self.property.state() }.unref(self.value_ref);
             self.value_ref = 0;
         }
     }
 
     pub fn push_value(&mut self) -> i32 {
-        let state = unsafe { &mut *self.property.state };
+        let state = unsafe { &mut *self.property.state() };
         if self.value_ref != 0 {
             state.raw_get_i(LUA_REGISTRY_INDEX, self.value_ref);
             return 1;
         }
         if let Some(value) = self.property.instance_value_mut() {
-            value.add_dependent(self);
             let reference = value
-                .as_view_model()
-                .and_then(ViewModelInstanceViewModel::reference_view_model_instance_rc);
+                .with(|value| {
+                    value
+                        .as_view_model_instance_view_model()
+                        .and_then(ViewModelInstanceViewModel::reference_view_model_instance)
+                })
+                .flatten();
             let view_model = reference
                 .as_ref()
-                .map(|instance| instance.view_model_rc())
+                .and_then(|instance| {
+                    instance
+                        .with(|instance| {
+                            instance
+                                .as_view_model_instance()
+                                .and_then(ViewModelInstance::get_view_model)
+                        })
+                        .flatten()
+                })
                 .or_else(|| self.view_model.clone());
             state.new_rive(ScriptedViewModel::new(state, view_model, reference));
         } else {
@@ -326,8 +378,8 @@ impl Drop for ScriptedPropertyViewModel {
 impl ScriptedViewModel {
     pub fn new(
         state: &mut LuaState,
-        view_model: Option<RiveRc<ViewModel>>,
-        view_model_instance: Option<RiveRc<ViewModelInstance>>,
+        view_model: Option<CoreHandle>,
+        view_model_instance: Option<CoreHandle>,
     ) -> Self {
         let context = scripting_context(state).map(|context| context as *mut dyn ScriptingContext);
         if let (Some(context), Some(instance)) = (context, view_model_instance.as_ref()) {
@@ -347,15 +399,21 @@ impl ScriptedViewModel {
             let instance = if state.top() == 2 && !state.is_none_or_nil(-1) && state.is_string(-1) {
                 let name = state.to_string(-1).unwrap();
                 view_model
-                    .create_from_instance(&name)
-                    .unwrap_or_else(|| view_model.create_instance())
+                    .with_downcast_mut::<ViewModel, _>(|view_model| {
+                        view_model
+                            .create_from_instance(&name)
+                            .or_else(|| view_model.create_instance())
+                    })
+                    .flatten()
             } else {
-                view_model.create_instance()
+                view_model
+                    .with_downcast_mut::<ViewModel, _>(ViewModel::create_instance)
+                    .flatten()
             };
             state.new_rive(ScriptedViewModel::new(
                 state,
                 Some(view_model.clone()),
-                Some(instance),
+                instance,
             ));
         } else {
             state.push_nil();
@@ -369,9 +427,16 @@ impl ScriptedViewModel {
             state.raw_get_i(LUA_REGISTRY_INDEX, *reference);
             return 1;
         }
-        if let Some(instance) = self.view_model_instance.as_mut() {
-            if let Some(property_value) = instance.property_value_mut(name) {
-                if core_type == 0 || property_value.core_type() == core_type {
+        if let Some(instance) = self.view_model_instance.as_ref() {
+            if let Some(property_value) = instance
+                .with(|instance| {
+                    instance
+                        .as_view_model_instance()
+                        .and_then(|instance| instance.property_value_named(name))
+                })
+                .flatten()
+            {
+                if core_type == 0 || property_value.core_type() == Some(core_type) {
                     push_view_model_instance_value(state, property_value);
                 } else {
                     state.push_nil();
@@ -381,8 +446,15 @@ impl ScriptedViewModel {
             }
         } else if core_type != 0 || self.view_model.is_none() {
             state.push_nil();
-        } else if let Some(property) = self.view_model.as_ref().unwrap().property(name) {
-            match property.core_type() {
+        } else if let Some(property) = self
+            .view_model
+            .as_ref()
+            .and_then(|model| {
+                model.with_downcast::<ViewModel, _>(|model| model.property_named(name))
+            })
+            .flatten()
+        {
+            match property.core_type().unwrap_or_default() {
                 ViewModelPropertyNumber::TYPE_KEY => {
                     state.new_rive(ScriptedPropertyNumber::new(state, None))
                 }
@@ -432,9 +504,20 @@ impl ScriptedViewModel {
         let index = self
             .view_model_instance
             .as_ref()
-            .and_then(|instance| instance.property_value(SymbolType::ITEM_INDEX))
-            .and_then(ViewModelInstanceValue::as_symbol_list_index)
-            .map(ViewModelInstanceSymbolListIndex::property_value)
+            .and_then(|instance| {
+                instance
+                    .with(|instance| {
+                        instance.as_view_model_instance().and_then(|instance| {
+                            instance.property_value_for_symbol(SymbolType::ITEM_INDEX)
+                        })
+                    })
+                    .flatten()
+            })
+            .and_then(|value| {
+                value.with_downcast::<ViewModelInstanceSymbolListIndex, _>(
+                    ViewModelInstanceSymbolListIndex::property_value,
+                )
+            })
             .unwrap_or(-1);
         state.push_integer(index as i64);
         1
@@ -444,11 +527,11 @@ impl ScriptedViewModel {
         self.state
     }
 
-    pub fn view_model_instance(&self) -> Option<RiveRc<ViewModelInstance>> {
+    pub fn view_model_instance(&self) -> Option<CoreHandle> {
         self.view_model_instance.clone()
     }
 
-    pub fn mutable_view_model_instance(&mut self) -> Option<RiveRc<ViewModelInstance>> {
+    pub fn mutable_view_model_instance(&mut self) -> Option<CoreHandle> {
         self.view_model_instance.clone()
     }
 }
@@ -470,9 +553,9 @@ impl Drop for ScriptedViewModel {
 macro_rules! scalar_property {
     ($name:ident, $value:ty, $as_value:ident, $default:expr, $push:ident) => {
         impl $name {
-            pub fn new(state: &mut LuaState, value: Option<RiveRc<$value>>) -> Self {
+            pub fn new(state: &mut LuaState, value: Option<CoreHandle>) -> Self {
                 Self {
-                    property: ScriptedProperty::new(state, value.map(RiveRc::into_base)),
+                    property: ScriptedProperty::new(state, value),
                 }
             }
 
@@ -480,10 +563,11 @@ macro_rules! scalar_property {
                 let value = self
                     .property
                     .instance_value()
-                    .and_then(ViewModelInstanceValue::$as_value)
-                    .map(|value| value.property_value())
+                    .and_then(|value| {
+                        value.with_downcast::<$value, _>(|value| value.property_value())
+                    })
                     .unwrap_or($default);
-                unsafe { &mut *self.property.state }.$push(value.into());
+                unsafe { &mut *self.property.state() }.$push(value.into());
                 1
             }
         }
@@ -514,62 +598,54 @@ scalar_property!(
 
 impl ScriptedPropertyNumber {
     pub fn set_value(&mut self, value: f32) {
-        if let Some(property) = self
-            .property
-            .instance_value_mut()
-            .and_then(ViewModelInstanceValue::as_number_mut)
-        {
-            property.set_property_value(value);
+        if let Some(property) = self.property.instance_value_mut() {
+            property.with_downcast_mut::<ViewModelInstanceNumber, _>(|property| {
+                property.set_property_value(value)
+            });
         }
     }
 }
 
 impl ScriptedPropertyColor {
     pub fn set_value(&mut self, value: u32) {
-        if let Some(property) = self
-            .property
-            .instance_value_mut()
-            .and_then(ViewModelInstanceValue::as_color_mut)
-        {
-            property.set_property_value(value as i32);
+        if let Some(property) = self.property.instance_value_mut() {
+            property.with_downcast_mut::<ViewModelInstanceColor, _>(|property| {
+                property.set_property_value(value as i32)
+            });
         }
     }
 }
 
 impl ScriptedPropertyBoolean {
     pub fn set_value(&mut self, value: bool) {
-        if let Some(property) = self
-            .property
-            .instance_value_mut()
-            .and_then(ViewModelInstanceValue::as_boolean_mut)
-        {
-            property.set_property_value(value);
+        if let Some(property) = self.property.instance_value_mut() {
+            property.with_downcast_mut::<ViewModelInstanceBoolean, _>(|property| {
+                property.set_property_value(value)
+            });
         }
     }
 }
 
 impl ScriptedPropertyTrigger {
-    pub fn new(state: &mut LuaState, value: Option<RiveRc<ViewModelInstanceTrigger>>) -> Self {
+    pub fn new(state: &mut LuaState, value: Option<CoreHandle>) -> Self {
         Self {
-            property: ScriptedProperty::new(state, value.map(RiveRc::into_base)),
+            property: ScriptedProperty::new(state, value),
         }
     }
 }
 
 impl ScriptedPropertyString {
-    pub fn new(state: &mut LuaState, value: Option<RiveRc<ViewModelInstanceString>>) -> Self {
+    pub fn new(state: &mut LuaState, value: Option<CoreHandle>) -> Self {
         Self {
-            property: ScriptedProperty::new(state, value.map(RiveRc::into_base)),
+            property: ScriptedProperty::new(state, value),
         }
     }
 
     pub fn set_value(&mut self, value: String) {
-        if let Some(property) = self
-            .property
-            .instance_value_mut()
-            .and_then(ViewModelInstanceValue::as_string_mut)
-        {
-            property.set_property_value(value);
+        if let Some(property) = self.property.instance_value_mut() {
+            property.with_downcast_mut::<ViewModelInstanceString, _>(|property| {
+                property.set_property_value(value)
+            });
         }
     }
 
@@ -577,44 +653,51 @@ impl ScriptedPropertyString {
         let value = self
             .property
             .instance_value()
-            .and_then(ViewModelInstanceValue::as_string)
-            .map(ViewModelInstanceString::property_value)
+            .and_then(|value| {
+                value.with_downcast::<ViewModelInstanceString, _>(|value| {
+                    value.property_value().to_owned()
+                })
+            })
             .unwrap_or_default();
-        unsafe { &mut *self.property.state }.push_string(&value);
+        unsafe { &mut *self.property.state() }.push_string(&value);
         1
     }
 }
 
 impl ScriptedPropertyEnum {
-    pub fn new(state: &mut LuaState, value: Option<RiveRc<ViewModelInstanceEnum>>) -> Self {
+    pub fn new(state: &mut LuaState, value: Option<CoreHandle>) -> Self {
         Self {
-            property: ScriptedProperty::new(state, value.map(RiveRc::into_base)),
+            property: ScriptedProperty::new(state, value),
         }
     }
 
     pub fn set_value(&mut self, value: String) {
-        if let Some(property) = self
-            .property
-            .instance_value_mut()
-            .and_then(ViewModelInstanceValue::as_enum_mut)
-        {
-            property.set_value_named(&value);
+        if let Some(property) = self.property.instance_value_mut() {
+            property.with_downcast_mut::<ViewModelInstanceEnum, _>(|property| {
+                property.set_value_named(&value)
+            });
         }
     }
 
     pub fn push_value(&mut self) -> i32 {
-        let state = unsafe { &mut *self.property.state };
-        if let Some(value) = self
-            .property
-            .instance_value()
-            .and_then(ViewModelInstanceValue::as_enum)
-        {
-            if let Some(data_enum) = value.view_model_property_enum().data_enum() {
-                if let Some(enum_value) = data_enum.values().get(value.property_value() as usize) {
-                    state.push_string(enum_value.key());
-                    return 1;
-                }
-            }
+        let state = unsafe { &mut *self.property.state() };
+        let key = self.property.instance_value().and_then(|value| {
+            value.with_downcast::<ViewModelInstanceEnum, _>(|value| {
+                let data_enum = value
+                    .view_model_property_enum()
+                    .and_then(|property| property.data_enum());
+                data_enum
+                    .and_then(|data_enum| {
+                        data_enum.with_downcast::<DataEnum, _>(|data_enum| {
+                            data_enum.key_at(value.property_value()).to_owned()
+                        })
+                    })
+                    .unwrap_or_default()
+            })
+        });
+        if let Some(key) = key.filter(|key| !key.is_empty()) {
+            state.push_string(&key);
+            return 1;
         }
         state.push_string("");
         1
@@ -622,9 +705,9 @@ impl ScriptedPropertyEnum {
 }
 
 impl ScriptedPropertyList {
-    pub fn new(state: &mut LuaState, value: Option<RiveRc<ViewModelInstanceList>>) -> Self {
+    pub fn new(state: &mut LuaState, value: Option<CoreHandle>) -> Self {
         Self {
-            property: ScriptedProperty::new(state, value.map(RiveRc::into_base)),
+            property: ScriptedProperty::new(state, value),
             changed: false,
             property_refs: HashMap::new(),
         }
@@ -639,29 +722,34 @@ impl ScriptedPropertyList {
         let length = self
             .property
             .instance_value()
-            .and_then(ViewModelInstanceValue::as_list)
-            .map(|list| list.list_items().len())
+            .and_then(|list| {
+                list.with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().len())
+            })
             .unwrap_or(0);
-        unsafe { &mut *self.property.state }.push_integer(length as i64);
+        unsafe { &mut *self.property.state() }.push_integer(length as i64);
         1
     }
 
     pub fn push_value(&mut self, index: usize) -> i32 {
-        let state = unsafe { &mut *self.property.state };
-        let Some(list) = self
-            .property
-            .instance_value()
-            .and_then(ViewModelInstanceValue::as_list)
-        else {
+        let state = unsafe { &mut *self.property.state() };
+        let Some(list) = self.property.instance_value() else {
             state.push_nil();
             return 1;
         };
-        let items = list.list_items();
+        let items = list
+            .with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().to_vec())
+            .unwrap_or_default();
         if self.changed {
             let mut references = HashMap::new();
-            for item in items {
-                if let Some(instance) = item.view_model_instance() {
-                    let key = instance.as_ptr();
+            for item in &items {
+                if let Some(instance) = item
+                    .with(|item| {
+                        item.as_view_model_instance_list_item()
+                            .and_then(ViewModelInstanceListItem::view_model_instance)
+                    })
+                    .flatten()
+                {
+                    let key = instance.clone();
                     if let Some(reference) = self.property_refs.remove(&key) {
                         references.insert(key, reference);
                     }
@@ -673,17 +761,27 @@ impl ScriptedPropertyList {
             self.property_refs = references;
             self.changed = false;
         }
-        if let Some(instance) = items
-            .get(index)
-            .and_then(ViewModelInstanceListItem::view_model_instance)
-        {
-            let key = instance.as_ptr();
+        if let Some(instance) = items.get(index).and_then(|item| {
+            item.with(|item| {
+                item.as_view_model_instance_list_item()
+                    .and_then(ViewModelInstanceListItem::view_model_instance)
+            })
+            .flatten()
+        }) {
+            let key = instance.clone();
             if let Some(reference) = self.property_refs.get(&key) {
                 state.raw_get_i(LUA_REGISTRY_INDEX, *reference);
             } else {
+                let view_model = instance
+                    .with(|instance| {
+                        instance
+                            .as_view_model_instance()
+                            .and_then(ViewModelInstance::get_view_model)
+                    })
+                    .flatten();
                 state.new_rive(ScriptedViewModel::new(
                     state,
-                    Some(instance.view_model_rc()),
+                    view_model,
                     Some(instance.clone()),
                 ));
                 self.property_refs.insert(key, state.reference(-1));
@@ -697,80 +795,89 @@ impl ScriptedPropertyList {
 
 impl Drop for ScriptedPropertyList {
     fn drop(&mut self) {
-        let state = unsafe { &mut *self.property.state };
+        let state = unsafe { &mut *self.property.state() };
         for (_, reference) in self.property_refs.drain() {
             state.unref(reference);
         }
     }
 }
 
-fn file_asset_for_property(
-    property: &ScriptedProperty,
-    asset_id: u32,
-) -> Option<RiveRc<FileAsset>> {
+fn file_asset_for_property(property: &ScriptedProperty, asset_id: u32) -> Option<CoreHandle> {
     if let Some(owner) = property.owner() {
-        if let Some(file) = unsafe { &*owner }
-            .script_asset()
-            .and_then(ScriptAsset::file)
-        {
-            return file.asset(asset_id);
+        if let Some(file) = owner.with(|owner| owner.scripted_object_file()).flatten() {
+            return file
+                .with_file(|file| file.asset(asset_id as usize))
+                .flatten();
         }
     }
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     if property.owner().is_none() {
-        if let Some(file) = property
-            .instance_value()
-            .and_then(ViewModelInstanceValue::view_model_instance)
-            .and_then(ViewModelInstance::view_model)
-            .and_then(ViewModel::file)
-        {
-            return file.asset(asset_id);
+        let file = property.instance_value().and_then(|value| {
+            value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_value()
+                        .and_then(ViewModelInstanceValue::view_model_instance)
+                })
+                .flatten()
+                .and_then(|instance| {
+                    instance
+                        .with(|instance| {
+                            instance
+                                .as_view_model_instance()
+                                .and_then(ViewModelInstance::get_view_model)
+                        })
+                        .flatten()
+                })
+                .and_then(|view_model| view_model.with_downcast::<ViewModel, _>(ViewModel::file))
+        });
+        if let Some(file) = file {
+            return file
+                .with_file(|file| file.asset(asset_id as usize))
+                .flatten();
         }
     }
     None
 }
 
 impl ScriptedPropertyImage {
-    pub fn new(state: &mut LuaState, value: Option<RiveRc<ViewModelInstanceAssetImage>>) -> Self {
+    pub fn new(state: &mut LuaState, value: Option<CoreHandle>) -> Self {
         Self {
-            property: ScriptedProperty::new(state, value.map(RiveRc::into_base)),
+            property: ScriptedProperty::new(state, value),
         }
     }
 
-    pub fn set_value(&mut self, image: Option<&ScriptedImage>) {
-        if let Some(property) = self
-            .property
-            .instance_value_mut()
-            .and_then(ViewModelInstanceValue::as_asset_image_mut)
-        {
-            property.set_value(image.and_then(|image| image.image.clone()));
+    pub fn set_value(&mut self, image: Option<RenderImageRef>) {
+        if let Some(property) = self.property.instance_value_mut() {
+            property.with_downcast_mut::<ViewModelInstanceAssetImage, _>(|property| {
+                property.set_value(image)
+            });
         }
     }
 
     pub fn push_value(&mut self) -> i32 {
-        let state = unsafe { &mut *self.property.state };
-        if self.property.cached_value_ref != 0 {
-            state.raw_get_i(LUA_REGISTRY_INDEX, self.property.cached_value_ref);
+        let state = unsafe { &mut *self.property.state() };
+        if self.property.cached_value_ref() != 0 {
+            state.raw_get_i(LUA_REGISTRY_INDEX, self.property.cached_value_ref());
             return 1;
         }
-        let render_image = self
-            .property
-            .instance_value()
-            .and_then(ViewModelInstanceValue::as_asset_image)
-            .and_then(|value| {
-                value
-                    .asset()
-                    .and_then(|asset| asset.render_image())
-                    .or_else(|| {
-                        file_asset_for_property(&self.property, value.property_value())
-                            .and_then(|asset| asset.as_image_asset())
-                            .and_then(ImageAsset::render_image)
-                    })
-            });
+        let render_image = self.property.instance_value().and_then(|value| {
+            value.with_downcast::<ViewModelInstanceAssetImage, _>(|value| {
+                value.asset().render_image().or_else(|| {
+                    file_asset_for_property(&self.property, value.base.property_value())
+                        .and_then(|asset| {
+                            asset.with_downcast::<ImageAsset, _>(|asset| {
+                                asset.render_image().cloned()
+                            })
+                        })
+                        .flatten()
+                })
+            })
+        });
         if let Some(render_image) = render_image {
             let scripted_image = ScriptedImage::lua_new(state);
             scripted_image.image = Some(render_image);
-            self.property.cached_value_ref = state.reference(-1);
+            self.property.set_cached_value_ref(state.reference(-1));
         } else {
             state.push_nil();
         }
@@ -779,42 +886,38 @@ impl ScriptedPropertyImage {
 }
 
 impl ScriptedPropertyFont {
-    pub fn new(state: &mut LuaState, value: Option<RiveRc<ViewModelInstanceAssetFont>>) -> Self {
+    pub fn new(state: &mut LuaState, value: Option<CoreHandle>) -> Self {
         Self {
-            property: ScriptedProperty::new(state, value.map(RiveRc::into_base)),
+            property: ScriptedProperty::new(state, value),
         }
     }
 
-    pub fn set_value(&mut self, font: Option<&ScriptedFont>) {
-        if let Some(property) = self
-            .property
-            .instance_value_mut()
-            .and_then(ViewModelInstanceValue::as_asset_font_mut)
-        {
-            property.set_value(font.and_then(|font| font.font.clone()));
+    pub fn set_value(&mut self, font: Option<FontRef>) {
+        if let Some(property) = self.property.instance_value_mut() {
+            property.with_downcast_mut::<ViewModelInstanceAssetFont, _>(|property| {
+                property.set_value(font)
+            });
         }
     }
 
     pub fn push_value(&mut self) -> i32 {
-        let state = unsafe { &mut *self.property.state };
-        if self.property.cached_value_ref != 0 {
-            state.raw_get_i(LUA_REGISTRY_INDEX, self.property.cached_value_ref);
+        let state = unsafe { &mut *self.property.state() };
+        if self.property.cached_value_ref() != 0 {
+            state.raw_get_i(LUA_REGISTRY_INDEX, self.property.cached_value_ref());
             return 1;
         }
-        let font = self
-            .property
-            .instance_value()
-            .and_then(ViewModelInstanceValue::as_asset_font)
-            .and_then(|value| {
-                value.asset().and_then(|asset| asset.font()).or_else(|| {
-                    file_asset_for_property(&self.property, value.property_value())
-                        .and_then(|asset| asset.as_font_asset())
-                        .and_then(FontAsset::font)
+        let font = self.property.instance_value().and_then(|value| {
+            value.with_downcast::<ViewModelInstanceAssetFont, _>(|value| {
+                value.asset().font().or_else(|| {
+                    file_asset_for_property(&self.property, value.base.property_value())
+                        .and_then(|asset| asset.with_downcast::<FontAsset, _>(FontAsset::font))
+                        .flatten()
                 })
-            });
+            })
+        });
         if let Some(font) = font {
             state.new_rive(ScriptedFont { font: Some(font) });
-            self.property.cached_value_ref = state.reference(-1);
+            self.property.set_cached_value_ref(state.reference(-1));
         } else {
             state.push_nil();
         }
@@ -823,41 +926,43 @@ impl ScriptedPropertyFont {
 }
 
 impl ScriptedPropertyBlob {
-    pub fn new(state: &mut LuaState, value: Option<RiveRc<ViewModelInstanceAssetBlob>>) -> Self {
+    pub fn new(state: &mut LuaState, value: Option<CoreHandle>) -> Self {
         Self {
-            property: ScriptedProperty::new(state, value.map(RiveRc::into_base)),
+            property: ScriptedProperty::new(state, value),
         }
     }
 
-    pub fn set_value(&mut self, blob: Option<RiveRc<BlobAsset>>) {
-        if let Some(property) = self
-            .property
-            .instance_value_mut()
-            .and_then(ViewModelInstanceValue::as_asset_blob_mut)
-        {
-            property.set_value(blob);
+    pub fn set_value(&mut self, blob: Option<CoreHandle>) {
+        if let Some(property) = self.property.instance_value_mut() {
+            let asset_id = blob
+                .as_ref()
+                .and_then(|asset| {
+                    asset.with_downcast::<BlobAsset, _>(|asset| asset.base.asset_id())
+                })
+                .unwrap_or(u32::MAX);
+            property.with_downcast_mut::<ViewModelInstanceAssetBlob, _>(|property| {
+                property.set_value(None);
+                property.base.set_property_value(asset_id);
+            });
         }
     }
 
     pub fn push_value(&mut self) -> i32 {
-        let state = unsafe { &mut *self.property.state };
-        if self.property.cached_value_ref != 0 {
-            state.raw_get_i(LUA_REGISTRY_INDEX, self.property.cached_value_ref);
+        let state = unsafe { &mut *self.property.state() };
+        if self.property.cached_value_ref() != 0 {
+            state.raw_get_i(LUA_REGISTRY_INDEX, self.property.cached_value_ref());
             return 1;
         }
-        let file_asset = self
-            .property
-            .instance_value()
-            .and_then(ViewModelInstanceValue::as_asset_blob)
-            .and_then(|value| {
-                value.asset().map(RiveRc::into_file_asset).or_else(|| {
-                    file_asset_for_property(&self.property, value.property_value())
-                        .filter(|asset| asset.is_blob_asset())
+        let file_asset = self.property.instance_value().and_then(|value| {
+            value
+                .with_downcast::<ViewModelInstanceAssetBlob, _>(|value| {
+                    file_asset_for_property(&self.property, value.base.property_value())
                 })
-            });
+                .flatten()
+        });
         if let Some(asset) = file_asset {
             state.new_rive(ScriptedBlob { asset: Some(asset) });
-            self.property.cached_value_ref = state.reference(-1);
+            self.property.set_cached_value_ref(state.reference(-1));
         } else {
             state.push_nil();
         }
@@ -866,18 +971,28 @@ impl ScriptedPropertyBlob {
 }
 
 impl ScriptedEnumValues {
-    pub fn new(state: &mut LuaState, data_enum: Option<*mut DataEnum>) -> Self {
+    pub fn new(state: &mut LuaState, data_enum: Option<CoreHandle>) -> Self {
         Self { state, data_enum }
     }
 
     pub fn push_value(&self, index: i32) -> i32 {
         let state = unsafe { &mut *self.state };
         if index >= 0 {
-            if let Some(data_enum) = self.data_enum {
-                if let Some(value) = unsafe { &*data_enum }.values().get(index as usize) {
-                    state.push_string(value.key());
-                    return 1;
-                }
+            if let Some(key) = self
+                .data_enum
+                .as_ref()
+                .and_then(|data_enum| {
+                    data_enum.with_downcast::<DataEnum, _>(|data_enum| {
+                        data_enum
+                            .values()
+                            .get(index as usize)
+                            .map(|value| value.key().to_owned())
+                    })
+                })
+                .flatten()
+            {
+                state.push_string(&key);
+                return 1;
             }
         }
         state.push_nil();
@@ -887,7 +1002,10 @@ impl ScriptedEnumValues {
     pub fn push_length(&self) -> i32 {
         let length = self
             .data_enum
-            .map(|data_enum| unsafe { &*data_enum }.values().len())
+            .as_ref()
+            .and_then(|data_enum| {
+                data_enum.with_downcast::<DataEnum, _>(|data_enum| data_enum.values().len())
+            })
             .unwrap_or(0);
         unsafe { &mut *self.state }.push_integer(length as i64);
         1
@@ -901,7 +1019,7 @@ fn property_vm_index(state: &mut LuaState) -> i32 {
     }
     let property = state.to_rive_mut::<ScriptedPropertyViewModel>(1);
     if atom == LuaAtoms::Value {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_value()
     } else {
         0
@@ -914,10 +1032,10 @@ fn property_vm_newindex(state: &mut LuaState) -> i32 {
         return state.type_error(2, state.type_name(LuaType::String));
     }
     if atom == LuaAtoms::Value {
-        let view_model = state.to_rive_mut::<ScriptedViewModel>(3) as *mut ScriptedViewModel;
+        let replacement = state.to_rive::<ScriptedViewModel>(3).view_model_instance();
         state
             .to_rive_mut::<ScriptedPropertyViewModel>(1)
-            .set_value(unsafe { &mut *view_model });
+            .set_value(replacement);
     }
     0
 }
@@ -929,17 +1047,32 @@ fn view_model_index(state: &mut LuaState) -> i32 {
     view_model.push_value(&name, 0)
 }
 
-fn push_list_item(state: &mut LuaState, item: Option<RiveRc<ViewModelInstanceListItem>>) -> i32 {
-    if let Some(instance) = item.and_then(|item| item.view_model_instance()) {
-        state.new_rive(ScriptedViewModel::new(
-            state,
-            Some(instance.view_model_rc()),
-            Some(instance),
-        ));
+fn push_list_item(state: &mut LuaState, item: Option<CoreHandle>) -> i32 {
+    if let Some(instance) = item.and_then(|item| {
+        item.with(|item| {
+            item.as_view_model_instance_list_item()
+                .and_then(ViewModelInstanceListItem::view_model_instance)
+        })
+        .flatten()
+    }) {
+        let view_model = instance
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()
+                    .and_then(ViewModelInstance::get_view_model)
+            })
+            .flatten();
+        state.new_rive(ScriptedViewModel::new(state, view_model, Some(instance)));
         1
     } else {
         0
     }
+}
+
+fn insert_list_item(list: &CoreHandle, instance: Option<CoreHandle>) -> Option<CoreHandle> {
+    let mut item = ViewModelInstanceListItem::default();
+    item.set_view_model_instance(instance);
+    list.insert_sibling(item)
 }
 
 fn property_namecall_atom(
@@ -951,45 +1084,36 @@ fn property_namecall_atom(
         LuaAtoms::AddListener => Some(property.add_listener()),
         LuaAtoms::RemoveListener => Some(property.remove_listener()),
         LuaAtoms::Fire => {
-            if let Some(trigger) = property
-                .instance_value_mut()
-                .and_then(ViewModelInstanceValue::as_trigger_mut)
+            if let Some(value) = property.instance_value_mut()
+                && value
+                    .with_downcast_mut::<ViewModelInstanceTrigger, _>(|trigger| trigger.trigger())
+                    .is_some()
             {
-                trigger.trigger();
                 return Some(0);
             }
             let view_model = state.to_rive::<ScriptedViewModel>(2);
             let instance = view_model.view_model_instance();
-            let list = property
-                .instance_value_mut()
-                .unwrap()
-                .as_list_mut()
-                .unwrap();
-            let mut item = ViewModelInstanceListItem::default_rc();
-            item.set_view_model_instance(instance);
-            list.add_item(item);
+            let list = property.instance_value_mut().unwrap();
+            if let Some(item) = insert_list_item(&list, instance) {
+                list.with_downcast_mut::<ViewModelInstanceList, _>(|list| list.add_item(item));
+            }
             Some(0)
         }
         LuaAtoms::Push => {
             let view_model = state.to_rive::<ScriptedViewModel>(2);
             let instance = view_model.view_model_instance();
-            let list = property
-                .instance_value_mut()
-                .unwrap()
-                .as_list_mut()
-                .unwrap();
-            let mut item = ViewModelInstanceListItem::default_rc();
-            item.set_view_model_instance(instance);
-            list.add_item(item);
+            let list = property.instance_value_mut().unwrap();
+            if let Some(item) = insert_list_item(&list, instance) {
+                list.with_downcast_mut::<ViewModelInstanceList, _>(|list| list.add_item(item));
+            }
             Some(0)
         }
         LuaAtoms::Pop => {
-            let list = property
-                .instance_value_mut()
-                .unwrap()
-                .as_list_mut()
-                .unwrap();
-            Some(push_list_item(state, list.pop()))
+            let list = property.instance_value_mut().unwrap();
+            let item = list
+                .with_downcast_mut::<ViewModelInstanceList, _>(ViewModelInstanceList::pop)
+                .flatten();
+            Some(push_list_item(state, item))
         }
         LuaAtoms::Swap => {
             let first = state.to_unsigned(2) - 1;
@@ -997,72 +1121,74 @@ fn property_namecall_atom(
             property
                 .instance_value_mut()
                 .unwrap()
-                .as_list_mut()
-                .unwrap()
-                .swap(first as usize, second as usize);
+                .with_downcast_mut::<ViewModelInstanceList, _>(|list| list.swap(first, second));
             Some(0)
         }
         LuaAtoms::Shift => {
-            let list = property
-                .instance_value_mut()
-                .unwrap()
-                .as_list_mut()
-                .unwrap();
-            Some(push_list_item(state, list.shift()))
+            let list = property.instance_value_mut().unwrap();
+            let item = list
+                .with_downcast_mut::<ViewModelInstanceList, _>(ViewModelInstanceList::shift)
+                .flatten();
+            Some(push_list_item(state, item))
         }
         LuaAtoms::Clear => {
             property
                 .instance_value_mut()
                 .unwrap()
-                .as_list_mut()
-                .unwrap()
-                .remove_all_items();
+                .with_downcast_mut::<ViewModelInstanceList, _>(
+                    ViewModelInstanceList::remove_all_items,
+                );
             Some(0)
         }
         LuaAtoms::Insert => {
             let view_model = state.to_rive::<ScriptedViewModel>(2);
             let index = state.to_unsigned(3) - 1;
-            let mut item = ViewModelInstanceListItem::default_rc();
-            item.set_view_model_instance(view_model.view_model_instance());
-            property
-                .instance_value_mut()
-                .unwrap()
-                .as_list_mut()
-                .unwrap()
-                .add_item_at(item, index as usize);
+            let list = property.instance_value_mut().unwrap();
+            if let Some(item) = insert_list_item(&list, view_model.view_model_instance()) {
+                list.with_downcast_mut::<ViewModelInstanceList, _>(|list| {
+                    list.add_item_at(item, index as i32)
+                });
+            }
             Some(0)
         }
         LuaAtoms::Remove => {
             if let Some(view_model) = state.to_rive_optional::<ScriptedViewModel>(2, true) {
                 if let Some(instance) = view_model.view_model_instance() {
-                    let list = property
-                        .instance_value_mut()
-                        .unwrap()
-                        .as_list_mut()
-                        .unwrap();
-                    if let Some(item) = list
-                        .list_items()
-                        .iter()
-                        .find(|item| item.view_model_instance().as_ref() == Some(&instance))
-                        .cloned()
-                    {
-                        list.remove_item(item);
-                    }
+                    let list = property.instance_value_mut().unwrap();
+                    list.with_downcast_mut::<ViewModelInstanceList, _>(|list| {
+                        let item = list
+                            .list_items()
+                            .iter()
+                            .find(|item| {
+                                item.with(|item| {
+                                    item.as_view_model_instance_list_item()
+                                        .and_then(ViewModelInstanceListItem::view_model_instance)
+                                })
+                                .flatten()
+                                .as_ref()
+                                    == Some(&instance)
+                            })
+                            .cloned();
+                        if let Some(item) = item {
+                            list.remove_item(&item);
+                        }
+                    });
                 }
             }
             Some(0)
         }
         LuaAtoms::RemoveAt => {
             let lua_index = state.check_integer(2);
-            let list = property
-                .instance_value_mut()
-                .unwrap()
-                .as_list_mut()
-                .unwrap();
-            if lua_index < 1 || lua_index as usize > list.list_items().len() {
+            let list = property.instance_value_mut().unwrap();
+            let length = list
+                .with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().len())
+                .unwrap_or_default();
+            if lua_index < 1 || lua_index as usize > length {
                 return Some(state.error("removeAt index out of range"));
             }
-            list.remove_item_at((lua_index - 1) as usize);
+            list.with_downcast_mut::<ViewModelInstanceList, _>(|list| {
+                list.remove_item_at((lua_index - 1) as i32)
+            });
             Some(0)
         }
         LuaAtoms::RemoveAllOf => {
@@ -1071,9 +1197,9 @@ fn property_namecall_atom(
                     property
                         .instance_value_mut()
                         .unwrap()
-                        .as_list_mut()
-                        .unwrap()
-                        .remove_all_items_with_view_model_instance(&instance);
+                        .with_downcast_mut::<ViewModelInstanceList, _>(|list| {
+                            list.remove_all_items_with_view_model_instance(Some(instance))
+                        });
                 }
             }
             Some(0)
@@ -1081,10 +1207,24 @@ fn property_namecall_atom(
         LuaAtoms::Values => {
             let data_enum = property
                 .instance_value()
-                .and_then(ViewModelInstanceValue::view_model_property)
-                .and_then(ViewModelProperty::as_enum)
-                .and_then(ViewModelPropertyEnum::data_enum)
-                .map(|data_enum| data_enum as *mut DataEnum);
+                .and_then(|value| {
+                    value
+                        .with(|value| {
+                            value
+                                .as_view_model_instance_value()
+                                .and_then(ViewModelInstanceValue::view_model_property)
+                        })
+                        .flatten()
+                })
+                .and_then(|property| {
+                    property
+                        .with(|property| {
+                            property
+                                .as_view_model_property_enum()
+                                .and_then(ViewModelPropertyEnum::data_enum)
+                        })
+                        .flatten()
+                });
             state.new_rive(ScriptedEnumValues::new(state, data_enum));
             Some(1)
         }
@@ -1094,7 +1234,6 @@ fn property_namecall_atom(
 
 fn view_model_namecall(state: &mut LuaState) -> i32 {
     let (name, atom) = state.namecall_atom();
-    let view_model = state.to_rive_mut::<ScriptedViewModel>(1) as *mut ScriptedViewModel;
     let core_type = match atom {
         LuaAtoms::GetNumber => Some(ViewModelInstanceNumber::TYPE_KEY),
         LuaAtoms::GetTrigger => Some(ViewModelInstanceTrigger::TYPE_KEY),
@@ -1111,12 +1250,15 @@ fn view_model_namecall(state: &mut LuaState) -> i32 {
     };
     if let Some(core_type) = core_type {
         let property_name = state.check_string(2);
-        assert!(std::ptr::eq(unsafe { &*view_model }.state(), state));
-        return unsafe { &mut *view_model }.push_value(&property_name, core_type);
+        return state
+            .to_rive_mut::<ScriptedViewModel>(1)
+            .push_value(&property_name, core_type);
     }
     match atom {
-        LuaAtoms::GetIndex => unsafe { &mut *view_model }.push_index(),
-        LuaAtoms::Instance | LuaAtoms::New => unsafe { &mut *view_model }.instance(state),
+        LuaAtoms::GetIndex => state.to_rive_mut::<ScriptedViewModel>(1).push_index(),
+        LuaAtoms::Instance | LuaAtoms::New => {
+            state.to_rive_mut::<ScriptedViewModel>(1).instance(state)
+        }
         _ => state.error(format!(
             "{} is not a valid method of {}",
             name.unwrap_or_default(),
@@ -1155,8 +1297,60 @@ fn property_namecall(state: &mut LuaState) -> i32 {
         ScriptedPropertyBlob::LUA_TAG => ScriptedPropertyBlob::LUA_NAME,
         _ => return state.type_error(1, "Property"),
     };
-    let property = state.to_userdata::<ScriptedProperty>(1);
-    if let Some(result) = property_namecall_atom(state, unsafe { &mut *property }, atom) {
+    let result = match tag {
+        ScriptedPropertyNumber::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyNumber>(1).property,
+            atom,
+        ),
+        ScriptedPropertyTrigger::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyTrigger>(1).property,
+            atom,
+        ),
+        ScriptedPropertyColor::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyColor>(1).property,
+            atom,
+        ),
+        ScriptedPropertyString::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyString>(1).property,
+            atom,
+        ),
+        ScriptedPropertyBoolean::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyBoolean>(1).property,
+            atom,
+        ),
+        ScriptedPropertyEnum::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyEnum>(1).property,
+            atom,
+        ),
+        ScriptedPropertyList::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyList>(1).property,
+            atom,
+        ),
+        ScriptedPropertyImage::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyImage>(1).property,
+            atom,
+        ),
+        ScriptedPropertyFont::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyFont>(1).property,
+            atom,
+        ),
+        ScriptedPropertyBlob::LUA_TAG => property_namecall_atom(
+            state,
+            &mut state.to_rive_mut::<ScriptedPropertyBlob>(1).property,
+            atom,
+        ),
+        _ => None,
+    };
+    if let Some(result) = result {
         result
     } else {
         state.error(format!(
@@ -1168,6 +1362,8 @@ fn property_namecall(state: &mut LuaState) -> i32 {
 }
 
 fn property_number_direct_value(userdata: *mut (), result: *mut LuaDirectFieldResult) {
+    // SAFETY: Luau invokes this direct-field callback with userdata carrying
+    // `ScriptedPropertyNumber::LUA_TAG` and a live out-result for this call.
     let property = unsafe { &mut *(userdata as *mut ScriptedPropertyNumber) };
     let value = property
         .property
@@ -1179,6 +1375,8 @@ fn property_number_direct_value(userdata: *mut (), result: *mut LuaDirectFieldRe
 }
 
 fn property_color_direct_value(userdata: *mut (), result: *mut LuaDirectFieldResult) {
+    // SAFETY: Luau's registered color-property tag establishes both pointer
+    // types and keeps the userdata/result live for the callback duration.
     let property = unsafe { &mut *(userdata as *mut ScriptedPropertyColor) };
     let value = property
         .property
@@ -1190,6 +1388,8 @@ fn property_color_direct_value(userdata: *mut (), result: *mut LuaDirectFieldRes
 }
 
 fn property_boolean_direct_value(userdata: *mut (), result: *mut LuaDirectFieldResult) {
+    // SAFETY: the callback is registered only for boolean-property userdata;
+    // Luau supplies a valid same-call result out pointer.
     let property = unsafe { &mut *(userdata as *mut ScriptedPropertyBoolean) };
     let value = property
         .property
@@ -1201,6 +1401,8 @@ fn property_boolean_direct_value(userdata: *mut (), result: *mut LuaDirectFieldR
 }
 
 fn property_list_direct_length(userdata: *mut (), result: *mut LuaDirectFieldResult) {
+    // SAFETY: the callback is registered only for list-property userdata and
+    // both ABI pointers remain live and uniquely borrowed for this call.
     let property = unsafe { &mut *(userdata as *mut ScriptedPropertyList) };
     let length = property
         .property
@@ -1218,7 +1420,7 @@ fn property_list_index(state: &mut LuaState) -> i32 {
         return property.push_value((state.check_integer(2) - 1) as usize);
     }
     if atom == LuaAtoms::Length {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_length()
     } else {
         0
@@ -1248,7 +1450,7 @@ fn property_number_index(state: &mut LuaState) -> i32 {
     }
     let property = state.to_rive_mut::<ScriptedPropertyNumber>(1);
     if atom == LuaAtoms::Value {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_value()
     } else {
         0
@@ -1276,7 +1478,7 @@ fn property_color_index(state: &mut LuaState) -> i32 {
     }
     let property = state.to_rive_mut::<ScriptedPropertyColor>(1);
     if atom == LuaAtoms::Value {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_value()
     } else {
         0
@@ -1304,7 +1506,7 @@ fn property_string_index(state: &mut LuaState) -> i32 {
     }
     let property = state.to_rive_mut::<ScriptedPropertyString>(1);
     if atom == LuaAtoms::Value {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_value()
     } else {
         0
@@ -1332,7 +1534,7 @@ fn property_boolean_index(state: &mut LuaState) -> i32 {
     }
     let property = state.to_rive_mut::<ScriptedPropertyBoolean>(1);
     if atom == LuaAtoms::Value {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_value()
     } else {
         0
@@ -1360,7 +1562,7 @@ fn property_enum_index(state: &mut LuaState) -> i32 {
     }
     let property = state.to_rive_mut::<ScriptedPropertyEnum>(1);
     if atom == LuaAtoms::Value {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_value()
     } else {
         0
@@ -1388,7 +1590,7 @@ fn property_image_index(state: &mut LuaState) -> i32 {
     }
     let property = state.to_rive_mut::<ScriptedPropertyImage>(1);
     if atom == LuaAtoms::Value {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_value()
     } else {
         0
@@ -1403,10 +1605,10 @@ fn property_image_newindex(state: &mut LuaState) -> i32 {
     if atom == LuaAtoms::Value {
         let image = state
             .to_rive_optional::<ScriptedImage>(3, true)
-            .map(|image| image as *const ScriptedImage);
+            .and_then(|image| image.image.clone());
         state
             .to_rive_mut::<ScriptedPropertyImage>(1)
-            .set_value(image.map(|image| unsafe { &*image }));
+            .set_value(image);
     }
     0
 }
@@ -1418,7 +1620,7 @@ fn property_font_index(state: &mut LuaState) -> i32 {
     }
     let property = state.to_rive_mut::<ScriptedPropertyFont>(1);
     if atom == LuaAtoms::Value {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_value()
     } else {
         0
@@ -1433,10 +1635,8 @@ fn property_font_newindex(state: &mut LuaState) -> i32 {
     if atom == LuaAtoms::Value {
         let font = state
             .to_rive_optional::<ScriptedFont>(3, true)
-            .map(|font| font as *const ScriptedFont);
-        state
-            .to_rive_mut::<ScriptedPropertyFont>(1)
-            .set_value(font.map(|font| unsafe { &*font }));
+            .and_then(|font| font.font.clone());
+        state.to_rive_mut::<ScriptedPropertyFont>(1).set_value(font);
     }
     0
 }
@@ -1448,7 +1648,7 @@ fn property_blob_index(state: &mut LuaState) -> i32 {
     }
     let property = state.to_rive_mut::<ScriptedPropertyBlob>(1);
     if atom == LuaAtoms::Value {
-        assert!(std::ptr::eq(property.property.state, state));
+        assert!(std::ptr::eq(property.property.state(), state));
         property.push_value()
     } else {
         0

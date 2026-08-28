@@ -6,7 +6,7 @@ use crate::mechanical_port::source::{
 };
 #[derive(Default)]
 pub struct PolygonState {
-    pub vertices: Vec<Box<StraightVertex>>,
+    pub vertices: Vec<Rc<RefCell<StraightVertex>>>,
 }
 pub struct Polygon {
     pub base: PolygonBase,
@@ -35,7 +35,8 @@ impl Polygon {
         let oy = -self.base.origin_y() * self.base.height() + half_height;
         let mut angle = -math_types::PI / 2.0;
         let increment = 2.0 * math_types::PI / self.base.points();
-        for vertex in &mut self.polygon.vertices {
+        for vertex in &self.polygon.vertices {
+            let mut vertex = vertex.borrow_mut();
             vertex.base.set_x(ox + angle.cos() * half_width);
             vertex.base.set_y(oy + angle.sin() * half_height);
             vertex.base.set_radius(self.base.corner_radius());
@@ -48,10 +49,10 @@ impl Polygon {
             if self.polygon.vertices.len() != count {
                 self.polygon
                     .vertices
-                    .resize_with(count, || Box::new(StraightVertex::default()));
+                    .resize_with(count, || Rc::new(RefCell::new(StraightVertex::default())));
                 self.base.clear_vertices();
-                for vertex in &mut self.polygon.vertices {
-                    self.base.add_vertex(&mut **vertex);
+                for vertex in &self.polygon.vertices {
+                    self.base.add_runtime_straight_vertex(vertex.clone());
                 }
             }
             self.build_polygon();
@@ -59,3 +60,4 @@ impl Polygon {
         self.base.update(value);
     }
 }
+use std::{cell::RefCell, rc::Rc};

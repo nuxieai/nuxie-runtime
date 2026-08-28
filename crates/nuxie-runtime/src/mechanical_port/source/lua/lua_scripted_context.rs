@@ -1,11 +1,9 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::{
     assets::{blob_asset::BlobAsset, image_asset::ImageAsset},
     lua::{lua_image_decode::context_decode_image_impl, rive_lua_libs::*},
     scripted::scripted_object::ScriptedObject,
 };
 pub fn push_gpu_features(state: &mut LuaState) -> i32 {
-    #[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
     if let Some(context) = state.thread_data::<dyn ScriptingContext>().ore_context() {
         let f = context.features();
         state.create_table(0, 19);
@@ -75,7 +73,7 @@ pub fn push_gpu_features(state: &mut LuaState) -> i32 {
     1
 }
 impl ScriptedContext {
-    pub fn new(object: &mut ScriptedObject) -> Self {
+    pub fn new(object: CoreHandle) -> Self {
         Self {
             scripted_object: Some(object),
             missing_requested_data: false,
@@ -84,13 +82,18 @@ impl ScriptedContext {
     pub fn push_viewmodel(&mut self, state: &mut LuaState) -> i32 {
         if let Some(instance) = self
             .scripted_object
-            .and_then(|o| unsafe { &mut *o }.data_context())
-            .and_then(|c| c.main_viewmodel_instance())
+            .as_ref()
+            .and_then(|object| {
+                object
+                    .with(|object| object.as_scripted_object()?.data_context())
+                    .flatten()
+            })
+            .and_then(|context| context.borrow().main_view_model_instance())
         {
-            state.new_rive(ScriptedViewModel::new(
-                instance.viewmodel(),
-                instance.clone(),
-            ));
+            let model = instance
+                .with(|instance| instance.as_view_model_instance()?.get_view_model())
+                .flatten();
+            state.new_rive(ScriptedViewModel::new(state, model, Some(instance)));
             return 1;
         }
         self.missing_requested_data = true;
@@ -99,24 +102,32 @@ impl ScriptedContext {
     pub fn push_root_viewmodel(&mut self, state: &mut LuaState) -> i32 {
         if let Some(instance) = self
             .scripted_object
-            .and_then(|o| unsafe { &mut *o }.data_context())
-            .and_then(|c| c.root_viewmodel_instance())
+            .as_ref()
+            .and_then(|object| {
+                object
+                    .with(|object| object.as_scripted_object()?.data_context())
+                    .flatten()
+            })
+            .and_then(|context| context.borrow().root_view_model_instance())
         {
-            state.new_rive(ScriptedViewModel::new(
-                instance.viewmodel(),
-                instance.clone(),
-            ));
+            let model = instance
+                .with(|instance| instance.as_view_model_instance()?.get_view_model())
+                .flatten();
+            state.new_rive(ScriptedViewModel::new(state, model, Some(instance)));
             return 1;
         }
         self.missing_requested_data = true;
         0
     }
     pub fn push_data_context(&mut self, state: &mut LuaState) -> i32 {
-        if let Some(context) = self
-            .scripted_object
-            .and_then(|o| unsafe { &mut *o }.data_context())
-        {
-            state.new_rive(ScriptedDataContext::new(state, context.clone()));
+        if let Some(context) = self.scripted_object.as_ref().and_then(|object| {
+            object
+                .with(|object| object.as_scripted_object()?.data_context())
+                .flatten()
+        }) {
+            state.new_rive(ScriptedDataContext::new(
+                ScriptedDataContextHandle::Mutable(context),
+            ));
             return 1;
         }
         self.missing_requested_data = true;
@@ -148,13 +159,20 @@ fn context_namecall(s: &mut LuaState) -> i32 {
     let (name, atom) = s.namecall_atom();
     let name = name.unwrap_or_default();
     let context = s.to_rive_mut::<ScriptedContext>(1);
-    let Some(pointer) = context.scripted_object else {
+    let Some(object) = context.scripted_object.clone() else {
         return s.error(format!("context:{name}() called on a disposed context — the context passed to init() must not be used after init() returns"));
     };
-    let object = unsafe { &mut *pointer };
+    let file = object
+        .with(|object| object.scripted_object_file())
+        .flatten()
+        .flatten();
     match atom {
         LuaAtoms::MarkNeedsUpdate => {
-            object.mark_needs_update();
+            object.with_mut(|object| {
+                if let Some(object) = object.as_scripted_object_mut() {
+                    object.mark_needs_update();
+                }
+            });
             0
         }
         LuaAtoms::ViewModel => context.push_viewmodel(s),
@@ -162,18 +180,21 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         LuaAtoms::DataContext => context.push_data_context(s),
         LuaAtoms::Image => {
             let wanted = s.check_string(2);
-            if let Some(image) = object
-                .script_asset()
-                .and_then(|a| a.file())
-                .into_iter()
-                .flat_map(|f| f.assets())
-                .filter_map(|a| a.as_image_asset())
-                .find(|a| a.name() == wanted)
-                .and_then(ImageAsset::render_image)
-            {
-                s.new_rive(ScriptedImage {
-                    image: Some(image.clone()),
-                });
+            if let Some(image) = file.as_ref().and_then(|file| {
+                file.with_file(|file| {
+                    file.assets().iter().find_map(|asset| {
+                        asset
+                            .with(|asset| {
+                                let image = asset.as_image_asset()?;
+                                (image.base.name() == wanted)
+                                    .then(|| image.render_image().cloned())
+                                    .flatten()
+                            })
+                            .flatten()
+                    })
+                })
+            }) {
+                s.new_rive(ScriptedImage { image: Some(image) });
                 return 1;
             }
             0
@@ -181,34 +202,49 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         LuaAtoms::Blob => {
             let wanted = s.check_string(2);
             let reference = ScopedAssetReference::new(s, &wanted);
-            if let Some(blob) = object
-                .script_asset()
-                .and_then(|a| a.file())
-                .into_iter()
-                .flat_map(|f| f.assets())
-                .filter_map(|a| a.as_blob_asset())
-                .filter(|b| !b.bytes().is_empty())
-                .max_by_key(|b| reference.match_name(b.name(), b.name()))
-            {
-                s.new_rive(ScriptedBlob {
-                    asset: Some(blob.clone().into_file_asset()),
-                });
+            if let Some(blob) = file.as_ref().and_then(|file| {
+                file.with_file(|file| {
+                    file.assets()
+                        .iter()
+                        .filter_map(|asset_handle| {
+                            asset_handle
+                                .with(|asset| {
+                                    let blob = asset.as_blob_asset()?;
+                                    (!blob.bytes().is_empty()).then(|| {
+                                        (
+                                            reference
+                                                .match_name(blob.base.name(), blob.base.name()),
+                                            asset_handle.clone(),
+                                        )
+                                    })
+                                })
+                                .flatten()
+                        })
+                        .max_by_key(|(rank, _)| *rank)
+                        .and_then(|(_, asset)| asset)
+                })
+            }) {
+                s.new_rive(ScriptedBlob { asset: Some(blob) });
                 return 1;
             }
             0
         }
-        #[cfg(feature = "rive_audio")]
         LuaAtoms::Audio => {
             let wanted = s.check_string(2);
-            if let Some(source) = object
-                .script_asset()
-                .and_then(|a| a.file())
-                .into_iter()
-                .flat_map(|f| f.assets())
-                .filter_map(|a| a.as_audio_asset())
-                .find(|a| a.name() == wanted)
-                .and_then(|a| a.audio_source())
-            {
+            if let Some(source) = file.as_ref().and_then(|file| {
+                file.with_file(|file| {
+                    file.assets().iter().find_map(|asset| {
+                        asset
+                            .with(|asset| {
+                                let audio = asset.as_audio_asset()?;
+                                (audio.base.name() == wanted)
+                                    .then(|| audio.audio_source())
+                                    .flatten()
+                            })
+                            .flatten()
+                    })
+                })
+            }) {
                 let mut scripted = ScriptedAudioSource::default();
                 scripted.set_source(source);
                 s.new_rive(scripted);
@@ -218,9 +254,6 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         }
         LuaAtoms::Canvas => {
             let (w, h) = descriptor_size(s);
-            #[cfg(not(feature = "rive_canvas"))]
-            return s.error("context:canvas() requires a RIVE_CANVAS build");
-            #[cfg(feature = "rive_canvas")]
             {
                 let Some(render_context) = s.thread_data::<dyn ScriptingContext>().render_context()
                 else {
@@ -248,9 +281,6 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         }
         LuaAtoms::GpuCanvas => {
             let (w, h) = descriptor_size(s);
-            #[cfg(not(all(feature = "rive_canvas", feature = "rive_ore")))]
-            return s.error("context:gpuCanvas() requires a RIVE_CANVAS + RIVE_ORE build");
-            #[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
             {
                 let scripting = s.thread_data::<dyn ScriptingContext>();
                 if scripting.gpu_canvas_defer_only() {
@@ -285,29 +315,20 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         }
         LuaAtoms::Features => push_gpu_features(s),
         LuaAtoms::Shader => {
-            #[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
-            {
-                let wanted = s.check_string(2);
-                let reference = ScopedAssetReference::new(s, &wanted);
-                let file_asset = object
-                    .script_asset()
-                    .and_then(|a| lua_gpu_find_shader_asset(a.file(), &reference));
-                let mut scripted = ScriptedShader::default();
-                if lua_gpu_load_shader_by_name(
-                    &mut scripted,
-                    s.thread_data::<dyn ScriptingContext>(),
-                    &reference,
-                    file_asset,
-                ) {
-                    s.new_rive(scripted);
-                    return 1;
-                }
-                return 0;
+            let wanted = s.check_string(2);
+            let reference = ScopedAssetReference::new(s, &wanted);
+            let file_asset = lua_gpu_find_shader_asset(file.clone(), &reference);
+            let mut scripted = ScriptedShader::default();
+            if lua_gpu_load_shader_by_name(
+                &mut scripted,
+                s.thread_data::<dyn ScriptingContext>(),
+                &reference,
+                file_asset,
+            ) {
+                s.new_rive(scripted);
+                return 1;
             }
-            #[cfg(not(all(feature = "rive_canvas", feature = "rive_ore")))]
-            {
-                0
-            }
+            return 0;
         }
         LuaAtoms::DecodeImage => context_decode_image_impl(s),
         _ => s.error(format!(

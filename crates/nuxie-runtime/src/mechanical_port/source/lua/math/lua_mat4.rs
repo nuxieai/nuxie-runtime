@@ -1,4 +1,3 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::{lua::rive_lua_libs::*, math::mat4::Mat4};
 fn push(s: &mut LuaState, m: Mat4) -> i32 {
     s.new_rive(ScriptedMat4 { value: m });

@@ -1,14 +1,17 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::mechanical_port::source::{
+    core::CoreHandle,
     core_context::{CoreContext, StatusCode},
     generated::shapes::paint::trim_path_base::TrimPathBase,
     math::{
         contour_measure::{ContourMeasure, ContourMeasureIter},
         raw_path::RawPath,
     },
-    refcnt::Rcp,
     shapes::paint::{
         effects_container::{self, EffectsContainer},
-        shape_paint::{ShapePaint, ShapePaintPath, ShapePaintType},
+        shape_paint::{ShapePaint, ShapePaintType},
+        shape_paint_path::ShapePaintPath,
         stroke_effect::{EffectPath, PathProvider, StrokeEffect, StrokeEffectState},
     },
 };
@@ -19,24 +22,24 @@ pub enum TrimPathMode {
     Synchronized = 2,
 }
 pub struct TrimEffectPath {
-    path: ShapePaintPath,
-    contours: Vec<Rcp<ContourMeasure>>,
+    path: Rc<RefCell<ShapePaintPath>>,
+    contours: Vec<Rc<ContourMeasure>>,
 }
 impl TrimEffectPath {
     pub fn new() -> Self {
         Self {
-            path: ShapePaintPath::new(true),
+            path: Rc::new(RefCell::new(ShapePaintPath::new(true))),
             contours: Vec::new(),
         }
     }
 }
 impl EffectPath for TrimEffectPath {
     fn invalidate_effect(&mut self) {
-        self.path.rewind();
+        self.path.borrow_mut().rewind();
         self.contours.clear();
     }
-    fn path(&mut self) -> Option<&mut ShapePaintPath> {
-        Some(&mut self.path)
+    fn path(&mut self) -> Option<Rc<RefCell<ShapePaintPath>>> {
+        Some(self.path.clone())
     }
     fn as_trim_mut(&mut self) -> Option<&mut TrimEffectPath> {
         Some(self)
@@ -46,21 +49,38 @@ pub struct TrimPath {
     pub base: TrimPathBase,
     stroke: StrokeEffectState,
 }
+impl Default for TrimPath {
+    fn default() -> Self {
+        Self {
+            base: TrimPathBase::default(),
+            stroke: StrokeEffectState::default(),
+        }
+    }
+}
 impl TrimPath {
     pub fn mode(&self) -> TrimPathMode {
         TrimPathMode::from(self.base.mode_value())
     }
-    pub fn on_added_clean(&mut self, _context: &mut CoreContext) -> StatusCode {
-        let Some(container) = effects_container::from(self.base.parent_mut()) else {
+    pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
+        let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::InvalidObject;
         };
-        container.add_stroke_effect(self as *mut _ as *mut dyn StrokeEffect);
+        let added = parent
+            .with_mut(|parent| {
+                parent
+                    .as_effects_container_mut()
+                    .map(|container| container.add_stroke_effect(this))
+            })
+            .is_some();
+        if !added {
+            return StatusCode::InvalidObject;
+        }
         StatusCode::Ok
     }
     fn trim_path(
         &self,
         destination: &mut ShapePaintPath,
-        contours: &mut Vec<Rcp<ContourMeasure>>,
+        contours: &mut Vec<Rc<ContourMeasure>>,
         source: &RawPath,
         paint_type: ShapePaintType,
     ) {
@@ -172,7 +192,7 @@ impl TrimPath {
     pub fn mode_value_changed(&mut self) {
         StrokeEffect::invalidate_effect_from_local(self);
     }
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
@@ -183,24 +203,27 @@ impl TrimPath {
     }
     pub fn update_effect(
         &mut self,
-        provider: &mut PathProvider,
+        provider: &PathProvider,
         source: &ShapePaintPath,
         paint: &ShapePaint,
     ) {
         let Some(effect) = self
             .stroke
             .effect_paths
-            .get_mut(&(provider as *mut _))
+            .get_mut(&provider.identity())
             .and_then(|path| path.as_trim_mut())
         else {
             return;
         };
-        if effect.path.has_render_path() {
+        if effect.path.borrow().has_render_path() {
             return;
         }
-        effect.path.rewind_as(source.is_local(), source.fill_rule());
+        effect
+            .path
+            .borrow_mut()
+            .rewind_as(source.is_local(), source.fill_rule());
         self.trim_path(
-            &mut effect.path,
+            &mut effect.path.borrow_mut(),
             &mut effect.contours,
             source.raw_path(),
             paint.paint_type(),
@@ -211,11 +234,14 @@ impl StrokeEffect for TrimPath {
     fn stroke_effect_state(&mut self) -> &mut StrokeEffectState {
         &mut self.stroke
     }
-    fn update_effect(&mut self, p: &mut PathProvider, s: &ShapePaintPath, paint: &ShapePaint) {
+    fn stroke_effect_handle(&self) -> Option<CoreHandle> {
+        self.base.handle()
+    }
+    fn update_effect(&mut self, p: &PathProvider, s: &ShapePaintPath, paint: &ShapePaint) {
         TrimPath::update_effect(self, p, s, paint);
     }
-    fn parent_paint(&mut self) -> Option<&mut dyn EffectsContainer> {
-        effects_container::from(self.base.parent_mut())
+    fn parent_paint_handle(&self) -> Option<CoreHandle> {
+        self.base.parent_handle()
     }
     fn create_effect_path(&mut self) -> Box<dyn EffectPath> {
         Box::new(TrimEffectPath::new())

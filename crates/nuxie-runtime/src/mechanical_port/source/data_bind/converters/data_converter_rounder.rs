@@ -49,3 +49,5 @@ struct DataConverterRounderInitializationCallbacks;
 impl DataConverterRounderBaseCallbacks for DataConverterRounderInitializationCallbacks {
     fn notify_property_changed(&mut self, _property_key: u16) {}
 }
+
+crate::impl_data_converter_capability_forward!(DataConverterRounder, base.base);

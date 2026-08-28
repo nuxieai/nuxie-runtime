@@ -27,7 +27,7 @@ impl TextInputDrawable {
     pub fn local_path(&mut self) -> &mut ShapePaintPath {
         self.base.local_clockwise_path()
     }
-    pub fn on_added_clean(&mut self, _context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
         if !self.base.parent_is_text_input() {
             StatusCode::InvalidObject
         } else {

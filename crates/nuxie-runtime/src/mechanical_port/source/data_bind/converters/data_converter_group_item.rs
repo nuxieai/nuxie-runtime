@@ -1,14 +1,16 @@
-use super::data_converter::StatusCode;
-use super::data_converter_group::GroupConverter;
-use crate::mechanical_port::source::generated::data_bind::converters::data_converter_group_item_base::DataConverterGroupItemBase;
+use crate::mechanical_port::source::{
+    core::CoreHandle,
+    generated::data_bind::converters::data_converter_group_item_base::DataConverterGroupItemBase,
+    status_code::StatusCode,
+};
 pub trait GroupItemImporter {
-    fn add_group_item_referencer(&mut self, item: *mut DataConverterGroupItem);
-    fn add_item_to_group(&mut self, item: *mut DataConverterGroupItem) -> bool;
+    fn add_group_item_referencer(&mut self, item: CoreHandle);
+    fn add_item_to_group(&mut self, item: CoreHandle) -> bool;
     fn import_super(&mut self, item: &mut DataConverterGroupItem) -> StatusCode;
 }
 pub struct DataConverterGroupItem {
     pub base: DataConverterGroupItemBase,
-    data_converter: Option<*mut dyn GroupConverter>,
+    data_converter: Option<CoreHandle>,
     owns_converter: bool,
 }
 impl Default for DataConverterGroupItem {
@@ -23,11 +25,9 @@ impl Default for DataConverterGroupItem {
 impl Drop for DataConverterGroupItem {
     fn drop(&mut self) {
         if self.owns_converter {
-            if let Some(converter) = self.data_converter.take() {
-                unsafe {
-                    drop(Box::from_raw(converter));
-                }
-            }
+            // Converter clones are CoreArena occurrences. This field is a
+            // retained identity, never authority to reconstruct a Box.
+            self.data_converter = None;
         }
     }
 }
@@ -36,27 +36,29 @@ impl DataConverterGroupItem {
         let Some(importer) = importer else {
             return StatusCode::MissingObject;
         };
-        importer.add_group_item_referencer(self as *mut Self);
-        if !importer.add_item_to_group(self as *mut Self) {
+        let Some(item) = self.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        importer.add_group_item_referencer(item.clone());
+        if !importer.add_item_to_group(item) {
             return StatusCode::MissingObject;
         }
         importer.import_super(self)
     }
-    pub fn converter(&self) -> Option<*mut dyn GroupConverter> {
-        self.data_converter
+    pub fn converter(&self) -> Option<CoreHandle> {
+        self.data_converter.clone()
     }
-    pub fn set_converter(&mut self, value: Option<*mut dyn GroupConverter>) {
+    pub fn set_converter(&mut self, value: Option<CoreHandle>) {
         self.data_converter = value
     }
     pub fn set_owns_converter(&mut self, value: bool) {
         self.owns_converter = value
     }
     pub fn clone_item(&self) -> Self {
-        if let Some(converter) = self.data_converter {
-            let cloned = unsafe { (&*converter).clone_box() };
+        if let Some(converter) = self.data_converter.as_ref() {
             Self {
                 base: DataConverterGroupItemBase::default(),
-                data_converter: Some(Box::into_raw(cloned)),
+                data_converter: converter.clone_occurrence(),
                 owns_converter: true,
             }
         } else {

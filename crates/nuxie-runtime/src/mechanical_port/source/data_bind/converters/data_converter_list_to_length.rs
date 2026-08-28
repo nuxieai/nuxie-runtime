@@ -14,10 +14,10 @@ impl DataConverterListToLength {
     pub fn output_type(&self) -> DataType {
         DataType::Number
     }
-    pub fn convert<'a>(&'a mut self, input: &mut dyn DataValue) -> &'a dyn DataValue {
+    pub fn convert<'a>(&'a mut self, input: &dyn DataValue) -> &'a dyn DataValue {
         let value = input
-            .as_any_mut()
-            .downcast_mut::<DataValueList>()
+            .as_any()
+            .downcast_ref::<DataValueList>()
             .map_or(DataValueNumber::DEFAULT_VALUE, |list| {
                 list.value().len() as f32
             });
@@ -25,3 +25,5 @@ impl DataConverterListToLength {
         &self.output
     }
 }
+
+crate::impl_data_converter_capability_forward!(DataConverterListToLength, base.base);

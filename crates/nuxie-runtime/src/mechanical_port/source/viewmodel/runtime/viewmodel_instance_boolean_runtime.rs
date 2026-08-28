@@ -1,27 +1,34 @@
-use super::viewmodel_instance_value_runtime::{
-    DataType, ViewModelInstanceValue, ViewModelInstanceValueRuntime,
-};
-use std::rc::Rc;
-pub trait BooleanValue: ViewModelInstanceValue {
-    fn property_value(&self) -> bool;
-    fn set_property_value(&self, value: bool);
+use super::viewmodel_instance_value_runtime::{DataType, ViewModelInstanceValueRuntime};
+use crate::mechanical_port::source::viewmodel::viewmodel_instance_boolean::ViewModelInstanceBoolean;
+
+#[derive(Clone)]
+pub struct ViewModelInstanceBooleanRuntime {
+    base: ViewModelInstanceValueRuntime,
 }
-pub struct ViewModelInstanceBooleanRuntime<T: BooleanValue> {
-    base: ViewModelInstanceValueRuntime<T>,
-}
-impl<T: BooleanValue> ViewModelInstanceBooleanRuntime<T> {
-    pub fn new(value: Rc<T>) -> Self {
-        Self {
-            base: ViewModelInstanceValueRuntime::new(value),
-        }
+
+impl ViewModelInstanceBooleanRuntime {
+    pub fn new(base: ViewModelInstanceValueRuntime) -> Option<Self> {
+        (base.data_type() == DataType::Boolean).then_some(Self { base })
     }
+
     pub fn value(&self) -> bool {
-        self.base.value().property_value()
+        self.base
+            .handle()
+            .with_downcast::<ViewModelInstanceBoolean, _>(ViewModelInstanceBoolean::value)
+            .unwrap_or(false)
     }
+
     pub fn set_value(&self, value: bool) {
-        self.base.value().set_property_value(value)
+        self.base
+            .handle()
+            .with_downcast_mut::<ViewModelInstanceBoolean, _>(|property| property.set_value(value));
     }
+
     pub fn data_type(&self) -> DataType {
         DataType::Boolean
+    }
+
+    pub fn value_runtime(&self) -> &ViewModelInstanceValueRuntime {
+        &self.base
     }
 }

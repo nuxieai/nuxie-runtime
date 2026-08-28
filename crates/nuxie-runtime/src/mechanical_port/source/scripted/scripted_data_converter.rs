@@ -1,6 +1,10 @@
-use crate::mechanical_port::source::scripted::scripted_object::{
-    ScriptProtocol, ScriptValue, ScriptedObject,
+use crate::mechanical_port::source::{
+    core::CoreHandle,
+    data_bind::data_context::DataContext,
+    generated::scripted::scripted_data_converter_base::ScriptedDataConverterBase,
+    scripted::scripted_object::{ScriptProtocol, ScriptValue, ScriptedObject},
 };
+use std::{cell::RefCell, rc::Rc};
 #[derive(Clone, Debug, PartialEq)]
 pub enum DataValue {
     None,
@@ -13,14 +17,18 @@ pub enum DataValue {
 }
 #[derive(Default)]
 pub struct ScriptedDataConverter {
+    pub base: ScriptedDataConverterBase,
     pub scripted: ScriptedObject,
-    data_context: Option<usize>,
+    data_context: Option<Rc<RefCell<DataContext>>>,
     data_value: Option<DataValue>,
-    properties: Vec<usize>,
+    properties: Vec<CoreHandle>,
     converter_dirty: bool,
-    data_binds: Vec<usize>,
 }
 impl ScriptedDataConverter {
+    pub fn asset_id(&self) -> u32 {
+        self.base.script_asset_id()
+    }
+
     pub fn did_hydrate_script_inputs(&mut self) {
         self.converter_dirty = true;
     }
@@ -68,8 +76,8 @@ impl ScriptedDataConverter {
         let out = self.apply_conversion(v, "reverseConvert");
         out
     }
-    pub fn bind_from_context(&mut self, c: Option<usize>) {
-        self.data_context = c;
+    pub fn bind_from_context(&mut self, c: Option<Rc<RefCell<DataContext>>>) {
+        self.data_context = c.clone();
         self.scripted.set_data_context(c);
         self.scripted.reinit();
         self.converter_dirty = true
@@ -90,8 +98,11 @@ impl ScriptedDataConverter {
         }
         needs_advance
     }
-    pub fn add_property(&mut self, p: usize) {
+    pub fn add_property(&mut self, p: CoreHandle) {
         self.properties.push(p)
+    }
+    pub fn remove_property(&mut self, property: &CoreHandle) {
+        self.properties.retain(|item| item != property)
     }
     pub fn add_scripted_dirt(&mut self) {
         self.converter_dirty = true
@@ -108,8 +119,8 @@ impl ScriptedDataConverter {
             _ => self.scripted.set_string_input(name, String::new()),
         }
     }
-    pub fn add_data_bind_from_scripted_object(&mut self, data_bind: usize) -> bool {
-        self.data_binds.push(data_bind);
+    pub fn add_data_bind_from_scripted_object(&mut self, data_bind: CoreHandle) -> bool {
+        self.base.base.add_data_bind(data_bind);
         true
     }
 }

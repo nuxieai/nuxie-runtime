@@ -1,47 +1,63 @@
-use super::viewmodel_instance_value_runtime::{
-    DataType, ViewModelInstanceValue, ViewModelInstanceValueRuntime,
+use crate::mechanical_port::source::{
+    bindable_artboard::RuntimeBindableArtboardHandle, core::CoreHandle,
 };
-use std::rc::Rc;
-pub trait BindableArtboard {
-    fn artboard_name(&self) -> Option<&str>;
+
+use super::viewmodel_instance_value_runtime::{DataType, ViewModelInstanceValueRuntime};
+
+#[derive(Clone)]
+pub struct ViewModelInstanceArtboardRuntime {
+    base: ViewModelInstanceValueRuntime,
 }
-pub trait ArtboardValue: ViewModelInstanceValue {
-    type Artboard: BindableArtboard;
-    type Instance;
-    fn set_asset(&self, value: Rc<Self::Artboard>);
-    fn asset(&self) -> Option<Rc<Self::Artboard>>;
-    fn set_bound_view_model_instance(&self, value: Option<Rc<Self::Instance>>);
-}
-pub struct ViewModelInstanceArtboardRuntime<T: ArtboardValue> {
-    base: ViewModelInstanceValueRuntime<T>,
-}
-impl<T: ArtboardValue> ViewModelInstanceArtboardRuntime<T> {
-    pub fn new(value: Rc<T>) -> Self {
-        Self {
-            base: ViewModelInstanceValueRuntime::new(value),
-        }
+
+impl ViewModelInstanceArtboardRuntime {
+    pub fn new(base: ViewModelInstanceValueRuntime) -> Option<Self> {
+        (base.data_type() == DataType::Artboard).then_some(Self { base })
     }
-    pub fn set_value(&self, artboard: Rc<T::Artboard>) {
-        self.base.value().set_bound_view_model_instance(None);
-        self.base.value().set_asset(artboard)
+    pub fn set_value(&self, artboard: Option<RuntimeBindableArtboardHandle>) {
+        self.base.handle().with_mut(|property| {
+            if let Some(property) = property.as_view_model_instance_artboard_mut() {
+                property.set_bound_view_model_instance(None);
+                property.set_asset(artboard);
+            }
+        });
     }
-    pub fn set_view_model_instance(&self, instance: Rc<T::Instance>) {
-        self.base
-            .value()
-            .set_bound_view_model_instance(Some(instance))
+    pub fn set_view_model_instance(&self, instance: Option<CoreHandle>) {
+        self.base.handle().with_mut(|property| {
+            if let Some(property) = property.as_view_model_instance_artboard_mut() {
+                property.set_bound_view_model_instance(instance);
+            }
+        });
     }
     pub fn artboard_name(&self) -> String {
         self.base
-            .value()
-            .asset()
-            .and_then(|asset| asset.artboard_name().map(str::to_owned))
+            .handle()
+            .with(|property| {
+                property
+                    .as_view_model_instance_artboard()
+                    .and_then(|property| {
+                        property
+                            .asset()
+                            .map(|asset| asset.with_artboard(|artboard| artboard.name().to_owned()))
+                    })
+            })
+            .flatten()
             .unwrap_or_default()
+    }
+    #[cfg(any(test, feature = "tools"))]
+    pub fn testing_value(&self) -> Option<RuntimeBindableArtboardHandle> {
+        self.base
+            .handle()
+            .with(|property| {
+                property
+                    .as_view_model_instance_artboard()
+                    .and_then(|property| property.asset())
+            })
+            .flatten()
     }
     pub fn data_type(&self) -> DataType {
         DataType::Artboard
     }
-    #[cfg(feature = "testing")]
-    pub fn testing_value(&self) -> Option<Rc<T::Artboard>> {
-        self.base.value().asset()
+    pub fn value_runtime(&self) -> &ViewModelInstanceValueRuntime {
+        &self.base
     }
 }

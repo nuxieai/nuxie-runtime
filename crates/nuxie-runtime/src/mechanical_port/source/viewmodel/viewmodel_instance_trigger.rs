@@ -10,14 +10,14 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub struct ViewModelInstanceTrigger {
     pub base: ViewModelInstanceTriggerBase,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     changed_callback: Option<fn(&mut Self, u32)>,
 }
 
 impl ViewModelInstanceTrigger {
     pub fn property_value_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::BINDINGS);
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             callback(self, self.base.property_value());
         }
@@ -38,10 +38,18 @@ impl ViewModelInstanceTrigger {
         self.base.set_property_value(self.base.property_value() + 1);
     }
     pub fn apply_value(&mut self, value: &DataValueInteger) {
-        let this = self as *mut Self;
-        unsafe { (*this).base.set_property_value(value.value(), &mut *this) };
+        if self.base.set_property_value_value(value.value()) {
+            self.property_value_changed();
+            self.base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .notify_property_changed(ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY);
+        }
     }
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self, u32)>) {
         self.changed_callback = callback;
     }

@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     component::{ComponentDirt, has_dirt},
-    core::{CoreContext, StatusCode},
+    core::{CoreContext, CoreHandle, StatusCode},
     math::{mat2d::Mat2D, vec2d::Vec2D},
     node::Node,
     renderer::RenderPaint,
@@ -19,7 +19,7 @@ use crate::mechanical_port::source::{
 
 pub struct LinearGradient {
     pub base: LinearGradientBase,
-    stops: Vec<GradientStop>,
+    stops: Vec<CoreHandle>,
     shape_paint_container: Option<Node>,
     deformer: Option<PointDeformer>,
     color_storage: Vec<ColorInt>,
@@ -27,7 +27,7 @@ pub struct LinearGradient {
 }
 
 impl LinearGradient {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
@@ -60,14 +60,21 @@ impl LinearGradient {
         }
     }
 
-    pub fn add_stop(&mut self, stop: GradientStop) {
+    pub fn add_stop(&mut self, stop: CoreHandle) {
         self.stops.push(stop);
     }
 
     pub fn update(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::STOPS) {
-            self.stops
-                .sort_by(|a, b| a.position().total_cmp(&b.position()));
+            self.stops.sort_by(|a, b| {
+                let a = a
+                    .with_downcast::<GradientStop, _>(|stop| stop.base.position())
+                    .unwrap_or_default();
+                let b = b
+                    .with_downcast::<GradientStop, _>(|stop| stop.base.position())
+                    .unwrap_or_default();
+                a.total_cmp(&b)
+            });
         }
         let paints_in_world_space = self
             .base
@@ -127,8 +134,13 @@ impl LinearGradient {
         self.color_storage.resize(self.stops.len(), 0);
         let mut positions = vec![0.0; self.stops.len()];
         for (index, stop) in self.stops.iter().enumerate() {
-            self.color_storage[index] = color_modulate_opacity(stop.color_value(), opacity);
-            positions[index] = stop.position().clamp(0.0, 1.0);
+            let (color, position) = stop
+                .with_downcast::<GradientStop, _>(|stop| {
+                    (stop.base.color_value(), stop.base.position())
+                })
+                .unwrap_or_default();
+            self.color_storage[index] = color_modulate_opacity(color, opacity);
+            positions[index] = position.clamp(0.0, 1.0);
         }
         self.make_gradient(render_paint, start, end, &self.color_storage, &positions);
     }

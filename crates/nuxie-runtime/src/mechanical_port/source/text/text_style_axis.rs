@@ -8,20 +8,42 @@ pub struct TextStyleAxis {
 }
 
 impl TextStyleAxis {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code == StatusCode::Ok {
-            let Some(mut style) = self.base.parent_as_text_style() else {
+            let (Some(style), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
                 return StatusCode::InvalidObject;
             };
-            unsafe { style.as_mut() }.add_variation(self);
+            let added = style
+                .with_mut(|style| {
+                    style
+                        .as_text_style_mut()
+                        .map(|style| style.add_variation(this))
+                })
+                .flatten()
+                .is_some();
+            if !added {
+                return StatusCode::InvalidObject;
+            }
         }
         code
     }
     pub fn tag_changed(&mut self) {
-        self.base.parent_mut().add_dirt(ComponentDirt::TEXT_SHAPE);
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(parent) = parent.as_component_mut() {
+                    parent.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+                }
+            });
+        }
     }
     pub fn axis_value_changed(&mut self) {
-        self.base.parent_mut().add_dirt(ComponentDirt::TEXT_SHAPE);
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(parent) = parent.as_component_mut() {
+                    parent.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+                }
+            });
+        }
     }
 }

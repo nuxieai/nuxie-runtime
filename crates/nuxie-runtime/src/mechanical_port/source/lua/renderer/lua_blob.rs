@@ -1,4 +1,3 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::{
     assets::blob_asset::BlobAsset,
     lua::rive_lua_libs::{LuaAtoms, LuaState, LuaType, ScriptedBlob},
@@ -39,7 +38,7 @@ fn index(state: &mut LuaState) -> i32 {
     }
     1
 }
-#[cfg(feature = "rive_tools")]
+#[cfg(feature = "tools")]
 pub fn push_blob(state: &mut LuaState, name: Option<&str>, data: &[u8]) -> i32 {
     let mut blob = ScriptedBlob::default();
     if !data.is_empty() {

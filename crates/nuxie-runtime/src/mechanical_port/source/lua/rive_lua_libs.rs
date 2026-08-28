@@ -1,14 +1,12 @@
-#![cfg(feature = "rive_scripting")]
-
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
     time::{Duration, Instant},
 };
 
-#[cfg(feature = "rive_tools")]
+#[cfg(feature = "tools")]
 pub use super::renderer::lua_blob::push_blob as lua_push_blob;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub use super::renderer::lua_gpu::{
     lua_gpu_find_shader_asset, lua_gpu_load_shader_by_name, lua_gpu_push_shader_by_name,
     rive_lua_close_orphan_render_pass,
@@ -32,8 +30,10 @@ pub use crate::mechanical_port::source::{
     artboard::{Artboard, ArtboardInstance},
     assets::{
         blob_asset::BlobAsset, file_asset::FileAsset, font_asset::FontAsset,
-        image_asset::ImageAsset, script_asset::ModuleDetails, shader_asset::ShaderAsset,
+        image_asset::ImageAsset, script_asset::RuntimeModuleDetailsHandle,
+        shader_asset::ShaderAsset,
     },
+    core::CoreHandle,
     data_bind::{
         data_context::DataContext,
         data_values::{
@@ -42,7 +42,7 @@ pub use crate::mechanical_port::source::{
     },
     event::Event,
     factory::Factory,
-    file::File,
+    file::{File, RuntimeFileWeakHandle},
     hit_result::HitResult,
     input::focusable::{Key, KeyModifiers},
     input::gamepad_snapshot::{GamepadEventInvocation, GamepadSnapshot},
@@ -54,12 +54,10 @@ pub use crate::mechanical_port::source::{
         raw_path::RawPath,
         vec2d::Vec2D,
     },
-    refcnt::RiveRc,
     renderer::{
         ImageFilter, ImageSampler, ImageWrap, RenderBuffer, RenderImage, RenderPaint,
         RenderPaintStyle, RenderPath, RenderShader, Renderer,
     },
-    scripted::scripted_object::ScriptedObject,
     shapes::paint::{
         blend_mode::BlendMode, color::ColorInt, shape_paint::ShapePaint, stroke_cap::StrokeCap,
         stroke_join::StrokeJoin,
@@ -67,7 +65,9 @@ pub use crate::mechanical_port::source::{
     text::font_hb::Font,
     transform_component::TransformComponent,
     viewmodel::{
-        data_enum::DataEnum, viewmodel::ViewModel, viewmodel_instance::ViewModelInstance,
+        data_enum::DataEnum,
+        viewmodel::ViewModel,
+        viewmodel_instance::ViewModelInstance,
         viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob,
         viewmodel_instance_asset_font::ViewModelInstanceAssetFont,
         viewmodel_instance_asset_image::ViewModelInstanceAssetImage,
@@ -78,13 +78,12 @@ pub use crate::mechanical_port::source::{
         viewmodel_instance_number::ViewModelInstanceNumber,
         viewmodel_instance_string::ViewModelInstanceString,
         viewmodel_instance_trigger::ViewModelInstanceTrigger,
-        viewmodel_instance_value::ViewModelInstanceValue,
+        viewmodel_instance_value::{ViewModelInstanceValue, ViewModelInstanceValueDelegateHandle},
         viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
     },
 };
 
 pub use crate::mechanical_port::source::r#async::work_pool::WorkPool;
-#[cfg(feature = "rive_audio")]
 pub use crate::mechanical_port::source::audio::{
     audio_engine::AudioEngine, audio_sound::AudioSoundRef, audio_source::AudioSource,
 };
@@ -1104,13 +1103,7 @@ impl_lua_rive!(ScriptedTriangleBuffer, 5, "TriangleBuffer");
 #[derive(Default)]
 pub struct ScriptedImage {
     pub image: Option<RenderImage>,
-    #[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
     pub cached_ore_view: Option<OreTextureView>,
-    #[cfg(all(
-        feature = "rive_canvas",
-        feature = "rive_ore",
-        feature = "ore_backend_gl"
-    ))]
     pub cached_mirror_image: Option<RenderImage>,
 }
 
@@ -1124,99 +1117,64 @@ impl_lua_rive!(ScriptedImage, 6, "Image");
 
 #[derive(Default)]
 pub struct ScriptedBlob {
-    pub asset: Option<RiveRc<FileAsset>>,
+    pub asset: Option<CoreHandle>,
 }
 
 impl_lua_rive!(ScriptedBlob, 35, "Blob");
 
-#[cfg(feature = "rive_audio")]
 pub struct ScriptedAudio;
 
-#[cfg(feature = "rive_audio")]
 impl_lua_rive!(ScriptedAudio, 40, "Audio");
 
-#[cfg(feature = "rive_audio")]
 #[derive(Default)]
 pub struct ScriptedAudioSource {
-    pub source: Option<Rc<AudioSource>>,
+    pub source: Option<std::sync::Arc<AudioSource>>,
 }
 
-#[cfg(feature = "rive_audio")]
 impl_lua_rive!(ScriptedAudioSource, 38, "AudioSource");
 
-#[cfg(feature = "rive_audio")]
 pub struct ScriptedAudioSound {
     pub sound: Option<AudioSoundRef>,
-    pub artboard: Option<*mut Artboard>,
+    pub artboard: Option<crate::mechanical_port::source::core::CoreHandle>,
 }
 
-#[cfg(feature = "rive_audio")]
 impl_lua_rive!(ScriptedAudioSound, 39, "AudioSound");
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OreBuffer;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OreTexture;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OreTextureView;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OreSampler;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OreBindGroup;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OreBindGroupLayout;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OreShaderModule;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OrePipeline;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OreRenderPass;
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct OreContext;
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 #[derive(Default)]
 pub struct ScriptedGPUBuffer {
     pub buffer: Option<OreBuffer>,
     pub immutable: bool,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPUBuffer, 41, "GPUBuffer");
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 #[derive(Default)]
 pub struct ScriptedGPUTexture {
     pub texture: Option<OreTexture>,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPUTexture, 42, "GPUTexture");
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 #[derive(Default)]
 pub struct ScriptedGPUSampler {
     pub sampler: Option<OreSampler>,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPUSampler, 43, "GPUSampler", no_metatable);
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct ScriptedShaderEntry {
     pub stage: u8,
     pub logical: String,
     pub physical: String,
     pub module: Option<Rc<OreShaderModule>>,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 #[derive(Default)]
 pub struct ScriptedShader {
     pub entries: Vec<ScriptedShaderEntry>,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl ScriptedShader {
     pub fn has_module(&self) -> bool {
         !self.entries.is_empty()
@@ -1247,19 +1205,13 @@ impl ScriptedShader {
             .as_deref()
     }
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedShader, 44, "Shader", no_metatable);
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct ScriptedGPUPipeline {
     pub pipeline: Option<OrePipeline>,
     pub sample_count: u32,
     pub owned_vertex_layout_data: Vec<u8>,
     pub auto_bind_group_layouts: Vec<OreBindGroupLayout>,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl Default for ScriptedGPUPipeline {
     fn default() -> Self {
         Self {
@@ -1270,32 +1222,20 @@ impl Default for ScriptedGPUPipeline {
         }
     }
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPUPipeline, 45, "GPUPipeline");
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct ScriptedGPUBindGroup {
     pub bind_group: Option<OreBindGroup>,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPUBindGroup, 52, "GPUBindGroup", no_metatable);
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct ScriptedGPUBindGroupLayout {
     pub layout: Option<OreBindGroupLayout>,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(
     ScriptedGPUBindGroupLayout,
     60,
     "GPUBindGroupLayout",
     no_metatable
 );
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct ScriptedGPURenderPass {
     pub pass: Option<Box<OreRenderPass>>,
     pub context: Option<*mut OreContext>,
@@ -1305,17 +1245,11 @@ pub struct ScriptedGPURenderPass {
     pub label: String,
     pub draw_call_count: u32,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPURenderPass, 46, "GPURenderPass");
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct ScriptedGPUTextureView {
     pub view: Option<OreTextureView>,
     pub retained_image: Option<RenderImage>,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPUTextureView, 51, "GPUTextureView", no_metatable);
 
 #[repr(i32)]
@@ -1325,8 +1259,6 @@ pub enum CanvasState {
     Idle = 0,
     Rendering = 1,
 }
-
-#[cfg(feature = "rive_canvas")]
 pub struct ScriptedCanvas {
     pub canvas: Option<RenderCanvas>,
     pub state: *mut LuaState,
@@ -1336,11 +1268,7 @@ pub struct ScriptedCanvas {
     pub rive_renderer: Option<Box<RiveRenderer>>,
     pub renderer_ref: i32,
 }
-
-#[cfg(feature = "rive_canvas")]
 impl_lua_rive!(ScriptedCanvas, 50, "Canvas");
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 pub struct ScriptedGPUCanvas {
     pub canvas: Option<RenderCanvas>,
     pub color_view: Option<OreTextureView>,
@@ -1348,8 +1276,6 @@ pub struct ScriptedGPUCanvas {
     pub image_ref: i32,
     pub render_context: Option<*mut RenderContext>,
 }
-
-#[cfg(all(feature = "rive_canvas", feature = "rive_ore"))]
 impl_lua_rive!(ScriptedGPUCanvas, 47, "GPUCanvas");
 
 #[repr(u8)]
@@ -1632,12 +1558,10 @@ impl ScriptedRenderer {
 impl_lua_rive!(ScriptedRenderer, 9, "Renderer");
 
 pub struct ScriptReffedArtboard {
-    pub file: *mut File,
-    #[cfg(feature = "rive_tools")]
-    pub file_pin: Option<Rc<File>>,
+    pub file: RuntimeFileWeakHandle,
     pub artboard: Option<Box<ArtboardInstance>>,
     pub state_machine: Option<Box<StateMachineInstance>>,
-    pub view_model_instance: Option<Rc<ViewModelInstance>>,
+    pub view_model_instance: Option<CoreHandle>,
     pub scripting_context: *mut dyn ScriptingContext,
 }
 
@@ -1667,7 +1591,7 @@ impl ScriptedArtboard {
         Rc::get_mut(self.script_reffed_artboard.as_mut()?)?.state_machine_mut()
     }
 
-    pub fn view_model_instance(&self) -> Option<Rc<ViewModelInstance>> {
+    pub fn view_model_instance(&self) -> Option<CoreHandle> {
         self.script_reffed_artboard
             .as_ref()
             .and_then(|artboard| artboard.view_model_instance.clone())
@@ -1689,37 +1613,50 @@ pub struct ScriptedListener {
     pub property_self_ref: i32,
 }
 
-pub struct ScriptedProperty {
+pub struct ScriptedPropertyRuntime {
     pub listeners: Vec<ScriptedListener>,
-    pub owner: Option<*mut ScriptedObject>,
-    #[cfg(feature = "rive_tools")]
+    pub state: *mut LuaState,
+    pub cached_value_ref: i32,
+}
+
+pub struct ScriptedProperty {
+    pub runtime: Rc<RefCell<ScriptedPropertyRuntime>>,
+    pub delegate: Option<ViewModelInstanceValueDelegateHandle>,
+    pub owner: Option<CoreHandle>,
+    #[cfg(feature = "tools")]
     pub orphan_context: Option<*mut dyn ScriptingContext>,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub orphan_owner_tag: u32,
     pub disposed: bool,
-    pub state: *mut LuaState,
-    pub instance_value: Option<RiveRc<ViewModelInstanceValue>>,
-    pub cached_value_ref: i32,
+    pub instance_value: Option<CoreHandle>,
 }
 
 impl ScriptedProperty {
     pub fn state(&self) -> *mut LuaState {
-        self.state
+        self.runtime.borrow().state
     }
 
-    pub fn instance_value(&self) -> Option<&ViewModelInstanceValue> {
-        self.instance_value.as_deref()
+    pub fn instance_value(&self) -> Option<CoreHandle> {
+        self.instance_value.clone()
     }
 
-    pub fn instance_value_mut(&mut self) -> Option<&mut ViewModelInstanceValue> {
-        self.instance_value.as_deref_mut()
+    pub fn instance_value_mut(&mut self) -> Option<CoreHandle> {
+        self.instance_value.clone()
+    }
+
+    pub fn cached_value_ref(&self) -> i32 {
+        self.runtime.borrow().cached_value_ref
+    }
+
+    pub fn set_cached_value_ref(&mut self, value: i32) {
+        self.runtime.borrow_mut().cached_value_ref = value;
     }
 }
 
 pub struct ScriptedViewModel {
     pub state: *mut LuaState,
-    pub view_model: Option<RiveRc<ViewModel>>,
-    pub view_model_instance: Option<RiveRc<ViewModelInstance>>,
+    pub view_model: Option<CoreHandle>,
+    pub view_model_instance: Option<CoreHandle>,
     pub property_refs: HashMap<String, i32>,
     pub scripting_context: Option<*mut dyn ScriptingContext>,
 }
@@ -1752,7 +1689,7 @@ macro_rules! scripted_property_type {
 
 pub struct ScriptedPropertyViewModel {
     pub property: ScriptedProperty,
-    pub view_model: Option<RiveRc<ViewModel>>,
+    pub view_model: Option<CoreHandle>,
     pub value_ref: i32,
 }
 
@@ -1763,7 +1700,7 @@ scripted_property_type!(ScriptedPropertyTrigger, 14, "PropertyTrigger");
 pub struct ScriptedPropertyList {
     pub property: ScriptedProperty,
     pub changed: bool,
-    pub property_refs: HashMap<*mut ViewModelInstance, i32>,
+    pub property_refs: HashMap<CoreHandle, i32>,
 }
 
 impl_lua_rive!(ScriptedPropertyList, 15, "PropertyList");
@@ -1773,7 +1710,7 @@ scripted_property_type!(ScriptedPropertyBoolean, 18, "Property<bool>");
 
 pub struct ScriptedEnumValues {
     pub state: *mut LuaState,
-    pub data_enum: Option<*mut DataEnum>,
+    pub data_enum: Option<CoreHandle>,
 }
 
 impl ScriptedEnumValues {
@@ -1934,21 +1871,21 @@ impl_lua_rive!(ScriptedPointerEvent, 24, "PointerEvent");
 
 pub struct ScriptedNode {
     pub artboard: Rc<ScriptReffedArtboard>,
-    pub component: *mut TransformComponent,
-    pub shape_paint: Option<*const ShapePaint>,
+    pub component: CoreHandle,
+    pub shape_paint: Option<CoreHandle>,
 }
 
 impl_lua_rive!(ScriptedNode, 25, "NodeData");
 
 pub struct ScriptedContourMeasure {
-    pub measure: RiveRc<ContourMeasure>,
-    pub iterator: Option<RiveRc<RefCntContourMeasureIter>>,
+    pub measure: Rc<ContourMeasure>,
+    pub iterator: Option<Rc<RefCell<RefCntContourMeasureIter>>>,
 }
 
 impl ScriptedContourMeasure {
     pub fn new(
-        measure: RiveRc<ContourMeasure>,
-        iterator: Option<RiveRc<RefCntContourMeasureIter>>,
+        measure: Rc<ContourMeasure>,
+        iterator: Option<Rc<RefCell<RefCntContourMeasureIter>>>,
     ) -> Self {
         Self { measure, iterator }
     }
@@ -1969,13 +1906,13 @@ impl ScriptedPathMeasure {
 impl_lua_rive!(ScriptedPathMeasure, 27, "PathMeasure");
 
 pub struct ScriptedContext {
-    pub scripted_object: Option<*mut ScriptedObject>,
+    pub scripted_object: Option<CoreHandle>,
     pub missing_requested_data: bool,
 }
 
 impl ScriptedContext {
-    pub fn scripted_object(&self) -> Option<*mut ScriptedObject> {
-        self.scripted_object
+    pub fn scripted_object(&self) -> Option<CoreHandle> {
+        self.scripted_object.clone()
     }
 
     pub fn clear_scripted_object(&mut self) {
@@ -2054,12 +1991,12 @@ impl ScriptedFocusInvocation {
 impl_lua_rive!(ScriptedFocusInvocation, 57, "FocusInvocation");
 
 pub struct ScriptedReportedEventInvocation {
-    pub event: *mut Event,
+    pub event: CoreHandle,
     pub delay_seconds: f32,
 }
 
 impl ScriptedReportedEventInvocation {
-    pub fn new(event: *mut Event, delay_seconds: f32) -> Self {
+    pub fn new(event: CoreHandle, delay_seconds: f32) -> Self {
         Self {
             event,
             delay_seconds,
@@ -2129,14 +2066,28 @@ impl ScriptedNoneInvocation {
 }
 impl_lua_rive!(ScriptedNoneInvocation, 61, "NoneInvocation");
 
-pub struct ScriptedDataContext {
-    pub state: *mut LuaState,
-    pub data_context: DataContext,
+pub enum ScriptedDataContextHandle {
+    Shared(Rc<DataContext>),
+    Mutable(Rc<RefCell<DataContext>>),
 }
 
-impl ScriptedDataContext {
-    pub fn state(&self) -> *mut LuaState {
-        self.state
+pub struct ScriptedDataContext {
+    pub data_context: ScriptedDataContextHandle,
+}
+
+impl ScriptedDataContextHandle {
+    pub fn parent(&self) -> Option<Rc<DataContext>> {
+        match self {
+            Self::Shared(context) => context.parent(),
+            Self::Mutable(context) => context.borrow().parent(),
+        }
+    }
+
+    pub fn main_view_model_instance(&self) -> Option<CoreHandle> {
+        match self {
+            Self::Shared(context) => context.main_view_model_instance(),
+            Self::Mutable(context) => context.borrow().main_view_model_instance(),
+        }
     }
 }
 
@@ -2233,7 +2184,7 @@ impl ScopedAssetReference {
 }
 
 pub struct TrackedViewModelInstance {
-    pub instance: RiveRc<ViewModelInstance>,
+    pub instance: CoreHandle,
     pub registrations: i32,
 }
 
@@ -2247,20 +2198,20 @@ pub struct ScriptingContextData {
     #[cfg(target_family = "wasm")]
     pub gl_handle: i32,
     pub factory: *mut Factory,
-    pub current_scripted_object: Option<*mut ScriptedObject>,
-    pub modules_to_register: Vec<*mut ModuleDetails>,
-    pub module_lookup: HashMap<String, *mut ModuleDetails>,
-    pub pending_modules: HashSet<*mut ModuleDetails>,
-    pub tracked_view_model_instances: HashMap<*mut ViewModelInstance, TrackedViewModelInstance>,
-    #[cfg(feature = "rive_tools")]
+    pub current_scripted_object: Option<CoreHandle>,
+    pub modules_to_register: Vec<RuntimeModuleDetailsHandle>,
+    pub module_lookup: HashMap<String, RuntimeModuleDetailsHandle>,
+    pub pending_modules: HashSet<RuntimeModuleDetailsHandle>,
+    pub tracked_view_model_instances: HashMap<CoreHandle, TrackedViewModelInstance>,
+    #[cfg(feature = "tools")]
     pub asset_generator_refs: HashMap<u32, i32>,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub is_playing: bool,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub orphan_scripted_properties: Vec<*mut ScriptedProperty>,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub orphan_owner_tag: u32,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub shader_rstbs: HashMap<String, Vec<u8>>,
 }
 
@@ -2281,15 +2232,15 @@ impl ScriptingContextData {
             module_lookup: HashMap::new(),
             pending_modules: HashSet::new(),
             tracked_view_model_instances: HashMap::new(),
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             asset_generator_refs: HashMap::new(),
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             is_playing: false,
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             orphan_scripted_properties: Vec::new(),
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             orphan_owner_tag: 0,
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             shader_rstbs: HashMap::new(),
         }
     }
@@ -2316,38 +2267,45 @@ pub trait ScriptingContext {
         unsafe { &mut *self.data().factory }
     }
 
-    fn current_scripted_object(&self) -> Option<*mut ScriptedObject> {
-        self.data().current_scripted_object
+    fn current_scripted_object(&self) -> Option<CoreHandle> {
+        self.data().current_scripted_object.clone()
     }
 
-    fn set_current_scripted_object(&mut self, value: Option<*mut ScriptedObject>) {
+    fn set_current_scripted_object(&mut self, value: Option<CoreHandle>) {
         self.data_mut().current_scripted_object = value;
     }
 
-    fn add_module(&mut self, module: &mut ModuleDetails) {
-        let module = module as *mut ModuleDetails;
-        self.data_mut().modules_to_register.push(module);
-        self.data_mut()
-            .module_lookup
-            .insert(unsafe { &*module }.module_name().to_owned(), module);
+    fn add_module(&mut self, module: RuntimeModuleDetailsHandle) {
+        let Some(name) = module.with_module(|module| module.module_name()) else {
+            return;
+        };
+        self.data_mut().modules_to_register.push(module.clone());
+        self.data_mut().module_lookup.insert(name, module);
     }
 
-    fn try_register_module(&mut self, state: &mut LuaState, module: *mut ModuleDetails) -> bool {
-        let module = unsafe { &mut *module };
-        #[cfg(not(feature = "rive_tools"))]
-        if !module.verified() {
+    fn try_register_module(
+        &mut self,
+        state: &mut LuaState,
+        module: &RuntimeModuleDetailsHandle,
+    ) -> bool {
+        let Some((verified, name, protocol_script, bytecode)) = module.with_module(|module| {
+            (
+                module.verified(),
+                module.module_name(),
+                module.is_protocol_script(),
+                module.module_bytecode().to_vec(),
+            )
+        }) else {
+            return false;
+        };
+        #[cfg(not(feature = "tools"))]
+        if !verified {
             return false;
         }
 
-        let name = module.module_name().to_owned();
         let mut function_ref = 0;
-        let registered = if module.is_protocol_script() {
-            if scripting_vm::ScriptingVM::register_script_on(
-                state,
-                &name,
-                module.module_bytecode(),
-                None,
-            ) {
+        let registered = if protocol_script {
+            if scripting_vm::ScriptingVM::register_script_on(state, &name, &bytecode, None) {
                 if state.value_type(-1) == LuaType::Function {
                     function_ref = state.reference(-1);
                 }
@@ -2357,15 +2315,10 @@ pub trait ScriptingContext {
                 false
             }
         } else {
-            scripting_vm::ScriptingVM::register_module_on(
-                state,
-                &name,
-                module.module_bytecode(),
-                None,
-            )
+            scripting_vm::ScriptingVM::register_module_on(state, &name, &bytecode, None)
         };
         if registered {
-            module.registration_complete(function_ref);
+            module.with_module_mut(|module| module.registration_complete(function_ref));
             self.on_module_registered(module);
         }
         registered
@@ -2374,15 +2327,14 @@ pub trait ScriptingContext {
     fn perform_registration(&mut self, state: &mut LuaState) {
         let modules = self.data().modules_to_register.clone();
         for module in modules {
-            if module.is_null() {
+            let Some(cache_key) = module.with_module(|module| module.module_name()) else {
                 continue;
-            }
-            let cache_key = unsafe { &*module }.module_name().to_owned();
+            };
             if check_registered_modules(state, &cache_key) {
                 state.pop(1);
                 continue;
             }
-            self.try_register_module(state, module);
+            self.try_register_module(state, &module);
         }
 
         if !self.data().pending_modules.is_empty() {
@@ -2393,7 +2345,7 @@ pub trait ScriptingContext {
                 self.sort_next_module(module, &mut pending, &mut sorted, &mut visited);
             }
             for module in sorted {
-                self.try_register_module(state, module);
+                self.try_register_module(state, &module);
             }
         }
 
@@ -2403,21 +2355,24 @@ pub trait ScriptingContext {
 
     fn sort_next_module(
         &self,
-        module: *mut ModuleDetails,
-        pending: &mut Vec<*mut ModuleDetails>,
-        sorted: &mut Vec<*mut ModuleDetails>,
-        visited: &mut HashSet<*mut ModuleDetails>,
+        module: RuntimeModuleDetailsHandle,
+        pending: &mut Vec<RuntimeModuleDetailsHandle>,
+        sorted: &mut Vec<RuntimeModuleDetailsHandle>,
+        visited: &mut HashSet<RuntimeModuleDetailsHandle>,
     ) {
-        if !visited.insert(module) {
+        if !visited.insert(module.clone()) {
             return;
         }
-        for dependency in unsafe { &*module }.missing_dependencies() {
+        let dependencies = module
+            .with_module(|module| module.missing_dependencies())
+            .unwrap_or_default();
+        for dependency in dependencies {
             if let Some(dependency_module) = self.data().module_lookup.get(&dependency) {
-                self.sort_next_module(*dependency_module, pending, sorted, visited);
+                self.sort_next_module(dependency_module.clone(), pending, sorted, visited);
             }
         }
         if !sorted.contains(&module) {
-            sorted.push(module);
+            sorted.push(module.clone());
         }
         if let Some(next) = pending.pop() {
             self.sort_next_module(next, pending, sorted, visited);
@@ -2428,35 +2383,36 @@ pub trait ScriptingContext {
         if requiring_module.is_empty() {
             return;
         }
-        let Some(module) = self.data().module_lookup.get(requiring_module).copied() else {
+        let Some(module) = self.data().module_lookup.get(requiring_module).cloned() else {
             return;
         };
-        unsafe { &mut *module }.add_missing_dependency(missing_module.to_owned());
+        module.with_module_mut(|module| module.add_missing_dependency(missing_module.to_owned()));
         self.data_mut().pending_modules.insert(module);
     }
 
-    fn on_module_registered(&mut self, registered: &mut ModuleDetails) {
-        let key = registered.module_name().to_owned();
-        for module in &self.data().modules_to_register {
-            let module = unsafe { &mut **module };
-            if !module.missing_dependencies().is_empty() {
-                module.clear_missing_dependency(&key);
-            }
+    fn on_module_registered(&mut self, registered: &RuntimeModuleDetailsHandle) {
+        let Some(key) = registered.with_module(|module| module.module_name()) else {
+            return;
+        };
+        let modules = self.data().modules_to_register.clone();
+        for module in modules {
+            module.with_module_mut(|module| {
+                if !module.missing_dependencies().is_empty() {
+                    module.clear_missing_dependency(&key);
+                }
+            });
         }
-        self.data_mut()
-            .pending_modules
-            .remove(&(registered as *mut ModuleDetails));
+        self.data_mut().pending_modules.remove(registered);
     }
 
-    fn track_view_model_instance(&mut self, instance: Option<RiveRc<ViewModelInstance>>) {
+    fn track_view_model_instance(&mut self, instance: Option<CoreHandle>) {
         let Some(instance) = instance else {
             return;
         };
-        let pointer = instance.as_ptr();
         let tracked = self
             .data_mut()
             .tracked_view_model_instances
-            .entry(pointer)
+            .entry(instance.clone())
             .or_insert(TrackedViewModelInstance {
                 instance,
                 registrations: 0,
@@ -2464,30 +2420,33 @@ pub trait ScriptingContext {
         tracked.registrations += 1;
     }
 
-    fn untrack_view_model_instance(&mut self, instance: Option<&ViewModelInstance>) {
+    fn untrack_view_model_instance(&mut self, instance: Option<&CoreHandle>) {
         let Some(instance) = instance else {
             return;
         };
-        let pointer = instance as *const ViewModelInstance as *mut ViewModelInstance;
         if let Some(tracked) = self
             .data_mut()
             .tracked_view_model_instances
-            .get_mut(&pointer)
+            .get_mut(instance)
         {
             tracked.registrations -= 1;
             if tracked.registrations <= 0 {
                 self.data_mut()
                     .tracked_view_model_instances
-                    .remove(&pointer);
+                    .remove(instance);
             }
         }
     }
 
     fn advance_detached_view_models(&mut self) {
         for tracked in self.data_mut().tracked_view_model_instances.values_mut() {
-            if !tracked.instance.has_parents() {
-                tracked.instance.advanced();
-            }
+            tracked.instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut()
+                    && !instance.has_parents()
+                {
+                    instance.advanced();
+                }
+            });
         }
     }
 
@@ -2500,8 +2459,6 @@ pub trait ScriptingContext {
             .render_context
             .map(|context| unsafe { &mut *context })
     }
-
-    #[cfg(feature = "rive_ore")]
     fn ore_context(&mut self) -> Option<&mut OreContext> {
         self.render_context()?.ore()
     }
@@ -2565,14 +2522,14 @@ pub trait ScriptingContext {
         self.data().previous_gl_context
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn set_generator_ref(&mut self, asset_id: u32, reference: i32) {
         self.data_mut()
             .asset_generator_refs
             .insert(asset_id, reference);
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn generator_ref(&self, asset_id: u32) -> i32 {
         self.data()
             .asset_generator_refs
@@ -2581,32 +2538,32 @@ pub trait ScriptingContext {
             .unwrap_or(0)
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn clear_generator_refs(&mut self) {
         self.data_mut().asset_generator_refs.clear();
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn has_generator_ref(&self, asset_id: u32) -> bool {
         self.data().asset_generator_refs.contains_key(&asset_id)
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn set_is_playing(&mut self, value: bool) {
         self.data_mut().is_playing = value;
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn is_playing(&self) -> bool {
         self.data().is_playing
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn track_orphan_scripted_property(&mut self, property: &mut ScriptedProperty) {
         self.data_mut().orphan_scripted_properties.push(property);
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn untrack_orphan_scripted_property(&mut self, property: &mut ScriptedProperty) {
         let pointer = property as *mut ScriptedProperty;
         self.data_mut()
@@ -2614,7 +2571,7 @@ pub trait ScriptingContext {
             .retain(|candidate| *candidate != pointer);
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn dispose_orphan_scripted_properties(&mut self, owner_tag: Option<u32>) {
         if owner_tag == Some(0) {
             return;
@@ -2631,22 +2588,22 @@ pub trait ScriptingContext {
         }
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn orphan_owner_tag(&self) -> u32 {
         self.data().orphan_owner_tag
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn set_orphan_owner_tag(&mut self, value: u32) {
         self.data_mut().orphan_owner_tag = value;
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn register_shader_rstb(&mut self, name: String, bytes: Vec<u8>) {
         self.data_mut().shader_rstbs.insert(name, bytes);
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn find_shader_rstb(&self, reference: &ScopedAssetReference) -> Option<&[u8]> {
         self.data()
             .shader_rstbs
@@ -2660,7 +2617,7 @@ pub trait ScriptingContext {
             .map(|(_, bytes)| bytes)
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     fn take_shader_rstbs(&mut self) -> HashMap<String, Vec<u8>> {
         std::mem::take(&mut self.data_mut().shader_rstbs)
     }
@@ -2668,21 +2625,20 @@ pub trait ScriptingContext {
 
 pub struct ScopedScriptedObjectContext {
     context: Option<*mut dyn ScriptingContext>,
-    previous: Option<*mut ScriptedObject>,
+    previous: Option<CoreHandle>,
 }
 
 impl ScopedScriptedObjectContext {
     pub fn new(
         context: Option<&mut dyn ScriptingContext>,
-        scripted_object: Option<&mut ScriptedObject>,
+        scripted_object: Option<CoreHandle>,
     ) -> Self {
         let previous = context
             .as_ref()
             .and_then(|context| context.current_scripted_object());
         let context_pointer = context.map(|context| context as *mut dyn ScriptingContext);
         if let Some(context) = context_pointer {
-            unsafe { &mut *context }
-                .set_current_scripted_object(scripted_object.map(|object| object as *mut _));
+            unsafe { &mut *context }.set_current_scripted_object(scripted_object);
         }
         Self {
             context: context_pointer,
@@ -2728,18 +2684,18 @@ impl Drop for ScopedCanvasDrawingPhase {
     }
 }
 
-#[cfg(feature = "rive_tools")]
+#[cfg(feature = "tools")]
 pub type ConsoleCallback = fn();
 
 pub struct CPPRuntimeScriptingContext {
     pub context: ScriptingContextData,
     pub execution_time: Instant,
     timeout_ms: i32,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     console_callback: Option<ConsoleCallback>,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     console_buffer: Vec<u8>,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     called_console_callback: bool,
 }
 
@@ -2749,11 +2705,11 @@ impl CPPRuntimeScriptingContext {
             context: ScriptingContextData::new(factory),
             execution_time: Instant::now(),
             timeout_ms: 200,
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             console_callback: None,
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             console_buffer: Vec::new(),
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             called_console_callback: false,
         }
     }
@@ -2764,7 +2720,7 @@ impl CPPRuntimeScriptingContext {
         context
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn with_console_callback(
         factory: &mut Factory,
         timeout_ms: i32,
@@ -2797,18 +2753,18 @@ impl CPPRuntimeScriptingContext {
         }
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn console_memory(&self) -> &[u8] {
         &self.console_buffer
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn clear_console(&mut self) {
         self.console_buffer.clear();
         self.called_console_callback = false;
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn has_console_callback(&self) -> bool {
         self.console_callback.is_some()
     }
@@ -2824,7 +2780,7 @@ impl ScriptingContext for CPPRuntimeScriptingContext {
     }
 
     fn print_begin_line(&mut self, state: &mut LuaState) {
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         {
             self.console_buffer.push(0);
             let (source, line) = state
@@ -2837,7 +2793,7 @@ impl ScriptingContext for CPPRuntimeScriptingContext {
     }
 
     fn print(&mut self, data: &[u8]) {
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         {
             if data.is_empty() {
                 return;
@@ -2852,7 +2808,7 @@ impl ScriptingContext for CPPRuntimeScriptingContext {
     }
 
     fn print_end_line(&mut self) {
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         {
             write_var_uint(&mut self.console_buffer, 0);
             if let Some(callback) = self.console_callback {
@@ -2869,7 +2825,7 @@ impl ScriptingContext for CPPRuntimeScriptingContext {
     fn print_error(&mut self, state: &mut LuaState) {
         if let Some(error) = state.to_string(-1) {
             eprintln!("{error}");
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             {
                 self.print_begin_line(state);
                 self.print(error.as_bytes());
@@ -2890,7 +2846,7 @@ impl ScriptingContext for CPPRuntimeScriptingContext {
     }
 }
 
-#[cfg(feature = "rive_tools")]
+#[cfg(feature = "tools")]
 fn write_var_uint(output: &mut Vec<u8>, mut value: u64) {
     loop {
         let byte = (value & 0x7f) as u8;
@@ -2982,21 +2938,19 @@ pub fn rive_lua_error_handler(state: &mut LuaState) -> i32 {
 pub fn rive_lua_pcall(state: &mut LuaState, argument_count: i32, result_count: i32) -> i32 {
     let context = state.thread_data_mut::<dyn ScriptingContext>();
     let result = context.p_call(state, argument_count, result_count);
-    #[cfg(feature = "rive_ore")]
     rive_lua_close_orphan_render_pass(state);
     result
 }
 
 pub fn rive_lua_pcall_with_context(
     state: &mut LuaState,
-    scripted_object: &mut ScriptedObject,
+    scripted_object: CoreHandle,
     argument_count: i32,
     result_count: i32,
 ) -> i32 {
     let context = state.thread_data_mut::<dyn ScriptingContext>();
     let _scope = ScopedScriptedObjectContext::new(Some(context), Some(scripted_object));
     let result = context.p_call(state, argument_count, result_count);
-    #[cfg(feature = "rive_ore")]
     rive_lua_close_orphan_render_pass(state);
     result
 }

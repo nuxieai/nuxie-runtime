@@ -1,14 +1,12 @@
-use std::ptr::NonNull;
-
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
+    core::CoreHandle,
     data_bind::data_values::data_value_viewmodel::DataValueViewModel,
     generated::viewmodel::viewmodel_instance_viewmodel_base::ViewModelInstanceViewModelBase,
     importers::{
         artboard_importer::ArtboardImporter, backboard_importer::BackboardImporter,
         import_stack::ImportStack, viewmodel_instance_importer::ViewModelInstanceImporter,
     },
-    refcnt::RiveRc,
     status_code::StatusCode,
 };
 
@@ -17,63 +15,77 @@ use super::viewmodel_instance::ViewModelInstance;
 #[derive(Default)]
 pub struct ViewModelInstanceViewModel {
     pub base: ViewModelInstanceViewModelBase,
-    reference_view_model_instance: Option<RiveRc<ViewModelInstance>>,
-    parent_view_model_instance: Option<NonNull<ViewModelInstance>>,
-    #[cfg(feature = "rive_tools")]
+    reference_view_model_instance: Option<CoreHandle>,
+    parent_view_model_instance: Option<CoreHandle>,
+    #[cfg(feature = "tools")]
     changed_callback: Option<fn(&mut Self)>,
 }
 
 impl ViewModelInstanceViewModel {
-    pub fn set_reference_view_model_instance(&mut self, value: Option<RiveRc<ViewModelInstance>>) {
+    pub fn set_reference_view_model_instance(&mut self, value: Option<CoreHandle>) {
         if let (Some(instance), Some(parent)) = (
-            &mut self.reference_view_model_instance,
-            self.parent_view_model_instance,
+            self.reference_view_model_instance.as_ref(),
+            self.parent_view_model_instance.as_ref(),
         ) {
-            instance.remove_parent(parent);
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.remove_parent(parent);
+                }
+            });
         }
         self.reference_view_model_instance = value;
         if let (Some(instance), Some(parent)) = (
-            &mut self.reference_view_model_instance,
-            self.parent_view_model_instance,
+            self.reference_view_model_instance.as_ref(),
+            self.parent_view_model_instance.as_ref(),
         ) {
-            instance.add_parent(parent);
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.add_parent(parent.clone());
+                }
+            });
         }
         self.property_value_changed();
     }
 
-    pub fn reference_view_model_instance(&self) -> Option<NonNull<ViewModelInstance>> {
-        self.reference_view_model_instance
-            .as_ref()
-            .and_then(|instance| NonNull::new(instance.as_ptr()))
+    pub fn reference_view_model_instance(&self) -> Option<CoreHandle> {
+        self.reference_view_model_instance.clone()
     }
 
-    pub fn set_parent_view_model_instance(&mut self, parent: Option<NonNull<ViewModelInstance>>) {
+    pub fn set_parent_view_model_instance(&mut self, parent: Option<CoreHandle>) {
         self.parent_view_model_instance = parent;
     }
 
-    pub fn parent_view_model_instance(&self) -> Option<NonNull<ViewModelInstance>> {
-        self.parent_view_model_instance
+    pub fn parent_view_model_instance(&self) -> Option<CoreHandle> {
+        self.parent_view_model_instance.clone()
     }
 
     pub fn property_value_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::BINDINGS);
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             callback(self);
         }
         self.base.on_value_changed();
     }
 
-    pub fn set_root(&mut self, value: RiveRc<ViewModelInstance>) {
+    pub fn set_root(&mut self, value: CoreHandle) {
         self.base.set_root(value.clone());
-        if let Some(instance) = &mut self.reference_view_model_instance {
-            instance.set_root(value);
+        if let Some(instance) = &self.reference_view_model_instance {
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.set_root(value);
+                }
+            });
         }
     }
 
     pub fn advanced(&mut self) {
-        if let Some(instance) = &mut self.reference_view_model_instance {
-            instance.advanced();
+        if let Some(instance) = &self.reference_view_model_instance {
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.advanced();
+                }
+            });
         }
     }
 
@@ -90,7 +102,7 @@ impl ViewModelInstanceViewModel {
             ) else {
                 return StatusCode::MissingObject;
             };
-            if let Some(mut file) = backboard.file() {
+            if let Some(file) = backboard.file() {
                 let instance_importer = import_stack.latest::<ViewModelInstanceImporter>(
                     crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase::TYPE_KEY,
                 );
@@ -98,63 +110,93 @@ impl ViewModelInstanceViewModel {
                     "artboard ViewModelInstanceViewModel import requires its instance importer",
                 );
                 let instance = instance_importer.view_model_instance();
-                if let Some(view_model) = unsafe { file.as_mut() }
-                    .view_model(unsafe { instance.as_ref() }.base.view_model_id() as usize)
-                {
-                    if let Some(property) = unsafe { view_model.as_ref() }
-                        .property_at(self.base.view_model_property_id() as usize)
-                    {
-                        if let Some(reference_id) = unsafe { property.as_ref() }
-                            .base
-                            .as_view_model_reference_id()
-                        {
-                            if let Some(referenced_view_model) =
-                                unsafe { file.as_mut() }.view_model(reference_id as usize)
-                            {
-                                if let Some(referenced_instance) =
-                                    unsafe { referenced_view_model.as_ref() }
-                                        .instance_at(self.base.property_value() as usize)
-                                {
-                                    unsafe { referenced_instance.as_ref() }.base.ref_();
-                                    self.set_reference_view_model_instance(Some(unsafe {
-                                        RiveRc::from_raw(referenced_instance.as_ptr())
-                                    }));
-                                }
-                            }
-                        }
-                    }
+                let view_model_id = instance
+                    .with(|instance| {
+                        instance
+                            .as_view_model_instance()
+                            .map(|instance| instance.base.view_model_id())
+                    })
+                    .flatten();
+                let referenced_instance = view_model_id.and_then(|view_model_id| {
+                    file.with_file_mut(|file| {
+                        let view_model = file.view_model(view_model_id as usize)?;
+                        let property = view_model
+                            .with(|view_model| {
+                                view_model.as_view_model().and_then(|view_model| {
+                                    view_model
+                                        .property_at(self.base.view_model_property_id() as usize)
+                                })
+                            })
+                            .flatten()?;
+                        let reference_id = property
+                            .with(|property| {
+                                property
+                                    .as_view_model_property()
+                                    .and_then(|property| property.base.as_view_model_reference_id())
+                            })
+                            .flatten()?;
+                        let referenced_view_model = file.view_model(reference_id as usize)?;
+                        referenced_view_model
+                            .with(|view_model| {
+                                view_model.as_view_model().and_then(|view_model| {
+                                    view_model.instance_at(self.base.property_value() as usize)
+                                })
+                            })
+                            .flatten()
+                    })
+                    .flatten()
+                });
+                if let Some(referenced_instance) = referenced_instance {
+                    self.set_reference_view_model_instance(Some(referenced_instance));
                 }
             }
         }
         status
     }
 
-    pub fn update_view_model(&mut self, value: NonNull<ViewModelInstance>) {
-        unsafe { value.as_ref() }.base.ref_();
-        let instance = unsafe { RiveRc::from_raw(value.as_ptr()) };
-        let mut owner = self.base.view_model_instance().unwrap();
-        unsafe { owner.as_mut() }
-            .replace_view_model_by_property(NonNull::from(&mut *self), instance);
+    pub fn update_view_model(&mut self, value: CoreHandle) {
+        let Some(property) = self.base.base.base.base.base.handle() else {
+            return;
+        };
+        let Some(owner) = self.base.view_model_instance() else {
+            return;
+        };
+        owner.with_mut(|owner| {
+            if let Some(owner) = owner.as_view_model_instance_mut() {
+                owner.replace_view_model_property_handle(property, value);
+            }
+        });
     }
 
     pub fn apply_value(&mut self, data_value: &DataValueViewModel) {
-        self.update_view_model(data_value.value());
-    }
-
-    pub fn clone_value(&self) -> Box<Self> {
-        let mut cloned = self.base.clone_view_model_instance_viewmodel();
-        if let Some(instance) = &self.reference_view_model_instance {
-            let cloned_instance = instance.clone_instance();
-            let cloned_instance = unsafe { RiveRc::from_box(cloned_instance) };
-            cloned.set_reference_view_model_instance(Some(cloned_instance));
-            cloned
-                .base
-                .set_view_model_instance(self.base.view_model_instance());
+        if let Some(value) = data_value.value() {
+            self.update_view_model(value);
         }
-        cloned
     }
 
-    #[cfg(feature = "rive_tools")]
+    pub fn clone_value(&self) -> Option<CoreHandle> {
+        let cloned = self.base.base.base.base.base.handle()?.clone_occurrence()?;
+        if let Some(instance) = &self.reference_view_model_instance {
+            let cloned_instance = instance
+                .with(|instance| {
+                    instance
+                        .as_view_model_instance()
+                        .and_then(ViewModelInstance::clone_instance)
+                })
+                .flatten();
+            cloned.with_mut(|cloned| {
+                if let Some(cloned) = cloned.as_view_model_instance_view_model_mut() {
+                    cloned.set_reference_view_model_instance(cloned_instance);
+                    cloned
+                        .base
+                        .set_view_model_instance(self.base.view_model_instance());
+                }
+            });
+        }
+        Some(cloned)
+    }
+
+    #[cfg(feature = "tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self)>) {
         self.changed_callback = callback;
     }

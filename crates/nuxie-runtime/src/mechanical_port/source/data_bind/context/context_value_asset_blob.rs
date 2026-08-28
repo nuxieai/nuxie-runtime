@@ -11,7 +11,10 @@ impl DataBindContextValueAssetBlob {
             base: DataBindContextValue::new(binding),
         }
     }
-    pub fn file_asset(&self, binding: &dyn ContextApplyBinding) -> *mut () {
+    pub fn file_asset(
+        &self,
+        binding: &dyn ContextApplyBinding,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
         binding.resolved_blob_asset()
     }
     pub fn apply(

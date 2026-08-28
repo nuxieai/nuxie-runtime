@@ -1,4 +1,3 @@
-#[cfg(feature = "with_rive_text")]
 use super::raw_text_input::{Flags, RawTextInput};
 use super::{text_interface::TextInterface, text_style::TextStyle};
 use crate::mechanical_port::source::{
@@ -17,20 +16,18 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
     text_engine::TextSizing,
 };
-use std::ptr::NonNull;
 pub struct TextInput {
     pub base: TextInputBase,
     world_bounds: Aabb,
     source_text: String,
-    text_style: Option<NonNull<TextStyle>>,
-    scroll_constraint: Option<NonNull<ScrollConstraint>>,
+    text_style: Option<CoreHandle>,
+    scroll_constraint: Option<CoreHandle>,
     is_dragging: bool,
     focused: bool,
     last_drag_world_position: Vec2D,
     scroll_x: f32,
     scroll_y: f32,
     layout_width: f32,
-    #[cfg(feature = "with_rive_text")]
     raw_text_input: RawTextInput,
 }
 
@@ -48,7 +45,6 @@ impl Default for TextInput {
             scroll_x: 0.0,
             scroll_y: 0.0,
             layout_width: f32::NAN,
-            #[cfg(feature = "with_rive_text")]
             raw_text_input: RawTextInput::default(),
         }
     }
@@ -68,7 +64,6 @@ impl TextInput {
         }
         self.base.component_hit_test_point(position, skip, primary)
     }
-    #[cfg(feature = "with_rive_text")]
     pub fn raw_text_input(&mut self) -> &mut RawTextInput {
         &mut self.raw_text_input
     }
@@ -79,46 +74,62 @@ impl TextInput {
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE);
     }
     pub fn local_bounds(&self) -> Aabb {
-        #[cfg(feature = "with_rive_text")]
-        {
-            self.raw_text_input.bounds()
-        }
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            Aabb::default()
-        }
+        self.raw_text_input.bounds()
     }
-    pub fn on_added_clean(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         self.base.on_added_clean(context);
         self.source_text = self.base.text().to_owned();
         self.text_style = self
             .base
-            .children_mut()
-            .iter_mut()
-            .find_map(|child| child.as_text_style_mut())
-            .map(NonNull::from);
-        #[cfg(feature = "with_rive_text")]
+            .children()
+            .iter()
+            .find(|child| {
+                child
+                    .with(|child| child.as_text_style().is_some())
+                    .unwrap_or(false)
+            })
+            .cloned();
         {
-            if let Some(mut style) = self.text_style {
-                let style = unsafe { style.as_mut() };
-                if let Some(font) = style.font() {
-                    self.raw_text_input.set_font(Some(font));
-                    self.raw_text_input.set_font_size(style.base.font_size());
-                }
+            if let Some(style) = &self.text_style
+                && let Some((font, font_size)) = style
+                    .with_mut(|style| {
+                        style
+                            .as_text_style_mut()
+                            .map(|style| (style.font(), style.base.font_size()))
+                    })
+                    .flatten()
+                && let Some(font) = font
+            {
+                self.raw_text_input.set_font(Some(font));
+                self.raw_text_input.set_font_size(font_size);
             }
             self.sync_displayed_text_from_source(false);
         }
         self.scroll_constraint = self
             .base
-            .parent()
-            .and_then(|parent| parent.parent())
-            .and_then(|parent| parent.as_transform_component())
+            .parent_handle()
             .and_then(|parent| {
-                parent
-                    .constraints_mut()
-                    .find_map(|constraint| constraint.as_scroll_constraint_mut())
+                parent.with(|parent| {
+                    parent
+                        .as_component()
+                        .and_then(|parent| parent.parent_handle())
+                })?
             })
-            .map(NonNull::from);
+            .and_then(|parent| {
+                parent.with(|parent| {
+                    parent.as_transform_component().and_then(|parent| {
+                        parent
+                            .constraints()
+                            .iter()
+                            .find(|constraint| {
+                                constraint
+                                    .with_downcast::<ScrollConstraint, _>(|_| ())
+                                    .is_some()
+                            })
+                            .cloned()
+                    })
+                })?
+            });
         self.update_multiline(false);
         if self.text_style.is_none() {
             StatusCode::MissingObject
@@ -128,17 +139,23 @@ impl TextInput {
     }
     pub fn update(&mut self, value: ComponentDirt) {
         self.base.update(value);
-        #[cfg(feature = "with_rive_text")]
         if value.intersects(ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT) {
-            let style = unsafe { self.text_style.expect("TextInput style").as_mut() };
-            self.raw_text_input.set_font_size(style.base.font_size());
+            let font_size = self
+                .text_style
+                .as_ref()
+                .and_then(|style| {
+                    style
+                        .with(|style| style.as_text_style().map(|style| style.base.font_size()))
+                        .flatten()
+                })
+                .expect("TextInput style");
+            self.raw_text_input.set_font_size(font_size);
             let changed = self.raw_text_input.update(self.base.artboard().factory());
             if changed & Flags::ShapeDirty as u8 != 0 {
                 self.world_bounds = self
                     .base
                     .world_transform()
                     .map_aabb(self.raw_text_input.bounds());
-                #[cfg(feature = "with_rive_layout")]
                 if self.raw_text_input.sizing() == TextSizing::AutoHeight {
                     self.base.mark_layout_node_dirty();
                 }
@@ -152,38 +169,42 @@ impl TextInput {
             }
 
             if self.scroll_x == 0.0 && self.scroll_y == 0.0 && !self.is_dragging {
-                if let Some(mut scroll) = self.scroll_constraint {
-                    let scroll = unsafe { scroll.as_mut() };
-                    let cursor = self.raw_text_input.cursor_visual_position();
-                    let viewport_width = scroll.viewport_width();
-                    let viewport_height = scroll.viewport_height();
-                    let viewport_x = cursor.x() + scroll.authored_scroll_offset_x();
-                    let viewport_top = cursor.top() + scroll.authored_scroll_offset_y();
-                    let viewport_bottom = cursor.bottom() + scroll.authored_scroll_offset_y();
-                    let horizontal = !self.base.multiline() && scroll.base.constrains_horizontal();
-                    let vertical = self.base.multiline() && scroll.base.constrains_vertical();
-                    if horizontal && viewport_x < 0.0 {
-                        scroll.stop_physics();
-                        scroll.set_authored_scroll_offset_x(
-                            scroll.authored_scroll_offset_x() - viewport_x,
-                        );
-                    } else if horizontal && viewport_x > viewport_width - 1.0 {
-                        scroll.stop_physics();
-                        scroll.set_authored_scroll_offset_x(
-                            scroll.authored_scroll_offset_x() - (viewport_x - viewport_width + 1.0),
-                        );
-                    }
-                    if vertical && viewport_top < 0.0 {
-                        scroll.stop_physics();
-                        scroll.set_authored_scroll_offset_y(
-                            scroll.authored_scroll_offset_y() - viewport_top,
-                        );
-                    } else if vertical && viewport_bottom > viewport_height {
-                        scroll.stop_physics();
-                        scroll.set_authored_scroll_offset_y(
-                            scroll.authored_scroll_offset_y() - (viewport_bottom - viewport_height),
-                        );
-                    }
+                if let Some(scroll) = self.scroll_constraint.clone() {
+                    scroll.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                        let cursor = self.raw_text_input.cursor_visual_position();
+                        let viewport_width = scroll.viewport_width();
+                        let viewport_height = scroll.viewport_height();
+                        let viewport_x = cursor.x() + scroll.authored_scroll_offset_x();
+                        let viewport_top = cursor.top() + scroll.authored_scroll_offset_y();
+                        let viewport_bottom = cursor.bottom() + scroll.authored_scroll_offset_y();
+                        let horizontal =
+                            !self.base.multiline() && scroll.base.constrains_horizontal();
+                        let vertical = self.base.multiline() && scroll.base.constrains_vertical();
+                        if horizontal && viewport_x < 0.0 {
+                            scroll.stop_physics();
+                            scroll.set_authored_scroll_offset_x(
+                                scroll.authored_scroll_offset_x() - viewport_x,
+                            );
+                        } else if horizontal && viewport_x > viewport_width - 1.0 {
+                            scroll.stop_physics();
+                            scroll.set_authored_scroll_offset_x(
+                                scroll.authored_scroll_offset_x()
+                                    - (viewport_x - viewport_width + 1.0),
+                            );
+                        }
+                        if vertical && viewport_top < 0.0 {
+                            scroll.stop_physics();
+                            scroll.set_authored_scroll_offset_y(
+                                scroll.authored_scroll_offset_y() - viewport_top,
+                            );
+                        } else if vertical && viewport_bottom > viewport_height {
+                            scroll.stop_physics();
+                            scroll.set_authored_scroll_offset_y(
+                                scroll.authored_scroll_offset_y()
+                                    - (viewport_bottom - viewport_height),
+                            );
+                        }
+                    });
                 }
             }
         }
@@ -195,25 +216,17 @@ impl TextInput {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
-        #[cfg(feature = "with_rive_text")]
-        {
-            let max_width = if width_mode == LayoutMeasureMode::Undefined {
-                f32::MAX
-            } else {
-                width
-            };
-            let max_height = if height_mode == LayoutMeasureMode::Undefined {
-                f32::MAX
-            } else {
-                height
-            };
-            return self.raw_text_input.measure(max_width, max_height).size();
-        }
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = (width, width_mode, height, height_mode);
-            Vec2D::default()
-        }
+        let max_width = if width_mode == LayoutMeasureMode::Undefined {
+            f32::MAX
+        } else {
+            width
+        };
+        let max_height = if height_mode == LayoutMeasureMode::Undefined {
+            f32::MAX
+        } else {
+            height
+        };
+        self.raw_text_input.measure(max_width, max_height).size()
     }
     pub fn control_size(
         &mut self,
@@ -228,15 +241,12 @@ impl TextInput {
     pub fn text_changed(&mut self) {
         self.source_text = self.base.text().to_owned();
         self.sync_displayed_text_from_source(false);
-        #[cfg(feature = "with_rive_layout")]
         self.base.mark_layout_node_dirty();
         self.mark_shape_dirty();
     }
     pub fn selection_radius_changed(&mut self) {
-        #[cfg(feature = "with_rive_text")]
         self.raw_text_input
             .set_selection_corner_radius(self.base.selection_radius());
-        #[cfg(feature = "with_rive_text")]
         self.mark_shape_dirty();
     }
     pub fn multiline_changed(&mut self) {
@@ -266,7 +276,6 @@ impl TextInput {
         }
     }
     fn sync_displayed_text_from_source(&mut self, preserve_cursor: bool) {
-        #[cfg(feature = "with_rive_text")]
         {
             let next_display_text = self.displayed_text();
             if self.raw_text_input.text() == next_display_text {
@@ -282,7 +291,6 @@ impl TextInput {
         self.mark_shape_dirty();
     }
     fn sync_source_text_from_raw(&mut self) {
-        #[cfg(feature = "with_rive_text")]
         {
             let mut displayed = self.raw_text_input.text();
             if !self.base.multiline() {
@@ -298,7 +306,6 @@ impl TextInput {
         }
     }
     fn update_multiline(&mut self, sync: bool) {
-        #[cfg(feature = "with_rive_text")]
         if self.base.multiline() {
             self.raw_text_input.set_max_width(self.layout_width);
             self.raw_text_input.set_sizing(TextSizing::AutoHeight);
@@ -306,20 +313,20 @@ impl TextInput {
             self.raw_text_input.set_max_width(0.0);
             self.raw_text_input.set_sizing(TextSizing::AutoWidth);
         }
-        if let Some(mut scroll) = self.scroll_constraint {
-            let scroll = unsafe { scroll.as_mut() };
-            if self.base.multiline() && scroll.authored_scroll_offset_x() != 0.0 {
-                scroll.stop_physics();
-                scroll.set_authored_scroll_offset_x(0.0);
-            } else if !self.base.multiline() && scroll.authored_scroll_offset_y() != 0.0 {
-                scroll.stop_physics();
-                scroll.set_authored_scroll_offset_y(0.0);
-            }
+        if let Some(scroll) = self.scroll_constraint.clone() {
+            scroll.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                if self.base.multiline() && scroll.authored_scroll_offset_x() != 0.0 {
+                    scroll.stop_physics();
+                    scroll.set_authored_scroll_offset_x(0.0);
+                } else if !self.base.multiline() && scroll.authored_scroll_offset_y() != 0.0 {
+                    scroll.stop_physics();
+                    scroll.set_authored_scroll_offset_y(0.0);
+                }
+            });
         }
         if sync {
             self.sync_displayed_text_from_source(true);
         }
-        #[cfg(feature = "with_rive_layout")]
         self.base.mark_layout_node_dirty();
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE);
     }
@@ -330,7 +337,6 @@ impl TextInput {
         pressed: bool,
         _repeat: bool,
     ) -> bool {
-        #[cfg(feature = "with_rive_text")]
         {
             if pressed {
                 let system_modifier = if cfg!(target_os = "windows") {
@@ -406,33 +412,21 @@ impl TextInput {
                 return true;
             }
         }
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = (key, modifiers, pressed);
-        }
         false
     }
     pub fn text_input(&mut self, value: &str) -> bool {
-        #[cfg(feature = "with_rive_text")]
-        {
-            let value = if self.base.multiline() {
-                value.to_owned()
-            } else {
-                Self::stripped_line_breaks(value)
-            };
-            if value.is_empty() {
-                return true;
-            }
-            self.raw_text_input.insert(&value);
-            self.sync_source_text_from_raw();
-            self.mark_shape_dirty();
-            true
+        let value = if self.base.multiline() {
+            value.to_owned()
+        } else {
+            Self::stripped_line_breaks(value)
+        };
+        if value.is_empty() {
+            return true;
         }
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            let _ = value;
-            true
-        }
+        self.raw_text_input.insert(&value);
+        self.sync_source_text_from_raw();
+        self.mark_shape_dirty();
+        true
     }
     pub fn gamepad_dispatch(&mut self, _invocation: &ListenerInvocation) -> bool {
         false
@@ -443,7 +437,6 @@ impl TextInput {
     }
     pub fn blurred(&mut self) {
         self.focused = false;
-        #[cfg(feature = "with_rive_text")]
         self.raw_text_input.clear_selection();
         self.mark_paint_dirty();
     }
@@ -494,32 +487,33 @@ impl TextInput {
             return false;
         };
         let mut local = inv * world;
-        if let Some(mut scroll) = self.scroll_constraint {
-            let scroll = unsafe { scroll.as_mut() };
-            let viewport_width = scroll.viewport_width();
-            let viewport_height = scroll.viewport_height();
-            let scroll_offset_x = scroll.authored_scroll_offset_x();
-            let scroll_offset_y = scroll.authored_scroll_offset_y();
-            const EDGE_THRESHOLD: f32 = 20.0;
-            let horizontal = !self.base.multiline() && scroll.base.constrains_horizontal();
-            let vertical = self.base.multiline() && scroll.base.constrains_vertical();
-            if horizontal {
-                let viewport_x = local.x + scroll_offset_x;
-                let left_distance = self.edge_activation_distance(viewport_x, EDGE_THRESHOLD);
-                let right_distance =
-                    self.edge_activation_distance(viewport_width - viewport_x, EDGE_THRESHOLD);
-                if enable_scroll && left_distance > 0.0 {
-                    self.scroll_x = self.edge_scroll_speed_for_distance(left_distance);
-                    if viewport_x < 0.0 {
-                        local.x = -scroll_offset_x;
-                    }
-                } else if enable_scroll && right_distance > 0.0 {
-                    self.scroll_x = -self.edge_scroll_speed_for_distance(right_distance);
-                    if viewport_x > viewport_width {
-                        local.x = viewport_width - scroll_offset_x;
+        if let Some(scroll) = self.scroll_constraint.clone() {
+            scroll.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                let viewport_width = scroll.viewport_width();
+                let viewport_height = scroll.viewport_height();
+                let scroll_offset_x = scroll.authored_scroll_offset_x();
+                let scroll_offset_y = scroll.authored_scroll_offset_y();
+                const EDGE_THRESHOLD: f32 = 20.0;
+                let horizontal = !self.base.multiline() && scroll.base.constrains_horizontal();
+                let vertical = self.base.multiline() && scroll.base.constrains_vertical();
+                if horizontal {
+                    let viewport_x = local.x + scroll_offset_x;
+                    let left_distance = self.edge_activation_distance(viewport_x, EDGE_THRESHOLD);
+                    let right_distance =
+                        self.edge_activation_distance(viewport_width - viewport_x, EDGE_THRESHOLD);
+                    if enable_scroll && left_distance > 0.0 {
+                        self.scroll_x = self.edge_scroll_speed_for_distance(left_distance);
+                        if viewport_x < 0.0 {
+                            local.x = -scroll_offset_x;
+                        }
+                    } else if enable_scroll && right_distance > 0.0 {
+                        self.scroll_x = -self.edge_scroll_speed_for_distance(right_distance);
+                        if viewport_x > viewport_width {
+                            local.x = viewport_width - scroll_offset_x;
+                        }
                     }
                 }
-            }
+            });
             if vertical {
                 let viewport_y = local.y + scroll_offset_y;
                 let top_distance = self.edge_activation_distance(viewport_y, EDGE_THRESHOLD);
@@ -546,7 +540,6 @@ impl TextInput {
         self.last_drag_world_position = world;
         let mut local = Vec2D::default();
         if self.world_to_local_with_viewport(world, &mut local, false) {
-            #[cfg(feature = "with_rive_text")]
             self.raw_text_input.move_cursor_to(local, false);
             self.mark_paint_dirty();
         }
@@ -558,7 +551,6 @@ impl TextInput {
         let mut local = Vec2D::default();
         if self.world_to_local_with_viewport(world, &mut local, true) {
             self.last_drag_world_position = world;
-            #[cfg(feature = "with_rive_text")]
             self.raw_text_input.move_cursor_to(local, true);
             self.mark_paint_dirty();
         }
@@ -570,12 +562,10 @@ impl TextInput {
         self.scroll_y = 0.0;
     }
     pub fn select_word(&mut self) {
-        #[cfg(feature = "with_rive_text")]
         self.raw_text_input.select_word();
         self.mark_paint_dirty();
     }
     pub fn select_line(&mut self) {
-        #[cfg(feature = "with_rive_text")]
         self.raw_text_input.select_line();
         self.mark_paint_dirty();
     }
@@ -585,30 +575,30 @@ impl TextInput {
             self.scroll_y = 0.0;
             return false;
         }
-        #[cfg(feature = "with_rive_text")]
         {
-            let Some(mut scroll) = self.scroll_constraint else {
+            let Some(scroll) = self.scroll_constraint.clone() else {
                 return false;
             };
             if self.scroll_x == 0.0 && self.scroll_y == 0.0 {
                 return false;
             }
-            let scroll = unsafe { scroll.as_mut() };
-            scroll.stop_physics();
-            if self.scroll_x != 0.0 {
-                let mut offset = scroll.authored_scroll_offset_x() + self.scroll_x * elapsed;
-                if !scroll.infinite() {
-                    offset = offset.clamp(scroll.max_offset_x(), 0.0);
+            scroll.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                scroll.stop_physics();
+                if self.scroll_x != 0.0 {
+                    let mut offset = scroll.authored_scroll_offset_x() + self.scroll_x * elapsed;
+                    if !scroll.infinite() {
+                        offset = offset.clamp(scroll.max_offset_x(), 0.0);
+                    }
+                    scroll.set_authored_scroll_offset_x(offset);
                 }
-                scroll.set_authored_scroll_offset_x(offset);
-            }
-            if self.scroll_y != 0.0 {
-                let mut offset = scroll.authored_scroll_offset_y() + self.scroll_y * elapsed;
-                if !scroll.infinite() {
-                    offset = offset.clamp(scroll.max_offset_y(), 0.0);
+                if self.scroll_y != 0.0 {
+                    let mut offset = scroll.authored_scroll_offset_y() + self.scroll_y * elapsed;
+                    if !scroll.infinite() {
+                        offset = offset.clamp(scroll.max_offset_y(), 0.0);
+                    }
+                    scroll.set_authored_scroll_offset_y(offset);
                 }
-                scroll.set_authored_scroll_offset_y(offset);
-            }
+            });
             if self.last_drag_world_position.x.is_finite()
                 && self.last_drag_world_position.y.is_finite()
             {

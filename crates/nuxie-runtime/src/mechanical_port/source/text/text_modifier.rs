@@ -6,15 +6,25 @@ pub struct TextModifier {
     pub base: TextModifierBase,
 }
 impl TextModifier {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
-        let Some(mut group) = self.base.parent_as_text_modifier_group() else {
+        let (Some(group), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::MissingObject;
         };
-        unsafe { group.as_mut() }.add_modifier(self);
+        let added = group
+            .with_mut(|group| {
+                group
+                    .as_text_modifier_group_mut()
+                    .map(|group| group.add_modifier(this))
+            })
+            .flatten()
+            .is_some();
+        if !added {
+            return StatusCode::MissingObject;
+        }
         StatusCode::Ok
     }
 }

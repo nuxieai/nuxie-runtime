@@ -25,7 +25,7 @@ impl DataBindContextValueEnum {
         };
         if binding.field_type() == FieldType::Uint && binding.target_is_solo() {
             if let Some(data_enum) = value.data_enum() {
-                binding.solo_update_by_name(unsafe { (&*data_enum).value(value.value()) });
+                binding.solo_update_by_name(data_enum.value(value.value()));
             }
         } else {
             binding.set_uint(property_key, value.value());

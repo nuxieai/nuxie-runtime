@@ -1,46 +1,34 @@
 use std::rc::Rc;
+
+use crate::mechanical_port::source::{
+    assets::manifest_asset::ManifestAsset, core::CoreHandle,
+    data_bind::data_bind_path::DataBindPath, data_resolver::DataResolver,
+};
+
 const NO_SLOT: u32 = u32::MAX;
-pub trait DependentContainer {}
-pub trait ViewModelValue {
-    fn referenced_instance(&self) -> Option<Rc<dyn ViewModelInstance>>;
-}
-pub trait ViewModelInstance {
-    fn view_model_id(&self) -> u32;
-    fn property_value(&self, id: u32) -> Option<Rc<dyn ViewModelValue>>;
-    fn property_value_named(&self, name: &str) -> Option<Rc<dyn ViewModelValue>>;
-    fn add_dependent(&self, container: *mut dyn DependentContainer);
-    fn remove_dependent(&self, container: *mut dyn DependentContainer);
-    fn advanced(&self);
-}
-pub trait DataResolver {
-    fn resolve_name(&self, id: u32) -> String;
-}
-pub trait DataBindPathLookup {
-    fn is_relative(&self) -> bool;
-    fn resolved_path(&mut self) -> Vec<u32>;
-    fn path(&self) -> Vec<u32>;
-    fn resolver(&self) -> Option<&dyn DataResolver>;
-}
+
 #[derive(Default)]
 struct GlobalSlots {
     slot_keys: Vec<u32>,
 }
+
 pub struct DataContext {
     parent: Option<Rc<DataContext>>,
-    instances: Vec<Rc<dyn ViewModelInstance>>,
-    dependent_containers: Vec<*mut dyn DependentContainer>,
+    instances: Vec<CoreHandle>,
+    dependent_containers: Vec<CoreHandle>,
     global_slots: Option<GlobalSlots>,
 }
+
 impl Drop for DataContext {
     fn drop(&mut self) {
-        let instances = self.instances.clone();
-        for instance in instances {
-            self.detach_containers(instance.as_ref());
+        for instance in self.instances.clone() {
+            self.detach_containers(&instance);
         }
     }
 }
+
 impl DataContext {
-    pub fn new(instance: Option<Rc<dyn ViewModelInstance>>) -> Self {
+    pub fn new(instance: Option<CoreHandle>) -> Self {
         Self {
             parent: None,
             instances: instance.into_iter().collect(),
@@ -48,7 +36,8 @@ impl DataContext {
             global_slots: None,
         }
     }
-    pub fn from_instances(instances: Vec<Rc<dyn ViewModelInstance>>) -> Self {
+
+    pub fn from_instances(instances: Vec<CoreHandle>) -> Self {
         Self {
             parent: None,
             instances,
@@ -56,36 +45,52 @@ impl DataContext {
             global_slots: None,
         }
     }
-    fn attach_containers(&self, instance: &dyn ViewModelInstance) {
+
+    fn attach_containers(&self, instance: &CoreHandle) {
         for container in &self.dependent_containers {
-            instance.add_dependent(*container);
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.add_dependent(container.clone());
+                }
+            });
         }
     }
-    fn detach_containers(&self, instance: &dyn ViewModelInstance) {
+
+    fn detach_containers(&self, instance: &CoreHandle) {
         for container in &self.dependent_containers {
-            instance.remove_dependent(*container);
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.remove_dependent(container);
+                }
+            });
         }
     }
-    pub fn add_dependent_container(&mut self, container: *mut dyn DependentContainer) {
-        if self
-            .dependent_containers
-            .iter()
-            .any(|item| core::ptr::addr_eq(*item, container))
-        {
+
+    pub fn add_dependent_container(&mut self, container: CoreHandle) {
+        if self.dependent_containers.contains(&container) {
             return;
         }
-        self.dependent_containers.push(container);
+        self.dependent_containers.push(container.clone());
         for instance in &self.instances {
-            instance.add_dependent(container);
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.add_dependent(container.clone());
+                }
+            });
         }
     }
-    pub fn remove_dependent_container(&mut self, container: *mut dyn DependentContainer) {
+
+    pub fn remove_dependent_container(&mut self, container: &CoreHandle) {
         for instance in &self.instances {
-            instance.remove_dependent(container);
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.remove_dependent(container);
+                }
+            });
         }
-        self.dependent_containers
-            .retain(|item| !core::ptr::addr_eq(*item, container));
+        self.dependent_containers.retain(|item| item != container);
     }
+
     fn ensure_global_slots(&mut self) {
         if self.global_slots.is_none() {
             self.global_slots = Some(GlobalSlots {
@@ -93,6 +98,7 @@ impl DataContext {
             });
         }
     }
+
     fn slot_key_at(&self, index: usize) -> u32 {
         self.global_slots
             .as_ref()
@@ -100,51 +106,45 @@ impl DataContext {
             .copied()
             .unwrap_or(NO_SLOT)
     }
-    fn insert_instance_at(
-        &mut self,
-        index: usize,
-        value: Rc<dyn ViewModelInstance>,
-        slot_key: u32,
-    ) {
+
+    fn insert_instance_at(&mut self, index: usize, value: CoreHandle, slot_key: u32) {
         self.instances.insert(index, value);
         if let Some(slots) = self.global_slots.as_mut() {
             slots.slot_keys.insert(index, slot_key);
         }
-        self.attach_containers(self.instances[index].as_ref());
+        self.attach_containers(&self.instances[index]);
     }
+
     fn remove_instance_at(&mut self, index: usize) {
-        self.detach_containers(self.instances[index].as_ref());
+        self.detach_containers(&self.instances[index]);
         self.instances.remove(index);
         if let Some(slots) = self.global_slots.as_mut() {
             slots.slot_keys.remove(index);
         }
     }
-    pub fn set_view_model_instance(&mut self, value: Rc<dyn ViewModelInstance>) {
+
+    pub fn set_view_model_instance(&mut self, value: CoreHandle) {
         if self.global_slots.is_some() {
             self.set_main_view_model_instance(Some(value));
             return;
         }
         if self.instances.is_empty() {
             self.instances.push(value);
-            self.attach_containers(self.instances.last().unwrap().as_ref());
+            self.attach_containers(self.instances.last().unwrap());
         } else {
-            self.detach_containers(self.instances[0].as_ref());
+            self.detach_containers(&self.instances[0]);
             self.instances[0] = value;
-            self.attach_containers(self.instances[0].as_ref());
+            self.attach_containers(&self.instances[0]);
         }
     }
-    pub fn set_view_model_instance_for_slot(
-        &mut self,
-        slot_key: u32,
-        value: Option<Rc<dyn ViewModelInstance>>,
-    ) {
+
+    pub fn set_view_model_instance_for_slot(&mut self, slot_key: u32, value: Option<CoreHandle>) {
         let Some(value) = value else {
-            if self.global_slots.is_some() {
-                if let Some(index) =
+            if self.global_slots.is_some()
+                && let Some(index) =
                     (0..self.instances.len()).find(|index| self.slot_key_at(*index) == slot_key)
-                {
-                    self.remove_instance_at(index);
-                }
+            {
+                self.remove_instance_at(index);
             }
             return;
         };
@@ -152,10 +152,10 @@ impl DataContext {
         if let Some(index) =
             (0..self.instances.len()).find(|index| self.slot_key_at(*index) == slot_key)
         {
-            self.detach_containers(self.instances[index].as_ref());
+            self.detach_containers(&self.instances[index]);
             self.instances[index] = value;
             self.global_slots.as_mut().unwrap().slot_keys[index] = slot_key;
-            self.attach_containers(self.instances[index].as_ref());
+            self.attach_containers(&self.instances[index]);
             return;
         }
         let mut index = 0;
@@ -170,11 +170,13 @@ impl DataContext {
         }
         self.insert_instance_at(index, value, slot_key);
     }
-    pub fn instance_for_slot(&self, slot: u32) -> Option<Rc<dyn ViewModelInstance>> {
+
+    pub fn instance_for_slot(&self, slot: u32) -> Option<CoreHandle> {
         (0..self.instances.len())
             .find(|index| self.slot_key_at(*index) == slot)
             .map(|index| self.instances[index].clone())
     }
+
     pub fn remove_main_view_model_instance(&mut self) {
         let mut index = 0;
         while index < self.instances.len() {
@@ -185,78 +187,127 @@ impl DataContext {
             }
         }
     }
-    pub fn set_main_view_model_instance(&mut self, value: Option<Rc<dyn ViewModelInstance>>) {
+
+    pub fn set_main_view_model_instance(&mut self, value: Option<CoreHandle>) {
         self.remove_main_view_model_instance();
         if let Some(value) = value {
             self.insert_instance_at(0, value, NO_SLOT);
         }
     }
-    pub fn main_view_model_instance(&self) -> Option<Rc<dyn ViewModelInstance>> {
+
+    pub fn main_view_model_instance(&self) -> Option<CoreHandle> {
         (0..self.instances.len())
             .find(|index| self.slot_key_at(*index) == NO_SLOT)
             .map(|index| self.instances[index].clone())
     }
+
     pub fn advanced(&self) {
         for instance in &self.instances {
-            instance.advanced();
+            instance.with_mut(|instance| {
+                if let Some(instance) = instance.as_view_model_instance_mut() {
+                    instance.advanced();
+                }
+            });
         }
     }
-    fn try_property(
-        instance: Rc<dyn ViewModelInstance>,
-        path: &[u32],
-    ) -> Option<Rc<dyn ViewModelValue>> {
-        if instance.view_model_id() != path[0] || path.len() == 1 {
+
+    fn instance_view_model_id(instance: &CoreHandle) -> Option<u32> {
+        instance
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()
+                    .map(|instance| instance.base.view_model_id())
+            })
+            .flatten()
+    }
+
+    fn instance_property_by_id(instance: &CoreHandle, id: u32) -> Option<CoreHandle> {
+        instance
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()
+                    .and_then(|instance| instance.property_value_by_id(id))
+            })
+            .flatten()
+    }
+
+    fn instance_property_named(instance: &CoreHandle, name: &str) -> Option<CoreHandle> {
+        instance
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()
+                    .and_then(|instance| instance.property_value_named(name))
+            })
+            .flatten()
+    }
+
+    fn referenced_instance(value: &CoreHandle) -> Option<CoreHandle> {
+        value
+            .with(|value| {
+                value
+                    .as_view_model_instance_view_model()
+                    .and_then(|value| value.reference_view_model_instance())
+            })
+            .flatten()
+    }
+
+    fn try_property(instance: CoreHandle, path: &[u32]) -> Option<CoreHandle> {
+        if Self::instance_view_model_id(&instance)? != path[0] || path.len() == 1 {
             return None;
         }
         let mut current = instance;
         for id in &path[1..path.len() - 1] {
-            current = current.property_value(*id)?.referenced_instance()?;
+            current = Self::referenced_instance(&Self::instance_property_by_id(&current, *id)?)?;
         }
-        current.property_value(*path.last().unwrap())
+        Self::instance_property_by_id(&current, *path.last().unwrap())
     }
+
     fn try_relative_property(
-        instance: Rc<dyn ViewModelInstance>,
+        instance: CoreHandle,
         path: &[u32],
         resolver: &dyn DataResolver,
-    ) -> Option<Rc<dyn ViewModelValue>> {
+    ) -> Option<CoreHandle> {
         let mut current = instance;
         if path.len() == 1 {
-            return current.property_value_named(&resolver.resolve_name(path[0]));
+            return Self::instance_property_named(&current, resolver.resolve_name(path[0] as i32));
         }
         for id in &path[..path.len() - 1] {
-            current = current
-                .property_value_named(&resolver.resolve_name(*id))?
-                .referenced_instance()?;
+            let property =
+                Self::instance_property_named(&current, resolver.resolve_name(*id as i32))?;
+            current = Self::referenced_instance(&property)?;
         }
-        current.property_value_named(&resolver.resolve_name(*path.last().unwrap()))
+        Self::instance_property_named(
+            &current,
+            resolver.resolve_name(*path.last().unwrap() as i32),
+        )
     }
-    fn try_instance(
-        instance: Rc<dyn ViewModelInstance>,
-        path: &[u32],
-    ) -> Option<Rc<dyn ViewModelInstance>> {
-        if instance.view_model_id() != path[0] {
+
+    fn try_instance(instance: CoreHandle, path: &[u32]) -> Option<CoreHandle> {
+        if Self::instance_view_model_id(&instance)? != path[0] {
             return None;
         }
         let mut current = instance;
         for id in &path[1..] {
-            current = current.property_value(*id)?.referenced_instance()?;
+            current = Self::referenced_instance(&Self::instance_property_by_id(&current, *id)?)?;
         }
         Some(current)
     }
+
     fn try_relative_instance(
-        instance: Rc<dyn ViewModelInstance>,
+        instance: CoreHandle,
         path: &[u32],
         resolver: &dyn DataResolver,
-    ) -> Option<Rc<dyn ViewModelInstance>> {
+    ) -> Option<CoreHandle> {
         let mut current = instance;
         for id in path {
-            current = current
-                .property_value_named(&resolver.resolve_name(*id))?
-                .referenced_instance()?;
+            let property =
+                Self::instance_property_named(&current, resolver.resolve_name(*id as i32))?;
+            current = Self::referenced_instance(&property)?;
         }
         Some(current)
     }
-    pub fn get_view_model_property(&self, path: &[u32]) -> Option<Rc<dyn ViewModelValue>> {
+
+    pub fn get_view_model_property(&self, path: &[u32]) -> Option<CoreHandle> {
         if path.is_empty() {
             return None;
         }
@@ -267,11 +318,12 @@ impl DataContext {
         }
         self.parent.as_ref()?.get_view_model_property(path)
     }
+
     pub fn get_relative_view_model_property(
         &self,
         path: &[u32],
         resolver: Option<&dyn DataResolver>,
-    ) -> Option<Rc<dyn ViewModelValue>> {
+    ) -> Option<CoreHandle> {
         let resolver = resolver?;
         if path.is_empty() {
             return None;
@@ -285,7 +337,8 @@ impl DataContext {
             .as_ref()?
             .get_relative_view_model_property(path, Some(resolver))
     }
-    pub fn get_view_model_instance(&self, path: &[u32]) -> Option<Rc<dyn ViewModelInstance>> {
+
+    pub fn get_view_model_instance(&self, path: &[u32]) -> Option<CoreHandle> {
         if path.is_empty() {
             return None;
         }
@@ -296,11 +349,12 @@ impl DataContext {
         }
         self.parent.as_ref()?.get_view_model_instance(path)
     }
+
     pub fn get_relative_view_model_instance(
         &self,
         path: &[u32],
         resolver: Option<&dyn DataResolver>,
-    ) -> Option<Rc<dyn ViewModelInstance>> {
+    ) -> Option<CoreHandle> {
         let resolver = resolver?;
         if path.is_empty() {
             return None;
@@ -314,45 +368,62 @@ impl DataContext {
             .as_ref()?
             .get_relative_view_model_instance(path, Some(resolver))
     }
-    pub fn get_property_from_path(
-        &self,
-        path: &mut dyn DataBindPathLookup,
-    ) -> Option<Rc<dyn ViewModelValue>> {
+
+    pub fn get_property_from_path(&self, path: &mut DataBindPath) -> Option<CoreHandle> {
         if path.is_relative() {
-            let resolver = path.resolver()?;
-            self.get_relative_view_model_property(&path.resolved_path(), Some(resolver))
+            let resolved = path.resolved_path().to_vec();
+            path.file()
+                .with_file(|file| {
+                    file.manifest()?
+                        .with_downcast::<ManifestAsset, _>(|resolver| {
+                            self.get_relative_view_model_property(&resolved, Some(resolver))
+                        })
+                })
+                .flatten()
+                .flatten()
         } else {
-            self.get_view_model_property(&path.path())
+            self.get_view_model_property(path.path())
         }
     }
-    pub fn get_instance_from_path(
-        &self,
-        path: Option<&mut dyn DataBindPathLookup>,
-    ) -> Option<Rc<dyn ViewModelInstance>> {
+
+    pub fn get_instance_from_path(&self, path: Option<&mut DataBindPath>) -> Option<CoreHandle> {
         let path = path?;
         if path.is_relative() {
-            let resolver = path.resolver()?;
-            self.get_relative_view_model_instance(&path.resolved_path(), Some(resolver))
+            let resolved = path.resolved_path().to_vec();
+            path.file()
+                .with_file(|file| {
+                    file.manifest()?
+                        .with_downcast::<ManifestAsset, _>(|resolver| {
+                            self.get_relative_view_model_instance(&resolved, Some(resolver))
+                        })
+                })
+                .flatten()
+                .flatten()
         } else {
-            self.get_view_model_instance(&path.resolved_path())
+            self.get_view_model_instance(path.resolved_path())
         }
     }
+
     pub fn set_parent(&mut self, value: Option<Rc<DataContext>>) {
         self.parent = value
     }
+
     pub fn parent(&self) -> Option<Rc<DataContext>> {
         self.parent.clone()
     }
-    pub fn view_model_instances(&self) -> &[Rc<dyn ViewModelInstance>] {
+
+    pub fn view_model_instances(&self) -> &[CoreHandle] {
         &self.instances
     }
-    pub fn root_view_model_instance(&self) -> Option<Rc<dyn ViewModelInstance>> {
+
+    pub fn root_view_model_instance(&self) -> Option<CoreHandle> {
         self.parent.as_ref().map_or_else(
             || self.main_view_model_instance(),
             |parent| parent.root_view_model_instance(),
         )
     }
-    pub fn view_model_value(&self) -> Option<Rc<dyn ViewModelValue>> {
+
+    pub fn view_model_value(&self) -> Option<CoreHandle> {
         self.parent
             .as_ref()
             .and_then(|parent| parent.view_model_value())

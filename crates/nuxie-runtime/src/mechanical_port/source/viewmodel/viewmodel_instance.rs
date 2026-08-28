@@ -1,254 +1,320 @@
-use std::{collections::HashMap, ptr::NonNull};
+use std::{
+    collections::{HashMap, hash_map::DefaultHasher},
+    hash::{Hash, Hasher},
+};
 
 use crate::mechanical_port::source::{
-    component::Component,
-    data_bind::data_bind_container::DataBindContainer,
+    core::CoreHandle,
     generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase,
     importers::{
         artboard_importer::ArtboardImporter, backboard_importer::BackboardImporter,
         import_stack::ImportStack,
     },
-    refcnt::RiveRc,
     status_code::StatusCode,
 };
 
-use super::{
-    symbol_type::SymbolType, viewmodel::ViewModel,
-    viewmodel_instance_value::ViewModelInstanceValue,
-    viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
-};
+use super::symbol_type::SymbolType;
 
 #[derive(Default)]
 pub struct ViewModelInstance {
     pub base: ViewModelInstanceBase,
-    property_values: Vec<RiveRc<ViewModelInstanceValue>>,
-    parents: Vec<NonNull<ViewModelInstance>>,
-    dependents: Vec<NonNull<DataBindContainer>>,
-    property_symbols: HashMap<SymbolType, NonNull<ViewModelInstanceValue>>,
-    view_model: Option<NonNull<ViewModel>>,
+    property_values: Vec<CoreHandle>,
+    parents: Vec<CoreHandle>,
+    dependents: Vec<CoreHandle>,
+    property_symbols: HashMap<SymbolType, CoreHandle>,
+    view_model: Option<CoreHandle>,
 }
 
 impl ViewModelInstance {
-    pub fn pointer_key(instance: Option<NonNull<Self>>) -> u32 {
+    fn handle(&self) -> Option<CoreHandle> {
+        self.base.base.base.base.base.base.handle()
+    }
+
+    pub fn pointer_key(instance: Option<&CoreHandle>) -> u32 {
         let Some(instance) = instance else {
             return u32::MAX;
         };
-        let pointer = instance.as_ptr() as u64;
-        (pointer ^ (pointer >> 32)) as u32
+        let mut hasher = DefaultHasher::new();
+        instance.hash(&mut hasher);
+        let value = hasher.finish();
+        (value ^ (value >> 32)) as u32
     }
 
-    pub fn add_value(&mut self, mut value: NonNull<ViewModelInstanceValue>) {
-        if self
-            .property_values
-            .iter()
-            .any(|existing| std::ptr::eq(existing.as_ptr(), value.as_ptr()))
-        {
+    pub fn add_value(&mut self, value: CoreHandle) {
+        if self.property_values.contains(&value) {
             return;
         }
-        unsafe { value.as_mut() }.set_view_model_instance(NonNull::from(&mut *self));
-        if let Some(property) = unsafe { value.as_ref() }.view_model_property() {
-            if let Some(symbol) =
-                SymbolType::from_i32(unsafe { property.as_ref() }.base.symbol_type_value())
-            {
-                if symbol != SymbolType::None {
-                    self.set_property_symbol(symbol, value);
+        if let Some(instance) = self.handle() {
+            value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.set_view_model_instance(instance);
                 }
-            }
+            });
         }
-        self.property_values
-            .push(unsafe { RiveRc::from_raw(value.as_ptr()) });
+        let symbol = value
+            .with(|value| {
+                let value = value.as_view_model_instance_value()?;
+                let property = value.view_model_property()?;
+                property
+                    .with(|property| {
+                        let property = property.as_view_model_property()?;
+                        SymbolType::from_i32(property.base.symbol_type_value())
+                    })
+                    .flatten()
+            })
+            .flatten();
+        if let Some(symbol) = symbol.filter(|symbol| *symbol != SymbolType::None) {
+            self.set_property_symbol(symbol, value.clone());
+        }
+        self.property_values.push(value);
     }
 
     pub fn remove_value(&mut self, property_id: u32) -> bool {
-        let Some(index) = self
-            .property_values
-            .iter()
-            .position(|value| value.base.view_model_property_id() == property_id)
-        else {
+        let Some(index) = self.property_values.iter().position(|value| {
+            value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_value()
+                        .is_some_and(|value| value.base.view_model_property_id() == property_id)
+                })
+                .unwrap_or(false)
+        }) else {
             return false;
         };
-        let value = &self.property_values[index];
-        if let Some(mut nested) = value.base.as_view_model_instance_viewmodel() {
-            if let Some(mut referenced) = unsafe { nested.as_ref() }.reference_view_model_instance()
-            {
-                unsafe { referenced.as_mut() }.remove_parent(NonNull::from(&mut *self));
-            }
+        let value = self.property_values[index].clone();
+        if let Some(referenced) = value
+            .with(|value| {
+                value
+                    .as_view_model_instance_view_model()
+                    .and_then(|value| value.reference_view_model_instance())
+            })
+            .flatten()
+            && let Some(this) = self.handle()
+        {
+            referenced.with_mut(|referenced| {
+                if let Some(referenced) = referenced.as_view_model_instance_mut() {
+                    referenced.remove_parent(&this);
+                }
+            });
         }
-        let raw = value.as_ptr();
-        self.property_symbols
-            .retain(|_, stored| !std::ptr::eq(stored.as_ptr(), raw));
+        self.property_symbols.retain(|_, stored| stored != &value);
         self.property_values.remove(index);
         true
     }
 
-    pub fn property_value_by_id(&self, id: u32) -> Option<NonNull<ViewModelInstanceValue>> {
-        self.property_values
-            .iter()
-            .find(|value| value.base.view_model_property_id() == id)
-            .and_then(|value| NonNull::new(value.as_ptr()))
-    }
-
-    pub fn property_value_named(&self, name: &str) -> Option<NonNull<ViewModelInstanceValue>> {
+    pub fn property_value_by_id(&self, id: u32) -> Option<CoreHandle> {
         self.property_values.iter().find_map(|value| {
-            let property = value.view_model_property()?;
-            (unsafe { property.as_ref() }.base.name() == name)
-                .then(|| NonNull::new(value.as_ptr()).unwrap())
+            value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_value()
+                        .is_some_and(|value| value.base.view_model_property_id() == id)
+                })
+                .unwrap_or(false)
+                .then(|| value.clone())
         })
     }
 
-    pub fn property_value_for_symbol(
-        &self,
-        symbol_type: SymbolType,
-    ) -> Option<NonNull<ViewModelInstanceValue>> {
-        self.property_symbols.get(&symbol_type).copied()
+    pub fn property_value_named(&self, name: &str) -> Option<CoreHandle> {
+        self.property_values.iter().find_map(|value| {
+            let property = value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_value()
+                        .and_then(|value| value.view_model_property())
+                })
+                .flatten()?;
+            let matches = property
+                .with(|property| {
+                    property
+                        .as_view_model_property()
+                        .is_some_and(|property| property.base.name() == name)
+                })
+                .unwrap_or(false);
+            matches.then(|| value.clone())
+        })
     }
 
-    pub fn set_property_symbol(
-        &mut self,
-        symbol_type: SymbolType,
-        value: NonNull<ViewModelInstanceValue>,
-    ) {
+    pub fn property_value_for_symbol(&self, symbol_type: SymbolType) -> Option<CoreHandle> {
+        self.property_symbols.get(&symbol_type).cloned()
+    }
+
+    pub fn set_property_symbol(&mut self, symbol_type: SymbolType, value: CoreHandle) {
         if symbol_type != SymbolType::None {
             self.property_symbols.insert(symbol_type, value);
         }
     }
 
-    pub fn replace_view_model_by_name(
-        &mut self,
-        name: &str,
-        value: RiveRc<ViewModelInstance>,
-    ) -> bool {
-        let view_model = self
-            .view_model
-            .expect("replaceViewModelByName requires the instance's ViewModel");
-        let Some(property) = (unsafe { view_model.as_ref() }).property_named(name) else {
+    pub fn replace_view_model_by_name(&mut self, name: &str, value: CoreHandle) -> bool {
+        let Some(view_model) = self.view_model.as_ref() else {
             return false;
         };
-        for property_value in &mut self.property_values {
-            if property_value.view_model_property() != Some(property) {
+        let property = view_model
+            .with(|view_model| {
+                view_model
+                    .as_view_model()
+                    .and_then(|view_model| view_model.property_named(name))
+            })
+            .flatten();
+        let Some(property) = property else {
+            return false;
+        };
+        for property_value in &self.property_values {
+            let matches = property_value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_value()
+                        .and_then(|value| value.view_model_property())
+                        == Some(property.clone())
+                })
+                .unwrap_or(false);
+            if !matches {
                 continue;
             }
-            let Some(mut nested) = property_value.base.as_view_model_instance_viewmodel() else {
-                break;
-            };
-            if value.base.view_model_id()
-                != unsafe { property.as_ref() }.base.view_model_reference_id()
+            let required_id = property
+                .with(|property| {
+                    property
+                        .as_view_model_property()
+                        .map(|property| property.base.view_model_reference_id())
+                })
+                .flatten();
+            if required_id
+                != value
+                    .with(|value| {
+                        value
+                            .as_view_model_instance()
+                            .map(|value| value.base.view_model_id())
+                    })
+                    .flatten()
             {
                 break;
             }
-            let previous = unsafe { nested.as_ref() }.reference_view_model_instance();
-            unsafe { nested.as_mut() }.set_reference_view_model_instance(Some(value));
-            let snapshot = property_value.dependents().to_vec();
-            for mut dependent in snapshot {
-                unsafe { dependent.as_mut() }.relink_data_bind();
+            if self.replace_view_model_property_handle(property_value.clone(), value) {
+                return true;
             }
-            self.rebind_dependents();
-            if let Some(mut previous) = previous {
-                unsafe { previous.as_mut() }.rebind_properties();
-            }
-            return true;
+            break;
         }
         false
     }
 
-    pub fn replace_view_model_by_property(
+    pub fn replace_view_model_property_handle(
         &mut self,
-        property: NonNull<ViewModelInstanceViewModel>,
-        value: RiveRc<ViewModelInstance>,
+        property: CoreHandle,
+        value: CoreHandle,
     ) -> bool {
-        for property_value in &mut self.property_values {
-            if property_value.as_ptr().cast() != property.as_ptr() {
-                continue;
-            }
-            let mut nested = property;
-            let previous = unsafe { nested.as_ref() }.reference_view_model_instance();
-            unsafe { nested.as_mut() }.set_reference_view_model_instance(Some(value));
-            let snapshot = property_value.dependents().to_vec();
-            for mut dependent in snapshot {
-                unsafe { dependent.as_mut() }.relink_data_bind();
-            }
-            self.rebind_dependents();
-            if let Some(mut previous) = previous {
-                unsafe { previous.as_mut() }.rebind_properties();
-            }
-            return true;
+        if !self.property_values.contains(&property) {
+            return false;
         }
-        false
+        let previous = property
+            .with(|property| {
+                property
+                    .as_view_model_instance_view_model()
+                    .and_then(|property| property.reference_view_model_instance())
+            })
+            .flatten();
+        property.with_mut(|property| {
+            if let Some(property) = property.as_view_model_instance_view_model_mut() {
+                property.set_reference_view_model_instance(Some(value));
+            }
+        });
+        property.with_mut(|property| {
+            if let Some(property) = property.as_view_model_instance_value_mut() {
+                property.relink_dependents();
+            }
+        });
+        self.rebind_dependents();
+        if let Some(previous) = previous {
+            previous.with_mut(|previous| {
+                if let Some(previous) = previous.as_view_model_instance_mut() {
+                    previous.rebind_properties();
+                }
+            });
+        }
+        true
     }
 
-    pub fn property_values(&self) -> &[RiveRc<ViewModelInstanceValue>] {
+    pub fn property_values(&self) -> &[CoreHandle] {
         &self.property_values
     }
 
-    pub fn property_from_path(
-        &self,
-        path: &[u32],
-        index: usize,
-    ) -> Option<NonNull<ViewModelInstanceValue>> {
+    pub fn property_from_path(&self, path: &[u32], index: usize) -> Option<CoreHandle> {
         let property = self.property_value_by_id(*path.get(index)?)?;
         if index == path.len() - 1 {
             return Some(property);
         }
-        let nested = unsafe { property.as_ref() }
-            .base
-            .as_view_model_instance_viewmodel()?;
-        let instance = unsafe { nested.as_ref() }
-            .reference_view_model_instance()
-            .expect("a nested property path requires a referenced ViewModelInstance");
-        unsafe { instance.as_ref() }.property_from_path(path, index + 1)
+        let instance = property
+            .with(|property| {
+                property
+                    .as_view_model_instance_view_model()
+                    .and_then(|property| property.reference_view_model_instance())
+            })
+            .flatten()?;
+        instance
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()
+                    .and_then(|instance| instance.property_from_path(path, index + 1))
+            })
+            .flatten()
     }
 
-    pub fn view_model(&mut self, mut value: NonNull<ViewModel>) {
-        if let Some(mut old) = self.view_model {
-            unsafe { old.as_mut() }.base.unref();
-        }
-        unsafe { value.as_mut() }.base.ref_();
+    pub fn view_model(&mut self, value: CoreHandle) {
         self.view_model = Some(value);
     }
 
-    pub fn get_view_model(&self) -> Option<NonNull<ViewModel>> {
-        self.view_model
+    pub fn get_view_model(&self) -> Option<CoreHandle> {
+        self.view_model.clone()
     }
 
-    pub fn on_component_dirty(&mut self, _component: NonNull<Component>) {}
-
-    pub fn set_as_root(&mut self, instance: RiveRc<ViewModelInstance>) {
+    pub fn set_as_root(&mut self, instance: CoreHandle) {
         self.set_root(instance);
     }
 
-    pub fn set_root(&mut self, value: RiveRc<ViewModelInstance>) {
-        for property in &mut self.property_values {
-            property.set_root(value.clone());
+    pub fn set_root(&mut self, value: CoreHandle) {
+        for property in &self.property_values {
+            property.with_mut(|property| {
+                if let Some(property) = property.as_view_model_instance_value_mut() {
+                    property.set_root(value.clone());
+                }
+            });
         }
     }
 
-    pub fn clone_instance(&self) -> Box<ViewModelInstance> {
-        let mut cloned = Box::new(Self {
-            base: self.base.clone_base(),
-            property_values: Vec::new(),
-            parents: Vec::new(),
-            dependents: Vec::new(),
-            property_symbols: HashMap::new(),
-            view_model: None,
-        });
-        if self.base.artboard().is_none() {
+    pub fn clone_instance(&self) -> Option<CoreHandle> {
+        let cloned = self.handle()?.clone_occurrence()?;
+        let copy_values = self.base.base.base.base.artboard().is_none();
+        if copy_values {
             for property in &self.property_values {
-                cloned.add_value(property.clone_core_value());
+                let Some(property) = property.clone_occurrence() else {
+                    continue;
+                };
+                cloned.with_mut(|cloned| {
+                    if let Some(cloned) = cloned.as_view_model_instance_mut() {
+                        cloned.add_value(property);
+                    }
+                });
             }
         }
-        if let Some(view_model) = self.view_model {
-            cloned.view_model(view_model);
+        if let Some(view_model) = self.view_model.clone() {
+            cloned.with_mut(|cloned| {
+                if let Some(cloned) = cloned.as_view_model_instance_mut() {
+                    cloned.view_model(view_model);
+                }
+            });
         }
-        cloned
+        Some(cloned)
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
+        let Some(instance) = self.handle() else {
+            return StatusCode::MissingObject;
+        };
         let Some(importer) = import_stack.latest::<BackboardImporter>(
             crate::mechanical_port::source::backboard::Backboard::TYPE_KEY,
         ) else {
             return StatusCode::MissingObject;
         };
-        importer.add_view_model_instance(NonNull::from(&mut *self));
+        importer.add_view_model_instance(instance.clone());
         if import_stack
             .latest::<ArtboardImporter>(
                 crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
@@ -257,93 +323,118 @@ impl ViewModelInstance {
         {
             return self.base.import(import_stack);
         }
-        if let Some(mut file) = importer.file() {
-            unsafe { file.as_mut() }.add_file_view_model_instance(NonNull::from(&mut *self));
+        if let Some(file) = importer.file() {
+            file.with_file_mut(|file| file.add_file_view_model_instance(instance));
         }
         StatusCode::Ok
     }
 
     pub fn advanced(&mut self) {
-        for value in &mut self.property_values {
-            value.advanced();
+        for value in &self.property_values {
+            value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.advanced();
+                }
+            });
         }
     }
 
-    pub fn add_parent(&mut self, parent: NonNull<ViewModelInstance>) {
+    pub fn add_parent(&mut self, parent: CoreHandle) {
         if !self.parents.contains(&parent) {
             self.parents.push(parent);
         }
     }
 
-    pub fn remove_parent(&mut self, parent: NonNull<ViewModelInstance>) {
-        self.parents.retain(|candidate| *candidate != parent);
+    pub fn remove_parent(&mut self, parent: &CoreHandle) {
+        self.parents.retain(|candidate| candidate != parent);
     }
 
     pub fn has_parents(&self) -> bool {
         !self.parents.is_empty()
     }
 
-    pub fn add_dependent(&mut self, dependent: NonNull<DataBindContainer>) {
+    pub fn add_dependent(&mut self, dependent: CoreHandle) {
         if !self.dependents.contains(&dependent) {
             self.dependents.push(dependent);
         }
     }
 
-    pub fn remove_dependent(&mut self, dependent: NonNull<DataBindContainer>) {
-        self.dependents.retain(|candidate| *candidate != dependent);
+    pub fn remove_dependent(&mut self, dependent: &CoreHandle) {
+        self.dependents.retain(|candidate| candidate != dependent);
     }
 
-    #[cfg(feature = "testing")]
-    pub fn dependents(&self) -> Vec<NonNull<DataBindContainer>> {
+    #[cfg(any(test, feature = "tools"))]
+    pub fn dependents(&self) -> Vec<CoreHandle> {
         self.dependents.clone()
     }
 
-    #[cfg(feature = "testing")]
-    pub fn parents(&self) -> Vec<NonNull<ViewModelInstance>> {
+    #[cfg(any(test, feature = "tools"))]
+    pub fn parents(&self) -> Vec<CoreHandle> {
         self.parents.clone()
     }
 
-    fn rebind_properties(&mut self) {
-        for property in &mut self.property_values {
-            let snapshot = property.dependents().to_vec();
-            for mut dependent in snapshot {
-                unsafe { dependent.as_mut() }.relink_data_bind();
-            }
-            if let Some(nested) = property.base.as_view_model_instance_viewmodel() {
-                if let Some(mut instance) =
-                    unsafe { nested.as_ref() }.reference_view_model_instance()
-                {
-                    unsafe { instance.as_mut() }.rebind_properties();
+    pub fn rebind_properties(&mut self) {
+        for property in &self.property_values {
+            property.with_mut(|property| {
+                if let Some(property) = property.as_view_model_instance_value_mut() {
+                    property.relink_dependents();
                 }
+            });
+            let nested = property
+                .with(|property| {
+                    property
+                        .as_view_model_instance_view_model()
+                        .and_then(|property| property.reference_view_model_instance())
+                })
+                .flatten();
+            if let Some(nested) = nested {
+                nested.with_mut(|nested| {
+                    if let Some(nested) = nested.as_view_model_instance_mut() {
+                        nested.rebind_properties();
+                    }
+                });
             }
         }
     }
 
     fn rebind_dependents(&mut self) {
-        for dependent in &mut self.dependents {
-            unsafe { dependent.as_mut() }.relink_data_context();
+        for dependent in &self.dependents {
+            dependent.with_mut(|dependent| {
+                if let Some(dependent) = dependent.as_bind_container_mut() {
+                    dependent.relink_data_context();
+                }
+            });
         }
         for parent in self.parents.clone() {
-            unsafe { parent.as_ptr().as_mut().unwrap() }.rebind_dependents();
+            parent.with_mut(|parent| {
+                if let Some(parent) = parent.as_view_model_instance_mut() {
+                    parent.rebind_dependents();
+                }
+            });
         }
     }
 }
 
 impl Drop for ViewModelInstance {
     fn drop(&mut self) {
-        let self_pointer = NonNull::from(&mut *self);
-        for value in &mut self.property_values {
-            if let Some(nested) = value.base.as_view_model_instance_viewmodel() {
-                if let Some(mut instance) =
-                    unsafe { nested.as_ref() }.reference_view_model_instance()
-                {
-                    unsafe { instance.as_mut() }.remove_parent(self_pointer);
-                }
+        let this = self.handle();
+        for value in &self.property_values {
+            let nested = value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_view_model()
+                        .and_then(|value| value.reference_view_model_instance())
+                })
+                .flatten();
+            if let (Some(nested), Some(this)) = (nested, this.as_ref()) {
+                nested.with_mut(|nested| {
+                    if let Some(nested) = nested.as_view_model_instance_mut() {
+                        nested.remove_parent(this);
+                    }
+                });
             }
         }
         self.property_values.clear();
-        if let Some(mut view_model) = self.view_model {
-            unsafe { view_model.as_mut() }.base.unref();
-        }
+        self.view_model = None;
     }
 }

@@ -7,34 +7,30 @@ pub struct GradientStop {
     pub base: GradientStopBase,
 }
 impl GradientStop {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
-        if !self.base.parent().is::<LinearGradient>() {
+        let (Some(this), Some(parent)) = (self.base.handle(), self.base.parent_handle()) else {
+            return StatusCode::MissingObject;
+        };
+        if parent
+            .with_downcast_mut::<LinearGradient, _>(|gradient| gradient.add_stop(this))
+            .is_none()
+        {
             return StatusCode::MissingObject;
         }
-        let this = self as *mut _;
-        self.base
-            .parent_mut()
-            .as_mut::<LinearGradient>()
-            .unwrap()
-            .add_stop(unsafe { &mut *this });
         StatusCode::Ok
     }
     pub fn color_value_changed(&mut self) {
-        self.base
-            .parent_mut()
-            .as_mut::<LinearGradient>()
-            .unwrap()
-            .mark_gradient_dirty();
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_downcast_mut::<LinearGradient, _>(LinearGradient::mark_gradient_dirty);
+        }
     }
     pub fn position_changed(&mut self) {
-        self.base
-            .parent_mut()
-            .as_mut::<LinearGradient>()
-            .unwrap()
-            .mark_stops_dirty();
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_downcast_mut::<LinearGradient, _>(LinearGradient::mark_stops_dirty);
+        }
     }
 }

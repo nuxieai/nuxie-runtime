@@ -9,24 +9,40 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub struct ViewModelInstanceNumber {
     pub base: ViewModelInstanceNumberBase,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     changed_callback: Option<fn(&mut Self, f32)>,
 }
 
 impl ViewModelInstanceNumber {
+    pub fn value(&self) -> f32 {
+        self.base.property_value()
+    }
+
+    pub fn set_value(&mut self, value: f32) {
+        if self.base.set_property_value_value(value) {
+            self.property_value_changed();
+            self.base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .notify_property_changed(ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY);
+        }
+    }
+
     pub fn property_value_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::BINDINGS);
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             callback(self, self.base.property_value());
         }
         self.base.on_value_changed();
     }
     pub fn apply_value(&mut self, value: &DataValueNumber) {
-        let this = self as *mut Self;
-        unsafe { (*this).base.set_property_value(value.value(), &mut *this) };
+        self.set_value(value.value());
     }
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self, f32)>) {
         self.changed_callback = callback;
     }

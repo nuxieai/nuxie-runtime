@@ -1,23 +1,27 @@
-use super::viewmodel_instance_value_runtime::{
-    DataType, ViewModelInstanceValue, ViewModelInstanceValueRuntime,
-};
-use std::rc::Rc;
-pub trait TriggerValue: ViewModelInstanceValue {
-    fn trigger(&self);
+use super::viewmodel_instance_value_runtime::{DataType, ViewModelInstanceValueRuntime};
+
+#[derive(Clone)]
+pub struct ViewModelInstanceTriggerRuntime {
+    base: ViewModelInstanceValueRuntime,
 }
-pub struct ViewModelInstanceTriggerRuntime<T: TriggerValue> {
-    base: ViewModelInstanceValueRuntime<T>,
-}
-impl<T: TriggerValue> ViewModelInstanceTriggerRuntime<T> {
-    pub fn new(value: Rc<T>) -> Self {
-        Self {
-            base: ViewModelInstanceValueRuntime::new(value),
-        }
+
+impl ViewModelInstanceTriggerRuntime {
+    pub fn new(base: ViewModelInstanceValueRuntime) -> Option<Self> {
+        (base.data_type() == DataType::Trigger).then_some(Self { base })
     }
+
     pub fn trigger(&self) {
-        self.base.value().trigger()
+        self.base.handle().with_mut(|property| {
+            if let Some(property) = property.as_view_model_instance_trigger_mut() {
+                property.trigger();
+            }
+        });
     }
+
     pub fn data_type(&self) -> DataType {
         DataType::Trigger
+    }
+    pub fn value_runtime(&self) -> &ViewModelInstanceValueRuntime {
+        &self.base
     }
 }

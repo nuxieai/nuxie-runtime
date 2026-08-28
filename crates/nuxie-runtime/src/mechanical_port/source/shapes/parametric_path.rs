@@ -1,14 +1,10 @@
 use crate::mechanical_port::source::{
-    component::{Component, ContainerComponent},
     generated::shapes::parametric_path_base::ParametricPathBase,
     layout::{
         layout_enums::{LayoutDirection, LayoutScaleType},
         layout_measure_mode::LayoutMeasureMode,
     },
-    layout_component::LayoutComponent,
     math::{aabb::Aabb, vec2d::Vec2D},
-    node::Node,
-    shapes::shape::Shape,
 };
 pub struct ParametricPath {
     pub base: ParametricPathBase,
@@ -50,26 +46,42 @@ impl ParametricPath {
     }
     pub fn mark_path_dirty(&mut self, send_to_layout: bool) {
         self.base.super_mark_path_dirty();
-        #[cfg(feature = "with_rive_layout")]
         if send_to_layout {
-            let mut parent = self.base.parent_mut().map(|p| p as *mut ContainerComponent);
-            while let Some(pointer) = parent {
-                unsafe {
-                    if let Some(layout) = (*pointer).as_mut::<LayoutComponent>() {
-                        layout.mark_layout_node_dirty(false);
-                        break;
-                    }
-                    if (*pointer).is::<Node>() {
-                        if let Some(shape) = (*pointer).as_mut::<Shape>() {
-                            if std::ptr::eq(shape, self.base.shape_mut()) {
-                                parent = (*pointer).parent_mut().map(|p| p as *mut _);
-                                continue;
-                            }
+            let shape = self.base.shape_handle();
+            let mut parent = self.base.parent_handle();
+            while let Some(current) = parent {
+                let found_layout = current
+                    .with_mut(|current| {
+                        if let Some(layout) = current.as_layout_component_mut() {
+                            layout.mark_layout_node_dirty(false);
+                            true
+                        } else {
+                            false
                         }
-                        break;
-                    }
-                    parent = (*pointer).parent_mut().map(|p| p as *mut _);
+                    })
+                    .unwrap_or(false);
+                if found_layout {
+                    break;
                 }
+                let is_node = current
+                    .with(|current| current.as_node().is_some())
+                    .unwrap_or(false);
+                if is_node {
+                    if current
+                        .with(|current| current.as_shape().is_some())
+                        .unwrap_or(false)
+                        && shape.as_ref() == Some(&current)
+                    {
+                        parent = current
+                            .with(|current| current.component_parent_handle())
+                            .flatten();
+                        continue;
+                    }
+                    break;
+                }
+                parent = current
+                    .with(|current| current.component_parent_handle())
+                    .flatten();
             }
         }
     }

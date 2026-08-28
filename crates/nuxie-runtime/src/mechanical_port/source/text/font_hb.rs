@@ -1,6 +1,4 @@
-#![cfg(feature = "with_rive_text")]
-
-use std::cell::UnsafeCell;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::ptr;
@@ -14,9 +12,9 @@ use crate::mechanical_port::source::math::raw_path::RawPath;
 use crate::mechanical_port::source::math::vec2d::Vec2D;
 use crate::mechanical_port::source::shapes::paint::color::{ColorInt, color_argb};
 use crate::mechanical_port::source::text_engine::{
-    Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, Feature, Font, FontBase, FontRef,
-    G_FALLBACK_PROC, GlyphId, GlyphRun, GradientStop, LineMetrics, Paragraph, TextDirection,
-    TextRun, Unichar, fallback_proc_enabled,
+    Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, Feature, Font, FontBase, FontRef, GlyphId,
+    GlyphRun, GradientStop, LineMetrics, Paragraph, TextDirection, TextRun, Unichar, fallback_proc,
+    fallback_proc_enabled,
 };
 
 const STANDARD_SCALE: i32 = 2048;
@@ -34,11 +32,19 @@ pub struct HbFont {
     has_color_paint: bool,
     has_png: bool,
     palette_colors: Vec<hb_color_t>,
-    color_layer_cache: UnsafeCell<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
+    color_layer_cache: RefCell<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
 }
 
 impl HbFont {
     pub fn decode(bytes: &[u8]) -> Option<FontRef> {
+        Self::decode_face(bytes, 0)
+    }
+
+    pub fn decode_face(bytes: &[u8], face_index: u32) -> Option<FontRef> {
+        // SAFETY: HarfBuzz duplicates `bytes` before this call returns. Every
+        // successfully created blob/face is destroyed after transferring its
+        // reference to the next HarfBuzz owner, and the returned font becomes
+        // the singular owned handle destroyed by `HbFont::drop`.
         unsafe {
             let blob = hb_blob_create_or_fail(
                 bytes.as_ptr().cast(),
@@ -48,7 +54,7 @@ impl HbFont {
                 None,
             );
             if !blob.is_null() {
-                let face = hb_face_create_or_fail(blob, 0);
+                let face = hb_face_create_or_fail(blob, face_index);
                 hb_blob_destroy(blob);
                 if !face.is_null() {
                     let font = hb_font_create(face);
@@ -62,7 +68,31 @@ impl HbFont {
         None
     }
 
-    #[cfg(any(feature = "rive_no_coretext", not(target_os = "macos")))]
+    /// Rebuild a server-local HarfBuzz font from the Send-safe font payload
+    /// used at the command-queue boundary.
+    pub fn from_raw_text(font: &crate::text::RawTextFont) -> Option<FontRef> {
+        let decoded = Self::decode_face(font.source_bytes().as_ref(), font.face_index())?;
+        let variable_axes = (0..font.axis_count())
+            .map(|index| {
+                let axis = font.axis(index);
+                Coord {
+                    axis: axis.tag,
+                    value: font.axis_value(axis.tag),
+                }
+            })
+            .collect::<Vec<_>>();
+        let features = font
+            .features()
+            .into_iter()
+            .filter_map(|tag| {
+                let value = font.feature_value(tag);
+                (value != u32::MAX).then_some(Feature { tag, value })
+            })
+            .collect::<Vec<_>>();
+        Some(decoded.with_options(&variable_axes, &features))
+    }
+
+    #[cfg(not(target_os = "macos"))]
     pub fn from_system(
         _system_font: *mut c_void,
         _use_system_shaper: bool,
@@ -73,6 +103,8 @@ impl HbFont {
     }
 
     pub fn get_style(font: *mut hb_font_t, style_tag: u32) -> f32 {
+        // SAFETY: callers supply the live font owned by an `HbFont`; HarfBuzz
+        // reads it only for this call and does not retain it.
         unsafe { hb_style_get_value(font, style_tag as hb_style_tag_t) }
     }
 
@@ -90,6 +122,10 @@ impl HbFont {
         feature_values: HashMap<u32, u32>,
         features: Vec<hb_feature_t>,
     ) -> Self {
+        // SAFETY: `font` is a newly owned/live HarfBuzz reference. Callback
+        // function tables are created here, retained only by this `HbFont`,
+        // and destroyed exactly once in `Drop`; callback userdata is null or
+        // points to same-call stack values supplied by the invoking methods.
         unsafe {
             let draw_funcs = hb_draw_funcs_create();
             hb_draw_funcs_set_move_to_func(
@@ -227,7 +263,7 @@ impl HbFont {
                 has_color_paint,
                 has_png,
                 palette_colors,
-                color_layer_cache: UnsafeCell::new(HashMap::new()),
+                color_layer_cache: RefCell::new(HashMap::new()),
             }
         }
     }
@@ -244,9 +280,8 @@ impl HbFont {
         let glyph_run = shape_run(&text[text_start as usize..], text_run, text_start);
         if let Some(index) = glyph_run.glyphs.iter().position(|glyph| *glyph == 0) {
             let missing = text[glyph_run.text_indices[index] as usize];
-            let fallback = unsafe {
-                G_FALLBACK_PROC.and_then(|callback| callback(missing, fallback_index, self))
-            };
+            let fallback =
+                fallback_proc().and_then(|callback| callback(missing, fallback_index, self));
             if let Some(fallback_font) = fallback {
                 let fallback_hb = fallback_font
                     .as_any()
@@ -275,6 +310,8 @@ impl HbFont {
 
 impl Drop for HbFont {
     fn drop(&mut self) {
+        // SAFETY: these are the three owned HarfBuzz references established
+        // by `with_stored_options`; no other `HbFont` destroys them.
         unsafe {
             hb_draw_funcs_destroy(self.draw_funcs);
             hb_paint_funcs_destroy(self.paint_funcs);
@@ -293,10 +330,15 @@ impl Font for HbFont {
     }
 
     fn get_axis(&self, index: u16) -> Axis {
+        // SAFETY: `self.font` owns a live face for this whole call; `index` is
+        // checked before the single bounded POD out-parameter is read.
         unsafe {
             let face = hb_font_get_face(self.font);
             assert!((index as u32) < hb_ot_var_get_axis_count(face));
             let mut count = 1;
+            // SAFETY: HarfBuzz declares this record as C POD; zero is a valid
+            // out-parameter seed. `count == 1` bounds the single live slot,
+            // and `face` remains owned by `self.font` for this call.
             let mut info = std::mem::zeroed::<hb_ot_var_axis_info_t>();
             hb_ot_var_get_axis_infos(face, index as u32, &mut count, &mut info);
             assert_eq!(count, 1);
@@ -310,6 +352,8 @@ impl Font for HbFont {
     }
 
     fn get_axis_count(&self) -> u16 {
+        // SAFETY: `self.font` remains live and HarfBuzz retains no returned
+        // face pointer beyond this expression.
         unsafe { hb_ot_var_get_axis_count(hb_font_get_face(self.font)) as u16 }
     }
 
@@ -317,10 +361,15 @@ impl Font for HbFont {
         if let Some(value) = self.axis_values.get(&axis_tag) {
             return *value;
         }
+        // SAFETY: `self.font` keeps the face live, and every requested axis
+        // record uses one bounded POD out slot initialized before inspection.
         unsafe {
             let face = hb_font_get_face(self.font);
             let count = hb_ot_var_get_axis_count(face);
             for index in 0..count {
+                // SAFETY: HarfBuzz's axis-info record is C POD and the API
+                // initializes one requested slot before it is read. The face
+                // pointer remains valid through the owning `self.font`.
                 let mut info = std::mem::zeroed::<hb_ot_var_axis_info_t>();
                 let mut one = 1;
                 hb_ot_var_get_axis_infos(face, index, &mut one, &mut info);
@@ -348,6 +397,8 @@ impl Font for HbFont {
     }
 
     fn features(&self) -> Vec<u32> {
+        // SAFETY: the face borrowed from the owned font remains live while the
+        // helpers perform count-then-fill calls into correctly sized vectors.
         unsafe {
             let mut features = HashSet::new();
             let face = hb_font_get_face(self.font);
@@ -358,6 +409,8 @@ impl Font for HbFont {
     }
 
     fn has_glyph(&self, missing: Unichar) -> bool {
+        // SAFETY: HarfBuzz receives the owned live font and one same-call
+        // scalar out-parameter, which is not read after the call returns false.
         unsafe {
             let mut glyph = 0;
             hb_font_get_nominal_glyph(self.font, missing, &mut glyph) != 0
@@ -365,6 +418,9 @@ impl Font for HbFont {
     }
 
     fn with_options(&self, coords: &[Coord], features: &[Feature]) -> FontRef {
+        // SAFETY: HarfBuzz creates a new owned sub-font reference. Variation
+        // slices are live for the call and copied into the sub-font; ownership
+        // then transfers to the returned `HbFont`.
         unsafe {
             let mut axis_values = self.axis_values.clone();
             for coord in coords {
@@ -404,6 +460,8 @@ impl Font for HbFont {
 
     fn get_path(&self, glyph: GlyphId) -> RawPath {
         let mut path = RawPath::default();
+        // SAFETY: callback userdata points to this stack-local `RawPath` only
+        // for the synchronous draw call; the callback table is owned by self.
         unsafe {
             hb_font_draw_glyph(
                 self.font,
@@ -423,6 +481,9 @@ impl Font for HbFont {
         if !self.has_color_layers && !self.has_color_paint && !self.has_png {
             return false;
         }
+        // SAFETY: every HarfBuzz handle is borrowed from `self.font` for this
+        // call. Any returned PNG blob is destroyed exactly once after its
+        // length is inspected.
         unsafe {
             let face = hb_font_get_face(self.font);
             if self.has_color_layers
@@ -460,9 +521,8 @@ impl Font for HbFont {
         if !self.has_color_layers && !self.has_color_paint && !self.has_png {
             return 0;
         }
-        let color_layer_cache = unsafe { &*self.color_layer_cache.get() };
-        if let Some(cached_layers) = color_layer_cache.get(&glyph) {
-            for cached in cached_layers {
+        if let Some(cached_layers) = self.color_layer_cache.borrow().get(&glyph).cloned() {
+            for cached in &cached_layers {
                 let mut layer = cached.clone();
                 layer.color = if cached.use_foreground {
                     foreground
@@ -475,6 +535,10 @@ impl Font for HbFont {
         }
 
         let mut layers = Vec::new();
+        // SAFETY: all callback userdata points to stack-local `RawPath` or
+        // `PaintState` values for synchronous HarfBuzz calls only. Count/fill
+        // queries bound every POD vector, and owned font/function handles stay
+        // live throughout callback execution.
         unsafe {
             let face = hb_font_get_face(self.font);
             if self.has_color_layers {
@@ -486,6 +550,9 @@ impl Font for HbFont {
                     ptr::null_mut(),
                 );
                 if layer_count > 0 {
+                    // SAFETY: `hb_ot_color_layer_t` is C POD. The first query
+                    // supplies the allocation bound; the second initializes at
+                    // most `layer_count` elements while `face` stays alive.
                     let mut hb_layers =
                         vec![std::mem::zeroed::<hb_ot_color_layer_t>(); layer_count as usize];
                     hb_ot_color_glyph_get_layers(
@@ -547,9 +614,9 @@ impl Font for HbFont {
             return 0;
         }
         let count = layers.len();
-        unsafe {
-            (&mut *self.color_layer_cache.get()).insert(glyph, layers.clone());
-        }
+        self.color_layer_cache
+            .borrow_mut()
+            .insert(glyph, layers.clone());
         out.extend(layers);
         count
     }
@@ -560,6 +627,9 @@ impl Font for HbFont {
         text_runs: &[TextRun],
         text_direction_flag: i32,
     ) -> Vec<Paragraph> {
+        // SAFETY: the implementation passes only call-scoped slice buffers to
+        // SheenBidi/HarfBuzz and releases every created algorithm/paragraph/
+        // buffer handle before returning.
         unsafe { self.on_shape_text_ffi(text, text_runs, text_direction_flag) }
     }
 }
@@ -680,13 +750,13 @@ impl HbFont {
                     shape_run(&text[unichar_index..], text_run, unichar_index as u32);
                 unichar_index += text_run.unichar_count as usize;
 
-                if G_FALLBACK_PROC.is_some() && fallback_proc_enabled() && !self.has_color_glyphs()
+                if fallback_proc().is_some() && fallback_proc_enabled() && !self.has_color_glyphs()
                 {
                     for glyph_index in 0..glyph_run.glyphs.len() {
                         if glyph_run.glyphs[glyph_index] != 0 {
                             let text_position = glyph_run.text_indices[glyph_index] as usize;
                             if text_position + 1 < text.len() && text[text_position + 1] == 0xfe0f {
-                                let emoji_font = G_FALLBACK_PROC
+                                let emoji_font = fallback_proc()
                                     .and_then(|callback| callback(text[text_position], 0, self));
                                 if emoji_font
                                     .as_ref()
@@ -700,7 +770,7 @@ impl HbFont {
                 }
 
                 let missing_index = glyph_run.glyphs.iter().position(|glyph| *glyph == 0);
-                if G_FALLBACK_PROC.is_none() || missing_index.is_none() || !fallback_proc_enabled()
+                if fallback_proc().is_none() || missing_index.is_none() || !fallback_proc_enabled()
                 {
                     if !glyph_run.glyphs.is_empty() {
                         glyph_runs.push(glyph_run);
@@ -708,7 +778,7 @@ impl HbFont {
                 } else {
                     let index = missing_index.unwrap();
                     let missing = text[glyph_run.text_indices[index] as usize];
-                    let fallback = G_FALLBACK_PROC.and_then(|callback| callback(missing, 0, self));
+                    let fallback = fallback_proc().and_then(|callback| callback(missing, 0, self));
                     if let Some(fallback) = fallback {
                         perform_fallback(fallback, &mut glyph_runs, text, &glyph_run, text_run, 1);
                     } else if !glyph_run.glyphs.is_empty() {
@@ -739,11 +809,16 @@ impl HbFont {
 unsafe fn make_line_metrics(font: *mut hb_font_t) -> LineMetrics {
     hb_ot_font_set_funcs(font);
     hb_font_set_scale(font, STANDARD_SCALE, STANDARD_SCALE);
+    // SAFETY: both HarfBuzz extent records are C POD, zero is a valid
+    // out-parameter seed, and `font` is required by this function's contract
+    // to remain live for every same-call HarfBuzz access below.
     let mut extents = std::mem::zeroed::<hb_font_extents_t>();
     hb_font_get_h_extents(font, &mut extents);
     let ascent = -extents.ascender as f32 * INVERSE_SCALE;
     let measure_glyph_top = |unicode: u32| {
         let mut glyph = 0;
+        // SAFETY: this HarfBuzz C POD is a same-call out parameter; it is read
+        // only when the API reports successful initialization.
         let mut glyph_extents = std::mem::zeroed::<hb_glyph_extents_t>();
         if hb_font_get_nominal_glyph(font, unicode, &mut glyph) != 0
             && hb_font_get_glyph_extents(font, glyph, &mut glyph_extents) != 0
@@ -832,6 +907,9 @@ unsafe fn fill_features(face: *mut hb_face_t, table_tag: u32, features: &mut Has
 }
 
 fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun {
+    // SAFETY: the HarfBuzz buffer is owned and destroyed in this call. Input
+    // slices outlive shaping, and glyph info/position slices are bounded by
+    // the count HarfBuzz returns while the buffer remains live.
     unsafe {
         let buffer = hb_buffer_create();
         hb_buffer_add_utf32(
@@ -1030,6 +1108,9 @@ impl PaintState<'_> {
     ) -> Vec<GradientStop> {
         let mut count = 0;
         hb_color_line_get_color_stops(color_line, 0, &mut count, ptr::null_mut());
+        // SAFETY: `hb_color_stop_t` is C POD. The count-only query determines
+        // the allocation bound, the fill query initializes at most that many
+        // slots, and `color_line` remains live for both adjacent calls.
         let mut hb_stops = vec![std::mem::zeroed::<hb_color_stop_t>(); count as usize];
         hb_color_line_get_color_stops(color_line, 0, &mut count, hb_stops.as_mut_ptr());
         hb_stops
@@ -1059,6 +1140,8 @@ impl PaintState<'_> {
 }
 
 fn hb_color_to_color_int(color: hb_color_t) -> ColorInt {
+    // SAFETY: HarfBuzz's color accessors are pure scalar extraction macros/
+    // functions and do not dereference or retain external storage.
     unsafe {
         color_argb(
             hb_color_get_alpha(color),
@@ -1077,6 +1160,13 @@ const fn hb_color(red: u8, green: u8, blue: u8, alpha: u8) -> u32 {
     (blue as u32) | ((green as u32) << 8) | ((red as u32) << 16) | ((alpha as u32) << 24)
 }
 
+// SAFETY CONTRACT FOR THE HARFBUZZ CALLBACKS BELOW: HarfBuzz invokes each
+// callback synchronously from `hb_font_draw_glyph`/`hb_font_paint_glyph`.
+// `path` is the unique stack-local `RawPath` supplied by `get_path` or layer
+// construction; `data` is the unique stack-local `PaintState` supplied by
+// `get_color_layers`; HarfBuzz color-line/blob/extent handles remain live for
+// the callback and are never retained. Every callback returns before those
+// stack locals or HarfBuzz handles are released.
 unsafe extern "C" fn raw_path_move_to(
     _: *mut hb_draw_funcs_t,
     path: *mut c_void,
@@ -1149,6 +1239,7 @@ unsafe extern "C" fn raw_path_close(
 }
 
 unsafe fn paint_state<'a>(data: *mut c_void) -> &'a mut PaintState<'a> {
+    // SAFETY: established by the callback contract immediately above.
     &mut *(data as *mut PaintState<'a>)
 }
 
@@ -1348,10 +1439,14 @@ unsafe extern "C" fn paint_image(
     let state = paint_state(data);
     let mut layer = ColorGlyphLayer::default();
     layer.paint_type = ColorGlyphPaintType::Image;
+    // SAFETY: HarfBuzz returned `length` readable bytes owned by the live
+    // callback-scoped blob. They are copied before the callback returns.
     layer.image_bytes = std::slice::from_raw_parts(bytes.cast::<u8>(), length as usize).to_vec();
     layer.image_width = width;
     layer.image_height = height;
     if !extents.is_null() {
+        // SAFETY: HarfBuzz supplied a non-null callback-scoped extent record;
+        // it is read only during this callback and never retained.
         layer.image_bearing_x = (*extents).x_bearing as f32 * INVERSE_SCALE;
         layer.image_bearing_y = -(*extents).y_bearing as f32 * INVERSE_SCALE;
         layer.image_extent_x = (*extents).width as f32 * INVERSE_SCALE;

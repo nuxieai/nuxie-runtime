@@ -1,9 +1,6 @@
-use std::ptr::NonNull;
-
 use crate::mechanical_port::source::{
     assets::script_asset::{ScriptInput, ScriptInputBehavior},
     core_context::CoreContext,
-    custom_property::CustomProperty,
     generated::{
         custom_property_trigger_base::CustomPropertyTriggerBaseCallbacks,
         script_input_trigger_base::ScriptInputTriggerBase,
@@ -28,10 +25,6 @@ impl Default for ScriptInputTrigger {
 }
 
 impl ScriptInputTrigger {
-    fn custom_property_mut(&mut self) -> &mut CustomProperty {
-        &mut self.base.base.base.base
-    }
-
     fn name(&self) -> &str {
         self.base.base.base.base.base.base.base.name()
     }
@@ -50,16 +43,16 @@ impl ScriptInputTrigger {
         else {
             return StatusCode::MissingObject;
         };
-        importer.add_input(
-            NonNull::from(self.custom_property_mut()),
-            ScriptInputTriggerBase::TYPE_KEY.into(),
-        );
+        let Some(this) = self.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        importer.add_input(this, ScriptInputTriggerBase::TYPE_KEY.into());
 
-        if self
-            .script_input
-            .scripted_object()
-            .is_some_and(|object| unsafe { object.as_ref() }.component().is_some())
-        {
+        if self.script_input.scripted_object().is_some_and(|object| {
+            object
+                .with(|object| object.as_component().is_some())
+                .unwrap_or(false)
+        }) {
             return self.base.base.base.base.base.base.import(import_stack);
         }
         StatusCode::Ok
@@ -71,18 +64,8 @@ impl ScriptInputTrigger {
             return code;
         }
 
-        let property = self.custom_property_mut() as *mut CustomProperty;
-        if let Some(parent) = self
-            .base
-            .base
-            .base
-            .base
-            .base
-            .base
-            .parent_mut()
-            .and_then(|parent| parent.as_scripted_object_mut())
-        {
-            parent.add_property(property);
+        if let (Some(this), Some(parent)) = (self.base.handle(), self.base.parent_handle()) {
+            parent.with_mut(|parent| parent.scripted_object_add_property(this));
         }
         StatusCode::Ok
     }
@@ -90,11 +73,15 @@ impl ScriptInputTrigger {
     pub fn property_value_changed(&mut self) {
         if self.property_value() != 0 {
             let name = self.name().to_owned();
-            let mut object = self
+            let object = self
                 .script_input
                 .scripted_object()
                 .expect("a changed script trigger has a scripted object");
-            unsafe { object.as_mut() }.trigger(name);
+            object.with_mut(|object| {
+                if let Some(object) = object.as_scripted_object_mut() {
+                    object.trigger(name);
+                }
+            });
         }
     }
 }
@@ -140,9 +127,24 @@ impl CustomPropertyTriggerBaseCallbacks for ScriptInputTrigger {
 
 impl Drop for ScriptInputTrigger {
     fn drop(&mut self) {
-        let property = self.custom_property_mut() as *mut CustomProperty;
-        if let Some(mut object) = self.script_input.scripted_object() {
-            unsafe { object.as_mut() }.remove_property(property);
+        if let (Some(this), Some(object)) =
+            (self.base.handle(), self.script_input.scripted_object())
+        {
+            object.with_mut(|object| object.scripted_object_remove_property(&this));
         }
+    }
+}
+
+impl std::ops::Deref for ScriptInputTrigger {
+    type Target = ScriptInputTriggerBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptInputTrigger {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -61,3 +61,24 @@ impl ImageSampler {
         ImageFilter::from(key / (NUM_IMAGE_WRAP * NUM_IMAGE_WRAP) as u8)
     }
 }
+
+impl From<ImageSampler> for nuxie_render_api::ImageSampler {
+    fn from(value: ImageSampler) -> Self {
+        Self {
+            wrap_x: match value.wrap_x {
+                ImageWrap::Clamp => nuxie_render_api::ImageWrap::Clamp,
+                ImageWrap::Repeat => nuxie_render_api::ImageWrap::Repeat,
+                ImageWrap::Mirror => nuxie_render_api::ImageWrap::Mirror,
+            },
+            wrap_y: match value.wrap_y {
+                ImageWrap::Clamp => nuxie_render_api::ImageWrap::Clamp,
+                ImageWrap::Repeat => nuxie_render_api::ImageWrap::Repeat,
+                ImageWrap::Mirror => nuxie_render_api::ImageWrap::Mirror,
+            },
+            filter: match value.filter {
+                ImageFilter::Bilinear => nuxie_render_api::ImageFilter::Bilinear,
+                ImageFilter::Nearest => nuxie_render_api::ImageFilter::Nearest,
+            },
+        }
+    }
+}

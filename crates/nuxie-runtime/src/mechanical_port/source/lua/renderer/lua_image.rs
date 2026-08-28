@@ -1,4 +1,3 @@
-#![cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::{
     lua::rive_lua_libs::{LuaAtoms, LuaState, LuaType, ScriptedImage, ScriptedImageSampler},
     renderer::{ImageFilter, ImageSampler, ImageWrap},
@@ -42,7 +41,6 @@ fn image_index(state: &mut LuaState) -> i32 {
                 .map(|v| v.height() as f64)
                 .unwrap_or(0.0),
         ),
-        #[cfg(feature = "rive_ore")]
         LuaAtoms::View => state.push_function_named(rive_image_view_impl, "Image.view"),
         _ => {
             return state.error(format!(

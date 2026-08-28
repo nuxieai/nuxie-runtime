@@ -1,18 +1,18 @@
 use super::{
     glyph_lookup::GlyphLookup, text::Text, text_follow_path_modifier::TextFollowPathModifier,
-    text_modifier::TextModifier, text_modifier_flags::TextModifierFlags,
-    text_modifier_range::TextModifierRange, text_shape_modifier::TextShapeModifier,
+    text_modifier_flags::TextModifierFlags, text_modifier_range::TextModifierRange,
+    text_variation_modifier::TextVariationModifier,
 };
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
+    core::CoreHandle,
     core_context::CoreContext,
     generated::text::text_modifier_group_base::TextModifierGroupBase,
     math::{mat2d::Mat2D, transform_components::TransformComponents, vec2d::Vec2D},
-    refcnt::RiveRc,
     status_code::StatusCode,
-    text_engine::{Font, FontCoord, GlyphLine, Paragraph, StyledText, TextRun},
+    text_engine::{FontCoord, FontRef, GlyphLine, Paragraph, StyledText, TextRun},
 };
-use std::{collections::HashMap, ptr::NonNull};
+use std::collections::HashMap;
 pub struct TransformGlyphArg<'a> {
     pub position: Vec2D,
     pub origin_position: Vec2D,
@@ -35,63 +35,78 @@ impl<'a> TransformGlyphArg<'a> {
 }
 pub struct TextModifierGroup {
     pub base: TextModifierGroupBase,
-    ranges: Vec<NonNull<TextModifierRange>>,
-    modifiers: Vec<NonNull<TextModifier>>,
-    shape_modifiers: Vec<NonNull<dyn TextShapeModifier>>,
-    follow_path_modifiers: Vec<NonNull<TextFollowPathModifier>>,
+    ranges: Vec<CoreHandle>,
+    modifiers: Vec<CoreHandle>,
+    shape_modifiers: Vec<CoreHandle>,
+    follow_path_modifiers: Vec<CoreHandle>,
     coverage: Vec<f32>,
-    variable_font: Option<RiveRc<Font>>,
+    variable_font: Option<FontRef>,
     variation_coords: Vec<FontCoord>,
     next_text_runs: Vec<TextRun>,
 }
 impl TextModifierGroup {
-    pub fn text_component(&self) -> Option<NonNull<Text>> {
-        self.base.parent_as_text()
+    pub fn text_component(&self) -> Option<CoreHandle> {
+        self.base.parent_handle().filter(|parent| {
+            parent
+                .with(|parent| parent.as_text().is_some())
+                .unwrap_or(false)
+        })
     }
-    pub fn on_added_dirty(&mut self, c: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, c: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(c);
         if code != StatusCode::Ok {
             return code;
         }
-        let Some(mut text) = self.text_component() else {
+        let (Some(text), Some(this)) = (self.text_component(), self.base.handle()) else {
             return StatusCode::MissingObject;
         };
-        unsafe { text.as_mut() }.add_modifier_group(self);
+        let added = text
+            .with_mut(|text| text.as_text_mut().map(|text| text.add_modifier_group(this)))
+            .flatten()
+            .is_some();
+        if !added {
+            return StatusCode::MissingObject;
+        }
         StatusCode::Ok
     }
-    pub fn add_modifier_range(&mut self, r: &mut TextModifierRange) {
-        self.ranges.push(NonNull::from(r));
+    pub fn add_modifier_range(&mut self, range: CoreHandle) {
+        self.ranges.push(range);
     }
-    pub fn add_modifier(&mut self, m: &mut TextModifier) {
-        let ptr = NonNull::from(&mut *m);
-        self.modifiers.push(ptr);
-        if let Some(shape) = m.base.as_text_shape_modifier() {
-            self.shape_modifiers.push(shape);
+    pub fn add_modifier(&mut self, modifier: CoreHandle) {
+        self.modifiers.push(modifier.clone());
+        if modifier
+            .with_downcast::<TextVariationModifier, _>(|_| ())
+            .is_some()
+        {
+            self.shape_modifiers.push(modifier.clone());
         }
-        if let Some(path) = m.base.as_text_follow_path_modifier() {
-            self.follow_path_modifiers.push(path);
+        if modifier
+            .with_downcast::<TextFollowPathModifier, _>(|_| ())
+            .is_some()
+        {
+            self.follow_path_modifiers.push(modifier);
         }
     }
     pub fn range_type_changed(&mut self) {
-        self.base.parent_text_mut().modifier_shape_dirty();
-        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE);
+        self.with_text_mut(Text::modifier_shape_dirty);
+        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE, true);
     }
     pub fn shape_modifier_changed(&mut self) {
-        self.base.parent_text_mut().mark_shape_dirty();
+        self.with_text_mut(Text::mark_shape_dirty);
     }
     pub fn range_changed(&mut self) {
         if self.shape_modifiers.is_empty() {
-            self.base.parent_text_mut().mark_paint_dirty();
+            self.with_text_mut(Text::mark_paint_dirty);
         } else {
-            self.base.parent_text_mut().modifier_shape_dirty();
+            self.with_text_mut(Text::modifier_shape_dirty);
         }
-        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE);
+        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE, true);
     }
     pub fn clear_range_maps(&mut self) {
         for r in &mut self.ranges {
-            unsafe { r.as_mut() }.clear_range_map();
+            r.with_downcast_mut::<TextModifierRange, _>(TextModifierRange::clear_range_map);
         }
-        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE);
+        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE, true);
     }
     pub fn compute_range_map(
         &mut self,
@@ -101,7 +116,9 @@ impl TextModifierGroup {
         lookup: &GlyphLookup,
     ) {
         for r in &mut self.ranges {
-            unsafe { r.as_mut() }.compute_range(text, shape, lines, lookup);
+            r.with_downcast_mut::<TextModifierRange, _>(|range| {
+                range.compute_range(text, shape, lines, lookup)
+            });
         }
     }
     pub fn compute_coverage(&mut self, size: u32) {
@@ -112,7 +129,9 @@ impl TextModifierGroup {
         self.coverage.clear();
         self.coverage.resize(size as usize, 0.0);
         for r in &mut self.ranges {
-            unsafe { r.as_mut() }.compute_coverage(&mut self.coverage);
+            r.with_downcast_mut::<TextModifierRange, _>(|range| {
+                range.compute_coverage(&mut self.coverage)
+            });
         }
     }
     pub fn coverage(&self, i: u32) -> f32 {
@@ -128,8 +147,12 @@ impl TextModifierGroup {
     }
     pub fn on_text_world_transform_dirty(&mut self) {
         if !self.follow_path_modifiers.is_empty() {
-            if let Some(mut text) = self.text_component() {
-                unsafe { text.as_mut() }.base.add_dirt(ComponentDirt::PATH);
+            if let Some(text) = self.text_component() {
+                text.with_mut(|text| {
+                    if let Some(text) = text.as_text_mut() {
+                        text.base.add_dirt(ComponentDirt::PATH, true);
+                    }
+                });
             }
         }
     }
@@ -137,11 +160,19 @@ impl TextModifierGroup {
         let Some(text) = self.text_component() else {
             return;
         };
-        let Some(inverse) = unsafe { text.as_ref() }.base.world_transform().inverse() else {
+        let Some(inverse) = text
+            .with(|text| {
+                text.as_text()
+                    .and_then(|text| text.base.world_transform().inverse())
+            })
+            .flatten()
+        else {
             return;
         };
         for modifier in &mut self.follow_path_modifiers {
-            unsafe { modifier.as_mut() }.reset(&inverse);
+            modifier.with_downcast_mut::<TextFollowPathModifier, _>(|modifier| {
+                modifier.reset(&inverse)
+            });
         }
     }
     pub fn modifies_transform(&self) -> bool {
@@ -183,7 +214,11 @@ impl TextModifierGroup {
                 arg.offset = Vec2D::new(self.base.x(), self.base.y());
             }
             for m in &self.follow_path_modifiers {
-                tc = unsafe { m.as_ref() }.transform_glyph(tc, arg);
+                tc = m
+                    .with_downcast::<TextFollowPathModifier, _>(|modifier| {
+                        modifier.transform_glyph(tc, arg)
+                    })
+                    .unwrap_or(tc);
             }
             let diff = tc.translation() - arg.origin_position;
             parts.set_rotation(parts.rotation() + tc.rotation() * amount);
@@ -221,7 +256,17 @@ impl TextModifierGroup {
         }
     }
     fn mark_paint(&mut self) {
-        self.base.parent_text_mut().mark_paint_dirty();
+        self.with_text_mut(Text::mark_paint_dirty);
+    }
+
+    fn with_text_mut(&self, use_text: impl FnOnce(&mut Text)) {
+        if let Some(text) = self.text_component() {
+            text.with_mut(|text| {
+                if let Some(text) = text.as_text_mut() {
+                    use_text(text);
+                }
+            });
+        }
     }
     pub fn modifier_flags_changed(&mut self) {
         self.mark_paint();
@@ -266,13 +311,20 @@ impl TextModifierGroup {
         let Some(style) = text.style_from_shaper_id(run.style_id) else {
             return run;
         };
-        let Some(font) = unsafe { style.as_ref() }.base.font() else {
+        let Some(font) = style
+            .with(|style| style.as_text_style().and_then(|style| style.font()))
+            .flatten()
+        else {
             return run;
         };
         let mut variations = HashMap::new();
         let mut size = run.size;
         for modifier in &self.shape_modifiers {
-            size = unsafe { modifier.as_ref() }.modify(&font, &mut variations, size, strength);
+            size = modifier
+                .with_downcast::<TextVariationModifier, _>(|modifier| {
+                    modifier.modify(&font, &mut variations, size, strength)
+                })
+                .unwrap_or(size);
         }
         if variations.is_empty() {
             self.variable_font = None;
@@ -328,9 +380,10 @@ impl TextModifierGroup {
     }
     pub fn needs_shape(&self) -> bool {
         !self.shape_modifiers.is_empty()
-            || self
-                .ranges
-                .iter()
-                .any(|r| unsafe { r.as_ref() }.needs_shape())
+            || self.ranges.iter().any(|range| {
+                range
+                    .with_downcast::<TextModifierRange, _>(TextModifierRange::needs_shape)
+                    .unwrap_or(false)
+            })
     }
 }

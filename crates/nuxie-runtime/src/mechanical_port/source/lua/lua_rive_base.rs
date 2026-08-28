@@ -1,9 +1,7 @@
-#[cfg(feature = "rive_scripting")]
 use crate::mechanical_port::source::lua::rive_lua_libs::{
     LuaFunction, LuaReg, LuaState, ScriptingContext,
 };
 
-#[cfg(feature = "rive_scripting")]
 fn lua_print(state: &mut LuaState) -> i32 {
     let count = state.top();
     if count == 0 {
@@ -20,10 +18,8 @@ fn lua_print(state: &mut LuaState) -> i32 {
     0
 }
 
-#[cfg(feature = "rive_scripting")]
 const BASE_FUNCTIONS: &[LuaReg] = &[LuaReg::new("print", lua_print), LuaReg::END];
 
-#[cfg(feature = "rive_scripting")]
 pub fn luaopen_rive_base(state: &mut LuaState) -> i32 {
     state.register("_G", BASE_FUNCTIONS);
     1

@@ -1,4 +1,7 @@
-use crate::mechanical_port::source::scripted::scripted_object::{ScriptProtocol, ScriptedObject};
+use crate::mechanical_port::source::{
+    core::CoreHandle, generated::scripted::scripted_layout_base::ScriptedLayoutBase,
+    scripted::scripted_object::ScriptProtocol,
+};
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Vec2 {
     pub x: f32,
@@ -27,9 +30,8 @@ pub enum LayoutDirection {
 }
 #[derive(Default)]
 pub struct ScriptedLayout {
-    pub scripted: ScriptedObject,
+    pub base: ScriptedLayoutBase,
     size: Vec2,
-    pub properties: Vec<usize>,
     parent_layout_dirty: bool,
     paint_dirty: bool,
 }
@@ -39,8 +41,12 @@ impl ScriptedLayout {
         self.paint_dirty = true;
     }
     fn call_scripted_resize(&mut self, size: Vec2) {
-        if self.scripted.resizes() && self.scripted.self_ref() != 0 {
-            let _ = self.scripted.call_number("resize", &[size.x, size.y]);
+        if self.base.base.scripted.resizes() && self.base.base.scripted.self_ref() != 0 {
+            let _ = self
+                .base
+                .base
+                .scripted
+                .call_number("resize", &[size.x, size.y]);
         }
     }
     pub fn measure_layout(
@@ -50,10 +56,11 @@ impl ScriptedLayout {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2 {
-        if !self.scripted.measures() || self.scripted.self_ref() == 0 {
+        if !self.base.base.scripted.measures() || self.base.base.scripted.self_ref() == 0 {
             return Vec2::default();
         }
-        let Some((measured_width, measured_height)) = self.scripted.call_vec2("measure", &[])
+        let Some((measured_width, measured_height)) =
+            self.base.base.scripted.call_vec2("measure", &[])
         else {
             return Vec2::default();
         };
@@ -82,8 +89,11 @@ impl ScriptedLayout {
         self.size = size;
         self.call_scripted_resize(size)
     }
-    pub fn add_property(&mut self, p: usize) {
-        self.properties.push(p)
+    pub fn add_property(&mut self, p: CoreHandle) {
+        self.base.base.add_property(p)
+    }
+    pub fn remove_property(&mut self, property: &CoreHandle) {
+        self.base.base.remove_property(property)
     }
     pub fn script_protocol(&self) -> ScriptProtocol {
         ScriptProtocol::Layout

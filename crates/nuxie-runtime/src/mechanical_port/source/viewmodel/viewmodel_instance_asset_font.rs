@@ -1,13 +1,17 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
-    assets::font_asset::FontAsset, component_dirt::ComponentDirt,
-    data_bind::data_values::data_value_integer::DataValueInteger,
+    component_dirt::ComponentDirt,
+    data_bind::data_values::{
+        data_value_asset_font::FontAsset, data_value_integer::DataValueInteger,
+    },
     generated::viewmodel::viewmodel_instance_asset_font_base::ViewModelInstanceAssetFontBase,
-    refcnt::RiveRc, text_engine::FontRef,
+    text_engine::FontRef,
 };
 
 pub struct ViewModelInstanceAssetFont {
     pub base: ViewModelInstanceAssetFontBase,
-    font_asset: RiveRc<FontAsset>,
+    font_asset: Rc<FontAsset>,
 }
 
 impl Default for ViewModelInstanceAssetFont {
@@ -20,13 +24,13 @@ impl ViewModelInstanceAssetFont {
     pub fn new() -> Self {
         Self {
             base: ViewModelInstanceAssetFontBase::default(),
-            font_asset: RiveRc::new(FontAsset::default()),
+            font_asset: Rc::new(FontAsset::new()),
         }
     }
 
     pub fn property_value_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::BINDINGS);
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         if let Some(callback) = self.base.changed_callback() {
             callback(self, self.base.property_value());
         }
@@ -34,28 +38,29 @@ impl ViewModelInstanceAssetFont {
     }
 
     pub fn set_value(&mut self, font: Option<FontRef>) {
-        if self.font_asset.font().as_ref().map(FontRef::as_ptr)
-            == font.as_ref().map(FontRef::as_ptr)
+        let previous = self.font_asset.font();
+        if matches!((&previous, &font), (Some(left), Some(right)) if Rc::ptr_eq(left, right))
+            || previous.is_none() && font.is_none()
         {
             self.base.set_property_value(u32::MAX);
             return;
         }
-        #[cfg(feature = "rive_tools")]
+        #[cfg(feature = "tools")]
         let already_sentinel = self.base.property_value() == u32::MAX;
-        self.font_asset.set_font_direct(font);
-        #[cfg(feature = "rive_tools")]
+        self.font_asset.set_font(font);
+        #[cfg(feature = "tools")]
         if !already_sentinel {
             self.base.set_property_value(u32::MAX);
         } else if let Some(callback) = self.base.changed_callback() {
             callback(self, self.base.property_value());
         }
-        #[cfg(not(feature = "rive_tools"))]
+        #[cfg(not(feature = "tools"))]
         self.base.set_property_value(u32::MAX);
         self.base.add_dirt(ComponentDirt::BINDINGS);
         self.base.on_value_changed();
     }
 
-    pub fn asset(&self) -> RiveRc<FontAsset> {
+    pub fn asset(&self) -> Rc<FontAsset> {
         self.font_asset.clone()
     }
 

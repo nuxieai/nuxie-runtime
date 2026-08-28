@@ -1,309 +1,345 @@
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
+
 use crate::mechanical_port::source::{
-    core::{Core, CoreRegistry},
+    component_dirt::ComponentDirt,
+    core::CoreHandle,
+    data_bind::data_bind_list_item_consumer::DataBindListItemConsumer,
+    dirtyable::Dirtyable,
+    generated::shapes::{
+        cubic_detached_vertex_base::CubicDetachedVertexBase, list_path_base::ListPathBase,
+        vertex_base::VertexBase,
+    },
     math::{math_types::PI, vec2d::Vec2D},
-    shapes::{cubic_detached_vertex::CubicDetachedVertex, path::Path, vertex::Vertex},
+    shapes::{cubic_detached_vertex::CubicDetachedVertex, vertex::VertexBehavior},
     viewmodel::{
-        core_object_listener::CoreObjectListener,
-        property_symbol_dependent::{
-            PropertySymbolDependent, PropertySymbolDependentMulti, PropertySymbolDependentSingle,
-        },
-        symbol_type::SymbolType,
-        viewmodel_instance::ViewModelInstance,
-        viewmodel_instance_list_item::ViewModelInstanceListItem,
-        viewmodel_instance_value::ViewModelInstanceValue,
+        symbol_type::SymbolType, viewmodel_instance_value::ValueDependentHandle,
+        viewmodel_value_dependent::ViewModelValueDependent,
     },
 };
 
-pub struct VertexPropertyListenerSingle {
-    pub base: PropertySymbolDependentSingle,
-    multiplier: f32,
-}
-impl VertexPropertyListenerSingle {
-    pub fn new(
-        vertex: *mut Core,
-        listener: *mut VertexListener,
-        value: *mut ViewModelInstanceValue,
+enum VertexProperty {
+    Single {
         key: u16,
         multiplier: f32,
-    ) -> Self {
-        Self {
-            base: PropertySymbolDependentSingle::new(vertex, listener, value, key),
-            multiplier,
-        }
-    }
-    pub fn write_value(&mut self) {
-        let value = self.base.instance_value().as_number().property_value() * self.multiplier;
-        CoreRegistry::set_double(self.base.core_object(), self.base.property_key(), value);
-    }
-}
-
-pub struct VertexPropertyListenerMulti {
-    pub base: PropertySymbolDependentMulti,
-    multiplier: f32,
-}
-impl VertexPropertyListenerMulti {
-    pub fn new(
-        vertex: *mut Core,
-        listener: *mut VertexListener,
-        value: *mut ViewModelInstanceValue,
+    },
+    Multi {
         keys: Vec<u16>,
         multiplier: f32,
-    ) -> Self {
-        Self {
-            base: PropertySymbolDependentMulti::new(vertex, listener, value, keys),
-            multiplier,
-        }
-    }
-    pub fn write_value(&mut self) {
-        let value = self.base.instance_value().as_number().property_value() * self.multiplier;
-        for key in self.base.property_keys() {
-            CoreRegistry::set_double(self.base.core_object(), *key, value);
-        }
-    }
-}
-
-pub struct VertexPropertyListenerPoint {
-    pub base: PropertySymbolDependent,
-    y_value: Option<*mut ViewModelInstanceValue>,
-    distance_key: u16,
-    rotation_key: u16,
-}
-impl VertexPropertyListenerPoint {
-    pub fn new(
-        vertex: *mut Core,
-        listener: *mut VertexListener,
-        x_value: Option<*mut ViewModelInstanceValue>,
-        y_value: Option<*mut ViewModelInstanceValue>,
+    },
+    Point {
         distance_key: u16,
         rotation_key: u16,
-    ) -> Self {
-        let mut value = Self {
-            base: PropertySymbolDependent::new(vertex, listener, x_value),
-            y_value,
-            distance_key,
-            rotation_key,
-        };
-        if let Some(y) = value.y_value {
-            unsafe { &mut *y }.add_dependent(&mut value);
-        }
-        value
-    }
-    pub fn write_value(&mut self) {
-        let x = self
-            .base
-            .instance_value()
-            .map(|v| v.as_number().property_value())
-            .unwrap_or(0.0);
-        let y = self
-            .y_value
-            .map(|v| unsafe { &*v }.as_number().property_value())
-            .unwrap_or(0.0);
-        let point = Vec2D::new(x, y);
-        CoreRegistry::set_double(self.base.core_object(), self.distance_key, point.length());
-        CoreRegistry::set_double(
-            self.base.core_object(),
-            self.rotation_key,
-            point.y.atan2(point.x),
-        );
-    }
+    },
 }
-impl Drop for VertexPropertyListenerPoint {
-    fn drop(&mut self) {
-        if let Some(y) = self.y_value {
-            unsafe { &mut *y }.remove_dependent(self);
+
+struct VertexPropertyListener {
+    vertex: Weak<RefCell<CubicDetachedVertex>>,
+    path: CoreHandle,
+    x_value: Option<CoreHandle>,
+    y_value: Option<CoreHandle>,
+    property: VertexProperty,
+}
+
+impl VertexPropertyListener {
+    fn number(value: Option<&CoreHandle>) -> f32 {
+        value
+            .and_then(|value| {
+                value.with(|value| {
+                    value
+                        .as_view_model_instance_number()
+                        .map(|value| value.base.property_value())
+                })
+            })
+            .flatten()
+            .unwrap_or_default()
+    }
+
+    fn set_value(vertex: &mut CubicDetachedVertex, key: u16, value: f32) {
+        match key {
+            VertexBase::X_PROPERTY_KEY => {
+                if vertex.base.set_x_value(value) {
+                    VertexBehavior::x_changed(vertex);
+                }
+            }
+            VertexBase::Y_PROPERTY_KEY => {
+                if vertex.base.set_y_value(value) {
+                    VertexBehavior::y_changed(vertex);
+                }
+            }
+            CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY => {
+                if vertex.base.set_in_rotation_value(value) {
+                    vertex.in_rotation_changed();
+                }
+            }
+            CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY => {
+                if vertex.base.set_in_distance_value(value) {
+                    vertex.in_distance_changed();
+                }
+            }
+            CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY => {
+                if vertex.base.set_out_rotation_value(value) {
+                    vertex.out_rotation_changed();
+                }
+            }
+            CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY => {
+                if vertex.base.set_out_distance_value(value) {
+                    vertex.out_distance_changed();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn write_value(&mut self) {
+        let Some(vertex) = self.vertex.upgrade() else {
+            return;
+        };
+        let mut vertex = vertex.borrow_mut();
+        match &self.property {
+            VertexProperty::Single { key, multiplier } => {
+                Self::set_value(
+                    &mut vertex,
+                    *key,
+                    Self::number(self.x_value.as_ref()) * *multiplier,
+                );
+            }
+            VertexProperty::Multi { keys, multiplier } => {
+                let value = Self::number(self.x_value.as_ref()) * *multiplier;
+                for key in keys {
+                    Self::set_value(&mut vertex, *key, value);
+                }
+            }
+            VertexProperty::Point {
+                distance_key,
+                rotation_key,
+            } => {
+                let point = Vec2D::new(
+                    Self::number(self.x_value.as_ref()),
+                    Self::number(self.y_value.as_ref()),
+                );
+                Self::set_value(&mut vertex, *distance_key, point.length());
+                Self::set_value(&mut vertex, *rotation_key, point.y.atan2(point.x));
+            }
         }
     }
 }
 
-pub struct VertexListener {
-    pub base: CoreObjectListener,
-    path: *mut Path,
+impl Dirtyable for VertexPropertyListener {
+    fn add_dirt(&mut self, _value: ComponentDirt, _recurse: bool) {
+        self.write_value();
+        self.path.with_mut(|path| {
+            if let Some(path) = path.as_path_mut() {
+                path.mark_path_dirty(true);
+            }
+        });
+    }
 }
+
+impl ViewModelValueDependent for VertexPropertyListener {
+    fn relink_data_bind(&mut self) {}
+}
+
+struct VertexListener {
+    vertex: Rc<RefCell<CubicDetachedVertex>>,
+    instance: CoreHandle,
+    path: CoreHandle,
+    properties: Vec<Rc<RefCell<dyn ViewModelValueDependent>>>,
+}
+
 impl VertexListener {
-    pub fn new(vertex: *mut Vertex, instance: ViewModelInstance, path: *mut Path) -> Self {
-        let mut value = Self {
-            base: CoreObjectListener::new(vertex.cast(), instance),
+    fn new(
+        vertex: Rc<RefCell<CubicDetachedVertex>>,
+        instance: CoreHandle,
+        path: CoreHandle,
+    ) -> Self {
+        let mut listener = Self {
+            vertex,
+            instance,
             path,
+            properties: Vec::new(),
         };
-        value.create_properties();
-        value
+        listener.create_properties();
+        listener
     }
-    pub fn vertex(&mut self) -> &mut Vertex {
-        self.base.core_mut().as_vertex_mut().unwrap()
-    }
-    pub fn mark_dirty(&mut self) {
-        unsafe { &mut *self.path }.mark_path_dirty(true);
-    }
-    fn create_properties(&mut self) {
-        self.base.create_properties();
-        for symbol in [
-            SymbolType::VertexX,
-            SymbolType::VertexY,
-            SymbolType::Rotation,
-            SymbolType::InRotation,
-            SymbolType::OutRotation,
-            SymbolType::Distance,
-            SymbolType::InDistance,
-            SymbolType::OutDistance,
-        ] {
-            self.create_property_listener(symbol);
+
+    fn remap(&mut self, instance: CoreHandle) {
+        if self.instance != instance {
+            self.properties.clear();
+            self.instance = instance;
+            self.create_properties();
         }
-        self.create_point_property_listener(
-            SymbolType::CubicVertexInPointX,
-            SymbolType::CubicVertexInPointY,
-            CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY,
-            CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY,
-        );
-        self.create_point_property_listener(
-            SymbolType::CubicVertexOutPointX,
-            SymbolType::CubicVertexOutPointY,
-            CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY,
-            CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY,
-        );
     }
-    fn create_single_property_listener(
+
+    fn instance_value(&self, symbol: SymbolType) -> Option<CoreHandle> {
+        self.instance
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()
+                    .and_then(|instance| instance.property_value_for_symbol(symbol))
+            })
+            .flatten()
+            .filter(|value| {
+                value
+                    .with(|value| value.as_view_model_instance_number().is_some())
+                    .unwrap_or(false)
+            })
+    }
+
+    fn add_listener(
         &mut self,
-        symbol: SymbolType,
-    ) -> Option<Box<dyn PropertyListener>> {
-        let (key, multiplier) = match symbol {
-            SymbolType::VertexX => (VertexBase::X_PROPERTY_KEY, 1.0),
-            SymbolType::VertexY => (VertexBase::Y_PROPERTY_KEY, 1.0),
-            SymbolType::InRotation => (
+        x_value: Option<CoreHandle>,
+        y_value: Option<CoreHandle>,
+        property: VertexProperty,
+    ) {
+        if x_value.is_none() && y_value.is_none() {
+            return;
+        }
+        let listener = Rc::new(RefCell::new(VertexPropertyListener {
+            vertex: Rc::downgrade(&self.vertex),
+            path: self.path.clone(),
+            x_value: x_value.clone(),
+            y_value: y_value.clone(),
+            property,
+        }));
+        listener.borrow_mut().write_value();
+        let dependent: Rc<RefCell<dyn ViewModelValueDependent>> = listener;
+        let dependent_handle = ValueDependentHandle::runtime(&dependent);
+        for value in [x_value, y_value].into_iter().flatten() {
+            value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.add_dependent(dependent_handle.clone());
+                }
+            });
+        }
+        self.properties.push(dependent);
+    }
+
+    fn create_properties(&mut self) {
+        self.properties.clear();
+        for (symbol, key, multiplier) in [
+            (SymbolType::VertexX, VertexBase::X_PROPERTY_KEY, 1.0),
+            (SymbolType::VertexY, VertexBase::Y_PROPERTY_KEY, 1.0),
+            (
+                SymbolType::InRotation,
                 CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY,
                 PI / 180.0,
             ),
-            SymbolType::OutRotation => (
+            (
+                SymbolType::OutRotation,
                 CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY,
                 PI / 180.0,
             ),
-            SymbolType::InDistance => (CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY, 1.0),
-            SymbolType::OutDistance => (CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY, 1.0),
-            _ => (0, 1.0),
-        };
-        let value = self
-            .base
-            .instance()
-            .property_value(symbol)?
-            .as_number_mut()?;
-        Some(Box::new(VertexPropertyListenerSingle::new(
-            self.base.core_pointer(),
-            self,
-            value,
-            key,
-            multiplier,
-        )))
-    }
-    fn create_multi_property_listener(
-        &mut self,
-        symbol: SymbolType,
-        keys: Vec<u16>,
-        multiplier: f32,
-    ) -> Option<Box<dyn PropertyListener>> {
-        let value = self
-            .base
-            .instance()
-            .property_value(symbol)?
-            .as_number_mut()?;
-        Some(Box::new(VertexPropertyListenerMulti::new(
-            self.base.core_pointer(),
-            self,
-            value,
-            keys,
-            multiplier,
-        )))
-    }
-    fn create_point_property_listener(
-        &mut self,
-        x_symbol: SymbolType,
-        y_symbol: SymbolType,
-        distance_key: u16,
-        rotation_key: u16,
-    ) {
-        let x = self
-            .base
-            .instance()
-            .property_value(x_symbol)
-            .and_then(ViewModelInstanceValue::as_number_mut);
-        let y = self
-            .base
-            .instance()
-            .property_value(y_symbol)
-            .and_then(ViewModelInstanceValue::as_number_mut);
-        if x.is_some() || y.is_some() {
-            let mut listener = VertexPropertyListenerPoint::new(
-                self.base.core_pointer(),
-                self,
-                x,
-                y,
-                distance_key,
-                rotation_key,
-            );
-            listener.write_value();
-            self.base.properties_mut().push(Box::new(listener));
+            (
+                SymbolType::InDistance,
+                CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY,
+                1.0,
+            ),
+            (
+                SymbolType::OutDistance,
+                CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY,
+                1.0,
+            ),
+        ] {
+            let value = self.instance_value(symbol);
+            self.add_listener(value, None, VertexProperty::Single { key, multiplier });
         }
-    }
-    fn create_property_listener(&mut self, symbol: SymbolType) {
-        let listener = match symbol {
-            SymbolType::VertexX
-            | SymbolType::VertexY
-            | SymbolType::InRotation
-            | SymbolType::OutRotation
-            | SymbolType::InDistance
-            | SymbolType::OutDistance => self.create_single_property_listener(symbol),
-            SymbolType::Distance => self.create_multi_property_listener(
-                symbol,
-                vec![
+        self.add_listener(
+            self.instance_value(SymbolType::Distance),
+            None,
+            VertexProperty::Multi {
+                keys: vec![
                     CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY,
                     CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY,
                 ],
-                1.0,
-            ),
-            SymbolType::Rotation => self.create_multi_property_listener(
-                symbol,
-                vec![
+                multiplier: 1.0,
+            },
+        );
+        self.add_listener(
+            self.instance_value(SymbolType::Rotation),
+            None,
+            VertexProperty::Multi {
+                keys: vec![
                     CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY,
                     CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY,
                 ],
-                PI / 180.0,
+                multiplier: PI / 180.0,
+            },
+        );
+        for (x_symbol, y_symbol, distance_key, rotation_key) in [
+            (
+                SymbolType::CubicVertexInPointX,
+                SymbolType::CubicVertexInPointY,
+                CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY,
+                CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY,
             ),
-            _ => None,
-        };
-        if let Some(mut listener) = listener {
-            listener.write_value();
-            self.base.properties_mut().push(listener);
+            (
+                SymbolType::CubicVertexOutPointX,
+                SymbolType::CubicVertexOutPointY,
+                CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY,
+                CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY,
+            ),
+        ] {
+            self.add_listener(
+                self.instance_value(x_symbol),
+                self.instance_value(y_symbol),
+                VertexProperty::Point {
+                    distance_key,
+                    rotation_key,
+                },
+            );
         }
     }
 }
 
+#[derive(Default)]
 pub struct ListPath {
     pub base: ListPathBase,
     vertex_listeners: Vec<VertexListener>,
 }
+
 impl ListPath {
-    pub fn update_list(&mut self, list: &[ViewModelInstanceListItem]) {
+    pub fn update_list(&mut self, list: &[CoreHandle]) {
         let current_size = self.vertex_listeners.len();
+        let Some(path) = self.base.handle() else {
+            return;
+        };
         let mut index = 0;
         for item in list {
-            if let Some(instance) = item.viewmodel_instance() {
-                if index >= current_size {
-                    let mut vertex = Box::new(CubicDetachedVertex::default());
-                    let listener = VertexListener::new(
-                        vertex.as_mut().as_vertex_mut(),
-                        instance.clone(),
-                        self.base.as_path_mut(),
-                    );
-                    self.vertex_listeners.push(listener);
-                    self.base.add_vertex(vertex.into_vertex());
-                } else {
-                    self.vertex_listeners[index].base.remap(instance.clone());
-                }
-                index += 1;
+            let instance = item
+                .with(|item| {
+                    item.as_view_model_instance_list_item()
+                        .and_then(|item| item.view_model_instance())
+                })
+                .flatten();
+            let Some(instance) = instance else {
+                continue;
+            };
+            if index >= current_size {
+                let vertex = Rc::new(RefCell::new(CubicDetachedVertex::default()));
+                self.vertex_listeners.push(VertexListener::new(
+                    vertex.clone(),
+                    instance,
+                    path.clone(),
+                ));
+                self.base.add_runtime_cubic_vertex(vertex);
+            } else {
+                self.vertex_listeners[index].remap(instance);
             }
+            index += 1;
         }
         while self.vertex_listeners.len() > index {
             self.vertex_listeners.pop();
             self.base.pop_vertex();
         }
         self.base.mark_path_dirty(true);
+    }
+}
+
+impl DataBindListItemConsumer for ListPath {
+    fn update_list(&mut self, list: &[CoreHandle]) {
+        Self::update_list(self, list);
     }
 }

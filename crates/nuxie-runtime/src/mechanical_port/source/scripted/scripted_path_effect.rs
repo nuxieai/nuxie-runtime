@@ -1,4 +1,8 @@
-use crate::mechanical_port::source::scripted::scripted_object::{ScriptProtocol, ScriptedObject};
+use crate::mechanical_port::source::{
+    core::CoreHandle,
+    generated::scripted::scripted_path_effect_base::ScriptedPathEffectBase,
+    scripted::scripted_object::{ScriptProtocol, ScriptedObject},
+};
 use std::collections::HashMap;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ShapePaintPath {
@@ -26,9 +30,10 @@ impl ScriptedEffectPath {
     }
 }
 pub struct ScriptedPathEffect {
+    pub base: ScriptedPathEffectBase,
     pub scripted: ScriptedObject,
-    effect_paths: HashMap<usize, ScriptedEffectPath>,
-    properties: Vec<usize>,
+    effect_paths: HashMap<CoreHandle, ScriptedEffectPath>,
+    properties: Vec<CoreHandle>,
     advance_active: bool,
     needs_update: bool,
     paint_dirty: bool,
@@ -36,6 +41,7 @@ pub struct ScriptedPathEffect {
 impl Default for ScriptedPathEffect {
     fn default() -> Self {
         Self {
+            base: ScriptedPathEffectBase::default(),
             scripted: ScriptedObject::default(),
             effect_paths: HashMap::new(),
             properties: Vec::new(),
@@ -46,11 +52,15 @@ impl Default for ScriptedPathEffect {
     }
 }
 impl ScriptedPathEffect {
+    pub fn asset_id(&self) -> u32 {
+        self.base.script_asset_id()
+    }
+
     pub fn did_hydrate_script_inputs(&mut self) {
         self.advance_active = true;
         self.paint_dirty = true;
     }
-    pub fn update_effect(&mut self, path_provider: usize, source: &ShapePaintPath) {
+    pub fn update_effect(&mut self, path_provider: CoreHandle, source: &ShapePaintPath) {
         if !self.scripted.updates() {
             return;
         }
@@ -82,8 +92,11 @@ impl ScriptedPathEffect {
     pub fn add_scripted_dirt(&mut self) {
         self.mark_needs_update()
     }
-    pub fn add_property(&mut self, p: usize) {
+    pub fn add_property(&mut self, p: CoreHandle) {
         self.properties.push(p)
+    }
+    pub fn remove_property(&mut self, property: &CoreHandle) {
+        self.properties.retain(|item| item != property)
     }
     pub fn update(&mut self, script_update_dirty: bool) {
         if script_update_dirty {

@@ -1,5 +1,6 @@
 use super::data_converter_operation::ArithmeticOperation;
 use crate::mechanical_port::source::{
+    core::CoreHandle,
     data_bind::data_values::data_value::DataValue,
     generated::data_bind::converters::{
         data_converter_operation_base::DataConverterOperationBaseCallbacks,
@@ -10,6 +11,49 @@ use crate::mechanical_port::source::{
 };
 pub struct DataConverterOperationValue {
     pub base: DataConverterOperationValueBase,
+}
+
+impl std::ops::Deref for DataConverterOperationValue {
+    type Target = DataConverterOperationValueBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for DataConverterOperationValue {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability
+    for DataConverterOperationValue
+{
+    fn convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(Self::convert(self, input));
+    }
+
+    fn reverse_convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        let value = Self::reverse_convert(self, input);
+        output(value.as_ref());
+    }
+
+    fn output_type(
+        &self,
+    ) -> crate::mechanical_port::source::data_bind::data_values::data_type::DataType {
+        self.base.base.output_type()
+    }
+
+    crate::data_converter_capability_lifecycle!(base.base.base.base);
 }
 
 impl Default for DataConverterOperationValue {

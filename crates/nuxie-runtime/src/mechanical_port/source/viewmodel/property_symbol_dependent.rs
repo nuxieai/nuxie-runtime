@@ -1,54 +1,72 @@
-use std::ptr::NonNull;
-
-use crate::mechanical_port::source::{component_dirt::ComponentDirt, core::Core, refcnt::RiveRc};
-
-use super::{
-    viewmodel_instance::ViewModelInstance, viewmodel_instance_value::ViewModelInstanceValue,
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
 };
+
+use crate::mechanical_port::source::{component_dirt::ComponentDirt, core::CoreHandle};
+
+use super::viewmodel_instance_value::ValueDependentHandle;
 
 pub trait PropertyWriter {
     fn write_value(&mut self);
 }
 
+pub type PropertyWriterHandle = Rc<RefCell<dyn PropertyWriter>>;
+pub type CoreObjectListenerHandle = Rc<RefCell<CoreObjectListener>>;
+
 pub struct PropertySymbolDependent {
-    core_object: NonNull<Core>,
-    core_object_listener: NonNull<CoreObjectListener>,
-    instance_value: Option<NonNull<ViewModelInstanceValue>>,
-    writer: NonNull<dyn PropertyWriter>,
-    dependent_identity: NonNull<dyn super::viewmodel_value_dependent::ViewModelValueDependent>,
+    core_object: CoreHandle,
+    core_object_listener: Weak<RefCell<CoreObjectListener>>,
+    instance_value: Option<CoreHandle>,
+    writer: PropertyWriterHandle,
+    dependent_identity: ValueDependentHandle,
 }
 
 impl PropertySymbolDependent {
     pub fn new(
-        core_object: NonNull<Core>,
-        core_object_listener: NonNull<CoreObjectListener>,
-        mut instance_value: Option<NonNull<ViewModelInstanceValue>>,
-        writer: NonNull<dyn PropertyWriter>,
-        dependent_identity: NonNull<dyn super::viewmodel_value_dependent::ViewModelValueDependent>,
+        core_object: CoreHandle,
+        core_object_listener: &CoreObjectListenerHandle,
+        instance_value: Option<CoreHandle>,
+        writer: PropertyWriterHandle,
+        dependent_identity: ValueDependentHandle,
     ) -> Self {
         let dependent = Self {
             core_object,
-            core_object_listener,
-            instance_value,
+            core_object_listener: Rc::downgrade(core_object_listener),
+            instance_value: instance_value.clone(),
             writer,
-            dependent_identity,
+            dependent_identity: dependent_identity.clone(),
         };
-        if let Some(value) = &mut instance_value {
-            unsafe { value.as_mut() }.add_dependent(dependent.dependent_identity);
+        if let Some(value) = instance_value {
+            value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.add_dependent(dependent_identity);
+                }
+            });
         }
         dependent
     }
 
     pub fn add_dirt(&mut self, _value: ComponentDirt, _recurse: bool) {
-        unsafe { self.writer.as_mut() }.write_value();
-        unsafe { self.core_object_listener.as_mut() }.mark_dirty();
+        self.writer.borrow_mut().write_value();
+        if let Some(listener) = self.core_object_listener.upgrade() {
+            listener.borrow_mut().mark_dirty();
+        }
+    }
+
+    pub fn core_object(&self) -> &CoreHandle {
+        &self.core_object
     }
 }
 
 impl Drop for PropertySymbolDependent {
     fn drop(&mut self) {
-        if let Some(mut value) = self.instance_value {
-            unsafe { value.as_mut() }.remove_dependent(self.dependent_identity);
+        if let Some(value) = self.instance_value.as_ref() {
+            value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.remove_dependent(&self.dependent_identity);
+                }
+            });
         }
     }
 }
@@ -65,6 +83,10 @@ impl PropertySymbolDependentSingle {
             property_key,
         }
     }
+
+    pub fn property_key(&self) -> u16 {
+        self.property_key
+    }
 }
 
 pub struct PropertySymbolDependentMulti {
@@ -79,6 +101,10 @@ impl PropertySymbolDependentMulti {
             property_keys,
         }
     }
+
+    pub fn property_keys(&self) -> &[u16] {
+        &self.property_keys
+    }
 }
 
 pub trait ListenerCallbacks {
@@ -86,18 +112,20 @@ pub trait ListenerCallbacks {
     fn create_properties(&mut self);
 }
 
+pub type ListenerCallbacksHandle = Rc<RefCell<dyn ListenerCallbacks>>;
+
 pub struct CoreObjectListener {
-    core: Option<Box<Core>>,
-    instance: Option<RiveRc<ViewModelInstance>>,
-    properties: Vec<NonNull<PropertySymbolDependent>>,
-    callbacks: NonNull<dyn ListenerCallbacks>,
+    core: Option<CoreHandle>,
+    instance: Option<CoreHandle>,
+    properties: Vec<Box<PropertySymbolDependent>>,
+    callbacks: ListenerCallbacksHandle,
 }
 
 impl CoreObjectListener {
     pub fn new(
-        core: Box<Core>,
-        instance: Option<RiveRc<ViewModelInstance>>,
-        callbacks: NonNull<dyn ListenerCallbacks>,
+        core: CoreHandle,
+        instance: Option<CoreHandle>,
+        callbacks: ListenerCallbacksHandle,
     ) -> Self {
         Self {
             core: Some(core),
@@ -108,37 +136,34 @@ impl CoreObjectListener {
     }
 
     pub fn mark_dirty(&mut self) {
-        unsafe { self.callbacks.as_mut() }.mark_dirty();
+        self.callbacks.borrow_mut().mark_dirty();
     }
 
     pub fn create_properties(&mut self) {
         self.delete_properties();
-        unsafe { self.callbacks.as_mut() }.create_properties();
+        self.callbacks.borrow_mut().create_properties();
     }
 
     pub fn delete_properties(&mut self) {
-        for property in self.properties.drain(..) {
-            unsafe { drop(Box::from_raw(property.as_ptr())) };
-        }
+        self.properties.clear();
     }
 
-    pub fn remap(&mut self, instance: Option<RiveRc<ViewModelInstance>>) {
-        let changed = match (&self.instance, &instance) {
-            (Some(left), Some(right)) => !RiveRc::ptr_eq(left, right),
-            (None, None) => false,
-            _ => true,
-        };
-        if changed {
+    pub fn remap(&mut self, instance: Option<CoreHandle>) {
+        if self.instance != instance {
             self.delete_properties();
             self.instance = instance;
             self.create_properties();
         }
     }
+
+    pub fn add_property(&mut self, property: Box<PropertySymbolDependent>) {
+        self.properties.push(property);
+    }
 }
 
 impl Drop for CoreObjectListener {
     fn drop(&mut self) {
-        self.core.take();
+        self.core = None;
         self.delete_properties();
     }
 }

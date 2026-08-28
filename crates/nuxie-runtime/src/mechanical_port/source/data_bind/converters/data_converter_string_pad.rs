@@ -104,3 +104,5 @@ struct DataConverterStringPadInitializationCallbacks;
 impl DataConverterStringPadBaseCallbacks for DataConverterStringPadInitializationCallbacks {
     fn notify_property_changed(&mut self, _property_key: u16) {}
 }
+
+crate::impl_data_converter_capability_forward!(DataConverterStringPad, base.base);

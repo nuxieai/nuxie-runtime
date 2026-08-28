@@ -32,12 +32,13 @@ impl Star {
         let mut angle = -math_types::PI / 2.0;
         let increment = 2.0 * math_types::PI / length as f32;
         for index in (0..length).step_by(2) {
-            let outer = &mut self.polygon.vertices[index];
+            let mut outer = self.polygon.vertices[index].borrow_mut();
             outer.base.set_x(ox + angle.cos() * half_width);
             outer.base.set_y(oy + angle.sin() * half_height);
             outer.base.set_radius(self.base.corner_radius());
+            drop(outer);
             angle += increment;
-            let inner = &mut self.polygon.vertices[index + 1];
+            let mut inner = self.polygon.vertices[index + 1].borrow_mut();
             inner.base.set_x(ox + angle.cos() * inner_half_width);
             inner.base.set_y(oy + angle.sin() * inner_half_height);
             inner.base.set_radius(self.base.corner_radius());
@@ -47,12 +48,12 @@ impl Star {
     pub fn update(&mut self, value: ComponentDirt) {
         if self.base.has_dirt(ComponentDirt::PATH) {
             if self.polygon.vertices.len() != self.vertex_count() {
-                self.polygon
-                    .vertices
-                    .resize_with(self.vertex_count(), StraightVertex::default);
+                self.polygon.vertices.resize_with(self.vertex_count(), || {
+                    std::rc::Rc::new(std::cell::RefCell::new(StraightVertex::default()))
+                });
                 self.base.clear_vertices();
-                for vertex in &mut self.polygon.vertices {
-                    self.base.add_vertex(vertex);
+                for vertex in &self.polygon.vertices {
+                    self.base.add_runtime_straight_vertex(vertex.clone());
                 }
             }
             self.build_polygon();

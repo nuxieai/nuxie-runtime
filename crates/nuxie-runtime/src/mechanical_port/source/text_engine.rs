@@ -7,15 +7,14 @@ pub use crate::mechanical_port::source::renderer::is_white_space;
 use crate::mechanical_port::source::shapes::paint::color::ColorInt;
 use crate::mechanical_port::source::text::glyph_lookup::GlyphLookup;
 
-#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextSizing {
     AutoWidth,
     AutoHeight,
     Fixed,
+    Unknown(u32),
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextOverflow {
     Visible,
@@ -24,13 +23,14 @@ pub enum TextOverflow {
     Ellipsis,
     Fit,
     FitFontSize,
+    Unknown(u32),
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextOrigin {
     Top,
     Baseline,
+    Unknown(u32),
 }
 
 #[repr(transparent)]
@@ -79,27 +79,27 @@ pub enum TextDirection {
     Rtl = 1,
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextAlign {
-    Left = 0,
-    Right = 1,
-    Center = 2,
+    Left,
+    Right,
+    Center,
+    Unknown(u32),
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextWrap {
-    Wrap = 0,
-    NoWrap = 1,
+    Wrap,
+    NoWrap,
+    Unknown(u32),
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerticalTextAlign {
-    Top = 0,
-    Bottom = 1,
-    Middle = 2,
+    Top,
+    Bottom,
+    Middle,
+    Unknown(u32),
 }
 
 #[derive(Clone, Debug)]
@@ -369,19 +369,19 @@ pub trait Font: Any {
         let reserve_size = text.len() / 4;
         let mut breaks = Vec::with_capacity(reserve_size);
         let mut joiners = Vec::with_capacity(reserve_size);
-        let mut last_run: Option<*mut GlyphRun> = None;
+        let mut last_run: Option<(usize, usize)> = None;
 
-        for paragraph in &mut paragraphs {
-            for glyph_run in &mut paragraph.runs {
-                if let Some(previous) = last_run {
-                    unsafe {
-                        (*previous).breaks =
-                            std::mem::replace(&mut breaks, Vec::with_capacity(reserve_size));
-                        (*previous).joiners =
-                            std::mem::replace(&mut joiners, Vec::with_capacity(reserve_size));
-                    }
+        for paragraph_index in 0..paragraphs.len() {
+            for run_index in 0..paragraphs[paragraph_index].runs.len() {
+                if let Some((previous_paragraph, previous_run)) = last_run {
+                    let previous = &mut paragraphs[previous_paragraph].runs[previous_run];
+                    previous.breaks =
+                        std::mem::replace(&mut breaks, Vec::with_capacity(reserve_size));
+                    previous.joiners =
+                        std::mem::replace(&mut joiners, Vec::with_capacity(reserve_size));
                 }
 
+                let glyph_run = &mut paragraphs[paragraph_index].runs[run_index];
                 for (glyph_index, offset) in glyph_run.text_indices.iter().copied().enumerate() {
                     let unicode = text[offset as usize];
                     if unicode == u32::from(b'\n') || unicode == 0x2028 {
@@ -397,22 +397,21 @@ pub trait Font: Any {
                     }
                 }
 
-                last_run = Some(glyph_run as *mut GlyphRun);
+                last_run = Some((paragraph_index, run_index));
             }
         }
 
-        if let Some(last_run) = last_run {
-            unsafe {
-                if want_white_space {
-                    breaks.push((*last_run).glyphs.len() as u32);
-                } else {
-                    let last_break = breaks.last().copied().unwrap_or(0);
-                    breaks.push(last_break);
-                    breaks.push((*last_run).glyphs.len() as u32);
-                }
-                (*last_run).breaks = breaks;
-                (*last_run).joiners = joiners;
+        if let Some((paragraph_index, run_index)) = last_run {
+            let last_run = &mut paragraphs[paragraph_index].runs[run_index];
+            if want_white_space {
+                breaks.push(last_run.glyphs.len() as u32);
+            } else {
+                let last_break = breaks.last().copied().unwrap_or(0);
+                breaks.push(last_break);
+                breaks.push(last_run.glyphs.len() as u32);
             }
+            last_run.breaks = breaks;
+            last_run.joiners = joiners;
         }
 
         debug_assert!(
@@ -430,12 +429,29 @@ pub trait Font: Any {
 
 pub type FontRef = Rc<dyn Font>;
 pub type FallbackProc = fn(Unichar, u32, &dyn Font) -> Option<FontRef>;
-pub static mut G_FALLBACK_PROC: Option<FallbackProc> = None;
-pub static mut G_FALLBACK_PROC_ENABLED: bool = true;
+static G_FALLBACK_PROC: std::sync::Mutex<Option<FallbackProc>> = std::sync::Mutex::new(None);
+static G_FALLBACK_PROC_ENABLED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
 pub const REGULAR_WEIGHT: u32 = 400;
 
+pub fn set_fallback_proc(value: Option<FallbackProc>) {
+    *G_FALLBACK_PROC
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = value;
+}
+
+pub fn fallback_proc() -> Option<FallbackProc> {
+    *G_FALLBACK_PROC
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+pub fn set_fallback_proc_enabled(value: bool) {
+    G_FALLBACK_PROC_ENABLED.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub fn fallback_proc_enabled() -> bool {
-    unsafe { G_FALLBACK_PROC_ENABLED }
+    G_FALLBACK_PROC_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 #[derive(Clone)]
@@ -520,17 +536,22 @@ impl GlyphRun {
 }
 
 pub struct OrderedLine {
-    start_logical: *const GlyphRun,
-    end_logical: *const GlyphRun,
+    start_logical: Option<usize>,
+    end_logical: Option<usize>,
     start_glyph_index: u32,
     end_glyph_index: u32,
-    runs: Vec<*const GlyphRun>,
-    glyph_line: *const GlyphLine,
+    runs: Vec<OrderedRun>,
+    glyph_line: GlyphLine,
     y: f32,
 }
 
+#[derive(Clone)]
+struct OrderedRun {
+    run: GlyphRun,
+    logical_index: Option<usize>,
+}
+
 impl OrderedLine {
-    #[cfg(feature = "with_rive_text")]
     pub fn new(
         paragraph: &Paragraph,
         line: &GlyphLine,
@@ -541,12 +562,12 @@ impl OrderedLine {
         y: f32,
     ) -> Self {
         let mut result = Self {
-            start_logical: std::ptr::null(),
-            end_logical: std::ptr::null(),
+            start_logical: None,
+            end_logical: None,
             start_glyph_index: line.start_glyph_index,
             end_glyph_index: line.end_glyph_index,
             runs: Vec::new(),
-            glyph_line: line,
+            glyph_line: line.clone(),
             y,
         };
         let mut logical_runs = Vec::new();
@@ -562,17 +583,20 @@ impl OrderedLine {
             )
         {
             for i in line.start_run_index..line.end_run_index + 1 {
-                logical_runs.push(&paragraph.runs[i as usize] as *const GlyphRun);
+                logical_runs.push(OrderedRun {
+                    run: paragraph.runs[i as usize].clone(),
+                    logical_index: Some(i as usize),
+                });
             }
             if !logical_runs.is_empty() {
-                result.start_logical = logical_runs[0];
-                result.end_logical = logical_runs[logical_runs.len() - 1];
+                result.start_logical = logical_runs[0].logical_index;
+                result.end_logical = logical_runs[logical_runs.len() - 1].logical_index;
             }
         }
 
         let mut max_level = 0;
         for run in &logical_runs {
-            let level = unsafe { (**run).level };
+            let level = run.run.level;
             if level > max_level {
                 max_level = level;
             }
@@ -580,11 +604,9 @@ impl OrderedLine {
         for new_level in (1..=max_level).rev() {
             let mut start = logical_runs.len() as i32 - 1;
             while start >= 0 {
-                if unsafe { (*logical_runs[start as usize]).level } >= new_level {
+                if logical_runs[start as usize].run.level >= new_level {
                     let mut count = 1;
-                    while start > 0
-                        && unsafe { (*logical_runs[start as usize - 1]).level } >= new_level
-                    {
+                    while start > 0 && logical_runs[start as usize - 1].run.level >= new_level {
                         start -= 1;
                         count += 1;
                     }
@@ -597,23 +619,23 @@ impl OrderedLine {
         result
     }
 
-    pub fn start_logical(&self) -> *const GlyphRun {
+    pub fn start_logical(&self) -> Option<usize> {
         self.start_logical
     }
 
-    pub fn end_logical(&self) -> *const GlyphRun {
+    pub fn end_logical(&self) -> Option<usize> {
         self.end_logical
     }
 
-    pub fn runs(&self) -> &[*const GlyphRun] {
-        &self.runs
+    pub fn runs(&self) -> impl ExactSizeIterator<Item = &GlyphRun> {
+        self.runs.iter().map(|run| &run.run)
     }
 
     pub fn begin(&self) -> GlyphItr<'_> {
         let mut iterator = GlyphItr {
             line: self,
             run_index: 0,
-            glyph_index: self.start_glyph_index(self.runs[0]),
+            glyph_index: self.start_glyph_index(0),
         };
         iterator.try_advance_run();
         iterator
@@ -628,24 +650,22 @@ impl OrderedLine {
         GlyphItr {
             line: self,
             run_index,
-            glyph_index: self.end_glyph_index(self.runs[run_index]),
+            glyph_index: self.end_glyph_index(run_index),
         }
     }
 
     pub fn glyph_line(&self) -> &GlyphLine {
-        unsafe { &*self.glyph_line }
+        &self.glyph_line
     }
 
     pub fn y(&self) -> f32 {
         self.y
     }
 
-    #[cfg(feature = "with_rive_text")]
     pub fn bottom(&self) -> f32 {
         self.y - self.glyph_line().baseline + self.glyph_line().bottom
     }
 
-    #[cfg(feature = "with_rive_text")]
     pub fn first_code_point_index(&self, glyph_lookup: &GlyphLookup) -> u32 {
         let index = self.begin();
         let glyph_index = index.glyph_index();
@@ -657,7 +677,6 @@ impl OrderedLine {
         first.min(glyph_lookup.last_code_point_index().wrapping_sub(1))
     }
 
-    #[cfg(feature = "with_rive_text")]
     pub fn last_code_point_index(&self, glyph_lookup: &GlyphLookup) -> u32 {
         let mut index = self.begin();
         let mut last_index = index;
@@ -674,7 +693,6 @@ impl OrderedLine {
         last.min(glyph_lookup.last_code_point_index().wrapping_sub(1))
     }
 
-    #[cfg(feature = "with_rive_text")]
     pub fn contains_code_point_index(
         &self,
         glyph_lookup: &GlyphLookup,
@@ -684,21 +702,22 @@ impl OrderedLine {
             && code_point_index <= self.last_code_point_index(glyph_lookup)
     }
 
-    pub fn last_run(&self) -> *const GlyphRun {
-        self.runs[self.runs.len() - 1]
+    pub fn last_run(&self) -> &GlyphRun {
+        &self.runs[self.runs.len() - 1].run
     }
 
-    pub fn start_glyph_index(&self, run_pointer: *const GlyphRun) -> u32 {
-        let run = unsafe { &*run_pointer };
+    pub fn start_glyph_index(&self, run_index: usize) -> u32 {
+        let ordered = &self.runs[run_index];
+        let run = &ordered.run;
         match run.dir() {
             TextDirection::Ltr => {
-                if self.start_logical == run_pointer {
+                if self.start_logical == ordered.logical_index {
                     self.start_glyph_index
                 } else {
                     0
                 }
             }
-            TextDirection::Rtl => (if self.end_logical == run_pointer {
+            TextDirection::Rtl => (if self.end_logical == ordered.logical_index {
                 self.end_glyph_index
             } else {
                 run.glyphs.len() as u32
@@ -707,17 +726,18 @@ impl OrderedLine {
         }
     }
 
-    pub fn end_glyph_index(&self, run_pointer: *const GlyphRun) -> u32 {
-        let run = unsafe { &*run_pointer };
+    pub fn end_glyph_index(&self, run_index: usize) -> u32 {
+        let ordered = &self.runs[run_index];
+        let run = &ordered.run;
         match run.dir() {
             TextDirection::Ltr => {
-                if self.end_logical == run_pointer {
+                if self.end_logical == ordered.logical_index {
                     self.end_glyph_index
                 } else {
                     run.glyphs.len() as u32
                 }
             }
-            TextDirection::Rtl => (if self.start_logical == run_pointer {
+            TextDirection::Rtl => (if self.start_logical == ordered.logical_index {
                 self.start_glyph_index
             } else {
                 0
@@ -726,10 +746,9 @@ impl OrderedLine {
         }
     }
 
-    #[cfg(feature = "with_rive_text")]
     fn build_ellipsis_runs(
         &mut self,
-        logical_runs: &mut Vec<*const GlyphRun>,
+        logical_runs: &mut Vec<OrderedRun>,
         paragraph: &Paragraph,
         line: &GlyphLine,
         line_width: f32,
@@ -822,31 +841,35 @@ impl OrderedLine {
                 x += advance;
             }
             start_glyph_index = 0;
-            logical_runs.push(run);
-            self.end_logical = run;
+            logical_runs.push(OrderedRun {
+                run: run.clone(),
+                logical_index: Some(i as usize),
+            });
+            self.end_logical = Some(i as usize);
 
             if ellipsis_overflowed && ellipsis_run.font.is_some() {
                 *stored_ellipsis_run = ellipsis_run;
-                logical_runs.push(stored_ellipsis_run);
+                logical_runs.push(OrderedRun {
+                    run: stored_ellipsis_run.clone(),
+                    logical_index: None,
+                });
                 break;
             }
         }
 
         if !ellipsis_overflowed && ellipsis_run.font.is_some() {
             *stored_ellipsis_run = ellipsis_run;
-            logical_runs.push(stored_ellipsis_run);
+            logical_runs.push(OrderedRun {
+                run: stored_ellipsis_run.clone(),
+                logical_index: None,
+            });
         }
-        self.start_logical = if stored_ellipsis_run as *const GlyphRun == logical_runs[0] {
-            std::ptr::null()
-        } else {
-            logical_runs[0]
-        };
+        self.start_logical = logical_runs[0].logical_index;
         true
     }
 }
 
-#[cfg(feature = "with_rive_text")]
-fn reverse_runs(runs: &mut [*const GlyphRun]) {
+fn reverse_runs(runs: &mut [OrderedRun]) {
     let half_count = runs.len() / 2;
     let final_index = runs.len() - 1;
     for index in 0..half_count {
@@ -869,20 +892,19 @@ impl PartialEq for GlyphItr<'_> {
 }
 
 impl GlyphItr<'_> {
-    #[cfg(feature = "with_rive_text")]
     pub fn try_advance_run(&mut self) {
         loop {
-            let run = self.line.runs[self.run_index];
-            if self.glyph_index == self.line.end_glyph_index(run) && run != self.line.last_run() {
+            if self.glyph_index == self.line.end_glyph_index(self.run_index)
+                && self.run_index + 1 < self.line.runs.len()
+            {
                 self.run_index += 1;
-                self.glyph_index = self.line.start_glyph_index(self.line.runs[self.run_index]);
+                self.glyph_index = self.line.start_glyph_index(self.run_index);
             } else {
                 break;
             }
         }
     }
 
-    #[cfg(feature = "with_rive_text")]
     pub fn advance(&mut self) {
         let run = self.run();
         self.glyph_index = if run.dir() == TextDirection::Ltr {
@@ -894,7 +916,7 @@ impl GlyphItr<'_> {
     }
 
     pub fn run(&self) -> &GlyphRun {
-        unsafe { &*self.line.runs[self.run_index] }
+        &self.line.runs[self.run_index].run
     }
 
     pub fn glyph_index(&self) -> u32 {
@@ -902,13 +924,11 @@ impl GlyphItr<'_> {
     }
 }
 
-#[cfg(feature = "with_rive_text")]
 pub struct GlyphItrIterator<'a> {
     current: GlyphItr<'a>,
     end: GlyphItr<'a>,
 }
 
-#[cfg(feature = "with_rive_text")]
 impl<'a> Iterator for GlyphItrIterator<'a> {
     type Item = (&'a GlyphRun, u32);
 
@@ -923,7 +943,6 @@ impl<'a> Iterator for GlyphItrIterator<'a> {
     }
 }
 
-#[cfg(feature = "with_rive_text")]
 impl<'a> IntoIterator for &'a OrderedLine {
     type Item = (&'a GlyphRun, u32);
     type IntoIter = GlyphItrIterator<'a>;

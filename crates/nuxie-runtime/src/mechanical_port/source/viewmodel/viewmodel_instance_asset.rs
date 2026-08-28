@@ -1,17 +1,28 @@
 use crate::mechanical_port::source::{
-    assets::file_asset::FileAsset,
+    core::CoreHandle,
     generated::viewmodel::viewmodel_instance_asset_base::ViewModelInstanceAssetBase,
     importers::{backboard_importer::BackboardImporter, import_stack::ImportStack},
-    refcnt::RiveRc,
     status_code::StatusCode,
 };
 
 #[derive(Default)]
 pub struct ViewModelInstanceAsset {
     pub base: ViewModelInstanceAssetBase,
-    assets: Vec<RiveRc<FileAsset>>,
-    #[cfg(feature = "rive_tools")]
+    assets: Vec<CoreHandle>,
+    #[cfg(feature = "tools")]
     changed_callback: Option<fn(&mut Self, u32)>,
+}
+
+impl std::ops::Deref for ViewModelInstanceAsset {
+    type Target = ViewModelInstanceAssetBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ViewModelInstanceAsset {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
 }
 
 impl ViewModelInstanceAsset {
@@ -27,15 +38,15 @@ impl ViewModelInstanceAsset {
         self.base.import(import_stack)
     }
 
-    pub fn add_asset(&mut self, asset: RiveRc<FileAsset>) {
+    pub fn add_asset(&mut self, asset: CoreHandle) {
         self.assets.push(asset);
     }
 
-    pub fn assets(&self) -> &[RiveRc<FileAsset>] {
+    pub fn assets(&self) -> &[CoreHandle] {
         &self.assets
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self, u32)>) {
         self.changed_callback = callback;
     }

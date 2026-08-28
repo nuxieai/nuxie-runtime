@@ -1,23 +1,20 @@
 use super::data_converter_operation::ArithmeticOperation;
 use crate::mechanical_port::source::{
-    data_bind::data_values::data_value::DataValue,
+    core::CoreHandle,
+    data_bind::{data_context::DataContext, data_values::data_value::DataValue},
     generated::data_bind::converters::{
         data_converter_operation_base::DataConverterOperationBaseCallbacks,
         data_converter_operation_viewmodel_base::{
             DataConverterOperationViewModelBase, DataConverterOperationViewModelBaseCallbacks,
         },
     },
+    viewmodel::viewmodel_instance_number::ViewModelInstanceNumber,
+    viewmodel::viewmodel_instance_value::ValueDependentHandle,
 };
-pub trait NumberSource {
-    fn property_value(&self) -> f32;
-    fn add_dependent(&self, data_bind: *mut ());
-}
-pub trait OperationDataContext {
-    fn number_property(&self, path: &[u32]) -> Option<*mut dyn NumberSource>;
-}
+use std::{cell::RefCell, rc::Rc};
 pub struct DataConverterOperationViewModel {
     pub base: DataConverterOperationViewModelBase,
-    source: Option<*mut dyn NumberSource>,
+    source: Option<CoreHandle>,
     source_path_ids: Vec<u32>,
 }
 impl Default for DataConverterOperationViewModel {
@@ -40,7 +37,11 @@ impl DataConverterOperationViewModel {
     }
     fn resolve_value(&self) -> f32 {
         self.source
-            .map_or(0.0, |source| unsafe { (&*source).property_value() })
+            .as_ref()
+            .and_then(|source| {
+                source.with_downcast::<ViewModelInstanceNumber, _>(|source| source.property_value())
+            })
+            .unwrap_or(0.0)
     }
     pub fn convert<'a>(&'a mut self, input: &dyn DataValue) -> &'a dyn DataValue {
         self.base.base.convert_value(input, self.resolve_value())
@@ -75,12 +76,25 @@ impl DataConverterOperationViewModel {
     pub fn source_path_ids(&self) -> &[u32] {
         &self.source_path_ids
     }
-    pub fn bind_from_context(&mut self, context: &dyn OperationDataContext, data_bind: *mut ()) {
-        self.source = context.number_property(&self.source_path_ids);
-        if let Some(source) = self.source {
-            unsafe {
-                (&*source).add_dependent(data_bind);
-            }
+    pub fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle) {
+        self.base
+            .base
+            .base
+            .bind_from_context(Rc::clone(&context), data_bind.clone());
+        self.source = context
+            .borrow()
+            .get_view_model_property(&self.source_path_ids)
+            .filter(|source| {
+                source
+                    .with_downcast::<ViewModelInstanceNumber, _>(|_| true)
+                    .unwrap_or(false)
+            });
+        if let Some(source) = self.source.as_ref() {
+            source.with_mut(|source| {
+                if let Some(source) = source.as_view_model_instance_value_mut() {
+                    source.add_dependent(ValueDependentHandle::core(data_bind));
+                }
+            });
         }
     }
 }
@@ -91,6 +105,55 @@ impl DataConverterOperationViewModelBaseCallbacks for DataConverterOperationView
     }
 
     fn copy_source_path_ids(&mut self, _object: &DataConverterOperationViewModelBase) {}
+}
+
+impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability
+    for DataConverterOperationViewModel
+{
+    fn convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(Self::convert(self, input));
+    }
+
+    fn reverse_convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        let value = Self::reverse_convert(self, input);
+        output(value.as_ref());
+    }
+
+    fn output_type(
+        &self,
+    ) -> crate::mechanical_port::source::data_bind::data_values::data_type::DataType {
+        self.base.base.output_type()
+    }
+
+    fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle) {
+        Self::bind_from_context(self, context, data_bind);
+    }
+
+    fn unbind(&mut self) {
+        self.base.base.base.base.unbind();
+    }
+
+    fn update(&mut self) {
+        self.base.base.base.base.update();
+    }
+
+    fn reset(&mut self) {
+        self.base.base.base.base.reset();
+    }
+
+    fn advance(&mut self, elapsed: f32) -> bool {
+        self.base.base.base.base.advance(elapsed)
+    }
 }
 
 struct DataConverterOperationViewModelInitializationCallbacks;

@@ -1,12 +1,9 @@
-use std::ptr::NonNull;
-
 use crate::mechanical_port::source::{
     artboard_referencer::{ArtboardReferencer, ArtboardReferencerBehavior, CoreArtboardReferencer},
     assets::script_asset::{ScriptInput, ScriptInputBehavior},
-    core::Core,
+    core::{Core, CoreHandle},
     core_context::CoreContext,
-    custom_property::CustomProperty,
-    file::File,
+    file::RuntimeFileWeakHandle,
     generated::{
         backboard_base::BackboardBase, script_input_artboard_base::ScriptInputArtboardBase,
         script_input_artboard_base::ScriptInputArtboardBaseCallbacks,
@@ -17,14 +14,13 @@ use crate::mechanical_port::source::{
         scripted_object_importer::ScriptedObjectImporter,
     },
     status_code::StatusCode,
-    viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard,
 };
 
 pub struct ScriptInputArtboard {
     pub base: ScriptInputArtboardBase,
     script_input: ScriptInput,
     artboard_referencer: ArtboardReferencer,
-    file: Option<NonNull<File>>,
+    file: Option<RuntimeFileWeakHandle>,
 }
 
 impl Default for ScriptInputArtboard {
@@ -39,15 +35,11 @@ impl Default for ScriptInputArtboard {
 }
 
 impl ScriptInputArtboard {
-    fn custom_property_mut(&mut self) -> &mut CustomProperty {
-        &mut self.base.base
-    }
-
     fn name(&self) -> &str {
         self.base.base.base.base.base.name()
     }
 
-    pub fn set_file(&mut self, value: Option<NonNull<File>>) {
+    pub fn set_file(&mut self, value: Option<RuntimeFileWeakHandle>) {
         self.file = value;
     }
 
@@ -77,9 +69,12 @@ impl ScriptInputArtboard {
             return;
         };
         let name = self.name().to_owned();
-        if let Some(mut object) = self.script_input.scripted_object() {
-            unsafe { object.as_mut() }
-                .set_artboard_input(name, referenced_artboard.as_ptr() as usize);
+        if let Some(object) = self.script_input.scripted_object() {
+            object.with_mut(|object| {
+                if let Some(object) = object.as_scripted_object_mut() {
+                    object.set_artboard_input(name, referenced_artboard);
+                }
+            });
         }
     }
 
@@ -89,24 +84,23 @@ impl ScriptInputArtboard {
         else {
             return StatusCode::MissingObject;
         };
-        let referencer: &mut dyn ArtboardReferencerBehavior = self;
-        backboard_importer.add_artboard_referencer(NonNull::from(referencer));
+        let Some(this) = self.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        backboard_importer.add_artboard_referencer(this.clone());
 
         let Some(importer) =
             import_stack.latest::<ScriptedObjectImporter>(ScriptedDrawableBase::TYPE_KEY)
         else {
             return StatusCode::MissingObject;
         };
-        importer.add_input(
-            NonNull::from(self.custom_property_mut()),
-            ScriptInputArtboardBase::TYPE_KEY.into(),
-        );
+        importer.add_input(this, ScriptInputArtboardBase::TYPE_KEY.into());
 
-        if self
-            .script_input
-            .scripted_object()
-            .is_some_and(|object| unsafe { object.as_ref() }.component().is_some())
-        {
+        if self.script_input.scripted_object().is_some_and(|object| {
+            object
+                .with(|object| object.as_component().is_some())
+                .unwrap_or(false)
+        }) {
             return self.base.base.base.base.import(import_stack);
         }
         StatusCode::Ok
@@ -118,51 +112,42 @@ impl ScriptInputArtboard {
             return code;
         }
 
-        let property = self.custom_property_mut() as *mut CustomProperty;
-        if let Some(parent) = self
-            .base
-            .base
-            .base
-            .base
-            .parent_mut()
-            .and_then(|parent| parent.as_scripted_object_mut())
-        {
-            parent.add_property(property);
+        if let (Some(this), Some(parent)) = (self.base.handle(), self.base.parent_handle()) {
+            parent.with_mut(|parent| parent.scripted_object_add_property(this));
         }
         StatusCode::Ok
     }
 
     pub fn clone(&self) -> Self {
         let mut twin = Self::default();
-        let twin_base = &mut twin.base as *mut ScriptInputArtboardBase;
-        unsafe { twin_base.as_mut().unwrap() }.copy(&self.base, &mut twin);
+        let mut twin_base = std::mem::take(&mut twin.base);
+        twin_base.copy(&self.base, &mut twin);
+        twin.base = twin_base;
         if let Some(referenced_artboard) = self.artboard_referencer.referenced_artboard() {
             twin.artboard_referencer
                 .set_referenced_artboard(Some(referenced_artboard));
-            twin.file = self.file;
+            twin.file = self.file.clone();
         }
         twin
     }
 
     pub fn artboard_id_changed(&mut self) {
-        let Some(mut file) = self.file else {
+        let Some(file) = self.file.as_ref() else {
             return;
         };
         self.artboard_referencer.set_referenced_artboard(
-            unsafe { file.as_mut() }.artboard(self.base.artboard_id() as usize),
+            file.with_file(|file| file.artboard_handle(self.base.artboard_id() as usize))
+                .flatten(),
         );
         self.sync_referenced_artboard();
     }
 
-    pub fn update_artboard(
-        &mut self,
-        view_model_instance_artboard: Option<NonNull<ViewModelInstanceArtboard>>,
-    ) {
-        let parent_artboard = self.base.base.base.base.artboard_mut().map(NonNull::from);
+    pub fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>) {
+        let parent_artboard = self.base.artboard_handle();
         if let Some(referenced_artboard) = ArtboardReferencer::find_artboard(
             view_model_instance_artboard,
             parent_artboard,
-            self.file,
+            self.file.clone(),
         ) {
             self.artboard_referencer
                 .set_referenced_artboard(Some(referenced_artboard));
@@ -214,10 +199,7 @@ impl ArtboardReferencerBehavior for ScriptInputArtboard {
         &mut self.artboard_referencer
     }
 
-    fn update_artboard(
-        &mut self,
-        view_model_instance_artboard: Option<NonNull<ViewModelInstanceArtboard>>,
-    ) {
+    fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>) {
         ScriptInputArtboard::update_artboard(self, view_model_instance_artboard);
     }
 
@@ -254,10 +236,25 @@ impl ScriptInputArtboardBaseCallbacks for ScriptInputArtboard {
 
 impl Drop for ScriptInputArtboard {
     fn drop(&mut self) {
-        let property = self.custom_property_mut() as *mut CustomProperty;
-        if let Some(mut object) = self.script_input.scripted_object() {
-            unsafe { object.as_mut() }.remove_property(property);
+        if let (Some(this), Some(object)) =
+            (self.base.handle(), self.script_input.scripted_object())
+        {
+            object.with_mut(|object| object.scripted_object_remove_property(&this));
         }
         self.artboard_referencer.set_referenced_artboard(None);
+    }
+}
+
+impl std::ops::Deref for ScriptInputArtboard {
+    type Target = ScriptInputArtboardBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ScriptInputArtboard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

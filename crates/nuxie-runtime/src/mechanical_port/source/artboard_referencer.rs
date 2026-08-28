@@ -1,60 +1,56 @@
-use std::ptr::NonNull;
-
 use crate::mechanical_port::source::{
     artboard::Artboard,
-    core::Core,
-    file::File,
+    core::{Core, CoreHandle},
+    file::RuntimeFileWeakHandle,
     generated::{
         nested_artboard_base::NestedArtboardBase,
         nested_artboard_layout_base::NestedArtboardLayoutBase,
         nested_artboard_leaf_base::NestedArtboardLeafBase,
         script_input_artboard_base::ScriptInputArtboardBase,
     },
-    viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard,
 };
 
 #[derive(Default)]
 pub struct ArtboardReferencer {
-    referenced_artboard: Option<NonNull<Artboard>>,
+    referenced_artboard: Option<CoreHandle>,
 }
 
 impl ArtboardReferencer {
     pub fn find_artboard(
-        view_model_instance_artboard: Option<NonNull<ViewModelInstanceArtboard>>,
-        parent_artboard: Option<NonNull<Artboard>>,
-        file: Option<NonNull<File>>,
-    ) -> Option<NonNull<Artboard>> {
-        let mut view_model_instance_artboard = view_model_instance_artboard?;
-        let view_model_instance_artboard = unsafe { view_model_instance_artboard.as_mut() };
-
-        if let Some(mut asset) = view_model_instance_artboard.asset() {
-            let artboard = NonNull::from(asset.artboard());
-            if parent_artboard
-                .is_none_or(|parent| unsafe { !parent.as_ref().is_ancestor(artboard.as_ref()) })
-            {
-                return Some(artboard);
-            }
-            return None;
-        }
-
-        if let Some(mut file) = file {
-            let property_value = view_model_instance_artboard.base.property_value();
-            if let Some(artboard) = unsafe { file.as_mut() }.artboard(property_value as usize) {
-                if parent_artboard
-                    .is_none_or(|parent| unsafe { !parent.as_ref().is_ancestor(artboard.as_ref()) })
-                {
-                    return Some(artboard);
-                }
-            }
-        }
-        None
+        view_model_instance_artboard: Option<CoreHandle>,
+        parent_artboard: Option<CoreHandle>,
+        file: Option<RuntimeFileWeakHandle>,
+    ) -> Option<CoreHandle> {
+        let value = view_model_instance_artboard?;
+        let (asset, property_value) = value
+            .with(|value| {
+                let value = value.as_view_model_instance_artboard()?;
+                Some((value.asset(), value.base.property_value()))
+            })
+            .flatten()?;
+        let candidate = asset
+            .and_then(|asset| asset.source_artboard_handle())
+            .or_else(|| {
+                file.and_then(|file| {
+                    file.with_file(|file| file.artboard_handle(property_value as usize))
+                        .flatten()
+                })
+            })?;
+        let is_ancestor = parent_artboard.as_ref().is_some_and(|parent| {
+            parent
+                .with_downcast_mut::<Artboard, _>(|parent| {
+                    parent.is_ancestor(Some(candidate.clone()))
+                })
+                .unwrap_or(false)
+        });
+        (!is_ancestor).then_some(candidate)
     }
 
-    pub fn referenced_artboard(&self) -> Option<NonNull<Artboard>> {
-        self.referenced_artboard
+    pub fn referenced_artboard(&self) -> Option<CoreHandle> {
+        self.referenced_artboard.clone()
     }
 
-    pub fn set_referenced_artboard(&mut self, artboard: Option<NonNull<Artboard>>) {
+    pub fn set_referenced_artboard(&mut self, artboard: Option<CoreHandle>) {
         self.referenced_artboard = artboard;
     }
 
@@ -74,13 +70,10 @@ impl ArtboardReferencer {
 pub trait ArtboardReferencerBehavior {
     fn artboard_referencer(&self) -> &ArtboardReferencer;
     fn artboard_referencer_mut(&mut self) -> &mut ArtboardReferencer;
-    fn update_artboard(
-        &mut self,
-        view_model_instance_artboard: Option<NonNull<ViewModelInstanceArtboard>>,
-    );
+    fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>);
     fn referenced_artboard_id(&self) -> i32;
 
-    fn set_referenced_artboard(&mut self, artboard: Option<NonNull<Artboard>>) {
+    fn set_referenced_artboard(&mut self, artboard: Option<CoreHandle>) {
         self.artboard_referencer_mut()
             .set_referenced_artboard(artboard);
     }

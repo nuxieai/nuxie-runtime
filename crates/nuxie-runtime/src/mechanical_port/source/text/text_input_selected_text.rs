@@ -10,12 +10,11 @@ impl TextInputSelectedText {
     pub fn hit_test(&self, _transform: &Mat2D) -> Option<CoreHandle> {
         None
     }
-    pub fn on_added_clean(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
         }
-        #[cfg(feature = "with_rive_text")]
         self.base
             .text_input_mut()
             .raw_text_input_mut()
@@ -23,18 +22,11 @@ impl TextInputSelectedText {
         StatusCode::Ok
     }
     pub fn local_clockwise_path(&mut self) -> Option<&mut ShapePaintPath> {
-        #[cfg(feature = "with_rive_text")]
-        {
-            return Some(
-                self.base
-                    .text_input_mut()
-                    .raw_text_input_mut()
-                    .selected_text_path(),
-            );
-        }
-        #[cfg(not(feature = "with_rive_text"))]
-        {
-            None
-        }
+        Some(
+            self.base
+                .text_input_mut()
+                .raw_text_input_mut()
+                .selected_text_path(),
+        )
     }
 }

@@ -5,3 +5,13 @@ pub enum StrokeCap {
     Round = 1,
     Square = 2,
 }
+
+impl From<StrokeCap> for nuxie_render_api::StrokeCap {
+    fn from(value: StrokeCap) -> Self {
+        match value {
+            StrokeCap::Butt => Self::Butt,
+            StrokeCap::Round => Self::Round,
+            StrokeCap::Square => Self::Square,
+        }
+    }
+}

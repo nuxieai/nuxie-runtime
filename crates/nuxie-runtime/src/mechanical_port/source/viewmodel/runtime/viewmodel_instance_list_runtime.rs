@@ -1,112 +1,172 @@
-use super::viewmodel_instance_runtime::{ViewModelInstanceRuntime, ViewModelInstanceSource};
-use super::viewmodel_instance_value_runtime::{
-    DataType, ViewModelInstanceValue, ViewModelInstanceValueRuntime,
+use std::{cell::RefCell, collections::HashMap};
+
+use crate::mechanical_port::source::{
+    core::CoreHandle, viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
-pub trait ListItem<I> {
-    fn identity(&self) -> usize;
-    fn view_model_instance(&self) -> Option<Rc<I>>;
-    fn set_view_model_instance(&self, value: Rc<I>);
+
+use super::{
+    viewmodel_instance_runtime::{RuntimeViewModelInstanceHandle, ViewModelInstanceRuntime},
+    viewmodel_instance_value_runtime::{DataType, ViewModelInstanceValueRuntime},
+};
+
+#[derive(Clone)]
+pub struct ViewModelInstanceListRuntime {
+    base: ViewModelInstanceValueRuntime,
+    items: std::rc::Rc<RefCell<HashMap<CoreHandle, RuntimeViewModelInstanceHandle>>>,
 }
-pub trait ListValue<I, Item: ListItem<I>>: ViewModelInstanceValue {
-    fn list_items(&self) -> Vec<Rc<Item>>;
-    fn make_item(&self) -> Rc<Item>;
-    fn add_item(&self, item: Rc<Item>);
-    fn add_item_at(&self, item: Rc<Item>, index: i32) -> bool;
-    fn remove_item(&self, item: &Rc<Item>);
-    fn swap(&self, a: u32, b: u32);
-    fn remove_all_items(&self);
-}
-pub struct ViewModelInstanceListRuntime<L, I, Item>
-where
-    L: ListValue<I, Item>,
-    I: ViewModelInstanceSource,
-    Item: ListItem<I>,
-{
-    base: ViewModelInstanceValueRuntime<L>,
-    items_map: RefCell<HashMap<usize, Rc<ViewModelInstanceRuntime<I>>>>,
-}
-impl<L, I, Item> ViewModelInstanceListRuntime<L, I, Item>
-where
-    L: ListValue<I, Item>,
-    I: ViewModelInstanceSource + 'static,
-    Item: ListItem<I>,
-{
-    pub fn new(value: Rc<L>) -> Self {
-        Self {
-            base: ViewModelInstanceValueRuntime::new(value),
-            items_map: RefCell::new(HashMap::new()),
-        }
+
+impl ViewModelInstanceListRuntime {
+    pub fn new(base: ViewModelInstanceValueRuntime) -> Option<Self> {
+        (base.data_type() == DataType::List).then_some(Self {
+            base,
+            items: Default::default(),
+        })
     }
-    pub fn instance_at(&self, index: i32) -> Option<Rc<ViewModelInstanceRuntime<I>>> {
-        let items = self.base.value().list_items();
-        if index < 0 || index as usize >= items.len() {
-            return None;
-        }
-        let item = &items[index as usize];
-        let instance = item.view_model_instance()?;
-        if let Some(runtime) = self.items_map.borrow().get(&item.identity()) {
+
+    fn list_items(&self) -> Vec<CoreHandle> {
+        self.base
+            .handle()
+            .with(|list| {
+                list.as_view_model_instance_list()
+                    .map(|list| list.list_items().to_vec())
+            })
+            .flatten()
+            .unwrap_or_default()
+    }
+
+    pub fn instance_at(&self, index: i32) -> Option<RuntimeViewModelInstanceHandle> {
+        let item = self.list_items().get(usize::try_from(index).ok()?)?.clone();
+        if let Some(runtime) = self.items.borrow().get(&item) {
             return Some(runtime.clone());
         }
-        let runtime = ViewModelInstanceRuntime::new(instance);
-        self.items_map
-            .borrow_mut()
-            .insert(item.identity(), runtime.clone());
+        let instance = item
+            .with(|item| {
+                item.as_view_model_instance_list_item()?
+                    .view_model_instance()
+            })
+            .flatten()?;
+        let runtime = ViewModelInstanceRuntime::new(instance).into_handle();
+        self.items.borrow_mut().insert(item, runtime.clone());
         Some(runtime)
     }
-    pub fn add_instance(&self, runtime: Rc<ViewModelInstanceRuntime<I>>) {
-        let item = self.base.value().make_item();
-        item.set_view_model_instance(runtime.instance());
-        self.items_map.borrow_mut().insert(item.identity(), runtime);
-        self.base.value().add_item(item)
-    }
-    pub fn add_instance_at(&self, runtime: Rc<ViewModelInstanceRuntime<I>>, index: i32) -> bool {
-        let item = self.base.value().make_item();
-        if self.base.value().add_item_at(item.clone(), index) {
-            item.set_view_model_instance(runtime.instance());
-            self.items_map.borrow_mut().insert(item.identity(), runtime);
-            true
-        } else {
-            false
-        }
-    }
-    pub fn remove_instance(&self, runtime: &Rc<ViewModelInstanceRuntime<I>>) {
-        let items: Vec<_> = self
+
+    fn make_item(&self, runtime: &RuntimeViewModelInstanceHandle) -> Option<CoreHandle> {
+        let item = self
             .base
-            .value()
-            .list_items()
-            .into_iter()
-            .filter(|item| {
-                item.view_model_instance()
-                    .is_some_and(|instance| Rc::ptr_eq(&instance, &runtime.instance()))
+            .handle()
+            .insert_sibling(ViewModelInstanceListItem::default())?;
+        let initialized = item
+            .with_mut(|item| {
+                item.as_view_model_instance_list_item_mut()
+                    .map(|item| item.set_view_model_instance(Some(runtime.instance())))
             })
-            .collect();
+            .flatten()
+            .is_some();
+        if !initialized {
+            item.remove_occurrence();
+            return None;
+        }
+        self.items
+            .borrow_mut()
+            .insert(item.clone(), runtime.clone());
+        Some(item)
+    }
+
+    pub fn add_instance(&self, runtime: RuntimeViewModelInstanceHandle) {
+        let Some(item) = self.make_item(&runtime) else {
+            return;
+        };
+        self.base.handle().with_mut(|list| {
+            if let Some(list) = list.as_view_model_instance_list_mut() {
+                list.add_item(item);
+            }
+        });
+    }
+
+    pub fn add_instance_at(&self, runtime: RuntimeViewModelInstanceHandle, index: i32) -> bool {
+        let Some(item) = self.make_item(&runtime) else {
+            return false;
+        };
+        let inserted = self
+            .base
+            .handle()
+            .with_mut(|list| {
+                list.as_view_model_instance_list_mut()
+                    .is_some_and(|list| list.add_item_at(item.clone(), index))
+            })
+            .unwrap_or(false);
+        if !inserted {
+            self.items.borrow_mut().remove(&item);
+            item.remove_occurrence();
+        }
+        inserted
+    }
+
+    pub fn remove_instance(&self, runtime: &RuntimeViewModelInstanceHandle) {
+        let items = self.list_items();
         for item in items {
-            self.items_map.borrow_mut().remove(&item.identity());
-            self.base.value().remove_item(&item);
+            let matches = item
+                .with(|item| {
+                    item.as_view_model_instance_list_item()
+                        .and_then(|item| item.view_model_instance())
+                        .is_some_and(|instance| instance == runtime.instance())
+                })
+                .unwrap_or(false);
+            if matches {
+                self.base.handle().with_mut(|list| {
+                    if let Some(list) = list.as_view_model_instance_list_mut() {
+                        list.remove_item(&item);
+                    }
+                });
+                self.items.borrow_mut().remove(&item);
+                item.remove_occurrence();
+            }
         }
     }
+
     pub fn remove_instance_at(&self, index: i32) {
-        let items = self.base.value().list_items();
-        if index >= 0 && (index as usize) < items.len() {
-            let item = &items[index as usize];
-            self.base.value().remove_item(item);
-            self.items_map.borrow_mut().remove(&item.identity());
+        let item = usize::try_from(index)
+            .ok()
+            .and_then(|index| self.list_items().get(index).cloned());
+        self.base.handle().with_mut(|list| {
+            if let Some(list) = list.as_view_model_instance_list_mut() {
+                list.remove_item_at(index);
+            }
+        });
+        if let Some(item) = item {
+            self.items.borrow_mut().remove(&item);
+            item.remove_occurrence();
         }
     }
+
     pub fn swap(&self, a: u32, b: u32) {
-        self.base.value().swap(a, b)
+        self.base.handle().with_mut(|list| {
+            if let Some(list) = list.as_view_model_instance_list_mut() {
+                list.swap(a, b);
+            }
+        });
     }
+
     pub fn remove_all_instances(&self) {
-        self.base.value().remove_all_items();
-        self.items_map.borrow_mut().clear()
+        let items = self.list_items();
+        self.base.handle().with_mut(|list| {
+            if let Some(list) = list.as_view_model_instance_list_mut() {
+                list.remove_all_items();
+            }
+        });
+        self.items.borrow_mut().clear();
+        for item in items {
+            item.remove_occurrence();
+        }
     }
+
     pub fn size(&self) -> usize {
-        self.base.value().list_items().len()
+        self.list_items().len()
     }
     pub fn data_type(&self) -> DataType {
         DataType::List
+    }
+    pub fn value_runtime(&self) -> &ViewModelInstanceValueRuntime {
+        &self.base
     }
 }

@@ -410,6 +410,10 @@ impl Artboard {
         self.data_bind_container.data_binds()
     }
 
+    pub fn add_data_bind(&mut self, bind: CoreHandle) {
+        self.data_bind_container.add_data_bind(bind);
+    }
+
     pub fn set_scripting_vm(&mut self, value: Option<RuntimeScriptingVmHandle>) {
         self.scripting_vm = value;
     }
@@ -2830,29 +2834,24 @@ impl Artboard {
     }
 
     fn clone_object_data_binds(
-        &self,
-        object: &CoreHandle,
-        clone: CoreHandle,
-        artboard: &mut Artboard,
-    ) {
-        for data_bind_handle in self.data_bind_container.data_binds() {
+        data_binds: &[CoreHandle],
+        object: Option<&CoreHandle>,
+        clone: Option<CoreHandle>,
+        arena: &CoreArena,
+        container: &DataBindContainer,
+    ) -> Option<()> {
+        for data_bind_handle in data_binds {
             let matches = data_bind_handle
                 .with(|data_bind| {
                     data_bind
                         .as_data_bind()
-                        .is_some_and(|data_bind| data_bind.target().as_ref() == Some(object))
+                        .is_some_and(|data_bind| data_bind.target().as_ref() == object)
                 })
                 .unwrap_or(false);
             if !matches {
                 continue;
             }
-            let Some(data_bind_clone) = data_bind_handle
-                .with(|data_bind| data_bind.clone_boxed())
-                .flatten()
-            else {
-                continue;
-            };
-            let clone_handle = artboard.core_arena.insert_boxed(data_bind_clone);
+            let clone_handle = data_bind_handle.clone_occurrence_into(arena)?;
             let (file, converter) = data_bind_handle
                 .with(|data_bind| {
                     let data_bind = data_bind.as_data_bind()?;
@@ -2860,23 +2859,25 @@ impl Artboard {
                 })
                 .flatten()
                 .unwrap_or_default();
-            let converter_clone = converter
-                .and_then(|converter| {
-                    converter
-                        .with(|converter| converter.clone_boxed())
-                        .flatten()
-                })
-                .map(|converter| artboard.core_arena.insert_boxed(converter));
             clone_handle.with_mut(|data_bind| {
                 if let Some(data_bind) = data_bind.as_data_bind_mut() {
-                    data_bind.set_target(Some(clone));
+                    data_bind.set_target(clone.clone());
                     data_bind.set_file(file);
                     data_bind.initialize();
-                    data_bind.set_converter(converter_clone);
                 }
             });
-            artboard.data_bind_container.add_data_bind(clone_handle);
+            if let Some(converter) = converter {
+                let converter_clone = converter.clone_occurrence_into(arena)?;
+                clone_handle.with_mut(|data_bind| {
+                    data_bind
+                        .as_data_bind_mut()
+                        .unwrap()
+                        .set_converter(Some(converter_clone));
+                });
+            }
+            container.add_data_bind(clone_handle);
         }
+        Some(())
     }
 
     pub fn internal_data_context_handle(root: &CoreHandle, value: RuntimeDataContextHandle) {
@@ -3214,31 +3215,12 @@ impl Artboard {
         } else {
             crate::mechanical_port::source::core::CoreObject::core(self).handle()
         };
-        clone.base.objects.push(None);
-        for object in self.objects.iter().skip(1) {
-            clone.base.objects.push(
-                object
-                    .as_ref()
-                    .and_then(|object| object.clone_occurrence_into(&clone.base.core_arena)),
-            );
-        }
-        clone
-            .base
-            .animations
-            .extend(self.animations.iter().cloned());
-        clone
-            .base
-            .state_machines
-            .extend(self.state_machines.iter().cloned());
         assert!(clone.base.is_instance());
         clone
     }
 
     pub fn instance_from_handle(source: &CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
-        let definition =
-            source.with_downcast::<Artboard, _>(Artboard::clone_instance_definition)?;
-        let instance = RuntimeArtboardInstanceHandle::new(*definition);
-        (Self::initialize_handle(&instance.core_handle()) == StatusCode::Ok).then_some(instance)
+        Self::instance_from_handle_internal(source, true)
     }
 
     /// An embedded instance's source definitions are owned by its containing
@@ -3247,11 +3229,56 @@ impl Artboard {
     pub fn nested_instance_from_handle(
         source: &CoreHandle,
     ) -> Option<RuntimeArtboardInstanceHandle> {
-        let mut definition =
-            source.with_downcast::<Artboard, _>(Artboard::clone_instance_definition)?;
-        definition.base.definition_owner = None;
+        Self::instance_from_handle_internal(source, false)
+    }
+
+    fn instance_from_handle_internal(
+        source: &CoreHandle,
+        retain_definitions: bool,
+    ) -> Option<RuntimeArtboardInstanceHandle> {
+        let (mut definition, objects, data_binds, animations, state_machines) = source
+            .with_downcast::<Artboard, _>(|source| {
+                (
+                    source.clone_instance_definition(),
+                    source.objects.clone(),
+                    source.data_bind_container.data_binds(),
+                    source.animations.clone(),
+                    source.state_machines.clone(),
+                )
+            })?;
+        if !retain_definitions {
+            definition.base.definition_owner = None;
+        }
         let instance = RuntimeArtboardInstanceHandle::new(*definition);
-        (Self::initialize_handle(&instance.core_handle()) == StatusCode::Ok).then_some(instance)
+        let root = instance.core_handle();
+        let (arena, container) = instance.with_artboard(|instance| {
+            (
+                instance.base.core_arena.clone(),
+                instance.base.data_bind_container.clone(),
+            )
+        });
+        // The root exists before bind initialization so observers and collapsables
+        // attach to the actual instance, never a temporary copied Artboard.
+        Self::clone_object_data_binds(
+            &data_binds,
+            Some(source),
+            Some(root.clone()),
+            &arena,
+            &container,
+        )?;
+        for object in objects.iter().skip(1) {
+            let clone = match object {
+                Some(object) => Some(object.clone_occurrence_into(&arena)?),
+                None => None,
+            };
+            instance.with_artboard_mut(|instance| instance.base.objects.push(clone.clone()));
+            Self::clone_object_data_binds(&data_binds, object.as_ref(), clone, &arena, &container)?;
+        }
+        instance.with_artboard_mut(|instance| {
+            instance.base.animations = animations;
+            instance.base.state_machines = state_machines;
+        });
+        (Self::initialize_handle(&root) == StatusCode::Ok).then_some(instance)
     }
 
     fn artboard_file(&self) -> Option<RuntimeFileWeakHandle> {

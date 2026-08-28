@@ -2531,16 +2531,6 @@ pub trait CoreCapabilities: Any {
     fn overrides_keyed_interpolation(&mut self, _property_key: i32) -> Option<bool> {
         None
     }
-    fn as_bind_target(
-        &self,
-    ) -> Option<&dyn crate::mechanical_port::source::data_bind::data_bind::BindTarget> {
-        None
-    }
-    fn as_bind_target_mut(
-        &mut self,
-    ) -> Option<&mut dyn crate::mechanical_port::source::data_bind::data_bind::BindTarget> {
-        None
-    }
     fn as_bind_source(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::data_bind::data_bind::BindSource> {
@@ -2641,12 +2631,6 @@ pub trait CoreCapabilities: Any {
     fn as_bind_script_input_mut(
         &mut self,
     ) -> Option<&mut dyn crate::mechanical_port::source::data_bind::data_bind::BindScriptInput>
-    {
-        None
-    }
-    fn as_bind_scripted_object_mut(
-        &mut self,
-    ) -> Option<&mut dyn crate::mechanical_port::source::data_bind::data_bind::BindScriptedObject>
     {
         None
     }
@@ -64096,6 +64080,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
     }
 }
 impl crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_base::ViewModelInstanceAssetBaseCallbacks for crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob {
+    fn property_value_changed(&mut self) { self.property_value_changed(); }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue as crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -64329,6 +64314,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
     }
 }
 impl crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_base::ViewModelInstanceAssetBaseCallbacks for crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_font::ViewModelInstanceAssetFont {
+    fn property_value_changed(&mut self) { self.property_value_changed(); }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue as crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -64380,6 +64366,7 @@ impl crate::mechanical_port::source::generated::viewmodel::viewmodel_component_b
     }
 }
 impl crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_base::ViewModelInstanceAssetBaseCallbacks for crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_image::ViewModelInstanceAssetImage {
+    fn property_value_changed(&mut self) { self.property_value_changed(); }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue as crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }

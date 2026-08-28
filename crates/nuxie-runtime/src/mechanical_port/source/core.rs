@@ -539,7 +539,10 @@ impl Core {
         // front, matching the pinned linked-list callback order.
         let observers = self.observers.clone();
         for observer in observers {
-            observer.with_downcast_mut::<DataBind, _>(|observer| {
+            observer.with_mut(|observer| {
+                let Some(observer) = observer.as_data_bind_mut() else {
+                    return;
+                };
                 if observer.property_key() == u32::from(property_key) {
                     observer.add_dirt(u32::from(ComponentDirt::BINDINGS_TARGET.0), false);
                 }
@@ -569,7 +572,11 @@ impl Core {
 impl Drop for Core {
     fn drop(&mut self) {
         for observer in std::mem::take(&mut self.observers) {
-            observer.with_downcast_mut::<DataBind, _>(DataBind::on_target_destroyed);
+            observer.with_mut(|observer| {
+                if let Some(observer) = observer.as_data_bind_mut() {
+                    observer.on_target_destroyed();
+                }
+            });
         }
     }
 }

@@ -51720,6 +51720,14 @@ impl CoreCapabilities
     fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
+    fn listener_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        invocation: &crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation,
+    ) -> bool {
+        self.perform(machine, invocation);
+        true
+    }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::transition_self_comparator::TransitionSelfComparator {
     fn lifecycle_import(&mut self, stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
@@ -51734,6 +51742,13 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::state_machi
 
     fn state_machine_fire_action_occurs(&self) -> Option<crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance> {
         Some(self.base.base.occurs())
+    }
+    fn state_machine_fire_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+    ) -> bool {
+        self.perform(machine);
+        true
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::transition_value_trigger_comparator::TransitionValueTriggerComparator {
@@ -52317,6 +52332,21 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
         Some(self.base.base.import_with(stack, |input| input.with(|input| crate::mechanical_port::source::generated::animation::state_machine_trigger_base::StateMachineTriggerBase::is_type_of(input.core_type())).unwrap_or(false)))
     }
 
+    fn transition_condition_allowed(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        layer: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> Option<bool> {
+        Some(self.evaluate(machine, &layer))
+    }
+    fn transition_condition_use_layer(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        layer: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> bool {
+        self.use_in_layer(machine, layer);
+        true
+    }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::keyed_property::KeyedProperty {
     fn lifecycle_import(
@@ -52475,6 +52505,14 @@ impl CoreCapabilities
     fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
+    fn listener_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        invocation: &crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation,
+    ) -> bool {
+        self.perform(machine, invocation);
+        true
+    }
 }
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::listener_align_target::ListenerAlignTarget
@@ -52590,6 +52628,13 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
     ) -> bool {
         self.base.base.base.base.base.use_in_layer(machine, layer);
         true
+    }
+    fn transition_condition_allowed(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        layer: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> Option<bool> {
+        Some(self.evaluate(machine, &layer))
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::transition_value_boolean_comparator::TransitionValueBooleanComparator {
@@ -52929,6 +52974,14 @@ impl CoreCapabilities
     fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
+    fn listener_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        invocation: &crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation,
+    ) -> bool {
+        self.perform(machine, invocation);
+        true
+    }
 }
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::focus_action_target::FocusActionTarget
@@ -52946,6 +52999,14 @@ impl CoreCapabilities
     }
     fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
+    }
+    fn listener_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        invocation: &crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation,
+    ) -> bool {
+        self.perform(machine, invocation);
+        true
     }
 }
 impl CoreCapabilities
@@ -53207,6 +53268,14 @@ impl CoreCapabilities
     fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
+    fn listener_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        invocation: &crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation,
+    ) -> bool {
+        self.perform(Some(machine), invocation);
+        true
+    }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::state_machine::StateMachine {
     fn lifecycle_on_added_dirty(
@@ -53251,6 +53320,13 @@ impl CoreCapabilities
     }
     fn state_machine_fire_action_occurs(&self) -> Option<crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance> {
         Some(self.base.base.occurs())
+    }
+    fn state_machine_fire_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+    ) -> bool {
+        self.perform(machine);
+        true
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::entry_state::EntryState {
@@ -53402,6 +53478,14 @@ impl CoreCapabilities
     }
     fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
+    }
+    fn listener_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        invocation: &crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation,
+    ) -> bool {
+        self.perform(machine, invocation);
+        true
     }
 }
 impl CoreCapabilities
@@ -53903,6 +53987,13 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
     ) -> bool {
         self.base.base.base.base.base.use_in_layer(machine, layer);
         true
+    }
+    fn transition_condition_allowed(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        layer: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> Option<bool> {
+        Some(self.evaluate(machine, &layer))
     }
 }
 impl CoreCapabilities

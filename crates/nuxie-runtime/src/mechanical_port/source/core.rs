@@ -83,6 +83,8 @@ pub trait CoreObject: CoreRegistryObject + Any {
 
 struct CoreArenaSlot {
     generation: Cell<u64>,
+    occupied: Cell<bool>,
+    core_type: Cell<CoreTypeKey>,
     object: RefCell<Option<Box<dyn CoreObject>>>,
 }
 
@@ -90,6 +92,8 @@ impl CoreArenaSlot {
     fn vacant() -> Self {
         Self {
             generation: Cell::new(0),
+            occupied: Cell::new(false),
+            core_type: Cell::new(0),
             object: RefCell::new(None),
         }
     }
@@ -135,8 +139,10 @@ impl CoreArena {
             index,
             generation,
         };
+        slot.core_type.set(value.core_type());
         value.set_core_handle(handle.clone());
         let previous = slot.object.replace(Some(value));
+        slot.occupied.set(true);
         debug_assert!(previous.is_none(), "CoreArena reused an occupied slot");
         handle
     }
@@ -157,6 +163,7 @@ impl CoreArena {
             return None;
         }
         let value = slot.object.borrow_mut().take()?;
+        slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
         self.inner.borrow_mut().free.push(handle.index);
         Some(value)
@@ -167,7 +174,7 @@ impl CoreArena {
             .borrow()
             .slots
             .iter()
-            .filter(|slot| slot.object.borrow().is_some())
+            .filter(|slot| slot.occupied.get())
             .count()
     }
 
@@ -201,8 +208,7 @@ impl CoreHandle {
     }
 
     pub fn is_alive(&self) -> bool {
-        self.slot()
-            .is_some_and(|slot| slot.object.borrow().is_some())
+        self.slot().is_some_and(|slot| slot.occupied.get())
     }
 
     pub fn is_type_of(&self, type_key: CoreTypeKey) -> bool {
@@ -211,19 +217,20 @@ impl CoreHandle {
     }
 
     pub fn core_type(&self) -> Option<CoreTypeKey> {
-        self.with(CoreObject::core_type)
+        let slot = self.slot()?;
+        slot.occupied.get().then(|| slot.core_type.get())
     }
 
     pub fn with<R>(&self, f: impl FnOnce(&dyn CoreObject) -> R) -> Option<R> {
         let slot = self.slot()?;
-        let object = slot.object.try_borrow().ok()?;
+        let object = slot.object.borrow();
         let object = object.as_deref()?;
         Some(f(object))
     }
 
     pub fn with_mut<R>(&self, f: impl FnOnce(&mut dyn CoreObject) -> R) -> Option<R> {
         let slot = self.slot()?;
-        let mut object = slot.object.try_borrow_mut().ok()?;
+        let mut object = slot.object.borrow_mut();
         let object = object.as_deref_mut()?;
         Some(f(object))
     }
@@ -237,11 +244,20 @@ impl CoreHandle {
     }
 
     pub fn clone_occurrence(&self) -> Option<CoreHandle> {
-        let clone = self.with(CoreObject::clone_boxed)??;
+        let (clone, complete) =
+            self.with(|source| (source.clone_boxed(), source.clone_completion_handler()))?;
+        let clone = clone?;
         let arena = CoreArena {
             inner: self.arena.upgrade()?,
         };
-        Some(arena.insert_boxed(clone))
+        let clone = arena.insert_boxed(clone);
+        if let Some(complete) = complete {
+            if !complete(self, &clone) {
+                arena.remove(&clone);
+                return None;
+            }
+        }
+        Some(clone)
     }
 
     /// Insert a newly constructed occurrence into the same graph arena.

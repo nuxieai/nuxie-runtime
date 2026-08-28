@@ -1212,6 +1212,11 @@ pub trait DataConverterCapability {
 }
 
 pub trait CoreCapabilities: Any {
+    /// Some pinned clone overrides need the new authored identity before they
+    /// can attach cloned child objects and data-bind targets.
+    fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> {
+        None
+    }
     fn as_shape_paint_mutator(
         &self,
     ) -> Option<
@@ -8652,7 +8657,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(self.clone_instance())
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -9252,7 +9257,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_list_base::ViewModelInstanceListBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(self.clone_value())
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -9826,7 +9831,7 @@ impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port
     fn core_type(&self) -> u16 { crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_viewmodel_base::ViewModelInstanceViewModelBase::TYPE_KEY }
     fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_viewmodel_base::ViewModelInstanceViewModelBase::is_type_of(type_key) }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(self.clone_value())
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(&mut self, property_key: u16, reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>) -> bool {
         let mut base = std::mem::take(&mut self.base);
@@ -15736,7 +15741,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::scripted::scripted_data_converter_base::ScriptedDataConverterBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.base.clone_into()))
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -48589,6 +48594,9 @@ impl CoreCapabilities
     ) -> Option<&mut crate::mechanical_port::source::container_component::ContainerComponent> {
         Some(&mut self.base.base)
     }
+    fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> {
+        Some(crate::mechanical_port::source::viewmodel::viewmodel_instance::ViewModelInstance::complete_clone)
+    }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_property_asset_blob::ViewModelPropertyAssetBlob {
     fn lifecycle_import(&mut self, stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
@@ -48722,6 +48730,9 @@ impl CoreCapabilities
     ) -> Option<&mut crate::mechanical_port::source::component::Component> {
         Some(&mut self.base.base.base.base)
     }
+    fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> {
+        Some(crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList::complete_clone)
+    }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber {
     fn as_view_model_instance_number(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber> { Some(self) }
@@ -48825,6 +48836,7 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_i
     fn as_view_model_instance_view_model_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel> { Some(&mut self) }
     fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> { Some(&self.base.base.base.base) }
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base) }
+    fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> { Some(crate::mechanical_port::source::viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel::complete_clone) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_property_trigger::ViewModelPropertyTrigger {
     fn lifecycle_import(&mut self, stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
@@ -50831,6 +50843,21 @@ impl CoreCapabilities
         &mut crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter,
     > {
         Some(&mut self.base.base)
+    }
+    fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> {
+        Some(crate::mechanical_port::source::scripted::scripted_data_converter::ScriptedDataConverter::complete_clone)
+    }
+    fn as_data_converter_capability(&self) -> Option<&dyn DataConverterCapability> {
+        Some(self)
+    }
+    fn as_data_converter_capability_mut(&mut self) -> Option<&mut dyn DataConverterCapability> {
+        Some(self)
+    }
+    fn lifecycle_import(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(self.import(stack))
     }
 }
 impl CoreCapabilities

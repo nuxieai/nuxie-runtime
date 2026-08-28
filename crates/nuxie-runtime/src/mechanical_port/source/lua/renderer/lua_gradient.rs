@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     lua::rive_lua_libs::{LuaReg, LuaState, ScriptedGradient, ScriptingContext},
     shapes::paint::color::ColorInt,
 };
+use std::rc::Rc;
 fn fill_stops(state: &mut LuaState) -> (Vec<f32>, Vec<ColorInt>) {
     state.check_type(3, LuaType::Table);
     let (mut stops, mut colors) = (Vec::new(), Vec::new());
@@ -28,8 +29,10 @@ fn linear(state: &mut LuaState) -> i32 {
     let shader = state
         .thread_data::<dyn ScriptingContext>()
         .factory()
-        .make_linear_gradient(from.x, from.y, to.x, to.y, &colors, &stops, stops.len());
-    state.new_rive(ScriptedGradient { shader });
+        .make_linear_gradient(from.x, from.y, to.x, to.y, &colors, &stops);
+    state.new_rive(ScriptedGradient {
+        shader: Some(Rc::from(shader)),
+    });
     1
 }
 fn radial(state: &mut LuaState) -> i32 {
@@ -39,8 +42,10 @@ fn radial(state: &mut LuaState) -> i32 {
     let shader = state
         .thread_data::<dyn ScriptingContext>()
         .factory()
-        .make_radial_gradient(from.x, from.y, radius, &colors, &stops, stops.len());
-    state.new_rive(ScriptedGradient { shader });
+        .make_radial_gradient(from.x, from.y, radius, &colors, &stops);
+    state.new_rive(ScriptedGradient {
+        shader: Some(Rc::from(shader)),
+    });
     1
 }
 const METHODS: &[LuaReg] = &[

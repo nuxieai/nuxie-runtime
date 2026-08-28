@@ -149,7 +149,7 @@ impl ScriptedPaintData {
     }
 
     fn push_gradient(&self, state: &mut LuaState) {
-        if let Some(shader) = self.gradient() {
+        if let Some(shader) = self.gradient.as_ref() {
             state.new_rive(ScriptedGradient {
                 shader: Some(shader.clone()),
             });
@@ -173,7 +173,7 @@ impl ScriptedPaint {
         result.set_cap(source.cap());
         result.set_feather(source.feather());
         result.set_blend_mode(source.blend_mode());
-        result.set_gradient(source.gradient().cloned());
+        result.set_gradient(source.gradient.clone());
         result
     }
 }

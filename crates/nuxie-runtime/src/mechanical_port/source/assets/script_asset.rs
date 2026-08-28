@@ -14,10 +14,6 @@ use crate::mechanical_port::source::{
     importers::text_asset_importer::SCRIPT_VERIFICATION_PUBLIC_KEY,
     lua::scripting_vm::RuntimeScriptingVmHandle,
 };
-use crate::{
-    mechanical_port::source::scripted::scripted_object::ScriptProtocol as ObjectScriptProtocol,
-    scripting::NoopScriptHost,
-};
 
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -409,11 +405,12 @@ impl ScriptAsset {
         &self.bytecode
     }
 
-    pub fn init_scripted_object(&mut self, object: &mut ScriptedObject) -> bool {
-        if self.scripting_vm().is_none() {
-            return false;
-        }
-        self.init_scripted_object_with(object)
+    pub fn init_scripted_object(
+        object: &CoreHandle,
+        host: &mut dyn crate::scripting::ScriptHost,
+    ) -> bool {
+        let properties = ScriptedObject::custom_properties(object);
+        ScriptedObject::initialize_occurrence(object, &properties, host)
     }
 
     pub fn decode(&mut self, data: &mut Vec<u8>, _factory: &RuntimeFactoryHandle) -> bool {
@@ -500,29 +497,6 @@ impl ScriptAsset {
 
     pub fn is_protocol_script(&self) -> bool {
         !self.base.is_module()
-    }
-
-    fn init_scripted_object_with(&mut self, object: &mut ScriptedObject) -> bool {
-        let Some(vm) = self.scripting_vm() else {
-            return false;
-        };
-        let module_name = self.module_name();
-        let bytecode = self.bytecode.clone();
-        let instance = vm
-            .with_vm_mut(|vm| vm.instantiate_script(&module_name, &bytecode, &mut NoopScriptHost));
-        let Ok(instance) = instance else {
-            return false;
-        };
-        if !self.initted {
-            self.optional_methods.set_implemented_methods(
-                (self.base.serialized_implemented_methods() & OptionalScriptedMethods::METHOD_MASK)
-                    as i32,
-            );
-            self.initted = true;
-        }
-        object.install_script_instance(instance, vm);
-        object.set_implemented_methods(self.optional_methods.implemented_methods() as u32);
-        object.ensure_script_initialized(ObjectScriptProtocol::Utility)
     }
 
     pub fn optional_methods(&self) -> &OptionalScriptedMethods {

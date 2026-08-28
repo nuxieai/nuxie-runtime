@@ -1,14 +1,13 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::mechanical_port::source::{
-    animation::listener_invocation::ListenerInvocation,
     assets::file_asset_referencer::FileAssetReferencer, core::CoreHandle,
     data_bind::data_context::RuntimeDataContextHandle, importers::import_stack::ImportStack,
     status_code::StatusCode,
 };
 
 use crate::scripting::{
-    NoopScriptHost, RuntimeScriptInstanceHandle, ScriptInstance as RuntimeScriptInstance,
+    RuntimeScriptInstanceHandle, ScriptInstance as RuntimeScriptInstance,
     ScriptMethod as RuntimeScriptMethod, ScriptValue as RuntimeScriptValue,
 };
 #[repr(u8)]
@@ -33,83 +32,6 @@ pub enum ScriptValue {
     String(String),
     ViewModel(CoreHandle),
     Trigger,
-}
-pub trait ScriptRuntime {
-    fn initialize(&mut self, asset_id: u32, protocol: ScriptProtocol) -> Option<(i32, i32)>;
-    fn set_input(&mut self, self_ref: i32, name: &str, value: &ScriptValue);
-    fn validate_for_cold_script_init(&self, _name: &str, _value: &ScriptValue) -> bool {
-        true
-    }
-    fn validate_hydration_prerequisites(&self, _name: &str, _value: &ScriptValue) -> bool {
-        true
-    }
-    fn hydrate_input(&mut self, self_ref: i32, name: &str, value: &ScriptValue) -> bool {
-        self.set_input(self_ref, name, value);
-        true
-    }
-    fn init(&mut self, _self_ref: i32, _context_ref: i32) -> bool {
-        true
-    }
-    fn did_hydrate(&mut self, _self_ref: i32) {}
-    fn advance(&mut self, self_ref: i32, elapsed: f32) -> bool;
-    fn draw(&mut self, self_ref: i32);
-    fn draw_canvas(&mut self, self_ref: i32) {
-        self.draw(self_ref);
-    }
-    fn update(&mut self, self_ref: i32);
-    fn dispose(&mut self, self_ref: i32, context_ref: i32);
-    fn dispose_script_input(&mut self, _name: &str, _value: &ScriptValue) {}
-    fn dispose_tracked_property(&mut self, _property: usize) {}
-    fn call_number(&mut self, self_ref: i32, method: &str, args: &[f32]) -> Option<f32>;
-    fn trigger(&mut self, _self_ref: i32, _name: &str) -> bool {
-        false
-    }
-    fn call_boolean(&mut self, _self_ref: i32, _method: &str, _args: &[f32]) -> Option<bool> {
-        None
-    }
-    fn call_boolean_with_string(
-        &mut self,
-        _self_ref: i32,
-        _method: &str,
-        _value: &str,
-    ) -> Option<bool> {
-        None
-    }
-    fn call_gamepad(
-        &mut self,
-        _self_ref: i32,
-        _method: &str,
-        _invocation: &ListenerInvocation,
-    ) -> bool {
-        false
-    }
-    fn call_pointer(&mut self, _self_ref: i32, _method: &str, _x: f32, _y: f32) -> Option<u8> {
-        None
-    }
-    fn call_vec2(&mut self, _self_ref: i32, _method: &str, _args: &[f32]) -> Option<(f32, f32)> {
-        None
-    }
-    fn call_path(
-        &mut self,
-        _self_ref: i32,
-        _method: &str,
-        _points: &[(f32, f32)],
-    ) -> Option<Vec<(f32, f32)>> {
-        None
-    }
-    fn call_value(
-        &mut self,
-        self_ref: i32,
-        method: &str,
-        value: &ScriptValue,
-    ) -> Option<ScriptValue> {
-        match value {
-            ScriptValue::Number(value) => self
-                .call_number(self_ref, method, &[*value])
-                .map(ScriptValue::Number),
-            _ => None,
-        }
-    }
 }
 pub const ADVANCES_BIT: u32 = 1 << 0;
 pub const UPDATES_BIT: u32 = 1 << 1;
@@ -164,7 +86,6 @@ pub struct ScriptedObject {
     file_asset_referencer: FileAssetReferencer,
     self_ref: i32,
     context_ref: i32,
-    runtime: Option<Box<dyn ScriptRuntime>>,
     runtime_instance: Option<RuntimeScriptInstanceHandle>,
     runtime_vm: Option<crate::mechanical_port::source::lua::scripting_vm::RuntimeScriptingVmHandle>,
     asset_id: u32,
@@ -185,7 +106,6 @@ impl Default for ScriptedObject {
             file_asset_referencer: FileAssetReferencer::default(),
             self_ref: 0,
             context_ref: 0,
-            runtime: None,
             runtime_instance: None,
             runtime_vm: None,
             asset_id: u32::MAX,
@@ -634,13 +554,79 @@ impl ScriptedObject {
         self.runtime_instance.clone()
     }
 
+    fn add_input_dirt(owner: &CoreHandle) {
+        use crate::mechanical_port::source::{
+            component::ComponentOccurrenceHandle, component_dirt::ComponentDirt,
+            scripted::scripted_data_converter::ScriptedDataConverter,
+        };
+        let is_component = owner
+            .with(|owner| owner.as_component().is_some())
+            .expect("the scripted owner remains live during input assignment");
+        if is_component {
+            ComponentOccurrenceHandle::Authored(owner.clone())
+                .add_dirt(ComponentDirt::SCRIPT_UPDATE, false);
+        } else {
+            owner.with_downcast_mut::<ScriptedDataConverter, _>(|converter| {
+                converter.add_scripted_dirt(u32::from(ComponentDirt::SCRIPT_UPDATE.0), false);
+            });
+            // Actions, conditions, and interpolators intentionally add no dirt.
+        }
+    }
+
+    pub fn set_primitive_input(owner: &CoreHandle, name: String, value: ScriptValue) {
+        use crate::scripting::ScriptCoreString;
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .filter(|scripted| scripted.self_ref != 0)
+                    .and_then(|scripted| scripted.runtime_instance())
+            })
+            .flatten();
+        let Some(instance) = instance else {
+            return;
+        };
+        let value =
+            runtime_script_value(&value).expect("primitive input dispatch takes a primitive value");
+        let assigned = instance
+            .borrow_mut()
+            .set_input_core(&ScriptCoreString::from_bytes(name.into_bytes()), value)
+            .is_ok();
+        if assigned {
+            Self::add_input_dirt(owner);
+        }
+    }
+
+    pub fn trigger_occurrence(owner: &CoreHandle, name: String) {
+        use crate::scripting::ScriptCoreString;
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .filter(|scripted| scripted.self_ref != 0)
+                    .and_then(|scripted| scripted.runtime_instance())
+            })
+            .flatten();
+        let Some(instance) = instance else {
+            return;
+        };
+        let mut host = ScriptUpdateRequestHost::default();
+        // The native trigger adapter marks this host only after it finds and
+        // attempts a function, including an ordinary protected-call failure.
+        let _ = instance
+            .borrow_mut()
+            .call_input_trigger_core(&ScriptCoreString::from_bytes(name.into_bytes()), &mut host);
+        if host.take_requested() {
+            Self::add_input_dirt(owner);
+        }
+    }
+
     pub fn install_script_instance(
         &mut self,
         instance: Box<dyn RuntimeScriptInstance>,
         vm: crate::mechanical_port::source::lua::scripting_vm::RuntimeScriptingVmHandle,
     ) {
         self.script_dispose();
-        self.runtime = None;
         self.runtime_instance = Some(RuntimeScriptInstanceHandle::new(instance));
         self.runtime_vm = Some(vm);
         self.self_ref = 1;
@@ -649,121 +635,20 @@ impl ScriptedObject {
         self.disposed = false;
     }
 
-    pub fn set_runtime(&mut self, r: Box<dyn ScriptRuntime>) {
-        {
-            self.runtime_instance = None;
-        }
-        if let Some(runtime) = &mut self.runtime {
-            runtime.dispose(self.self_ref, self.context_ref);
-            for property in self.tracked_properties.clone() {
-                runtime.dispose_tracked_property(property);
-            }
-        }
-        self.self_ref = 0;
-        self.context_ref = 0;
-        self.tracked_properties.clear();
-        self.user_init_done = false;
-        self.disposed = false;
-        self.runtime = Some(r)
-    }
-    pub fn ensure_script_initialized(&mut self, protocol: ScriptProtocol) -> bool {
-        if let Some(instance) = &self.runtime_instance {
-            let mut instance = instance.borrow_mut();
-            if instance.prepare_init_retry().is_err() {
-                return false;
-            }
-            let live = instance.script_lifetime_valid();
-            self.self_ref = u32::from(live) as i32;
-            self.context_ref = u32::from(live) as i32;
-            return live;
-        }
-        if self.self_ref != 0 {
-            return true;
-        }
-        let Some(runtime) = &mut self.runtime else {
-            return false;
-        };
-        if self
-            .inputs
-            .iter()
-            .any(|(name, value)| !runtime.validate_for_cold_script_init(name, value))
-        {
-            return false;
-        }
-        if let Some((s, c)) = runtime.initialize(self.asset_id, protocol) {
-            self.self_ref = s;
-            self.context_ref = c;
-            true
-        } else {
-            false
-        }
-    }
-    pub fn hydrate_script_inputs(&mut self) -> bool {
-        if let Some(instance) = &self.runtime_instance {
-            let mut instance = instance.borrow_mut();
-            for (name, value) in &self.inputs {
-                let Some(value) = runtime_script_value(value) else {
-                    return false;
-                };
-                if instance.set_input(name, value).is_err() {
-                    return false;
-                }
-            }
-            if self.implemented_methods & INITS_BIT != 0 && !self.user_init_done {
-                match instance.call_init(&mut NoopScriptHost) {
-                    Ok(true) => self.user_init_done = true,
-                    Ok(false) | Err(_) => return false,
-                }
-            }
-            return true;
-        }
-        let Some(runtime) = &mut self.runtime else {
-            return true;
-        };
-        if self.self_ref == 0 {
-            return false;
-        }
-        if self
-            .inputs
-            .iter()
-            .any(|(name, value)| !runtime.validate_hydration_prerequisites(name, value))
-        {
-            return false;
-        }
-        for (name, value) in &self.inputs {
-            if !runtime.hydrate_input(self.self_ref, name, value) {
-                return false;
-            }
-        }
-        if self.implemented_methods & INITS_BIT != 0 && !self.user_init_done {
-            if !runtime.init(self.self_ref, self.context_ref) {
-                return false;
-            }
-            self.user_init_done = true;
-        }
-        runtime.did_hydrate(self.self_ref);
-        true
-    }
-    fn set(&mut self, n: String, v: ScriptValue) {
-        if let Some(instance) = &self.runtime_instance {
-            let Some(value) = runtime_script_value(&v) else {
-                return;
-            };
-            if instance.borrow_mut().set_input(&n, value).is_ok() {
-                self.inputs.insert(n, v);
-                self.mark_needs_update();
-            }
-            return;
-        }
-        let Some(runtime) = &mut self.runtime else {
-            return;
-        };
+    fn set(&mut self, name: String, value: ScriptValue) {
         if self.self_ref == 0 {
             return;
         }
-        self.inputs.insert(n.clone(), v.clone());
-        runtime.set_input(self.self_ref, &n, &v);
-        self.mark_needs_update();
+        let Some(instance) = self.runtime_instance.clone() else {
+            return;
+        };
+        let Some(converted) = runtime_script_value(&value) else {
+            return;
+        };
+        if instance.borrow_mut().set_input(&name, converted).is_ok() {
+            self.inputs.insert(name, value);
+            self.mark_needs_update();
+        }
     }
     pub fn set_artboard_input(&mut self, n: String, v: CoreHandle) {
         self.set(n, ScriptValue::Artboard(v))
@@ -783,41 +668,21 @@ impl ScriptedObject {
     pub fn set_view_model_input(&mut self, n: String, v: CoreHandle) {
         self.set(n, ScriptValue::ViewModel(v))
     }
-    pub fn trigger(&mut self, n: String) {
-        if let Some(instance) = &self.runtime_instance {
-            if instance
-                .borrow_mut()
-                .call_input_trigger(&n, &mut NoopScriptHost)
-                .is_ok()
-            {
-                self.mark_needs_update();
-            }
-            return;
-        }
-        let Some(runtime) = &mut self.runtime else {
-            return;
-        };
-        if self.self_ref == 0 || !runtime.trigger(self.self_ref, &n) {
-            return;
-        }
-        self.mark_needs_update();
-    }
-    pub fn script_advance(&mut self, e: f32) -> bool {
+
+    pub fn script_advance(&mut self, elapsed: f32) -> bool {
         if !self.advances() || self.self_ref == 0 {
             return false;
         }
-        if let Some(instance) = &self.runtime_instance {
-            let mut host = ScriptUpdateRequestHost::default();
-            let advanced = instance
-                .borrow_mut()
-                .call_advance_truthy(e, &mut host)
-                .unwrap_or(false);
-            self.callback_update_requested |= host.take_requested();
-            return advanced;
-        }
-        self.runtime
-            .as_mut()
-            .is_some_and(|r| r.advance(self.self_ref, e))
+        let Some(instance) = self.runtime_instance.clone() else {
+            return false;
+        };
+        let mut host = ScriptUpdateRequestHost::default();
+        let advanced = instance
+            .borrow_mut()
+            .call_advance_truthy(elapsed, &mut host)
+            .unwrap_or(false);
+        self.callback_update_requested |= host.take_requested();
+        advanced
     }
 
     /// The most-derived owner applies markNeedsUpdate after releasing the VM
@@ -825,37 +690,53 @@ impl ScriptedObject {
     pub fn take_update_request(&mut self) -> bool {
         std::mem::take(&mut self.callback_update_requested)
     }
-    pub fn script_draw_canvas(&mut self) {
-        if !self.draws_canvas() {
-            return;
-        }
-        if let Some(r) = &mut self.runtime {
-            r.draw_canvas(self.self_ref)
+    pub fn draw_canvas_occurrence(
+        owner: &CoreHandle,
+        factory: &mut dyn nuxie_render_api::RenderFactory,
+    ) {
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .filter(|scripted| scripted.draws_canvas() && scripted.self_ref != 0)
+                    .and_then(|scripted| scripted.runtime_instance())
+            })
+            .flatten();
+        if let Some(instance) = instance {
+            let _ = instance.borrow_mut().call_draw_canvas(factory);
         }
     }
-    pub fn script_draw(&mut self) {
-        if let Some(runtime) = &mut self.runtime {
-            runtime.draw(self.self_ref);
-        }
-    }
-    pub fn script_update(&mut self) {
-        if !self.updates() {
+
+    pub fn script_update_occurrence(owner: &CoreHandle) {
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .filter(|scripted| scripted.updates() && scripted.self_ref != 0)
+                    .and_then(|scripted| scripted.runtime_instance())
+            })
+            .flatten();
+        let Some(instance) = instance else {
             return;
-        }
-        self.in_update_phase = true;
-        if let Some(instance) = &self.runtime_instance {
-            let _ = instance.borrow_mut().call_method(
-                RuntimeScriptMethod::Update,
-                &[],
-                &mut NoopScriptHost,
-            );
-            self.in_update_phase = false;
-            return;
-        }
-        if let Some(r) = &mut self.runtime {
-            r.update(self.self_ref)
-        }
-        self.in_update_phase = false
+        };
+        owner.with_mut(|owner| {
+            owner
+                .as_scripted_object_mut()
+                .unwrap()
+                .set_in_update_phase(true)
+        });
+        let mut host = ScriptUpdateRequestHost::default();
+        let _ =
+            instance
+                .borrow_mut()
+                .call_optional_method(RuntimeScriptMethod::Update, &[], &mut host);
+        // markNeedsUpdate requests made in the update phase are intentionally ignored.
+        owner.with_mut(|owner| {
+            owner
+                .as_scripted_object_mut()
+                .unwrap()
+                .set_in_update_phase(false)
+        });
     }
     pub fn script_dispose(&mut self) {
         if self.disposed {
@@ -864,15 +745,6 @@ impl ScriptedObject {
         if let Some(instance) = self.runtime_instance.take() {
             instance.borrow_mut().invalidate_for_init_retry();
         }
-        if let Some(r) = &mut self.runtime {
-            for (name, value) in &self.inputs {
-                r.dispose_script_input(name, value);
-            }
-            for property in self.tracked_properties.clone() {
-                r.dispose_tracked_property(property);
-            }
-            r.dispose(self.self_ref, self.context_ref)
-        }
         self.self_ref = 0;
         self.context_ref = 0;
         self.inputs.clear();
@@ -880,7 +752,7 @@ impl ScriptedObject {
         self.runtime_vm = None;
         self.user_init_done = false;
         self.callback_update_requested = false;
-        self.disposed = true
+        self.disposed = true;
     }
     pub fn reinit(&mut self) {
         self.script_dispose();
@@ -1027,53 +899,13 @@ impl ScriptedObject {
             != 0
     }
     pub fn clear_scripting_vm(&mut self) {
-        self.runtime = None;
-        {
-            self.runtime_instance = None;
-        }
+        self.runtime_instance = None;
+        self.runtime_vm = None;
         self.self_ref = 0;
         self.context_ref = 0;
     }
     pub fn user_lua_init_done(&self) -> bool {
         self.user_init_done
-    }
-    pub fn call_number(&mut self, m: &str, args: &[f32]) -> Option<f32> {
-        self.runtime.as_mut()?.call_number(self.self_ref, m, args)
-    }
-    pub fn call_boolean(&mut self, method: &str, args: &[f32]) -> Option<bool> {
-        self.runtime
-            .as_mut()?
-            .call_boolean(self.self_ref, method, args)
-    }
-    pub fn call_boolean_with_string(&mut self, method: &str, value: &str) -> Option<bool> {
-        self.runtime
-            .as_mut()?
-            .call_boolean_with_string(self.self_ref, method, value)
-    }
-    pub fn call_gamepad(&mut self, method: &str, invocation: &ListenerInvocation) -> bool {
-        self.runtime
-            .as_mut()
-            .is_some_and(|runtime| runtime.call_gamepad(self.self_ref, method, invocation))
-    }
-    pub fn call_pointer(&mut self, method: &str, x: f32, y: f32) -> Option<u8> {
-        self.runtime
-            .as_mut()?
-            .call_pointer(self.self_ref, method, x, y)
-    }
-    pub fn call_vec2(&mut self, method: &str, args: &[f32]) -> Option<(f32, f32)> {
-        self.runtime
-            .as_mut()?
-            .call_vec2(self.self_ref, method, args)
-    }
-    pub fn call_path(&mut self, method: &str, points: &[(f32, f32)]) -> Option<Vec<(f32, f32)>> {
-        self.runtime
-            .as_mut()?
-            .call_path(self.self_ref, method, points)
-    }
-    pub fn call_value(&mut self, method: &str, value: &ScriptValue) -> Option<ScriptValue> {
-        self.runtime
-            .as_mut()?
-            .call_value(self.self_ref, method, value)
     }
 }
 
@@ -1083,7 +915,9 @@ fn runtime_script_value(value: &ScriptValue) -> Option<RuntimeScriptValue> {
         ScriptValue::Color(value) => Some(RuntimeScriptValue::Color(*value)),
         ScriptValue::Integer(value) => Some(RuntimeScriptValue::Number(f64::from(*value as u32))),
         ScriptValue::Number(value) => Some(RuntimeScriptValue::Number(f64::from(*value))),
-        ScriptValue::String(value) => Some(RuntimeScriptValue::String(value.clone())),
+        ScriptValue::String(value) => Some(RuntimeScriptValue::CoreString(
+            crate::scripting::ScriptCoreString::from_bytes(value.as_bytes().to_vec()),
+        )),
         ScriptValue::Artboard(_) | ScriptValue::ViewModel(_) | ScriptValue::Trigger => None,
     }
 }

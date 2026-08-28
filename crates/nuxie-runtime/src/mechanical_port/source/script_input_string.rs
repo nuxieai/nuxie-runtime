@@ -37,11 +37,10 @@ impl ScriptInputString {
         let name = self.name().to_owned();
         let value = self.property_value().to_owned();
         if let Some(object) = self.script_input.scripted_object() {
-            object.with_mut(|object| {
-                if let Some(object) = object.as_scripted_object_mut() {
-                    object.set_string_input(name, value);
-                }
-            });
+            crate::mechanical_port::source::scripted::scripted_object::ScriptedObject::set_primitive_input(
+                &object, name,
+                crate::mechanical_port::source::scripted::scripted_object::ScriptValue::String(value),
+            );
         }
     }
 
@@ -86,11 +85,10 @@ impl ScriptInputString {
         let name = self.name().to_owned();
         let value = self.property_value().to_owned();
         if let Some(object) = self.script_input.scripted_object() {
-            object.with_mut(|object| {
-                if let Some(object) = object.as_scripted_object_mut() {
-                    object.set_string_input(name, value);
-                }
-            });
+            crate::mechanical_port::source::scripted::scripted_object::ScriptedObject::set_primitive_input(
+                &object, name,
+                crate::mechanical_port::source::scripted::scripted_object::ScriptValue::String(value),
+            );
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    core::CoreHandle,
     input::{
         gamepad_snapshot::{GamepadInputChange, GamepadSnapshot},
         standard_gamepad::{StandardGamepadAxis, StandardGamepadButton},
@@ -48,7 +49,7 @@ pub struct FocusInvocation {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReportedEventInvocation {
-    pub event_local_index: usize,
+    pub event: CoreHandle,
     pub delay_seconds: f32,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -138,10 +139,10 @@ impl ListenerInvocation {
             }),
         }
     }
-    pub fn reported_event(event_local_index: usize, delay_seconds: f32) -> Self {
+    pub fn reported_event(event: CoreHandle, delay_seconds: f32) -> Self {
         Self {
             storage: ListenerInvocationStorage::ReportedEvent(ReportedEventInvocation {
-                event_local_index,
+                event,
                 delay_seconds,
             }),
         }

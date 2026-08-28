@@ -38,10 +38,16 @@ use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
     core::CoreHandle,
     data_bind::{
+        bindable_property_artboard::BindablePropertyArtboard,
+        bindable_property_asset::BindablePropertyAsset,
         bindable_property_boolean::BindablePropertyBoolean,
         bindable_property_color::BindablePropertyColor,
+        bindable_property_enum::BindablePropertyEnum,
+        bindable_property_integer::BindablePropertyInteger,
         bindable_property_number::BindablePropertyNumber,
         bindable_property_string::BindablePropertyString,
+        bindable_property_trigger::BindablePropertyTrigger,
+        bindable_property_viewmodel::BindablePropertyViewModel,
         data_bind::DataBind,
         data_bind_container::DataBindContainer,
         data_context::{DataContext, RuntimeDataContextHandle},
@@ -55,6 +61,7 @@ use crate::mechanical_port::source::{
             keyframe_color_base::KeyFrameColorBase, keyframe_double_base::KeyFrameDoubleBase,
             keyframe_string_base::KeyFrameStringBase, state_transition_base::StateTransitionBase,
         },
+        core_registry::CoreRegistry,
         data_bind::{
             bindable_property_base::BindablePropertyBase,
             bindable_property_boolean_base::BindablePropertyBooleanBase,
@@ -1905,6 +1912,10 @@ impl RuntimeListenerViewModelHandle {
 }
 
 impl RuntimeListenerViewModelWeakHandle {
+    fn ptr_eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
+
     fn with_listener<R>(&self, f: impl FnOnce(&ListenerViewModel) -> R) -> Option<R> {
         self.0.upgrade().map(|listener| f(&listener.borrow()))
     }
@@ -2216,18 +2227,48 @@ impl StateMachineInstance {
 
     pub fn listener_has(&self, listener: &CoreHandle, listener_type: ListenerType) -> bool {
         listener
-            .with_downcast::<StateMachineListener, _>(|listener| {
-                listener.has_listener(listener_type)
-            })
+            .with(|listener| listener.state_machine_listener_has(listener_type))
+            .flatten()
             .unwrap_or(false)
     }
 
     fn listener_has_any(&self, listener: &CoreHandle, listener_types: &[ListenerType]) -> bool {
-        listener
-            .with_downcast::<StateMachineListener, _>(|listener| {
-                listener.has_listeners(listener_types)
+        listener_types
+            .iter()
+            .copied()
+            .any(|kind| self.listener_has(listener, kind))
+    }
+
+    fn listener_target_id(listener: &CoreHandle) -> u32 {
+        CoreRegistry::get_uint_handle(listener,
+            crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::TARGET_ID_PROPERTY_KEY as i32)
+            .expect("a StateMachineListener retains targetId")
+    }
+
+    fn focus_data_child(target: &CoreHandle) -> Option<CoreHandle> {
+        target
+            .with(|target| {
+                target.as_node()?;
+                Some(target.as_container_component()?.children().to_vec())
             })
-            .unwrap_or(false)
+            .flatten()?
+            .into_iter()
+            .find(|child| child.with_downcast::<FocusData, _>(|_| ()).is_some())
+    }
+
+    fn semantic_data_child(target: &CoreHandle) -> Option<CoreHandle> {
+        target
+            .with(|target| {
+                target.as_node()?;
+                Some(target.as_container_component()?.children().to_vec())
+            })
+            .flatten()?
+            .into_iter()
+            .find(|child| {
+                child
+                    .with(|child| child.as_semantic_data().is_some())
+                    .unwrap_or(false)
+            })
     }
 
     pub fn perform_listener_changes(
@@ -2235,10 +2276,18 @@ impl StateMachineInstance {
         listener: &CoreHandle,
         invocation: ListenerInvocation,
     ) {
-        let runtime = Rc::clone(&self.runtime);
-        runtime
-            .borrow_mut()
-            .listener_perform_changes(listener, self, &invocation);
+        let actions = listener
+            .with(|listener| listener.state_machine_listener_actions())
+            .flatten()
+            .expect("a listener retains its authored action list");
+        for action in actions {
+            action.with_mut(|action| {
+                assert!(
+                    action.listener_action_perform(self, &invocation),
+                    "an authored listener action has concrete dispatch"
+                );
+            });
+        }
     }
 
     pub fn semantic_constraints_met(
@@ -2379,17 +2428,11 @@ impl StateMachineInstance {
                     .push(ListenerViewModel::new(machine.clone(), listener));
                 continue;
             }
-            let target = self.runtime.borrow_mut().artboard_resolve(
-                &self.artboard_instance,
-                self.runtime.borrow_mut().listener_target_id(&listener),
-            );
+            let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
             if self.listener_has(&listener, ListenerType::Focus)
                 || self.listener_has(&listener, ListenerType::Blur)
             {
-                if let Some(focus_data) = target
-                    .as_ref()
-                    .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
-                {
+                if let Some(focus_data) = target.as_ref().and_then(Self::focus_data_child) {
                     let group = RuntimeFocusListenerGroupHandle::new(
                         focus_data,
                         listener.clone(),
@@ -2401,10 +2444,7 @@ impl StateMachineInstance {
             if self.listener_has(&listener, ListenerType::Keyboard)
                 || self.listener_has(&listener, ListenerType::TextInput)
             {
-                if let Some(focus_data) = target
-                    .as_ref()
-                    .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
-                {
+                if let Some(focus_data) = target.as_ref().and_then(Self::focus_data_child) {
                     let group = RuntimeKeyboardListenerGroupHandle::new(
                         focus_data,
                         Some(listener.clone()),
@@ -2414,10 +2454,7 @@ impl StateMachineInstance {
                 }
             }
             if self.listener_has(&listener, ListenerType::SemanticAction) {
-                if let Some(semantic_data) = target
-                    .as_ref()
-                    .and_then(|target| self.runtime.borrow_mut().resolve_semantic_data(target))
-                {
+                if let Some(semantic_data) = target.as_ref().and_then(Self::semantic_data_child) {
                     let group = RuntimeSemanticListenerGroupHandle::new(
                         semantic_data,
                         listener.clone(),
@@ -2443,10 +2480,7 @@ impl StateMachineInstance {
                 self.listener_groups.push(group);
             }
             if self.listener_has(&listener, ListenerType::Gamepad) {
-                if let Some(focus_data) = target
-                    .as_ref()
-                    .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
-                {
+                if let Some(focus_data) = target.as_ref().and_then(Self::focus_data_child) {
                     let group = RuntimeGamepadListenerGroupHandle::new(
                         focus_data,
                         Some(listener.clone()),
@@ -2701,28 +2735,20 @@ impl StateMachineInstance {
     }
 
     fn normalize_pointer_position(&self, mut position: Vec2D) -> Vec2D {
-        if self
-            .runtime
-            .borrow_mut()
-            .artboard_frame_origin(&self.artboard_instance)
-        {
-            let origin = self
-                .runtime
-                .borrow_mut()
-                .artboard_origin(&self.artboard_instance);
-            let size = self
-                .runtime
-                .borrow_mut()
-                .artboard_layout_size(&self.artboard_instance);
-            position = Vec2D::new(
-                position.x - origin.x * size.x,
-                position.y - origin.y * size.y,
-            );
-        }
-        self.runtime
-            .borrow_mut()
-            .artboard_inverse_self_transform(&self.artboard_instance, position)
-            .unwrap_or(position)
+        self.artboard_instance
+            .with_artboard(|artboard| {
+                if artboard.frame_origin() {
+                    position = Vec2D::new(
+                        position.x - artboard.origin_x() * artboard.layout_width(),
+                        position.y - artboard.origin_y() * artboard.layout_height(),
+                    );
+                }
+                if artboard.has_self_transform() {
+                    position = artboard.self_transform().invert_or_identity() * position;
+                }
+                position
+            })
+            .expect("a state machine retains its ArtboardInstance")
     }
 
     fn update_listeners(
@@ -2881,9 +2907,9 @@ impl StateMachineInstance {
             eprintln!(
                 "{} StateMachine exceeded max event iterations on artboard {}",
                 self.name(),
-                self.runtime
-                    .borrow_mut()
-                    .artboard_name(&self.artboard_instance)
+                self.artboard_instance
+                    .with_artboard(|artboard| artboard.name().to_owned())
+                    .expect("a state machine retains its ArtboardInstance")
             );
         }
     }
@@ -3083,9 +3109,9 @@ impl StateMachineInstance {
 
     pub fn advance(&mut self, seconds: f32, new_frame: bool) -> bool {
         let counter = self
-            .runtime
-            .borrow_mut()
-            .artboard_draw_order_change_counter(&self.artboard_instance);
+            .artboard_instance
+            .with_artboard(|artboard| artboard.draw_order_change_counter())
+            .expect("a state machine retains its ArtboardInstance");
         if self.draw_order_change_counter != counter {
             self.draw_order_change_counter = counter;
             self.sort_hit_components();
@@ -3342,18 +3368,68 @@ impl StateMachineInstance {
     }
 
     pub fn bindable_property_number_value(&self, property: &CoreHandle) -> Option<f32> {
-        self.runtime
-            .borrow_mut()
-            .bindable_property_number_value(property)
+        self.bindable_property_instance(property)?
+            .with_downcast::<BindablePropertyNumber, _>(|property| property.base.property_value())
     }
 
     pub fn bindable_property_comparison_value(
         &self,
         property: &CoreHandle,
     ) -> Option<RuntimeComparisonValue> {
-        self.runtime
-            .borrow_mut()
-            .bindable_property_comparison_value(property)
+        let property = self.bindable_property_instance(property)?;
+        property
+            .with_downcast::<BindablePropertyNumber, _>(|property| {
+                RuntimeComparisonValue::Number(property.base.property_value())
+            })
+            .or_else(|| {
+                property.with_downcast::<BindablePropertyInteger, _>(|property| {
+                    RuntimeComparisonValue::Uint(property.base.property_value())
+                })
+            })
+            .or_else(|| {
+                property.with_downcast::<BindablePropertyBoolean, _>(|property| {
+                    RuntimeComparisonValue::Boolean(property.base.property_value())
+                })
+            })
+            .or_else(|| {
+                property.with_downcast::<BindablePropertyString, _>(|property| {
+                    RuntimeComparisonValue::String(property.base.property_value().to_owned())
+                })
+            })
+            .or_else(|| {
+                property.with_downcast::<BindablePropertyColor, _>(|property| {
+                    RuntimeComparisonValue::Color(property.base.property_value())
+                })
+            })
+            .or_else(|| {
+                property.with_downcast::<BindablePropertyEnum, _>(|property| {
+                    RuntimeComparisonValue::Uint(property.base.property_value())
+                })
+            })
+            .or_else(|| {
+                property.with_downcast::<BindablePropertyTrigger, _>(|property| {
+                    RuntimeComparisonValue::Uint(property.base.base.property_value())
+                })
+            })
+            .or_else(|| {
+                property.with_downcast::<BindablePropertyAsset, _>(|property| {
+                    RuntimeComparisonValue::Uint(property.base.property_value())
+                })
+            })
+            .or_else(|| {
+                property.with_downcast::<BindablePropertyArtboard, _>(|property| {
+                    RuntimeComparisonValue::Uint(property.base.property_value())
+                })
+            })
+            .or_else(|| {
+                property
+                    .with_downcast::<BindablePropertyViewModel, _>(|property| {
+                        property
+                            .view_model_instance_value()
+                            .map(RuntimeComparisonValue::ViewModel)
+                    })
+                    .flatten()
+            })
     }
 
     pub fn component_comparison_value(
@@ -3361,15 +3437,35 @@ impl StateMachineInstance {
         object_id: u32,
         property_key: u32,
     ) -> Option<RuntimeComparisonValue> {
-        self.runtime
-            .borrow_mut()
-            .component_comparison_value(object_id, property_key)
+        let object = self.resolve_artboard_object(object_id)?;
+        match CoreRegistry::property_field_id(property_key as i32) as u16 {
+            CoreRegistry::CORE_DOUBLE_TYPE_ID => {
+                CoreRegistry::get_double_handle(&object, property_key as i32)
+                    .map(RuntimeComparisonValue::Number)
+            }
+            CoreRegistry::CORE_BOOL_TYPE_ID => {
+                CoreRegistry::get_bool_handle(&object, property_key as i32)
+                    .map(RuntimeComparisonValue::Boolean)
+            }
+            CoreRegistry::CORE_STRING_TYPE_ID => {
+                CoreRegistry::get_string_handle(&object, property_key as i32)
+                    .map(RuntimeComparisonValue::String)
+            }
+            CoreRegistry::CORE_COLOR_TYPE_ID => {
+                CoreRegistry::get_color_handle(&object, property_key as i32)
+                    .map(RuntimeComparisonValue::Color)
+            }
+            CoreRegistry::CORE_UINT_TYPE_ID => {
+                CoreRegistry::get_uint_handle(&object, property_key as i32)
+                    .map(RuntimeComparisonValue::Uint)
+            }
+            _ => None,
+        }
     }
 
     pub fn artboard_layout_size(&self) -> Option<(f32, f32)> {
-        self.runtime
-            .borrow_mut()
-            .artboard_layout_dimensions(&self.artboard_instance)
+        self.artboard_instance
+            .with_artboard(|artboard| (artboard.base.layout_width(), artboard.base.layout_height()))
     }
 
     pub fn bindable_source_changed_in_layer(
@@ -3377,9 +3473,28 @@ impl StateMachineInstance {
         property: &CoreHandle,
         layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
     ) -> bool {
-        self.runtime
-            .borrow_mut()
-            .bindable_source_changed_in_layer(property, layer)
+        let Some(property) = self.bindable_property_instance(property) else {
+            return false;
+        };
+        let Some(data_bind) = self.bindable_data_bind_to_target(&property) else {
+            return false;
+        };
+        let source = data_bind
+            .with(|data_bind| data_bind.as_data_bind().and_then(DataBind::source))
+            .flatten();
+        let Some(source) = source else {
+            return false;
+        };
+        source
+            .with(|source| {
+                source.as_view_model_instance_value().is_some_and(|source| {
+                    source.has_changed()
+                        && layer
+                            .as_ref()
+                            .is_none_or(|layer| !source.is_used_in_layer(layer))
+                })
+            })
+            .unwrap_or(false)
     }
 
     pub fn use_bindable_property_in_layer(
@@ -3387,9 +3502,25 @@ impl StateMachineInstance {
         property: &CoreHandle,
         layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
     ) {
-        self.runtime
-            .borrow_mut()
-            .use_bindable_property_in_layer(property, layer);
+        let Some(layer) = layer else {
+            return;
+        };
+        let Some(property) = self.bindable_property_instance(property) else {
+            return;
+        };
+        let Some(data_bind) = self.bindable_data_bind_to_target(&property) else {
+            return;
+        };
+        let source = data_bind
+            .with(|data_bind| data_bind.as_data_bind().and_then(DataBind::source))
+            .flatten();
+        if let Some(source) = source {
+            source.with_mut(|source| {
+                if let Some(source) = source.as_view_model_instance_value_mut() {
+                    source.use_in_layer(layer);
+                }
+            });
+        }
     }
 
     pub fn get_bool(&self, name: &str) -> Option<&SMIBool> {
@@ -3535,14 +3666,12 @@ impl StateMachineInstance {
             else {
                 continue;
             };
-            let invocation = self
-                .runtime
-                .borrow_mut()
-                .listener_invocation_view_model(view_model.clone());
-            let runtime = Rc::clone(&self.runtime);
-            runtime
-                .borrow_mut()
-                .listener_perform_changes(&listener, self, &invocation);
+            let index = self
+                .listener_view_models
+                .iter()
+                .position(|candidate| candidate.downgrade().ptr_eq(view_model))
+                .expect("a reported view-model listener remains owned until dispatch");
+            self.perform_listener_changes(&listener, ListenerInvocation::view_model_change(index));
         }
     }
 
@@ -3565,10 +3694,7 @@ impl StateMachineInstance {
             if !self.listener_has(&listener, ListenerType::Event) {
                 continue;
             }
-            let target = self.runtime.borrow_mut().artboard_resolve(
-                &self.artboard_instance,
-                self.runtime.borrow_mut().listener_target_id(&listener),
-            );
+            let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
             if source
                 .as_ref()
                 .is_some_and(|source| target.as_ref() != Some(source))
@@ -3576,47 +3702,65 @@ impl StateMachineInstance {
                 continue;
             }
             let source_artboard = if let Some(source) = source.as_ref() {
-                self.runtime.borrow_mut().nested_artboard_instance(source)
+                source
+                    .with(|source| {
+                        source
+                            .as_nested_artboard()
+                            .and_then(|nested| nested.artboard_instance_default())
+                    })
+                    .flatten()
+                    .map(|artboard| artboard.downgrade())
+                    .expect("an event source retains its nested ArtboardInstance")
             } else {
                 self.artboard_instance.clone()
             };
             for report in events {
                 if source.is_none() {
-                    let resolved_target = self.runtime.borrow_mut().artboard_resolve(
-                        &source_artboard,
-                        self.runtime.borrow_mut().listener_target_id(&listener),
-                    );
+                    let resolved_target = source_artboard
+                        .with_artboard(|artboard| {
+                            artboard.resolve_handle(Self::listener_target_id(&listener))
+                        })
+                        .flatten();
                     if resolved_target.as_ref().is_some_and(|resolved_target| {
-                        !self
-                            .runtime
-                            .borrow_mut()
-                            .component_is_artboard(resolved_target)
-                            && !self.runtime.borrow_mut().object_is_event(resolved_target)
+                        !resolved_target.is_type_of(crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY)
+                            && !resolved_target.is_type_of(EventBase::TYPE_KEY)
                     }) {
                         continue;
                     }
                 }
-                for event_id in self.runtime.borrow_mut().listener_event_ids(&listener) {
-                    if self
-                        .runtime
-                        .borrow_mut()
-                        .artboard_resolve(&source_artboard, event_id)
+                let single_event =
+                    listener.with_downcast::<StateMachineListenerSingle, _>(|listener| {
+                        listener.base.event_id()
+                    });
+                let event_ids = if let Some(event_id) = single_event {
+                    vec![event_id]
+                } else {
+                    listener.with(|listener| listener.state_machine_listener_input_types()).flatten()
+                        .expect("a listener retains its input types").into_iter()
+                        .filter_map(|input| input.with_downcast::<crate::mechanical_port::source::animation::listener_types::listener_input_type_event::ListenerInputTypeEvent, _>(|input| input.base.event_id()))
+                        .collect()
+                };
+                let mut matched = false;
+                for event_id in event_ids {
+                    if source_artboard
+                        .with_artboard(|artboard| artboard.resolve_handle(event_id))
+                        .flatten()
                         .as_ref()
                         == report.event.as_ref()
                     {
                         let Some(event) = report.event.as_ref() else {
                             continue;
                         };
-                        let invocation = self
-                            .runtime
-                            .borrow_mut()
-                            .listener_invocation_event(event, report.seconds_delay);
-                        let runtime = Rc::clone(&self.runtime);
-                        runtime
-                            .borrow_mut()
-                            .listener_perform_changes(&listener, self, &invocation);
+                        self.perform_listener_changes(
+                            &listener,
+                            ListenerInvocation::reported_event(event.clone(), report.seconds_delay),
+                        );
+                        matched = true;
                         break;
                     }
+                }
+                if matched && single_event.is_some() {
+                    break;
                 }
             }
         }

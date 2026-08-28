@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::mechanical_port::source::{
+    animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
     component_dirt::ComponentDirt,
     core::CoreHandle,
     core_context::CoreContext,
@@ -111,6 +112,7 @@ pub struct ViewModelInstanceValue {
     delegates_copy: Vec<ViewModelInstanceValueDelegateWeakHandle>,
     dependents: Vec<ValueDependentHandle>,
     view_model_instance: Option<CoreHandle>,
+    used_layers: Vec<RuntimeStateMachineLayerInstanceWeakHandle>,
 }
 
 impl std::ops::Deref for ViewModelInstanceValue {
@@ -135,6 +137,7 @@ impl Default for ViewModelInstanceValue {
             delegates_copy: Vec::new(),
             dependents: Vec::new(),
             view_model_instance: None,
+            used_layers: Vec::new(),
         }
     }
 }
@@ -265,8 +268,18 @@ impl ViewModelInstanceValue {
     }
 
     pub fn advanced(&mut self) {
-        self.base.used_layers_mut().clear();
+        self.used_layers.clear();
         self.clear_flag(ValueFlags::ValueChanged);
+    }
+
+    pub fn is_used_in_layer(&self, layer: &RuntimeStateMachineLayerInstanceWeakHandle) -> bool {
+        self.used_layers.iter().any(|used| used.ptr_eq(layer))
+    }
+
+    pub fn use_in_layer(&mut self, layer: RuntimeStateMachineLayerInstanceWeakHandle) {
+        if !self.is_used_in_layer(&layer) {
+            self.used_layers.push(layer);
+        }
     }
 
     pub fn set_view_model_instance(&mut self, value: CoreHandle) {

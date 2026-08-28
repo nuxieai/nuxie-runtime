@@ -1,37 +1,25 @@
-use crate::mechanical_port::source::semantic::{
-    semantic_provider::ResolvedSemanticData, semantic_role::SemanticRole,
+use crate::mechanical_port::source::{
+    core::CoreHandle, semantic::semantic_provider::ResolvedSemanticData,
 };
 
-pub trait InferenceComponent {
-    fn is_text(&self) -> bool;
-    fn text_runs(&self) -> &[Option<String>];
+pub fn supports_inferred_semantics(component: Option<&CoreHandle>) -> bool {
+    component
+        .and_then(|component| component.with(|component| component.semantic_provider_can_infer()))
+        .unwrap_or(false)
 }
 
-pub fn supports_inferred_semantics(component: Option<&dyn InferenceComponent>) -> bool {
-    { component.is_some_and(InferenceComponent::is_text) }
-}
 pub fn resolve_inferred_semantics(
-    component: Option<&dyn InferenceComponent>,
+    component: Option<&CoreHandle>,
     out: &mut ResolvedSemanticData,
 ) -> bool {
-    {
-        let Some(component) = component else {
-            return false;
-        };
-        if !component.is_text() {
-            return false;
-        }
-        let label: String = component
-            .text_runs()
-            .iter()
-            .filter_map(|run| run.as_deref())
-            .collect();
-        if label.is_empty() {
-            return false;
-        }
-        out.has_semantics = true;
-        out.role = SemanticRole::Text as u32;
-        out.label = label;
-        true
-    }
+    let Some(inferred) = component
+        .and_then(|component| {
+            component.with(|component| component.semantic_provider_inferred_data())
+        })
+        .flatten()
+    else {
+        return false;
+    };
+    *out = inferred;
+    true
 }

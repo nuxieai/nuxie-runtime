@@ -50,7 +50,6 @@ use crate::mechanical_port::source::{
         semantic_data::SemanticData,
         semantic_manager::RuntimeSemanticManagerHandle,
         semantic_node::{SemanticNode, SemanticNodeRef},
-        semantic_snapshot::Bounds,
     },
     shapes::{clipping_shape::ClippingShape, paint::shape_paint::ShapePaint, shape::Shape},
     status_code::StatusCode,
@@ -2458,33 +2457,18 @@ impl Artboard {
                 self.semantic_boundary_node = Some(boundary);
             }
             let boundary = self.semantic_boundary_node.clone().unwrap();
-            semantic_manager.with_semantic_manager_mut(|manager| {
-                manager.add_child(parent_semantic_node, boundary.clone())
-            });
+            semantic_manager.add_child(parent_semantic_node, boundary.clone());
             self.mark_semantic_boundary_transform_dirty();
             effective_parent = Some(boundary);
         }
 
         for object in self.objects.iter().flatten() {
-            let parent = object
-                .with(|object| object.component_parent_handle())
-                .flatten()
-                .and_then(|parent| SemanticData::find_closest_semantic_node_handle(Some(parent)))
-                .or_else(|| effective_parent.clone());
-            let manager_ref = semantic_manager.semantic_manager_ref();
             object.with_mut(|candidate| {
-                let core_owner = candidate.component_parent_handle();
                 let Some(semantic_data) = candidate.as_semantic_data_mut() else {
                     return;
                 };
-                let node = semantic_data.semantic_node(
-                    false,
-                    core_owner,
-                    object.clone(),
-                    Bounds::default(),
-                );
-                semantic_data.attach(manager_ref, parent.clone());
-                semantic_data.sync_semantic_tree_visibility(false, false, false, parent);
+                let node = semantic_data
+                    .register_with_manager(semantic_manager.clone(), effective_parent.clone());
                 debug_assert!(
                     semantic_data
                         .existing_semantic_node()
@@ -2577,16 +2561,13 @@ impl Artboard {
         }
         for object in self.objects.iter().flatten() {
             object.with_mut(|object| {
-                if let Some(semantic_data) = object.as_semantic_data_mut()
-                    && let Some(node) = semantic_data.existing_semantic_node()
-                    && semantic_data.manager_is(&manager.semantic_manager_ref())
-                {
-                    manager.with_semantic_manager_mut(|manager| manager.remove_child(&node));
+                if let Some(semantic_data) = object.as_semantic_data_mut() {
+                    semantic_data.detach_if_managed_by(&manager);
                 }
             });
         }
         if let Some(boundary) = self.semantic_boundary_node.take() {
-            manager.with_semantic_manager_mut(|manager| manager.remove_child(&boundary));
+            manager.remove_child(&boundary);
         }
         self.active_semantic_manager = None;
     }
@@ -2597,10 +2578,11 @@ impl Artboard {
             let semantic_data = child.borrow().semantic_data.clone();
             if let Some(semantic_data) = semantic_data {
                 semantic_data.with_mut(|semantic_data| {
-                    if let Some(semantic_data) = semantic_data.as_semantic_data_mut()
-                        && semantic_data.is_collapsed() != value
+                    if semantic_data
+                        .as_semantic_data()
+                        .is_some_and(|semantic_data| semantic_data.is_collapsed() != value)
                     {
-                        semantic_data.collapse(value, child.borrow().parent());
+                        semantic_data.component_collapse(value);
                     }
                 });
             }
@@ -2627,10 +2609,11 @@ impl Artboard {
     fn collapse_semantic_objects(&mut self, value: bool) {
         for object in self.objects.iter().flatten() {
             object.with_mut(|object| {
-                if let Some(semantic_data) = object.as_semantic_data_mut()
-                    && semantic_data.is_collapsed() != value
+                if object
+                    .as_semantic_data()
+                    .is_some_and(|semantic_data| semantic_data.is_collapsed() != value)
                 {
-                    semantic_data.collapse(value, None);
+                    object.component_collapse(value);
                 }
             });
         }

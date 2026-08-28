@@ -9,7 +9,7 @@ use crate::mechanical_port::source::semantic::{
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
-    rc::Rc,
+    rc::{Rc, Weak},
 };
 
 #[derive(Clone)]
@@ -35,8 +35,36 @@ impl RuntimeSemanticManagerHandle {
         Rc::ptr_eq(&self.0, &other.0)
     }
 
-    pub fn semantic_manager_ref(&self) -> Rc<RefCell<SemanticManager>> {
-        self.0.clone()
+    pub fn downgrade(&self) -> RuntimeSemanticManagerWeakHandle {
+        RuntimeSemanticManagerWeakHandle(Rc::downgrade(&self.0))
+    }
+
+    pub fn add_child(&self, parent: Option<SemanticNodeRef>, child: SemanticNodeRef) {
+        self.0.borrow_mut().add_child(parent, child.clone());
+        child.borrow_mut().manager = Some(self.downgrade());
+    }
+
+    pub fn remove_child(&self, node: &SemanticNodeRef) {
+        self.0.borrow_mut().remove_child(node);
+        let mut node = node.borrow_mut();
+        if node
+            .manager
+            .as_ref()
+            .and_then(RuntimeSemanticManagerWeakHandle::upgrade)
+            .as_ref()
+            .is_some_and(|manager| manager.ptr_eq(self))
+        {
+            node.manager = None;
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct RuntimeSemanticManagerWeakHandle(Weak<RefCell<SemanticManager>>);
+
+impl RuntimeSemanticManagerWeakHandle {
+    pub fn upgrade(&self) -> Option<RuntimeSemanticManagerHandle> {
+        self.0.upgrade().map(RuntimeSemanticManagerHandle)
     }
 }
 
@@ -121,7 +149,7 @@ impl SemanticManager {
             self.next_local_id = node.id.wrapping_add(1);
         }
     }
-    pub fn add_child(&mut self, parent: Option<SemanticNodeRef>, child: SemanticNodeRef) {
+    fn add_child(&mut self, parent: Option<SemanticNodeRef>, child: SemanticNodeRef) {
         let id = child.borrow().id;
         if id != 0
             && self
@@ -146,7 +174,7 @@ impl SemanticManager {
         }
         self.mark_dirty(SemanticDirt::STRUCTURE);
     }
-    pub fn remove_child(&mut self, node: &SemanticNodeRef) {
+    fn remove_child(&mut self, node: &SemanticNodeRef) {
         if let Some(parent) = node.borrow().parent() {
             parent
                 .borrow_mut()

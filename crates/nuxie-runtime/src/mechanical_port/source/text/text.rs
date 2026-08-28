@@ -23,6 +23,7 @@ use crate::mechanical_port::source::{
         vec2d::Vec2D,
     },
     renderer::{BlendMode, ImageSampler, RenderPaintStyle, Renderer, to_render_raw_path},
+    semantic::{semantic_provider::ResolvedSemanticData, semantic_role::SemanticRole},
     shapes::{
         paint::color::{ColorInt, color_modulate_opacity},
         shape_paint_path::ShapePaintPath,
@@ -588,6 +589,18 @@ impl Text {
     }
     pub fn runs(&self) -> &[TextValueRunHandle] {
         &self.all_runs
+    }
+    pub(crate) fn inferred_semantic_data(&self) -> Option<ResolvedSemanticData> {
+        let label = self
+            .all_runs
+            .iter()
+            .filter_map(|run| run.with(|run| run.base.text().to_owned()))
+            .collect::<String>();
+        (!label.is_empty()).then_some(ResolvedSemanticData {
+            has_semantics: true,
+            role: SemanticRole::Text as u32,
+            label,
+        })
     }
     pub fn have_modifiers(&self) -> bool {
         !self.modifier_groups.is_empty()

@@ -1,4 +1,10 @@
-use crate::mechanical_port::source::{core::CoreHandle, semantic::semantic_snapshot::Bounds};
+use crate::mechanical_port::source::{
+    core::CoreHandle,
+    semantic::{
+        semantic_manager::{RuntimeSemanticManagerHandle, RuntimeSemanticManagerWeakHandle},
+        semantic_snapshot::Bounds,
+    },
+};
 use std::{
     cell::RefCell,
     rc::{Rc, Weak},
@@ -10,6 +16,7 @@ pub struct SemanticNode {
     pub(crate) id: u32,
     pub(crate) parent: Weak<RefCell<SemanticNode>>,
     pub(crate) children: Vec<SemanticNodeRef>,
+    pub(crate) manager: Option<RuntimeSemanticManagerWeakHandle>,
     pub role: u32,
     pub state_flags: u32,
     pub label: String,
@@ -29,6 +36,7 @@ impl SemanticNode {
             id,
             parent: Weak::new(),
             children: Vec::new(),
+            manager: None,
             role: 0,
             state_flags: 0,
             label: String::new(),
@@ -56,5 +64,10 @@ impl SemanticNode {
     }
     pub fn children(&self) -> &[SemanticNodeRef] {
         &self.children
+    }
+    pub fn manager(&self) -> Option<RuntimeSemanticManagerHandle> {
+        self.manager
+            .as_ref()
+            .and_then(RuntimeSemanticManagerWeakHandle::upgrade)
     }
 }

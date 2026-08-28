@@ -859,16 +859,21 @@ impl StateMachineLayerInstance {
                     })
                     .flatten()
                     .expect("an authored StateTransition must expose exit time");
-                let exit_time = out_state
-                    .first_animation(|animation| {
-                        if flags & 32 != 0 {
-                            animation.start_time()
-                                + authored_exit_time as f32 / 100.0 * animation.duration_seconds()
-                        } else {
-                            authored_exit_time as f32 / 1000.0
-                        }
-                    })
-                    .unwrap_or(0.0);
+                let exit_time = if flags & 32 != 0 {
+                    let exit_animation = transition
+                        .with_downcast::<crate::mechanical_port::source::animation::blend_state_transition::BlendStateTransition, _>(|transition| transition.exit_time_animation(Some(&out_state)))
+                        .unwrap_or_else(|| hold_animation.clone());
+                    let (start, duration) = exit_animation
+                        .and_then(|animation| {
+                            animation.with_downcast::<LinearAnimation, _>(|animation| {
+                                (animation.start_time(), animation.duration_seconds())
+                            })
+                        })
+                        .unwrap_or((0.0, 0.0));
+                    start + authored_exit_time as f32 / 100.0 * duration
+                } else {
+                    authored_exit_time as f32 / 1000.0
+                };
                 out_state.first_animation(|animation| animation.set_time(exit_time));
                 true
             } else {

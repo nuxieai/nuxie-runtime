@@ -19,9 +19,7 @@ use super::lua_blob::{ScriptedBlob, ScriptedBlobAssets};
 use super::lua_font::{ScriptedFont, create_asset_font};
 use super::lua_image::{ScriptedImage, create_asset_image};
 
-type ViewModelInstance = Rc<RefCell<RuntimeOwnedViewModelInstance>>;
-type ViewModelInstanceWeak = Weak<RefCell<RuntimeOwnedViewModelInstance>>;
-type ViewModelInstanceKey = usize;
+type ViewModelInstanceKey = (u8, usize, usize, u64);
 
 const PROPERTY_METATABLE_PATCHER: &str = "rive_property_metatable_patcher";
 const PROPERTY_LISTENER_FLUSH: &str = "rive_property_listener_flush";
@@ -108,18 +106,13 @@ impl ScriptedPropertyListenerOwner {
     }
 }
 
-fn instance_key(instance: &ViewModelInstance) -> ViewModelInstanceKey {
-    Rc::as_ptr(instance) as usize
-}
-
 #[derive(Default)]
 struct TrackedViewModels {
     instances: BTreeMap<ViewModelInstanceKey, TrackedViewModel>,
 }
 
 struct TrackedViewModel {
-    instance: ViewModelInstanceWeak,
-    strong_instance: Option<ViewModelInstance>,
+    instance: ScriptViewModel,
     registrations: usize,
 }
 
@@ -161,36 +154,24 @@ impl ScriptViewModelFrameContext {
 
     fn ensure_entry<'a>(
         tracked: &'a mut TrackedViewModels,
-        instance: &ViewModelInstance,
+        instance: &ScriptViewModel,
     ) -> &'a mut TrackedViewModel {
-        let key = instance_key(instance);
-        let replace = tracked.instances.get(&key).is_some_and(|entry| {
-            entry
-                .instance
-                .upgrade()
-                .is_none_or(|current| !Rc::ptr_eq(&current, instance))
-        });
-        if replace {
-            tracked.instances.remove(&key);
-        }
+        let key = instance.identity_key();
         tracked
             .instances
             .entry(key)
             .or_insert_with(|| TrackedViewModel {
-                instance: Rc::downgrade(instance),
-                strong_instance: None,
+                instance: instance.clone(),
                 registrations: 0,
             })
     }
 
     pub(crate) fn register(&self, model: &ScriptViewModel) -> ScriptViewModelRegistration {
-        let instance = model.owned_instance();
-        let key = instance_key(&instance);
+        let key = model.identity_key();
         {
             let mut tracked = self.tracked.borrow_mut();
-            let entry = Self::ensure_entry(&mut tracked, &instance);
+            let entry = Self::ensure_entry(&mut tracked, model);
             entry.registrations = entry.registrations.saturating_add(1);
-            entry.strong_instance = Some(Rc::clone(&instance));
         }
         ScriptViewModelRegistration {
             tracked: Rc::downgrade(&self.tracked),
@@ -300,20 +281,14 @@ impl ScriptViewModelFrameContext {
         changed |= self.dispatch_property_watches();
         let roots = {
             let mut tracked = self.tracked.borrow_mut();
-            tracked
-                .instances
-                .retain(|_, entry| entry.registrations > 0 && entry.instance.strong_count() > 0);
+            tracked.instances.retain(|_, entry| entry.registrations > 0);
             tracked
                 .instances
                 .values()
-                .filter_map(|entry| {
-                    let instance = entry.instance.upgrade()?;
-                    let is_detached = !instance.borrow().has_parents();
-                    is_detached.then_some(instance)
-                })
+                .filter_map(|entry| (!entry.instance.has_parents()).then(|| entry.instance.clone()))
                 .collect::<Vec<_>>()
         };
-        changed |= ScriptViewModel::advance_owned_instances(&roots);
+        changed |= ScriptViewModel::advance_script_models(&roots);
         // Trigger reset cascades ordinary dirt even though C++ suppresses its
         // delegate callback. Consume that reset dirt so it cannot replay the
         // Lua listener on the next host frame.
@@ -326,7 +301,7 @@ impl ScriptViewModelFrameContext {
         self.tracked
             .borrow()
             .instances
-            .get(&instance_key(&model.owned_instance()))
+            .get(&model.identity_key())
             .map(|entry| entry.registrations)
             .unwrap_or_default()
     }
@@ -348,7 +323,7 @@ impl Drop for ScriptViewModelRegistration {
         };
         entry.registrations = entry.registrations.saturating_sub(1);
         if entry.registrations == 0 {
-            entry.strong_instance = None;
+            tracked.instances.remove(&self.key);
         }
     }
 }
@@ -910,7 +885,7 @@ impl UserData for ScriptedPropertyViewModel {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
                 return Ok(Value::Table(cached.clone()));
             }
-            let Some(model) = this.parent.active_view_model(&this.name) else {
+            let Some(model) = this.parent.view_model(&this.name) else {
                 return Ok(Value::Nil);
             };
             let value = create_scripted_view_model_with_listener_owner(
@@ -1491,14 +1466,13 @@ impl UserData for ScriptedPropertyFont {
             Ok(Value::UserData(value))
         });
         fields.add_field_method_set("value", |_, this, value: Value| {
-            let font_bytes = match value {
+            let font = match value {
                 Value::Nil => None,
-                Value::UserData(font) => Some(font.borrow::<ScriptedFont>()?.font_bytes()),
+                Value::UserData(font) => Some(font.borrow::<ScriptedFont>()?.font()),
                 _ => return Err(luaur_rt::Error::runtime("expected Font userdata or nil")),
             };
-            this.model.defer_property_change_callbacks(|| {
-                this.model.set_font_bytes(&this.name, font_bytes)
-            });
+            this.model
+                .defer_property_change_callbacks(|| this.model.set_font(&this.name, font.as_ref()));
             Ok(())
         });
     }
@@ -1540,7 +1514,7 @@ impl ScriptedPropertyList {
     fn retain_current_item_refs(&mut self) {
         let current = (0..self.model.list_len(&self.name).unwrap_or_default())
             .filter_map(|index| self.model.list_item(&self.name, index))
-            .map(|item| instance_key(&item.owned_instance()))
+            .map(|item| item.identity_key())
             .collect::<BTreeSet<_>>();
         self.item_refs.retain(|key, _| current.contains(key));
     }
@@ -1553,7 +1527,7 @@ impl ScriptedPropertyList {
             // edges. Do not add an explicit edge here: removing the item must
             // make a retained wrapper detached immediately.
             Some(item) => {
-                let key = instance_key(&item.owned_instance());
+                let key = item.identity_key();
                 if let Some(table) = self.item_refs.get(&key) {
                     return Ok(Value::Table(table.clone()));
                 }

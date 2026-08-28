@@ -23,6 +23,7 @@ impl ScriptedFontAssetOwners {
 /// upstream `rcp<Font>` member and runs its destructor with the userdata.
 pub(super) struct ScriptedFont {
     font_bytes: Arc<[u8]>,
+    font: ScriptFont,
 }
 
 impl ScriptedFont {
@@ -31,11 +32,16 @@ impl ScriptedFont {
             let asset_global_id = font.asset_global_id()?;
             ScriptedFontAssetOwners::for_lua(lua)?.get(asset_global_id)
         })?;
-        Some(Self { font_bytes })
+        let font = font.with_resolved_font_bytes(font_bytes.clone());
+        Some(Self { font_bytes, font })
     }
 
     pub(super) fn font_bytes(&self) -> Arc<[u8]> {
         Arc::clone(&self.font_bytes)
+    }
+
+    pub(super) fn font(&self) -> ScriptFont {
+        self.font.clone()
     }
 }
 

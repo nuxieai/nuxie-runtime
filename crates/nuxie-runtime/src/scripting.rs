@@ -1229,12 +1229,24 @@ fn script_blend_mode(value: u32) -> BlendMode {
 pub struct ScriptViewModel {
     properties: BTreeMap<String, ScriptViewModelProperty>,
     nested_view_models: BTreeMap<String, ScriptViewModel>,
-    context: RuntimeOwnedViewModelContextHandle,
-    file: Rc<RuntimeFile>,
+    backing: ScriptViewModelBacking,
     view_model_index: usize,
     ancestors: Rc<Vec<usize>>,
     blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
     change_callbacks: ScriptViewModelChangeCallbacks,
+}
+
+#[path = "scripting/native_view_model.rs"]
+mod native_view_model;
+use native_view_model::NativeScriptViewModel;
+
+#[derive(Debug, Clone)]
+enum ScriptViewModelBacking {
+    Legacy {
+        context: RuntimeOwnedViewModelContextHandle,
+        file: Rc<RuntimeFile>,
+    },
+    Native(NativeScriptViewModel),
 }
 
 type ScriptViewModelChangeCallback = Rc<dyn Fn()>;
@@ -1341,13 +1353,30 @@ pub fn script_image_assets(file: &RuntimeFile) -> ScriptImageAssets {
 /// File-backed values preserve their asset identity until the scripting VM
 /// resolves them through its file-owned font registry. Live values retain the
 /// exact byte owner installed by the host or another scripted property.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ScriptFont {
     asset_global_id: Option<u32>,
     live_font_bytes: Option<Arc<[u8]>>,
+    native_font: Option<crate::mechanical_port::source::text_engine::FontRef>,
+}
+
+impl std::fmt::Debug for ScriptFont {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScriptFont")
+            .field("asset_global_id", &self.asset_global_id)
+            .field("live_font_bytes", &self.live_font_bytes)
+            .field("native_font", &self.native_font.is_some())
+            .finish()
+    }
 }
 
 impl ScriptFont {
+    #[doc(hidden)]
+    pub fn with_resolved_font_bytes(mut self, bytes: Arc<[u8]>) -> Self {
+        self.live_font_bytes = Some(bytes);
+        self
+    }
+
     #[doc(hidden)]
     pub fn asset_global_id(&self) -> Option<u32> {
         self.asset_global_id
@@ -1371,9 +1400,114 @@ impl ScriptImage {
 }
 
 impl ScriptViewModel {
+    /// Construct the approved scripting facade around the translated occurrence.
+    pub fn from_native(
+        instance: crate::mechanical_port::source::core::CoreHandle,
+        file: crate::mechanical_port::source::file::RuntimeFileHandle,
+    ) -> Option<Self> {
+        let model = instance
+            .with(|instance| instance.as_view_model_instance()?.get_view_model())
+            .flatten()?;
+        Some(Self::from_native_definition(model, Some(instance), file))
+    }
+
+    fn from_native_definition(
+        model: crate::mechanical_port::source::core::CoreHandle,
+        instance: Option<crate::mechanical_port::source::core::CoreHandle>,
+        file: crate::mechanical_port::source::file::RuntimeFileHandle,
+    ) -> Self {
+        let native = NativeScriptViewModel {
+            instance,
+            model,
+            file,
+        };
+        let properties = native.properties();
+        Self {
+            properties,
+            nested_view_models: BTreeMap::new(),
+            backing: ScriptViewModelBacking::Native(native),
+            view_model_index: 0,
+            ancestors: Rc::new(Vec::new()),
+            blob_assets: Rc::new(RefCell::new(BTreeMap::new())),
+            change_callbacks: ScriptViewModelChangeCallbacks::default(),
+        }
+    }
+
+    fn native(&self) -> Option<&NativeScriptViewModel> {
+        match &self.backing {
+            ScriptViewModelBacking::Native(native) => Some(native),
+            _ => None,
+        }
+    }
+
+    pub fn native_instance(&self) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.native()?.instance.clone()
+    }
+
+    /// Exact identity for VM userdata caches and owner-counted registrations.
+    pub fn identity_key(&self) -> (u8, usize, usize, u64) {
+        if let Some(native) = self.native() {
+            let (arena, slot, generation) = native
+                .instance
+                .as_ref()
+                .unwrap_or(&native.model)
+                .identity_key();
+            return (
+                if native.instance.is_some() { 1 } else { 2 },
+                arena,
+                slot,
+                generation,
+            );
+        }
+        (
+            0,
+            Rc::as_ptr(&self.legacy_context().root_handle().shared()) as usize,
+            0,
+            0,
+        )
+    }
+
+    fn legacy_context(&self) -> &RuntimeOwnedViewModelContextHandle {
+        match &self.backing {
+            ScriptViewModelBacking::Legacy { context, .. } => context,
+            ScriptViewModelBacking::Native(_) => {
+                panic!("native ViewModel cannot be projected into a legacy graph")
+            }
+        }
+    }
+
+    fn legacy_file(&self) -> &Rc<RuntimeFile> {
+        match &self.backing {
+            ScriptViewModelBacking::Legacy { file, .. } => file,
+            ScriptViewModelBacking::Native(_) => {
+                panic!("native ViewModel cannot use a legacy RuntimeFile")
+            }
+        }
+    }
+
+    pub fn advance_script_models(models: &[Self]) -> bool {
+        let mut seen_native = BTreeSet::new();
+        let mut legacy = Vec::new();
+        let mut changed = false;
+        for model in models {
+            if let Some(native) = model.native() {
+                if seen_native.insert(model.identity_key()) {
+                    changed |= native.advance();
+                }
+            } else {
+                legacy.push(model.owned_instance());
+            }
+        }
+        changed | Self::advance_owned_instances(&legacy)
+    }
+
     /// Read the retained runtime's structural parent topology.
     pub fn has_parents(&self) -> bool {
-        self.context.root_handle().borrow().has_parents()
+        if let Some(native) = self.native() {
+            return native.has_parents();
+        }
+
+        self.legacy_context().root_handle().borrow().has_parents()
     }
 
     pub fn property(&self, name: &str) -> Option<ScriptViewModelProperty> {
@@ -1389,9 +1523,13 @@ impl ScriptViewModel {
     /// Lua property delegates use this to observe host/state-machine writes
     /// before the end-of-frame reset consumes transient trigger values.
     pub fn property_dirt_sink(&self, name: &str) -> Option<RuntimeCellDirtSink> {
+        if let Some(native) = self.native() {
+            return native.property_dirt_sink(name);
+        }
+
         let path = self.scoped_property_path(name)?;
         let cell = self
-            .context
+            .legacy_context()
             .root_handle()
             .borrow()
             .cell_by_property_path(&path)?;
@@ -1506,18 +1644,23 @@ impl ScriptViewModel {
     }
 
     pub fn named_instance(&self, name: Option<&str>) -> Option<Self> {
+        if let Some(native) = self.native() {
+            return native.named_instance(name);
+        }
+
         let instance = match name {
-            Some(name) => {
-                crate::view_model::RuntimeAuthoredViewModel::new(&self.file, self.view_model_index)?
-                    .create_from_instance(name)
-                    .or_else(|| {
-                        RuntimeOwnedViewModelInstance::new(&self.file, self.view_model_index)
-                    })?
-            }
-            None => RuntimeOwnedViewModelInstance::new(&self.file, self.view_model_index)?,
+            Some(name) => crate::view_model::RuntimeAuthoredViewModel::new(
+                self.legacy_file(),
+                self.view_model_index,
+            )?
+            .create_from_instance(name)
+            .or_else(|| {
+                RuntimeOwnedViewModelInstance::new(self.legacy_file(), self.view_model_index)
+            })?,
+            None => RuntimeOwnedViewModelInstance::new(self.legacy_file(), self.view_model_index)?,
         };
         build_script_view_model_with_blob_assets(
-            Rc::clone(&self.file),
+            Rc::clone(self.legacy_file()),
             self.view_model_index,
             instance,
             self.ancestors.as_slice(),
@@ -1530,27 +1673,37 @@ impl ScriptViewModel {
     /// Scoped integrations should prefer [`Self::owned_handle`] so a nested
     /// view model keeps its property path as well as the shared root identity.
     pub fn owned_instance(&self) -> Rc<RefCell<RuntimeOwnedViewModelInstance>> {
-        self.context.root_handle().shared()
+        self.legacy_context().root_handle().shared()
     }
 
     pub fn owned_handle(&self) -> RuntimeOwnedViewModelContextHandle {
-        self.context.clone()
+        self.legacy_context().clone()
     }
 
     pub fn number(&self, name: &str) -> Option<f32> {
+        if let Some(native) = self.native() {
+            return native.number(name);
+        }
+
         let path = self.scoped_property_path(name)?;
-        self.context
+        self.legacy_context()
             .root_handle()
             .borrow()
             .number_value_by_property_path(&path)
     }
 
     pub fn set_number(&self, name: &str, value: f32) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_number(name, value);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .set_number_by_property_path(&path, value)
@@ -1559,19 +1712,29 @@ impl ScriptViewModel {
     }
 
     pub fn color(&self, name: &str) -> Option<u32> {
+        if let Some(native) = self.native() {
+            return native.color(name);
+        }
+
         let path = self.scoped_property_path(name)?;
-        self.context
+        self.legacy_context()
             .root_handle()
             .borrow()
             .color_value_by_property_path(&path)
     }
 
     pub fn set_color(&self, name: &str, value: u32) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_color(name, value);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .set_color_by_property_path(&path, value)
@@ -1580,8 +1743,12 @@ impl ScriptViewModel {
     }
 
     pub fn string(&self, name: &str) -> Option<String> {
+        if let Some(native) = self.native() {
+            return native.string(name);
+        }
+
         let path = self.scoped_property_path(name)?;
-        self.context
+        self.legacy_context()
             .root_handle()
             .borrow()
             .string_value_by_property_path(&path)
@@ -1589,11 +1756,17 @@ impl ScriptViewModel {
     }
 
     pub fn set_string(&self, name: &str, value: &str) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_string(name, value);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .set_string_by_property_path(&path, value.as_bytes())
@@ -1602,40 +1775,52 @@ impl ScriptViewModel {
     }
 
     pub fn boolean(&self, name: &str) -> Option<bool> {
+        if let Some(native) = self.native() {
+            return native.boolean(name);
+        }
+
         let path = self.scoped_property_path(name)?;
-        self.context
+        self.legacy_context()
             .root_handle()
             .borrow()
             .boolean_value_by_property_path(&path)
     }
 
     pub fn enum_value(&self, name: &str) -> Option<String> {
+        if let Some(native) = self.native() {
+            return native.enum_value(name);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Enum) {
             return None;
         }
         let path = self.scoped_property_path(name)?;
         let value_index = usize::try_from(
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow()
                 .enum_value_by_property_path(&path)?,
         )
         .ok()?;
-        let view_model = self.file.view_model(self.view_model_index)?;
+        let view_model = self.legacy_file().view_model(self.view_model_index)?;
         let property = view_model
             .properties
             .iter()
             .find(|property| property.string_property("name") == Some(name))?;
-        self.file
+        self.legacy_file()
             .view_model_property_enum_value_key_for_index_object(property, value_index)
             .map(|value| String::from_utf8_lossy(value).into_owned())
     }
 
     pub fn enum_values(&self, name: &str) -> Option<Vec<String>> {
+        if let Some(native) = self.native() {
+            return native.enum_values(name);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Enum) {
             return None;
         }
-        let view_model = self.file.view_model(self.view_model_index)?;
+        let view_model = self.legacy_file().view_model(self.view_model_index)?;
         let property = view_model
             .properties
             .iter()
@@ -1643,7 +1828,7 @@ impl ScriptViewModel {
         Some(
             (0..)
                 .map_while(|index| {
-                    self.file
+                    self.legacy_file()
                         .view_model_property_enum_value_key_for_index_object(property, index)
                 })
                 .map(|value| String::from_utf8_lossy(value).into_owned())
@@ -1652,13 +1837,19 @@ impl ScriptViewModel {
     }
 
     pub fn set_enum_value(&self, name: &str, value: &str) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_enum_value(name, value);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Enum) {
             return false;
         }
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
-        let Some(view_model) = self.file.view_model(self.view_model_index) else {
+        let Some(view_model) = self.legacy_file().view_model(self.view_model_index) else {
             return false;
         };
         let Some(property) = view_model
@@ -1669,13 +1860,13 @@ impl ScriptViewModel {
             return false;
         };
         let Some(value_index) = self
-            .file
+            .legacy_file()
             .view_model_property_enum_value_index_for_key_bytes_object(property, value.as_bytes())
         else {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .set_enum_by_property_path(&path, value_index as u64)
@@ -1684,17 +1875,21 @@ impl ScriptViewModel {
     }
 
     pub fn image(&self, name: &str) -> Option<ScriptImage> {
+        if let Some(native) = self.native() {
+            return native.image(name);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Image) {
             return None;
         }
         let path = self.scoped_property_path(name)?;
         let file_asset_index = self
-            .context
+            .legacy_context()
             .root_handle()
             .borrow()
             .asset_value_by_property_path(&path)?;
         let asset = self
-            .file
+            .legacy_file()
             .file_asset(usize::try_from(file_asset_index).ok()?)?;
         (asset.type_name == "ImageAsset").then_some(ScriptImage {
             file_asset_index,
@@ -1703,28 +1898,48 @@ impl ScriptViewModel {
     }
 
     pub fn font(&self, name: &str) -> Option<ScriptFont> {
+        if let Some(native) = self.native() {
+            return native.font(name);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Font) {
             return None;
         }
         let path = self.scoped_property_path(name)?;
         let value = self
-            .context
+            .legacy_context()
             .root_handle()
             .borrow()
             .font_asset_value_by_property_path(&path)?;
         let asset_global_id = usize::try_from(value.file_asset_index())
             .ok()
-            .and_then(|index| self.file.file_asset(index))
+            .and_then(|index| self.legacy_file().file_asset(index))
             .filter(|asset| asset.type_name == "FontAsset")
             .map(|asset| asset.id);
         (asset_global_id.is_some() || value.live_font_bytes_arc().is_some()).then(|| ScriptFont {
             asset_global_id,
             live_font_bytes: value.live_font_bytes_arc().cloned(),
+            native_font: None,
         })
+    }
+
+    pub fn set_font(&self, name: &str, font: Option<&ScriptFont>) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_font(name, font);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+        self.set_font_bytes(name, font.and_then(|font| font.live_font_bytes.clone()))
     }
 
     #[doc(hidden)]
     pub fn set_font_bytes(&self, name: &str, font_bytes: Option<Arc<[u8]>>) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_font_bytes(name, font_bytes);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Font) {
             return false;
         }
@@ -1732,7 +1947,7 @@ impl ScriptViewModel {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .set_live_font_bytes_by_property_path(&path, font_bytes)
@@ -1741,11 +1956,15 @@ impl ScriptViewModel {
     }
 
     pub fn render_image(&self, name: &str) -> Option<Rc<dyn nuxie_render_api::RenderImage>> {
+        if let Some(native) = self.native() {
+            return native.render_image(name);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Image) {
             return None;
         }
         let path = self.scoped_property_path(name)?;
-        self.context
+        self.legacy_context()
             .root_handle()
             .borrow()
             .runtime_image_by_property_path(&path)?
@@ -1753,10 +1972,20 @@ impl ScriptViewModel {
     }
 
     pub fn image_asset_named(&self, name: &str) -> Option<ScriptImage> {
-        script_image_assets(self.file.as_ref()).named(name)
+        if let Some(native) = self.native() {
+            return native.image_asset_named(name);
+        }
+
+        script_image_assets(self.legacy_file().as_ref()).named(name)
     }
 
     pub fn set_image(&self, name: &str, image: Option<ScriptImage>) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_image(name, image);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Image) {
             return false;
         }
@@ -1767,7 +1996,7 @@ impl ScriptViewModel {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .set_asset_by_property_path(&path, file_asset_index)
@@ -1780,6 +2009,12 @@ impl ScriptViewModel {
         name: &str,
         image: Option<Rc<dyn nuxie_render_api::RenderImage>>,
     ) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_render_image(name, image);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Image) {
             return false;
         }
@@ -1787,7 +2022,7 @@ impl ScriptViewModel {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .set_runtime_image_by_property_path(
@@ -1799,12 +2034,16 @@ impl ScriptViewModel {
     }
 
     pub fn blob_asset(&self, name: &str) -> Option<Arc<RuntimeBlobAsset>> {
+        if let Some(native) = self.native() {
+            return native.blob_asset(name);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Blob) {
             return None;
         }
         let path = self.scoped_property_path(name)?;
         let cell = self
-            .context
+            .legacy_context()
             .root_handle()
             .borrow()
             .cell_by_property_path(&path)?;
@@ -1815,7 +2054,7 @@ impl ScriptViewModel {
             return Some(Arc::clone(asset));
         }
         let asset = self
-            .file
+            .legacy_file()
             .file_asset(usize::try_from(value.file_asset_index()).ok()?)?;
         if asset.type_name != "BlobAsset" {
             return None;
@@ -1824,7 +2063,7 @@ impl ScriptViewModel {
             return Some(Arc::clone(retained));
         }
         let bytes = self
-            .file
+            .legacy_file()
             .imported_file_asset_contents(asset.id)
             .map(<[u8]>::to_vec)?;
         let name = asset.string_property("name").unwrap_or_default();
@@ -1840,6 +2079,12 @@ impl ScriptViewModel {
     }
 
     pub fn set_blob(&self, name: &str, bytes: Option<Arc<[u8]>>) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_blob(name, bytes);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Blob) {
             return false;
         }
@@ -1847,7 +2092,7 @@ impl ScriptViewModel {
             return false;
         };
         let Some(cell) = self
-            .context
+            .legacy_context()
             .root_handle()
             .borrow()
             .cell_by_property_path(&path)
@@ -1859,6 +2104,12 @@ impl ScriptViewModel {
     }
 
     pub fn set_blob_asset(&self, name: &str, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_blob_asset(name, asset);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         if self.property(name) != Some(ScriptViewModelProperty::Blob) {
             return false;
         }
@@ -1866,7 +2117,7 @@ impl ScriptViewModel {
             return false;
         };
         let Some(cell) = self
-            .context
+            .legacy_context()
             .root_handle()
             .borrow()
             .cell_by_property_path(&path)
@@ -1879,17 +2130,27 @@ impl ScriptViewModel {
 
     /// Mirrors C++ `ScriptedViewModel::pushIndex` for component-list rows.
     pub fn component_list_item_index(&self) -> Option<u64> {
-        self.context
+        if let Some(native) = self.native() {
+            return native.component_list_item_index();
+        }
+
+        self.legacy_context()
             .detached_snapshot()
             .and_then(|instance| instance.component_list_item_index())
     }
 
     pub fn set_boolean(&self, name: &str, value: bool) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_boolean(name, value);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .set_boolean_by_property_path(&path, value)
@@ -1898,8 +2159,12 @@ impl ScriptViewModel {
     }
 
     pub fn trigger(&self, name: &str) -> Option<u64> {
+        if let Some(native) = self.native() {
+            return native.trigger(name);
+        }
+
         let path = self.scoped_property_path(name)?;
-        self.context
+        self.legacy_context()
             .root_handle()
             .borrow()
             .trigger_value_by_property_path(&path)
@@ -1909,11 +2174,17 @@ impl ScriptViewModel {
     /// does: increment the backing counter and leave consumption/reset to the
     /// end-of-frame `advanced()` pass.
     pub fn fire_trigger(&self, name: &str) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.fire_trigger(name);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .fire_trigger_by_property_path(&path)
@@ -1927,7 +2198,11 @@ impl ScriptViewModel {
     /// without invoking script listeners, embedded view models recurse, and
     /// shared list instances recurse exactly once even if the graph cycles.
     pub fn advance_script_frame(&self) -> bool {
-        Self::advance_owned_instance(&self.context.root_handle().shared())
+        if let Some(native) = self.native() {
+            return native.advance();
+        }
+
+        Self::advance_owned_instance(&self.legacy_context().root_handle().shared())
     }
 
     /// Advance a shared owned instance without requiring its schema wrapper.
@@ -1953,22 +2228,26 @@ impl ScriptViewModel {
     }
 
     pub fn view_model(&self, name: &str) -> Option<Self> {
+        if let Some(native) = self.native() {
+            return native.view_model(name, false);
+        }
+
         let property_index = self
-            .file
+            .legacy_file()
             .view_model(self.view_model_index)?
             .properties
             .iter()
             .position(|property| property.string_property("name") == Some(name))?;
-        let mut property_path = self.context.scope_path().to_vec();
+        let mut property_path = self.legacy_context().scope_path().to_vec();
         property_path.push(property_index);
         let concrete = self
-            .context
+            .legacy_context()
             .root_handle()
             .linked_view_model_by_property_path(&property_path);
         if let Some(concrete) = concrete {
             let view_model_index = concrete.borrow().view_model_index();
             return build_script_view_model_shared_with_blob_assets_and_callbacks(
-                Rc::clone(&self.file),
+                Rc::clone(self.legacy_file()),
                 view_model_index,
                 concrete,
                 self.ancestors.as_slice(),
@@ -1989,21 +2268,25 @@ impl ScriptViewModel {
     /// however, produce `nil` until that property links a concrete occurrence;
     /// this accessor preserves that distinction without discarding the schema.
     pub fn active_view_model(&self, name: &str) -> Option<Self> {
+        if let Some(native) = self.native() {
+            return native.view_model(name, true);
+        }
+
         let property_index = self
-            .file
+            .legacy_file()
             .view_model(self.view_model_index)?
             .properties
             .iter()
             .position(|property| property.string_property("name") == Some(name))?;
-        let mut property_path = self.context.scope_path().to_vec();
+        let mut property_path = self.legacy_context().scope_path().to_vec();
         property_path.push(property_index);
         let concrete = self
-            .context
+            .legacy_context()
             .root_handle()
             .linked_view_model_by_property_path(&property_path)?;
         let view_model_index = concrete.borrow().view_model_index();
         build_script_view_model_shared_with_blob_assets_and_callbacks(
-            Rc::clone(&self.file),
+            Rc::clone(self.legacy_file()),
             view_model_index,
             concrete,
             self.ancestors.as_slice(),
@@ -2015,6 +2298,12 @@ impl ScriptViewModel {
     /// Port of `ScriptedPropertyViewModel::setValue`: replace the actual
     /// retained child occurrence and synchronously notify/relink its parent.
     pub fn set_view_model(&self, name: &str, value: &ScriptViewModel) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.set_view_model(name, value);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(property_path) = self.scoped_property_path(name) else {
             return false;
         };
@@ -2029,7 +2318,7 @@ impl ScriptViewModel {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .link_view_model_by_property_path(&property_path, &value)
                 .unwrap_or(false)
@@ -2038,24 +2327,32 @@ impl ScriptViewModel {
     }
 
     pub fn list_len(&self, name: &str) -> Option<usize> {
+        if let Some(native) = self.native() {
+            return native.list_len(name);
+        }
+
         let path = self.scoped_property_path(name)?;
-        self.context
+        self.legacy_context()
             .root_handle()
             .borrow()
             .list_item_count_by_property_path(&path)
     }
 
     pub fn list_item(&self, name: &str, index: usize) -> Option<Self> {
+        if let Some(native) = self.native() {
+            return native.list_item(name, index);
+        }
+
         let path = self.scoped_property_path(name)?;
         let item = self
-            .context
+            .legacy_context()
             .root_handle()
             .borrow()
             .list_handle_by_property_path(&path)?
             .item_at(index)?;
         let view_model_index = item.borrow().view_model_index();
         build_script_view_model_shared_with_blob_assets_and_callbacks(
-            Rc::clone(&self.file),
+            Rc::clone(self.legacy_file()),
             view_model_index,
             item,
             self.ancestors.as_slice(),
@@ -2065,6 +2362,12 @@ impl ScriptViewModel {
     }
 
     pub fn push_list_item(&self, name: &str, item: &ScriptViewModel) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.insert_list_item(name, None, item);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
@@ -2072,7 +2375,7 @@ impl ScriptViewModel {
         if !item_context.is_root() {
             return false;
         }
-        let root = self.context.root_handle();
+        let root = self.legacy_context().root_handle();
         let changed = self.with_released_listener_callbacks(|| {
             root.push_list_item_by_property_path(&path, item_context.root_handle().shared())
         });
@@ -2080,6 +2383,12 @@ impl ScriptViewModel {
     }
 
     pub fn insert_list_item(&self, name: &str, index: usize, item: &ScriptViewModel) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.insert_list_item(name, Some(index), item);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
@@ -2087,7 +2396,7 @@ impl ScriptViewModel {
         if !item_context.is_root() {
             return false;
         }
-        let root = self.context.root_handle();
+        let root = self.legacy_context().root_handle();
         let changed = self.with_released_listener_callbacks(|| {
             root.insert_list_item_by_property_path(
                 &path,
@@ -2099,9 +2408,13 @@ impl ScriptViewModel {
     }
 
     pub fn pop_list_item(&self, name: &str) -> Option<Self> {
+        if let Some(native) = self.native() {
+            return native.pop_list_item(name, false);
+        }
+
         let path = self.scoped_property_path(name)?;
         let item = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .pop_list_item_by_property_path(&path)
@@ -2109,7 +2422,7 @@ impl ScriptViewModel {
         self.notify_property_change(&path);
         let view_model_index = item.borrow().view_model_index();
         build_script_view_model_shared_with_blob_assets_and_callbacks(
-            Rc::clone(&self.file),
+            Rc::clone(self.legacy_file()),
             view_model_index,
             RuntimeOwnedViewModelHandle::from_shared(item),
             self.ancestors.as_slice(),
@@ -2119,9 +2432,13 @@ impl ScriptViewModel {
     }
 
     pub fn shift_list_item(&self, name: &str) -> Option<Self> {
+        if let Some(native) = self.native() {
+            return native.pop_list_item(name, true);
+        }
+
         let path = self.scoped_property_path(name)?;
         let item = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .shift_list_item_by_property_path(&path)
@@ -2129,7 +2446,7 @@ impl ScriptViewModel {
         self.notify_property_change(&path);
         let view_model_index = item.borrow().view_model_index();
         build_script_view_model_shared_with_blob_assets_and_callbacks(
-            Rc::clone(&self.file),
+            Rc::clone(self.legacy_file()),
             view_model_index,
             RuntimeOwnedViewModelHandle::from_shared(item),
             self.ancestors.as_slice(),
@@ -2139,11 +2456,17 @@ impl ScriptViewModel {
     }
 
     pub fn swap_list_items(&self, name: &str, first: usize, second: usize) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.swap_list_items(name, first, second);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .swap_list_items_by_property_path(&path, first, second)
@@ -2152,11 +2475,17 @@ impl ScriptViewModel {
     }
 
     pub fn clear_list_items(&self, name: &str) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.clear_list_items(name);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .clear_list_items_by_property_path(&path)
@@ -2165,11 +2494,17 @@ impl ScriptViewModel {
     }
 
     pub fn remove_list_item_at(&self, name: &str, index: usize) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.remove_list_item_at(name, index);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .remove_list_item_at_by_property_path(&path, index)
@@ -2178,6 +2513,12 @@ impl ScriptViewModel {
     }
 
     pub fn remove_list_item(&self, name: &str, item: &ScriptViewModel, remove_all: bool) -> bool {
+        if let Some(native) = self.native() {
+            let changed = native.remove_list_item(name, item, remove_all);
+            return self
+                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
+        }
+
         let Some(path) = self.scoped_property_path(name) else {
             return false;
         };
@@ -2187,7 +2528,7 @@ impl ScriptViewModel {
         }
         let item = item_context.root_handle().shared();
         let changed = self.with_released_listener_callbacks(|| {
-            self.context
+            self.legacy_context()
                 .root_handle()
                 .borrow_mut()
                 .remove_list_items_by_identity_at_property_path(&path, &item, remove_all)
@@ -2205,13 +2546,17 @@ impl ScriptViewModel {
     }
 
     fn scoped_property_path(&self, name: &str) -> Option<Vec<usize>> {
+        if let Some(native) = self.native() {
+            return native.property_path(name);
+        }
+
         let property_index = self
-            .file
+            .legacy_file()
             .view_model(self.view_model_index)?
             .properties
             .iter()
             .position(|property| property.string_property("name") == Some(name))?;
-        let mut path = self.context.scope_path().to_vec();
+        let mut path = self.legacy_context().scope_path().to_vec();
         path.push(property_index);
         Some(path)
     }
@@ -2487,8 +2832,7 @@ fn build_script_view_model_scoped_with_blob_assets_and_callbacks(
     Some(ScriptViewModel {
         properties,
         nested_view_models,
-        context,
-        file,
+        backing: ScriptViewModelBacking::Legacy { context, file },
         view_model_index,
         ancestors: Rc::new(ancestors.to_vec()),
         blob_assets,

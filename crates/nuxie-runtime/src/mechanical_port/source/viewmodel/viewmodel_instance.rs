@@ -387,9 +387,10 @@ impl ViewModelInstance {
     pub fn advanced(&mut self) {
         for value in &self.property_values {
             value.with_mut(|value| {
-                if let Some(value) = value.as_view_model_instance_value_mut() {
-                    value.advanced();
-                }
+                assert!(
+                    value.view_model_instance_value_advanced(),
+                    "ViewModel property value advance capability"
+                );
             });
         }
     }

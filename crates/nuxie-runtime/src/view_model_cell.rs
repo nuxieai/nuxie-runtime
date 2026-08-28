@@ -372,6 +372,8 @@ pub struct RuntimeCellDirtSink {
     /// complete parent-first notification path; ordinary sinks leave it
     /// empty and use `notification` directly.
     before_notify: Rc<RefCell<Option<Rc<dyn Fn(RuntimeCellDirt) -> bool>>>>,
+    /// Retains an adapter's observer registration, never a mirrored value.
+    retained_owner: Option<Rc<dyn std::any::Any>>,
 }
 
 impl std::fmt::Debug for RuntimeCellDirtSink {
@@ -409,6 +411,7 @@ impl RuntimeCellDirtSink {
                 dedupe_while_dirty: false,
             }),
             before_notify: Rc::new(RefCell::new(None)),
+            retained_owner: None,
         }
     }
 
@@ -431,11 +434,16 @@ impl RuntimeCellDirtSink {
                 dedupe_while_dirty: true,
             }),
             before_notify: Rc::new(RefCell::new(None)),
+            retained_owner: None,
         }
     }
 
     pub fn add_dirt(&self, dirt: RuntimeCellDirt) {
         self.bits.set(self.bits.get() | dirt.0);
+    }
+
+    pub(crate) fn retain_owner(&mut self, owner: Rc<dyn std::any::Any>) {
+        self.retained_owner = Some(owner);
     }
 
     pub fn take_dirt(&self) -> RuntimeCellDirt {

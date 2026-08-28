@@ -247,6 +247,7 @@ class DistributionContractTests(unittest.TestCase):
             "NuxStatus nux_file_import_configured(const uint8_t *bytes);\n"
             "NuxStatus nux_renderer_free(NuxRenderer *renderer);\n"
             "NuxStatus nux_renderer_new_android_vulkan(void);\n"
+            "NuxStatus nux_file_import_configured_with_trusted_wgsl(const uint8_t *bytes);\n"
             "NuxStatus nux_product_file_import_configured(const uint8_t *bytes);\n"
         )
         manifests = {
@@ -254,6 +255,9 @@ class DistributionContractTests(unittest.TestCase):
             "appleExtension": "nux_file_import_configured\nnux_renderer_free\n",
             "androidExtension": (
                 "nux_file_import_configured\nnux_renderer_new_android_vulkan\n"
+            ),
+            "androidAuthoredWgslExtension": (
+                "nux_file_import_configured_with_trusted_wgsl\n"
             ),
             "productExtension": "nux_product_file_import_configured\n",
         }

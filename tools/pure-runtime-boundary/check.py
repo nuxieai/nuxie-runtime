@@ -140,6 +140,7 @@ PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {
 }
 PORTABLE_ABI_FACADE_ALLOWED_FEATURE_FORWARDINGS = {
     ("android-vulkan", "renderer-vulkan"),
+    ("android-authored-wgsl", "android-authored-wgsl"),
     ("apple-authored-msl", "ore-metal-authored-msl"),
 }
 PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {

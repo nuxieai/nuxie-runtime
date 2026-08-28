@@ -20,6 +20,10 @@ ore-metal-authored-msl = [
     "dep:objc2",
     "dep:objc2-metal",
 ]
+android-authored-wgsl = [
+    "scripting",
+    "nuxie-scripting/android-authored-wgsl",
+]
 threading = ["nuxie-runtime/threading"]
 test-support = []
 scripting = [

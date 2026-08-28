@@ -1512,6 +1512,28 @@ NuxStatus nux_file_import_configured(const uint8_t *bytes,
                                      struct NuxCapiResult **out_result);
 #endif
 
+#if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(NUX_CAPI_ANDROID_AUTHORED_WGSL))
+/**
+ * Import caller-authenticated product bytes after enabling the authored-data
+ * converter format and trusted WGSL-exporter authority.
+ *
+ * This function performs no package or signature verification. The Android
+ * product caller must verify the signed release envelope before selecting
+ * this entrypoint, and must establish that every shader payload came from the
+ * trusted exporter. A signature over arbitrary WGSL is insufficient.
+ *
+ * # Safety
+ *
+ * The pointers and lengths must satisfy the same contract as
+ * [`super::nux_file_import_configured`].
+ */
+NuxStatus nux_file_import_configured_with_trusted_wgsl(const uint8_t *bytes,
+                                                       size_t len,
+                                                       const struct NuxFileImportConfig *config,
+                                                       struct NuxFile **out_file,
+                                                       struct NuxCapiResult **out_result);
+#endif
+
 /**
  * Import exact caller-authenticated bytes and install one generic script
  * module named by `config`. The module exposes only

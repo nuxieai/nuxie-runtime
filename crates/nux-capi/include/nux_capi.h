@@ -76,6 +76,14 @@
  *    module name are copied synchronously. It installs no foreign callback;
  *    scripts only enqueue bounded owned values for the active player step.
  *    Ordinary nux_file_import remains script-inert.
+ *    On Android, nux_file_import_configured_with_trusted_wgsl is a separate,
+ *    caller-asserted trust boundary for exporter-authored WGSL. It performs no
+ *    signature verification: the product caller must first authenticate the
+ *    signed release and establish that every shader came from the trusted
+ *    exporter. nux_file_import_configured and nux_file_import_with_assets never
+ *    grant shader authority. Android product consumers define both
+ *    NUX_CAPI_ANDROID_VULKAN and NUX_CAPI_ANDROID_AUTHORED_WGSL when compiling
+ *    against a library built with the matching Cargo features.
  * 12. On Apple, NuxRenderer owns the exact Metal device domain; it never owns a
  *    CAMetalLayer or acquires a drawable. nux_renderer_copy_metal_device gives
  *    the caller Objective-C +1 ownership. A non-NULL AVAILABLE drawable is

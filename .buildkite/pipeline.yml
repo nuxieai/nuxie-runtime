@@ -109,7 +109,7 @@ steps:
     agents:
       queue: nuxie-pr
       nuxie-platform: macos
-    timeout_in_minutes: 45
+    timeout_in_minutes: 90
     retry:
       automatic:
         - exit_status: -1

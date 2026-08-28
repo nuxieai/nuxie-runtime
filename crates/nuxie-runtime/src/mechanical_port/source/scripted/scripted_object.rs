@@ -180,6 +180,264 @@ impl Default for ScriptedObject {
     }
 }
 impl ScriptedObject {
+    /// The non-component scripted owners delete only ScriptInput-derived
+    /// properties. Clear every input's backlink before removing any owner.
+    pub fn dispose_owned_script_inputs(properties: &mut Vec<CoreHandle>) {
+        let inputs: Vec<_> = properties
+            .iter()
+            .filter(|property| {
+                property
+                    .with_mut(|property| {
+                        let Some(input) = property.as_bind_script_input_mut() else {
+                            return false;
+                        };
+                        input.set_scripted_object(None);
+                        true
+                    })
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect();
+        properties.clear();
+        for input in inputs {
+            input.remove_occurrence();
+        }
+    }
+
+    /// Pinned ScriptedObject::cloneProperties, with each generated clone
+    /// installed in the same arena before its links are established.
+    pub fn clone_properties(
+        properties: &[CoreHandle],
+        owner: &CoreHandle,
+        container: &mut crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer,
+    ) -> Vec<CoreHandle> {
+        let mut clones = Vec::with_capacity(properties.len());
+        for property in properties {
+            let clone = property
+                .clone_occurrence()
+                .expect("a retained scripted property has a concrete clone");
+            let added = owner.with_mut(|owner| owner.scripted_object_add_property(clone.clone()));
+            assert_eq!(
+                added,
+                Some(true),
+                "the scripted clone retains its property container"
+            );
+            let source_bind = property
+                .with(|property| property.script_input_data_bind())
+                .flatten();
+            if let Some(source_bind) = source_bind {
+                let bind = source_bind
+                    .clone_occurrence()
+                    .expect("a retained scripted input bind has a concrete clone");
+                let (file, converter) = source_bind
+                    .with(|bind| {
+                        let bind = bind.as_data_bind().expect("the input retains a DataBind");
+                        (bind.file(), bind.converter())
+                    })
+                    .expect("the input bind remains live");
+                bind.with_mut(|bind| {
+                    bind.as_data_bind_mut()
+                        .expect("a cloned DataBind keeps its type")
+                        .set_file(file);
+                })
+                .expect("the cloned input bind remains live");
+                let converter = converter.map(|converter| {
+                    converter
+                        .clone_occurrence()
+                        .expect("a retained scripted input converter has a concrete clone")
+                });
+                bind.with_mut(|bind| {
+                    let bind = bind
+                        .as_data_bind_mut()
+                        .expect("a cloned DataBind keeps its type");
+                    bind.set_converter(converter);
+                    bind.set_target(Some(clone.clone()));
+                })
+                .expect("the cloned input bind remains live");
+                container.add_data_bind(bind.clone());
+                let attached = clone
+                    .with_mut(|property| property.script_input_set_data_bind(Some(bind), false));
+                assert_eq!(attached, Some(true), "a cloned script input keeps its type");
+            }
+            clones.push(clone);
+        }
+        clones
+    }
+
+    /// Reinitialization releases the scripted owner before touching its
+    /// inputs: their hydration calls back into this same occurrence.
+    pub fn reinit_occurrence(
+        owner: &CoreHandle,
+        properties: &[CoreHandle],
+        host: &mut dyn crate::scripting::ScriptHost,
+    ) -> bool {
+        use crate::mechanical_port::source::assets::script_asset::ScriptAsset;
+        let Some(asset) = owner
+            .with(|owner| owner.as_scripted_object().and_then(Self::script_asset))
+            .flatten()
+        else {
+            return false;
+        };
+        let live = owner
+            .with(|owner| {
+                let scripted = owner
+                    .as_scripted_object()
+                    .expect("a scripted owner keeps its type");
+                scripted.self_ref != 0
+                    && scripted
+                        .runtime_instance
+                        .as_ref()
+                        .is_some_and(|instance| instance.borrow_mut().script_lifetime_valid())
+            })
+            .unwrap_or(false);
+        if !live {
+            owner.with_mut(|owner| {
+                owner
+                    .as_scripted_object_mut()
+                    .expect("a scripted owner keeps its type")
+                    .reinit();
+            });
+            for property in properties {
+                if with_script_input(property, |input| input.validate_for_cold_script_init())
+                    == Some(false)
+                {
+                    return false;
+                }
+            }
+            let Some((instance, methods)) = ScriptAsset::instantiate_for_occurrence(&asset, host)
+            else {
+                return false;
+            };
+            owner
+                .with_mut(|owner| {
+                    let scripted = owner
+                        .as_scripted_object_mut()
+                        .expect("a scripted owner keeps its type");
+                    scripted.install_script_instance(instance);
+                    scripted.set_implemented_methods(methods);
+                })
+                .expect("the stateful owner remains live");
+        }
+        for property in properties {
+            if with_script_input(property, |input| input.validate_hydration_prerequisites())
+                == Some(false)
+            {
+                return false;
+            }
+        }
+        for property in properties {
+            if with_script_input(property, |input| input.hydrate_script_input()) == Some(false) {
+                return false;
+            }
+        }
+        // The runtime instance is cloned out before invoking user code, so
+        // callbacks may resolve the authored owner without a RefCell reborrow.
+        let (instance, needs_init) = owner
+            .with(|owner| {
+                let scripted = owner
+                    .as_scripted_object()
+                    .expect("a scripted owner keeps its type");
+                (
+                    scripted.runtime_instance.clone(),
+                    scripted.implemented_methods & INITS_BIT != 0 && !scripted.user_init_done,
+                )
+            })
+            .expect("the reinitialized owner remains live");
+        if needs_init {
+            let Some(instance) = instance else {
+                return false;
+            };
+            if !matches!(instance.borrow_mut().call_init(host), Ok(true)) {
+                // A failed user init invalidates the self/context lifetime;
+                // the next reinit must run the generator again.
+                owner.with_mut(|owner| {
+                    owner
+                        .as_scripted_object_mut()
+                        .expect("a scripted owner keeps its type")
+                        .script_dispose();
+                });
+                return false;
+            }
+            owner.with_mut(|owner| {
+                owner
+                    .as_scripted_object_mut()
+                    .expect("a scripted owner keeps its type")
+                    .user_init_done = true;
+            });
+        }
+        true
+    }
+
+    pub fn perform_listener_action(
+        owner: &CoreHandle,
+        invocation: &crate::state_machine::ScriptListenerInvocation,
+        host: &mut dyn crate::scripting::ScriptHost,
+    ) {
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .and_then(|scripted| scripted.runtime_instance.clone())
+            })
+            .flatten();
+        if let Some(instance) = instance {
+            // A callback error does not cause a second legacy invocation.
+            let _ = instance
+                .borrow_mut()
+                .call_preferred_listener_action(invocation, host);
+        }
+    }
+
+    pub fn evaluate_condition(
+        owner: &CoreHandle,
+        host: &mut dyn crate::scripting::ScriptHost,
+    ) -> bool {
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .and_then(|scripted| scripted.runtime_instance.clone())
+            })
+            .flatten();
+        instance.is_some_and(|instance| {
+            matches!(
+                instance
+                    .borrow_mut()
+                    .call_method(RuntimeScriptMethod::Evaluate, &[], host),
+                Ok(RuntimeScriptValue::Bool(true))
+            )
+        })
+    }
+
+    pub fn perform_pointer(
+        owner: &CoreHandle,
+        method: RuntimeScriptMethod,
+        pointer_id: i32,
+        local_position: crate::mechanical_port::source::math::vec2d::Vec2D,
+        host: &mut dyn crate::scripting::ScriptHost,
+    ) -> crate::scripting::ScriptedDrawablePointerResult {
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .and_then(|scripted| scripted.runtime_instance.clone())
+            })
+            .flatten();
+        let Some(instance) = instance else {
+            return crate::scripting::ScriptedDrawablePointerResult::default();
+        };
+        instance
+            .borrow_mut()
+            .call_scripted_drawable_pointer(
+                method,
+                pointer_id,
+                local_position.x,
+                local_position.y,
+                host,
+            )
+            .unwrap_or_default()
+    }
+
     pub(crate) fn file_asset_referencer_mut(&mut self) -> &mut FileAssetReferencer {
         &mut self.file_asset_referencer
     }
@@ -620,4 +878,36 @@ impl Drop for ScriptedObject {
     fn drop(&mut self) {
         self.script_dispose()
     }
+}
+
+fn with_script_input<R>(
+    property: &CoreHandle,
+    use_input: impl FnOnce(
+        &mut dyn crate::mechanical_port::source::assets::script_asset::ScriptInputBehavior,
+    ) -> R,
+) -> Option<R> {
+    property.with_mut(|property| {
+        if let Some(input) = property.as_any_mut().downcast_mut::<crate::mechanical_port::source::script_input_artboard::ScriptInputArtboard>() {
+            return Some(use_input(input));
+        }
+        if let Some(input) = property.as_any_mut().downcast_mut::<crate::mechanical_port::source::script_input_boolean::ScriptInputBoolean>() {
+            return Some(use_input(input));
+        }
+        if let Some(input) = property.as_any_mut().downcast_mut::<crate::mechanical_port::source::script_input_color::ScriptInputColor>() {
+            return Some(use_input(input));
+        }
+        if let Some(input) = property.as_any_mut().downcast_mut::<crate::mechanical_port::source::script_input_number::ScriptInputNumber>() {
+            return Some(use_input(input));
+        }
+        if let Some(input) = property.as_any_mut().downcast_mut::<crate::mechanical_port::source::script_input_string::ScriptInputString>() {
+            return Some(use_input(input));
+        }
+        if let Some(input) = property.as_any_mut().downcast_mut::<crate::mechanical_port::source::script_input_trigger::ScriptInputTrigger>() {
+            return Some(use_input(input));
+        }
+        if let Some(input) = property.as_any_mut().downcast_mut::<crate::mechanical_port::source::script_input_viewmodel_property::ScriptInputViewModelProperty>() {
+            return Some(use_input(input));
+        }
+        None
+    }).flatten()
 }

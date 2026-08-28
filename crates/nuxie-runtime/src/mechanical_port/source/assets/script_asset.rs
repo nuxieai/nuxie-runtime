@@ -529,6 +529,35 @@ impl ScriptAsset {
         &self.optional_methods
     }
 
+    /// Snapshot the asset before invoking the generator. User code may resolve
+    /// the asset and its owning scripted occurrence through the real host.
+    pub fn instantiate_for_occurrence(
+        asset: &CoreHandle,
+        host: &mut dyn crate::scripting::ScriptHost,
+    ) -> Option<(Box<dyn crate::scripting::ScriptInstance>, u32)> {
+        let (vm, module_name, bytecode, methods) =
+            asset.with_downcast_mut::<Self, _>(|asset| {
+                let vm = asset.scripting_vm()?;
+                if !asset.initted {
+                    asset.optional_methods.set_implemented_methods(
+                        (asset.base.serialized_implemented_methods()
+                            & OptionalScriptedMethods::METHOD_MASK) as i32,
+                    );
+                    asset.initted = true;
+                }
+                Some((
+                    vm,
+                    asset.module_name(),
+                    asset.bytecode.clone(),
+                    asset.optional_methods.implemented_methods() as u32,
+                ))
+            })??;
+        let instance = vm
+            .with_vm_mut(|vm| vm.instantiate_script(&module_name, &bytecode, host))
+            .ok()?;
+        Some((instance, methods))
+    }
+
     pub fn module_details(&self) -> &ModuleDetails {
         &self.module_details
     }

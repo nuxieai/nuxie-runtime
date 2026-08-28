@@ -1104,7 +1104,12 @@ impl LayoutComponent {
                     )
                 })
             })
-            .unwrap_or((false, false, YGAlign::Stretch as u32));
+            .unwrap_or((
+                false,
+                false,
+                crate::mechanical_port::source::layout::layout_style_applier::YGJustify::Stretch
+                    as u32,
+            ));
         let inline_hugs = style
             .with_downcast::<LayoutComponentStyle, _>(|style| {
                 style.width_scale_type() == LayoutScaleType::Hug

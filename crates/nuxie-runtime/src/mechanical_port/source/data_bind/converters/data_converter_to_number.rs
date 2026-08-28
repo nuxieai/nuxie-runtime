@@ -7,10 +7,6 @@ use crate::mechanical_port::source::{
     },
     generated::data_bind::converters::data_converter_to_number_base::DataConverterToNumberBase,
 };
-use std::ffi::{CString, c_char, c_double};
-unsafe extern "C" {
-    fn atof(value: *const c_char) -> c_double;
-}
 #[derive(Default)]
 pub struct DataConverterToNumber {
     pub base: DataConverterToNumberBase,
@@ -22,14 +18,14 @@ impl DataConverterToNumber {
     }
     pub fn convert<'a>(&'a mut self, input: &dyn DataValue) -> &'a dyn DataValue {
         let value = if let Some(value) = input.as_any().downcast_ref::<DataValueString>() {
-            CString::new(value.value())
-                .ok()
-                .map_or(self.output.value(), |text| unsafe {
-                    // SAFETY: `CString` guarantees a live NUL-terminated byte
-                    // sequence for this same-call C `atof` invocation. The C
-                    // function does not retain the pointer.
-                    atof(text.as_ptr()) as f32
-                })
+            // Keep the pinned `std::atof` prefix/range semantics without a C
+            // runtime dependency. This shared parser is also the authority
+            // used by the existing Rust integration and remains available on
+            // `wasm32-unknown-unknown`.
+            nuxie_binary::data_converter_to_number_string_value(
+                value.value().as_bytes(),
+                self.output.value(),
+            )
         } else if let Some(value) = input.as_any().downcast_ref::<DataValueEnum>() {
             value.value() as f32
         } else if let Some(value) = input.as_any().downcast_ref::<DataValueNumber>() {

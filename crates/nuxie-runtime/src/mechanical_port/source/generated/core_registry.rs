@@ -12128,10 +12128,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -29937,10 +29934,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::shapes::mesh_base::MeshBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -34261,10 +34255,7 @@ impl crate::mechanical_port::source::core::CoreObject
         )
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,

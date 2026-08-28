@@ -3,6 +3,7 @@ use crate::mechanical_port::source::{
         file_asset::FileAsset, file_asset_referencer::FileAssetReferencer, image_asset::ImageAsset,
     },
     core::{Core, CoreHandle, StatusCode},
+    generated::shapes::image_base::ImageBase,
     hit_info::HitInfo,
     importers::import_stack::ImportStack,
     layout::{
@@ -161,13 +162,17 @@ impl Image {
         self.base.mark_world_transform_dirty();
     }
 
-    pub fn clone_core(&self) -> Core {
-        let mut twin = self.base.clone_image();
+    pub fn clone_definition(&self) -> Self {
+        let mut twin = Self::default();
+        let mut base = std::mem::take(&mut twin.base);
+        base.copy(&self.base, &mut twin);
+        twin.base = base;
         twin.layout_scale_separate = self.layout_scale_separate;
-        if let Some(asset) = self.file_asset_referencer.file_asset().cloned() {
-            twin.set_asset(Some(asset));
+        if let Some(asset) = self.file_asset_referencer.asset() {
+            twin.file_asset_referencer.set_asset_unattached(Some(asset));
+            twin.update_image_scale();
         }
-        twin.into_core()
+        twin
     }
 
     pub fn set_mesh(&mut self, mesh: Option<CoreHandle>) {

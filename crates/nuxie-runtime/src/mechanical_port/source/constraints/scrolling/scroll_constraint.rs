@@ -123,11 +123,25 @@ impl Drop for ScrollConstraint {
     fn drop(&mut self) {
         self.virtualizer = None;
         self.layout_children.clear();
-        self.physics = None;
+        if let Some(physics) = self.physics.take() {
+            physics.remove_occurrence();
+        }
     }
 }
 
 impl ScrollConstraint {
+    pub fn clone_definition(&self) -> Self {
+        let mut twin = Self::default();
+        let mut base = std::mem::take(&mut twin.base);
+        base.copy(&self.base, &mut twin);
+        twin.base = base;
+        twin.physics = self.physics.as_ref().map(|physics| {
+            physics
+                .clone_occurrence()
+                .expect("live ScrollPhysics is cloneable")
+        });
+        twin
+    }
     pub fn handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.base.base.handle()
     }
@@ -640,9 +654,11 @@ impl ScrollConstraint {
         };
         let objects = importer.physics();
         let id = self.base.physics_id() as usize;
-        self.physics = (id != usize::MAX)
-            .then(|| objects.get(id).cloned())
-            .flatten();
+        self.physics = objects.get(id).map(|physics| {
+            physics
+                .clone_occurrence()
+                .expect("imported ScrollPhysics is cloneable")
+        });
         self.base.import(import_stack)
     }
 

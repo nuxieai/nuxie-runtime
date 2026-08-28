@@ -6,6 +6,7 @@ use crate::mechanical_port::source::{
     },
     component::{ComponentDirt, has_dirt},
     core::{CoreContext, CoreHandle, StatusCode},
+    generated::shapes::mesh_base::MeshBase,
     math::{mat2d::Mat2D, vec2d::Vec2D},
     shapes::{
         image::Image,
@@ -59,6 +60,30 @@ impl SkinnableBehavior for Mesh {
 }
 
 impl Mesh {
+    pub fn clone_definition(&self) -> Self {
+        let factory = self
+            .base
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
+            .expect("Mesh renderer factory");
+        let mut twin = Self::default();
+        let mut base = std::mem::take(&mut twin.base.base);
+        base.copy(&self.base.base, &mut twin);
+        twin.base.base = base;
+        twin.index_buffer = self.index_buffer.clone();
+        twin.vertex_render_buffer_dirty = true;
+        twin.mesh.vertex_render_buffer =
+            Some(Rc::new(RefCell::new(factory.with_factory_mut(|factory| {
+                factory.make_render_buffer(
+                    RenderBufferType::Vertex,
+                    RenderBufferFlags::None,
+                    self.vertices.len() * std::mem::size_of::<Vec2D>(),
+                )
+            }))));
+        twin.mesh.uv_render_buffer = self.mesh.uv_render_buffer.clone();
+        twin.mesh.index_render_buffer = self.mesh.index_render_buffer.clone();
+        twin
+    }
     pub fn mark_drawable_dirty(&mut self) {
         if let Some(skin) = self.skin() {
             skin.with_mut(|skin| {
@@ -114,7 +139,10 @@ impl Mesh {
     }
 
     pub fn copy_triangle_index_bytes(&mut self, object: &MeshBase) {
-        self.index_buffer = object.as_mesh().unwrap().index_buffer.clone();
+        self.index_buffer = object
+            .handle()
+            .and_then(|owner| owner.with_downcast::<Mesh, _>(|owner| owner.index_buffer.clone()))
+            .flatten();
     }
 
     pub fn mark_skin_dirty(&mut self) {

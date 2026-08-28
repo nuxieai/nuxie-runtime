@@ -51,10 +51,11 @@ impl Stroke {
         paint.cap(StrokeCap::from(self.base.cap()).into());
         paint.join(StrokeJoin::from(self.base.join()).into());
         paint.shader(None);
+        let path_flags = self.path_flags();
         if let Some(mutator) = self.base.paint() {
             mutator.with_mut(|mutator| {
                 if let Some(mutator) = mutator.as_shape_paint_mutator_mut() {
-                    mutator.apply_to(paint, opacity);
+                    mutator.apply_to(paint, opacity, path_flags);
                 }
             });
         }
@@ -65,19 +66,20 @@ impl Stroke {
     }
 
     pub fn thickness_changed(&mut self) {
-        self.base.add_dirt(ComponentDirt::PAINT);
+        self.base.add_dirt(ComponentDirt::PAINT, false);
     }
 
     pub fn cap_changed(&mut self) {
-        self.base.add_dirt(ComponentDirt::PAINT);
+        self.base.add_dirt(ComponentDirt::PAINT, false);
     }
 
     pub fn join_changed(&mut self) {
-        self.base.add_dirt(ComponentDirt::PAINT);
+        self.base.add_dirt(ComponentDirt::PAINT, false);
     }
 
     pub fn update(&mut self, value: ComponentDirt) {
-        self.base.update(value);
+        let kind = self.pick_path_kind();
+        self.base.base.update_with_path_kind(value, kind);
         if has_dirt(value, ComponentDirt::PAINT) {
             let thickness = self.base.thickness();
             let cap = StrokeCap::from(self.base.cap()).into();
@@ -100,17 +102,19 @@ impl Stroke {
         let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return;
         };
-        parent.with_mut(|parent| {
-            if let Some(shape) = parent.as_shape_mut() {
-                shape.path_composer_mut().add_dependent(this);
-            } else if let Some(component) = parent.as_component_mut() {
-                component.add_dependent(this);
-            }
-        });
+        let builder = parent
+            .with(|parent| parent.shape_paint_path_builder())
+            .flatten();
+        if let Some(builder) = builder {
+            builder.with_component_mut(|component| component.add_dependent(this));
+        }
     }
 }
 
 impl ShapePaintBehavior for Stroke {
+    fn is_visible(&self) -> bool {
+        Stroke::is_visible(self)
+    }
     fn shape_paint(&self) -> &ShapePaint {
         &self.base.base
     }

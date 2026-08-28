@@ -7,9 +7,9 @@ use crate::mechanical_port::source::math::mat2d::Mat2D;
 use crate::mechanical_port::source::math::raw_path::RawPath;
 use crate::mechanical_port::source::math::vec2d::Vec2D;
 use crate::mechanical_port::source::renderer::{RenderPaint, RenderPath, Renderer};
+use crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath;
 use crate::mechanical_port::source::text::cursor::{Cursor, CursorPosition, CursorVisualPosition};
 use crate::mechanical_port::source::text::fully_shaped_text::FullyShapedText;
-use crate::mechanical_port::source::text::text::ShapePaintPath;
 use crate::mechanical_port::source::text::text_selection_path::TextSelectionPath;
 use crate::mechanical_port::source::text::utf::Utf;
 use crate::mechanical_port::source::text_engine::{
@@ -131,7 +131,7 @@ pub struct RawTextInput {
     wrap: TextWrap,
     max_width: f32,
     max_height: f32,
-    clip_render_path: Option<Rc<RenderPath>>,
+    clip_render_path: Option<Box<RenderPath>>,
     ideal_cursor_x: f32,
     cursor_visual_position: CursorVisualPosition,
     selection_rects: Vec<Aabb>,
@@ -204,13 +204,13 @@ impl RawTextInput {
             renderer.clip_path(self.clip_render_path.as_ref().unwrap().as_ref());
         }
         if self.cursor.has_selection() {
-            let render_path = self.selection_path.render_path(factory);
-            renderer.draw_path(render_path.as_ref(), selection_paint);
+            let render_path = self.selection_path.path.render_path(factory);
+            renderer.draw_path(render_path, selection_paint);
         }
         let render_path = self.text_path.render_path(factory);
-        renderer.draw_path(render_path.as_ref(), text_paint);
+        renderer.draw_path(render_path, text_paint);
         let cursor_render_path = self.cursor_path.render_path(factory);
-        renderer.draw_path(cursor_render_path.as_ref(), cursor_paint);
+        renderer.draw_path(cursor_render_path, cursor_paint);
         if self.overflow == TextOverflow::Clipped && self.clip_render_path.is_some() {
             renderer.restore();
         }
@@ -437,7 +437,7 @@ impl RawTextInput {
         self.capture_journal_entry(starting_cursor);
     }
 
-    pub fn update(&mut self, factory: &mut Factory) -> u8 {
+    pub fn update(&mut self, factory: &RuntimeFactoryHandle) -> u8 {
         let mut updated = Flags::None as u8;
         if self.text_run.font.is_none() {
             return updated;
@@ -480,7 +480,7 @@ impl RawTextInput {
                 self.cursor_visual_position.bottom(),
             );
             rectangle.close();
-            self.cursor_path.add_path_clockwise(&rectangle);
+            self.cursor_path.add_path_clockwise(&rectangle, None);
         }
         if update_text_path {
             self.build_text_paths(factory);
@@ -510,7 +510,7 @@ impl RawTextInput {
         self.cursor_visual_position = self.cursor_visual_position_at(self.cursor.end());
     }
 
-    fn build_text_paths(&mut self, factory: &mut Factory) {
+    fn build_text_paths(&mut self, factory: &RuntimeFactoryHandle) {
         let want_separate = self.flagged(Flags::SeparateSelectionText as u8);
         self.text_path.rewind();
         self.selected_text_path.rewind();
@@ -521,17 +521,20 @@ impl RawTextInput {
 
         if self.overflow == TextOverflow::Clipped {
             if self.clip_render_path.is_none() {
-                self.clip_render_path = Some(factory.make_empty_render_path());
+                self.clip_render_path =
+                    Some(factory.with_factory_mut(|factory| factory.make_empty_render_path()));
             } else {
-                self.clip_render_path.as_ref().unwrap().rewind();
+                self.clip_render_path.as_mut().unwrap().rewind();
             }
             let bounds = self.shape.bounds();
-            self.clip_render_path.as_ref().unwrap().add_rect(
-                bounds.min_x,
-                bounds.min_y,
-                bounds.width(),
-                bounds.height(),
-            );
+            let mut raw = nuxie_render_api::RawPath::new();
+            raw.add_rect(nuxie_render_api::Aabb::new(
+                bounds.left(),
+                bounds.top(),
+                bounds.right(),
+                bounds.bottom(),
+            ));
+            self.clip_render_path.as_mut().unwrap().add_raw_path(&raw);
         } else {
             self.clip_render_path = None;
         }
@@ -561,7 +564,7 @@ impl RawTextInput {
                     let glyph_id = run.glyphs[glyph_index];
                     let advance = run.advances[glyph_index];
                     let mut raw_path = font.get_path(glyph_id);
-                    raw_path.transform_in_place(&Mat2D::new(
+                    raw_path.transform_in_place(Mat2D::new(
                         run.size,
                         0.0,
                         0.0,
@@ -571,9 +574,9 @@ impl RawTextInput {
                     ));
                     x += advance;
                     if want_separate && self.cursor.contains(run.text_indices[glyph_index]) {
-                        self.selected_text_path.add_path_clockwise(&raw_path);
+                        self.selected_text_path.add_path_clockwise(&raw_path, None);
                     } else {
-                        self.text_path.add_path_clockwise(&raw_path);
+                        self.text_path.add_path_clockwise(&raw_path, None);
                     }
                 }
                 line_index += 1;

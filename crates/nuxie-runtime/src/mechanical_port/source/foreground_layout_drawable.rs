@@ -79,10 +79,11 @@ impl ForegroundLayoutDrawable {
                 let Some(paint) = paint.as_shape_paint_behavior_mut() else {
                     return;
                 };
-                if !paint.shape_paint().should_draw() {
+                if !paint.should_draw() {
                     return;
                 }
                 let kind = paint.pick_path_kind();
+                let fill_rule = paint.fill_rule();
                 parent.with_mut(|parent| {
                     let Some(parent) = parent.as_layout_component_mut() else {
                         return;
@@ -95,7 +96,7 @@ impl ForegroundLayoutDrawable {
                     };
                     paint
                         .shape_paint_mut()
-                        .draw(renderer, path, world, false, None, true);
+                        .draw_with_fill_rule(renderer, path, world, false, None, true, fill_rule);
                 });
             });
         }

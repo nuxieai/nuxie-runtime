@@ -201,6 +201,10 @@ pub struct Feature {
     pub value: u32,
 }
 
+// Rust spellings for the nested C++ Font::Coord and Font::Feature records.
+pub type FontCoord = Coord;
+pub type FontFeature = Feature;
+
 #[derive(Clone, Copy, Debug)]
 pub struct GradientStop {
     pub offset: f32,

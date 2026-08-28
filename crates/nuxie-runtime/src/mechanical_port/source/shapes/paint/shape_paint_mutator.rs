@@ -1,8 +1,10 @@
-use crate::mechanical_port::source::{
-    component::Component, core::CoreHandle, core_context::StatusCode,
-};
+use crate::mechanical_port::source::{core::CoreHandle, core_context::StatusCode};
 use core::ops::{BitAnd, BitOr, BitOrAssign};
 use nuxie_render_api::RenderPaint;
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct MutatorFlags(pub u8);
 impl MutatorFlags {
@@ -31,7 +33,7 @@ impl BitAnd for MutatorFlags {
 pub struct ShapePaintMutatorState {
     pub flags: MutatorFlags,
     render_opacity: f32,
-    shape_paint: Option<CoreHandle>,
+    render_paint: Weak<RefCell<Box<dyn RenderPaint>>>,
     component: Option<CoreHandle>,
 }
 impl Default for ShapePaintMutatorState {
@@ -39,7 +41,7 @@ impl Default for ShapePaintMutatorState {
         Self {
             flags: MutatorFlags::NONE,
             render_opacity: 1.0,
-            shape_paint: None,
+            render_paint: Weak::new(),
             component: None,
         }
     }
@@ -48,28 +50,38 @@ pub trait ShapePaintMutator {
     fn mutator_state(&self) -> &ShapePaintMutatorState;
     fn mutator_state_mut(&mut self) -> &mut ShapePaintMutatorState;
     fn render_opacity_changed(&mut self);
-    fn apply_to(&self, paint: &mut dyn RenderPaint, opacity: f32);
-    fn init_paint_mutator(&mut self, component: &mut Component) -> StatusCode {
+    fn apply_to(
+        &mut self,
+        paint: &mut dyn RenderPaint,
+        opacity: f32,
+        path_flags: crate::mechanical_port::source::shapes::path_flags::PathFlags,
+    );
+    fn init_paint_mutator(
+        &mut self,
+        component: CoreHandle,
+        parent: Option<CoreHandle>,
+    ) -> StatusCode {
         self.mutator_state_mut().flags = MutatorFlags::TRANSLUCENT | MutatorFlags::VISIBLE;
-        let Some(this) = component.handle() else {
+        self.mutator_state_mut().component = Some(component.clone());
+        let Some(parent) = parent else {
             return StatusCode::MissingObject;
         };
-        let Some(parent) = component.parent_handle() else {
-            return StatusCode::MissingObject;
-        };
-        let initialized = parent
+        parent
             .with_mut(|parent| {
-                parent
-                    .as_shape_paint_behavior_mut()
-                    .is_some_and(|paint| paint.initialize_render_paint(this.clone()))
+                let Some(paint) = parent.as_shape_paint_behavior_mut() else {
+                    return StatusCode::MissingObject;
+                };
+                if !paint.initialize_render_paint(component) {
+                    return StatusCode::InvalidObject;
+                }
+                let render_paint = paint
+                    .shape_paint()
+                    .render_paint_handle()
+                    .expect("initialized ShapePaint owns its render paint");
+                self.mutator_state_mut().render_paint = Rc::downgrade(&render_paint);
+                StatusCode::Ok
             })
-            .unwrap_or(false);
-        if !initialized {
-            return StatusCode::InvalidObject;
-        }
-        self.mutator_state_mut().component = Some(this);
-        self.mutator_state_mut().shape_paint = Some(parent);
-        StatusCode::Ok
+            .unwrap_or(StatusCode::MissingObject)
     }
     fn render_opacity(&self) -> f32 {
         self.mutator_state().render_opacity
@@ -97,14 +109,13 @@ pub trait ShapePaintMutator {
     where
         Self: Sized,
     {
-        self.mutator_state().shape_paint.as_ref().and_then(|paint| {
-            paint
-                .with_mut(|paint| {
-                    paint
-                        .as_shape_paint_mut()
-                        .and_then(|paint| paint.with_render_paint_mut(use_paint))
-                })
-                .flatten()
-        })
+        let paint = self.mutator_state().render_paint.upgrade()?;
+        Some(use_paint(paint.borrow_mut().as_mut()))
+    }
+}
+
+impl ShapePaintMutatorState {
+    pub fn render_paint_handle(&self) -> Option<Rc<RefCell<Box<dyn RenderPaint>>>> {
+        self.render_paint.upgrade()
     }
 }

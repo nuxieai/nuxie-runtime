@@ -1,10 +1,12 @@
 use crate::mechanical_port::source::{
-    component::{Component, ComponentDirt, has_dirt},
-    core::{CoreContext, CoreHandle, StatusCode},
+    component_dirt::{ComponentDirt, has_dirt},
+    core::CoreHandle,
+    core_context::{CoreContext, StatusCode},
+    generated::shapes::paint::shape_paint_base::ShapePaintBase,
     math::mat2d::Mat2D,
     shapes::{
+        paint::shape_paint_path::ShapePaintPath,
         paint::{
-            blend_mode::BlendMode,
             effects_container::{EffectsContainer, EffectsContainerState},
             feather::Feather,
             shape_paint_mutator::ShapePaintMutator,
@@ -12,12 +14,13 @@ use crate::mechanical_port::source::{
         },
         path_flags::PathFlags,
         shape_paint_container::ShapePaintContainer,
-        shape_paint_path::ShapePaintPath,
     },
-    transform_component::TransformComponent,
     transform_space::TransformSpace,
 };
-use nuxie_render_api::{RenderPaint, Renderer};
+use nuxie_render_api::{BlendMode, RenderPaint, Renderer};
+use std::{cell::RefCell, rc::Rc};
+
+pub type RuntimeRenderPaintHandle = Rc<RefCell<Box<dyn RenderPaint>>>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShapePaintType {
@@ -38,6 +41,13 @@ pub trait ShapePaintBehavior {
     fn path_flags(&self) -> PathFlags;
     fn paint_type(&self) -> ShapePaintType;
     fn pick_path_kind(&self) -> ShapePaintPathKind;
+    fn is_visible(&self) -> bool;
+    fn should_draw(&self) -> bool {
+        self.is_visible() && self.shape_paint().mutator_is_visible()
+    }
+    fn is_translucent(&self) -> bool {
+        !self.is_visible() || self.shape_paint().mutator_is_translucent()
+    }
     fn fill_rule(&self) -> Option<u32> {
         None
     }
@@ -49,7 +59,7 @@ pub struct ShapePaint {
     pub base: ShapePaintBase,
     pub effects_container: EffectsContainerState,
     path_provider: PathProvider,
-    render_paint: Option<Box<dyn RenderPaint>>,
+    render_paint: Option<RuntimeRenderPaintHandle>,
     paint_mutator: Option<CoreHandle>,
     feather: Option<CoreHandle>,
 }
@@ -69,39 +79,45 @@ impl Default for ShapePaint {
 
 impl ShapePaint {
     pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
-        let Some(container) = ShapePaintContainer::from_component_mut(self.base.parent_mut())
-        else {
+        let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::MissingObject;
         };
-        if self.paint_mutator.is_some() {
-            if let Some(this) = self.base.handle() {
-                container.add_paint(this);
-            }
-        }
-        StatusCode::Ok
+        parent
+            .with_mut(|parent| {
+                let Some(container) = parent.as_shape_paint_container_mut() else {
+                    return StatusCode::MissingObject;
+                };
+                if self.paint_mutator.is_some() {
+                    container.add_paint(this);
+                }
+                StatusCode::Ok
+            })
+            .unwrap_or(StatusCode::MissingObject)
     }
 
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.update(value);
+    pub fn update_with_path_kind(&mut self, value: ComponentDirt, kind: ShapePaintPathKind) {
         if has_dirt(value, ComponentDirt::PATH) && !self.effects_container.effects.is_empty() {
-            let container = ShapePaintContainer::from_component(self.base.parent()).unwrap();
-            let path = self.pick_path(container);
-            let mut current = None;
-            for effect in self.effects_container.effects.iter().cloned() {
-                effect.with_mut(|effect| {
-                    let Some(effect) = effect.as_stroke_effect_mut() else {
-                        return;
-                    };
-                    if let Some(current) = current.as_ref() {
-                        effect.update_effect(&self.path_provider, &current.borrow(), self);
-                    } else {
-                        effect.update_effect(&self.path_provider, path, self);
-                    }
-                    if let Some(new_path) = effect.effect_path(&self.path_provider) {
-                        current = Some(new_path);
+            let parent = self.base.parent_handle().expect("ShapePaint container");
+            parent.with_mut(|container| {
+                container.with_shape_paint_path_mut(kind, &mut |path| {
+                    let mut current: Option<Rc<RefCell<ShapePaintPath>>> = None;
+                    for handle in self.effects_container.effects.iter().cloned() {
+                        handle.with_mut(|effect| {
+                            let Some(effect) = effect.as_stroke_effect_mut() else {
+                                return;
+                            };
+                            if let Some(current) = current.as_ref() {
+                                effect.update_effect(&self.path_provider, &current.borrow(), self);
+                            } else {
+                                effect.update_effect(&self.path_provider, path, self);
+                            }
+                            if let Some(new_path) = effect.effect_path(&self.path_provider) {
+                                current = Some(new_path);
+                            }
+                        });
                     }
                 });
-            }
+            });
         }
     }
 
@@ -117,7 +133,9 @@ impl ShapePaint {
             return false;
         };
         self.paint_mutator = Some(mutator);
-        self.render_paint = Some(factory.with_factory_mut(|factory| factory.make_render_paint()));
+        self.render_paint = Some(Rc::new(RefCell::new(
+            factory.with_factory_mut(|factory| factory.make_render_paint()),
+        )));
         true
     }
 
@@ -125,15 +143,40 @@ impl ShapePaint {
         &mut self,
         use_paint: impl FnOnce(&mut dyn RenderPaint) -> R,
     ) -> Option<R> {
-        self.render_paint.as_deref_mut().map(use_paint)
+        self.render_paint
+            .as_ref()
+            .map(|paint| use_paint(paint.borrow_mut().as_mut()))
+    }
+
+    pub fn render_paint_handle(&self) -> Option<RuntimeRenderPaintHandle> {
+        self.render_paint.clone()
     }
 
     pub fn blend_mode(&mut self, parent_value: BlendMode) {
-        let render_paint = self.render_paint.as_deref_mut().unwrap();
+        let mut render_paint = self.render_paint.as_ref().unwrap().borrow_mut();
         if self.base.blend_mode_value() == 127 {
-            render_paint.blend_mode(parent_value.into());
+            render_paint.blend_mode(parent_value);
         } else {
-            render_paint.blend_mode(BlendMode::from_u8(self.base.blend_mode_value()).into());
+            let mode = match self.base.blend_mode_value() {
+                3 => BlendMode::SrcOver,
+                14 => BlendMode::Screen,
+                15 => BlendMode::Overlay,
+                16 => BlendMode::Darken,
+                17 => BlendMode::Lighten,
+                18 => BlendMode::ColorDodge,
+                19 => BlendMode::ColorBurn,
+                20 => BlendMode::HardLight,
+                21 => BlendMode::SoftLight,
+                22 => BlendMode::Difference,
+                23 => BlendMode::Exclusion,
+                24 => BlendMode::Multiply,
+                25 => BlendMode::Hue,
+                26 => BlendMode::Saturation,
+                27 => BlendMode::Color,
+                28 => BlendMode::Luminosity,
+                value => panic!("invalid blend mode {value}"),
+            };
+            render_paint.blend_mode(mode);
         }
     }
 
@@ -145,7 +188,7 @@ impl ShapePaint {
         self.feather.clone()
     }
 
-    pub fn draw(
+    pub fn draw_with_fill_rule(
         &mut self,
         renderer: &mut dyn Renderer,
         shape_paint_path: &mut ShapePaintPath,
@@ -153,13 +196,14 @@ impl ShapePaint {
         use_path_fill_rule: bool,
         override_paint: Option<&mut dyn RenderPaint>,
         needs_save_operation: bool,
+        fill_rule: Option<u32>,
     ) {
         let mut saved = !needs_save_operation;
         let feather = self.feather.as_ref().and_then(|feather| {
             feather.with_downcast::<Feather, _>(|feather| {
                 (
                     feather.space(),
-                    feather.is_inner(),
+                    feather.base.inner() && fill_rule.is_some(),
                     feather.base.offset_x(),
                     feather.base.offset_y(),
                     feather.effect_path_dirty(),
@@ -197,19 +241,6 @@ impl ShapePaint {
                         return None;
                     }
                     if path_effect.is_some() && *effect_path_dirty {
-                        let transform = self
-                            .base
-                            .parent_handle()
-                            .and_then(|parent| {
-                                parent
-                                    .with(|parent| {
-                                        parent
-                                            .as_shape_paint_container()
-                                            .map(ShapePaintContainer::shape_world_transform)
-                                    })
-                                    .flatten()
-                            })
-                            .unwrap_or_else(Mat2D::identity);
                         if let (Some(feather), Some(effect)) =
                             (self.feather.as_ref(), path_effect.as_ref())
                         {
@@ -262,13 +293,7 @@ impl ShapePaint {
         let mut draw_path = |path: &mut ShapePaintPath| {
             let render_path = path.render_path(&factory);
             if !use_path_fill_rule {
-                if let Some(fill_rule) = self.base.handle().and_then(|this| {
-                    this.with(|this| {
-                        this.as_shape_paint_behavior()
-                            .and_then(ShapePaintBehavior::fill_rule)
-                    })
-                    .flatten()
-                }) {
+                if let Some(fill_rule) = fill_rule {
                     match fill_rule {
                         0 => render_path.fill_rule(nuxie_render_api::FillRule::NonZero),
                         1 => render_path.fill_rule(nuxie_render_api::FillRule::EvenOdd),
@@ -279,8 +304,8 @@ impl ShapePaint {
             }
             if let Some(paint) = override_paint.as_deref() {
                 renderer.draw_path(render_path, paint);
-            } else if let Some(paint) = self.render_paint.as_deref() {
-                renderer.draw_path(render_path, paint);
+            } else if let Some(paint) = self.render_paint.as_ref() {
+                renderer.draw_path(render_path, paint.borrow().as_ref());
             }
         };
         if let Some(inner) = inner_path {
@@ -320,7 +345,7 @@ impl ShapePaint {
     }
 
     pub fn invalidate_rendering(&mut self) {
-        self.base.add_dirt(ComponentDirt::PATH);
+        self.base.add_dirt(ComponentDirt::PATH, false);
     }
 
     pub fn add_stroke_effect(&mut self, effect: CoreHandle) {
@@ -356,63 +381,64 @@ impl ShapePaint {
         }
     }
 
-    pub fn is_flagged(&self, flags: PathFlags) -> bool {
-        !(self.path_flags() & flags).is_empty()
-    }
-
     pub fn paint(&self) -> Option<CoreHandle> {
         self.paint_mutator.clone()
     }
 
-    pub fn is_translucent(&self) -> bool {
-        !self.base.is_visible()
-            || self
-                .paint_mutator
-                .as_ref()
-                .and_then(|mutator| {
-                    mutator.with(|mutator| {
-                        mutator
-                            .as_shape_paint_mutator()
-                            .map(ShapePaintMutator::is_translucent)
-                    })
+    pub fn mutator_is_translucent(&self) -> bool {
+        self.paint_mutator
+            .as_ref()
+            .and_then(|mutator| {
+                mutator.with(|mutator| {
+                    mutator
+                        .as_shape_paint_mutator()
+                        .map(ShapePaintMutator::is_translucent)
                 })
-                .flatten()
-                .unwrap_or(false)
+            })
+            .flatten()
+            .unwrap_or(false)
     }
 
-    pub fn should_draw(&self) -> bool {
-        self.base.is_visible()
-            && self
-                .paint_mutator
-                .as_ref()
-                .and_then(|mutator| {
-                    mutator.with(|mutator| {
-                        mutator
-                            .as_shape_paint_mutator()
-                            .map(ShapePaintMutator::is_visible)
-                    })
+    pub fn mutator_is_visible(&self) -> bool {
+        self.paint_mutator
+            .as_ref()
+            .and_then(|mutator| {
+                mutator.with(|mutator| {
+                    mutator
+                        .as_shape_paint_mutator()
+                        .map(ShapePaintMutator::is_visible)
                 })
-                .flatten()
-                .unwrap_or(false)
+            })
+            .flatten()
+            .unwrap_or(false)
     }
 
-    pub fn parent_transform_component(&self) -> Option<&TransformComponent> {
-        let mut parent = self.base.parent();
+    pub fn parent_transform_component(&self) -> Option<CoreHandle> {
+        let mut parent = self.base.parent_handle();
         while let Some(component) = parent {
-            if let Some(transform) = component.as_transform_component() {
-                return Some(transform);
+            if component
+                .with(|component| component.as_transform_component().is_some())
+                .unwrap_or(false)
+            {
+                return Some(component);
             }
-            parent = component.parent();
+            parent = component
+                .with(|component| component.component_parent_handle())
+                .flatten();
         }
         None
     }
+}
 
-    pub fn path_flags(&self) -> PathFlags {
-        self.base.path_flags()
+impl std::ops::Deref for ShapePaint {
+    type Target = ShapePaintBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
     }
-
-    pub fn pick_path<'a>(&self, container: &'a ShapePaintContainer) -> &'a mut ShapePaintPath {
-        self.base.pick_path(container)
+}
+impl std::ops::DerefMut for ShapePaint {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }
 

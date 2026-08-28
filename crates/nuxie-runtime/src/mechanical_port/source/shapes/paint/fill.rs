@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    component_dirt::ComponentDirt,
     core::CoreHandle,
     generated::shapes::paint::fill_base::FillBase,
     shapes::{
@@ -17,6 +18,10 @@ pub struct Fill {
 }
 
 impl Fill {
+    pub fn update(&mut self, value: ComponentDirt) {
+        let kind = self.pick_path_kind();
+        self.base.base.update_with_path_kind(value, kind);
+    }
     pub fn path_flags(&self) -> PathFlags {
         if self.base.fill_rule() == nuxie_render_api::FillRule::Clockwise as u32 {
             PathFlags::LOCAL_CLOCKWISE
@@ -37,10 +42,11 @@ impl Fill {
     pub fn apply_to(&mut self, paint: &mut dyn RenderPaint, opacity: f32) {
         paint.style(RenderPaintStyle::Fill);
         paint.shader(None);
+        let path_flags = self.path_flags();
         if let Some(mutator) = self.base.paint() {
             mutator.with_mut(|mutator| {
                 if let Some(mutator) = mutator.as_shape_paint_mutator_mut() {
-                    mutator.apply_to(paint, opacity);
+                    mutator.apply_to(paint, opacity, path_flags);
                 }
             });
         }
@@ -53,17 +59,19 @@ impl Fill {
         let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return;
         };
-        parent.with_mut(|parent| {
-            if let Some(shape) = parent.as_shape_mut() {
-                shape.path_composer_mut().add_dependent(this);
-            } else if let Some(component) = parent.as_component_mut() {
-                component.add_dependent(this);
-            }
-        });
+        let builder = parent
+            .with(|parent| parent.shape_paint_path_builder())
+            .flatten();
+        if let Some(builder) = builder {
+            builder.with_component_mut(|component| component.add_dependent(this));
+        }
     }
 }
 
 impl ShapePaintBehavior for Fill {
+    fn is_visible(&self) -> bool {
+        self.base.is_visible()
+    }
     fn shape_paint(&self) -> &ShapePaint {
         &self.base.base
     }

@@ -29,6 +29,17 @@ impl ComponentDirt {
     pub fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
     }
+    pub fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+
+    pub fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+}
+
+pub fn has_dirt(value: ComponentDirt, flag: ComponentDirt) -> bool {
+    value.0 & flag.0 != 0
 }
 
 impl std::ops::BitOr for ComponentDirt {
@@ -50,5 +61,18 @@ impl std::ops::BitAnd for ComponentDirt {
 
     fn bitand(self, rhs: Self) -> Self::Output {
         Self(self.0 & rhs.0)
+    }
+}
+
+impl std::ops::BitAndAssign for ComponentDirt {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl std::ops::Not for ComponentDirt {
+    type Output = Self;
+    fn not(self) -> Self {
+        Self(!self.0)
     }
 }

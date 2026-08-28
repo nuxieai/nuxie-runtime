@@ -61,29 +61,26 @@ impl TextStylePaint {
         }
         !had
     }
-    pub fn draw(&mut self, renderer: &mut dyn Renderer, world: &Mat2D) {
+    pub fn draw(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        world: &Mat2D,
+        blend: nuxie_render_api::BlendMode,
+    ) {
         for handle in self.paints.shape_paints().to_vec() {
             handle.with_mut(|object| {
                 let Some(paint) = object.as_shape_paint_behavior_mut() else {
                     return;
                 };
-                if !paint.shape_paint().should_draw() {
+                if !paint.should_draw() {
                     return;
                 }
-                let blend = self
-                    .base
-                    .parent_handle()
-                    .and_then(|parent| {
-                        parent
-                            .with(|parent| parent.as_drawable().map(|parent| parent.blend_mode()))
-                            .flatten()
-                    })
-                    .expect("TextStylePaint parent is Text");
+                let fill_rule = paint.fill_rule();
                 paint.shape_paint_mut().blend_mode(blend);
                 if let Some(path) = self.opacity_paths.get_mut(&Opacity(1.0)) {
                     paint
                         .shape_paint_mut()
-                        .draw(renderer, path, *world, true, None, true);
+                        .draw_with_fill_rule(renderer, path, *world, true, None, true, fill_rule);
                 }
                 if self.paint_pool.len() < self.opacity_paths.len() {
                     let factory = self
@@ -112,9 +109,15 @@ impl TextStylePaint {
                         })
                         .unwrap_or(0.0);
                     pooled.feather(strength);
-                    paint
-                        .shape_paint_mut()
-                        .draw(renderer, path, *world, true, Some(pooled), true);
+                    paint.shape_paint_mut().draw_with_fill_rule(
+                        renderer,
+                        path,
+                        *world,
+                        true,
+                        Some(pooled),
+                        true,
+                        fill_rule,
+                    );
                 }
             });
         }
@@ -124,7 +127,8 @@ impl TextStylePaint {
             let color = paint
                 .with_downcast::<Fill, _>(|fill| {
                     fill.base.paint().and_then(|mutator| {
-                        mutator.with_downcast::<SolidColor, _>(|color| color.base.color_value())
+                        mutator
+                            .with_downcast::<SolidColor, _>(|color| color.base.color_value() as u32)
                     })
                 })
                 .flatten();

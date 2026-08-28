@@ -154,7 +154,12 @@ impl TextInput {
                 })
                 .expect("TextInput style");
             self.raw_text_input.set_font_size(font_size);
-            let changed = self.raw_text_input.update(self.base.artboard().factory());
+            let factory = self
+                .base
+                .with_artboard(|artboard| artboard.factory())
+                .flatten()
+                .expect("TextInput retains its imported renderer factory");
+            let changed = self.raw_text_input.update(&factory);
             if changed & Flags::ShapeDirty as u8 != 0 {
                 self.world_bounds = self
                     .base
@@ -165,10 +170,12 @@ impl TextInput {
                 }
             }
             if changed & Flags::SelectionDirty as u8 != 0 {
-                for child in self.base.children_mut() {
-                    if let Some(drawable) = child.as_text_input_drawable_mut() {
-                        drawable.paints.invalidate_stroke_effects();
-                    }
+                for child in self.base.children().to_vec() {
+                    child.with_mut(|child| {
+                        if let Some(drawable) = child.as_text_input_drawable_mut() {
+                            drawable.paints.invalidate_stroke_effects();
+                        }
+                    });
                 }
             }
 

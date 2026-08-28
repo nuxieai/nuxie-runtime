@@ -5,8 +5,9 @@ use crate::mechanical_port::source::{
         rectangles_to_contour::{Contour, RectanglesToContour},
         vec2d::Vec2D,
     },
-    shapes::{path::Path, shape_paint_path::ShapePaintPath},
+    shapes::{paint::shape_paint_path::ShapePaintPath, path::Path},
 };
+#[derive(Default)]
 pub struct TextSelectionPath {
     pub path: ShapePaintPath,
     rectangles: RectanglesToContour,

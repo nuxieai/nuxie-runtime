@@ -669,9 +669,10 @@ impl LayoutComponent {
                 let Some(paint) = paint.as_shape_paint_behavior_mut() else {
                     return;
                 };
-                if !paint.shape_paint().should_draw() {
+                if !paint.should_draw() {
                     return;
                 }
+                let fill_rule = paint.fill_rule();
                 let path = match paint.pick_path_kind() {
                     ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise => {
                         &mut self.local_path
@@ -680,7 +681,7 @@ impl LayoutComponent {
                 };
                 paint
                     .shape_paint_mut()
-                    .draw(renderer, path, world, false, None, true);
+                    .draw_with_fill_rule(renderer, path, world, false, None, true, fill_rule);
             });
         }
     }
@@ -737,9 +738,9 @@ impl LayoutComponent {
             );
             for paint in self.paints.shape_paints().iter().cloned() {
                 paint.with_mut(|paint| {
-                    if let Some(paint) = paint.as_shape_paint_mut() {
+                    if let Some(paint) = paint.as_shape_paint_behavior_mut() {
                         if paint.should_draw() {
-                            paint.invalidate_effects();
+                            paint.shape_paint_mut().invalidate_effects();
                         }
                     }
                 });

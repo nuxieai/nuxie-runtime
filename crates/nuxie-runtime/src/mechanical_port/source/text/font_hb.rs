@@ -49,6 +49,12 @@ pub struct HbFont {
 }
 
 impl HbFont {
+    pub fn source_bytes(&self) -> Arc<[u8]> {
+        self.bytes.clone()
+    }
+    pub fn face_index(&self) -> u32 {
+        self.face_index
+    }
     pub fn decode(bytes: &[u8]) -> Option<FontRef> {
         Self::decode_face(bytes, 0)
     }

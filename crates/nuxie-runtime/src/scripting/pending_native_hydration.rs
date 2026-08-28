@@ -1,4 +1,5 @@
 // Preserved pre-integration hydration assertions; adapt to the live translated owner before validation.
+use super::*;
 #[cfg(test)]
 mod hydration_atomicity_tests {
     use super::*;

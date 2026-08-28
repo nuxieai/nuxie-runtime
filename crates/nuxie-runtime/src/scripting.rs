@@ -14,6 +14,9 @@ use crate::view_model_cell::{
 };
 mod native_artboard;
 pub(crate) use native_artboard::native_script_artboard;
+#[cfg(test)]
+#[path = "scripting/pending_native_hydration.rs"]
+mod pending_native_hydration;
 
 /// Runtime-owned scripting error type.
 ///

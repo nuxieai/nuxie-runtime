@@ -405,8 +405,8 @@ impl ScriptAsset {
         self.base.text_asset().verified()
     }
 
-    pub fn module_bytecode(&mut self) -> &mut [u8] {
-        &mut self.bytecode
+    pub fn module_bytecode(&self) -> &[u8] {
+        &self.bytecode
     }
 
     pub fn init_scripted_object(&mut self, object: &mut ScriptedObject) -> bool {
@@ -527,6 +527,17 @@ impl ScriptAsset {
 
     pub fn optional_methods(&self) -> &OptionalScriptedMethods {
         &self.optional_methods
+    }
+
+    pub fn prepare_implemented_methods(&mut self) -> u32 {
+        if !self.initted {
+            self.optional_methods.set_implemented_methods(
+                (self.base.serialized_implemented_methods() & OptionalScriptedMethods::METHOD_MASK)
+                    as i32,
+            );
+            self.initted = true;
+        }
+        self.optional_methods.implemented_methods() as u32
     }
 
     /// Snapshot the asset before invoking the generator. User code may resolve

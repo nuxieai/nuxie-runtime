@@ -336,9 +336,7 @@ impl ScriptedObject {
         }
     }
 
-    /// Reinitialization releases the scripted owner before touching its
-    /// inputs: their hydration calls back into this same occurrence.
-    pub fn reinit_occurrence(
+    pub fn initialize_occurrence(
         owner: &CoreHandle,
         properties: &[CoreHandle],
         host: &mut dyn crate::scripting::ScriptHost,
@@ -350,12 +348,23 @@ impl ScriptedObject {
         else {
             return false;
         };
-        let Some(vm) = asset
-            .with_downcast::<ScriptAsset, _>(ScriptAsset::scripting_vm)
+        let Some((vm, methods)) = asset
+            .with_downcast_mut::<ScriptAsset, _>(|asset| {
+                let vm = asset.scripting_vm()?;
+                Some((vm, asset.prepare_implemented_methods()))
+            })
             .flatten()
         else {
             return false;
         };
+        // ScriptAsset updates these even when ensureScriptInitialized can
+        // reuse the existing table in the same VM (e.g. editor live editing).
+        owner.with_mut(|owner| {
+            owner
+                .as_scripted_object_mut()
+                .expect("a scripted owner keeps its type")
+                .set_implemented_methods(methods)
+        });
         let live = owner
             .with(|owner| {
                 let scripted = owner
@@ -399,6 +408,26 @@ impl ScriptedObject {
                     scripted.set_implemented_methods(methods);
                 })
                 .expect("the stateful owner remains live");
+        }
+        true
+    }
+
+    /// Input hydration calls back into this same occurrence, so no owner
+    /// borrow crosses validation or user initialization.
+    pub fn hydrate_occurrence(
+        owner: &CoreHandle,
+        properties: &[CoreHandle],
+        host: &mut dyn crate::scripting::ScriptHost,
+    ) -> bool {
+        let live = owner
+            .with(|owner| {
+                owner.as_scripted_object().is_some_and(|scripted| {
+                    scripted.self_ref != 0 && scripted.runtime_instance.is_some()
+                })
+            })
+            .unwrap_or(false);
+        if !live {
+            return false;
         }
         for property in properties {
             if with_script_input(property, |input| input.validate_hydration_prerequisites())
@@ -464,6 +493,65 @@ impl ScriptedObject {
             }
         });
         true
+    }
+
+    pub fn reinit_occurrence(
+        owner: &CoreHandle,
+        properties: &[CoreHandle],
+        host: &mut dyn crate::scripting::ScriptHost,
+    ) -> bool {
+        let has_asset = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .is_some_and(|scripted| scripted.script_asset().is_some())
+            })
+            .unwrap_or(false);
+        if !has_asset {
+            return false;
+        }
+        Self::initialize_occurrence(owner, properties, host);
+        Self::hydrate_occurrence(owner, properties, host)
+    }
+
+    pub fn custom_properties(owner: &CoreHandle) -> Vec<CoreHandle> {
+        use crate::mechanical_port::source::{
+            animation::{
+                scripted_listener_action::ScriptedListenerAction,
+                scripted_transition_condition::ScriptedTransitionCondition,
+            },
+            scripted::{
+                scripted_data_converter::ScriptedDataConverter,
+                scripted_drawable::ScriptedDrawable, scripted_interpolator::ScriptedInterpolator,
+                scripted_layout::ScriptedLayout, scripted_path_effect::ScriptedPathEffect,
+            },
+        };
+        owner
+            .with(|owner| {
+                if let Some(value) = owner.as_any().downcast_ref::<ScriptedListenerAction>() {
+                    return value.properties.clone();
+                }
+                if let Some(value) = owner.as_any().downcast_ref::<ScriptedTransitionCondition>() {
+                    return value.properties.clone();
+                }
+                if let Some(value) = owner.as_any().downcast_ref::<ScriptedDrawable>() {
+                    return value.properties.clone();
+                }
+                if let Some(value) = owner.as_any().downcast_ref::<ScriptedLayout>() {
+                    return value.base.base.properties.clone();
+                }
+                if let Some(value) = owner.as_any().downcast_ref::<ScriptedDataConverter>() {
+                    return value.properties.clone();
+                }
+                if let Some(value) = owner.as_any().downcast_ref::<ScriptedInterpolator>() {
+                    return value.properties.clone();
+                }
+                if let Some(value) = owner.as_any().downcast_ref::<ScriptedPathEffect>() {
+                    return value.properties.clone();
+                }
+                panic!("a scripted occurrence must retain a concrete custom-property owner");
+            })
+            .expect("a retained scripted occurrence remains live")
     }
 
     pub fn perform_listener_action(

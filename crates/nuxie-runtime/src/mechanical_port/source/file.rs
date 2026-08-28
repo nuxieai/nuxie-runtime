@@ -715,14 +715,15 @@ impl File {
                         .and_then(|interpolator| interpolator.script_asset())
                 })
                 .flatten();
-            if let Some(script) = script {
-                script.with_downcast_mut::<ScriptAsset, _>(|script| {
-                    interpolator.with_mut(|interpolator| {
-                        interpolator
-                            .as_scripted_object_mut()
-                            .is_some_and(|interpolator| script.init_scripted_object(interpolator))
-                    })
-                });
+            if script.is_some() {
+                use crate::mechanical_port::source::scripted::scripted_object::{
+                    ScriptUpdateRequestHost, ScriptedObject,
+                };
+                let properties = ScriptedObject::custom_properties(&interpolator);
+                let mut host = ScriptUpdateRequestHost::default();
+                // File initializes shared interpolators but does not hydrate
+                // their inputs here; per-instance clones hydrate later.
+                ScriptedObject::initialize_occurrence(&interpolator, &properties, &mut host);
             }
         }
         true

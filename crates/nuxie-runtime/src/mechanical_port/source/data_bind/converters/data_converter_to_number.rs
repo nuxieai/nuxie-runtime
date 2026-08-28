@@ -107,13 +107,6 @@ fn cpp_atof_f32(value: &[u8]) -> CppAtofF32 {
     }
 
     let mut end = number_start;
-    if value
-        .get(end)
-        .is_some_and(|byte| matches!(*byte, b'+' | b'-'))
-    {
-        end += 1;
-    }
-
     let mut digits = 0usize;
     let mut nonzero_digit = false;
     while value.get(end).is_some_and(u8::is_ascii_digit) {

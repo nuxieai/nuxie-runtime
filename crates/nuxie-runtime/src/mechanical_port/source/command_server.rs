@@ -9,24 +9,29 @@ use std::{
 use crate::mechanical_port::source::{
     animation::state_machine_instance::StateMachineInstance,
     artboard::ArtboardInstance,
-    assets::blob_asset::BlobAsset,
-    audio::audio_source::AudioSource,
+    assets::{
+        audio_asset::AudioAsset, blob_asset::BlobAsset, font_asset::FontAsset,
+        image_asset::ImageAsset, script_asset::ScriptAsset,
+    },
+    audio::audio_source::{AudioSource, AudioSourceRef},
     bindable_artboard::BindableArtboard,
     command_queue::{
         ArtboardHandle, AudioSourceHandle, BlobAssetHandle, Command, CommandQueue,
         CommandServerCallback, CommandServerDrawCallback, DataType, DrawKey, FileHandle,
-        FontHandle, Message, PointerEvent, PropertyData, RIVE_NULL_HANDLE, RenderImageHandle,
-        StateMachineHandle, ViewModelInstanceData, ViewModelInstanceHandle,
+        FontHandle, Message, PointerEvent, PropertyData, RenderImageHandle, StateMachineHandle,
+        ViewModelInstanceData, ViewModelInstanceHandle, ViewModelInstanceValue,
     },
-    factory::Factory,
+    core::CoreHandle,
+    factory::RuntimeFactoryHandle,
     file::File,
-    file_asset_loader::FileAssetLoader,
+    file_asset_loader::{FileAssetLoader, FileAssetLoaderRef},
+    generated::core_registry::CoreCapabilities,
     hit_result::HitResult,
-    layout::{Alignment, compute_alignment},
+    layout::{compute_alignment, Alignment},
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
-    renderer::RenderImage,
+    renderer::{RenderImage, RenderImageRef},
     semantic::semantic_snapshot::{SemanticsBoundsUpdate, SemanticsDiff, SemanticsDiffNode},
-    text_engine::Font,
+    text_engine::{Font, FontRef},
     viewmodel::runtime::viewmodel_instance_runtime::ViewModelInstanceRuntime,
 };
 
@@ -36,151 +41,103 @@ pub struct Subscription {
     pub root_view_model: ViewModelInstanceHandle,
 }
 
-struct CommandFileAssetLoader {
-    server: *const CommandServer,
+#[derive(Default)]
+struct CommandAssetRegistry {
     image_assets: HashMap<String, RenderImageHandle>,
     audio_assets: HashMap<String, AudioSourceHandle>,
     font_assets: HashMap<String, FontHandle>,
-    internal_loader: Option<Rc<dyn FileAssetLoader>>,
+    images: HashMap<RenderImageHandle, RenderImageRef>,
+    audio_sources: HashMap<AudioSourceHandle, AudioSourceRef>,
+    fonts: HashMap<FontHandle, FontRef>,
 }
 
-impl CommandFileAssetLoader {
-    fn new(server: *const CommandServer, internal_loader: Option<Rc<dyn FileAssetLoader>>) -> Self {
-        Self {
-            server,
-            image_assets: HashMap::new(),
-            audio_assets: HashMap::new(),
-            font_assets: HashMap::new(),
-            internal_loader,
-        }
-    }
+struct CommandFileAssetLoader {
+    assets: Rc<std::cell::RefCell<CommandAssetRegistry>>,
+    internal_loader: Option<FileAssetLoaderRef>,
+}
 
+impl FileAssetLoader for CommandFileAssetLoader {
     fn load_contents(
         &mut self,
-        asset: &mut crate::mechanical_port::source::assets::file_asset::FileAsset,
+        asset: CoreHandle,
         in_band_bytes: &[u8],
-        factory: &mut Factory,
+        factory: &RuntimeFactoryHandle,
     ) -> bool {
-        if self
-            .internal_loader
-            .as_mut()
-            .is_some_and(|loader| loader.load_contents(asset, in_band_bytes, factory))
-        {
+        if self.internal_loader.as_ref().is_some_and(|loader| {
+            loader.with_loader_mut(|loader| {
+                loader.load_contents(asset.clone(), in_band_bytes, factory)
+            })
+        }) {
             return true;
         }
-        let server = unsafe { &*self.server };
-        if let Some(image_asset) = asset.as_image_asset_mut() {
-            if let Some(handle) = self.image_assets.get(asset.unique_name()) {
-                if let Some(image) = server.get_image(*handle) {
-                    image_asset.set_render_image(Some(image));
-                    return true;
-                }
-                return false;
-            }
-        } else if let Some(audio_asset) = asset.as_audio_asset_mut() {
-            if let Some(handle) = self.audio_assets.get(asset.unique_name()) {
-                if let Some(audio) = server.get_audio_source(*handle) {
-                    audio_asset.set_audio_source(Some(audio));
-                    return true;
-                }
-                return false;
-            }
-        } else if let Some(font_asset) = asset.as_font_asset_mut() {
-            if let Some(handle) = self.font_assets.get(asset.unique_name()) {
-                if let Some(font) = server.get_font(*handle) {
-                    font_asset.set_font(Some(font));
-                    return true;
-                }
-                return false;
-            }
-        } else if asset.is_script_asset() {
+
+        let Some((unique_name, unique_filename)) = asset
+            .with(|asset| {
+                CoreCapabilities::as_file_asset(asset).map(|asset| {
+                    (
+                        asset.file_asset_base().unique_name(),
+                        asset
+                            .file_asset_base()
+                            .unique_filename(asset.file_extension()),
+                    )
+                })
+            })
+            .flatten()
+        else {
             return false;
-        } else {
-            eprintln!(
-                "ERROR: CommandFileAssetLoader::loadContents - Unsupported asset type for asset: '{}'",
-                asset.unique_filename()
-            );
-            return false;
-        }
-        false
-    }
+        };
 
-    fn add_render_image(&mut self, name: String, handle: RenderImageHandle) {
-        self.image_assets.insert(name, handle);
-    }
-
-    fn add_audio_source(&mut self, name: String, handle: AudioSourceHandle) {
-        self.audio_assets.insert(name, handle);
-    }
-
-    fn add_font(&mut self, name: String, handle: FontHandle) {
-        self.font_assets.insert(name, handle);
-    }
-
-    fn remove_render_image_handle(&mut self, handle: RenderImageHandle) {
-        if let Some(name) = self
+        let assets = self.assets.borrow();
+        if let Some(image) = assets
             .image_assets
-            .iter()
-            .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+            .get(&unique_name)
+            .and_then(|handle| assets.images.get(handle))
+            .cloned()
         {
-            self.image_assets.remove(&name);
+            return asset
+                .with_downcast_mut::<ImageAsset, _>(|asset| {
+                    asset.set_render_image(Some(image));
+                    true
+                })
+                .unwrap_or(false);
         }
-    }
-
-    fn remove_audio_source_handle(&mut self, handle: AudioSourceHandle) {
-        if let Some(name) = self
+        if let Some(audio) = assets
             .audio_assets
-            .iter()
-            .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+            .get(&unique_name)
+            .and_then(|handle| assets.audio_sources.get(handle))
+            .cloned()
         {
-            self.audio_assets.remove(&name);
+            return asset
+                .with_downcast_mut::<AudioAsset, _>(|asset| {
+                    asset.set_audio_source(Some(audio));
+                    true
+                })
+                .unwrap_or(false);
         }
-    }
-
-    fn remove_font_handle(&mut self, handle: FontHandle) {
-        if let Some(name) = self
+        if let Some(font) = assets
             .font_assets
-            .iter()
-            .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+            .get(&unique_name)
+            .and_then(|handle| assets.fonts.get(handle))
+            .cloned()
         {
-            self.font_assets.remove(&name);
+            return asset
+                .with_downcast_mut::<FontAsset, _>(|asset| {
+                    asset.set_font(Some(font));
+                    true
+                })
+                .unwrap_or(false);
         }
-    }
-
-    fn remove_render_image(&mut self, name: &str) {
-        self.image_assets.remove(name);
-    }
-
-    fn remove_audio_source(&mut self, name: &str) {
-        self.audio_assets.remove(name);
-    }
-
-    fn remove_font(&mut self, name: &str) {
-        self.font_assets.remove(name);
-    }
-
-    #[cfg(feature = "testing")]
-    fn testing_image_named(&self, name: &str) -> RenderImageHandle {
-        self.image_assets
-            .get(name)
-            .copied()
-            .unwrap_or(RIVE_NULL_HANDLE)
-    }
-
-    #[cfg(feature = "testing")]
-    fn testing_audio_named(&self, name: &str) -> AudioSourceHandle {
-        self.audio_assets
-            .get(name)
-            .copied()
-            .unwrap_or(RIVE_NULL_HANDLE)
-    }
-
-    #[cfg(feature = "testing")]
-    fn testing_font_named(&self, name: &str) -> FontHandle {
-        self.font_assets
-            .get(name)
-            .copied()
-            .unwrap_or(RIVE_NULL_HANDLE)
+        if asset.with_downcast::<ScriptAsset, _>(|_| ()).is_some()
+            || asset.with_downcast::<ImageAsset, _>(|_| ()).is_some()
+            || asset.with_downcast::<AudioAsset, _>(|_| ()).is_some()
+            || asset.with_downcast::<FontAsset, _>(|_| ()).is_some()
+        {
+            return false;
+        }
+        eprintln!(
+            "ERROR: CommandFileAssetLoader::loadContents - Unsupported asset type for asset: '{unique_filename}'"
+        );
+        false
     }
 }
 
@@ -233,60 +190,51 @@ impl Drop for SynchronizedStateMachine {
 
 pub struct CommandServer {
     was_disconnect_received: bool,
-    command_queue: Rc<CommandQueue>,
-    factory: *mut Factory,
+    command_queue: CommandQueue,
+    factory: RuntimeFactoryHandle,
+    internal_loader: Option<FileAssetLoaderRef>,
     #[cfg(debug_assertions)]
     thread_id: ThreadId,
     property_subscriptions: Vec<Subscription>,
     file_dependencies: HashMap<FileHandle, Vec<ArtboardHandle>>,
     artboard_dependencies: HashMap<ArtboardHandle, Vec<StateMachineHandle>>,
     files: HashMap<FileHandle, Rc<File>>,
-    fonts: HashMap<FontHandle, Rc<Font>>,
-    images: HashMap<RenderImageHandle, Rc<RenderImage>>,
+    assets: Rc<std::cell::RefCell<CommandAssetRegistry>>,
     blobs: HashMap<BlobAssetHandle, Rc<BlobAsset>>,
-    audio_sources: HashMap<AudioSourceHandle, Rc<AudioSource>>,
     artboards: HashMap<ArtboardHandle, Rc<BindableArtboard>>,
     view_models: HashMap<ViewModelInstanceHandle, Rc<ViewModelInstanceRuntime>>,
     state_machines: Mutex<HashMap<StateMachineHandle, Arc<SynchronizedStateMachine>>>,
     unique_draws: HashMap<DrawKey, CommandServerDrawCallback>,
-    file_asset_loader: Box<CommandFileAssetLoader>,
 }
 
 impl CommandServer {
     pub fn new(
-        command_queue: Rc<CommandQueue>,
-        factory: &mut Factory,
-        internal_loader: Option<Rc<dyn FileAssetLoader>>,
+        command_queue: CommandQueue,
+        factory: RuntimeFactoryHandle,
+        internal_loader: Option<FileAssetLoaderRef>,
     ) -> Box<Self> {
-        let mut server = Box::new(Self {
+        Box::new(Self {
             was_disconnect_received: false,
             command_queue,
             factory,
+            internal_loader,
             #[cfg(debug_assertions)]
             thread_id: thread::current().id(),
             property_subscriptions: Vec::new(),
             file_dependencies: HashMap::new(),
             artboard_dependencies: HashMap::new(),
             files: HashMap::new(),
-            fonts: HashMap::new(),
-            images: HashMap::new(),
+            assets: Rc::new(std::cell::RefCell::new(CommandAssetRegistry::default())),
             blobs: HashMap::new(),
-            audio_sources: HashMap::new(),
             artboards: HashMap::new(),
             view_models: HashMap::new(),
             state_machines: Mutex::new(HashMap::new()),
             unique_draws: HashMap::new(),
-            file_asset_loader: Box::new(CommandFileAssetLoader::new(
-                std::ptr::null(),
-                internal_loader,
-            )),
-        });
-        server.file_asset_loader.server = &*server;
-        server
+        })
     }
 
-    pub fn factory(&self) -> &mut Factory {
-        unsafe { &mut *self.factory }
+    pub fn factory(&self) -> RuntimeFactoryHandle {
+        self.factory.clone()
     }
 
     fn assert_thread(&self) {
@@ -299,19 +247,19 @@ impl CommandServer {
         self.files.get(&handle).map(Rc::as_ref)
     }
 
-    pub fn get_image(&self, handle: RenderImageHandle) -> Option<&RenderImage> {
+    pub fn get_image(&self, handle: RenderImageHandle) -> Option<RenderImageRef> {
         self.assert_thread();
-        self.images.get(&handle).map(Rc::as_ref)
+        self.assets.borrow().images.get(&handle).cloned()
     }
 
-    pub fn get_audio_source(&self, handle: AudioSourceHandle) -> Option<&AudioSource> {
+    pub fn get_audio_source(&self, handle: AudioSourceHandle) -> Option<AudioSourceRef> {
         self.assert_thread();
-        self.audio_sources.get(&handle).map(Rc::as_ref)
+        self.assets.borrow().audio_sources.get(&handle).cloned()
     }
 
-    pub fn get_font(&self, handle: FontHandle) -> Option<&Font> {
+    pub fn get_font(&self, handle: FontHandle) -> Option<FontRef> {
         self.assert_thread();
-        self.fonts.get(&handle).map(Rc::as_ref)
+        self.assets.borrow().fonts.get(&handle).cloned()
     }
 
     pub fn get_blob(&self, handle: BlobAssetHandle) -> Option<&BlobAsset> {
@@ -339,14 +287,17 @@ impl CommandServer {
         self.state_machines.lock().unwrap().get(&handle).cloned()
     }
 
-    pub fn get_state_machine_instance(
+    pub fn with_state_machine_instance_mut<R>(
         &self,
         handle: StateMachineHandle,
-    ) -> Option<*mut StateMachineInstance> {
-        self.assert_thread();
-        let wrapper = self.state_machines.lock().unwrap().get(&handle)?.clone();
-        let mut instance = wrapper.instance.lock().unwrap();
-        Some(&mut **instance)
+        use_instance: impl FnOnce(&mut StateMachineInstance) -> R,
+    ) -> Option<R> {
+        let wrapper = self.get_state_machine_wrapper(handle)?;
+        let mut instance = wrapper
+            .instance
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        Some(use_instance(&mut instance))
     }
 
     pub fn get_view_model_instance(
@@ -359,15 +310,15 @@ impl CommandServer {
 
     pub fn get_handle_for_instance(
         &self,
-        instance: *const ViewModelInstanceRuntime,
+        instance: &ViewModelInstanceRuntime,
     ) -> ViewModelInstanceHandle {
         self.assert_thread();
         self.view_models
             .iter()
             .find_map(|(handle, candidate)| {
-                std::ptr::eq(Rc::as_ptr(candidate), instance).then_some(*handle)
+                std::ptr::eq(Rc::as_ref(candidate), instance).then_some(*handle)
             })
-            .unwrap_or(RIVE_NULL_HANDLE)
+            .unwrap_or(ViewModelInstanceHandle::NULL)
     }
 
     pub fn get_was_disconnected(&self) -> bool {
@@ -444,7 +395,13 @@ impl CommandServer {
         result
     }
 
-    fn error<H: fmt::Display>(&self, handle: H, request_id: u64, message: Message, text: String) {
+    fn error<H: Copy + fmt::Display + 'static>(
+        &self,
+        handle: H,
+        request_id: u64,
+        message: Message,
+        text: String,
+    ) {
         eprintln!("{text}");
         let mut messages = self.command_queue.message_lock();
         messages.write(message);
@@ -518,17 +475,24 @@ impl CommandServer {
                 continue;
             }
             property.clear_changes();
-            match data.meta_data.data_type {
+            data.value = match data.meta_data.data_type {
                 DataType::AssetImage | DataType::AssetBlob | DataType::Trigger | DataType::List => {
+                    ViewModelInstanceValue::None
                 }
-                DataType::Boolean => data.bool_value = property.as_boolean().unwrap().value(),
-                DataType::Color => data.color_value = property.as_color().unwrap().value(),
-                DataType::Number => data.number_value = property.as_number().unwrap().value(),
+                DataType::Boolean => {
+                    ViewModelInstanceValue::Bool(property.as_boolean().unwrap().value())
+                }
+                DataType::Color => {
+                    ViewModelInstanceValue::Color(property.as_color().unwrap().value())
+                }
+                DataType::Number => {
+                    ViewModelInstanceValue::Number(property.as_number().unwrap().value())
+                }
                 DataType::Enum => {
-                    data.string_value = property.as_enum().unwrap().value().to_owned()
+                    ViewModelInstanceValue::String(property.as_enum().unwrap().value().to_owned())
                 }
                 DataType::String => {
-                    data.string_value = property.as_string().unwrap().value().to_owned()
+                    ViewModelInstanceValue::String(property.as_string().unwrap().value().to_owned())
                 }
                 other => {
                     self.error(
@@ -542,21 +506,19 @@ impl CommandServer {
                     );
                     continue;
                 }
-            }
+            };
             let mut messages = self.command_queue.message_lock();
             messages.write(Message::ViewModelPropertyValueReceived);
             messages.write(handle);
             messages.write(data.meta_data.data_type);
             messages.write_name(data.meta_data.name.clone());
             messages.write(request_id);
-            match data.meta_data.data_type {
-                DataType::AssetImage | DataType::AssetBlob | DataType::Trigger | DataType::List => {
-                }
-                DataType::Boolean => messages.write(data.bool_value),
-                DataType::Number => messages.write(data.number_value),
-                DataType::Color => messages.write(data.color_value),
-                DataType::Enum | DataType::String => messages.write_name(data.string_value),
-                _ => unreachable!(),
+            match data.value {
+                ViewModelInstanceValue::None => {}
+                ViewModelInstanceValue::Bool(value) => messages.write(value),
+                ViewModelInstanceValue::Number(value) => messages.write(value),
+                ViewModelInstanceValue::Color(value) => messages.write(value),
+                ViewModelInstanceValue::String(value) => messages.write_name(value),
             }
         }
     }
@@ -595,10 +557,8 @@ impl CommandServer {
                     let handle: FileHandle = self.command_queue.read();
                     let request_id: u64 = self.command_queue.read();
                     let bytes = self.command_queue.pop_bytes();
-                    #[cfg(feature = "rive_scripting")]
                     let scripting_factory = self.command_queue.pop_scripting_context_factory();
                     lock.unlock();
-                    #[cfg(feature = "rive_scripting")]
                     let file = {
                         let mut context = scripting_factory
                             .and_then(|factory_fn| factory_fn(self.factory()))
@@ -619,7 +579,7 @@ impl CommandServer {
                             &vm,
                         )
                     };
-                    #[cfg(not(feature = "rive_scripting"))]
+                    #[cfg(any())]
                     let file =
                         File::import(&bytes, self.factory(), self.file_asset_loader.as_mut());
                     if let Some(file) = file {
@@ -659,7 +619,7 @@ impl CommandServer {
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
                     if let Some(image) = self.factory().decode_image(&bytes) {
-                        self.images.insert(handle, image);
+                        self.assets.borrow_mut().images.insert(handle, image);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::ImageDecoded);
                         messages.write(handle);
@@ -679,7 +639,7 @@ impl CommandServer {
                     let image = self.command_queue.pop_external_image();
                     lock.unlock();
                     if let Some(image) = image {
-                        self.images.insert(handle, image);
+                        self.assets.borrow_mut().images.insert(handle, image);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::ImageDecoded);
                         messages.write(handle);
@@ -697,8 +657,16 @@ impl CommandServer {
                     let handle: RenderImageHandle = self.command_queue.read();
                     let request_id: u64 = self.command_queue.read();
                     lock.unlock();
-                    self.images.remove(&handle);
-                    self.file_asset_loader.remove_render_image_handle(handle);
+                    let mut assets = self.assets.borrow_mut();
+                    assets.images.remove(&handle);
+                    if let Some(name) = assets
+                        .image_assets
+                        .iter()
+                        .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+                    {
+                        assets.image_assets.remove(&name);
+                    }
+                    drop(assets);
                     let mut messages = self.command_queue.message_lock();
                     messages.write(Message::ImageDeleted);
                     messages.write(handle);
@@ -761,7 +729,7 @@ impl CommandServer {
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
                     if let Some(audio) = self.factory().decode_audio(&bytes) {
-                        self.audio_sources.insert(handle, audio);
+                        self.assets.borrow_mut().audio_sources.insert(handle, audio);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::AudioDecoded);
                         messages.write(handle);
@@ -781,7 +749,7 @@ impl CommandServer {
                     let audio = self.command_queue.pop_external_audio();
                     lock.unlock();
                     if let Some(audio) = audio {
-                        self.audio_sources.insert(handle, audio);
+                        self.assets.borrow_mut().audio_sources.insert(handle, audio);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::AudioDecoded);
                         messages.write(handle);
@@ -799,8 +767,16 @@ impl CommandServer {
                     let handle: AudioSourceHandle = self.command_queue.read();
                     let request_id: u64 = self.command_queue.read();
                     lock.unlock();
-                    self.audio_sources.remove(&handle);
-                    self.file_asset_loader.remove_audio_source_handle(handle);
+                    let mut assets = self.assets.borrow_mut();
+                    assets.audio_sources.remove(&handle);
+                    if let Some(name) = assets
+                        .audio_assets
+                        .iter()
+                        .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+                    {
+                        assets.audio_assets.remove(&name);
+                    }
+                    drop(assets);
                     let mut messages = self.command_queue.message_lock();
                     messages.write(Message::AudioDeleted);
                     messages.write(handle);
@@ -812,7 +788,7 @@ impl CommandServer {
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
                     if let Some(font) = self.factory().decode_font(&bytes) {
-                        self.fonts.insert(handle, font);
+                        self.assets.borrow_mut().fonts.insert(handle, font);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::FontDecoded);
                         messages.write(handle);
@@ -832,7 +808,7 @@ impl CommandServer {
                     let font = self.command_queue.pop_external_font();
                     lock.unlock();
                     if let Some(font) = font {
-                        self.fonts.insert(handle, font);
+                        self.assets.borrow_mut().fonts.insert(handle, font);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::FontDecoded);
                         messages.write(handle);
@@ -850,8 +826,16 @@ impl CommandServer {
                     let handle: FontHandle = self.command_queue.read();
                     let request_id: u64 = self.command_queue.read();
                     lock.unlock();
-                    self.fonts.remove(&handle);
-                    self.file_asset_loader.remove_font_handle(handle);
+                    let mut assets = self.assets.borrow_mut();
+                    assets.fonts.remove(&handle);
+                    if let Some(name) = assets
+                        .font_assets
+                        .iter()
+                        .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+                    {
+                        assets.font_assets.remove(&name);
+                    }
+                    drop(assets);
                     let mut messages = self.command_queue.message_lock();
                     messages.write(Message::FontDeleted);
                     messages.write(handle);
@@ -1138,7 +1122,11 @@ impl CommandServer {
                     let request_id = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    let data = PropertyData { name, data_type };
+                    let data = PropertyData {
+                        name,
+                        data_type,
+                        enum_name: String::new(),
+                    };
                     if command == Command::SubscribeViewModelProperty {
                         if let Some(view) = self.get_view_model_instance(root_handle) {
                             if !matches!(
@@ -1830,25 +1818,45 @@ impl CommandServer {
                     let data_type = self.command_queue.read();
                     let request_id = self.command_queue.read();
                     let name = self.command_queue.pop_name();
-                    let mut value = ViewModelInstanceData::new(PropertyData { name, data_type });
-                    let mut nested = RIVE_NULL_HANDLE;
-                    let mut image = RIVE_NULL_HANDLE;
-                    let mut blob = RIVE_NULL_HANDLE;
-                    let mut artboard = RIVE_NULL_HANDLE;
-                    match data_type {
-                        DataType::Trigger => {}
-                        DataType::Boolean => value.bool_value = self.command_queue.read(),
-                        DataType::Number => value.number_value = self.command_queue.read(),
-                        DataType::Color => value.color_value = self.command_queue.read(),
-                        DataType::String | DataType::Enum => {
-                            value.string_value = self.command_queue.pop_name()
+                    let mut value = ViewModelInstanceData::new(PropertyData {
+                        name,
+                        data_type,
+                        enum_name: String::new(),
+                    });
+                    let mut nested = ViewModelInstanceHandle::NULL;
+                    let mut image = RenderImageHandle::NULL;
+                    let mut blob = BlobAssetHandle::NULL;
+                    let mut artboard = ArtboardHandle::NULL;
+                    value.value = match data_type {
+                        DataType::Trigger => ViewModelInstanceValue::None,
+                        DataType::Boolean => {
+                            ViewModelInstanceValue::Bool(self.command_queue.read())
                         }
-                        DataType::ViewModel => nested = self.command_queue.read(),
-                        DataType::AssetImage => image = self.command_queue.read(),
-                        DataType::AssetBlob => blob = self.command_queue.read(),
-                        DataType::Artboard => artboard = self.command_queue.read(),
+                        DataType::Number => {
+                            ViewModelInstanceValue::Number(self.command_queue.read())
+                        }
+                        DataType::Color => ViewModelInstanceValue::Color(self.command_queue.read()),
+                        DataType::String | DataType::Enum => {
+                            ViewModelInstanceValue::String(self.command_queue.pop_name())
+                        }
+                        DataType::ViewModel => {
+                            nested = self.command_queue.read();
+                            ViewModelInstanceValue::None
+                        }
+                        DataType::AssetImage => {
+                            image = self.command_queue.read();
+                            ViewModelInstanceValue::None
+                        }
+                        DataType::AssetBlob => {
+                            blob = self.command_queue.read();
+                            ViewModelInstanceValue::None
+                        }
+                        DataType::Artboard => {
+                            artboard = self.command_queue.read();
+                            ViewModelInstanceValue::None
+                        }
                         _ => unreachable!(),
-                    }
+                    };
                     lock.unlock();
                     self.set_view_model_value(
                         handle, request_id, value, nested, image, blob, artboard,
@@ -1863,7 +1871,11 @@ impl CommandServer {
                     self.list_view_model_property_value(
                         handle,
                         request_id,
-                        PropertyData { name, data_type },
+                        PropertyData {
+                            name,
+                            data_type,
+                            enum_name: String::new(),
+                        },
                     );
                 }
                 Command::GetViewModelListSize => {
@@ -1974,45 +1986,46 @@ impl CommandServer {
                     let _request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    if handle != RIVE_NULL_HANDLE && self.get_image(handle).is_some() {
-                        self.file_asset_loader.add_render_image(name, handle);
+                    if handle != RenderImageHandle::NULL && self.get_image(handle).is_some() {
+                        self.assets.borrow_mut().image_assets.insert(name, handle);
                     }
                 }
                 Command::RemoveImageFileAsset => {
                     let _request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    self.file_asset_loader.remove_render_image(&name);
+                    self.assets.borrow_mut().image_assets.remove(&name);
                 }
                 Command::AddAudioFileAsset => {
                     let handle = self.command_queue.read();
                     let _request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    if handle != RIVE_NULL_HANDLE && self.get_audio_source(handle).is_some() {
-                        self.file_asset_loader.add_audio_source(name, handle);
+                    if handle != AudioSourceHandle::NULL && self.get_audio_source(handle).is_some()
+                    {
+                        self.assets.borrow_mut().audio_assets.insert(name, handle);
                     }
                 }
                 Command::RemoveAudioFileAsset => {
                     let _request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    self.file_asset_loader.remove_audio_source(&name);
+                    self.assets.borrow_mut().audio_assets.remove(&name);
                 }
                 Command::AddFontFileAsset => {
                     let handle = self.command_queue.read();
                     let _request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    if handle != RIVE_NULL_HANDLE && self.get_font(handle).is_some() {
-                        self.file_asset_loader.add_font(name, handle);
+                    if handle != FontHandle::NULL && self.get_font(handle).is_some() {
+                        self.assets.borrow_mut().font_assets.insert(name, handle);
                     }
                 }
                 Command::RemoveFontFileAsset => {
                     let _request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    self.file_asset_loader.remove_font(&name);
+                    self.assets.borrow_mut().font_assets.remove(&name);
                 }
                 Command::Disconnect => {
                     lock.unlock();
@@ -2027,7 +2040,8 @@ impl CommandServer {
             }
         }
         lock.unlock();
-        for (key, callback) in &self.unique_draws {
+        let mut unique_draws = std::mem::take(&mut self.unique_draws);
+        for (key, callback) in &mut unique_draws {
             callback(*key, self);
         }
         self.unique_draws.clear();
@@ -2075,39 +2089,54 @@ impl CommandServer {
             }
             DataType::Boolean => {
                 if let Some(property) = view.property_boolean(name) {
-                    property.set_value(value.bool_value);
+                    let ViewModelInstanceValue::Bool(value) = &value.value else {
+                        unreachable!()
+                    };
+                    property.set_value(*value);
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
                 }
             }
             DataType::Number => {
                 if let Some(property) = view.property_number(name) {
-                    property.set_value(value.number_value);
+                    let ViewModelInstanceValue::Number(value) = &value.value else {
+                        unreachable!()
+                    };
+                    property.set_value(*value);
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
                 }
             }
             DataType::Color => {
                 if let Some(property) = view.property_color(name) {
-                    property.set_value(value.color_value);
+                    let ViewModelInstanceValue::Color(value) = &value.value else {
+                        unreachable!()
+                    };
+                    property.set_value(*value);
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
                 }
             }
             DataType::String => {
                 if let Some(property) = view.property_string(name) {
-                    property.set_value(&value.string_value);
+                    let ViewModelInstanceValue::String(value) = &value.value else {
+                        unreachable!()
+                    };
+                    property.set_value(value);
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
                 }
             }
             DataType::Enum => {
                 if let Some(property) = view.property_enum(name) {
+                    let ViewModelInstanceValue::String(value) = &value.value else {
+                        unreachable!()
+                    };
                     let values = property.values();
-                    if values.contains(&value.string_value) {
-                        property.set_value(&value.string_value);
+                    if values.contains(value) {
+                        property.set_value(value);
                     } else {
-                        self.error(handle, request_id, Message::ViewModelError, format!("Invalid enum value for property {name} when trying to set enum to {} possible values {:?}", value.string_value, values));
+                        self.error(handle, request_id, Message::ViewModelError, format!("Invalid enum value for property {name} when trying to set enum to {value} possible values {values:?}"));
                     }
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
@@ -2129,7 +2158,7 @@ impl CommandServer {
             }
             DataType::AssetImage => {
                 if let Some(property) = view.property_image(name) {
-                    if image_handle == RIVE_NULL_HANDLE {
+                    if image_handle == RenderImageHandle::NULL {
                         property.set_value(None);
                     } else if let Some(image) = self.get_image(image_handle) {
                         property.set_value(Some(image));
@@ -2147,7 +2176,7 @@ impl CommandServer {
             }
             DataType::AssetBlob => {
                 if let Some(property) = view.property_blob(name) {
-                    if blob_handle == RIVE_NULL_HANDLE {
+                    if blob_handle == BlobAssetHandle::NULL {
                         property.set_value(None);
                     } else if let Some(blob) = self.get_blob(blob_handle) {
                         property.set_value(Some(blob));
@@ -2165,7 +2194,7 @@ impl CommandServer {
             }
             DataType::Artboard => {
                 if let Some(property) = view.property_artboard(name) {
-                    if artboard_handle == RIVE_NULL_HANDLE {
+                    if artboard_handle == ArtboardHandle::NULL {
                         property.set_value(None);
                     } else if let Some(artboard) = self.get_bindable_artboard(artboard_handle) {
                         property.set_value(Some(artboard));
@@ -2212,60 +2241,65 @@ impl CommandServer {
                 data_type_name(value.meta_data.data_type)
             )
         };
-        match value.meta_data.data_type {
+        value.value = match value.meta_data.data_type {
             DataType::Boolean => {
                 if let Some(property) = view.property_boolean(name) {
-                    value.bool_value = property.value();
+                    ViewModelInstanceValue::Bool(property.value())
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
+                    return;
                 }
             }
             DataType::Number => {
                 if let Some(property) = view.property_number(name) {
-                    value.number_value = property.value();
+                    ViewModelInstanceValue::Number(property.value())
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
+                    return;
                 }
             }
             DataType::Color => {
                 if let Some(property) = view.property_color(name) {
-                    value.color_value = property.value();
+                    ViewModelInstanceValue::Color(property.value())
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
+                    return;
                 }
             }
             DataType::String => {
                 if let Some(property) = view.property_string(name) {
-                    value.string_value = property.value().into();
+                    ViewModelInstanceValue::String(property.value().into())
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
+                    return;
                 }
             }
             DataType::Enum => {
                 if let Some(property) = view.property_enum(name) {
-                    value.string_value = property.value().into();
+                    ViewModelInstanceValue::String(property.value().into())
                 } else {
                     self.error(handle, request_id, Message::ViewModelError, missing());
+                    return;
                 }
             }
             _ => unreachable!(),
-        }
+        };
         let mut messages = self.command_queue.message_lock();
         messages.write(Message::ViewModelPropertyValueReceived);
         messages.write(handle);
         messages.write(value.meta_data.data_type);
         messages.write_name(value.meta_data.name);
         messages.write(request_id);
-        match value.meta_data.data_type {
-            DataType::Boolean => messages.write(value.bool_value),
-            DataType::Number => messages.write(value.number_value),
-            DataType::Color => messages.write(value.color_value),
-            DataType::Enum | DataType::String => messages.write_name(value.string_value),
-            _ => unreachable!(),
+        match value.value {
+            ViewModelInstanceValue::None => {}
+            ViewModelInstanceValue::Bool(value) => messages.write(value),
+            ViewModelInstanceValue::Number(value) => messages.write(value),
+            ViewModelInstanceValue::Color(value) => messages.write(value),
+            ViewModelInstanceValue::String(value) => messages.write_name(value),
         }
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn testing_cursor_pos_for_pointer_event(
         &self,
         instance: &StateMachineInstance,
@@ -2273,35 +2307,50 @@ impl CommandServer {
     ) -> Vec2D {
         self.cursor_pos_for_pointer_event(instance, &event)
     }
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn testing_get_subscriptions(&self) -> &[Subscription] {
         &self.property_subscriptions
     }
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn testing_global_image_named(&self, name: &str) -> RenderImageHandle {
-        self.file_asset_loader.testing_image_named(name)
+        self.assets
+            .borrow()
+            .image_assets
+            .get(name)
+            .copied()
+            .unwrap_or(RenderImageHandle::NULL)
     }
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn testing_global_audio_named(&self, name: &str) -> AudioSourceHandle {
-        self.file_asset_loader.testing_audio_named(name)
+        self.assets
+            .borrow()
+            .audio_assets
+            .get(name)
+            .copied()
+            .unwrap_or(AudioSourceHandle::NULL)
     }
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn testing_global_font_named(&self, name: &str) -> FontHandle {
-        self.file_asset_loader.testing_font_named(name)
+        self.assets
+            .borrow()
+            .font_assets
+            .get(name)
+            .copied()
+            .unwrap_or(FontHandle::NULL)
     }
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn testing_global_image_contains(&self, name: &str) -> bool {
-        self.testing_global_image_named(name) != RIVE_NULL_HANDLE
+        self.testing_global_image_named(name) != RenderImageHandle::NULL
     }
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn testing_global_audio_contains(&self, name: &str) -> bool {
-        self.testing_global_audio_named(name) != RIVE_NULL_HANDLE
+        self.testing_global_audio_named(name) != AudioSourceHandle::NULL
     }
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn testing_global_font_contains(&self, name: &str) -> bool {
-        self.testing_global_font_named(name) != RIVE_NULL_HANDLE
+        self.testing_global_font_named(name) != FontHandle::NULL
     }
-    #[cfg(all(feature = "testing", debug_assertions))]
+    #[cfg(all(test, debug_assertions))]
     pub fn testing_override_thread_id(&mut self, thread_id: ThreadId) {
         self.thread_id = thread_id;
     }

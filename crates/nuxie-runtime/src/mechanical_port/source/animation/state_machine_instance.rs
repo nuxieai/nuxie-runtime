@@ -12,11 +12,15 @@ use crate::mechanical_port::source::{
         listener_types::listener_input_type_viewmodel::ListenerInputTypeViewModel,
         semantic_listener_group::{RuntimeSemanticListenerGroupHandle, SemanticActionType},
         state_instance::RuntimeStateInstanceHandle,
+        state_machine::StateMachine,
+        state_machine_bool::StateMachineBool,
         state_machine_input_instance::{
             InputInstanceNotifier, SMIBool, SMIInput, SMINumber, SMITrigger,
         },
         state_machine_listener::StateMachineListener,
         state_machine_listener_single::StateMachineListenerSingle,
+        state_machine_number::StateMachineNumber,
+        state_machine_trigger::StateMachineTrigger,
     },
     artboard::RuntimeArtboardInstanceWeakHandle,
     component_dirt::ComponentDirt,
@@ -152,6 +156,28 @@ pub enum InputInstance {
 }
 
 impl InputInstance {
+    fn from_definition(definition: &CoreHandle, notifier: InputInstanceNotifier) -> Option<Self> {
+        if let Some(instance) = definition.with_downcast::<StateMachineBool, _>(|definition| {
+            Self::Bool(Box::new(SMIBool::new(definition, notifier.clone())))
+        }) {
+            return Some(instance);
+        }
+        if let Some(instance) = definition.with_downcast::<StateMachineNumber, _>(|definition| {
+            Self::Number(Box::new(SMINumber::new(definition, notifier.clone())))
+        }) {
+            return Some(instance);
+        }
+        definition.with_downcast::<StateMachineTrigger, _>(|definition| {
+            Self::Trigger(Box::new(SMITrigger::new(definition, notifier)))
+        })
+    }
+
+    fn advanced(&mut self) {
+        if let Self::Trigger(trigger) = self {
+            trigger.advanced();
+        }
+    }
+
     fn base(&self) -> &SMIInput {
         match self {
             Self::Bool(value) => &value.base,
@@ -198,24 +224,6 @@ pub trait StateMachineInstanceRuntime {
         layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
     );
     fn deterministic_mode(&self) -> bool;
-    fn machine_name(&self, machine: &CoreHandle) -> String;
-    fn machine_input_count(&self, machine: &CoreHandle) -> usize;
-    fn machine_input(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
-    fn machine_layer_count(&self, machine: &CoreHandle) -> usize;
-    fn machine_layer(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
-    fn machine_listener_count(&self, machine: &CoreHandle) -> usize;
-    fn machine_listener(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
-    fn machine_data_bind_count(&self, machine: &CoreHandle) -> usize;
-    fn machine_data_bind(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
-    fn machine_scripted_objects(&self, machine: &CoreHandle) -> Vec<CoreHandle>;
-    fn input_core_type(&self, input: &CoreHandle) -> u16;
-    fn make_input_instance(
-        &mut self,
-        input: CoreHandle,
-        notifier: InputInstanceNotifier,
-    ) -> Option<InputInstance>;
-    fn input_name(&self, input: &CoreHandle) -> String;
-    fn input_advanced(&mut self, input: &mut InputInstance);
     fn layer_any_state(&self, layer: &CoreHandle) -> CoreHandle;
     fn layer_entry_state(&self, layer: &CoreHandle) -> CoreHandle;
     fn make_state_instance(
@@ -444,8 +452,6 @@ pub trait StateMachineInstanceRuntime {
     fn scripted_wants_keyboard(&self, object: &CoreHandle) -> bool;
     fn scripted_wants_text(&self, object: &CoreHandle) -> bool;
     fn scripted_wants_gamepad(&self, object: &CoreHandle) -> bool;
-    fn listener_has(&self, listener: &CoreHandle, kind: ListenerType) -> bool;
-    fn listener_has_any(&self, listener: &CoreHandle, kinds: &[ListenerType]) -> bool;
     fn listener_target_id(&self, listener: &CoreHandle) -> u32;
     fn listener_event_ids(&self, listener: &CoreHandle) -> Vec<u32>;
     fn listener_perform_changes(
@@ -2037,22 +2043,20 @@ impl StateMachineInstance {
             input_notifier.set_machine(handle.downgrade());
 
             let input_count = instance
-                .runtime
-                .borrow_mut()
-                .machine_input_count(&instance.machine);
+                .machine
+                .with_downcast::<StateMachine, _>(StateMachine::input_count)
+                .unwrap_or(0);
             instance.input_instances.resize_with(input_count, || None);
             for index in 0..input_count {
                 let Some(input) = instance
-                    .runtime
-                    .borrow_mut()
-                    .machine_input(&instance.machine, index)
+                    .machine
+                    .with_downcast::<StateMachine, _>(|machine| machine.input(index))
+                    .flatten()
                 else {
                     continue;
                 };
-                instance.input_instances[index] = instance
-                    .runtime
-                    .borrow_mut()
-                    .make_input_instance(input, input_notifier.clone());
+                instance.input_instances[index] =
+                    InputInstance::from_definition(&input, input_notifier.clone());
                 #[cfg(feature = "tools")]
                 if let Some(input_instance) = instance.input_instances[index].as_mut() {
                     input_instance.base_mut().set_index(index as u64);
@@ -2060,14 +2064,14 @@ impl StateMachineInstance {
             }
 
             let layer_count = instance
-                .runtime
-                .borrow_mut()
-                .machine_layer_count(&instance.machine);
+                .machine
+                .with_downcast::<StateMachine, _>(StateMachine::layer_count)
+                .unwrap_or(0);
             for index in 0..layer_count {
                 let Some(layer) = instance
-                    .runtime
-                    .borrow_mut()
-                    .machine_layer(&instance.machine, index)
+                    .machine
+                    .with_downcast::<StateMachine, _>(|machine| machine.layer(index))
+                    .flatten()
                 else {
                     continue;
                 };
@@ -2107,7 +2111,19 @@ impl StateMachineInstance {
     }
 
     pub fn listener_has(&self, listener: &CoreHandle, listener_type: ListenerType) -> bool {
-        self.runtime.borrow().listener_has(listener, listener_type)
+        listener
+            .with_downcast::<StateMachineListener, _>(|listener| {
+                listener.has_listener(listener_type)
+            })
+            .unwrap_or(false)
+    }
+
+    fn listener_has_any(&self, listener: &CoreHandle, listener_types: &[ListenerType]) -> bool {
+        listener
+            .with_downcast::<StateMachineListener, _>(|listener| {
+                listener.has_listeners(listener_types)
+            })
+            .unwrap_or(false)
     }
 
     pub fn perform_listener_changes(
@@ -2134,15 +2150,15 @@ impl StateMachineInstance {
     }
 
     fn initialize_data_binds(&mut self) {
-        for index in 0..self
-            .runtime
-            .borrow_mut()
-            .machine_data_bind_count(&self.machine)
-        {
+        let data_bind_count = self
+            .machine
+            .with_downcast::<StateMachine, _>(StateMachine::data_bind_count)
+            .unwrap_or(0);
+        for index in 0..data_bind_count {
             let Some(source) = self
-                .runtime
-                .borrow_mut()
-                .machine_data_bind(&self.machine, index)
+                .machine
+                .with_downcast::<StateMachine, _>(|machine| machine.data_bind(index))
+                .flatten()
             else {
                 continue;
             };
@@ -2204,30 +2220,22 @@ impl StateMachineInstance {
 
     fn initialize_listeners(&mut self, hit_lookup: &mut HashMap<CoreHandle, usize>) {
         let machine = self.occurrence.clone();
-        for index in 0..self
-            .runtime
-            .borrow_mut()
-            .machine_listener_count(&self.machine)
-        {
+        let listener_count = self
+            .machine
+            .with_downcast::<StateMachine, _>(StateMachine::listener_count)
+            .unwrap_or(0);
+        for index in 0..listener_count {
             let Some(listener) = self
-                .runtime
-                .borrow_mut()
-                .machine_listener(&self.machine, index)
+                .machine
+                .with_downcast::<StateMachine, _>(|machine| machine.listener(index))
+                .flatten()
             else {
                 continue;
             };
-            if self
-                .runtime
-                .borrow_mut()
-                .listener_has(&listener, ListenerType::Event)
-            {
+            if self.listener_has(&listener, ListenerType::Event) {
                 continue;
             }
-            if self
-                .runtime
-                .borrow_mut()
-                .listener_has(&listener, ListenerType::ViewModel)
-            {
+            if self.listener_has(&listener, ListenerType::ViewModel) {
                 self.listener_view_models
                     .push(ListenerViewModel::new(machine.clone(), listener));
                 continue;
@@ -2236,14 +2244,8 @@ impl StateMachineInstance {
                 &self.artboard_instance,
                 self.runtime.borrow_mut().listener_target_id(&listener),
             );
-            if self
-                .runtime
-                .borrow_mut()
-                .listener_has(&listener, ListenerType::Focus)
-                || self
-                    .runtime
-                    .borrow_mut()
-                    .listener_has(&listener, ListenerType::Blur)
+            if self.listener_has(&listener, ListenerType::Focus)
+                || self.listener_has(&listener, ListenerType::Blur)
             {
                 if let Some(focus_data) = target
                     .as_ref()
@@ -2257,14 +2259,8 @@ impl StateMachineInstance {
                     self.focus_listener_groups.push(group);
                 }
             }
-            if self
-                .runtime
-                .borrow_mut()
-                .listener_has(&listener, ListenerType::Keyboard)
-                || self
-                    .runtime
-                    .borrow_mut()
-                    .listener_has(&listener, ListenerType::TextInput)
+            if self.listener_has(&listener, ListenerType::Keyboard)
+                || self.listener_has(&listener, ListenerType::TextInput)
             {
                 if let Some(focus_data) = target
                     .as_ref()
@@ -2278,11 +2274,7 @@ impl StateMachineInstance {
                     self.keyboard_listener_groups.push(group);
                 }
             }
-            if self
-                .runtime
-                .borrow_mut()
-                .listener_has(&listener, ListenerType::SemanticAction)
-            {
+            if self.listener_has(&listener, ListenerType::SemanticAction) {
                 if let Some(semantic_data) = target
                     .as_ref()
                     .and_then(|target| self.runtime.borrow_mut().resolve_semantic_data(target))
@@ -2295,11 +2287,7 @@ impl StateMachineInstance {
                     self.semantic_listener_groups.push(group);
                 }
             }
-            if self
-                .runtime
-                .borrow_mut()
-                .listener_has_any(&listener, &POINTER_HIT_LISTENER_TYPES)
-            {
+            if self.listener_has_any(&listener, &POINTER_HIT_LISTENER_TYPES) {
                 let group =
                     RuntimeListenerGroupHandle::new(Box::new(ListenerGroup::new(listener.clone())));
                 if let Some(target) = target.as_ref() {
@@ -2315,11 +2303,7 @@ impl StateMachineInstance {
                 }
                 self.listener_groups.push(group);
             }
-            if self
-                .runtime
-                .borrow_mut()
-                .listener_has(&listener, ListenerType::Gamepad)
-            {
+            if self.listener_has(&listener, ListenerType::Gamepad) {
                 if let Some(focus_data) = target
                     .as_ref()
                     .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
@@ -2455,11 +2439,11 @@ impl StateMachineInstance {
     }
 
     fn initialize_scripted_objects(&mut self) {
-        for source in self
-            .runtime
-            .borrow_mut()
-            .machine_scripted_objects(&self.machine)
-        {
+        let scripted_objects = self
+            .machine
+            .with_downcast::<StateMachine, _>(StateMachine::scripted_objects)
+            .unwrap_or_default();
+        for source in scripted_objects {
             let clone = self.runtime.borrow_mut().scripted_clone(&source, self);
             self.scripted_objects_map.insert(source, clone);
         }
@@ -2989,7 +2973,7 @@ impl StateMachineInstance {
             self.needs_advance.set(true);
         }
         for input in self.input_instances.iter_mut().flatten() {
-            self.runtime.borrow_mut().input_advanced(input);
+            input.advanced();
         }
         self.needs_advance.get()
             || !self.reported_events.is_empty()
@@ -3096,7 +3080,9 @@ impl StateMachineInstance {
     }
 
     pub fn name(&self) -> String {
-        self.runtime.borrow_mut().machine_name(&self.machine)
+        self.machine
+            .with_downcast::<StateMachine, _>(|machine| machine.base.name().to_owned())
+            .unwrap_or_default()
     }
 
     pub fn state_machine(&self) -> CoreHandle {
@@ -3337,23 +3323,19 @@ impl StateMachineInstance {
         if events.is_empty() {
             return;
         }
-        for index in 0..self
-            .runtime
-            .borrow_mut()
-            .machine_listener_count(&self.machine)
-        {
+        let listener_count = self
+            .machine
+            .with_downcast::<StateMachine, _>(StateMachine::listener_count)
+            .unwrap_or(0);
+        for index in 0..listener_count {
             let Some(listener) = self
-                .runtime
-                .borrow_mut()
-                .machine_listener(&self.machine, index)
+                .machine
+                .with_downcast::<StateMachine, _>(|machine| machine.listener(index))
+                .flatten()
             else {
                 continue;
             };
-            if !self
-                .runtime
-                .borrow_mut()
-                .listener_has(&listener, ListenerType::Event)
-            {
+            if !self.listener_has(&listener, ListenerType::Event) {
                 continue;
             }
             let target = self.runtime.borrow_mut().artboard_resolve(

@@ -1423,7 +1423,7 @@ impl ScriptViewModel {
         Some(Self::from_native_definition(model, Some(instance), file))
     }
 
-    fn from_native_definition(
+    pub(crate) fn from_native_definition(
         model: crate::mechanical_port::source::core::CoreHandle,
         instance: Option<crate::mechanical_port::source::core::CoreHandle>,
         file: crate::mechanical_port::source::file::RuntimeFileHandle,
@@ -1431,7 +1431,7 @@ impl ScriptViewModel {
         let native = NativeScriptViewModel {
             instance,
             model,
-            file,
+            file: native_view_model::NativeScriptFile::owning(file),
         };
         let properties = native.properties();
         Self {
@@ -1450,6 +1450,18 @@ impl ScriptViewModel {
             ScriptViewModelBacking::Native(native) => Some(native),
             _ => None,
         }
+    }
+
+    pub(crate) fn from_native_file_definition(
+        model: crate::mechanical_port::source::core::CoreHandle,
+        file: &crate::mechanical_port::source::file::RuntimeFileHandle,
+    ) -> Self {
+        let mut facade = Self::from_native_definition(model, None, file.clone());
+        let ScriptViewModelBacking::Native(native) = &mut facade.backing else {
+            unreachable!()
+        };
+        native.file = native_view_model::NativeScriptFile::definition(file);
+        facade
     }
 
     pub fn native_instance(&self) -> Option<crate::mechanical_port::source::core::CoreHandle> {
@@ -4124,21 +4136,67 @@ impl fmt::Debug for RuntimeScriptInstanceHandle {
     }
 }
 
+/// Opaque retained generator owned by one ScriptAsset, not a module-name cache.
+#[derive(Clone)]
+pub struct RuntimeScriptProgram(Rc<dyn std::any::Any>);
+impl RuntimeScriptProgram {
+    pub fn from_backend<T: 'static>(program: T) -> Self {
+        Self(Rc::new(program))
+    }
+    pub fn backend<T: 'static>(&self) -> Option<&T> {
+        self.0.downcast_ref()
+    }
+}
+
+pub struct ScriptAssetRegistration<'a> {
+    pub name: &'a str,
+    /// Already validated and envelope-stripped by ScriptAsset::decode.
+    pub bytecode: &'a [u8],
+    pub is_protocol: bool,
+    pub missing_dependencies: Vec<String>,
+}
+
+#[derive(Default)]
+pub struct ScriptAssetRegistrationResult {
+    pub completed: bool,
+    pub program: Option<RuntimeScriptProgram>,
+    pub missing_dependencies: Vec<String>,
+    pub error: Option<ScriptError>,
+}
+
 /// Runtime-owned VM seam implemented by concrete scripting backends.
 pub trait ScriptingVm {
+    fn initializes_data_global_externally(&self) -> bool {
+        false
+    }
+    fn initialize_data_global(
+        &self,
+        models: BTreeMap<String, ScriptViewModel>,
+    ) -> Result<(), ScriptError>;
     /// Retain the one renderer factory identity before any imported script is
     /// registered or executed.
-    fn install_render_factory(
-        &mut self,
-        factory: &mut dyn RenderFactory,
-    ) -> Result<(), ScriptError>;
+    fn install_render_factory(&self, factory: &mut dyn RenderFactory) -> Result<(), ScriptError>;
 
-    fn install_rive_globals(&mut self) -> Result<(), ScriptError>;
+    fn install_rive_globals(&self) -> Result<(), ScriptError>;
 
-    fn register_module(&mut self, name: &str, payload: &[u8]) -> Result<(), ScriptError>;
+    fn register_module(&self, name: &str, payload: &[u8]) -> Result<(), ScriptError>;
+
+    fn register_script_assets(
+        &self,
+        scripts: &[ScriptAssetRegistration<'_>],
+    ) -> Vec<ScriptAssetRegistrationResult>;
+
+    fn instantiate_program(
+        &self,
+        program: &RuntimeScriptProgram,
+        context_present: bool,
+        view_model: Option<ScriptViewModel>,
+        parent_view_models: Vec<Option<ScriptViewModel>>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<Box<dyn ScriptInstance>, ScriptError>;
 
     fn instantiate_script(
-        &mut self,
+        &self,
         name: &str,
         payload: &[u8],
         host: &mut dyn ScriptHost,
@@ -4147,11 +4205,11 @@ pub trait ScriptingVm {
     /// Consume detached script-created view-model instances once at the end
     /// of a root host frame. Child/script-driven artboard advances must not
     /// call this hook.
-    fn advance_detached_view_models(&mut self) -> bool {
+    fn advance_detached_view_models(&self) -> bool {
         false
     }
 
-    fn perform_registration(&mut self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {
+    fn perform_registration(&self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {
         let mut pending: Vec<usize> = (0..modules.len()).collect();
         loop {
             let before = pending.len();

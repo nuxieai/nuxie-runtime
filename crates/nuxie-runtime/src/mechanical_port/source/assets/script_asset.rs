@@ -44,6 +44,19 @@ impl Default for ScriptInput {
     }
 }
 
+impl Drop for ScriptInput {
+    fn drop(&mut self) {
+        if self.owns_data_bind {
+            if let Some(bind) = self.data_bind.take() {
+                crate::mechanical_port::source::data_bind::data_bind::DataBind::unbind_handle(
+                    &bind,
+                );
+                bind.remove_occurrence();
+            }
+        }
+    }
+}
+
 impl ScriptInput {
     pub fn from(component: CoreHandle, type_key: CoreTypeKey) -> Option<CoreHandle> {
         match type_key {
@@ -58,9 +71,6 @@ impl ScriptInput {
 
     pub fn set_data_bind(&mut self, data_bind: Option<CoreHandle>, owns_data_bind: bool) {
         self.data_bind = data_bind;
-        // Imported and cloned Core owners share the arena's single ownership
-        // model. Keep the source bit because it controls logical attachment,
-        // but never reconstruct C++ raw-pointer deletion in Rust.
         self.owns_data_bind = owns_data_bind;
     }
 
@@ -320,6 +330,7 @@ pub struct ScriptAsset {
     module_details: ModuleDetails,
     file: Option<RuntimeFileWeakHandle>,
     scripting_vm: Option<RuntimeScriptingVmHandle>,
+    generator: Option<crate::scripting::RuntimeScriptProgram>,
     script_registered: bool,
     bytecode: Vec<u8>,
     initted: bool,
@@ -333,6 +344,7 @@ impl Default for ScriptAsset {
             module_details: ModuleDetails::default(),
             file: None,
             scripting_vm: None,
+            generator: None,
             script_registered: false,
             bytecode: Vec::new(),
             initted: false,
@@ -470,6 +482,9 @@ impl ScriptAsset {
     }
 
     pub fn set_scripting_vm(&mut self, vm: Option<RuntimeScriptingVmHandle>) {
+        if self.scripting_vm.as_ref() != vm.as_ref() {
+            self.generator = None;
+        }
         self.scripting_vm = vm;
     }
 
@@ -484,6 +499,24 @@ impl ScriptAsset {
             self.set_generator_function_ref(reference as u32);
             self.initted = false;
         }
+    }
+
+    /// The approved VM stores a real generator token in place of a Lua registry
+    /// integer. Serialized generatorFunctionRef remains the editor's asset key.
+    pub fn registration_complete_native(
+        &mut self,
+        program: Option<crate::scripting::RuntimeScriptProgram>,
+    ) {
+        if self.base.is_module() {
+            self.script_registered = true;
+        } else {
+            self.generator = program;
+            self.initted = false;
+        }
+    }
+
+    pub fn has_generator(&self) -> bool {
+        self.generator.is_some()
     }
 
     pub fn module_name(&self) -> String {
@@ -518,27 +551,59 @@ impl ScriptAsset {
     /// the asset and its owning scripted occurrence through the real host.
     pub fn instantiate_for_occurrence(
         asset: &CoreHandle,
+        owner: &CoreHandle,
         host: &mut dyn crate::scripting::ScriptHost,
     ) -> Option<(Box<dyn crate::scripting::ScriptInstance>, u32)> {
-        let (vm, module_name, bytecode, methods) =
-            asset.with_downcast_mut::<Self, _>(|asset| {
-                let vm = asset.scripting_vm()?;
-                if !asset.initted {
-                    asset.optional_methods.set_implemented_methods(
-                        (asset.base.serialized_implemented_methods()
-                            & OptionalScriptedMethods::METHOD_MASK) as i32,
-                    );
-                    asset.initted = true;
-                }
-                Some((
-                    vm,
-                    asset.module_name(),
-                    asset.bytecode.clone(),
-                    asset.optional_methods.implemented_methods() as u32,
-                ))
-            })??;
+        let (vm, generator, file, methods) = asset.with_downcast_mut::<Self, _>(|asset| {
+            let vm = asset.scripting_vm()?;
+            let generator = asset.generator.clone()?;
+            if !asset.initted {
+                asset.optional_methods.set_implemented_methods(
+                    (asset.base.serialized_implemented_methods()
+                        & OptionalScriptedMethods::METHOD_MASK) as i32,
+                );
+                asset.initted = true;
+            }
+            Some((
+                vm,
+                generator,
+                asset.file(),
+                asset.optional_methods.implemented_methods() as u32,
+            ))
+        })??;
+        let context = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .and_then(|owner| owner.data_context())
+            })
+            .flatten();
+        let context_present = context.is_some();
+        let mut chain = Vec::new();
+        let mut current = context;
+        while let Some(context) = current {
+            let (instance, parent) = context
+                .with_context(|context| (context.main_view_model_instance(), context.parent()));
+            let model = if let Some(instance) = instance {
+                Some(crate::scripting::ScriptViewModel::from_native(
+                    instance,
+                    file.as_ref()?.upgrade()?,
+                )?)
+            } else {
+                None
+            };
+            chain.push(model);
+            current = parent;
+        }
+        let view_model = if chain.is_empty() {
+            None
+        } else {
+            chain.remove(0)
+        };
         let instance = vm
-            .with_vm_mut(|vm| vm.instantiate_script(&module_name, &bytecode, host))
+            .with_vm_mut(|vm| {
+                vm.instantiate_program(&generator, context_present, view_model, chain, host)
+            })
             .ok()?;
         Some((instance, methods))
     }

@@ -55,7 +55,7 @@ use crate::mechanical_port::source::{
         viewmodel_instance::ViewModelInstance,
     },
 };
-use crate::scripting::ScriptModule;
+use crate::scripting::ScriptAssetRegistration;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ImportResult {
@@ -328,10 +328,13 @@ impl File {
         }
 
         let file = RuntimeFileHandle::new(File::new(factory, asset_loader));
-        let read_result = file.with_file_mut(|file| {
+        let (read_result, registration_ready) = file.with_file_mut(|file| {
             file.set_scripting_vm(scripting_vm);
             file.read(&mut reader, &header)
         });
+        if registration_ready {
+            Self::register_scripts(&file);
+        }
         if let Some(result) = result.as_deref_mut() {
             *result = read_result;
         }
@@ -341,7 +344,11 @@ impl File {
         Some(file)
     }
 
-    fn read(&mut self, reader: &mut BinaryReader<'_>, header: &RuntimeHeader) -> ImportResult {
+    fn read(
+        &mut self,
+        reader: &mut BinaryReader<'_>,
+        header: &RuntimeHeader,
+    ) -> (ImportResult, bool) {
         let mut import_stack = ImportStack::default();
         import_stack.set_version(header.major_version(), header.minor_version());
         let in_band_content = Rc::new(RefCell::new(Vec::new()));
@@ -368,9 +375,19 @@ impl File {
                 });
             }
 
-            let import_result = object
-                .with_mut(|object| object.import(&mut import_stack))
-                .unwrap_or(StatusCode::MissingObject);
+            let import_result = if object
+                .with(|object| object.as_data_bind().is_some())
+                .unwrap_or(false)
+            {
+                crate::mechanical_port::source::data_bind::data_bind::DataBind::import_handle(
+                    &object,
+                    &mut import_stack,
+                )
+            } else {
+                object
+                    .with_mut(|object| object.import(&mut import_stack))
+                    .unwrap_or(StatusCode::MissingObject)
+            };
             if import_result == StatusCode::Ok {
                 match object_type {
                     Backboard::TYPE_KEY => {
@@ -443,7 +460,7 @@ impl File {
                 crate::mechanical_port::source::generated::animation::keyed_property_base::KeyedPropertyBase::TYPE_KEY => {
                     let Some(importer) = import_stack.latest::<LinearAnimationImporter>(
                         crate::mechanical_port::source::generated::animation::linear_animation_base::LinearAnimationBase::TYPE_KEY,
-                    ) else { return ImportResult::Malformed; };
+                    ) else { return (ImportResult::Malformed, false); };
                     stack_object = Some(Box::new(KeyedPropertyImporter::new(importer.animation(), object.clone())));
                 }
                 crate::mechanical_port::source::generated::animation::state_machine_base::StateMachineBase::TYPE_KEY => {
@@ -452,7 +469,7 @@ impl File {
                 crate::mechanical_port::source::generated::animation::state_machine_layer_base::StateMachineLayerBase::TYPE_KEY => {
                     let Some(importer) = import_stack.latest::<ArtboardImporter>(
                         crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
-                    ) else { return ImportResult::Malformed; };
+                    ) else { return (ImportResult::Malformed, false); };
                     stack_object = Some(Box::new(StateMachineLayerImporter::new(object.clone(), importer.artboard())));
                 }
                 crate::mechanical_port::source::generated::animation::entry_state_base::EntryStateBase::TYPE_KEY
@@ -612,7 +629,7 @@ impl File {
             }
 
             if import_stack.make_latest(stack_type, stack_object) != StatusCode::Ok {
-                return ImportResult::Malformed;
+                return (ImportResult::Malformed, false);
             }
             if object.is_type_of(crate::mechanical_port::source::generated::animation::state_machine_layer_component_base::StateMachineLayerComponentBase::TYPE_KEY) {
                 if import_stack.make_latest(
@@ -620,7 +637,7 @@ impl File {
                     Some(Box::new(StateMachineLayerComponentImporter::new(object.clone()))),
                 ) != StatusCode::Ok
                 {
-                    return ImportResult::Malformed;
+                    return (ImportResult::Malformed, false);
                 }
             }
             if object.is_type_of(crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBase::TYPE_KEY) {
@@ -641,11 +658,10 @@ impl File {
         }
 
         let resolved = import_stack.resolve();
-        let scripts_registered = self.register_scripts();
-        if !reader.has_error() && resolved == StatusCode::Ok && scripts_registered {
-            ImportResult::Success
+        if !reader.has_error() && resolved == StatusCode::Ok {
+            (ImportResult::Success, true)
         } else {
-            ImportResult::Malformed
+            (ImportResult::Malformed, true)
         }
     }
 
@@ -655,9 +671,16 @@ impl File {
         }
     }
 
-    fn register_scripts(&mut self) -> bool {
-        let scripts: Vec<_> = self
-            .file_assets
+    fn register_scripts(file: &RuntimeFileHandle) {
+        let (assets, vm, interpolators, models) = file.with_file(|file| {
+            (
+                file.file_assets.clone(),
+                file.scripting_vm.clone(),
+                file.scripted_interpolators.clone(),
+                file.view_models.clone(),
+            )
+        });
+        let scripts: Vec<_> = assets
             .iter()
             .filter(|asset| {
                 asset
@@ -667,13 +690,30 @@ impl File {
             .cloned()
             .collect();
         if scripts.is_empty() {
-            return true;
+            return;
         }
-        let Some(vm) = self.scripting_vm.clone() else {
-            return false;
+        let Some(vm) = vm else {
+            return;
         };
+        if !vm.with_vm_mut(|vm| vm.initializes_data_global_externally()) {
+            let models = models
+                .into_iter()
+                .map(|model| {
+                    let name = model
+                        .with_downcast::<ViewModel, _>(|model| model.base.name().to_owned())
+                        .expect("File owns ViewModel definitions");
+                    (
+                        name,
+                        crate::scripting::ScriptViewModel::from_native_file_definition(model, file),
+                    )
+                })
+                .collect();
+            if let Err(error) = vm.with_vm_mut(|vm| vm.initialize_data_global(models)) {
+                eprintln!("{error}");
+            }
+        }
 
-        let owned_modules: Vec<(String, Vec<u8>, CoreHandle, bool)> = scripts
+        let owned_modules: Vec<(String, Vec<u8>, CoreHandle, bool, Vec<String>)> = scripts
             .iter()
             .filter_map(|script| {
                 script
@@ -687,6 +727,11 @@ impl File {
                             script_asset.module_bytecode().to_vec(),
                             script.clone(),
                             script_asset.is_module(),
+                            script_asset
+                                .module_details()
+                                .missing_dependencies()
+                                .into_iter()
+                                .collect(),
                         ))
                     })
                     .flatten()
@@ -694,20 +739,43 @@ impl File {
             .collect();
         let modules: Vec<_> = owned_modules
             .iter()
-            .map(|(name, bytes, _, _)| ScriptModule::new(name, bytes))
+            .map(
+                |(name, bytes, _, is_module, dependencies)| ScriptAssetRegistration {
+                    name,
+                    bytecode: bytes,
+                    is_protocol: !is_module,
+                    missing_dependencies: dependencies.clone(),
+                },
+            )
             .collect();
-        let failures = vm.with_vm_mut(|vm| vm.perform_registration(&modules));
-        if !failures.is_empty() {
-            return false;
-        }
-        for (_, _, script, is_module) in &owned_modules {
-            if *is_module {
-                script
-                    .with_downcast_mut::<ScriptAsset, _>(|script| script.registration_complete(0));
+        let results = vm.with_vm_mut(|vm| vm.register_script_assets(&modules));
+        assert_eq!(
+            results.len(),
+            owned_modules.len(),
+            "registration returns each asset's result"
+        );
+        for ((name, _, script, _, _), result) in owned_modules.iter().zip(results) {
+            if let Some(error) = &result.error {
+                eprintln!("{name}: {error}");
             }
+            script.with_downcast_mut::<ScriptAsset, _>(|script| {
+                for dependency in script.module_details().missing_dependencies() {
+                    script
+                        .module_details_mut()
+                        .clear_missing_dependency(&dependency);
+                }
+                for dependency in result.missing_dependencies {
+                    script
+                        .module_details_mut()
+                        .add_missing_dependency(dependency);
+                }
+                if result.completed {
+                    script.registration_complete_native(result.program);
+                }
+            });
         }
 
-        for interpolator in self.scripted_interpolators.clone() {
+        for interpolator in interpolators {
             let script = interpolator
                 .with(|interpolator| {
                     interpolator
@@ -726,7 +794,6 @@ impl File {
                 ScriptedObject::initialize_occurrence(&interpolator, &properties, &mut host);
             }
         }
-        true
     }
 
     pub fn set_scripting_vm(&mut self, vm: Option<RuntimeScriptingVmHandle>) {

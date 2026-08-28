@@ -1,8 +1,4 @@
-use std::{
-    cell::{BorrowMutError, RefCell},
-    fmt,
-    rc::Rc,
-};
+use std::{fmt, rc::Rc};
 
 /// Cloneable, runtime-neutral ownership for the concrete scripting backend.
 ///
@@ -12,30 +8,19 @@ use std::{
 /// call on one shared occurrence.
 #[derive(Clone)]
 pub struct RuntimeScriptingVmHandle {
-    inner: Rc<RefCell<Box<dyn crate::scripting::ScriptingVm>>>,
+    inner: Rc<Box<dyn crate::scripting::ScriptingVm>>,
 }
 
 impl RuntimeScriptingVmHandle {
     pub fn new(vm: Box<dyn crate::scripting::ScriptingVm>) -> Self {
-        Self {
-            inner: Rc::new(RefCell::new(vm)),
-        }
+        Self { inner: Rc::new(vm) }
     }
 
     pub fn with_vm_mut<R>(
         &self,
-        callback: impl FnOnce(&mut dyn crate::scripting::ScriptingVm) -> R,
+        callback: impl FnOnce(&dyn crate::scripting::ScriptingVm) -> R,
     ) -> R {
-        let mut vm = self.inner.borrow_mut();
-        callback(vm.as_mut())
-    }
-
-    pub fn try_with_vm_mut<R>(
-        &self,
-        callback: impl FnOnce(&mut dyn crate::scripting::ScriptingVm) -> R,
-    ) -> Result<R, BorrowMutError> {
-        let mut vm = self.inner.try_borrow_mut()?;
-        Ok(callback(vm.as_mut()))
+        callback(self.inner.as_ref().as_ref())
     }
 
     pub fn install_render_factory(

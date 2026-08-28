@@ -4,7 +4,7 @@ use super::*;
 use crate::mechanical_port::source::{
     assets::{blob_asset::BlobAsset, font_asset::FontAsset, image_asset::ImageAsset},
     core::CoreHandle,
-    file::RuntimeFileHandle,
+    file::{File, RuntimeFileHandle, RuntimeFileWeakHandle},
     generated::viewmodel as generated,
     text::font_hb::HbFont,
     viewmodel::{
@@ -35,7 +35,39 @@ use crate::mechanical_port::source::{
 pub(super) struct NativeScriptViewModel {
     pub instance: Option<CoreHandle>,
     pub model: CoreHandle,
-    pub file: RuntimeFileHandle,
+    pub file: NativeScriptFile,
+}
+
+/// File's Data constructor globals must not own File back through its VM.
+/// Materialized view-model userdata acquire an owning lease when constructed.
+#[derive(Clone)]
+pub(super) struct NativeScriptFile {
+    weak: RuntimeFileWeakHandle,
+    _lease: Option<RuntimeFileHandle>,
+}
+impl NativeScriptFile {
+    pub fn owning(file: RuntimeFileHandle) -> Self {
+        Self {
+            weak: file.downgrade(),
+            _lease: Some(file),
+        }
+    }
+    pub fn definition(file: &RuntimeFileHandle) -> Self {
+        Self {
+            weak: file.downgrade(),
+            _lease: None,
+        }
+    }
+    fn upgrade(&self) -> Option<RuntimeFileHandle> {
+        self.weak.upgrade()
+    }
+    fn handle(&self) -> RuntimeFileHandle {
+        self.upgrade()
+            .expect("instantiated native view model retains File")
+    }
+    fn with_file<R>(&self, callback: impl FnOnce(&File) -> R) -> R {
+        self.handle().with_file(callback)
+    }
 }
 
 impl std::fmt::Debug for NativeScriptViewModel {
@@ -158,11 +190,12 @@ impl NativeScriptViewModel {
                     .map(|model| model.base.name().to_owned())
             })
             .flatten()?;
-        let instance = self.file.with_file_mut(|file| {
+        let file = self.file.upgrade()?;
+        let instance = file.with_file_mut(|file| {
             name.and_then(|name| file.create_view_model_instance_named(&model_name, name))
                 .or_else(|| file.create_view_model_instance(self.model.clone()))
         })?;
-        ScriptViewModel::from_native(instance, self.file.clone())
+        ScriptViewModel::from_native(instance, file)
     }
 
     fn mutate<T: 'static>(&self, name: &str, mutation: impl FnOnce(&mut T) -> bool) -> bool {
@@ -456,7 +489,7 @@ impl NativeScriptViewModel {
                 .flatten()
         });
         if let Some(instance) = instance {
-            return ScriptViewModel::from_native(instance, self.file.clone());
+            return ScriptViewModel::from_native(instance, self.file.handle());
         }
         if active_only {
             return None;
@@ -472,7 +505,7 @@ impl NativeScriptViewModel {
         Some(ScriptViewModel::from_native_definition(
             model,
             None,
-            self.file.clone(),
+            self.file.handle(),
         ))
     }
     pub fn set_view_model(&self, name: &str, value: &ScriptViewModel) -> bool {
@@ -497,7 +530,7 @@ impl NativeScriptViewModel {
                 ViewModelInstanceListItem::view_model_instance,
             )
             .flatten()?;
-        ScriptViewModel::from_native(instance, self.file.clone())
+        ScriptViewModel::from_native(instance, self.file.handle())
     }
     pub fn insert_list_item(
         &self,
@@ -538,7 +571,7 @@ impl NativeScriptViewModel {
                 ViewModelInstanceListItem::view_model_instance,
             )
             .flatten()?;
-        ScriptViewModel::from_native(instance, self.file.clone())
+        ScriptViewModel::from_native(instance, self.file.handle())
     }
     pub fn swap_list_items(&self, name: &str, first: usize, second: usize) -> bool {
         self.mutate::<ViewModelInstanceList>(name, |owner| {

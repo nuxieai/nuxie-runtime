@@ -29,6 +29,7 @@ mod lua_mesh;
 mod lua_promise;
 mod lua_rive_base;
 mod lua_vec2d;
+mod native_registration;
 mod renderer;
 
 mod lua_artboards;
@@ -67,7 +68,8 @@ use luaur_vm::macros::lua_l_checkstring::luaL_checkstring;
 use luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
-    PreparedScriptArtboard, ScriptArtboard, ScriptCoreString, ScriptDataConverterMethod,
+    PreparedScriptArtboard, RuntimeScriptProgram, ScriptArtboard, ScriptAssetRegistration,
+    ScriptAssetRegistrationResult, ScriptCoreString, ScriptDataConverterMethod,
     ScriptDataConverterOptionalCall, ScriptError, ScriptHost, ScriptInstance,
     ScriptInterpolatorMethod, ScriptListenerActionMethod, ScriptListenerInvocation, ScriptMethod,
     ScriptOptionalMethodResult, ScriptOptionalNumberResult, ScriptValue, ScriptViewModel,
@@ -105,6 +107,33 @@ const MODULE_CACHE_KEY: &str = "_MODULES";
 unsafe fn lua_require_registered_module(
     state: *mut luaur_vm::records::lua_state::lua_State,
 ) -> core::ffi::c_int {
+    let mut debug = std::mem::MaybeUninit::<luaur_vm::records::lua_debug::LuaDebug>::zeroed();
+    let mut level = 1;
+    let requiring = loop {
+        if unsafe {
+            luaur_vm::functions::lua_getinfo::lua_getinfo(
+                state,
+                level,
+                c"s".as_ptr(),
+                debug.as_mut_ptr(),
+            )
+        } == 0
+        {
+            unsafe {
+                lua_l_error_l(
+                    state,
+                    c"require is not supported in this context".as_ptr(),
+                    format_args!("require is not supported in this context"),
+                )
+            };
+            return 0;
+        }
+        level += 1;
+        let debug = unsafe { debug.assume_init_ref() };
+        if unsafe { *debug.what } != b'C' as core::ffi::c_char {
+            break debug.source;
+        }
+    };
     unsafe { lua_settop(state, 1) };
     let path = luaL_checkstring!(state, 1);
     unsafe { lua_getfield(state, LUA_REGISTRYINDEX, c"_MODULES".as_ptr()) };
@@ -112,6 +141,26 @@ unsafe fn lua_require_registered_module(
     if unsafe { lua_type(state, -1) }
         == luaur_vm::enums::lua_type::lua_Type::LUA_TNIL as core::ffi::c_int
     {
+        // This registry table is installed only for File's registration pass.
+        // Index by the actual requiring Lua chunk, matching recordMissingDependency.
+        unsafe {
+            lua_getfield(
+                state,
+                LUA_REGISTRYINDEX,
+                c"_RIVE_REGISTRATION_DEPENDENCIES".as_ptr(),
+            )
+        };
+        if unsafe { lua_type(state, -1) }
+            == luaur_vm::enums::lua_type::lua_Type::LUA_TTABLE as core::ffi::c_int
+        {
+            unsafe { lua_getfield(state, -1, requiring) };
+            if unsafe { lua_type(state, -1) }
+                == luaur_vm::enums::lua_type::lua_Type::LUA_TTABLE as core::ffi::c_int
+            {
+                unsafe { luaur_vm::functions::lua_pushboolean::lua_pushboolean(state, 1) };
+                unsafe { luaur_vm::functions::lua_setfield::lua_setfield(state, -2, path) };
+            }
+        }
         unsafe { lua_settop(state, 1) };
         let path = unsafe { std::ffi::CStr::from_ptr(path) }.to_string_lossy();
         unsafe {
@@ -608,6 +657,8 @@ impl ScriptExecutionBudget {
 /// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
 /// [`ScriptVm::lua`] exposes the full mlua-style API for binding work.
 pub struct ScriptVm {
+    runtime_identity: Rc<()>,
+    initializes_data_global_externally: Cell<bool>,
     lua: Lua,
     initialization_error: Option<String>,
     execution_budget: Option<ScriptExecutionBudget>,
@@ -1203,6 +1254,8 @@ impl ScriptVm {
             Some(factory),
             context_view_model_value,
             context_parent_view_models,
+            None,
+            None,
         )
     }
 
@@ -1305,6 +1358,8 @@ impl ScriptVm {
             None,
             context_view_model_value,
             context_parent_view_models,
+            None,
+            None,
         )
     }
 
@@ -1321,6 +1376,8 @@ impl ScriptVm {
             None,
             self.default_context_view_model.clone(),
             self.default_context_parent_view_models.clone(),
+            None,
+            None,
         )
     }
 
@@ -1330,16 +1387,18 @@ impl ScriptVm {
         factory: Option<&mut dyn RenderFactory>,
         context_view_model_value: Option<ScriptViewModel>,
         context_parent_view_models: Vec<Option<ScriptViewModel>>,
+        explicit_context_present: Option<bool>,
+        mut host: Option<&mut dyn ScriptHost>,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         let context_alive = Rc::new(Cell::new(true));
-        let instantiate = || {
+        let mut instantiate = || {
             // A retained parent slot proves that the DataContext exists even
             // when its own main ViewModel is null. Pinned C++ pushes the
             // DataContext userdata independently from mainViewModelInstance.
-            let context_present = Rc::new(Cell::new(
+            let context_present = Rc::new(Cell::new(explicit_context_present.unwrap_or(
                 context_view_model_value.is_some() || !context_parent_view_models.is_empty(),
-            ));
+            )));
             let context_view_model = Rc::new(RefCell::new(context_view_model_value));
             let context_missing_requested_data = Rc::new(Cell::new(false));
             let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
@@ -1358,9 +1417,19 @@ impl ScriptVm {
                 ))
                 .map_err(|error| self.script_error(error))?;
             self.reset_execution_budget();
-            let instance: Table = self
-                .track_resource_result(program.generator.call(context.clone()))
-                .map_err(|error| self.script_error(error))?;
+            let generated =
+                self.track_resource_result(program.generator.call::<Table>(context.clone()));
+            let requested = context
+                .borrow::<ScriptedContext>()
+                .map_err(|error| self.script_error(error))?
+                .mark_needs_update_requested()
+                .replace(false);
+            if requested {
+                if let Some(host) = host.as_deref_mut() {
+                    host.mark_script_update();
+                }
+            }
+            let instance = generated.map_err(|error| self.script_error(error))?;
             Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
                 instance,
                 self.renderer_bindings.clone(),
@@ -1423,6 +1492,8 @@ impl ScriptVm {
         });
         Self {
             lua,
+            runtime_identity: Rc::new(()),
+            initializes_data_global_externally: Cell::new(false),
             initialization_error,
             execution_budget: None,
             rive_globals_installed: Cell::new(false),
@@ -1681,6 +1752,10 @@ impl ScriptVm {
             view_model::install_data_global(&self.lua, &self.view_models)
                 .expect("refreshing the initialized Data global should succeed");
         }
+    }
+
+    pub fn set_initializes_data_global_externally(&self, value: bool) {
+        self.initializes_data_global_externally.set(value);
     }
 
     /// Attach the importing file's image identities independently from its
@@ -2168,22 +2243,30 @@ pub fn validate_executable_luau_bytecode(
 }
 
 impl RuntimeScriptingVm for ScriptVm {
+    fn initializes_data_global_externally(&self) -> bool {
+        self.initializes_data_global_externally.get()
+    }
+    fn initialize_data_global(
+        &self,
+        models: BTreeMap<String, ScriptViewModel>,
+    ) -> std::result::Result<(), ScriptError> {
+        self.install_rive_globals()
+            .map_err(|error| self.script_error(error))?;
+        view_model::install_data_global(&self.lua, &models)
+            .map_err(|error| self.script_error(error))
+    }
     fn install_render_factory(
-        &mut self,
+        &self,
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<(), ScriptError> {
         ScriptVm::install_render_factory(self, factory)
     }
 
-    fn install_rive_globals(&mut self) -> std::result::Result<(), ScriptError> {
+    fn install_rive_globals(&self) -> std::result::Result<(), ScriptError> {
         ScriptVm::install_rive_globals(self).map_err(|error| self.script_error(error))
     }
 
-    fn register_module(
-        &mut self,
-        name: &str,
-        payload: &[u8],
-    ) -> std::result::Result<(), ScriptError> {
+    fn register_module(&self, name: &str, payload: &[u8]) -> std::result::Result<(), ScriptError> {
         ScriptVm::install_rive_globals(self).map_err(|error| self.script_error(error))?;
         ScriptVm::register_module(self, name, payload)
             .map(|_| ())
@@ -2191,7 +2274,7 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn instantiate_script(
-        &mut self,
+        &self,
         name: &str,
         payload: &[u8],
         _host: &mut dyn ScriptHost,
@@ -2262,8 +2345,41 @@ impl RuntimeScriptingVm for ScriptVm {
         )))
     }
 
-    fn advance_detached_view_models(&mut self) -> bool {
+    fn advance_detached_view_models(&self) -> bool {
         ScriptVm::advance_detached_view_models(self)
+    }
+
+    fn register_script_assets(
+        &self,
+        scripts: &[ScriptAssetRegistration<'_>],
+    ) -> Vec<ScriptAssetRegistrationResult> {
+        native_registration::register(self, scripts)
+    }
+
+    fn instantiate_program(
+        &self,
+        program: &RuntimeScriptProgram,
+        context_present: bool,
+        view_model: Option<ScriptViewModel>,
+        parent_view_models: Vec<Option<ScriptViewModel>>,
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        let program = program
+            .backend::<native_registration::RegisteredProtocolProgram>()
+            .ok_or_else(|| ScriptError::new("script generator belongs to a different backend"))?;
+        if !Rc::ptr_eq(&program.vm, &self.runtime_identity) {
+            return Err(ScriptError::new(
+                "script generator belongs to a different VM",
+            ));
+        }
+        self.instantiate_registered_script_with_optional_factory_and_context(
+            &program.program,
+            None,
+            view_model,
+            parent_view_models,
+            Some(context_present),
+            Some(host),
+        )
     }
 }
 

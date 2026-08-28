@@ -129,15 +129,10 @@ impl ScriptedObject {
         let inputs: Vec<_> = properties
             .iter()
             .filter(|property| {
-                property
-                    .with_mut(|property| {
-                        let Some(input) = property.as_bind_script_input_mut() else {
-                            return false;
-                        };
-                        input.set_scripted_object(None);
-                        true
-                    })
-                    .unwrap_or(false)
+                with_script_input(property, |input| {
+                    input.script_input_mut().set_scripted_object(None)
+                })
+                .is_some()
             })
             .cloned()
             .collect();
@@ -273,6 +268,9 @@ impl ScriptedObject {
         let Some((vm, methods)) = asset
             .with_downcast_mut::<ScriptAsset, _>(|asset| {
                 let vm = asset.scripting_vm()?;
+                if !asset.has_generator() {
+                    return None;
+                }
                 Some((vm, asset.prepare_implemented_methods()))
             })
             .flatten()
@@ -317,7 +315,8 @@ impl ScriptedObject {
                     return false;
                 }
             }
-            let Some((instance, methods)) = ScriptAsset::instantiate_for_occurrence(&asset, host)
+            let Some((instance, methods)) =
+                ScriptAsset::instantiate_for_occurrence(&asset, owner, host)
             else {
                 return false;
             };
@@ -1008,7 +1007,7 @@ impl Drop for ScriptedObject {
     }
 }
 
-fn with_script_input<R>(
+pub(crate) fn with_script_input<R>(
     property: &CoreHandle,
     use_input: impl FnOnce(
         &mut dyn crate::mechanical_port::source::assets::script_asset::ScriptInputBehavior,

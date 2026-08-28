@@ -16,6 +16,26 @@ pub const DEPENDENTS: u32 = 1;
 pub const BINDINGS: u32 = 2;
 pub const BINDINGS_TARGET: u32 = 4;
 
+pub type ConverterBindContextHandler = fn(&CoreHandle, RuntimeDataContextHandle, CoreHandle);
+
+/// Select the virtual operation, then release the occurrence before invoking
+/// it. A scripted converter's hydration may resolve this very same owner.
+pub fn bind_converter_context(
+    owner: &CoreHandle,
+    context: RuntimeDataContextHandle,
+    data_bind: CoreHandle,
+) {
+    let handler = owner
+        .with(|owner| {
+            owner
+                .as_data_converter_capability()
+                .expect("a retained converter has its capability")
+                .bind_context_handler()
+        })
+        .expect("the retained converter remains live");
+    handler(owner, context, data_bind);
+}
+
 pub trait DataBindNode {
     fn clone_bind(&self) -> Option<CoreHandle>;
     fn set_target_converter(&mut self, converter: CoreHandle);
@@ -38,12 +58,12 @@ pub trait ConverterImporter {
 #[macro_export]
 macro_rules! data_converter_capability_lifecycle {
     ($($base:ident).+) => {
-        fn bind_from_context(
-            &mut self,
-            context: $crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
-            data_bind: $crate::mechanical_port::source::core::CoreHandle,
-        ) {
-            self.$($base).+.bind_from_context(context, data_bind);
+        fn bind_context_handler(&self) -> $crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler {
+            |owner, context, data_bind| {
+                owner.with_downcast_mut::<Self, _>(|owner| {
+                    owner.$($base).+.bind_from_context(context, data_bind);
+                }).expect("the retained converter keeps its concrete type");
+            }
         }
 
         fn unbind(&mut self) {
@@ -205,6 +225,25 @@ impl DataConverter {
         importer.import_super(self)
     }
 
+    pub fn import_stack(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> StatusCode {
+        use crate::mechanical_port::source::{
+            generated::backboard_base::BackboardBase,
+            importers::backboard_importer::BackboardImporter,
+        };
+        let Some(importer) = stack.latest::<BackboardImporter>(BackboardBase::TYPE_KEY) else {
+            return StatusCode::MissingObject;
+        };
+        let Some(owner) = self.handle() else {
+            return StatusCode::MissingObject;
+        };
+        self.data_binds.set_owner(owner.clone());
+        importer.add_data_converter(owner);
+        self.base.base.import(stack)
+    }
+
     pub fn bind_from_context(
         &mut self,
         data_context: RuntimeDataContextHandle,
@@ -242,6 +281,7 @@ impl DataConverter {
     }
 
     pub fn add_data_bind(&mut self, data_bind: CoreHandle) {
+        self.initialize_container_owner();
         self.data_binds.add_data_bind(data_bind);
     }
 
@@ -273,8 +313,8 @@ impl DataConverter {
             .copy(&object.base, &mut DataConverterCopyCallbacks);
     }
 
-    pub fn advance(&mut self, elapsed_time: f32) -> bool {
-        self.data_binds.advance_data_binds(elapsed_time)
+    pub fn advance(&mut self, _elapsed_time: f32) -> bool {
+        false
     }
 
     pub fn reset(&mut self) {}
@@ -313,8 +353,12 @@ impl DataConverterCapability for DataConverter {
         Self::output_type(self)
     }
 
-    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
-        Self::bind_from_context(self, context, data_bind);
+    fn bind_context_handler(&self) -> ConverterBindContextHandler {
+        |owner, context, data_bind| {
+            owner
+                .with_downcast_mut::<Self, _>(|owner| owner.bind_from_context(context, data_bind))
+                .expect("the retained converter keeps its concrete type");
+        }
     }
 
     fn unbind(&mut self) {

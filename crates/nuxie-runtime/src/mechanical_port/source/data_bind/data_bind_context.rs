@@ -112,11 +112,9 @@ impl DataBindContext {
             self.base.base.converter(),
             self.base.base.base.base.handle(),
         ) {
-            converter.with_mut(|converter| {
-                if let Some(converter) = converter.as_context_converter_mut() {
-                    converter.bind_from_context(data_context, data_bind);
-                }
-            });
+            crate::mechanical_port::source::data_bind::converters::data_converter::bind_converter_context(
+                &converter, data_context, data_bind,
+            );
         }
     }
     pub fn source_path_ids(&self) -> &[u32] {

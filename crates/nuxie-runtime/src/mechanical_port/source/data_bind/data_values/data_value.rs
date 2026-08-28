@@ -1,5 +1,19 @@
 use super::data_type::DataType;
 use core::any::Any;
+
+/// The instantiable, untyped C++ DataValue base (not a typed None value).
+#[derive(Default)]
+pub struct EmptyDataValue;
+
+impl DataValue for EmptyDataValue {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
 pub trait DataValue: Any {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;

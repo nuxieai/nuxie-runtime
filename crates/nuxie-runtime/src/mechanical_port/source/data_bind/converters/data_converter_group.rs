@@ -111,11 +111,11 @@ impl DataConverterGroup {
                 })
                 .flatten();
             if let Some(converter) = converter {
-                converter.with_mut(|converter| {
-                    if let Some(converter) = converter.as_data_converter_capability_mut() {
-                        converter.bind_from_context(context.clone(), data_bind.clone());
-                    }
-                });
+                super::data_converter::bind_converter_context(
+                    &converter,
+                    context.clone(),
+                    data_bind.clone(),
+                );
             }
         }
     }
@@ -269,8 +269,12 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         Self::output_type(self, self.base.base.output_type())
     }
 
-    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
-        Self::bind_from_context(self, context, data_bind);
+    fn bind_context_handler(&self) -> crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler{
+        |owner, context, data_bind| {
+            owner
+                .with_downcast_mut::<Self, _>(|owner| owner.bind_from_context(context, data_bind))
+                .expect("the retained converter keeps its concrete type");
+        }
     }
 
     fn unbind(&mut self) {

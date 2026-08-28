@@ -166,6 +166,7 @@ pub struct ScriptedObject {
     context_ref: i32,
     runtime: Option<Box<dyn ScriptRuntime>>,
     runtime_instance: Option<RuntimeScriptInstanceHandle>,
+    runtime_vm: Option<crate::mechanical_port::source::lua::scripting_vm::RuntimeScriptingVmHandle>,
     asset_id: u32,
     asset: Option<Rc<[u8]>>,
     inputs: HashMap<String, ScriptValue>,
@@ -185,6 +186,7 @@ impl Default for ScriptedObject {
             context_ref: 0,
             runtime: None,
             runtime_instance: None,
+            runtime_vm: None,
             asset_id: u32::MAX,
             asset: None,
             inputs: HashMap::new(),
@@ -348,12 +350,22 @@ impl ScriptedObject {
         else {
             return false;
         };
+        let Some(vm) = asset
+            .with_downcast::<ScriptAsset, _>(ScriptAsset::scripting_vm)
+            .flatten()
+        else {
+            return false;
+        };
         let live = owner
             .with(|owner| {
                 let scripted = owner
                     .as_scripted_object()
                     .expect("a scripted owner keeps its type");
                 scripted.self_ref != 0
+                    && scripted
+                        .runtime_vm
+                        .as_ref()
+                        .is_some_and(|current| current.ptr_eq(&vm))
                     && scripted
                         .runtime_instance
                         .as_ref()
@@ -383,7 +395,7 @@ impl ScriptedObject {
                     let scripted = owner
                         .as_scripted_object_mut()
                         .expect("a scripted owner keeps its type");
-                    scripted.install_script_instance(instance);
+                    scripted.install_script_instance(instance, vm);
                     scripted.set_implemented_methods(methods);
                 })
                 .expect("the stateful owner remains live");
@@ -435,6 +447,22 @@ impl ScriptedObject {
                     .user_init_done = true;
             });
         }
+        owner.with_mut(|owner| {
+            use crate::mechanical_port::source::scripted::{
+                scripted_data_converter::ScriptedDataConverter,
+                scripted_drawable::ScriptedDrawable, scripted_layout::ScriptedLayout,
+                scripted_path_effect::ScriptedPathEffect,
+            };
+            if let Some(value) = owner.as_any_mut().downcast_mut::<ScriptedDataConverter>() {
+                value.did_hydrate_script_inputs();
+            } else if let Some(value) = owner.as_any_mut().downcast_mut::<ScriptedLayout>() {
+                value.did_hydrate_script_inputs();
+            } else if let Some(value) = owner.as_any_mut().downcast_mut::<ScriptedDrawable>() {
+                value.did_hydrate_script_inputs();
+            } else if let Some(value) = owner.as_any_mut().downcast_mut::<ScriptedPathEffect>() {
+                value.did_hydrate_script_inputs();
+            }
+        });
         true
     }
 
@@ -512,10 +540,19 @@ impl ScriptedObject {
         &mut self.file_asset_referencer
     }
 
-    pub fn install_script_instance(&mut self, instance: Box<dyn RuntimeScriptInstance>) {
+    pub fn runtime_instance(&self) -> Option<RuntimeScriptInstanceHandle> {
+        self.runtime_instance.clone()
+    }
+
+    pub fn install_script_instance(
+        &mut self,
+        instance: Box<dyn RuntimeScriptInstance>,
+        vm: crate::mechanical_port::source::lua::scripting_vm::RuntimeScriptingVmHandle,
+    ) {
         self.script_dispose();
         self.runtime = None;
         self.runtime_instance = Some(RuntimeScriptInstanceHandle::new(instance));
+        self.runtime_vm = Some(vm);
         self.self_ref = 1;
         self.context_ref = 1;
         self.user_init_done = false;
@@ -741,6 +778,8 @@ impl ScriptedObject {
         self.context_ref = 0;
         self.inputs.clear();
         self.tracked_properties.clear();
+        self.runtime_vm = None;
+        self.user_init_done = false;
         self.disposed = true
     }
     pub fn reinit(&mut self) {
@@ -760,9 +799,13 @@ impl ScriptedObject {
             .register_referencer(owner, import_stack)
     }
     pub fn set_asset(&mut self, owner: CoreHandle, asset: Option<CoreHandle>) {
-        self.script_dispose();
-        self.file_asset_referencer.set_asset(owner, asset);
-        self.disposed = false;
+        // The pinned override ignores null and non-ScriptAsset values and
+        // does not dispose the current VM lifetime merely on assignment.
+        if asset.as_ref().is_some_and(|asset| asset.is_type_of(
+            crate::mechanical_port::source::generated::assets::script_asset_base::ScriptAssetBase::TYPE_KEY,
+        )) {
+            self.file_asset_referencer.set_asset(owner, asset);
+        }
     }
     pub fn detach_asset(&mut self, owner: CoreHandle) {
         self.file_asset_referencer.detach(owner);

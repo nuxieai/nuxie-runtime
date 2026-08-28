@@ -152,8 +152,12 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         self.base.base.output_type()
     }
 
-    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
-        Self::bind_from_context(self, context, data_bind);
+    fn bind_context_handler(&self) -> crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler{
+        |owner, context, data_bind| {
+            owner
+                .with_downcast_mut::<Self, _>(|owner| owner.bind_from_context(context, data_bind))
+                .expect("the retained converter keeps its concrete type");
+        }
     }
 
     fn unbind(&mut self) {

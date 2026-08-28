@@ -520,7 +520,7 @@ impl ScriptAsset {
             );
             self.initted = true;
         }
-        object.install_script_instance(instance);
+        object.install_script_instance(instance, vm);
         object.set_implemented_methods(self.optional_methods.implemented_methods() as u32);
         object.ensure_script_initialized(ObjectScriptProtocol::Utility)
     }

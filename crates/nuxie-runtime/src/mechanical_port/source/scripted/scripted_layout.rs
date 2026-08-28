@@ -1,54 +1,56 @@
 use crate::mechanical_port::source::{
-    core::CoreHandle, generated::scripted::scripted_layout_base::ScriptedLayoutBase,
-    scripted::scripted_object::ScriptProtocol,
+    core::CoreHandle,
+    generated::scripted::scripted_layout_base::ScriptedLayoutBase,
+    scripted::scripted_object::{ScriptProtocol, ScriptUpdateRequestHost},
 };
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Vec2 {
-    pub x: f32,
-    pub y: f32,
-}
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LayoutMeasureMode {
-    Undefined = 0,
-    Exactly = 1,
-    AtMost = 2,
-}
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LayoutScaleType {
-    Fixed = 0,
-    Fill = 1,
-    Hug = 2,
-}
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LayoutDirection {
-    Inherit = 0,
-    Ltr = 1,
-    Rtl = 2,
-}
+pub use crate::mechanical_port::source::{
+    layout::{
+        layout_enums::{LayoutDirection, LayoutScaleType},
+        layout_measure_mode::LayoutMeasureMode,
+    },
+    math::vec2d::Vec2D as Vec2,
+};
+use crate::scripting::{ScriptMethod, ScriptOptionalMethodResult, ScriptValue};
+
 #[derive(Default)]
 pub struct ScriptedLayout {
     pub base: ScriptedLayoutBase,
     size: Vec2,
-    parent_layout_dirty: bool,
-    paint_dirty: bool,
 }
 impl ScriptedLayout {
     pub fn did_hydrate_script_inputs(&mut self) {
-        self.parent_layout_dirty = true;
-        self.paint_dirty = true;
-    }
-    fn call_scripted_resize(&mut self, size: Vec2) {
-        if self.base.base.scripted.resizes() && self.base.base.scripted.self_ref() != 0 {
-            let _ = self
-                .base
-                .base
-                .scripted
-                .call_number("resize", &[size.x, size.y]);
+        self.base.base.did_hydrate_script_inputs();
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(layout) = parent.as_layout_component_mut() {
+                    layout.mark_layout_node_dirty(true);
+                }
+            });
         }
     }
+
+    fn call_scripted_resize(&mut self, size: Vec2) {
+        if !self.base.base.scripted.resizes() {
+            return;
+        }
+        let Some(instance) = self.base.base.scripted.runtime_instance() else {
+            return;
+        };
+        let mut host = ScriptUpdateRequestHost::default();
+        // Upstream passes one native Vec2D, not two scalar arguments.
+        let _ = instance.borrow_mut().call_optional_method(
+            ScriptMethod::Resize,
+            &[ScriptValue::Vec2 {
+                x: size.x,
+                y: size.y,
+            }],
+            &mut host,
+        );
+        if host.take_requested() {
+            self.base.base.mark_needs_update();
+        }
+    }
+
     pub fn measure_layout(
         &mut self,
         width: f32,
@@ -56,45 +58,81 @@ impl ScriptedLayout {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2 {
-        if !self.base.base.scripted.measures() || self.base.base.scripted.self_ref() == 0 {
+        if !self.base.base.scripted.measures() {
             return Vec2::default();
         }
-        let Some((measured_width, measured_height)) =
-            self.base.base.scripted.call_vec2("measure", &[])
-        else {
+        let Some(instance) = self.base.base.scripted.runtime_instance() else {
             return Vec2::default();
         };
-        Vec2 {
-            x: if width_mode == LayoutMeasureMode::Undefined {
-                f32::MAX
-            } else {
-                width
-            }
-            .min(measured_width),
-            y: if height_mode == LayoutMeasureMode::Undefined {
-                f32::MAX
-            } else {
-                height
-            }
-            .min(measured_height),
+        let mut host = ScriptUpdateRequestHost::default();
+        let result =
+            instance
+                .borrow_mut()
+                .call_optional_method(ScriptMethod::Measure, &[], &mut host);
+        if host.take_requested() {
+            self.base.base.mark_needs_update();
         }
+        let measured = match result {
+            Ok(ScriptOptionalMethodResult::Missing) => return Vec2::default(),
+            Ok(ScriptOptionalMethodResult::Returned(ScriptValue::Vec2 { x, y })) => Vec2::new(x, y),
+            // Callback errors and non-vector results keep C++'s initial maxima.
+            _ => Vec2::new(f32::MAX, f32::MAX),
+        };
+        let width_limit = if width_mode == LayoutMeasureMode::Undefined {
+            f32::MAX
+        } else {
+            width
+        };
+        let height_limit = if height_mode == LayoutMeasureMode::Undefined {
+            f32::MAX
+        } else {
+            height
+        };
+        // std::min(a,b) selects a when b is NaN; f32::min differs for a=NaN.
+        Vec2::new(
+            if measured.x < width_limit {
+                measured.x
+            } else {
+                width_limit
+            },
+            if measured.y < height_limit {
+                measured.y
+            } else {
+                height_limit
+            },
+        )
     }
+
     pub fn control_size(
         &mut self,
         size: Vec2,
-        _w: LayoutScaleType,
-        _h: LayoutScaleType,
+        _width_scale: LayoutScaleType,
+        _height_scale: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
         self.size = size;
-        self.call_scripted_resize(size)
+        self.call_scripted_resize(size);
     }
-    pub fn add_property(&mut self, p: CoreHandle) {
-        self.base.base.add_property(p)
+
+    pub fn add_property(&mut self, property: CoreHandle) {
+        self.base.base.add_property(property);
     }
+
     pub fn remove_property(&mut self, property: &CoreHandle) {
-        self.base.base.remove_property(property)
+        self.base.base.remove_property(property);
     }
+
+    pub fn clone_definition(&self) -> Self {
+        let mut clone = self.base.clone_into();
+        clone
+            .base
+            .base
+            .scripted
+            .file_asset_referencer_mut()
+            .set_asset_unattached(self.base.base.scripted.script_asset());
+        clone
+    }
+
     pub fn script_protocol(&self) -> ScriptProtocol {
         ScriptProtocol::Layout
     }

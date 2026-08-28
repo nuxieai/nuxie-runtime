@@ -4,6 +4,273 @@ use crate::mechanical_port::source::core::{
     CoreHandle, field_types::core_callback_type::CallbackData,
 };
 
+/// Execute the C++ virtual update chain without retaining an authored-object
+/// borrow across a constraint callback. Constraints are part of the super call:
+/// they run before opacity and before each derived update tail, not at the end.
+pub fn component_update_handle(
+    handle: &CoreHandle,
+    dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+) -> bool {
+    use crate::mechanical_port::source::component_dirt::ComponentDirt;
+    let Some(is_transform) = handle.with(|object| object.as_transform_component().is_some()) else {
+        return false;
+    };
+    if !is_transform {
+        return handle
+            .with_mut(|object| object.component_update(dirt))
+            .unwrap_or(false);
+    }
+
+    handle.with_mut(|object| component_update_before_transform(object, dirt));
+    if dirt.contains(ComponentDirt::TRANSFORM) {
+        handle.with_mut(|object| {
+            let (x, y) = if let Some(layout) = object.as_layout_component() {
+                (layout.layout_x(), layout.layout_y())
+            } else if let Some(root) = object.as_root_bone() {
+                (root.x(), root.y())
+            } else if object.as_bone().is_some() {
+                let parent = object
+                    .as_component()
+                    .and_then(|component| component.parent_handle())
+                    .expect("onAddedClean requires a Bone parent");
+                let x = parent
+                    .with(|parent| parent.as_bone().map(|bone| bone.length()))
+                    .flatten()
+                    .expect("onAddedClean requires a Bone parent");
+                (x, 0.0)
+            } else {
+                let node = object
+                    .as_node()
+                    .expect("concrete TransformComponent has x/y");
+                (node.base.x(), node.base.y())
+            };
+            object
+                .as_transform_component_mut()
+                .unwrap()
+                .update_transform_state(x, y);
+            if let Some(image) = object
+                .as_any_mut()
+                .downcast_mut::<crate::mechanical_port::source::shapes::image::Image>(
+            ) {
+                image.update_transform_after_super();
+            }
+        });
+    }
+    if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
+        let compose = handle.with_mut(|object| {
+            // Artboard explicitly overrides updateWorldTransform with no work.
+            if object.as_artboard().is_some() {
+                return false;
+            }
+            if let Some(list) = object.as_any_mut().downcast_mut::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>() {
+                list.update_world_transform_before_super();
+            }
+            if let Some(node) = object.as_node_mut() {
+                node.update_world_transform_before_super();
+            }
+            let overridden = if let Some(text) = object.as_text_mut() {
+                text.try_compose_world_transform_override()
+            } else if let Some(shape) = object.as_shape_mut() {
+                shape.try_compose_world_transform_override()
+            } else if let Some(image) = object.as_any_mut().downcast_mut::<crate::mechanical_port::source::shapes::image::Image>() {
+                image.try_compose_world_transform_override()
+            } else {
+                false
+            };
+            if !overridden {
+                object.as_transform_component_mut().unwrap().compose_world_transform();
+            }
+            true
+        }).unwrap_or(false);
+        if compose {
+            component_update_constraints_handle(handle);
+        }
+    }
+    if dirt.contains(ComponentDirt::RENDER_OPACITY) {
+        let parent = handle
+            .with(|object| {
+                object
+                    .as_transform_component()
+                    .unwrap()
+                    .parent_transform_component()
+            })
+            .flatten();
+        let parent_opacity = parent.and_then(|parent| {
+            parent
+                .with(|object| object.world_transform_child_opacity())
+                .flatten()
+        });
+        handle.with_mut(|object| {
+            object
+                .as_transform_component_mut()
+                .unwrap()
+                .update_render_opacity_state(parent_opacity)
+        });
+    }
+
+    let layout_constraints = handle
+        .with_mut(|object| {
+            let child_opacity = object.world_transform_child_opacity();
+            object
+                .as_layout_component_mut()
+                .map(|layout| {
+                    layout.update_after_transform_super(
+                        dirt,
+                        child_opacity.expect("LayoutComponent opacity"),
+                    )
+                })
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
+    if layout_constraints {
+        component_update_constraints_handle(handle);
+    }
+    handle.with_mut(|object| {
+        if object.as_layout_component().is_some() {
+            if dirt.intersects(
+                ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::LAYOUT_STYLE,
+            ) {
+                if let Some(artboard) = object.as_artboard_mut() {
+                    artboard.update_render_path();
+                } else {
+                    object
+                        .as_layout_component_mut()
+                        .unwrap()
+                        .update_render_path();
+                }
+            }
+            object
+                .as_layout_component_mut()
+                .unwrap()
+                .reset_update_flags();
+        }
+        component_update_after_transform(object, dirt);
+    });
+    true
+}
+
+fn component_update_before_transform(
+    object: &mut dyn crate::mechanical_port::source::core::CoreObject,
+    dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+) {
+    use crate::mechanical_port::source::shapes::{
+        ellipse::Ellipse, polygon::Polygon, rectangle::Rectangle, star::Star, triangle::Triangle,
+    };
+    if let Some(owner) = object.as_any_mut().downcast_mut::<Rectangle>() {
+        owner.update_before_path_super(dirt);
+    } else if let Some(owner) = object.as_any_mut().downcast_mut::<Triangle>() {
+        owner.update_before_path_super(dirt);
+    } else if let Some(owner) = object.as_any_mut().downcast_mut::<Ellipse>() {
+        owner.update_before_path_super(dirt);
+    } else if let Some(owner) = object.as_any_mut().downcast_mut::<Star>() {
+        owner.update_before_path_super(dirt);
+    } else if let Some(owner) = object.as_any_mut().downcast_mut::<Polygon>() {
+        owner.update_before_path_super(dirt);
+    }
+    if let Some(points) = object.as_points_path_mut() {
+        points.update_before_path_super(dirt);
+    }
+}
+
+fn component_update_after_transform(
+    object: &mut dyn crate::mechanical_port::source::core::CoreObject,
+    dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+) {
+    use crate::mechanical_port::source::{
+        artboard_component_list::ArtboardComponentList,
+        foreground_layout_drawable::ForegroundLayoutDrawable, layout::n_sliced_node::NSlicedNode,
+        nested_artboard::NestedArtboard, nested_artboard_layout::NestedArtboardLayout,
+        nested_artboard_leaf::NestedArtboardLeaf,
+    };
+    if let Some(path) = object.as_path_mut() {
+        path.update_after_transform_super(dirt);
+    }
+    if let Some(shape) = object.as_shape_mut() {
+        shape.update_after_transform_super(dirt);
+    }
+    if let Some(text) = object.as_text_mut() {
+        text.update_after_transform_super(dirt);
+    }
+    if let Some(text) = object.as_text_input_mut() {
+        text.update_after_transform_super(dirt);
+    }
+    if let Some(artboard) = object.as_artboard_mut() {
+        artboard.update_after_layout_super(dirt);
+    }
+    if let Some(owner) = object.as_any_mut().downcast_mut::<NestedArtboardLayout>() {
+        owner.base.base.update_after_transform_super(dirt);
+        owner.update_after_nested_artboard_super(dirt);
+    } else if let Some(owner) = object.as_any_mut().downcast_mut::<NestedArtboardLeaf>() {
+        owner.base.base.update_after_transform_super(dirt);
+        owner.update_after_nested_artboard_super(dirt);
+    } else if let Some(owner) = object.as_any_mut().downcast_mut::<NestedArtboard>() {
+        owner.update_after_transform_super(dirt);
+    } else if let Some(owner) = object.as_any_mut().downcast_mut::<ArtboardComponentList>() {
+        owner.update_after_transform_super(dirt);
+    } else if let Some(owner) = object
+        .as_any_mut()
+        .downcast_mut::<ForegroundLayoutDrawable>()
+    {
+        owner.update_after_transform_super(dirt);
+    } else if let Some(owner) = object.as_any_mut().downcast_mut::<NSlicedNode>() {
+        owner.update_after_transform_super(dirt);
+    }
+}
+
+/// The three concrete overrides have different constraint ordering. Snapshot
+/// only their handle lists, release the component slot, then invoke each action.
+pub fn component_update_constraints_handle(handle: &CoreHandle) {
+    use crate::mechanical_port::source::{
+        artboard_component_list::ArtboardComponentList,
+        nested_artboard_layout::NestedArtboardLayout,
+    };
+    let Some((layout, list, transforms, skip_lists)) = handle.with_mut(|object| {
+        let transforms = object
+            .as_transform_component()
+            .map(|owner| owner.constraints().to_vec())
+            .unwrap_or_default();
+        if let Some(owner) = object.as_any_mut().downcast_mut::<ArtboardComponentList>() {
+            (
+                owner.layout_constraint_handles(),
+                owner.active_list_constraint_handles(),
+                transforms,
+                true,
+            )
+        } else if let Some(owner) = object.as_any_mut().downcast_mut::<NestedArtboardLayout>() {
+            (
+                owner.layout_constraint_handles(),
+                Vec::new(),
+                transforms,
+                false,
+            )
+        } else if let Some(owner) = object.as_layout_component() {
+            (
+                owner.layout_constraint_handles(),
+                Vec::new(),
+                transforms,
+                false,
+            )
+        } else {
+            (Vec::new(), Vec::new(), transforms, false)
+        }
+    }) else {
+        return;
+    };
+    for constraint in layout {
+        constraint.with_mut(|object| object.layout_constraint_constrain_child(handle.clone()));
+    }
+    for constraint in list {
+        constraint.with_mut(|object| object.list_constraint_constrain_list(handle.clone()));
+    }
+    for constraint in transforms {
+        constraint.with_mut(|object| {
+            if !skip_lists || object.as_list_constraint().is_none() {
+                object.constraint_apply(handle.clone());
+            }
+        });
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CoreConcreteType {
     ViewModelInstanceListItem,
@@ -1498,18 +1765,10 @@ pub trait CoreCapabilities: Any {
         is_primary_hit: bool,
     ) -> Option<bool> {
         if let Some(layout) = self.as_layout_component_mut() {
-            return Some(layout.hit_test_point(
-                position,
-                skip_on_unclipped,
-                is_primary_hit,
-            ));
+            return Some(layout.hit_test_point(position, skip_on_unclipped, is_primary_hit));
         }
         if let Some(text_input) = self.as_text_input_mut() {
-            return Some(text_input.hit_test_point(
-                *position,
-                skip_on_unclipped,
-                is_primary_hit,
-            ));
+            return Some(text_input.hit_test_point(*position, skip_on_unclipped, is_primary_hit));
         }
         if let Some(text_value_run) = self.as_text_value_run_mut() {
             return Some(text_value_run.hit_test_point(
@@ -1519,22 +1778,13 @@ pub trait CoreCapabilities: Any {
             ));
         }
         if let Some(shape) = self.as_shape_mut() {
-            return Some(shape.hit_test_point(
-                *position,
-                skip_on_unclipped,
-                is_primary_hit,
-            ));
+            return Some(shape.hit_test_point(*position, skip_on_unclipped, is_primary_hit));
         }
         if let Some(drawable) = self.as_drawable_mut() {
-            return Some(drawable.hit_test_point(
-                position,
-                skip_on_unclipped,
-                is_primary_hit,
-            ));
+            return Some(drawable.hit_test_point(position, skip_on_unclipped, is_primary_hit));
         }
-        self.as_component().map(|component| {
-            component.hit_test_point(position, skip_on_unclipped, is_primary_hit)
-        })
+        self.as_component()
+            .map(|component| component.hit_test_point(position, skip_on_unclipped, is_primary_hit))
     }
     fn world_transform_child_opacity(&self) -> Option<f32> {
         if let Some(transform) = self.as_transform_component() {
@@ -1607,10 +1857,10 @@ pub trait CoreCapabilities: Any {
     }
     fn semantic_provider_inferred_data(
         &self,
-    ) -> Option<
-        crate::mechanical_port::source::semantic::semantic_provider::ResolvedSemanticData,
-    > {
-        self.as_text().and_then(|text| text.inferred_semantic_data())
+    ) -> Option<crate::mechanical_port::source::semantic::semantic_provider::ResolvedSemanticData>
+    {
+        self.as_text()
+            .and_then(|text| text.inferred_semantic_data())
     }
     fn component_update(
         &mut self,
@@ -1767,6 +2017,20 @@ pub trait CoreCapabilities: Any {
     ) -> Option<&mut dyn crate::mechanical_port::source::constraints::list_constraint::ListConstraint>
     {
         None
+    }
+    fn list_constraint_constrain_list(&mut self, child: CoreHandle) -> bool {
+        let Some(constraint) = self.as_list_constraint_mut() else {
+            return false;
+        };
+        child
+            .with_mut(|child| {
+                let Some(list) = child.as_constrainable_list_mut() else {
+                    return false;
+                };
+                constraint.constrain_list(list);
+                true
+            })
+            .unwrap_or(false)
     }
     fn as_draggable_constraint(
         &self,
@@ -2385,7 +2649,7 @@ pub trait CoreCapabilities: Any {
         &self,
     ) -> Option<
         crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
-    > {
+    >{
         None
     }
     fn state_machine_fire_action_perform(
@@ -48675,7 +48939,10 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_viewmodel
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::distance_constraint::DistanceConstraint
 {
-    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
     }
@@ -48720,7 +48987,10 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::follow_path_constraint::FollowPathConstraint
 {
-    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
     }
@@ -48794,7 +49064,10 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::list_foll
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base.base.base.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constraint::IkConstraint {
-    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
     }
@@ -48849,7 +49122,10 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constr
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::translation_constraint::TranslationConstraint
 {
-    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
     }
@@ -48928,7 +49204,10 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint
 {
-    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
     }
@@ -49038,7 +49317,10 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::transform_constraint::TransformConstraint
 {
-    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
     }
@@ -49083,7 +49365,10 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::scale_constraint::ScaleConstraint
 {
-    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
     }
@@ -49156,7 +49441,10 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::rotation_constraint::RotationConstraint
 {
-    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
     }
@@ -49210,16 +49498,6 @@ impl CoreCapabilities for crate::mechanical_port::source::node::Node {
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base,
-            value,
-        );
-        true
     }
     fn as_transform_component(
         &self,
@@ -49322,13 +49600,6 @@ impl CoreCapabilities
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable::update(&mut self, value);
-        true
     }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base)
@@ -49537,13 +49808,6 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::nested_artboard::NestedArtboard::update(&mut self, value);
-        true
-    }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base)
     }
@@ -49741,15 +50005,6 @@ impl CoreCapabilities
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::update(
-            &mut self, value,
-        );
-        true
     }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base)
@@ -49979,16 +50234,6 @@ impl CoreCapabilities for crate::mechanical_port::source::solo::Solo {
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base,
-            value,
-        );
-        true
-    }
     fn as_transform_component(
         &self,
     ) -> Option<&crate::mechanical_port::source::transform_component::TransformComponent> {
@@ -50088,16 +50333,6 @@ impl CoreCapabilities
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base.base.base,
-            value,
-        );
-        true
     }
     fn as_scripted_object(
         &self,
@@ -50454,16 +50689,6 @@ impl CoreCapabilities
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base.base.base.base.base,
-            value,
-        );
-        true
     }
     fn as_scripted_object(
         &self,
@@ -50923,15 +51148,6 @@ impl CoreCapabilities
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout::update(
-            &mut self, value,
-        );
-        true
     }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base.base.base)
@@ -51568,7 +51784,9 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSli
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode {
-    fn semantic_provider_local_bounds(&self) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
+    fn semantic_provider_local_bounds(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
         Some(self.local_bounds())
     }
     fn component_build_dependencies(&mut self) -> bool {
@@ -51598,15 +51816,6 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_sliced_node:
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode::update(
-            &mut self, value,
-        );
-        true
     }
     fn as_transform_component(
         &self,
@@ -51755,7 +51964,10 @@ impl CoreCapabilities
             ),
         )
     }
-    fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
+    fn listener_action_matches(
+        &self,
+        occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
+    ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
     fn listener_action_perform(
@@ -51922,8 +52134,16 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::animation_state::AnimationState
 {
-    fn state_machine_layer_component_events(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.events().to_vec()) }
-    fn state_machine_layer_component_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.listener_actions().to_vec()) }
+    fn state_machine_layer_component_events(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.events().to_vec())
+    }
+    fn state_machine_layer_component_listener_actions(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.listener_actions().to_vec())
+    }
     fn layer_state_make_instance(
         &self,
         artboard: crate::mechanical_port::source::artboard::RuntimeArtboardInstanceWeakHandle,
@@ -52022,7 +52242,10 @@ impl CoreCapabilities
             ),
         )
     }
-    fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
+    fn listener_action_matches(
+        &self,
+        occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
+    ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
     fn listener_action_perform(
@@ -52087,7 +52310,10 @@ impl CoreCapabilities
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(crate::mechanical_port::source::animation::scripted_listener_action::ScriptedListenerAction::import(self, stack))
     }
-    fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
+    fn listener_action_matches(
+        &self,
+        occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
+    ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
     fn listener_action_perform(
@@ -52543,7 +52769,10 @@ impl CoreCapabilities
             ),
         )
     }
-    fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
+    fn listener_action_matches(
+        &self,
+        occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
+    ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
     fn listener_action_perform(
@@ -52569,7 +52798,10 @@ impl CoreCapabilities
             ),
         )
     }
-    fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
+    fn listener_action_matches(
+        &self,
+        occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
+    ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
 }
@@ -52715,8 +52947,16 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::any_state::AnyState {
-    fn state_machine_layer_component_events(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.events().to_vec()) }
-    fn state_machine_layer_component_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.listener_actions().to_vec()) }
+    fn state_machine_layer_component_events(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.events().to_vec())
+    }
+    fn state_machine_layer_component_listener_actions(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.listener_actions().to_vec())
+    }
     fn layer_state_make_instance(
         &self,
         artboard: crate::mechanical_port::source::artboard::RuntimeArtboardInstanceWeakHandle,
@@ -52794,8 +53034,16 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::any_state::
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::blend_state_1d_input::BlendState1DInput
 {
-    fn state_machine_layer_component_events(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.events().to_vec()) }
-    fn state_machine_layer_component_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.listener_actions().to_vec()) }
+    fn state_machine_layer_component_events(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.events().to_vec())
+    }
+    fn state_machine_layer_component_listener_actions(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.listener_actions().to_vec())
+    }
     fn layer_state_make_instance(
         &self,
         artboard: crate::mechanical_port::source::artboard::RuntimeArtboardInstanceWeakHandle,
@@ -53018,7 +53266,10 @@ impl CoreCapabilities
             ),
         )
     }
-    fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
+    fn listener_action_matches(
+        &self,
+        occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
+    ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
     fn listener_action_perform(
@@ -53044,7 +53295,10 @@ impl CoreCapabilities
             ),
         )
     }
-    fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
+    fn listener_action_matches(
+        &self,
+        occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
+    ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
     fn listener_action_perform(
@@ -53101,8 +53355,16 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::state_transition::StateTransition
 {
-    fn state_machine_layer_component_events(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.events().to_vec()) }
-    fn state_machine_layer_component_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.listener_actions().to_vec()) }
+    fn state_machine_layer_component_events(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.events().to_vec())
+    }
+    fn state_machine_layer_component_listener_actions(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.listener_actions().to_vec())
+    }
     fn lifecycle_on_added_dirty(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -53312,7 +53574,10 @@ impl CoreCapabilities
             ),
         )
     }
-    fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
+    fn listener_action_matches(
+        &self,
+        occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
+    ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
     fn listener_action_perform(
@@ -53365,7 +53630,7 @@ impl CoreCapabilities
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireAction::import(&mut self.base.base, stack))
     }
-    fn state_machine_fire_action_occurs(&self) -> Option<crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance> {
+    fn state_machine_fire_action_occurs(&self) -> Option<crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance>{
         Some(self.base.base.occurs())
     }
     fn state_machine_fire_action_perform(
@@ -53377,8 +53642,16 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::entry_state::EntryState {
-    fn state_machine_layer_component_events(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.events().to_vec()) }
-    fn state_machine_layer_component_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.listener_actions().to_vec()) }
+    fn state_machine_layer_component_events(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.events().to_vec())
+    }
+    fn state_machine_layer_component_listener_actions(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.listener_actions().to_vec())
+    }
     fn layer_state_make_instance(
         &self,
         artboard: crate::mechanical_port::source::artboard::RuntimeArtboardInstanceWeakHandle,
@@ -53526,7 +53799,10 @@ impl CoreCapabilities
             ),
         )
     }
-    fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
+    fn listener_action_matches(
+        &self,
+        occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance,
+    ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
     fn listener_action_perform(
@@ -53541,8 +53817,16 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::blend_state_direct::BlendStateDirect
 {
-    fn state_machine_layer_component_events(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.events().to_vec()) }
-    fn state_machine_layer_component_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.listener_actions().to_vec()) }
+    fn state_machine_layer_component_events(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.events().to_vec())
+    }
+    fn state_machine_layer_component_listener_actions(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.listener_actions().to_vec())
+    }
     fn layer_state_make_instance(
         &self,
         artboard: crate::mechanical_port::source::artboard::RuntimeArtboardInstanceWeakHandle,
@@ -53797,8 +54081,16 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::listener_ty
     fn listener_input_type_value(&self) -> Option<u32> { Some(self.base.base.listener_type_value()) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::exit_state::ExitState {
-    fn state_machine_layer_component_events(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.events().to_vec()) }
-    fn state_machine_layer_component_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.listener_actions().to_vec()) }
+    fn state_machine_layer_component_events(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.events().to_vec())
+    }
+    fn state_machine_layer_component_listener_actions(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.listener_actions().to_vec())
+    }
     fn layer_state_make_instance(
         &self,
         artboard: crate::mechanical_port::source::artboard::RuntimeArtboardInstanceWeakHandle,
@@ -54055,8 +54347,16 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::blend_state_1d_viewmodel::BlendState1DViewModel
 {
-    fn state_machine_layer_component_events(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.events().to_vec()) }
-    fn state_machine_layer_component_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.listener_actions().to_vec()) }
+    fn state_machine_layer_component_events(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.events().to_vec())
+    }
+    fn state_machine_layer_component_listener_actions(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.listener_actions().to_vec())
+    }
     fn layer_state_make_instance(
         &self,
         artboard: crate::mechanical_port::source::artboard::RuntimeArtboardInstanceWeakHandle,
@@ -54171,8 +54471,16 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::blend_state_transition::BlendStateTransition
 {
-    fn state_machine_layer_component_events(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.events().to_vec()) }
-    fn state_machine_layer_component_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some(self.listener_actions().to_vec()) }
+    fn state_machine_layer_component_events(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.events().to_vec())
+    }
+    fn state_machine_layer_component_listener_actions(
+        &self,
+    ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
+        Some(self.listener_actions().to_vec())
+    }
     fn lifecycle_on_added_dirty(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -55184,13 +55492,6 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::shape::Shape {
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::shapes::shape::Shape::update(&mut self, value);
-        true
-    }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base)
     }
@@ -55543,13 +55844,6 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::points_path::P
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::shapes::points_path::PointsPath::update(&mut self, value);
-        true
-    }
     fn as_path(&self) -> Option<&crate::mechanical_port::source::shapes::path::Path> {
         Some(&self.base.base.base.base)
     }
@@ -55810,13 +56104,6 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::rectangle::Rec
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::shapes::rectangle::Rectangle::update(&mut self, value);
-        true
-    }
     fn as_path(&self) -> Option<&crate::mechanical_port::source::shapes::path::Path> {
         Some(&self.base.base.base.base)
     }
@@ -56067,13 +56354,6 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Tria
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::shapes::triangle::Triangle::update(&mut self, value);
-        true
-    }
     fn as_path(&self) -> Option<&crate::mechanical_port::source::shapes::path::Path> {
         Some(&self.base.base.base.base)
     }
@@ -56280,13 +56560,6 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellip
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::shapes::ellipse::Ellipse::update(&mut self, value);
-        true
-    }
     fn as_path(&self) -> Option<&crate::mechanical_port::source::shapes::path::Path> {
         Some(&self.base.base.base.base)
     }
@@ -56482,16 +56755,6 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::list_path::Lis
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::shapes::path::Path::update(
-            &mut self.base.base.base.base,
-            value,
-        );
-        true
     }
     fn as_path(&self) -> Option<&crate::mechanical_port::source::shapes::path::Path> {
         Some(&self.base.base.base.base)
@@ -56777,13 +57040,6 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polyg
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::shapes::polygon::Polygon::update(&mut self, value);
-        true
-    }
     fn as_path(&self) -> Option<&crate::mechanical_port::source::shapes::path::Path> {
         Some(&self.base.base.base.base)
     }
@@ -56990,13 +57246,6 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::shapes::star::Star::update(&mut self, value);
-        true
-    }
     fn as_path(&self) -> Option<&crate::mechanical_port::source::shapes::path::Path> {
         Some(&self.base.base.base.base.base.base)
     }
@@ -57195,7 +57444,9 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
-    fn semantic_provider_local_bounds(&self) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
+    fn semantic_provider_local_bounds(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
         Some(self.local_bounds())
     }
     fn drawable_hit_test(
@@ -57227,16 +57478,6 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base.base.base,
-            value,
-        );
-        true
     }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base)
@@ -57946,13 +58187,6 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::layout_component::LayoutComponent::update(&mut self, value);
-        true
-    }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base)
     }
@@ -58108,11 +58342,7 @@ impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
         skip_on_unclipped: bool,
         is_primary_hit: bool,
     ) -> Option<bool> {
-        Some(self.hit_test_point(
-            position,
-            skip_on_unclipped,
-            is_primary_hit,
-        ))
+        Some(self.hit_test_point(position, skip_on_unclipped, is_primary_hit))
     }
     fn world_transform_child_opacity(&self) -> Option<f32> {
         Some(self.child_opacity())
@@ -58159,13 +58389,6 @@ impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::artboard::Artboard::update(&mut self, value);
-        true
     }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base.base.base)
@@ -59020,15 +59243,6 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf::update(
-            &mut self, value,
-        );
-        true
-    }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base.base.base)
     }
@@ -59258,16 +59472,6 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::bone::Bone {
         );
         true
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base,
-            value,
-        );
-        true
-    }
     fn as_transform_component(
         &self,
     ) -> Option<&crate::mechanical_port::source::transform_component::TransformComponent> {
@@ -59363,16 +59567,6 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::root_bone::Root
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::bones::root_bone::RootBone> {
         Some(&mut self)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base.base.base,
-            value,
-        );
-        true
     }
     fn as_transform_component(
         &self,
@@ -59805,16 +59999,6 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input_curso
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base.base.base.base.base,
-            value,
-        );
-        true
-    }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base.base.base)
     }
@@ -60003,16 +60187,6 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input_text:
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base.base.base.base.base,
-            value,
-        );
-        true
     }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base.base.base)
@@ -60484,16 +60658,6 @@ impl CoreCapabilities
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base.base.base.base.base,
-            value,
-        );
-        true
-    }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base.base.base)
     }
@@ -60706,13 +60870,6 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input::Text
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base)
     }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::text::text_input::TextInput::update(&mut self, value);
-        true
-    }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base)
     }
@@ -60914,16 +61071,6 @@ impl CoreCapabilities
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::transform_component::TransformComponent::update(
-            &mut self.base.base.base.base.base.base.base.base,
-            value,
-        );
-        true
     }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base.base.base)
@@ -61134,13 +61281,6 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
     }
     fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
         Some(&mut self.base.base.base.base)
-    }
-    fn component_update(
-        &mut self,
-        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
-    ) -> bool {
-        crate::mechanical_port::source::text::text::Text::update(&mut self, value);
-        true
     }
     fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
         Some(&self.base.base)

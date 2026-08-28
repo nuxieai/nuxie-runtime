@@ -27,7 +27,7 @@ impl Rectangle {
     pub fn corner_radius_br_changed(&mut self) {
         self.base.mark_path_dirty();
     }
-    pub fn update(&mut self, value: ComponentDirt) {
+    pub(crate) fn update_before_path_super(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::PATH) {
             let radius = self.base.corner_radius_tl();
             let link = self.base.link_corner_radius();
@@ -72,7 +72,6 @@ impl Rectangle {
                 });
             }
         }
-        self.base.update(value);
     }
 }
 use std::{cell::RefCell, rc::Rc};

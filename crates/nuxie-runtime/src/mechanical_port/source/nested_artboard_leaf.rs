@@ -31,8 +31,7 @@ impl NestedArtboardLeaf {
         nested_artboard
     }
 
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.base.update(value);
+    pub(crate) fn update_after_nested_artboard_super(&mut self, value: ComponentDirt) {
         if !value.contains(ComponentDirt::WORLD_TRANSFORM) {
             return;
         }

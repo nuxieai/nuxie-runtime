@@ -235,20 +235,32 @@ impl Image {
         }
     }
 
-    pub fn compose_world_transform(&mut self) {
-        if let (Some(participant), Some(parent)) = (
-            self.layout_participant(),
-            self.base.parent_transform_component(),
-        ) {
-            let base = Mat2D::from_translation(Vec2D::new(
-                participant.resolved_left(),
-                participant.resolved_top(),
-            ));
+    pub(crate) fn try_compose_world_transform_override(&mut self) -> bool {
+        let participant = self.base.children().iter().find_map(|child| {
+            child
+                .with(|child| {
+                    child.as_any().downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>().map(|participant| {
+                        (participant.resolved_left(), participant.resolved_top())
+                    })
+                })
+                .flatten()
+        });
+        let parent_world = self.base.parent_transform_component().and_then(|parent| {
+            parent
+                .with(|parent| {
+                    parent
+                        .as_world_transform_component()
+                        .map(|parent| *parent.world_transform())
+                })
+                .flatten()
+        });
+        if let (Some((left, top)), Some(parent_world)) = (participant, parent_world) {
+            let base = Mat2D::from_translation(Vec2D::new(left, top));
             self.base
-                .set_world_transform(parent.world_transform() * base * self.base.transform());
-            return;
+                .set_world_transform(parent_world * base * *self.base.transform());
+            return true;
         }
-        self.base.compose_world_transform();
+        false
     }
 
     pub fn layout_participant(&self) -> Option<&LayoutParticipant> {
@@ -275,8 +287,7 @@ impl Image {
         self.height() * self.render_scale_y()
     }
 
-    pub fn update_transform(&mut self) {
-        self.base.update_transform();
+    pub(crate) fn update_transform_after_super(&mut self) {
         self.base
             .transform_mut()
             .scale_by_values(self.layout_scale_x, self.layout_scale_y);

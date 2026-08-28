@@ -15,7 +15,7 @@ impl Triangle {
         }
         Self { base, vertices }
     }
-    pub fn update(&mut self, value: ComponentDirt) {
+    pub(crate) fn update_before_path_super(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::PATH) {
             let ox = -self.base.origin_x() * self.base.width();
             let oy = -self.base.origin_y() * self.base.height();
@@ -37,7 +37,6 @@ impl Triangle {
                 vertex.base.set_y(oy + h);
             }
         }
-        self.base.update(value);
     }
 }
 use std::{cell::RefCell, rc::Rc};

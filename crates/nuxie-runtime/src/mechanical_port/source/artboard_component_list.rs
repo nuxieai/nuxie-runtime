@@ -1193,8 +1193,7 @@ impl ArtboardComponentList {
         transform * Mat2D::from_translate(position.x, position.y)
     }
 
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.transform_mut().update(value);
+    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
         if self.artboard_count() == 0 {
             return;
         }
@@ -1222,9 +1221,20 @@ impl ArtboardComponentList {
         }
     }
 
-    pub fn update_world_transform(&mut self) {
+    pub(crate) fn update_world_transform_before_super(&mut self) {
         self.update_artboards_world_transform();
-        self.transform_mut().update_world_transform();
+    }
+
+    pub(crate) fn layout_constraint_handles(&self) -> Vec<CoreHandle> {
+        self.provider_state.layout_constraints().to_vec()
+    }
+
+    pub(crate) fn active_list_constraint_handles(&self) -> Vec<CoreHandle> {
+        if self.virtualization_enabled() {
+            Vec::new()
+        } else {
+            self.constrainable_list_state.list_constraints.clone()
+        }
     }
 
     fn update_artboards_world_transform(&mut self) {
@@ -1259,39 +1269,6 @@ impl ArtboardComponentList {
                     );
                 }
             }
-        }
-    }
-
-    pub fn update_constraints(&mut self) {
-        let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
-        else {
-            return;
-        };
-        let layout_constraints = self.provider_state.layout_constraints().to_vec();
-        for parent_constraint in layout_constraints {
-            parent_constraint.with_mut(|constraint| {
-                constraint.layout_constraint_constrain_child(owner.clone());
-            });
-        }
-        if !self.constrainable_list_state.list_constraints.is_empty()
-            && !self.virtualization_enabled()
-        {
-            let list_constraints = self.constrainable_list_state.list_constraints.clone();
-            for list_constraint in list_constraints {
-                list_constraint.with_mut(|constraint| {
-                    constraint.list_constraint_constrain_list(owner.clone());
-                });
-            }
-        }
-        let constraints = self.transform().constraints().to_vec();
-        for constraint in constraints {
-            if constraint.with(|constraint| constraint.as_list_constraint().is_some()) == Some(true)
-            {
-                continue;
-            }
-            constraint.with_mut(|constraint| {
-                constraint.constraint_apply(owner.clone());
-            });
         }
     }
 

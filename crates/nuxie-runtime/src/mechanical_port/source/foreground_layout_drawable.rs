@@ -38,8 +38,7 @@ impl ForegroundLayoutDrawable {
         }
     }
 
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.base.base.base.base.base.update(value);
+    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
         let Some(parent_layout) = self
             .base
             .base

@@ -89,8 +89,7 @@ impl Shape {
         can_defer
     }
 
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.update(value);
+    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::RENDER_OPACITY) {
             self.paint_container
                 .propagate_opacity(self.base.render_opacity());
@@ -531,23 +530,42 @@ impl Shape {
     pub fn is_participating_in_layout(&self) -> bool {
         self.layout_participant().is_some()
     }
-    pub fn compose_world_transform(&mut self) {
-        if let (Some(participant), Some(parent)) = (
-            self.layout_participant(),
-            self.base.parent_transform_component(),
-        ) {
+    pub(crate) fn try_compose_world_transform_override(&mut self) -> bool {
+        let participant = self.base.children().iter().find_map(|child| {
+            child
+                .with(|child| {
+                    child.as_any().downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>().map(|participant| {
+                        (
+                            participant.resolved_left(),
+                            participant.resolved_top(),
+                            participant.host_scale_x(),
+                            participant.host_scale_y(),
+                        )
+                    })
+                })
+                .flatten()
+        });
+        let parent_world = self.base.parent_transform_component().and_then(|parent| {
+            parent
+                .with(|parent| {
+                    parent
+                        .as_world_transform_component()
+                        .map(|parent| *parent.world_transform())
+                })
+                .flatten()
+        });
+        if let (Some((left, top, sx, sy)), Some(parent_world)) = (participant, parent_world) {
             let intrinsic = self.compute_intrinsic_bounds();
-            let (sx, sy) = (participant.host_scale_x(), participant.host_scale_y());
             let base = Mat2D::from_translation(Vec2D::new(
-                participant.resolved_left() - intrinsic.left() * sx,
-                participant.resolved_top() - intrinsic.top() * sy,
+                left - intrinsic.left() * sx,
+                top - intrinsic.top() * sy,
             ));
             self.base.set_world_transform(
-                parent.world_transform() * base * self.base.transform() * Mat2D::from_scale(sx, sy),
+                parent_world * base * *self.base.transform() * Mat2D::from_scale(sx, sy),
             );
-            return;
+            return true;
         }
-        self.base.compose_world_transform();
+        false
     }
 
     pub fn world_path(&mut self) -> &mut ShapePaintPath {

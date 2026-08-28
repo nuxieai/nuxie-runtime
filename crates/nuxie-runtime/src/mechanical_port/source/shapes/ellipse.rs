@@ -17,7 +17,7 @@ impl Ellipse {
         }
         Self { base, vertices }
     }
-    pub fn update(&mut self, value: ComponentDirt) {
+    pub(crate) fn update_before_path_super(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::PATH) {
             let rx = self.base.width() / 2.0;
             let ry = self.base.height() / 2.0;
@@ -68,7 +68,6 @@ impl Ellipse {
                     .set_out_point(Vec2D::new(ox - rx, oy - ry * CIRCLE_CONSTANT));
             }
         }
-        self.base.update(value);
     }
 }
 use std::{cell::RefCell, rc::Rc};

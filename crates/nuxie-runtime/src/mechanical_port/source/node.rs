@@ -71,16 +71,22 @@ impl Node {
         0.0
     }
 
-    pub fn update_world_transform(&mut self) {
+    pub(crate) fn update_world_transform_before_super(&mut self) {
         self.local_transform_needs_recompute = true;
-        self.base.base.update_world_transform();
     }
 
     pub fn local_transform(&mut self) -> Mat2D {
         if self.local_transform_needs_recompute {
             self.local_transform_needs_recompute = false;
             if let Some(parent) = self.base.base.parent_transform_component() {
-                let parent_world = *parent.world_transform();
+                let parent_world = parent
+                    .with(|parent| {
+                        *parent
+                            .as_world_transform_component()
+                            .expect("parent transform")
+                            .world_transform()
+                    })
+                    .expect("live parent transform");
                 let mut inverse = Mat2D::default();
                 if parent_world.invert(&mut inverse) {
                     self.local_transform = inverse * *self.base.base.world_transform();

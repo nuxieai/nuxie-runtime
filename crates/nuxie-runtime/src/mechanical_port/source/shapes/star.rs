@@ -45,8 +45,8 @@ impl Star {
             angle += increment;
         }
     }
-    pub fn update(&mut self, value: ComponentDirt) {
-        if self.base.has_dirt(ComponentDirt::PATH) {
+    pub(crate) fn update_before_path_super(&mut self, value: ComponentDirt) {
+        if value.contains(ComponentDirt::PATH) {
             if self.polygon.vertices.len() != self.vertex_count() {
                 self.polygon.vertices.resize_with(self.vertex_count(), || {
                     std::rc::Rc::new(std::cell::RefCell::new(StraightVertex::default()))
@@ -58,6 +58,5 @@ impl Star {
             }
             self.build_polygon();
         }
-        self.base.update(value);
     }
 }

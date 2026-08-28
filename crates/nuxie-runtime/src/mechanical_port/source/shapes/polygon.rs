@@ -43,7 +43,7 @@ impl Polygon {
             angle += increment;
         }
     }
-    pub fn update(&mut self, value: ComponentDirt) {
+    pub(crate) fn update_before_path_super(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::PATH) {
             let count = self.vertex_count();
             if self.polygon.vertices.len() != count {
@@ -57,7 +57,6 @@ impl Polygon {
             }
             self.build_polygon();
         }
-        self.base.update(value);
     }
 }
 use std::{cell::RefCell, rc::Rc};

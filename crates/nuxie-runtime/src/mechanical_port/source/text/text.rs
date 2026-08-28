@@ -712,8 +712,7 @@ impl Text {
                 .unwrap_or(false)
         })
     }
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.update(value);
+    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
         if value.intersects(ComponentDirt::PATH) {
             let precompute_modifier_coverage = self.modifier_ranges_need_shape();
             let parent_is_layout_not_artboard = self.base.parent().is_some_and(|parent| {
@@ -1492,22 +1491,43 @@ impl Text {
             }
         }
     }
-    pub fn compose_world_transform(&mut self) {
-        if let (Some(participant), Some(parent)) = (
-            self.layout_participant(),
-            self.base.parent_transform_component(),
-        ) {
+    pub(crate) fn try_compose_world_transform_override(&mut self) -> bool {
+        let participant = self.base.children().iter().find_map(|child| {
+            child
+                .with(|child| {
+                    child.as_any().downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>().map(|participant| {
+                        (
+                            participant.resolved_left(),
+                            participant.resolved_top(),
+                            participant.resolved_width(),
+                            participant.resolved_height(),
+                        )
+                    })
+                })
+                .flatten()
+        });
+        let parent_world = self.base.parent_transform_component().and_then(|parent| {
+            parent
+                .with(|parent| {
+                    parent
+                        .as_world_transform_component()
+                        .map(|parent| *parent.world_transform())
+                })
+                .flatten()
+        });
+        if let (Some((left, top, width, height)), Some(parent_world)) = (participant, parent_world)
+        {
             let base = Mat2D::from_translation(Vec2D::new(
-                participant.resolved_left() + self.base.origin_x() * participant.resolved_width(),
-                participant.resolved_top() + self.base.origin_y() * participant.resolved_height(),
+                left + self.base.origin_x() * width,
+                top + self.base.origin_y() * height,
             ));
             self.base
-                .set_world_transform(parent.world_transform() * base * self.base.transform());
-            return;
+                .set_world_transform(parent_world * base * *self.base.transform());
+            return true;
         }
-        self.base.compose_world_transform();
-        self.shape_world_transform = *self.base.world_transform() * self.internal_transform;
+        false
     }
+
     pub fn layout_participant(&self) -> Option<&LayoutParticipant> {
         self.base
             .children()

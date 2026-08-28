@@ -67,8 +67,7 @@ impl NSlicedNode {
             self.base.initial_height(),
         )
     }
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.update(value);
+    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
         if has_dirt(
             value,
             ComponentDirt::N_SLICER | ComponentDirt::WORLD_TRANSFORM,

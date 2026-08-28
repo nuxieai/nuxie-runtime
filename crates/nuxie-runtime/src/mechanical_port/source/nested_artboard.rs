@@ -661,8 +661,7 @@ impl NestedArtboard {
         self.base.base.on_added_clean(context)
     }
 
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.base.update(value);
+    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
         let Some(instance) = self.instance.clone() else {
             return;
         };

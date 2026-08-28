@@ -468,8 +468,7 @@ impl Path {
             self.base.add_dirt(ComponentDirt::PATH);
         }
     }
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.update(value);
+    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
         let changed = has_dirt(value, ComponentDirt::PATH);
         let world_changed = has_dirt(value, ComponentDirt::WORLD_TRANSFORM);
         let deformer_changed = has_dirt(value, ComponentDirt::N_SLICER);

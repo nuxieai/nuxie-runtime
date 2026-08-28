@@ -1324,7 +1324,7 @@ impl Artboard {
         self.base.base.layout().top()
     }
 
-    fn update_render_path(&mut self) {
+    pub(crate) fn update_render_path(&mut self) {
         let background = Aabb::from_ltwh(
             -self.layout_width() * self.origin_x(),
             -self.layout_height() * self.origin_y(),
@@ -1342,8 +1342,7 @@ impl Artboard {
         self.base.base.world_path_mut().add_rect(clip);
     }
 
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.base.update(value);
+    pub(crate) fn update_after_layout_super(&mut self, value: ComponentDirt) {
         if value.contains(ComponentDirt::DRAW_ORDER) {
             self.sort_draw_order();
         }
@@ -1411,16 +1410,11 @@ impl Artboard {
                 if dirt == ComponentDirt::NONE || dirt.contains(ComponentDirt::COLLAPSED) {
                     continue;
                 }
-                let constraints = component
-                    .with_mut(|component| {
-                        component.component_set_dirt(ComponentDirt::NONE);
-                        component.component_update(dirt);
-                        component.transform_component_constraint_handles()
-                    })
-                    .unwrap_or_default();
-                crate::mechanical_port::source::transform_component::TransformComponent::apply_constraints(
-                    component,
-                    constraints,
+                component.with_mut(|component| {
+                    component.component_set_dirt(ComponentDirt::NONE);
+                });
+                crate::mechanical_port::source::generated::core_registry::component_update_handle(
+                    &component, dirt,
                 );
                 if self.dirt_depth < i as u32 {
                     break;

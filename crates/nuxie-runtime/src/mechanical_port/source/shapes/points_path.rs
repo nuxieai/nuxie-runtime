@@ -53,7 +53,7 @@ impl PointsPath {
             self.base.world_transform()
         }
     }
-    pub fn update(&mut self, value: ComponentDirt) {
+    pub(crate) fn update_before_path_super(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::PATH) {
             if let Some(skin) = self.skin() {
                 let vertices = self
@@ -65,7 +65,6 @@ impl PointsPath {
                 skin.with_downcast::<Skin, _>(|skin| skin.deform(&vertices));
             }
         }
-        self.base.update(value);
     }
     pub fn mark_path_dirty(&mut self, _send_to_layout: bool) {
         if let Some(skin) = self.skin() {

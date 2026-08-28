@@ -65,8 +65,7 @@ impl NestedArtboardLayout {
         self.update_height_override();
     }
 
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.base.update(value);
+    pub(crate) fn update_after_nested_artboard_super(&mut self, value: ComponentDirt) {
         if !value.contains(ComponentDirt::WORLD_TRANSFORM) {
             return;
         }
@@ -90,18 +89,8 @@ impl NestedArtboardLayout {
         *self.base.base.mutable_world_transform() = Mat2D::from_translation(-origin) * world;
     }
 
-    pub fn update_constraints(&mut self) {
-        if let Some(provider) =
-            crate::mechanical_port::source::core::CoreObject::core(self).handle()
-        {
-            let constraints = self.provider_state.layout_constraints().to_vec();
-            for constraint in constraints {
-                constraint.with_mut(|constraint| {
-                    constraint.layout_constraint_constrain_child(provider.clone());
-                });
-            }
-        }
-        self.base.base.update_constraints();
+    pub(crate) fn layout_constraint_handles(&self) -> Vec<CoreHandle> {
+        self.provider_state.layout_constraints().to_vec()
     }
 
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {

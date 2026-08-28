@@ -142,8 +142,7 @@ impl TextInput {
             StatusCode::Ok
         }
     }
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.update(value);
+    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
         if value.intersects(ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT) {
             let font_size = self
                 .text_style

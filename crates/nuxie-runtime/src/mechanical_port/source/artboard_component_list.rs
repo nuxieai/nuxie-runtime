@@ -1,25 +1,30 @@
-use std::{collections::HashMap, ffi::c_void, ptr::NonNull, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::AdvancingComponent,
-    animation::{keyframe_interpolator::KeyFrameInterpolator, state_machine::StateMachineInstance},
-    artboard::{Artboard, ArtboardInstance},
+    animation::{
+        keyframe_interpolator::KeyFrameInterpolator, state_machine::StateMachineInstance,
+        state_machine_instance::RuntimeStateMachineInstanceHandle,
+    },
+    artboard::{
+        Artboard, ArtboardInstance, RuntimeArtboardInstanceHandle,
+        RuntimeArtboardInstanceWeakHandle,
+    },
     artboard_host::ArtboardHost,
     artboard_list_map_rule::ArtboardListMapRule,
     component::Component,
     component_dirt::ComponentDirt,
     constraints::{
         constrainable_list::{ConstrainableList, ConstrainableListState},
-        list_constraint::ListConstraint,
         scrolling::scroll_constraint::ScrollConstraint,
     },
-    core::Core,
+    core::{Core, CoreHandle},
     data_bind::{
         data_bind_list_item_consumer::DataBindListItemConsumer, data_context::DataContext,
     },
     dirtyable::Dirtyable,
-    file::File,
+    file::{File, RuntimeFileWeakHandle},
     generated::artboard_component_list_base::ArtboardComponentListBaseCallbacks,
     hit_info::HitInfo,
     input::{
@@ -34,50 +39,52 @@ use crate::mechanical_port::source::{
     layout_component::LayoutComponent,
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     property_recorder::PropertyRecorder,
-    refcnt::{Rcp, ref_rcp},
     renderer::Renderer,
     resetting_component::ResettingComponent,
     semantic::semantic_data::SemanticData,
     transform_component::TransformComponent,
     viewmodel::{
-        symbol_type::SymbolType, viewmodel_instance::ViewModelInstance,
+        symbol_type::SymbolType,
+        viewmodel_instance::ViewModelInstance,
         viewmodel_instance_list_item::ViewModelInstanceListItem,
         viewmodel_instance_number::ViewModelInstanceNumber,
         viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex,
-        viewmodel_instance_value::ViewModelInstanceValue,
+        viewmodel_instance_value::{ValueDependentHandle, ViewModelInstanceValue},
         viewmodel_value_dependent::ViewModelValueDependent,
     },
-    virtualizing_component::{Virtualizable, VirtualizingComponent},
+    virtualizing_component::VirtualizingComponent,
 };
 
 pub use crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase;
 
 pub struct ArtboardListDrawIndexDependent {
-    list: *mut ArtboardComponentList,
-    value: Rcp<ViewModelInstanceValue>,
+    list: CoreHandle,
+    value: CoreHandle,
+    identity: Option<ValueDependentHandle>,
 }
 
 impl ArtboardListDrawIndexDependent {
-    pub fn new(list: *mut ArtboardComponentList, value: *mut ViewModelInstanceValue) -> Box<Self> {
-        let mut dependent = Box::new(Self {
+    pub fn new(list: CoreHandle, value: CoreHandle) -> Rc<RefCell<dyn ViewModelValueDependent>> {
+        let dependent = Rc::new(RefCell::new(Self {
             list,
-            value: unsafe { ref_rcp(value) },
+            value: value.clone(),
+            identity: None,
+        }));
+        let erased: Rc<RefCell<dyn ViewModelValueDependent>> = dependent.clone();
+        let identity = ValueDependentHandle::runtime(&erased);
+        dependent.borrow_mut().identity = Some(identity.clone());
+        value.with_downcast_mut::<ViewModelInstanceValue, _>(|value| {
+            value.add_dependent(identity);
         });
-        unsafe {
-            (*value).add_dependent(NonNull::from(
-                dependent.as_mut() as &mut dyn ViewModelValueDependent
-            ));
-        }
-        dependent
+        erased
     }
 
     pub fn clear(&mut self) {
-        if !self.value.get().is_null() {
-            unsafe {
-                (*self.value.get())
-                    .remove_dependent(NonNull::from(self as &mut dyn ViewModelValueDependent));
-            }
-            self.value.reset(None);
+        if let Some(identity) = self.identity.take() {
+            self.value
+                .with_downcast_mut::<ViewModelInstanceValue, _>(|value| {
+                    value.remove_dependent(&identity);
+                });
         }
     }
 }
@@ -90,14 +97,12 @@ impl Drop for ArtboardListDrawIndexDependent {
 
 impl Dirtyable for ArtboardListDrawIndexDependent {
     fn add_dirt(&mut self, _value: ComponentDirt, _recurse: bool) {
-        if !self.list.is_null() {
-            unsafe {
-                (*self.list).invalidate_ordered_list_indices_cache();
-                (*self.list)
-                    .component_mut()
+        self.list
+            .with_downcast_mut::<ArtboardComponentList, _>(|list| {
+                list.invalidate_ordered_list_indices_cache();
+                list.component_mut()
                     .add_dirt(ComponentDirt::COMPONENTS, false);
-            }
-        }
+            });
     }
 }
 
@@ -107,23 +112,22 @@ impl ViewModelValueDependent for ArtboardListDrawIndexDependent {
 
 pub struct ArtboardComponentList {
     pub base: ArtboardComponentListBase,
-    list_items: Vec<Rcp<ViewModelInstanceListItem>>,
-    old_items: Vec<Rcp<ViewModelInstanceListItem>>,
-    artboards_map: HashMap<u32, *mut Artboard>,
-    artboard_instances_map: HashMap<Rcp<ViewModelInstanceListItem>, Box<ArtboardInstance>>,
-    state_machines_map: HashMap<Rcp<ViewModelInstanceListItem>, Box<StateMachineInstance>>,
-    resource_pool: HashMap<*mut Artboard, Vec<Box<ArtboardInstance>>>,
-    state_machines_pool: HashMap<*mut Artboard, Vec<Box<StateMachineInstance>>>,
-    property_recorders_map: HashMap<*const Artboard, Box<PropertyRecorder>>,
-    artboard_transforms: HashMap<*mut ArtboardInstance, Mat2D>,
-    artboard_instances_by_index: Vec<*mut ArtboardInstance>,
-    state_machines_by_index: Vec<*mut StateMachineInstance>,
-    file: *mut File,
+    list_items: Vec<CoreHandle>,
+    old_items: Vec<CoreHandle>,
+    artboards_map: HashMap<u32, CoreHandle>,
+    artboard_instances_map: HashMap<CoreHandle, RuntimeArtboardInstanceHandle>,
+    state_machines_map: HashMap<CoreHandle, RuntimeStateMachineInstanceHandle>,
+    resource_pool: HashMap<CoreHandle, Vec<RuntimeArtboardInstanceHandle>>,
+    state_machines_pool: HashMap<CoreHandle, Vec<RuntimeStateMachineInstanceHandle>>,
+    property_recorders_map: HashMap<CoreHandle, Box<PropertyRecorder>>,
+    artboard_transforms: HashMap<CoreHandle, Mat2D>,
+    artboard_instances_by_index: Vec<Option<RuntimeArtboardInstanceHandle>>,
+    state_machines_by_index: Vec<Option<RuntimeStateMachineInstanceHandle>>,
+    file: Option<RuntimeFileWeakHandle>,
     artboard_sizes: Vec<Vec2D>,
     layout_size: Vec2D,
     visible_start_index: i32,
     visible_end_index: i32,
-    artboard_overrides_map: HashMap<*mut ArtboardInstance, *mut ArtboardComponentListOverride>,
     artboard_map_rules: HashMap<i32, i32>,
     list_scope_focus_node: Option<FocusNodeRef>,
     list_row_focus_nodes: Vec<Option<FocusNodeRef>>,
@@ -131,8 +135,7 @@ pub struct ArtboardComponentList {
     list_uses_draw_index_sort: bool,
     ordered_list_indices_cache_valid: bool,
     cached_ordered_list_indices: Vec<i32>,
-    draw_index_dependents:
-        HashMap<Rcp<ViewModelInstanceListItem>, Box<ArtboardListDrawIndexDependent>>,
+    draw_index_dependents: HashMap<CoreHandle, Rc<RefCell<dyn ViewModelValueDependent>>>,
     provider_state: LayoutNodeProviderState,
     constrainable_list_state: ConstrainableListState,
 }
@@ -152,12 +155,11 @@ impl Default for ArtboardComponentList {
             artboard_transforms: HashMap::new(),
             artboard_instances_by_index: Vec::new(),
             state_machines_by_index: Vec::new(),
-            file: std::ptr::null_mut(),
+            file: None,
             artboard_sizes: Vec::new(),
             layout_size: Vec2D::default(),
             visible_start_index: -1,
             visible_end_index: -1,
-            artboard_overrides_map: HashMap::new(),
             artboard_map_rules: HashMap::new(),
             list_scope_focus_node: None,
             list_row_focus_nodes: Vec::new(),
@@ -227,20 +229,21 @@ impl ArtboardComponentList {
         }
         for index in 0..self.artboard_count() {
             if let Some(nested_artboard) = self.artboard_instance(index as i32) {
-                nested_artboard.collapse_semantic_boundary(value);
+                nested_artboard
+                    .with_artboard_mut(|artboard| artboard.collapse_semantic_boundary(value));
             }
         }
         true
     }
 
     pub fn clear(&mut self) {
-        for artboard in self.artboard_instances_map.values_mut() {
-            artboard.cleanup_semantic_tree();
+        for artboard in self.artboard_instances_map.values() {
+            artboard.with_artboard_mut(|artboard| artboard.cleanup_semantic_tree());
         }
         self.clear_draw_index_listeners();
         self.invalidate_ordered_list_indices_cache();
-        for artboard in self.artboard_instances_map.values_mut() {
-            artboard.cleanup_focus_tree();
+        for artboard in self.artboard_instances_map.values() {
+            artboard.with_artboard_mut(|artboard| artboard.cleanup_focus_tree());
         }
         self.remove_list_scope_focus_node();
         self.list_row_focus_nodes.clear();
@@ -252,43 +255,40 @@ impl ArtboardComponentList {
         self.artboards_map.clear();
         self.resource_pool.clear();
         self.state_machines_pool.clear();
-        self.artboard_overrides_map.clear();
     }
 
     pub fn artboard_count(&self) -> usize {
         self.list_items.len()
     }
 
-    pub fn list_item(&self, index: i32) -> Option<Rcp<ViewModelInstanceListItem>> {
+    pub fn list_item(&self, index: i32) -> Option<CoreHandle> {
         if index >= 0 && (index as usize) < self.list_items.len() {
             return Some(self.list_items[index as usize].clone());
         }
         None
     }
 
-    pub fn artboard_instance(&mut self, index: i32) -> Option<&mut ArtboardInstance> {
+    pub fn artboard_instance(&self, index: i32) -> Option<RuntimeArtboardInstanceHandle> {
         if !self.virtualization_enabled() {
-            if index >= 0 && (index as usize) < self.artboard_instances_by_index.len() {
-                return unsafe { self.artboard_instances_by_index[index as usize].as_mut() };
-            }
-            return None;
+            return (index >= 0)
+                .then(|| self.artboard_instances_by_index.get(index as usize))
+                .flatten()
+                .cloned()
+                .flatten();
         }
         if index >= 0 && (index as usize) < self.list_items.len() {
             let item = self.list_items[index as usize].clone();
-            return self.artboard_instances_map.get_mut(&item).map(Box::as_mut);
+            return self.artboard_instances_map.get(&item).cloned();
         }
         None
     }
 
-    pub fn index_of_artboard_instance(&self, instance: *mut ArtboardInstance) -> i32 {
-        if instance.is_null() {
-            return -1;
-        }
+    pub fn index_of_artboard_instance(&self, instance: &RuntimeArtboardInstanceHandle) -> i32 {
         for (index, item) in self.list_items.iter().enumerate() {
             if self
                 .artboard_instances_map
                 .get(item)
-                .is_some_and(|artboard| std::ptr::eq(artboard.as_ref(), unsafe { &*instance }))
+                .is_some_and(|artboard| artboard.downgrade().ptr_eq(&instance.downgrade()))
             {
                 return index as i32;
             }
@@ -296,66 +296,73 @@ impl ArtboardComponentList {
         -1
     }
 
-    pub fn state_machine_instance(&mut self, index: i32) -> Option<&mut StateMachineInstance> {
+    pub fn state_machine_instance(&self, index: i32) -> Option<RuntimeStateMachineInstanceHandle> {
         if !self.virtualization_enabled() {
-            if index >= 0 && (index as usize) < self.state_machines_by_index.len() {
-                return unsafe { self.state_machines_by_index[index as usize].as_mut() };
-            }
-            return None;
+            return (index >= 0)
+                .then(|| self.state_machines_by_index.get(index as usize))
+                .flatten()
+                .cloned()
+                .flatten();
         }
         if index >= 0 && (index as usize) < self.list_items.len() {
             let item = self.list_items[index as usize].clone();
-            return self.state_machines_map.get_mut(&item).map(Box::as_mut);
+            return self.state_machines_map.get(&item).cloned();
         }
         None
-    }
-
-    #[cfg(feature = "rive_layout")]
-    pub fn layout_node(&mut self, index: i32) -> *mut c_void {
-        self.artboard_instance(index)
-            .map_or(std::ptr::null_mut(), |artboard| {
-                &mut artboard.take_layout_data().node as *mut _ as *mut c_void
-            })
     }
 
     pub fn mark_layout_node_dirty(&mut self, _should_force_update_layout_bounds: bool) {
         let parent_is_row = self.main_axis_is_row();
         for index in 0..self.artboard_count() as i32 {
             if let Some(artboard) = self.artboard_instance(index) {
-                artboard.parent_is_row(parent_is_row);
+                artboard.with_artboard_mut(|artboard| artboard.parent_is_row(parent_is_row));
             }
         }
     }
 
     pub fn update_layout_bounds(&mut self, animate: bool) {
-        #[cfg(feature = "rive_layout")]
         for index in 0..self.artboard_count() as i32 {
             if let Some(artboard) = self.artboard_instance(index) {
-                artboard.update_layout_bounds(animate);
-                let bounds = artboard.layout_bounds();
+                let bounds = artboard.with_artboard_mut(|artboard| {
+                    artboard.update_layout_bounds(animate);
+                    artboard.layout_bounds()
+                });
                 self.set_item_size(Vec2D::new(bounds.width(), bounds.height()), index);
             }
         }
         self.compute_layout_bounds();
     }
 
-    #[cfg(feature = "rive_layout")]
     pub fn cascade_layout_style(
         &mut self,
         inherited_interpolation: LayoutStyleInterpolation,
-        inherited_interpolator: Option<&mut KeyFrameInterpolator>,
+        inherited_interpolator: Option<CoreHandle>,
         inherited_interpolation_time: f32,
         direction: LayoutDirection,
     ) -> bool {
-        let interpolator = inherited_interpolator.map(|value| value as *mut _);
         for index in 0..self.artboard_count() as i32 {
             if let Some(artboard) = self.artboard_instance(index) {
-                artboard.cascade_layout_style(
-                    inherited_interpolation,
-                    interpolator.map(|value| unsafe { &mut *value }),
-                    inherited_interpolation_time,
-                    direction,
-                );
+                if let Some(interpolator) = inherited_interpolator.as_ref() {
+                    interpolator.with_downcast_mut::<KeyFrameInterpolator, _>(|interpolator| {
+                        artboard.with_artboard_mut(|artboard| {
+                            artboard.cascade_layout_style(
+                                inherited_interpolation,
+                                Some(interpolator),
+                                inherited_interpolation_time,
+                                direction,
+                            );
+                        });
+                    });
+                } else {
+                    artboard.with_artboard_mut(|artboard| {
+                        artboard.cascade_layout_style(
+                            inherited_interpolation,
+                            None,
+                            inherited_interpolation_time,
+                            direction,
+                        );
+                    });
+                }
             }
         }
         false
@@ -365,7 +372,7 @@ impl ArtboardComponentList {
         let mut changed = false;
         for index in 0..self.artboard_count() as i32 {
             if let Some(artboard) = self.artboard_instance(index) {
-                if artboard.sync_style_changes() {
+                if artboard.with_artboard_mut(Artboard::sync_style_changes) {
                     changed = true;
                 }
             }
@@ -373,77 +380,59 @@ impl ArtboardComponentList {
         changed
     }
 
-    pub fn find_artboard(&mut self, list_item: &Rcp<ViewModelInstanceListItem>) -> *mut Artboard {
-        let Some(view_model_instance) = list_item.view_model_instance() else {
-            return std::ptr::null_mut();
-        };
-        let view_model_id = view_model_instance.view_model_id();
+    pub fn find_artboard(&mut self, list_item: &CoreHandle) -> Option<CoreHandle> {
+        let view_model_id = list_item
+            .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
+            .flatten()?
+            .with_downcast::<ViewModelInstance, _>(ViewModelInstance::view_model_id)?;
         if let Some(artboard) = self.artboards_map.get(&view_model_id) {
-            return *artboard;
+            return Some(artboard.clone());
         }
-        let artboards = unsafe { &mut *self.file }.artboards();
+        let artboards = self.file.as_ref()?.with_file(File::artboards)?;
         if let Some(artboard_index) = self.artboard_map_rules.get(&(view_model_id as i32)) {
             if *artboard_index >= 0 && (*artboard_index as usize) < artboards.len() {
-                let artboard = artboards[*artboard_index as usize];
-                self.artboards_map.insert(view_model_id, artboard);
-                return artboard;
+                let artboard = artboards[*artboard_index as usize].clone();
+                self.artboards_map.insert(view_model_id, artboard.clone());
+                return Some(artboard);
             }
         }
         for artboard in artboards {
-            if unsafe { &*artboard }.view_model_id() == view_model_id {
-                self.artboards_map.insert(view_model_id, artboard);
-                return artboard;
+            if artboard
+                .with_downcast::<Artboard, _>(Artboard::view_model_id)
+                .is_some_and(|id| id == view_model_id)
+            {
+                self.artboards_map.insert(view_model_id, artboard.clone());
+                return Some(artboard);
             }
-        }
-        std::ptr::null_mut()
-    }
-
-    fn dispose_list_item(&mut self, list_item: &Rcp<ViewModelInstanceListItem>) {
-        self.remove_artboard(list_item.clone());
-    }
-
-    fn create_artboard(
-        &mut self,
-        _target: *mut Component,
-        list_item: Rcp<ViewModelInstanceListItem>,
-    ) -> Option<Box<ArtboardInstance>> {
-        let artboard = self.find_artboard(&list_item);
-        if !artboard.is_null() {
-            return unsafe { &*artboard }.instance();
         }
         None
     }
 
+    fn dispose_list_item(&mut self, list_item: &CoreHandle) {
+        self.remove_artboard(list_item.clone());
+    }
+
+    fn create_artboard(&mut self, list_item: CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
+        self.find_artboard(&list_item)?
+            .with_downcast::<Artboard, _>(Artboard::instance_handle)
+            .flatten()
+    }
+
     fn create_state_machine_instance(
         &mut self,
-        _target: *mut Component,
-        artboard: *mut ArtboardInstance,
-    ) -> Option<Box<StateMachineInstance>> {
-        let artboard = unsafe { artboard.as_mut()? };
-        let default_index = artboard.base.default_state_machine_index();
-        let state_machine_index = if default_index >= 0 {
-            default_index as usize
-        } else {
-            0
-        };
-        let mut instance = artboard.state_machine_at(state_machine_index);
-        self.link_state_machine_to_artboard(
-            instance
-                .as_deref_mut()
-                .map_or(std::ptr::null_mut(), |value| value),
-            artboard,
-        );
-        instance
+        artboard: &RuntimeArtboardInstanceHandle,
+    ) -> Option<RuntimeStateMachineInstanceHandle> {
+        let instance =
+            artboard.with_artboard_mut(ArtboardInstance::default_state_machine_handle)?;
+        self.link_state_machine_to_artboard(&instance, artboard);
+        Some(instance)
     }
 
     pub fn ensure_list_scope_focus_node(
         &mut self,
-        focus_manager: *mut FocusManager,
+        focus_manager: &mut FocusManager,
         host_parent: Option<FocusNodeRef>,
     ) {
-        let Some(focus_manager) = (unsafe { focus_manager.as_mut() }) else {
-            return;
-        };
         if self.list_scope_focus_node.is_none() {
             let node = FocusNode::make_structural_scope();
             node.borrow_mut().name = "ArtboardComponentListScope".to_owned();
@@ -462,29 +451,29 @@ impl ArtboardComponentList {
     }
 
     pub fn remove_list_scope_focus_node(&mut self) {
+        let rows = std::mem::take(&mut self.list_row_focus_nodes);
+        let scope = self.list_scope_focus_node.take();
         let focus_manager = self
-            .component_mut()
-            .artboard_mut()
-            .and_then(Artboard::focus_manager_mut)
-            .map_or(std::ptr::null_mut(), |value| value);
-        for row in &mut self.list_row_focus_nodes {
-            let Some(node) = row.take() else {
+            .component()
+            .with_artboard(Artboard::focus_manager_handle)
+            .flatten();
+        for row in rows {
+            let Some(node) = row else {
                 continue;
             };
             if let Some(parent) = node.borrow().parent() {
                 FocusNode::remove_child(&parent, &node);
-            } else if !focus_manager.is_null() {
-                unsafe { &mut *focus_manager }.remove_child(&node);
+            } else if let Some(focus_manager) = focus_manager.as_ref() {
+                focus_manager.with_focus_manager_mut(|manager| manager.remove_child(&node));
             }
         }
-        self.list_row_focus_nodes.clear();
-        let Some(node) = self.list_scope_focus_node.take() else {
+        let Some(node) = scope else {
             return;
         };
         if let Some(parent) = node.borrow().parent() {
             FocusNode::remove_child(&parent, &node);
-        } else if !focus_manager.is_null() {
-            unsafe { &mut *focus_manager }.remove_child(&node);
+        } else if let Some(focus_manager) = focus_manager {
+            focus_manager.with_focus_manager_mut(|manager| manager.remove_child(&node));
         }
     }
 
@@ -511,61 +500,49 @@ impl ArtboardComponentList {
     }
 }
 
-fn artboard_has_focus_content(artboard: *mut Artboard) -> bool {
-    let Some(artboard) = (unsafe { artboard.as_mut() }) else {
-        return false;
-    };
-    if artboard.root_focus_data_count() > 0 {
+fn artboard_has_focus_content(artboard: &RuntimeArtboardInstanceHandle) -> bool {
+    if artboard.with_artboard(Artboard::root_focus_data_count) > 0 {
         return true;
     }
-    for host in artboard.nested_artboards() {
-        let Some(host) = (unsafe { host.as_mut() }) else {
-            continue;
-        };
-        if host.is_artboard_data_bound() {
+    let nested = artboard.with_artboard(Artboard::nested_artboards);
+    for host in nested {
+        let is_data_bound = host
+            .with(|host| host.nested_artboard_is_data_bound())
+            .unwrap_or(false);
+        if is_data_bound {
             return true;
         }
-        if artboard_has_focus_content(
-            host.artboard_instance(0)
-                .map_or(std::ptr::null_mut(), |value| value),
-        ) {
-            return true;
-        }
-    }
-    for list in artboard.artboard_component_lists() {
-        if !list.is_null() {
+        let instance = host
+            .with(|host| host.nested_artboard_instance_handle())
+            .flatten();
+        if instance.as_ref().is_some_and(artboard_has_focus_content) {
             return true;
         }
     }
-    false
+    artboard
+        .with_artboard(Artboard::artboard_component_lists)
+        .into_iter()
+        .any(|list| list.is_alive())
 }
 
 impl ArtboardComponentList {
     fn list_item_needs_build_under_row(
         &self,
-        parent_focus_manager: *mut FocusManager,
-        instance: *mut ArtboardInstance,
+        parent_focus_manager: &FocusManager,
+        instance: &RuntimeArtboardInstanceHandle,
         row: Option<FocusNodeRef>,
     ) -> bool {
-        let Some(instance) = (unsafe { instance.as_ref() }) else {
-            return false;
-        };
         let Some(row) = row else {
             return false;
         };
-        if parent_focus_manager.is_null() {
-            return false;
-        }
-        if instance
-            .focus_manager()
-            .map_or(std::ptr::null(), |value| value)
-            != parent_focus_manager
-        {
+        if instance.with_artboard(|instance| {
+            instance
+                .focus_manager()
+                .is_none_or(|manager| !std::ptr::eq(manager, parent_focus_manager))
+        }) {
             return true;
         }
-        if row.borrow().children().is_empty()
-            && artboard_has_focus_content(instance as *const _ as *mut Artboard)
-        {
+        if row.borrow().children().is_empty() && artboard_has_focus_content(instance) {
             return true;
         }
         false
@@ -588,7 +565,7 @@ impl ArtboardComponentList {
     fn sync_list_row_nodes_with_previous(
         &mut self,
         focus_manager: &mut FocusManager,
-        previous_list_items: &[Rcp<ViewModelInstanceListItem>],
+        previous_list_items: &[CoreHandle],
         previous_row_nodes: &[Option<FocusNodeRef>],
     ) {
         if self.list_scope_focus_node.is_none() {
@@ -632,68 +609,67 @@ impl ArtboardComponentList {
         }
         self.reparent_list_rows_in_scope(focus_manager);
         for index in 0..count {
-            let instance = self
-                .artboard_instance(index as i32)
-                .map_or(std::ptr::null_mut(), |value| value);
-            if instance.is_null() {
+            let Some(instance) = self.artboard_instance(index as i32) else {
                 continue;
-            }
+            };
             let row = self.list_row_focus_nodes[index].clone();
             if row.is_none() {
                 continue;
             }
-            let state_machine = self
-                .state_machine_instance(index as i32)
-                .map_or(std::ptr::null_mut(), |value| value);
-            if !state_machine.is_null()
-                && unsafe { &*state_machine }
-                    .focus_manager()
-                    .map_or(std::ptr::null(), |value| value)
-                    != focus_manager
-            {
-                unsafe { &mut *state_machine }.set_external_focus_manager(focus_manager);
+            if let Some(state_machine) = self.state_machine_instance(index as i32) {
+                state_machine.with_instance_mut(|state_machine| {
+                    let needs_parent = state_machine
+                        .focus_manager()
+                        .is_none_or(|manager| !std::ptr::eq(manager, focus_manager));
+                    if needs_parent {
+                        state_machine.set_external_focus_manager(focus_manager);
+                    }
+                });
             }
-            if self.list_item_needs_build_under_row(focus_manager, instance, row.clone()) {
-                let instance = unsafe { &mut *instance };
-                if instance.focus_manager().is_some() {
-                    instance.cleanup_focus_tree();
-                }
-                instance.build_focus_tree(focus_manager, row);
+            if self.list_item_needs_build_under_row(focus_manager, &instance, row.clone()) {
+                instance.with_artboard_mut(|instance| {
+                    if instance.focus_manager().is_some() {
+                        instance.cleanup_focus_tree();
+                    }
+                    instance.build_focus_tree(focus_manager, row);
+                });
             }
         }
     }
 
     fn link_state_machine_to_artboard(
         &mut self,
-        state_machine_instance: *mut StateMachineInstance,
-        artboard_instance: *mut ArtboardInstance,
+        state_machine_instance: &RuntimeStateMachineInstanceHandle,
+        artboard_instance: &RuntimeArtboardInstanceHandle,
     ) {
-        let (Some(state_machine_instance), Some(artboard_instance)) =
-            (unsafe { (state_machine_instance.as_mut(), artboard_instance.as_mut()) })
-        else {
-            return;
-        };
-        if let Some(data_context) = artboard_instance.base.data_context() {
-            state_machine_instance.data_context(data_context);
-            state_machine_instance.update_data_binds(false);
-        }
-        let parent_artboard = self.component_mut().artboard_mut();
-        if let Some(parent_artboard) = parent_artboard {
-            if let Some(parent_focus_manager) = parent_artboard.focus_manager_mut() {
-                state_machine_instance.set_external_focus_manager(parent_focus_manager);
+        let data_context = artboard_instance.with_artboard(|artboard| artboard.base.data_context());
+        state_machine_instance.with_instance_mut(|state_machine_instance| {
+            if let Some(data_context) = data_context {
+                state_machine_instance.data_context(data_context);
+                state_machine_instance.update_data_binds(false);
             }
-            if let Some(parent_semantic_manager) = parent_artboard.semantic_manager_mut() {
-                let parent_node = SemanticData::find_closest_semantic_node(self.component_mut());
-                state_machine_instance
-                    .set_external_semantic_manager(parent_semantic_manager, parent_node);
-            }
+        });
+        let parent_node = SemanticData::find_closest_semantic_node_handle(self.host_component());
+        let managers = self.component().with_artboard(|parent_artboard| {
+            (
+                parent_artboard.focus_manager_handle(),
+                parent_artboard.semantic_manager_handle(),
+            )
+        });
+        if let Some((focus_manager, semantic_manager)) = managers {
+            state_machine_instance.with_instance_mut(|state_machine_instance| {
+                if let Some(focus_manager) = focus_manager {
+                    state_machine_instance.set_external_focus_manager_handle(focus_manager);
+                }
+                if let Some(semantic_manager) = semantic_manager {
+                    state_machine_instance
+                        .set_external_semantic_manager_handle(semantic_manager, parent_node);
+                }
+            });
         }
     }
 
-    fn lists_are_equal(
-        list: Option<&[Rcp<ViewModelInstanceListItem>]>,
-        compared: Option<&[Rcp<ViewModelInstanceListItem>]>,
-    ) -> bool {
+    fn lists_are_equal(list: Option<&[CoreHandle]>, compared: Option<&[CoreHandle]>) -> bool {
         let (Some(list), Some(compared)) = (list, compared) else {
             return false;
         };
@@ -708,7 +684,7 @@ impl ArtboardComponentList {
         true
     }
 
-    pub fn update_list(&mut self, list: &[Rcp<ViewModelInstanceListItem>]) {
+    pub fn update_list(&mut self, list: &[CoreHandle]) {
         if Self::lists_are_equal(Some(&self.list_items), Some(list)) {
             return;
         }
@@ -724,14 +700,11 @@ impl ArtboardComponentList {
         self.state_machines_by_index.clear();
         if !self.virtualization_enabled() {
             self.artboard_instances_by_index
-                .resize(self.list_items.len(), std::ptr::null_mut());
+                .resize(self.list_items.len(), None);
             self.state_machines_by_index
-                .resize(self.list_items.len(), std::ptr::null_mut());
+                .resize(self.list_items.len(), None);
         }
-        if let Some(parent) = self.layout_parent() {
-            #[cfg(feature = "rive_layout")]
-            parent.clear_layout_children();
-        }
+        self.layout_parent_mut(LayoutComponent::clear_layout_children);
         for item in self.old_items.clone() {
             if !self.list_items.contains(&item) {
                 self.dispose_list_item(&item);
@@ -739,37 +712,35 @@ impl ArtboardComponentList {
         }
         for index in 0..self.list_items.len() {
             let item = self.list_items[index].clone();
-            if let Some(mut view_model_instance) = item.view_model_instance() {
-                if let Some(symbol) =
-                    view_model_instance.property_value_for_symbol(SymbolType::ItemIndex)
-                {
-                    unsafe {
-                        symbol
-                            .as_ptr()
-                            .cast::<ViewModelInstanceSymbolListIndex>()
-                            .as_mut()
-                    }
-                    .unwrap()
-                    .set_property_value(index as u32);
-                }
+            let view_model_instance = item
+                .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
+                .flatten();
+            if let Some(symbol) = view_model_instance.as_ref().and_then(|instance| {
+                instance
+                    .with_downcast::<ViewModelInstance, _>(|instance| {
+                        instance.property_value_for_symbol(SymbolType::ItemIndex)
+                    })
+                    .flatten()
+            }) {
+                symbol.with_downcast_mut::<ViewModelInstanceSymbolListIndex, _>(|symbol| {
+                    symbol.set_property_value(index as u32);
+                });
             }
-            let artboard = self.find_artboard(&item);
-            if !artboard.is_null() {
-                let artboard = unsafe { &*artboard };
-                self.artboard_sizes
-                    .push(Vec2D::new(artboard.width(), artboard.height()));
+            if let Some(artboard) = self.find_artboard(&item) {
+                if let Some(size) = artboard.with_downcast::<Artboard, _>(|artboard| {
+                    Vec2D::new(artboard.width(), artboard.height())
+                }) {
+                    self.artboard_sizes.push(size);
+                }
             }
             if !self.virtualization_enabled() {
                 if !self.artboard_instances_map.contains_key(&item) {
                     self.create_artboard_at(index as i32, false);
                 } else {
-                    self.artboard_instances_by_index[index] = self
-                        .artboard_instances_map
-                        .get_mut(&item)
-                        .map_or(std::ptr::null_mut(), |value| value.as_mut());
-                    if let Some(state_machine) = self.state_machines_map.get_mut(&item) {
-                        self.state_machines_by_index[index] = state_machine.as_mut();
-                    }
+                    self.artboard_instances_by_index[index] =
+                        self.artboard_instances_map.get(&item).cloned();
+                    self.state_machines_by_index[index] =
+                        self.state_machines_map.get(&item).cloned();
                 }
             }
         }
@@ -782,24 +753,23 @@ impl ArtboardComponentList {
         self.recompute_list_uses_draw_index_sort();
         self.sync_draw_index_listeners();
         let focus_manager = self
-            .component_mut()
-            .artboard_mut()
-            .and_then(Artboard::focus_manager_mut)
-            .map_or(std::ptr::null_mut(), |value| value);
-        if !focus_manager.is_null() && self.list_scope_focus_node.is_some() {
-            self.sync_list_row_nodes_with_previous(
-                unsafe { &mut *focus_manager },
-                &previous_list_items,
-                &previous_row_nodes,
-            );
+            .component()
+            .with_artboard(Artboard::focus_manager_handle)
+            .flatten();
+        if let Some(focus_manager) = focus_manager.filter(|_| self.list_scope_focus_node.is_some())
+        {
+            focus_manager.with_focus_manager_mut(|focus_manager| {
+                self.sync_list_row_nodes_with_previous(
+                    focus_manager,
+                    &previous_list_items,
+                    &previous_row_nodes,
+                );
+            });
         }
     }
 
     pub fn sync_layout_children(&mut self) {
-        if let Some(parent) = self.layout_parent() {
-            #[cfg(feature = "rive_layout")]
-            parent.sync_layout_children();
-        }
+        self.layout_parent_mut(LayoutComponent::sync_layout_children);
     }
 
     pub fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
@@ -813,22 +783,29 @@ impl ArtboardComponentList {
         for index in 0..self.artboard_count() as i32 {
             if advance_nested {
                 if let Some(state_machine) = self.state_machine_instance(index) {
-                    if !new_frame {
-                        if state_machine.try_change_state()
-                            && state_machine.advance(elapsed_seconds, new_frame)
-                        {
-                            keep_going = true;
+                    if state_machine.with_instance_mut(|state_machine| {
+                        if !new_frame {
+                            state_machine.try_change_state()
+                                && state_machine.advance(elapsed_seconds, new_frame)
+                        } else {
+                            state_machine.advance(elapsed_seconds, new_frame)
                         }
-                    } else if state_machine.advance(elapsed_seconds, new_frame) {
+                    }) {
                         keep_going = true;
                     }
                 }
             }
             if let Some(artboard) = self.artboard_instance(index) {
-                if artboard.advance_internal(elapsed_seconds, advancing_flags) {
+                let (advanced, has_dirt) = artboard.with_artboard_mut(|artboard| {
+                    (
+                        artboard.advance_internal(elapsed_seconds, advancing_flags),
+                        artboard.base.has_dirt(ComponentDirt::COMPONENTS),
+                    )
+                });
+                if advanced {
                     keep_going = true;
                 }
-                if artboard.base.has_dirt(ComponentDirt::COMPONENTS) {
+                if has_dirt {
                     self.component_mut()
                         .add_dirt(ComponentDirt::COMPONENTS, true);
                 }
@@ -840,21 +817,32 @@ impl ArtboardComponentList {
     pub fn reset(&mut self) {
         for item in self.list_items.clone() {
             if self.should_reset_instances {
-                if let Some(mut view_model_instance) = item.view_model_instance() {
-                    view_model_instance.advanced();
-                    if let Some(artboard) = self.artboard_instances_map.get_mut(&item) {
-                        if let Some(data_context) = artboard.base.data_context() {
-                            if let Some(bound_instance) = data_context.main_view_model_instance() {
-                                if bound_instance != view_model_instance {
-                                    bound_instance.advanced();
-                                }
-                            }
-                        }
+                let view_model_instance = item
+                    .with_downcast::<ViewModelInstanceListItem, _>(|item| {
+                        item.view_model_instance()
+                    })
+                    .flatten();
+                if let Some(view_model_instance) = view_model_instance.as_ref() {
+                    view_model_instance
+                        .with_downcast_mut::<ViewModelInstance, _>(ViewModelInstance::advanced);
+                }
+                if let Some(artboard) = self.artboard_instances_map.get(&item) {
+                    let bound_instance = artboard.with_artboard(|artboard| {
+                        artboard
+                            .base
+                            .data_context()
+                            .and_then(|context| context.main_view_model_instance_handle())
+                    });
+                    if let Some(bound_instance) =
+                        bound_instance.filter(|bound| Some(bound) != view_model_instance.as_ref())
+                    {
+                        bound_instance
+                            .with_downcast_mut::<ViewModelInstance, _>(ViewModelInstance::advanced);
                     }
                 }
             }
-            if let Some(artboard) = self.artboard_instances_map.get_mut(&item) {
-                artboard.reset();
+            if let Some(artboard) = self.artboard_instances_map.get(&item) {
+                artboard.with_artboard_mut(Artboard::reset);
             }
         }
     }
@@ -863,12 +851,12 @@ impl ArtboardComponentList {
         Aabb::new(0.0, 0.0, self.layout_size.x, self.layout_size.y)
     }
 
-    pub fn layout_bounds_for_node(&mut self, index: usize) -> Aabb {
-        if self.virtualization_enabled() {
+    pub fn layout_bounds_for_node(&self, index: usize) -> Aabb {
+        if self.virtualization_enabled_ref() {
             let real_index = index % self.list_items.len();
-            let gap = self.gap();
+            let gap = self.gap_ref();
             let mut running_size = 0.0;
-            let is_horizontal = self.main_axis_is_row();
+            let is_horizontal = self.main_axis_is_row_ref();
             for item_index in 0..real_index {
                 let size = self.artboard_sizes[item_index];
                 running_size += if is_horizontal { size.x } else { size.y } + gap;
@@ -880,21 +868,23 @@ impl ArtboardComponentList {
         }
         if index < self.num_layout_nodes() {
             if let Some(artboard) = self.artboard_instance(index as i32) {
-                return artboard.layout_bounds();
+                return artboard.with_artboard(Artboard::layout_bounds);
             }
         }
         Aabb::default()
     }
 
-    pub fn mark_hosting_layout_dirty(&mut self, artboard_instance: *mut ArtboardInstance) {
+    pub fn mark_hosting_layout_dirty(&mut self, artboard_instance: &RuntimeArtboardInstanceHandle) {
         for index in 0..self.artboard_count() as i32 {
-            let artboard = self
-                .artboard_instance(index)
-                .map_or(std::ptr::null_mut(), |value| value);
-            if artboard == artboard_instance {
-                if let Some(parent) = self.component_mut().artboard_mut() {
-                    parent.mark_layout_dirty(unsafe { &mut *artboard_instance });
-                }
+            let Some(artboard) = self.artboard_instance(index) else {
+                continue;
+            };
+            if artboard.downgrade().ptr_eq(&artboard_instance.downgrade()) {
+                self.component().with_artboard_mut(|parent| {
+                    artboard_instance.with_artboard_mut(|artboard| {
+                        parent.mark_layout_dirty(artboard);
+                    });
+                });
                 break;
             }
         }
@@ -913,14 +903,25 @@ impl ArtboardComponentList {
         let previous = self.list_uses_draw_index_sort;
         self.list_uses_draw_index_sort = false;
         for item in &self.list_items {
-            let Some(mut instance) = item.view_model_instance() else {
+            let Some(instance) = item
+                .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
+                .flatten()
+            else {
                 continue;
             };
-            if instance.view_model_ref().is_some_and(|view_model| {
-                view_model
-                    .property_for_symbol(SymbolType::DrawIndex)
-                    .is_some()
-            }) {
+            let has_draw_index = instance
+                .with_downcast::<ViewModelInstance, _>(|instance| instance.get_view_model())
+                .flatten()
+                .and_then(|view_model| {
+                    view_model.with(|view_model| {
+                        view_model.as_view_model().and_then(|view_model| {
+                            view_model.property_for_symbol(SymbolType::DrawIndex)
+                        })
+                    })
+                })
+                .flatten()
+                .is_some();
+            if has_draw_index {
                 self.list_uses_draw_index_sort = true;
                 if previous != self.list_uses_draw_index_sort {
                     self.invalidate_ordered_list_indices_cache();
@@ -937,26 +938,39 @@ impl ArtboardComponentList {
         if index < 0 || index as usize >= self.list_items.len() {
             return 0.0;
         }
-        let Some(mut instance) = self.list_items[index as usize].view_model_instance() else {
+        let Some(instance) = self.list_items[index as usize]
+            .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
+            .flatten()
+        else {
             return 0.0;
         };
-        if instance.view_model_ref().is_none()
-            || instance
-                .view_model_ref()
-                .unwrap()
-                .property_for_symbol(SymbolType::DrawIndex)
-                .is_none()
-        {
+        let has_draw_index = instance
+            .with_downcast::<ViewModelInstance, _>(|instance| instance.get_view_model())
+            .flatten()
+            .and_then(|view_model| {
+                view_model.with(|view_model| {
+                    view_model.as_view_model().and_then(|view_model| {
+                        view_model.property_for_symbol(SymbolType::DrawIndex)
+                    })
+                })
+            })
+            .flatten()
+            .is_some();
+        if !has_draw_index {
             return 0.0;
         }
-        if let Some(value) = instance.property_value_for_symbol(SymbolType::DrawIndex) {
-            let number = unsafe { value.as_ptr().cast::<ViewModelInstanceNumber>().as_ref() };
-            if let Some(number) = number {
-                let value = number.property_value();
-                if value.is_finite() {
-                    return value;
-                }
-            }
+        let value = instance
+            .with_downcast::<ViewModelInstance, _>(|instance| {
+                instance.property_value_for_symbol(SymbolType::DrawIndex)
+            })
+            .flatten();
+        if let Some(value) = value
+            .and_then(|value| {
+                value.with_downcast::<ViewModelInstanceNumber, _>(|number| number.property_value())
+            })
+            .filter(|value| value.is_finite())
+        {
+            return value;
         }
         0.0
     }
@@ -965,7 +979,7 @@ impl ArtboardComponentList {
         self.draw_index_dependents.clear();
     }
 
-    fn remove_draw_index_listener_for_item(&mut self, item: &Rcp<ViewModelInstanceListItem>) {
+    fn remove_draw_index_listener_for_item(&mut self, item: &CoreHandle) {
         self.draw_index_dependents.remove(item);
     }
 
@@ -974,16 +988,28 @@ impl ArtboardComponentList {
         if !self.list_uses_draw_index_sort {
             return;
         }
+        let Some(list) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return;
+        };
         for item in self.list_items.clone() {
-            let Some(mut instance) = item.view_model_instance() else {
+            let Some(instance) = item
+                .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
+                .flatten()
+            else {
                 continue;
             };
-            let Some(value) = instance.property_value_for_symbol(SymbolType::DrawIndex) else {
+            let Some(value) = instance
+                .with_downcast::<ViewModelInstance, _>(|instance| {
+                    instance.property_value_for_symbol(SymbolType::DrawIndex)
+                })
+                .flatten()
+            else {
                 continue;
             };
             self.draw_index_dependents.insert(
                 item,
-                ArtboardListDrawIndexDependent::new(self, value.as_ptr()),
+                ArtboardListDrawIndexDependent::new(list.clone(), value),
             );
         }
     }
@@ -1020,15 +1046,16 @@ impl ArtboardComponentList {
             }
         }
         if self.list_uses_draw_index_sort {
-            let this = self as *const Self;
-            self.cached_ordered_list_indices.sort_by(|left, right| {
-                let left_value = unsafe { &*this }.list_item_draw_index(*left);
-                let right_value = unsafe { &*this }.list_item_draw_index(*right);
+            let mut indices = std::mem::take(&mut self.cached_ordered_list_indices);
+            indices.sort_by(|left, right| {
+                let left_value = self.list_item_draw_index(*left);
+                let right_value = self.list_item_draw_index(*right);
                 left_value
                     .partial_cmp(&right_value)
                     .unwrap_or(std::cmp::Ordering::Equal)
                     .then_with(|| left.cmp(right))
             });
+            self.cached_ordered_list_indices = indices;
         }
         self.ordered_list_indices_cache_valid = true;
     }
@@ -1045,22 +1072,17 @@ impl ArtboardComponentList {
             renderer.save();
         }
         if self.virtualization_enabled() {
-            if let Some(parent) = self.component().parent() {
-                if let Some(parent) = parent.as_ref::<LayoutComponent>() {
-                    renderer.transform(parent.world_transform());
-                }
-            }
+            self.layout_parent_ref(|parent| renderer.transform(parent.world_transform()));
             if self.visible_start_index != -1 && self.visible_end_index != -1 {
                 let indices = self.ordered_list_indices().to_vec();
                 for index in indices {
-                    let artboard = self
-                        .artboard_instance(index)
-                        .map_or(std::ptr::null_mut(), |value| value);
-                    if !artboard.is_null() {
+                    if let (Some(artboard), Some(item)) =
+                        (self.artboard_instance(index), self.list_item(index))
+                    {
                         renderer.save();
-                        let transform = self.artboard_transforms[&artboard];
+                        let transform = self.artboard_transforms[&item];
                         renderer.transform(&transform);
-                        unsafe { &mut *artboard }.draw_internal(renderer);
+                        artboard.with_artboard_mut(|artboard| artboard.draw_internal(renderer));
                         renderer.restore();
                     }
                 }
@@ -1070,14 +1092,13 @@ impl ArtboardComponentList {
             renderer.transform(&transform);
             let indices = self.ordered_list_indices().to_vec();
             for index in indices {
-                let artboard = self
-                    .artboard_instance(index)
-                    .map_or(std::ptr::null_mut(), |value| value);
-                if !artboard.is_null() {
+                if let (Some(artboard), Some(item)) =
+                    (self.artboard_instance(index), self.list_item(index))
+                {
                     renderer.save();
-                    let transform = self.artboard_transforms[&artboard];
+                    let transform = self.artboard_transforms[&item];
                     renderer.transform(&transform);
-                    unsafe { &mut *artboard }.draw_internal(renderer);
+                    artboard.with_artboard_mut(|artboard| artboard.draw_internal(renderer));
                     renderer.restore();
                 }
             }
@@ -1095,63 +1116,71 @@ impl ArtboardComponentList {
         &mut self,
         position: &Vec2D,
         skip_on_unclipped: bool,
-        artboard: *mut ArtboardInstance,
+        artboard: &RuntimeArtboardInstanceHandle,
     ) -> bool {
-        if artboard.is_null() {
-            return false;
-        }
         let bounds = self.artboard_position(artboard);
         let offset = Vec2D::new(bounds.x + position.x, bounds.y + position.y);
         let transform = if self.virtualization_enabled() {
-            self.layout_parent()
-                .map_or(Mat2D::identity(), |parent| *parent.world_transform())
+            self.layout_parent_ref(|parent| *parent.world_transform())
+                .unwrap_or_else(Mat2D::identity)
         } else {
             *self.transform().world_transform()
         };
-        self.component_mut().parent_mut().is_some_and(|parent| {
-            parent.hit_test_point(&(transform * offset), skip_on_unclipped, false)
-        })
+        self.component()
+            .with_parent(|parent| {
+                parent.hit_test_point(&(transform * offset), skip_on_unclipped, false)
+            })
+            .unwrap_or(false)
     }
 
     pub fn host_transform_point(
         &self,
         vector: &Vec2D,
-        artboard_instance: *mut ArtboardInstance,
+        artboard_instance: &RuntimeArtboardInstanceHandle,
     ) -> Vec2D {
-        let bounds = self.artboard_transforms[&artboard_instance];
+        let bounds = self.artboard_transform(artboard_instance);
         let offset = Vec2D::new(bounds[4] + vector.x, bounds[5] + vector.y);
         let transform = if self.virtualization_enabled_ref() {
             self.component()
-                .parent()
-                .and_then(|parent| parent.as_ref::<LayoutComponent>())
-                .map_or(Mat2D::identity(), |parent| *parent.world_transform())
+                .parent_handle()
+                .and_then(|parent| {
+                    parent.with_downcast::<LayoutComponent, _>(|parent| *parent.world_transform())
+                })
+                .unwrap_or_else(Mat2D::identity)
         } else {
             *self.transform().world_transform()
         };
         let local = transform * offset;
         self.component()
-            .artboard()
-            .map_or(local, |artboard| artboard.root_transform(local))
+            .with_artboard(|artboard| artboard.root_transform(local))
+            .unwrap_or(local)
     }
 
-    pub fn world_transform_for_artboard(&self, artboard_instance: *mut ArtboardInstance) -> Mat2D {
-        let offset = self.artboard_transforms[&artboard_instance];
+    pub fn world_transform_for_artboard(
+        &self,
+        artboard_instance: &RuntimeArtboardInstanceHandle,
+    ) -> Mat2D {
+        let offset = self.artboard_transform(artboard_instance);
         let position = Vec2D::new(offset[4], offset[5]);
         let parent_layout = self
             .component()
-            .parent()
-            .and_then(|parent| parent.as_ref::<LayoutComponent>());
+            .parent_handle()
+            .filter(|parent| parent.with_downcast::<LayoutComponent, _>(|_| ()).is_some());
         if let Some(parent_layout) = parent_layout {
             let bounds = self.layout_bounds();
-            let transform = *parent_layout.world_transform()
-                * Mat2D::from_translate(bounds.left(), bounds.top());
-            return transform * Mat2D::from_translate(position.x, position.y);
+            if let Some(transform) = parent_layout.with_downcast::<LayoutComponent, _>(|parent| {
+                *parent.world_transform() * Mat2D::from_translate(bounds.left(), bounds.top())
+            }) {
+                return transform * Mat2D::from_translate(position.x, position.y);
+            }
         }
         let transform = if self.virtualization_enabled_ref() {
             self.component()
-                .parent()
-                .and_then(|parent| parent.as_ref::<LayoutComponent>())
-                .map_or(Mat2D::identity(), |parent| *parent.world_transform())
+                .parent_handle()
+                .and_then(|parent| {
+                    parent.with_downcast::<LayoutComponent, _>(|parent| *parent.world_transform())
+                })
+                .unwrap_or_else(Mat2D::identity)
         } else {
             *self.transform().world_transform()
         };
@@ -1166,7 +1195,7 @@ impl ArtboardComponentList {
         if Component::has_dirt_in(value, ComponentDirt::WORLD_TRANSFORM) {
             for index in 0..self.artboard_count() as i32 {
                 if let Some(artboard) = self.artboard_instance(index) {
-                    artboard.mark_semantic_boundary_transform_dirty();
+                    artboard.with_artboard_mut(Artboard::mark_semantic_boundary_transform_dirty);
                 }
             }
         }
@@ -1174,14 +1203,14 @@ impl ArtboardComponentList {
             let opacity = self.transform().render_opacity();
             for index in 0..self.artboard_count() as i32 {
                 if let Some(artboard) = self.artboard_instance(index) {
-                    artboard.opacity(opacity);
+                    artboard.with_artboard_mut(|artboard| artboard.opacity(opacity));
                 }
             }
         }
         if Component::has_dirt_in(value, ComponentDirt::COMPONENTS) {
             for index in 0..self.artboard_count() as i32 {
                 if let Some(artboard) = self.artboard_instance(index) {
-                    artboard.update_pass(false);
+                    artboard.with_artboard_mut(|artboard| artboard.update_pass(false));
                 }
             }
         }
@@ -1198,25 +1227,28 @@ impl ArtboardComponentList {
             return;
         }
         if !self.virtualization_enabled() {
-            let use_layout = self.layout_parent().is_some();
+            let use_layout = self.layout_parent_handle().is_some();
             for index in 0..count {
-                let artboard = self
-                    .artboard_instance(index as i32)
-                    .map_or(std::ptr::null_mut(), |value| value);
-                if !artboard.is_null() {
-                    let artboard_ref = unsafe { &mut *artboard };
-                    let bounds = if use_layout {
-                        artboard_ref.layout_bounds()
-                    } else {
-                        artboard_ref.world_bounds()
-                    };
-                    let origin = if use_layout {
-                        artboard_ref.origin()
-                    } else {
-                        Vec2D::default()
-                    };
+                if let (Some(artboard), Some(item)) = (
+                    self.artboard_instance(index as i32),
+                    self.list_item(index as i32),
+                ) {
+                    let (bounds, origin) = artboard.with_artboard(|artboard| {
+                        (
+                            if use_layout {
+                                artboard.layout_bounds()
+                            } else {
+                                artboard.world_bounds()
+                            },
+                            if use_layout {
+                                artboard.origin()
+                            } else {
+                                Vec2D::default()
+                            },
+                        )
+                    });
                     self.artboard_transforms.insert(
-                        artboard,
+                        item,
                         Mat2D::from_translate(bounds.left() - origin.x, bounds.top() - origin.y),
                     );
                 }
@@ -1225,45 +1257,60 @@ impl ArtboardComponentList {
     }
 
     pub fn update_constraints(&mut self) {
+        let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return;
+        };
         let layout_constraints = self.provider_state.layout_constraints().to_vec();
         for parent_constraint in layout_constraints {
-            unsafe { &mut *parent_constraint }.constrain_child(self);
+            parent_constraint.with_mut(|constraint| {
+                constraint.layout_constraint_constrain_child(owner.clone());
+            });
         }
         if !self.constrainable_list_state.list_constraints.is_empty()
             && !self.virtualization_enabled()
         {
             let list_constraints = self.constrainable_list_state.list_constraints.clone();
             for list_constraint in list_constraints {
-                unsafe { &mut *list_constraint }.constrain_list(self);
+                list_constraint.with_mut(|constraint| {
+                    constraint.list_constraint_constrain_list(owner.clone());
+                });
             }
         }
         let constraints = self.transform().constraints().to_vec();
         for constraint in constraints {
-            if ListConstraint::from(unsafe { &mut *constraint }).is_some() {
+            if constraint.with(|constraint| constraint.as_list_constraint().is_some()) == Some(true)
+            {
                 continue;
             }
-            unsafe { &mut *constraint }.constrain(self.component_mut());
+            constraint.with_mut(|constraint| {
+                constraint.constraint_apply(owner.clone());
+            });
         }
     }
 
     pub fn internal_data_context(&mut self, value: Rc<DataContext>) {
-        for artboard in self.artboard_instances_map.values_mut() {
-            if let Some(data_context) = artboard.base.data_context() {
-                data_context.set_parent(Some(value.clone()));
-                artboard.internal_data_context(data_context);
-            }
+        for artboard in self.artboard_instances_map.values() {
+            artboard.with_artboard_mut(|artboard| {
+                if let Some(data_context) = artboard.base.data_context() {
+                    data_context.set_parent(Some(value.clone()));
+                    artboard.internal_data_context(data_context);
+                }
+            });
         }
-        for state_machine in self.state_machines_map.values_mut() {
-            if let Some(data_context) = state_machine.data_context() {
-                data_context.set_parent(Some(value.clone()));
-                state_machine.internal_data_context(data_context);
-            }
+        for state_machine in self.state_machines_map.values() {
+            state_machine.with_instance_mut(|state_machine| {
+                if let Some(data_context) = state_machine.data_context() {
+                    data_context.set_parent(Some(value.clone()));
+                    state_machine.internal_data_context(data_context);
+                }
+            });
         }
     }
 
     pub fn bind_view_model_instance(
         &mut self,
-        _view_model_instance: Rc<ViewModelInstance>,
+        _view_model_instance: CoreHandle,
         _parent: Rc<DataContext>,
     ) {
     }
@@ -1277,30 +1324,36 @@ impl ArtboardComponentList {
     pub fn update_data_binds(&mut self) {
         for index in 0..self.artboard_count() as i32 {
             if let Some(state_machine) = self.state_machine_instance(index) {
-                state_machine.update_data_binds(false);
+                state_machine.with_instance_mut(|state_machine| {
+                    state_machine.update_data_binds(false);
+                });
             }
             if let Some(artboard) = self.artboard_instance(index) {
-                artboard.update_data_binds_default();
+                artboard.with_artboard_mut(Artboard::update_data_binds_default);
             }
         }
     }
 
-    fn artboard_position(&self, artboard: *mut ArtboardInstance) -> Vec2D {
-        let matrix = self.artboard_transforms[&artboard];
+    fn artboard_transform(&self, artboard: &RuntimeArtboardInstanceHandle) -> Mat2D {
+        let index = self.index_of_artboard_instance(artboard);
+        self.list_item(index)
+            .and_then(|item| self.artboard_transforms.get(&item).copied())
+            .unwrap_or_else(Mat2D::identity)
+    }
+
+    fn artboard_position(&self, artboard: &RuntimeArtboardInstanceHandle) -> Vec2D {
+        let matrix = self.artboard_transform(artboard);
         Vec2D::new(matrix[4], matrix[5])
     }
 
     pub fn world_to_local(&mut self, world: Vec2D, local: &mut Vec2D, index: i32) -> bool {
-        let artboard = self
-            .artboard_instance(index)
-            .map_or(std::ptr::null_mut(), |value| value);
-        if artboard.is_null() {
+        let Some(artboard) = self.artboard_instance(index) else {
             return false;
-        }
-        let offset = self.artboard_position(artboard);
+        };
+        let offset = self.artboard_position(&artboard);
         let transform = if self.virtualization_enabled() {
-            self.layout_parent()
-                .map_or(Mat2D::identity(), |parent| *parent.world_transform())
+            self.layout_parent_ref(|parent| *parent.world_transform())
+                .unwrap_or_else(Mat2D::identity)
         } else {
             *self.transform().world_transform()
         };
@@ -1313,12 +1366,12 @@ impl ArtboardComponentList {
         true
     }
 
-    pub fn set_file(&mut self, value: *mut File) {
+    pub fn set_file(&mut self, value: Option<RuntimeFileWeakHandle>) {
         self.file = value;
     }
 
-    pub fn file(&self) -> *mut File {
-        self.file
+    pub fn file(&self) -> Option<RuntimeFileWeakHandle> {
+        self.file.clone()
     }
 
     pub fn clone_core(&self) -> Box<dyn Core> {
@@ -1329,9 +1382,8 @@ impl ArtboardComponentList {
 
     pub fn create_artboard_at(&mut self, index: i32, force_layout_sync: bool) {
         if let Some(item) = self.list_item(index) {
-            let target = self.component_mut() as *mut Component;
-            if let Some(mut artboard) = self.create_artboard(target, item.clone()) {
-                self.attach_artboard_override(artboard.as_mut(), item);
+            if let Some(artboard) = self.create_artboard(item.clone()) {
+                self.attach_artboard_override(&artboard, item);
                 self.add_artboard_at(artboard, index, force_layout_sync);
             }
         }
@@ -1339,45 +1391,45 @@ impl ArtboardComponentList {
 
     pub fn add_artboard_at(
         &mut self,
-        artboard: Box<ArtboardInstance>,
+        artboard: RuntimeArtboardInstanceHandle,
         index: i32,
         force_layout_sync: bool,
     ) {
         let Some(item) = self.list_item(index) else {
             return;
         };
-        let artboard_instance = Box::into_raw(artboard);
         self.artboard_instances_map
-            .insert(item.clone(), unsafe { Box::from_raw(artboard_instance) });
-        self.bind_artboard(artboard_instance, item.clone());
-        unsafe {
-            (*artboard_instance).host(self);
-            (*artboard_instance).frame_origin(false);
-            (*artboard_instance).parent_is_row(self.main_axis_is_row());
-        }
+            .insert(item.clone(), artboard.clone());
+        self.bind_artboard(&artboard, item.clone());
+        let parent_is_row = self.main_axis_is_row();
+        let host = crate::mechanical_port::source::core::CoreObject::core(self).handle();
+        artboard.with_artboard_mut(|artboard| {
+            artboard.set_host_handle(host);
+            artboard.frame_origin(false);
+            artboard.parent_is_row(parent_is_row);
+        });
         if force_layout_sync {
             self.sync_layout_children();
         }
-        let mut state_machine_instance = std::ptr::null_mut();
-        let artboard = self.find_artboard(&item);
-        if !artboard.is_null() {
-            let pool = self.state_machines_pool.entry(artboard).or_default();
-            if let Some(mut state_machine) = pool.pop() {
-                state_machine.reset_state();
-                self.apply_recorders_to_state_machine(state_machine.as_mut(), unsafe {
-                    &*artboard
-                });
-                state_machine_instance = state_machine.as_mut();
-                self.state_machines_map.insert(item.clone(), state_machine);
-                self.link_state_machine_to_artboard(state_machine_instance, artboard_instance);
+        let mut state_machine_instance = None;
+        let source_artboard = self.find_artboard(&item);
+        if let Some(source_artboard) = source_artboard.as_ref() {
+            let pool = self
+                .state_machines_pool
+                .entry(source_artboard.clone())
+                .or_default();
+            if let Some(state_machine) = pool.pop() {
+                state_machine.with_instance_mut(StateMachineInstance::reset_state);
+                self.apply_recorders_to_state_machine(&state_machine, source_artboard);
+                state_machine_instance = Some(state_machine.clone());
+                self.state_machines_map
+                    .insert(item.clone(), state_machine.clone());
+                self.link_state_machine_to_artboard(&state_machine, &artboard);
             }
         }
-        if state_machine_instance.is_null() {
-            let target = self.component_mut() as *mut Component;
-            let mut state_machine = self.create_state_machine_instance(target, artboard_instance);
-            state_machine_instance = state_machine
-                .as_deref_mut()
-                .map_or(std::ptr::null_mut(), |value| value);
+        if state_machine_instance.is_none() {
+            let state_machine = self.create_state_machine_instance(&artboard);
+            state_machine_instance.clone_from(&state_machine);
             if let Some(state_machine) = state_machine {
                 self.state_machines_map.insert(item.clone(), state_machine);
             }
@@ -1385,28 +1437,33 @@ impl ArtboardComponentList {
         if !self.virtualization_enabled() {
             if index as usize >= self.artboard_instances_by_index.len() {
                 self.artboard_instances_by_index
-                    .resize(index as usize + 1, std::ptr::null_mut());
+                    .resize(index as usize + 1, None);
                 self.state_machines_by_index
-                    .resize(index as usize + 1, std::ptr::null_mut());
+                    .resize(index as usize + 1, None);
             }
-            self.artboard_instances_by_index[index as usize] = artboard_instance;
+            self.artboard_instances_by_index[index as usize] = Some(artboard);
             self.state_machines_by_index[index as usize] = state_machine_instance;
         }
     }
 
     fn bind_artboard(
         &mut self,
-        artboard_instance: *mut ArtboardInstance,
-        list_item: Rcp<ViewModelInstanceListItem>,
+        artboard_instance: &RuntimeArtboardInstanceHandle,
+        list_item: CoreHandle,
     ) {
-        let Some(artboard_instance) = (unsafe { artboard_instance.as_mut() }) else {
-            return;
-        };
-        let data_context = self.component().artboard().and_then(Artboard::data_context);
-        if let Some(view_model_instance) = list_item.view_model_instance() {
-            artboard_instance
-                .bind_view_model_instance_with_parent(view_model_instance, data_context);
-            artboard_instance.update_data_binds_default();
+        let data_context = self
+            .component()
+            .with_artboard(Artboard::data_context)
+            .flatten();
+        let view_model_instance = list_item
+            .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
+            .flatten();
+        if let Some(view_model_instance) = view_model_instance {
+            artboard_instance.with_artboard_mut(|artboard_instance| {
+                artboard_instance
+                    .bind_view_model_instance_handle_with_parent(view_model_instance, data_context);
+                artboard_instance.update_data_binds_default();
+            });
             self.invalidate_ordered_list_indices_cache();
         }
     }
@@ -1416,85 +1473,89 @@ impl ArtboardComponentList {
             && index >= 0
             && (index as usize) < self.artboard_instances_by_index.len()
         {
-            self.artboard_instances_by_index[index as usize] = std::ptr::null_mut();
-            self.state_machines_by_index[index as usize] = std::ptr::null_mut();
+            self.artboard_instances_by_index[index as usize] = None;
+            self.state_machines_by_index[index as usize] = None;
         }
         if let Some(item) = self.list_item(index) {
             self.remove_artboard(item);
         }
     }
 
-    pub fn remove_artboard(&mut self, item: Rcp<ViewModelInstanceListItem>) {
+    pub fn remove_artboard(&mut self, item: CoreHandle) {
         self.invalidate_ordered_list_indices_cache();
         self.remove_draw_index_listener_for_item(&item);
-        let artboard = self
-            .artboard_instances_map
-            .get_mut(&item)
-            .map_or(std::ptr::null_mut(), |value| value.as_mut());
-        if !artboard.is_null() {
-            unsafe {
-                (*artboard).cleanup_semantic_tree();
-                (*artboard).cleanup_focus_tree();
-            }
+        let artboard = self.artboard_instances_map.get(&item).cloned();
+        if let Some(artboard) = artboard.as_ref() {
+            artboard.with_artboard_mut(|artboard| {
+                artboard.cleanup_semantic_tree();
+                artboard.cleanup_focus_tree();
+            });
             self.clear_artboard_override(artboard);
         }
         self.state_machines_map.remove(&item);
         self.artboard_instances_map.remove(&item);
     }
 
-    fn create_artboard_recorders(&mut self, artboard: *const Artboard) {
-        let Some(artboard_ref) = (unsafe { artboard.as_ref() }) else {
-            return;
-        };
+    fn create_artboard_recorders(&mut self, artboard: CoreHandle) {
         if !self.property_recorders_map.contains_key(&artboard) {
             let mut recorder = Box::new(PropertyRecorder::default());
-            recorder.record_artboard(artboard_ref);
+            let nested_sources = artboard
+                .with_downcast::<Artboard, _>(|artboard| {
+                    recorder.record_artboard(artboard);
+                    artboard
+                        .nested_artboards()
+                        .into_iter()
+                        .filter_map(|nested| {
+                            nested
+                                .with(|nested| nested.nested_artboard_source_handle())
+                                .flatten()
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
             self.property_recorders_map.insert(artboard, recorder);
-            for nested_artboard in artboard_ref.nested_artboards() {
-                let Some(nested_artboard) = (unsafe { nested_artboard.as_ref() }) else {
-                    continue;
-                };
-                self.create_artboard_recorders(nested_artboard.source_artboard());
+            for nested_artboard in nested_sources {
+                self.create_artboard_recorders(nested_artboard);
             }
         }
     }
 
     fn apply_recorders_to_artboard(
         &self,
-        artboard: *mut Artboard,
-        source_artboard: *const Artboard,
+        artboard: &RuntimeArtboardInstanceHandle,
+        source_artboard: &CoreHandle,
     ) {
-        let Some(artboard) = (unsafe { artboard.as_mut() }) else {
-            return;
-        };
         if let Some(recorder) = self.property_recorders_map.get(&source_artboard) {
-            recorder.apply_artboard(artboard);
+            artboard.with_artboard_mut(|artboard| recorder.apply_artboard(artboard));
         }
-        for nested_artboard in artboard.nested_artboards() {
-            let Some(nested_artboard) = (unsafe { nested_artboard.as_mut() }) else {
-                continue;
-            };
-            let nested_instance = nested_artboard.source_artboard();
-            if nested_instance.is_null() {
-                continue;
-            }
-            unsafe {
-                self.apply_recorders_to_artboard(
-                    nested_instance,
-                    (*nested_instance).artboard_source() as *const Artboard,
-                );
-            }
+        let nested_instances = artboard.with_artboard(|artboard| {
+            artboard
+                .nested_artboards()
+                .into_iter()
+                .filter_map(|nested| {
+                    nested.with(|nested| {
+                        Some((
+                            nested.nested_artboard_instance_handle()?,
+                            nested.nested_artboard_source_handle()?,
+                        ))
+                    })?
+                })
+                .collect::<Vec<_>>()
+        });
+        for (nested_instance, nested_source) in nested_instances {
+            self.apply_recorders_to_artboard(&nested_instance, &nested_source);
         }
     }
 
     fn apply_recorders_to_state_machine(
         &self,
-        state_machine_instance: &mut StateMachineInstance,
-        source_artboard: &Artboard,
+        state_machine_instance: &RuntimeStateMachineInstanceHandle,
+        source_artboard: &CoreHandle,
     ) {
-        let source = source_artboard as *const Artboard;
-        if let Some(recorder) = self.property_recorders_map.get(&source) {
-            recorder.apply_state_machine(state_machine_instance);
+        if let Some(recorder) = self.property_recorders_map.get(source_artboard) {
+            state_machine_instance.with_instance_mut(|state_machine_instance| {
+                recorder.apply_state_machine(state_machine_instance);
+            });
         }
     }
 }
@@ -1504,36 +1565,36 @@ impl ArtboardComponentList {
         let Some(list_item) = self.list_item(index) else {
             return;
         };
-        let artboard = self.find_artboard(&list_item);
-        if artboard.is_null() {
+        let Some(artboard) = self.find_artboard(&list_item) else {
             return;
-        }
-        self.create_artboard_recorders(artboard);
-        let pooled = self.resource_pool.entry(artboard).or_default().pop();
-        if let Some(mut pooled_artboard) = pooled {
-            self.apply_recorders_to_artboard(
-                pooled_artboard.as_mut() as *mut ArtboardInstance as *mut Artboard,
-                artboard,
-            );
+        };
+        self.create_artboard_recorders(artboard.clone());
+        let pooled = self
+            .resource_pool
+            .entry(artboard.clone())
+            .or_default()
+            .pop();
+        if let Some(pooled_artboard) = pooled {
+            self.apply_recorders_to_artboard(&pooled_artboard, &artboard);
             self.add_artboard_at(pooled_artboard, index, true);
         } else {
             self.create_artboard_at(index, true);
         }
         self.component_mut()
             .add_dirt(ComponentDirt::COMPONENTS, true);
-        if let Some(parent) = self.layout_parent() {
-            parent.mark_layout_style_dirty();
-        }
+        self.layout_parent_mut(LayoutComponent::mark_layout_style_dirty);
     }
 
     pub fn virtualizable_changed(&mut self) {
         let focus_manager = self
-            .component_mut()
-            .artboard_mut()
-            .and_then(Artboard::focus_manager_mut)
-            .map_or(std::ptr::null_mut(), |value| value);
-        if !focus_manager.is_null() && self.list_scope_focus_node.is_some() {
-            self.sync_list_row_nodes_with_list(unsafe { &mut *focus_manager });
+            .component()
+            .with_artboard(Artboard::focus_manager_handle)
+            .flatten();
+        if let Some(focus_manager) = focus_manager.filter(|_| self.list_scope_focus_node.is_some())
+        {
+            focus_manager.with_focus_manager_mut(|focus_manager| {
+                self.sync_list_row_nodes_with_list(focus_manager);
+            });
         }
     }
 
@@ -1541,68 +1602,67 @@ impl ArtboardComponentList {
         if let Some(list_item) = self.list_item(index) {
             let artboard = self.find_artboard(&list_item);
             let artboard_instance = self.artboard_instances_map.remove(&list_item);
-            if !artboard.is_null() {
-                if let Some(artboard_instance) = artboard_instance {
-                    self.resource_pool
-                        .entry(artboard)
-                        .or_default()
-                        .push(artboard_instance);
-                }
+            if let (Some(artboard), Some(artboard_instance)) =
+                (artboard.as_ref(), artboard_instance)
+            {
+                self.resource_pool
+                    .entry(artboard.clone())
+                    .or_default()
+                    .push(artboard_instance);
             }
             if let Some(state_machine) = self.state_machines_map.remove(&list_item) {
-                self.state_machines_pool
-                    .entry(artboard)
-                    .or_default()
-                    .push(state_machine);
+                if let Some(artboard) = artboard {
+                    self.state_machines_pool
+                        .entry(artboard)
+                        .or_default()
+                        .push(state_machine);
+                }
             }
         }
         self.remove_artboard_at(index);
     }
 
     pub fn set_virtualizable_position(&mut self, index: i32, position: Vec2D) {
-        let use_layout = self.layout_parent().is_some();
+        let use_layout = self.layout_parent_handle().is_some();
         if let Some(artboard) = self.artboard_instance(index) {
-            let artboard_pointer = artboard as *mut ArtboardInstance;
-            let origin = if use_layout {
-                artboard.origin()
-            } else {
-                Vec2D::default()
-            };
-            self.artboard_transforms.insert(
-                artboard_pointer,
-                Mat2D::from_translate(position.x - origin.x, position.y - origin.y),
-            );
+            let origin = artboard.with_artboard(|artboard| {
+                if use_layout {
+                    artboard.origin()
+                } else {
+                    Vec2D::default()
+                }
+            });
+            if let Some(item) = self.list_item(index) {
+                self.artboard_transforms.insert(
+                    item,
+                    Mat2D::from_translate(position.x - origin.x, position.y - origin.y),
+                );
+            }
         }
     }
 
     fn virtualization_enabled_ref(&self) -> bool {
-        self.scroll_constraint_ref()
-            .is_some_and(|virtualizer| virtualizer.virtualize())
+        self.scroll_constraint_handle()
+            .and_then(|constraint| {
+                constraint.with_downcast::<ScrollConstraint, _>(ScrollConstraint::virtualize)
+            })
+            .unwrap_or(false)
     }
 
-    pub fn virtualization_enabled(&mut self) -> bool {
-        self.scroll_constraint()
-            .is_some_and(|virtualizer| virtualizer.virtualize())
+    pub fn virtualization_enabled(&self) -> bool {
+        self.virtualization_enabled_ref()
     }
 
-    fn scroll_constraint_ref(&self) -> Option<&ScrollConstraint> {
-        for parent_constraint in self.provider_state.layout_constraints() {
-            let constraint = unsafe { &**parent_constraint }.constraint();
-            if let Some(scroll) = constraint.as_scroll_constraint() {
-                return Some(scroll);
-            }
-        }
-        None
-    }
-
-    pub fn scroll_constraint(&mut self) -> Option<&mut ScrollConstraint> {
-        for parent_constraint in self.provider_state.layout_constraints() {
-            let constraint = unsafe { &mut **parent_constraint }.constraint_mut();
-            if let Some(scroll) = constraint.as_scroll_constraint_mut() {
-                return Some(scroll);
-            }
-        }
-        None
+    pub fn scroll_constraint_handle(&self) -> Option<CoreHandle> {
+        self.provider_state
+            .layout_constraints()
+            .iter()
+            .find(|constraint| {
+                constraint
+                    .with(|constraint| constraint.as_scroll_constraint().is_some())
+                    .unwrap_or(false)
+            })
+            .cloned()
     }
 
     fn compute_layout_bounds(&mut self) {
@@ -1626,8 +1686,10 @@ impl ArtboardComponentList {
                 }
             }
             self.layout_size = Vec2D::new(running_width, running_height);
-            if let Some(scroll) = self.scroll_constraint() {
-                scroll.constrain_virtualized(true);
+            if let Some(scroll) = self.scroll_constraint_handle() {
+                scroll.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                    scroll.constrain_virtualized(true);
+                });
             }
         }
     }
@@ -1651,93 +1713,126 @@ impl ArtboardComponentList {
     }
 
     pub fn gap(&mut self) -> f32 {
-        let is_row = self.main_axis_is_row();
-        self.layout_parent().map_or(0.0, |parent| {
+        self.gap_ref()
+    }
+
+    fn gap_ref(&self) -> f32 {
+        let is_row = self.main_axis_is_row_ref();
+        self.layout_parent_ref(|parent| {
             if is_row {
                 parent.gap_horizontal()
             } else {
                 parent.gap_vertical()
             }
         })
+        .unwrap_or(0.0)
     }
 
     fn attach_artboard_override(
         &mut self,
-        instance: &mut ArtboardInstance,
-        list_item: Rcp<ViewModelInstanceListItem>,
+        instance: &RuntimeArtboardInstanceHandle,
+        list_item: CoreHandle,
     ) {
-        let Some(view_model_instance) = list_item.view_model_instance() else {
+        let Some(view_model_instance) = list_item
+            .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
+            .flatten()
+        else {
             return;
         };
-        let artboards = unsafe { &mut *self.file }.artboards();
+        let Some(view_model_id) = view_model_instance
+            .with_downcast::<ViewModelInstance, _>(ViewModelInstance::view_model_id)
+        else {
+            return;
+        };
+        let Some(artboards) = self
+            .file
+            .as_ref()
+            .and_then(|file| file.with_file(File::artboards))
+        else {
+            return;
+        };
         let mut artboard_index = -1;
         for artboard in &artboards {
             artboard_index += 1;
-            if unsafe { &**artboard }.view_model_id() == view_model_instance.view_model_id() {
+            if artboard.with_downcast::<Artboard, _>(Artboard::view_model_id) == Some(view_model_id)
+            {
                 break;
             }
         }
         if artboard_index < 0 && artboard_index as usize >= artboards.len() {
             return;
         }
-        let mut artboard_override = std::ptr::null_mut();
+        let mut artboard_override = None;
         let children = self.container_mut().children().to_vec();
         for child in children {
-            let Some(child) = (unsafe { child.as_mut() }) else {
-                continue;
-            };
-            if let Some(candidate) = child.as_mut::<ArtboardComponentListOverride>() {
-                if candidate.base.artboard_id() == -1 {
-                    artboard_override = candidate;
-                } else if candidate.base.artboard_id() == artboard_index {
-                    artboard_override = candidate;
+            let candidate_id =
+                child.with_downcast::<ArtboardComponentListOverride, _>(|candidate| {
+                    candidate.base.artboard_id()
+                });
+            if let Some(candidate_id) = candidate_id {
+                if candidate_id == -1 {
+                    artboard_override = Some(child.clone());
+                } else if candidate_id == artboard_index {
+                    artboard_override = Some(child);
                     break;
                 }
             }
         }
-        if let Some(artboard_override) = unsafe { artboard_override.as_mut() } {
-            artboard_override.add_artboard(instance);
+        if let Some(artboard_override) = artboard_override {
+            artboard_override.with_downcast_mut::<ArtboardComponentListOverride, _>(|override_| {
+                instance.with_artboard_mut(|instance| override_.add_artboard(instance));
+            });
         }
     }
 
-    fn clear_artboard_override(&mut self, artboard_instance: *mut ArtboardInstance) {
+    fn clear_artboard_override(&mut self, artboard_instance: &RuntimeArtboardInstanceHandle) {
         let children = self.container_mut().children().to_vec();
         for child in children {
-            let Some(child) = (unsafe { child.as_mut() }) else {
-                continue;
-            };
-            if let Some(artboard_override) = child.as_mut::<ArtboardComponentListOverride>() {
-                if let Some(artboard_instance) = unsafe { artboard_instance.as_mut() } {
-                    artboard_override.remove_artboard(artboard_instance);
-                }
-            }
+            child.with_downcast_mut::<ArtboardComponentListOverride, _>(|override_| {
+                artboard_instance.with_artboard_mut(|instance| override_.remove_artboard(instance));
+            });
         }
     }
 
-    pub fn main_axis_is_row(&mut self) -> bool {
-        self.layout_parent()
-            .map_or(true, |parent| parent.main_axis_is_row())
+    pub fn main_axis_is_row(&self) -> bool {
+        self.main_axis_is_row_ref()
     }
 
-    pub fn layout_parent(&mut self) -> Option<&mut LayoutComponent> {
-        self.component_mut()
-            .parent_mut()
-            .and_then(|parent| parent.as_mut::<LayoutComponent>())
+    fn main_axis_is_row_ref(&self) -> bool {
+        self.layout_parent_handle()
+            .and_then(|parent| {
+                parent.with_downcast::<LayoutComponent, _>(LayoutComponent::main_axis_is_row)
+            })
+            .unwrap_or(true)
+    }
+
+    pub fn layout_parent_handle(&self) -> Option<CoreHandle> {
+        self.component()
+            .parent_handle()
+            .filter(|parent| parent.with_downcast::<LayoutComponent, _>(|_| ()).is_some())
+    }
+
+    fn layout_parent_ref<R>(&self, use_parent: impl FnOnce(&LayoutComponent) -> R) -> Option<R> {
+        self.layout_parent_handle()?
+            .with_downcast::<LayoutComponent, _>(use_parent)
+    }
+
+    fn layout_parent_mut<R>(
+        &self,
+        use_parent: impl FnOnce(&mut LayoutComponent) -> R,
+    ) -> Option<R> {
+        self.layout_parent_handle()?
+            .with_downcast_mut::<LayoutComponent, _>(use_parent)
     }
 
     pub fn list_transform(&self) -> &Mat2D {
         self.transform().world_transform()
     }
 
-    pub fn list_item_transforms<'a>(&'a mut self, transforms: &mut Vec<&'a mut Mat2D>) {
-        let count = self.list_items.len();
-        for index in 0..count {
-            let artboard = self
-                .artboard_instance(index as i32)
-                .map_or(std::ptr::null_mut(), |value| value);
-            if !artboard.is_null() {
-                let transform = self.artboard_transforms.get_mut(&artboard).unwrap() as *mut Mat2D;
-                transforms.push(unsafe { &mut *transform });
+    pub fn for_each_list_item_transform(&mut self, mut use_transform: impl FnMut(&mut Mat2D)) {
+        for item in &self.list_items {
+            if let Some(transform) = self.artboard_transforms.get_mut(item) {
+                use_transform(transform);
             }
         }
     }
@@ -1765,9 +1860,8 @@ impl ArtboardComponentList {
         self.list_items.len() as i32
     }
 
-    pub fn item(&mut self, index: i32) -> Option<&mut dyn Virtualizable> {
+    pub fn item(&self, index: i32) -> Option<RuntimeArtboardInstanceHandle> {
         self.artboard_instance(index)
-            .map(|value| value as &mut dyn Virtualizable)
     }
 
     pub fn transform_component_mut(&mut self) -> Option<&mut TransformComponent> {
@@ -1778,16 +1872,16 @@ impl ArtboardComponentList {
         Some(self.transform())
     }
 
-    pub fn parent_artboard(&mut self) -> &mut Artboard {
-        self.component_mut().artboard_mut().unwrap()
+    pub fn parent_artboard(&self) -> Option<CoreHandle> {
+        self.component().artboard_handle()
     }
 
     pub fn mark_host_transform_dirty(&mut self) {
         self.transform_mut().mark_transform_dirty();
     }
 
-    pub fn host_component(&mut self) -> Option<&mut Component> {
-        Some(self.component_mut())
+    pub fn host_component(&self) -> Option<CoreHandle> {
+        crate::mechanical_port::source::core::CoreObject::core(self).handle()
     }
 
     pub fn is_layout_provider(&self) -> bool {
@@ -1816,17 +1910,12 @@ impl LayoutNodeProvider for ArtboardComponentList {
         &mut self.provider_state
     }
 
-    #[cfg(feature = "rive_layout")]
-    fn layout_node(&mut self, index: i32) -> *mut c_void {
-        ArtboardComponentList::layout_node(self, index)
+    fn provider_handle(&self) -> Option<CoreHandle> {
+        crate::mechanical_port::source::core::CoreObject::core(self).handle()
     }
 
-    fn transform_component_mut(&mut self) -> Option<&mut TransformComponent> {
-        ArtboardComponentList::transform_component_mut(self)
-    }
-
-    fn transform_component(&self) -> Option<&TransformComponent> {
-        ArtboardComponentList::transform_component(self)
+    fn owner_handle(&self) -> Option<CoreHandle> {
+        self.provider_handle()
     }
 
     fn layout_bounds(&self) -> Aabb {
@@ -1834,8 +1923,7 @@ impl LayoutNodeProvider for ArtboardComponentList {
     }
 
     fn layout_bounds_for_node(&self, index: usize) -> Aabb {
-        let this = self as *const Self as *mut Self;
-        unsafe { &mut *this }.layout_bounds_for_node(index)
+        ArtboardComponentList::layout_bounds_for_node(self, index)
     }
 
     fn sync_style_changes(&mut self) -> bool {
@@ -1854,11 +1942,10 @@ impl LayoutNodeProvider for ArtboardComponentList {
         ArtboardComponentList::num_layout_nodes(self)
     }
 
-    #[cfg(feature = "rive_layout")]
     fn cascade_layout_style(
         &mut self,
         interpolation: LayoutStyleInterpolation,
-        interpolator: Option<&mut KeyFrameInterpolator>,
+        interpolator: Option<CoreHandle>,
         time: f32,
         direction: LayoutDirection,
     ) -> bool {
@@ -1881,8 +1968,8 @@ impl ConstrainableList for ArtboardComponentList {
         ArtboardComponentList::list_transform(self)
     }
 
-    fn list_item_transforms<'a>(&'a mut self, transforms: &mut Vec<&'a mut Mat2D>) {
-        ArtboardComponentList::list_item_transforms(self, transforms);
+    fn for_each_list_item_transform(&mut self, use_transform: &mut dyn FnMut(&mut Mat2D)) {
+        ArtboardComponentList::for_each_list_item_transform(self, use_transform);
     }
 }
 
@@ -1895,7 +1982,7 @@ impl VirtualizingComponent for ArtboardComponentList {
         ArtboardComponentList::item_count(self)
     }
 
-    fn item(&mut self, index: i32) -> Option<&mut dyn Virtualizable> {
+    fn item(&self, index: i32) -> Option<RuntimeArtboardInstanceHandle> {
         ArtboardComponentList::item(self, index)
     }
 
@@ -1937,7 +2024,7 @@ impl ArtboardHost for ArtboardComponentList {
         ArtboardComponentList::artboard_count(self)
     }
 
-    fn artboard_instance(&mut self, index: i32) -> Option<&mut ArtboardInstance> {
+    fn artboard_instance(&self, index: i32) -> Option<RuntimeArtboardInstanceHandle> {
         ArtboardComponentList::artboard_instance(self, index)
     }
 
@@ -1947,7 +2034,7 @@ impl ArtboardHost for ArtboardComponentList {
 
     fn bind_view_model_instance(
         &mut self,
-        view_model_instance: Rc<ViewModelInstance>,
+        view_model_instance: CoreHandle,
         parent: Rc<DataContext>,
     ) {
         ArtboardComponentList::bind_view_model_instance(self, view_model_instance, parent);
@@ -1965,11 +2052,13 @@ impl ArtboardHost for ArtboardComponentList {
         ArtboardComponentList::update_data_binds(self);
     }
 
-    fn mark_hosting_layout_dirty(&mut self, artboard_instance: *mut ArtboardInstance) {
-        ArtboardComponentList::mark_hosting_layout_dirty(self, artboard_instance);
+    fn mark_hosting_layout_dirty(&mut self, artboard_instance: RuntimeArtboardInstanceWeakHandle) {
+        if let Some(artboard_instance) = artboard_instance.upgrade() {
+            ArtboardComponentList::mark_hosting_layout_dirty(self, &artboard_instance);
+        }
     }
 
-    fn parent_artboard(&mut self) -> &mut Artboard {
+    fn parent_artboard(&self) -> Option<CoreHandle> {
         ArtboardComponentList::parent_artboard(self)
     }
 
@@ -1977,17 +2066,27 @@ impl ArtboardHost for ArtboardComponentList {
         &mut self,
         position: &Vec2D,
         skip_on_unclipped: bool,
-        artboard: *mut ArtboardInstance,
+        artboard: RuntimeArtboardInstanceWeakHandle,
     ) -> bool {
-        ArtboardComponentList::hit_test_host(self, position, skip_on_unclipped, artboard)
+        artboard.upgrade().is_some_and(|artboard| {
+            ArtboardComponentList::hit_test_host(self, position, skip_on_unclipped, &artboard)
+        })
     }
 
-    fn host_transform_point(&self, position: &Vec2D, artboard: *mut ArtboardInstance) -> Vec2D {
-        ArtboardComponentList::host_transform_point(self, position, artboard)
+    fn host_transform_point(
+        &self,
+        position: &Vec2D,
+        artboard: RuntimeArtboardInstanceWeakHandle,
+    ) -> Vec2D {
+        artboard.upgrade().map_or(*position, |artboard| {
+            ArtboardComponentList::host_transform_point(self, position, &artboard)
+        })
     }
 
-    fn world_transform_for_artboard(&self, artboard: *mut ArtboardInstance) -> Mat2D {
-        ArtboardComponentList::world_transform_for_artboard(self, artboard)
+    fn world_transform_for_artboard(&self, artboard: RuntimeArtboardInstanceWeakHandle) -> Mat2D {
+        artboard.upgrade().map_or_else(Mat2D::identity, |artboard| {
+            ArtboardComponentList::world_transform_for_artboard(self, &artboard)
+        })
     }
 
     fn mark_host_transform_dirty(&mut self) {
@@ -1998,15 +2097,15 @@ impl ArtboardHost for ArtboardComponentList {
         true
     }
 
-    fn set_file(&mut self, value: *mut File) {
+    fn set_file(&mut self, value: Option<RuntimeFileWeakHandle>) {
         ArtboardComponentList::set_file(self, value);
     }
 
-    fn file(&self) -> *mut File {
+    fn file(&self) -> Option<RuntimeFileWeakHandle> {
         ArtboardComponentList::file(self)
     }
 
-    fn host_component(&mut self) -> Option<&mut Component> {
+    fn host_component(&self) -> Option<CoreHandle> {
         ArtboardComponentList::host_component(self)
     }
 
@@ -2016,15 +2115,8 @@ impl ArtboardHost for ArtboardComponentList {
 }
 
 impl DataBindListItemConsumer for ArtboardComponentList {
-    fn update_list(
-        &mut self,
-        list: &Vec<Rc<dyn crate::mechanical_port::source::data_bind::data_values::data_value_list::ViewModelInstanceListItem>>,
-    ) {
-        let translated = list
-            .iter()
-            .map(|item| unsafe { ref_rcp(Rc::as_ptr(item) as *mut ViewModelInstanceListItem) })
-            .collect::<Vec<_>>();
-        ArtboardComponentList::update_list(self, &translated);
+    fn update_list(&mut self, list: &[CoreHandle]) {
+        ArtboardComponentList::update_list(self, list);
     }
 }
 
@@ -2034,5 +2126,19 @@ impl ArtboardComponentListBaseCallbacks for ArtboardComponentList {
             .base
             .base
             .notify_property_changed(property_key);
+    }
+}
+
+impl std::ops::Deref for ArtboardComponentList {
+    type Target = ArtboardComponentListBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ArtboardComponentList {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

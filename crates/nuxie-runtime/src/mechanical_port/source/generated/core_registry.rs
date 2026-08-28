@@ -933,11 +933,7 @@ pub trait DataConverterCapability {
     ) -> crate::mechanical_port::source::data_bind::data_values::data_type::DataType;
     fn bind_from_context(
         &mut self,
-        context: std::rc::Rc<
-            std::cell::RefCell<
-                crate::mechanical_port::source::data_bind::data_context::DataContext,
-            >,
-        >,
+        context: crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
         data_bind: crate::mechanical_port::source::core::CoreHandle,
     );
     fn unbind(&mut self);
@@ -947,6 +943,23 @@ pub trait DataConverterCapability {
 }
 
 pub trait CoreCapabilities: Any {
+    fn drawable_hit_test(
+        &mut self,
+        _info: &mut crate::mechanical_port::source::hit_info::HitInfo,
+        _transform: &crate::mechanical_port::source::math::mat2d::Mat2D,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        None
+    }
+    fn as_semantic_data(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::semantic::semantic_data::SemanticData> {
+        None
+    }
+    fn as_semantic_data_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::semantic::semantic_data::SemanticData> {
+        None
+    }
     fn nested_artboard_source_handle(
         &self,
     ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
@@ -1046,7 +1059,7 @@ pub trait CoreCapabilities: Any {
     }
     fn drawable_draw(
         &mut self,
-        _renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        _renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         false
     }
@@ -14011,10 +14024,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(Box::new(self.clone_core()))
     }
     fn deserialize(
         &mut self,
@@ -16289,10 +16299,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(Box::new(self.clone_layout()))
     }
     fn deserialize(
         &mut self,
@@ -48958,9 +48965,16 @@ impl CoreCapabilities for crate::mechanical_port::source::node::Node {
 impl CoreCapabilities
     for crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable
 {
+    fn drawable_hit_test(
+        &mut self,
+        info: &mut crate::mechanical_port::source::hit_info::HitInfo,
+        transform: &crate::mechanical_port::source::math::mat2d::Mat2D,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.hit_test(info, transform)
+    }
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw(renderer);
         true
@@ -49118,6 +49132,13 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::NestedArtboard {
+    fn drawable_hit_test(
+        &mut self,
+        info: &mut crate::mechanical_port::source::hit_info::HitInfo,
+        transform: &crate::mechanical_port::source::math::mat2d::Mat2D,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.hit_test(info, transform)
+    }
     fn nested_artboard_source_handle(
         &self,
     ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
@@ -49146,7 +49167,7 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
     }
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw(renderer);
         true
@@ -49316,6 +49337,13 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
 impl CoreCapabilities
     for crate::mechanical_port::source::artboard_component_list::ArtboardComponentList
 {
+    fn drawable_hit_test(
+        &mut self,
+        info: &mut crate::mechanical_port::source::hit_info::HitInfo,
+        transform: &crate::mechanical_port::source::math::mat2d::Mat2D,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.hit_test(info, transform)
+    }
     fn as_artboard_host(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::artboard_host::ArtboardHost> {
@@ -49331,7 +49359,7 @@ impl CoreCapabilities
     }
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw(renderer);
         true
@@ -49689,7 +49717,7 @@ impl CoreCapabilities
 {
     fn drawable_draw(
         &mut self,
-        _renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        _renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw();
         true
@@ -50055,7 +50083,7 @@ impl CoreCapabilities
 {
     fn drawable_draw(
         &mut self,
-        _renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        _renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.base.base.draw();
         true
@@ -50524,7 +50552,7 @@ impl CoreCapabilities
     }
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.base.base.draw(renderer);
         true
@@ -54506,9 +54534,17 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh_vertex::M
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::shape::Shape {
+    fn drawable_hit_test(
+        &mut self,
+        info: &mut crate::mechanical_port::source::hit_info::HitInfo,
+        transform: &crate::mechanical_port::source::math::mat2d::Mat2D,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.hit_test(info, *transform)
+            .and_then(crate::mechanical_port::source::core::Core::handle)
+    }
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw(renderer);
         true
@@ -56553,9 +56589,17 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
+    fn drawable_hit_test(
+        &mut self,
+        info: &mut crate::mechanical_port::source::hit_info::HitInfo,
+        transform: &crate::mechanical_port::source::math::mat2d::Mat2D,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.hit_test(info, *transform)
+            .and_then(crate::mechanical_port::source::core::Core::handle)
+    }
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw(renderer);
         true
@@ -57176,6 +57220,13 @@ impl CoreCapabilities for crate::mechanical_port::source::draw_rules::DrawRules 
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout_component::LayoutComponent {
+    fn drawable_hit_test(
+        &mut self,
+        info: &mut crate::mechanical_port::source::hit_info::HitInfo,
+        transform: &crate::mechanical_port::source::math::mat2d::Mat2D,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.hit_test(info, transform)
+    }
     fn as_layout_style_applier(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::layout::layout_style_applier::LayoutStyleApplier>
@@ -57243,7 +57294,7 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
     }
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw(renderer);
         true
@@ -57437,7 +57488,7 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
 impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw(renderer);
         true
@@ -57761,6 +57812,16 @@ impl CoreCapabilities for crate::mechanical_port::source::open_url_event::OpenUr
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::semantic::semantic_data::SemanticData {
+    fn as_semantic_data(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::semantic::semantic_data::SemanticData> {
+        Some(self)
+    }
+    fn as_semantic_data_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::semantic::semantic_data::SemanticData> {
+        Some(self)
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -58289,7 +58350,7 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::
     }
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.base.base.draw(renderer);
         true
@@ -59067,7 +59128,7 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input_cursor::TextInputCursor {
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.base.base.draw(renderer);
         true
@@ -59266,7 +59327,7 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input_curso
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input_text::TextInputText {
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.base.base.draw(renderer);
         true
@@ -59746,7 +59807,7 @@ impl CoreCapabilities
 {
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.base.base.draw(renderer);
         true
@@ -59945,7 +60006,7 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input::TextInput {
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw(renderer);
         true
@@ -60177,7 +60238,7 @@ impl CoreCapabilities
 {
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.base.base.draw(renderer);
         true
@@ -60374,9 +60435,17 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
+    fn drawable_hit_test(
+        &mut self,
+        info: &mut crate::mechanical_port::source::hit_info::HitInfo,
+        transform: &crate::mechanical_port::source::math::mat2d::Mat2D,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.hit_test(info, transform)
+            .and_then(crate::mechanical_port::source::core::Core::handle)
+    }
     fn drawable_draw(
         &mut self,
-        renderer: &mut dyn crate::mechanical_port::source::renderer::Renderer,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
         self.draw(renderer);
         true

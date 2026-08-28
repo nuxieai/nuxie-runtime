@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
-    core::Core,
+    core::CoreHandle,
     core_context::CoreContext,
     draw_rules::DrawRules,
     drawable_flag::DrawableFlag,
@@ -15,10 +15,10 @@ use crate::mechanical_port::source::{
 
 pub struct Drawable {
     pub base: DrawableBase,
-    clipping_shapes: Vec<*mut ClippingShape>,
-    pub(crate) flattened_draw_rules: Option<*mut DrawRules>,
-    pub(crate) prev: Option<*mut Drawable>,
-    pub(crate) next: Option<*mut Drawable>,
+    clipping_shapes: Vec<CoreHandle>,
+    pub(crate) flattened_draw_rules: Option<CoreHandle>,
+    pub(crate) prev: Option<RuntimeDrawableWeakOccurrence>,
+    pub(crate) next: Option<RuntimeDrawableWeakOccurrence>,
     needs_save_operation: bool,
 }
 
@@ -80,7 +80,7 @@ impl Drawable {
         panic!("abstract Drawable::draw");
     }
 
-    pub fn hit_test(&mut self, _info: &mut HitInfo, _transform: &Mat2D) -> Option<&mut Core> {
+    pub fn hit_test(&mut self, _info: &mut HitInfo, _transform: &Mat2D) -> Option<CoreHandle> {
         panic!("abstract Drawable::hit_test");
     }
 
@@ -93,15 +93,17 @@ impl Drawable {
         if self.is_hidden() {
             return false;
         }
-        let this = self as *mut Drawable;
+        let this = self.base.base.base.base.base.handle();
         if let Some(hittable) = self.hittable_component()
-            && hittable != this
+            && this.as_ref() != Some(&hittable)
         {
-            return unsafe { &mut *hittable }.hit_test_point(
-                position,
-                skip_on_unclipped,
-                is_primary_hit,
-            );
+            return hittable
+                .with_mut(|hittable| {
+                    hittable.as_drawable_mut().is_some_and(|hittable| {
+                        hittable.hit_test_point(position, skip_on_unclipped, is_primary_hit)
+                    })
+                })
+                .unwrap_or(false);
         }
         self.base
             .base
@@ -111,11 +113,11 @@ impl Drawable {
             .hit_test_point(position, skip_on_unclipped, is_primary_hit)
     }
 
-    pub fn add_clipping_shape(&mut self, shape: *mut ClippingShape) {
+    pub fn add_clipping_shape(&mut self, shape: CoreHandle) {
         self.clipping_shapes.push(shape);
     }
 
-    pub fn clipping_shapes(&self) -> &[*mut ClippingShape] {
+    pub fn clipping_shapes(&self) -> &[CoreHandle] {
         &self.clipping_shapes
     }
 
@@ -156,16 +158,15 @@ impl Drawable {
         self.needs_save_operation
     }
 
-    pub fn is_child_of_layout(&mut self, layout: *mut LayoutComponent) -> bool {
-        let mut parent = Some(self.base.base.base.base.base.parent_mut());
-        while let Some(Some(current)) = parent {
-            if current
-                .as_layout_component_mut()
-                .is_some_and(|candidate| std::ptr::eq(candidate, layout))
-            {
+    pub fn is_child_of_layout(&self, layout: &CoreHandle) -> bool {
+        let mut parent = self.base.base.base.base.base.parent_handle();
+        while let Some(current) = parent {
+            if &current == layout {
                 return true;
             }
-            parent = Some(current.base.base.parent_mut());
+            parent = current
+                .with(|current| current.component_parent_handle())
+                .flatten();
         }
         false
     }
@@ -195,26 +196,234 @@ impl Drawable {
         }
     }
 
-    pub fn hittable_component(&mut self) -> Option<*mut Drawable> {
-        Some(self as *mut Drawable)
+    pub fn hittable_component(&self) -> Option<CoreHandle> {
+        self.base.base.base.base.base.handle()
     }
 
     pub fn empty_clip_count(&self) -> i32 {
         0
     }
 
-    pub fn next_drawable(&self) -> Option<*mut Drawable> {
+    pub fn next_drawable(&self) -> Option<RuntimeDrawableOccurrence> {
         self.next
+            .as_ref()
+            .and_then(RuntimeDrawableWeakOccurrence::upgrade)
     }
-    pub fn prev_drawable(&self) -> Option<*mut Drawable> {
+    pub fn prev_drawable(&self) -> Option<RuntimeDrawableOccurrence> {
         self.prev
+            .as_ref()
+            .and_then(RuntimeDrawableWeakOccurrence::upgrade)
     }
 }
 
 pub trait ProxyDrawing {
-    fn draw_proxy(&mut self, renderer: &mut dyn Renderer);
+    fn draw_proxy(&mut self, renderer: &mut Renderer, needs_save_operation: bool);
     fn is_proxy_hidden(&self) -> bool;
-    fn as_layout_component_mut(&mut self) -> &mut LayoutComponent;
+    fn owner_handle(&self) -> CoreHandle;
+    fn empty_clip_count(&mut self) -> i32 {
+        0
+    }
+    fn is_clip_start(&self) -> bool {
+        false
+    }
+    fn is_clip_end(&self) -> bool {
+        false
+    }
+    fn will_clip(&self) -> bool {
+        false
+    }
+}
+
+#[derive(Clone)]
+pub enum RuntimeDrawableOccurrence {
+    Authored(CoreHandle),
+    RuntimeProxy(Rc<RefCell<DrawableProxy>>),
+}
+
+#[derive(Clone)]
+pub enum RuntimeDrawableWeakOccurrence {
+    Authored(CoreHandle),
+    RuntimeProxy(Weak<RefCell<DrawableProxy>>),
+}
+
+impl RuntimeDrawableOccurrence {
+    pub fn authored(handle: CoreHandle) -> Self {
+        Self::Authored(handle)
+    }
+
+    pub fn runtime_proxy(proxy: Rc<RefCell<DrawableProxy>>) -> Self {
+        Self::RuntimeProxy(proxy)
+    }
+
+    pub fn authored_handle(&self) -> Option<CoreHandle> {
+        match self {
+            Self::Authored(handle) => Some(handle.clone()),
+            Self::RuntimeProxy(_) => None,
+        }
+    }
+
+    pub fn is_hidden(&self) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with(|object| object.drawable_is_hidden())
+                .unwrap_or(true),
+            Self::RuntimeProxy(proxy) => proxy.borrow().is_hidden(),
+        }
+    }
+
+    pub fn will_draw(&self) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with(|object| object.drawable_will_draw())
+                .unwrap_or(false),
+            Self::RuntimeProxy(proxy) => !proxy.borrow().is_hidden(),
+        }
+    }
+
+    pub fn draw(&self, renderer: &mut Renderer) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with_mut(|object| object.drawable_draw(renderer))
+                .unwrap_or(false),
+            Self::RuntimeProxy(proxy) => {
+                proxy.borrow_mut().draw(renderer);
+                true
+            }
+        }
+    }
+
+    pub fn add_to_render_path(
+        &self,
+        path: &mut crate::mechanical_port::source::renderer::RenderPath,
+        transform: &Mat2D,
+    ) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with_mut(|object| object.drawable_add_to_render_path(path, transform))
+                .unwrap_or(false),
+            Self::RuntimeProxy(_) => false,
+        }
+    }
+
+    pub fn add_to_raw_path(
+        &self,
+        path: &mut crate::mechanical_port::source::math::raw_path::RawPath,
+        transform: Option<&Mat2D>,
+    ) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with_mut(|object| object.drawable_add_to_raw_path(path, transform))
+                .unwrap_or(false),
+            Self::RuntimeProxy(_) => false,
+        }
+    }
+
+    pub fn hit_test(&self, info: &mut HitInfo, transform: &Mat2D) -> Option<CoreHandle> {
+        match self {
+            Self::Authored(handle) => handle
+                .with_mut(|object| object.drawable_hit_test(info, transform))
+                .flatten(),
+            Self::RuntimeProxy(_) => None,
+        }
+    }
+
+    pub fn downgrade(&self) -> RuntimeDrawableWeakOccurrence {
+        match self {
+            Self::Authored(handle) => RuntimeDrawableWeakOccurrence::Authored(handle.clone()),
+            Self::RuntimeProxy(proxy) => {
+                RuntimeDrawableWeakOccurrence::RuntimeProxy(Rc::downgrade(proxy))
+            }
+        }
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Authored(a), Self::Authored(b)) => a == b,
+            (Self::RuntimeProxy(a), Self::RuntimeProxy(b)) => Rc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+
+    pub fn with<R>(&self, use_drawable: impl FnOnce(&Drawable) -> R) -> Option<R> {
+        match self {
+            Self::Authored(handle) => {
+                handle.with(|object| object.as_drawable().map(use_drawable))?
+            }
+            Self::RuntimeProxy(proxy) => Some(use_drawable(&proxy.borrow().base)),
+        }
+    }
+
+    pub fn with_mut<R>(&self, use_drawable: impl FnOnce(&mut Drawable) -> R) -> Option<R> {
+        match self {
+            Self::Authored(handle) => {
+                handle.with_mut(|object| object.as_drawable_mut().map(use_drawable))?
+            }
+            Self::RuntimeProxy(proxy) => Some(use_drawable(&mut proxy.borrow_mut().base)),
+        }
+    }
+
+    pub fn with_proxy<R>(&self, use_proxy: impl FnOnce(&DrawableProxy) -> R) -> Option<R> {
+        match self {
+            Self::RuntimeProxy(proxy) => Some(use_proxy(&proxy.borrow())),
+            Self::Authored(_) => None,
+        }
+    }
+
+    pub fn with_proxy_mut<R>(&self, use_proxy: impl FnOnce(&mut DrawableProxy) -> R) -> Option<R> {
+        match self {
+            Self::RuntimeProxy(proxy) => Some(use_proxy(&mut proxy.borrow_mut())),
+            Self::Authored(_) => None,
+        }
+    }
+
+    pub fn is_clip_start(&self) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with(|object| object.drawable_is_clip_start())
+                .unwrap_or(false),
+            Self::RuntimeProxy(proxy) => proxy.borrow().is_clip_start(),
+        }
+    }
+
+    pub fn is_clip_end(&self) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with(|object| object.drawable_is_clip_end())
+                .unwrap_or(false),
+            Self::RuntimeProxy(proxy) => proxy.borrow().is_clip_end(),
+        }
+    }
+
+    pub fn will_clip(&self) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with(|object| object.drawable_will_clip())
+                .unwrap_or(false),
+            Self::RuntimeProxy(proxy) => proxy.borrow().will_clip(),
+        }
+    }
+
+    pub fn empty_clip_count(&self) -> i32 {
+        match self {
+            Self::Authored(handle) => handle
+                .with_mut(|object| object.drawable_empty_clip_count())
+                .unwrap_or_default(),
+            Self::RuntimeProxy(proxy) => proxy.borrow_mut().empty_clip_count(),
+        }
+    }
+}
+
+impl RuntimeDrawableWeakOccurrence {
+    pub fn upgrade(&self) -> Option<RuntimeDrawableOccurrence> {
+        match self {
+            Self::Authored(handle) => handle
+                .is_alive()
+                .then(|| RuntimeDrawableOccurrence::Authored(handle.clone())),
+            Self::RuntimeProxy(proxy) => {
+                proxy.upgrade().map(RuntimeDrawableOccurrence::RuntimeProxy)
+            }
+        }
+    }
 }
 
 pub struct DrawableProxy {
@@ -230,27 +439,76 @@ impl DrawableProxy {
         }
     }
 
-    pub fn draw(&mut self, renderer: &mut dyn Renderer) {
-        self.proxy_drawing.draw_proxy(renderer);
+    pub fn draw(&mut self, renderer: &mut Renderer) {
+        self.proxy_drawing
+            .draw_proxy(renderer, self.base.needs_save_operation());
     }
     pub fn is_hidden(&self) -> bool {
         self.proxy_drawing.is_proxy_hidden()
     }
-    pub fn hittable_component(&mut self) -> *mut Drawable {
-        self.proxy_drawing
-            .as_layout_component_mut()
-            .as_drawable_mut()
+    pub fn hittable_component(&self) -> CoreHandle {
+        self.proxy_drawing.owner_handle()
     }
     pub fn is_target_opaque(&mut self) -> bool {
-        unsafe { &mut *self.hittable_component() }.is_target_opaque()
+        self.hittable_component()
+            .with(|hittable| {
+                hittable
+                    .as_drawable()
+                    .is_some_and(Drawable::is_target_opaque)
+            })
+            .unwrap_or(false)
     }
-    pub fn hit_test(&mut self, _info: &mut HitInfo, _transform: &Mat2D) -> Option<&mut Core> {
+    pub fn hit_test(&mut self, _info: &mut HitInfo, _transform: &Mat2D) -> Option<CoreHandle> {
         None
     }
     pub fn is_proxy(&self) -> bool {
         true
     }
+    pub fn empty_clip_count(&mut self) -> i32 {
+        self.proxy_drawing.empty_clip_count()
+    }
+    pub fn is_clip_start(&self) -> bool {
+        self.proxy_drawing.is_clip_start()
+    }
+    pub fn is_clip_end(&self) -> bool {
+        self.proxy_drawing.is_clip_end()
+    }
+    pub fn will_clip(&self) -> bool {
+        self.proxy_drawing.will_clip()
+    }
     pub fn proxy_drawing(&self) -> &dyn ProxyDrawing {
         &*self.proxy_drawing
     }
 }
+
+impl std::ops::Deref for Drawable {
+    type Target = DrawableBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Drawable {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl std::ops::Deref for DrawableProxy {
+    type Target = Drawable;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DrawableProxy {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    rc::{Rc, Weak},
+};

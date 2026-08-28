@@ -68,6 +68,51 @@ impl Default for SemanticData {
     }
 }
 impl SemanticData {
+    pub fn existing_semantic_node(&self) -> Option<SemanticNodeRef> {
+        self.semantic_node.clone()
+    }
+
+    pub fn is_collapsed(&self) -> bool {
+        self.collapsed
+    }
+
+    pub fn manager_is(&self, manager: &SemanticManagerRef) -> bool {
+        self.semantic_manager
+            .as_ref()
+            .is_some_and(|current| Rc::ptr_eq(current, manager))
+    }
+
+    pub fn find_closest_semantic_node_handle(start: Option<CoreHandle>) -> Option<SemanticNodeRef> {
+        let mut current = start;
+        while let Some(component) = current {
+            let direct_semantic = component
+                .with(|component| {
+                    if let Some(semantic) = component.as_semantic_data() {
+                        return semantic.existing_semantic_node();
+                    }
+                    component.as_container_component().and_then(|container| {
+                        container.children().iter().find_map(|child| {
+                            child
+                                .with(|child| {
+                                    child
+                                        .as_semantic_data()
+                                        .and_then(SemanticData::existing_semantic_node)
+                                })
+                                .flatten()
+                        })
+                    })
+                })
+                .flatten();
+            if direct_semantic.is_some() {
+                return direct_semantic;
+            }
+            current = component
+                .with(|component| component.component_parent_handle())
+                .flatten();
+        }
+        None
+    }
+
     fn set_trait_bit(&mut self, mask: u32, property_key: u16, value: bool) {
         let flags = if value {
             self.base.trait_flags() | mask

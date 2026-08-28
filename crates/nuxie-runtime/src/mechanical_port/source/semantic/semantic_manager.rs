@@ -34,6 +34,10 @@ impl RuntimeSemanticManagerHandle {
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }
+
+    pub fn semantic_manager_ref(&self) -> Rc<RefCell<SemanticManager>> {
+        self.0.clone()
+    }
 }
 
 pub struct SemanticManager {

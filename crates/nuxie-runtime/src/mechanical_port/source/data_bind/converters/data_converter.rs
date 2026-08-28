@@ -160,8 +160,13 @@ macro_rules! impl_data_converter_capability_forward {
 
 pub struct DataConverter {
     pub base: DataConverterBase,
-    parent_data_bind: Option<CoreHandle>,
     pub(crate) data_binds: DataBindContainer,
+}
+
+impl Drop for DataConverter {
+    fn drop(&mut self) {
+        self.data_binds.delete_data_binds();
+    }
 }
 
 impl std::ops::Deref for DataConverter {
@@ -180,7 +185,6 @@ impl Default for DataConverter {
     fn default() -> Self {
         Self {
             base: DataConverterBase::default(),
-            parent_data_bind: None,
             data_binds: DataBindContainer::default(),
         }
     }
@@ -245,13 +249,14 @@ impl DataConverter {
         context: RuntimeDataContextHandle,
         data_bind: CoreHandle,
     ) {
-        owner.with_mut(|owner| {
-            owner.as_data_converter_mut().unwrap().parent_data_bind = Some(data_bind)
-        });
+        owner
+            .data_bind_container()
+            .expect("registered converter container")
+            .set_parent_data_bind(Some(data_bind));
         crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).bind_data_binds_from_context(context);
     }
     pub(crate) fn parent_data_bind(&self) -> Option<CoreHandle> {
-        self.parent_data_bind.clone()
+        self.data_binds.parent_data_bind()
     }
     pub fn update_handle(owner: &CoreHandle) {
         use super::data_converter_group::DataConverterGroup;
@@ -352,7 +357,7 @@ impl DataConverter {
         data_context: RuntimeDataContextHandle,
         data_bind: CoreHandle,
     ) {
-        self.parent_data_bind = Some(data_bind);
+        self.data_binds.set_parent_data_bind(Some(data_bind));
         self.data_binds.bind_data_binds_from_context(data_context);
     }
 
@@ -361,7 +366,7 @@ impl DataConverter {
     }
 
     pub fn mark_converter_dirty(&mut self) {
-        if let Some(parent) = self.parent_data_bind.as_ref() {
+        if let Some(parent) = self.data_binds.parent_data_bind() {
             parent.with_mut(|parent| {
                 if let Some(parent) = parent.as_data_bind_mut() {
                     parent.add_dirt(

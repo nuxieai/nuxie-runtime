@@ -70,11 +70,7 @@ impl ScriptInputArtboard {
         };
         let name = self.name().to_owned();
         if let Some(object) = self.script_input.scripted_object() {
-            object.with_mut(|object| {
-                if let Some(object) = object.as_scripted_object_mut() {
-                    object.set_artboard_input(name, referenced_artboard);
-                }
-            });
+            crate::mechanical_port::source::scripted::scripted_object::ScriptedObject::set_artboard_input_occurrence(&object, name, referenced_artboard);
         }
     }
 

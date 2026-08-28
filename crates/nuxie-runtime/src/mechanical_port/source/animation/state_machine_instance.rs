@@ -1877,18 +1877,22 @@ impl ListenerViewModel {
 }
 
 #[derive(Clone)]
-pub struct RuntimeStateMachineInstanceHandle(Rc<RefCell<StateMachineInstance>>);
+pub struct RuntimeStateMachineInstanceHandle(Rc<RefCell<StateMachineInstance>>, DataBindContainer);
 
 #[derive(Clone, Default)]
-pub struct RuntimeStateMachineInstanceWeakHandle(Weak<RefCell<StateMachineInstance>>);
+pub struct RuntimeStateMachineInstanceWeakHandle(
+    Weak<RefCell<StateMachineInstance>>,
+    crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerWeak,
+);
 
 impl RuntimeStateMachineInstanceHandle {
     fn new(instance: StateMachineInstance) -> Self {
-        Self(Rc::new(RefCell::new(instance)))
+        let container = instance.data_bind_container.clone();
+        Self(Rc::new(RefCell::new(instance)), container)
     }
 
     pub fn downgrade(&self) -> RuntimeStateMachineInstanceWeakHandle {
-        RuntimeStateMachineInstanceWeakHandle(Rc::downgrade(&self.0))
+        RuntimeStateMachineInstanceWeakHandle(Rc::downgrade(&self.0), self.1.downgrade())
     }
 
     pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> R {
@@ -1902,7 +1906,22 @@ impl RuntimeStateMachineInstanceHandle {
 
 impl RuntimeStateMachineInstanceWeakHandle {
     pub fn upgrade(&self) -> Option<RuntimeStateMachineInstanceHandle> {
-        self.0.upgrade().map(RuntimeStateMachineInstanceHandle)
+        self.0.upgrade().map(|instance| {
+            RuntimeStateMachineInstanceHandle(
+                instance,
+                self.1
+                    .upgrade()
+                    .expect("live machine owns its binding container"),
+            )
+        })
+    }
+
+    pub(crate) fn data_bind_container(&self) -> Option<DataBindContainer> {
+        if self.0.strong_count() == 0 {
+            None
+        } else {
+            self.1.upgrade()
+        }
     }
 
     pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> Option<R> {
@@ -3982,9 +4001,9 @@ impl StateMachineInstance {
         }
         self.complete_view_model_instances();
         let data_context = self.data_context_handle.as_ref().unwrap().clone();
-        self.artboard_instance.with_artboard_mut(|artboard| {
-            artboard.base.internal_data_context(data_context.clone());
-        });
+        if let Some(artboard) = self.artboard_instance.upgrade() {
+            artboard.internal_data_context(data_context.clone());
+        }
         self.internal_data_context(data_context);
     }
 
@@ -4049,9 +4068,9 @@ impl StateMachineInstance {
     pub fn bind_view_model_instance(&mut self, view_model_instance: impl Into<Option<CoreHandle>>) {
         let Some(view_model_instance) = view_model_instance.into() else {
             self.clear_data_context();
-            self.artboard_instance.with_artboard_mut(|artboard| {
-                artboard.base.unbind();
-            });
+            if let Some(artboard) = self.artboard_instance.upgrade() {
+                artboard.unbind();
+            }
             return;
         };
         self.set_view_model_instance(view_model_instance);
@@ -4076,10 +4095,10 @@ impl StateMachineInstance {
         data_context.with_context_mut(|context| {
             context.add_state_machine_dependent_container(self.occurrence.clone());
         });
-        self.artboard_instance.with_artboard_mut(|artboard| {
-            artboard.base.clear_data_context();
-            artboard.base.internal_data_context(data_context.clone());
-        });
+        if let Some(artboard) = self.artboard_instance.upgrade() {
+            artboard.clear_data_context();
+            artboard.internal_data_context(data_context.clone());
+        }
         self.internal_data_context(data_context);
     }
 
@@ -4166,10 +4185,10 @@ impl StateMachineInstance {
         let Some(data_context) = self.data_context_handle.clone() else {
             return;
         };
-        self.artboard_instance.with_artboard_mut(|artboard| {
-            artboard.base.clear_data_context();
-            artboard.base.internal_data_context(data_context.clone());
-        });
+        if let Some(artboard) = self.artboard_instance.upgrade() {
+            artboard.clear_data_context();
+            artboard.internal_data_context(data_context.clone());
+        }
         self.internal_data_context(data_context);
     }
 
@@ -4185,18 +4204,13 @@ impl StateMachineInstance {
     }
 
     pub fn relink_data_context(&mut self) {
-        self.artboard_instance
-            .with_artboard_mut(|artboard| artboard.base.relink_data_context());
+        if let Some(artboard) = self.artboard_instance.upgrade() {
+            artboard.relink_data_context();
+        }
     }
 
     pub fn rebuild_data_bind(&mut self, data_bind: CoreHandle) {
-        if let Some(data_context) = self.data_context_handle.clone() {
-            data_bind.with_mut(|data_bind| {
-                if let Some(data_bind) = data_bind.as_data_bind_context_mut() {
-                    data_bind.bind_from_context(Some(data_context));
-                }
-            });
-        }
+        crate::mechanical_port::source::data_bind::data_bind_context::DataBindContext::bind_from_context_handle(&data_bind, self.data_context_handle.clone());
     }
 
     fn unbind(&mut self) {

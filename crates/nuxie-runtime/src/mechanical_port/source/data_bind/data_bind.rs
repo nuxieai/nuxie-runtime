@@ -31,7 +31,10 @@ use crate::mechanical_port::source::{
     },
     status_code::StatusCode,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell, RefMut},
+    rc::Rc,
+};
 
 pub const DEPENDENTS: u32 =
     crate::mechanical_port::source::component_dirt::ComponentDirt::DEPENDENTS.0 as u32;
@@ -115,6 +118,7 @@ pub trait BindConverter {
 }
 
 pub trait BindContextValue {
+    fn invalidation_handle(&self) -> Rc<Cell<bool>>;
     fn apply(
         &mut self,
         target: Option<CoreHandle>,
@@ -131,6 +135,28 @@ pub trait BindContextValue {
         is_main: bool,
         bind: CoreHandle,
     );
+}
+
+#[derive(Clone)]
+struct RuntimeBindContextValue {
+    value: Rc<RefCell<Box<dyn BindContextValue>>>,
+    valid: Rc<Cell<bool>>,
+}
+
+impl RuntimeBindContextValue {
+    fn new(value: Box<dyn BindContextValue>) -> Self {
+        let valid = value.invalidation_handle();
+        Self {
+            value: Rc::new(RefCell::new(value)),
+            valid,
+        }
+    }
+    fn borrow_mut(&self) -> RefMut<'_, Box<dyn BindContextValue>> {
+        self.value.borrow_mut()
+    }
+    fn invalidate(&self) {
+        self.valid.set(false);
+    }
 }
 
 pub trait ContextFactory {
@@ -154,7 +180,7 @@ pub struct DataBind {
     next_observer: Option<CoreHandle>,
     target: Option<CoreHandle>,
     source: Option<CoreHandle>,
-    context_value: Option<Rc<RefCell<Box<dyn BindContextValue>>>>,
+    context_value: Option<RuntimeBindContextValue>,
     converter: Option<CoreHandle>,
     container: Option<DataBindContainerOwner>,
     file: RuntimeFileWeakHandle,
@@ -192,12 +218,21 @@ impl Default for DataBind {
 }
 
 impl DataBind {
+    pub fn relink_handle(owner: &CoreHandle) {
+        let container = owner
+            .with(|owner| owner.as_data_bind().and_then(|bind| bind.container.clone()))
+            .flatten();
+        if let Some(container) = container {
+            container.rebuild_data_bind(owner.clone());
+        }
+    }
+
     pub fn bind_handle(owner: &CoreHandle) {
         owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().context_value = None);
         let context = super::context::context_value::create_context_value(owner);
         owner.with_mut(|owner| {
             owner.as_data_bind_mut().unwrap().context_value =
-                context.map(|context| Rc::new(RefCell::new(context)))
+                context.map(RuntimeBindContextValue::new)
         });
         if let Some(converter) = owner
             .with(|owner| owner.as_data_bind().unwrap().converter())
@@ -331,7 +366,7 @@ impl DataBind {
             return;
         };
         if invalidate {
-            context.borrow_mut().invalidate();
+            context.invalidate();
         }
         context
             .borrow_mut()
@@ -589,7 +624,7 @@ impl DataBind {
         self.context_value = None;
         self.context_value = factory
             .create(self.output_type(), bind.clone())
-            .map(|value| Rc::new(RefCell::new(value)));
+            .map(RuntimeBindContextValue::new);
         if let Some(converter) = self.converter.as_ref() {
             converter.with_mut(|converter| {
                 if let Some(converter) = converter.as_data_converter_capability_mut() {
@@ -816,7 +851,7 @@ impl DataBind {
         if self.dirt & DEPENDENTS != 0
             && let Some(context) = self.context_value.as_mut()
         {
-            context.borrow_mut().invalidate();
+            context.invalidate();
         }
         if !self.has_flag(COLLAPSED)
             && let Some(container) = self.container.clone()
@@ -993,9 +1028,10 @@ impl DataBindBaseCallbacks for DataBindInitializationCallbacks {
 impl Drop for DataBind {
     fn drop(&mut self) {
         self.unbind();
-        // Imported and cloned converters are arena-owned Core occurrences.
-        // Clearing this reference must never reconstruct a Box from a
-        // non-owning virtual pointer.
-        self.converter = None;
+        // Each DataBind owns the converter cloned for it by the importer.
+        // Retire that arena occurrence, never reconstruct a Box from a pointer.
+        if let Some(converter) = self.converter.take() {
+            converter.remove_occurrence();
+        }
     }
 }

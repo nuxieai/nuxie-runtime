@@ -422,7 +422,7 @@ impl ArtboardComponentList {
     }
 
     fn create_artboard(&mut self, list_item: CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
-        Artboard::instance_from_handle(&self.find_artboard(&list_item)?)
+        Artboard::nested_instance_from_handle(&self.find_artboard(&list_item)?)
     }
 
     fn create_state_machine_instance(
@@ -1311,7 +1311,7 @@ impl ArtboardComponentList {
                 });
             }
             if let Some(artboard) = self.artboard_instance(index) {
-                artboard.with_artboard_mut(Artboard::update_data_binds_default);
+                artboard.update_data_binds(true);
             }
         }
     }

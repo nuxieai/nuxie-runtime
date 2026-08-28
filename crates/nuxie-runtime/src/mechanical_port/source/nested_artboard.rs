@@ -206,7 +206,7 @@ impl NestedArtboard {
     fn nest(&mut self, artboard: CoreHandle) {
         self.artboard_referencer
             .set_referenced_artboard(Some(artboard.clone()));
-        let instance = Artboard::instance_from_handle(&artboard);
+        let instance = Artboard::nested_instance_from_handle(&artboard);
         let Some(instance) = instance else {
             return;
         };
@@ -345,7 +345,7 @@ impl NestedArtboard {
         }
 
         if let Some(artboard) = artboard {
-            let artboard_instance = Artboard::instance_from_handle(&artboard);
+            let artboard_instance = Artboard::nested_instance_from_handle(&artboard);
             let state_machine_count = artboard
                 .with_downcast::<Artboard, _>(Artboard::state_machine_count)
                 .unwrap_or_default();
@@ -874,7 +874,7 @@ impl NestedArtboard {
     pub fn update_data_binds(&mut self) {
         if !self.base.is_paused() {
             if let Some(instance) = self.instance.as_ref() {
-                instance.with_artboard_mut(ArtboardInstance::update_data_binds_default);
+                instance.update_data_binds(true);
             }
         }
     }

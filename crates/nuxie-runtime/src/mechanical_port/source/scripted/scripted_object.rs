@@ -669,6 +669,42 @@ impl ScriptedObject {
         }
     }
 
+    pub fn set_artboard_input_occurrence(owner: &CoreHandle, name: String, source: CoreHandle) {
+        use crate::mechanical_port::source::assets::script_asset::ScriptAsset;
+        use crate::scripting::{ScriptCoreString, native_script_artboard};
+        let state = owner
+            .with(|owner| {
+                let scripted = owner.as_scripted_object()?;
+                if scripted.self_ref == 0 {
+                    return None;
+                }
+                Some((
+                    scripted.runtime_instance()?,
+                    scripted.script_asset()?,
+                    scripted.data_context(),
+                ))
+            })
+            .flatten();
+        let Some((instance, asset, parent)) = state else {
+            return;
+        };
+        let file = asset
+            .with_downcast::<ScriptAsset, _>(ScriptAsset::file)
+            .flatten()
+            .and_then(|file| file.upgrade())
+            .expect("live script asset retains its File");
+        let Ok(artboard) = native_script_artboard(file, source, None, parent) else {
+            return;
+        };
+        let assigned = instance
+            .borrow_mut()
+            .set_artboard_input_core(&ScriptCoreString::from_bytes(name.into_bytes()), artboard)
+            .is_ok();
+        if assigned {
+            Self::add_input_dirt(owner);
+        }
+    }
+
     pub fn install_script_instance(
         &mut self,
         instance: Box<dyn RuntimeScriptInstance>,

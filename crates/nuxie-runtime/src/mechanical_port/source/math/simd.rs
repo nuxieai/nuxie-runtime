@@ -28,9 +28,7 @@ pub trait Truthy {
     fn truthy(self) -> bool;
 }
 macro_rules! truthy{($($ty:ty),*$(,)?)=>{$(impl Truthy for $ty{fn truthy(self)->bool{self!=0}})*};}
-truthy!(
-    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
-);
+truthy!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
 pub fn any<T: Copy + Truthy, const N: usize>(x: GVec<T, N>) -> bool {
     x.data.into_iter().any(Truthy::truthy)
 }
@@ -43,9 +41,7 @@ pub trait NotBits {
     fn not_bits(self) -> Self;
 }
 macro_rules! not_bits{($($ty:ty),*$(,)?)=>{$(impl NotBits for $ty{fn not_bits(self)->Self{!self}})*};}
-not_bits!(
-    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
-);
+not_bits!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
 pub fn isnan<const N: usize>(x: GVec<f32, N>) -> GVec<i32, N> {
     GVec {
         data: x.data.map(|value| if value.is_nan() { -1 } else { 0 }),
@@ -68,10 +64,18 @@ pub fn if_then_else<T: Copy, M: Truthy, const N: usize>(
 }
 pub trait SimdMinMax: Copy + PartialOrd {
     fn simd_min(self, other: Self) -> Self {
-        if other < self { other } else { self }
+        if other < self {
+            other
+        } else {
+            self
+        }
     }
     fn simd_max(self, other: Self) -> Self {
-        if self < other { other } else { self }
+        if self < other {
+            other
+        } else {
+            self
+        }
     }
 }
 impl SimdMinMax for f32 {
@@ -103,9 +107,7 @@ impl SimdMinMax for f32 {
     }
 }
 macro_rules! minmax{($($ty:ty),*$(,)?)=>{$(impl SimdMinMax for $ty{})*};}
-minmax!(
-    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
-);
+minmax!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
 pub fn min<T: SimdMinMax, const N: usize>(a: GVec<T, N>, b: GVec<T, N>) -> GVec<T, N> {
     GVec {
         data: core::array::from_fn(|i| a[i].simd_min(b[i])),
@@ -218,13 +220,31 @@ pub fn cast<U: CastFrom<T>, T: Copy, const N: usize>(x: GVec<T, N>) -> GVec<U, N
         data: core::array::from_fn(|i| U::cast_from(x[i])),
     }
 }
+/// Load `N` contiguous SIMD lanes from a call-scoped foreign buffer.
+///
+/// # Safety
+///
+/// `pointer` must be non-null, properly aligned, and readable for `N`
+/// initialized `T` values in one live allocation. The returned vector copies
+/// the values and does not retain the pointer.
 pub unsafe fn load<T: Copy, const N: usize>(pointer: *const T) -> GVec<T, N> {
     GVec {
+        // SAFETY: the caller guarantees the complete `0..N` input range.
         data: core::array::from_fn(|i| unsafe { *pointer.add(i) }),
     }
 }
+
+/// Store `N` contiguous SIMD lanes into a call-scoped foreign buffer.
+///
+/// # Safety
+///
+/// `pointer` must be non-null, properly aligned, and writable for `N` `T`
+/// values in one live allocation. It must not alias a live Rust reference for
+/// the duration of this call. No pointer is retained.
 pub unsafe fn store<T: Copy, const N: usize>(pointer: *mut T, vector: GVec<T, N>) {
     for i in 0..N {
+        // SAFETY: the caller guarantees the complete `0..N` output range and
+        // exclusive access for this call.
         unsafe {
             *pointer.add(i) = vector[i];
         }

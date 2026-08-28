@@ -13,6 +13,15 @@ pub fn unreachable_reached() -> ! {
 }
 
 #[inline(always)]
+/// Copy `count` non-overlapping bytes across a call-scoped FFI boundary.
+///
+/// # Safety
+///
+/// `source` must be readable and `destination` writable for `count` bytes;
+/// both ranges must be live, properly aligned for bytes, and non-overlapping.
+/// Neither pointer is retained.
 pub unsafe fn inline_memcpy(destination: *mut u8, source: *const u8, count: usize) {
+    // SAFETY: the caller supplies the valid non-overlapping ranges documented
+    // by this function's contract.
     unsafe { std::ptr::copy_nonoverlapping(source, destination, count) };
 }

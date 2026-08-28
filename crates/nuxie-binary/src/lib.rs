@@ -3,8 +3,10 @@ mod artboard_list_map_rule;
 mod binary_data_reader;
 mod binary_writer;
 mod runtime_file_writer;
+mod runtime_metadata;
 
 pub use runtime_file_writer::encode_runtime_file;
+pub use runtime_metadata::{DecodedRuntimeMetadata, read_runtime_metadata};
 
 #[cfg(feature = "test-support")]
 mod legacy_test_support;

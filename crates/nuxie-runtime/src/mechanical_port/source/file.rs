@@ -65,6 +65,15 @@ pub enum ImportResult {
     Malformed,
 }
 
+/// Optional host metadata observed from the actual importer. These records do
+/// not participate in runtime execution or retain a second ownership graph.
+#[derive(Clone, Debug)]
+pub enum RuntimeImportRecord {
+    NullObject,
+    Imported(CoreHandle),
+    Dropped(StatusCode),
+}
+
 /// Shared identity for the one non-Core File occurrence that owns an imported
 /// runtime graph. Consumers may only borrow it for the duration of a closure.
 #[derive(Clone)]
@@ -271,11 +280,11 @@ impl File {
     pub fn import(
         bytes: &[u8],
         factory: RuntimeFactoryHandle,
-        mut result: Option<&mut ImportResult>,
+        result: Option<&mut ImportResult>,
         asset_loader: Option<FileAssetLoaderRef>,
         scripting_vm: Option<RuntimeScriptingVmHandle>,
     ) -> Option<RuntimeFileHandle> {
-        Self::import_internal(bytes, factory, result, asset_loader, scripting_vm)
+        Self::import_internal(bytes, factory, result, asset_loader, scripting_vm, None)
     }
 
     pub fn import_with_loader(
@@ -285,7 +294,19 @@ impl File {
         asset_loader: FileAssetLoaderRef,
         scripting_vm: Option<RuntimeScriptingVmHandle>,
     ) -> Option<RuntimeFileHandle> {
-        Self::import_internal(bytes, factory, result, Some(asset_loader), scripting_vm)
+        Self::import_internal(bytes, factory, result, Some(asset_loader), scripting_vm, None)
+    }
+
+    pub fn import_with_records(
+        bytes: &[u8],
+        factory: RuntimeFactoryHandle,
+        result: Option<&mut ImportResult>,
+        asset_loader: Option<FileAssetLoaderRef>,
+        scripting_vm: Option<RuntimeScriptingVmHandle>,
+        records: &mut Vec<RuntimeImportRecord>,
+    ) -> Option<RuntimeFileHandle> {
+        records.clear();
+        Self::import_internal(bytes, factory, result, asset_loader, scripting_vm, Some(records))
     }
 
     fn import_internal(
@@ -294,6 +315,7 @@ impl File {
         mut result: Option<&mut ImportResult>,
         asset_loader: Option<FileAssetLoaderRef>,
         scripting_vm: Option<RuntimeScriptingVmHandle>,
+        records: Option<&mut Vec<RuntimeImportRecord>>,
     ) -> Option<RuntimeFileHandle> {
         if scripting_vm
             .as_ref()
@@ -330,7 +352,7 @@ impl File {
         let file = RuntimeFileHandle::new(File::new(factory, asset_loader));
         let (read_result, registration_ready) = file.with_file_mut(|file| {
             file.set_scripting_vm(scripting_vm);
-            file.read(&mut reader, &header)
+            file.read(&mut reader, &header, records)
         });
         if registration_ready {
             Self::register_scripts(&file);
@@ -348,6 +370,7 @@ impl File {
         &mut self,
         reader: &mut BinaryReader<'_>,
         header: &RuntimeHeader,
+        mut records: Option<&mut Vec<RuntimeImportRecord>>,
     ) -> (ImportResult, bool) {
         let mut import_stack = ImportStack::default();
         import_stack.set_version(header.major_version(), header.minor_version());
@@ -358,6 +381,9 @@ impl File {
 
         while !reader.reached_end() {
             let Some(object) = read_runtime_object(reader, header) else {
+                if let Some(records) = records.as_deref_mut() {
+                    records.push(RuntimeImportRecord::NullObject);
+                }
                 import_stack.read_null_object();
                 continue;
             };
@@ -388,6 +414,13 @@ impl File {
                     .with_mut(|object| object.import(&mut import_stack))
                     .unwrap_or(StatusCode::MissingObject)
             };
+            if let Some(records) = records.as_deref_mut() {
+                records.push(if import_result == StatusCode::Ok {
+                    RuntimeImportRecord::Imported(object.clone())
+                } else {
+                    RuntimeImportRecord::Dropped(import_result)
+                });
+            }
             if import_result == StatusCode::Ok {
                 match object_type {
                     Backboard::TYPE_KEY => {
@@ -434,6 +467,8 @@ impl File {
                     last_bindable_object = None;
                 }
                 eprintln!("Failed to import object of type {}", object_type);
+                // File::read deletes an object immediately when import fails.
+                drop(self.core_arena.remove(&object));
                 continue;
             }
 
@@ -695,6 +730,9 @@ impl File {
         let Some(vm) = vm else {
             return;
         };
+        if let Err(error) = vm.with_vm_mut(|vm| vm.install_native_file_assets(file.downgrade())) {
+            eprintln!("{error}");
+        }
         if !vm.with_vm_mut(|vm| vm.initializes_data_global_externally()) {
             let models = models
                 .into_iter()

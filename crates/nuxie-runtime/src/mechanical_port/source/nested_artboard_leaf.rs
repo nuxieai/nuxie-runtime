@@ -22,9 +22,11 @@ impl NestedArtboardLeaf {
     pub fn clone_leaf(&self) -> Self {
         let mut nested_artboard = self.base.clone_into(&mut CloneCallbacks);
         nested_artboard.base.base.set_file(self.base.base.file());
-        if let Some(referenced) = self.base.base.referenced_artboard() {
-            let instance = referenced.instance();
-            nested_artboard.base.base.set_referenced_artboard(instance);
+        if let Some(referenced) = self.base.base.source_artboard() {
+            nested_artboard
+                .base
+                .base
+                .referenced_artboard(Some(referenced));
         }
         nested_artboard
     }

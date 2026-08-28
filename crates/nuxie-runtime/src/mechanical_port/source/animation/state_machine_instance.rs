@@ -32,6 +32,7 @@ use crate::mechanical_port::source::{
         focus_manager::{FocusManager, RuntimeFocusManagerHandle},
         focus_node::FocusNodeRef,
     },
+    listener_group::{ListenerGroup, ListenerGroupProvider, RuntimeListenerGroupHandle},
     listener_type::ListenerType,
     math::{random::RandomProvider, vec2d::Vec2D},
     process_event_result::ProcessEventResult,
@@ -409,32 +410,11 @@ pub trait StateMachineInstanceRuntime {
         animation: &CoreHandle,
         listener: RuntimeStateMachineInstanceWeakHandle,
     );
-    fn listener_group_reset(&mut self, group: Object, pointer: i32);
-    fn listener_group_release(&mut self, group: Object, pointer: i32);
-    fn listener_group_hover(&mut self, group: Object, pointer: i32);
-    fn listener_group_consumed(&self, group: Object) -> bool;
-    fn listener_group_process(
-        &mut self,
-        group: Object,
-        component: &CoreHandle,
-        position: Vec2D,
-        pointer: i32,
-        kind: ListenerType,
-        can_hit: bool,
-        timestamp: f32,
-        machine: &mut StateMachineInstance,
-    ) -> ProcessEventResult;
-    fn listener_group_can_early_out(&self, group: Object, component: &CoreHandle) -> bool;
-    fn listener_group_needs_down(&self, group: Object, component: &CoreHandle) -> bool;
-    fn listener_group_needs_up(&self, group: Object, component: &CoreHandle) -> bool;
-    fn listener_group_enable(&mut self, group: Object, pointer: i32);
-    fn listener_group_disable(&mut self, group: Object, pointer: i32);
-    fn make_listener_group(&mut self, listener: &CoreHandle) -> Object;
     fn make_text_input_listener_group(
         &mut self,
         text_input: &CoreHandle,
         machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Object;
+    ) -> RuntimeListenerGroupHandle;
     fn make_focus_listener_group(
         &mut self,
         focus_data: &CoreHandle,
@@ -467,10 +447,6 @@ pub trait StateMachineInstanceRuntime {
     ) -> Object;
     fn resolve_focus_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
     fn resolve_semantic_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
-    fn listener_groups_from_provider(
-        &mut self,
-        provider: &CoreHandle,
-    ) -> Vec<(CoreHandle, Vec<(CoreHandle, bool)>)>;
     fn provided_hit_components(
         &mut self,
         provider: &CoreHandle,
@@ -1329,7 +1305,7 @@ pub struct HitDrawable {
     has_down_listener: bool,
     has_up_listener: bool,
     is_opaque: bool,
-    listeners: Vec<Object>,
+    listeners: Vec<RuntimeListenerGroupHandle>,
     hit_path: bool,
     hit_clip: bool,
     #[cfg(test)]
@@ -1366,14 +1342,29 @@ impl HitDrawable {
         }
     }
 
-    fn add_listener(&mut self, runtime: &dyn StateMachineInstanceRuntime, group: Object) {
-        if !runtime.listener_group_can_early_out(group, &self.component) {
+    fn add_listener(&mut self, group: RuntimeListenerGroupHandle) {
+        let (can_early_out, needs_down, needs_up) = self
+            .component
+            .with(|component| {
+                let component = component
+                    .as_component()
+                    .expect("a hit target retains a Component");
+                group.with_group(|group| {
+                    (
+                        group.can_early_out(component),
+                        group.needs_down_listener(component),
+                        group.needs_up_listener(component),
+                    )
+                })
+            })
+            .expect("a hit target remains in its CoreArena");
+        if !can_early_out {
             self.can_early_out = false;
         } else {
-            if runtime.listener_group_needs_down(group, &self.component) {
+            if needs_down {
                 self.has_down_listener = true;
             }
-            if runtime.listener_group_needs_up(group, &self.component) {
+            if needs_up {
                 self.has_up_listener = true;
             }
         }
@@ -1418,8 +1409,8 @@ impl HitComponent for HitDrawable {
         }
         self.is_hovered = hit_type != ListenerType::Exit && self.hit_test(runtime, position);
         if self.is_hovered {
-            for &listener in &self.listeners {
-                runtime.listener_group_hover(listener, pointer_id);
+            for listener in &self.listeners {
+                listener.with_group_mut(|listener| listener.hover(pointer_id));
             }
         }
     }
@@ -1450,21 +1441,24 @@ impl HitComponent for HitDrawable {
             return HitResult::None;
         }
         let mut blocking = false;
-        for &listener in &self.listeners {
-            if runtime.listener_group_consumed(listener) {
+        for listener in &self.listeners {
+            if listener.with_group(|listener| listener.is_consumed()) {
                 continue;
             }
-            if runtime.listener_group_process(
-                listener,
-                &self.component,
-                position,
-                pointer_id,
-                hit_type,
-                can_hit,
-                timestamp,
-                machine,
-            ) == ProcessEventResult::Scroll
-            {
+            let result = self
+                .component
+                .with_mut(|component| {
+                    let component = component
+                        .as_component_mut()
+                        .expect("a hit target retains a Component");
+                    listener.with_group_mut(|listener| {
+                        listener.process_event(
+                            component, position, pointer_id, hit_type, can_hit, timestamp, machine,
+                        )
+                    })
+                })
+                .expect("a hit target remains in its CoreArena");
+            if result == ProcessEventResult::Scroll {
                 blocking = true;
             }
         }
@@ -1482,8 +1476,8 @@ impl HitComponent for HitDrawable {
         runtime: &mut dyn StateMachineInstanceRuntime,
         pointer_id: i32,
     ) {
-        for &listener in &self.listeners {
-            runtime.listener_group_enable(listener, pointer_id);
+        for listener in &self.listeners {
+            listener.with_group_mut(|listener| listener.enable(pointer_id));
         }
     }
 
@@ -1492,8 +1486,8 @@ impl HitComponent for HitDrawable {
         runtime: &mut dyn StateMachineInstanceRuntime,
         pointer_id: i32,
     ) {
-        for &listener in &self.listeners {
-            runtime.listener_group_disable(listener, pointer_id);
+        for listener in &self.listeners {
+            listener.with_group_mut(|listener| listener.disable(pointer_id));
         }
     }
 }
@@ -2051,7 +2045,7 @@ pub struct StateMachineInstance {
     input_instances: Vec<Option<InputInstance>>,
     layers: Vec<RuntimeStateMachineLayerInstanceHandle>,
     hit_components: Vec<Box<dyn HitComponent>>,
-    listener_groups: Vec<Object>,
+    listener_groups: Vec<RuntimeListenerGroupHandle>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
     data_context: Object,
@@ -2405,7 +2399,8 @@ impl StateMachineInstance {
                 .borrow_mut()
                 .listener_has_any(&listener, &POINTER_HIT_LISTENER_TYPES)
             {
-                let group = self.runtime.borrow_mut().make_listener_group(&listener);
+                let group =
+                    RuntimeListenerGroupHandle::new(Box::new(ListenerGroup::new(listener.clone())));
                 if let Some(target) = target.as_ref() {
                     let is_layout = self.runtime.borrow_mut().component_is_layout(target);
                     let hit_target = if is_layout {
@@ -2451,18 +2446,32 @@ impl StateMachineInstance {
             .filter_map(|object| self.runtime.borrow_mut().object_listener_provider(&object))
             .collect();
         for provider in providers {
-            for (group, targets) in self
-                .runtime
-                .borrow_mut()
-                .listener_groups_from_provider(&provider)
-            {
-                for (target, opaque) in targets {
-                    let layout = self.runtime.borrow_mut().component_is_layout(&target)
+            let groups = provider
+                .with_mut(|provider| {
+                    ListenerGroupProvider::from(provider)
+                        .expect("a listener provider exposes ListenerGroupProvider")
+                        .listener_groups()
+                })
+                .expect("a listener provider remains in its CoreArena");
+            for group_with_targets in groups {
+                let (group, targets) = group_with_targets.into_parts();
+                for target in targets {
+                    let target_handle = target.component();
+                    let layout = self
+                        .runtime
+                        .borrow_mut()
+                        .component_is_layout(&target_handle)
                         || self
                             .runtime
                             .borrow_mut()
-                            .component_is_drawable_proxy(&target);
-                    self.add_to_hit_lookup(target, layout, hit_lookup, group, opaque);
+                            .component_is_drawable_proxy(&target_handle);
+                    self.add_to_hit_lookup(
+                        target_handle,
+                        layout,
+                        hit_lookup,
+                        group.clone(),
+                        target.is_opaque(),
+                    );
                 }
                 self.listener_groups.push(group);
             }
@@ -2538,7 +2547,7 @@ impl StateMachineInstance {
                 true,
                 true,
             );
-            hit.add_listener(self.runtime.borrow_mut().as_ref(), group);
+            hit.add_listener(group.clone());
             self.hit_components.push(Box::new(hit));
             self.listener_groups.push(group);
         }
@@ -2593,7 +2602,7 @@ impl StateMachineInstance {
         target: CoreHandle,
         is_layout_component: bool,
         hit_lookup: &mut HashMap<CoreHandle, usize>,
-        listener_group: Object,
+        listener_group: RuntimeListenerGroupHandle,
         is_opaque: bool,
     ) {
         if is_layout_component {
@@ -2615,7 +2624,7 @@ impl StateMachineInstance {
             };
             let drawable = self.hit_components[index].as_mut().as_hit_drawable_mut();
             if let Some(drawable) = drawable {
-                drawable.add_listener(self.runtime.borrow_mut().as_ref(), listener_group);
+                drawable.add_listener(listener_group);
                 drawable.is_opaque |= is_opaque;
             }
             return;
@@ -2649,14 +2658,20 @@ impl StateMachineInstance {
                 index
             };
             if let Some(drawable) = self.hit_components[index].as_mut().as_hit_drawable_mut() {
-                drawable.add_listener(self.runtime.borrow_mut().as_ref(), listener_group);
+                drawable.add_listener(listener_group);
             }
             return;
         }
         if self.runtime.borrow_mut().component_is_container(&target) {
             for child in self.runtime.borrow_mut().component_children(&target) {
                 let is_layout = self.runtime.borrow_mut().component_is_layout(&child);
-                self.add_to_hit_lookup(child, is_layout, hit_lookup, listener_group, is_opaque);
+                self.add_to_hit_lookup(
+                    child,
+                    is_layout,
+                    hit_lookup,
+                    listener_group.clone(),
+                    is_opaque,
+                );
             }
         }
     }
@@ -2694,10 +2709,8 @@ impl StateMachineInstance {
         timestamp: f32,
     ) -> HitResult {
         let position = self.normalize_pointer_position(position);
-        for &group in &self.listener_groups {
-            self.runtime
-                .borrow_mut()
-                .listener_group_reset(group, pointer_id);
+        for group in &self.listener_groups {
+            group.with_group_mut(|group| group.reset(pointer_id));
         }
         let mut hit_components = std::mem::take(&mut self.hit_components);
         for component in &mut hit_components {
@@ -2731,10 +2744,8 @@ impl StateMachineInstance {
         }
         self.hit_components = hit_components;
         if hit_type == ListenerType::Exit {
-            for &group in &self.listener_groups {
-                self.runtime
-                    .borrow_mut()
-                    .listener_group_release(group, pointer_id);
+            for group in &self.listener_groups {
+                group.with_group_mut(|group| group.release_event(pointer_id));
             }
         }
         if !hit_something {
@@ -4187,9 +4198,7 @@ impl Drop for StateMachineInstance {
         self.embedder_gamepads.clear();
         self.unbind();
         self.input_instances.clear();
-        for group in self.listener_groups.drain(..) {
-            self.runtime.borrow_mut().delete_owned_object(group);
-        }
+        self.listener_groups.clear();
         let runtime = Rc::clone(&self.runtime);
         runtime.borrow_mut().delete_all_data_binds(self);
         self.data_binds.clear();

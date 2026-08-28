@@ -172,6 +172,9 @@ impl DraggableConstraintListenerGroup {
     pub fn release_event(&mut self, pointer_id: i32) {
         self.base.release_event(pointer_id);
     }
+    pub fn hover(&mut self, pointer_id: i32) {
+        self.base.hover(pointer_id);
+    }
     pub fn is_consumed(&self) -> bool {
         self.base.is_consumed()
     }

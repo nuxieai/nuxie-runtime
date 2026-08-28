@@ -1,8 +1,9 @@
 use crate::mechanical_port::source::{
     animation::{
         layer_state::LayerState,
+        state_instance::RuntimeStateInstanceHandle,
         state_machine_instance::{
-            RuntimeObjectHandle, RuntimeStateMachineLayerInstanceWeakHandle, StateMachineInstance,
+            RuntimeStateMachineLayerInstanceWeakHandle, StateMachineInstance,
         },
     },
     core::CoreHandle,
@@ -35,8 +36,11 @@ pub trait TransitionRuntime {
     );
     fn animation_duration(&self, state: &LayerState) -> Option<f32>;
     fn exit_animation(&self, state: &LayerState) -> Option<(f32, f32)>;
-    fn exit_instance_times(&self, from: RuntimeObjectHandle) -> Option<(f32, f32, f32, i32)>;
-    fn set_exit_instance_time(&self, from: RuntimeObjectHandle, time: f32);
+    fn exit_instance_times(
+        &self,
+        from: &RuntimeStateInstanceHandle,
+    ) -> Option<(f32, f32, f32, i32)>;
+    fn set_exit_instance_time(&self, from: &RuntimeStateInstanceHandle, time: f32);
 }
 pub struct StateTransition {
     pub base: StateTransitionBase,
@@ -167,7 +171,7 @@ impl StateTransition {
     }
     pub fn allowed(
         &self,
-        from: RuntimeObjectHandle,
+        from: &RuntimeStateInstanceHandle,
         machine: &mut StateMachineInstance,
         layer: RuntimeStateMachineLayerInstanceWeakHandle,
         r: &dyn TransitionRuntime,
@@ -199,7 +203,7 @@ impl StateTransition {
     }
     pub fn apply_exit_condition(
         &self,
-        from: RuntimeObjectHandle,
+        from: &RuntimeStateInstanceHandle,
         state: &LayerState,
         r: &dyn TransitionRuntime,
     ) -> bool {

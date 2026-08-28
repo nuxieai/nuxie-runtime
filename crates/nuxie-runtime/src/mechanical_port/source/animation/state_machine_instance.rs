@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     animation::{
         linear_animation_instance::LinearAnimationInstance,
         listener_invocation::ListenerInvocation,
+        state_instance::RuntimeStateInstanceHandle,
         state_machine_input_instance::{
             InputInstanceNotifier, SMIBool, SMIInput, SMINumber, SMITrigger,
         },
@@ -193,29 +194,33 @@ pub trait StateMachineInstanceRuntime {
         &mut self,
         state: CoreHandle,
         artboard: &RuntimeArtboardInstanceWeakHandle,
-    ) -> Object;
-    fn delete_state_instance(&mut self, instance: Object);
-    fn state_definition(&self, instance: Object) -> CoreHandle;
-    fn state_advance(&mut self, instance: Object, seconds: f32, machine: &mut StateMachineInstance);
+    ) -> RuntimeStateInstanceHandle;
+    fn state_definition(&self, instance: &RuntimeStateInstanceHandle) -> CoreHandle;
+    fn state_advance(
+        &mut self,
+        instance: &RuntimeStateInstanceHandle,
+        seconds: f32,
+        machine: &mut StateMachineInstance,
+    );
     fn state_apply(
         &mut self,
-        instance: Object,
+        instance: &RuntimeStateInstanceHandle,
         artboard: &RuntimeArtboardInstanceWeakHandle,
         mix: f32,
     );
-    fn state_keep_going(&self, instance: Object) -> bool;
-    fn state_clear_spilled_time(&mut self, instance: Object);
-    fn state_spilled_time(&self, instance: Object) -> f32;
-    fn state_animation(&self, instance: Object) -> Option<CoreHandle>;
-    fn state_animation_instance(&self, instance: Object) -> Object;
+    fn state_keep_going(&self, instance: &RuntimeStateInstanceHandle) -> bool;
+    fn state_clear_spilled_time(&mut self, instance: &RuntimeStateInstanceHandle);
+    fn state_spilled_time(&self, instance: &RuntimeStateInstanceHandle) -> f32;
+    fn state_animation(&self, instance: &RuntimeStateInstanceHandle) -> Option<CoreHandle>;
+    fn state_animation_instance_time(&self, instance: &RuntimeStateInstanceHandle) -> f32;
     fn state_for_each_animation_instance(
         &mut self,
         machine: &mut StateMachineInstance,
-        state: Object,
+        state: &RuntimeStateInstanceHandle,
         callback: &mut dyn FnMut(
             &mut dyn StateMachineInstanceRuntime,
             &mut StateMachineInstance,
-            Object,
+            &mut LinearAnimationInstance,
         ),
     );
     fn state_transition_count(&self, state: &CoreHandle) -> usize;
@@ -227,7 +232,7 @@ pub trait StateMachineInstanceRuntime {
     fn transition_allowed(
         &mut self,
         transition: &CoreHandle,
-        from: Object,
+        from: &RuntimeStateInstanceHandle,
         machine: &mut StateMachineInstance,
         layer: RuntimeStateMachineLayerInstanceWeakHandle,
     ) -> u8;
@@ -245,7 +250,11 @@ pub trait StateMachineInstanceRuntime {
     fn transition_interpolator(&self, transition: &CoreHandle) -> Option<CoreHandle>;
     fn transition_enable_early_exit(&self, transition: &CoreHandle) -> bool;
     fn transition_pause_on_exit(&self, transition: &CoreHandle) -> bool;
-    fn transition_apply_exit_condition(&mut self, transition: &CoreHandle, from: Object) -> bool;
+    fn transition_apply_exit_condition(
+        &mut self,
+        transition: &CoreHandle,
+        from: &RuntimeStateInstanceHandle,
+    ) -> bool;
     fn transition_events(&self, transition: &CoreHandle) -> Vec<CoreHandle>;
     fn transition_listener_actions(&self, transition: &CoreHandle) -> Vec<CoreHandle>;
     fn transition_property_value(&self, property: &CoreHandle) -> f32;
@@ -266,8 +275,8 @@ pub trait StateMachineInstanceRuntime {
     );
     fn make_animation_reset(
         &mut self,
-        from: Object,
-        to: Object,
+        from: Option<&RuntimeStateInstanceHandle>,
+        to: Option<&RuntimeStateInstanceHandle>,
         artboard: &RuntimeArtboardInstanceWeakHandle,
     ) -> Object;
     fn release_animation_reset(&mut self, reset: Object);
@@ -284,7 +293,6 @@ pub trait StateMachineInstanceRuntime {
         mix: f32,
     );
     fn animation_duration_seconds(&self, animation: &CoreHandle) -> f32;
-    fn animation_instance_time(&self, instance: Object) -> f32;
     fn interpolator_transform(&self, interpolator: &CoreHandle, value: f32) -> f32;
     fn artboard_frame_origin(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> bool;
     fn artboard_origin(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Vec2D;
@@ -672,11 +680,11 @@ pub trait StateMachineInstanceRuntime {
     fn data_bind_on_changed(&mut self, bind: &CoreHandle, callback: fn());
     fn delete_owned_object(&mut self, object: CoreHandle);
     fn keyframe_type(&self, keyframe: &CoreHandle) -> u16;
-    fn animation_keyframes(&self, animation_instance: Object) -> Vec<CoreHandle>;
+    fn animation_keyframes(&self, animation_instance: &LinearAnimationInstance) -> Vec<CoreHandle>;
     fn make_keyframe_holder(&mut self, keyframe_type: u16) -> CoreHandle;
     fn add_keyframe_holder(
         &mut self,
-        animation_instance: Object,
+        animation_instance: &mut LinearAnimationInstance,
         keyframe: &CoreHandle,
         holder: CoreHandle,
     );
@@ -712,9 +720,9 @@ pub struct StateMachineLayerInstance {
     occurrence: RuntimeStateMachineLayerInstanceWeakHandle,
     layer: Option<CoreHandle>,
     artboard_instance: RuntimeArtboardInstanceWeakHandle,
-    any_state_instance: Object,
-    current_state: Object,
-    state_from: Object,
+    any_state_instance: Option<RuntimeStateInstanceHandle>,
+    current_state: Option<RuntimeStateInstanceHandle>,
+    state_from: Option<RuntimeStateInstanceHandle>,
     transition: Option<CoreHandle>,
     transition_duration_property: Option<CoreHandle>,
     animation_reset: Object,
@@ -777,9 +785,9 @@ impl Default for StateMachineLayerInstance {
             occurrence: RuntimeStateMachineLayerInstanceWeakHandle::default(),
             layer: None,
             artboard_instance: RuntimeArtboardInstanceWeakHandle::default(),
-            any_state_instance: RuntimeObjectHandle::NONE,
-            current_state: RuntimeObjectHandle::NONE,
-            state_from: RuntimeObjectHandle::NONE,
+            any_state_instance: None,
+            current_state: None,
+            state_from: None,
             transition: None,
             transition_duration_property: None,
             animation_reset: RuntimeObjectHandle::NONE,
@@ -822,29 +830,37 @@ impl StateMachineLayerInstance {
         RandomProvider::seed(seed);
         debug_assert!(self.layer.is_none());
         let any_state = self.runtime().layer_any_state(&layer);
-        self.any_state_instance = self.runtime().make_state_instance(any_state, &artboard);
-        state_machine_instance.build_state_keyframe_binds(self.any_state_instance);
+        let any_state_instance = self.runtime().make_state_instance(any_state, &artboard);
+        state_machine_instance.build_state_keyframe_binds(&any_state_instance);
+        self.any_state_instance = Some(any_state_instance);
         let entry = self.runtime().layer_entry_state(&layer);
         self.layer = Some(layer);
         self.change_state(state_machine_instance, entry);
     }
 
     fn reset_state(&mut self, machine: &mut StateMachineInstance) {
-        if self.state_from != 0
-            && self.state_from != self.any_state_instance
-            && self.state_from != self.current_state
+        if let Some(state_from) = self.state_from.as_ref()
+            && self
+                .any_state_instance
+                .as_ref()
+                .is_none_or(|any| !state_from.ptr_eq(any))
+            && self
+                .current_state
+                .as_ref()
+                .is_none_or(|current| !state_from.ptr_eq(current))
         {
-            machine.remove_state_keyframe_binds(self.state_from);
-            let state = self.state_from;
-            self.runtime().delete_state_instance(state);
+            machine.remove_state_keyframe_binds(state_from);
         }
-        self.state_from = RuntimeObjectHandle::NONE;
-        if self.current_state != 0 && self.current_state != self.any_state_instance {
-            machine.remove_state_keyframe_binds(self.current_state);
-            let state = self.current_state;
-            self.runtime().delete_state_instance(state);
+        self.state_from = None;
+        if let Some(current) = self.current_state.as_ref()
+            && self
+                .any_state_instance
+                .as_ref()
+                .is_none_or(|any| !current.ptr_eq(any))
+        {
+            machine.remove_state_keyframe_binds(current);
         }
-        self.current_state = RuntimeObjectHandle::NONE;
+        self.current_state = None;
         let entry = self
             .runtime()
             .layer_entry_state(self.layer.as_ref().expect("initialized layer"));
@@ -877,7 +893,10 @@ impl StateMachineLayerInstance {
             .runtime()
             .transition_duration_is_percentage(&transition)
         {
-            let animation = self.runtime().state_animation(self.state_from);
+            let animation = self
+                .state_from
+                .as_ref()
+                .and_then(|state| self.runtime().state_animation(state));
             let animation_duration = animation
                 .as_ref()
                 .map(|animation| self.runtime().animation_duration_seconds(animation))
@@ -889,7 +908,7 @@ impl StateMachineLayerInstance {
     }
 
     fn update_mix(&mut self, machine: &mut StateMachineInstance, seconds: f32) {
-        if self.transition.is_some() && self.state_from != 0 && self.resolved_duration() != 0 {
+        if self.transition.is_some() && self.state_from.is_some() && self.resolved_duration() != 0 {
             let mix_time = self.resolved_mix_time();
             self.mix = if mix_time == 0.0 {
                 1.0
@@ -919,12 +938,15 @@ impl StateMachineLayerInstance {
         if new_frame {
             self.state_machine_changed_on_advance = false;
         }
-        let current = self.current_state;
-        self.runtime().state_advance(current, seconds, machine);
+        if let Some(current) = self.current_state.clone() {
+            self.runtime().state_advance(&current, seconds, machine);
+        }
         self.update_mix(machine, seconds);
-        if self.state_from != 0 && self.mix < 1.0 && !self.hold_animation_from {
-            let from = self.state_from;
-            self.runtime().state_advance(from, seconds, machine);
+        if let Some(from) = self.state_from.clone()
+            && self.mix < 1.0
+            && !self.hold_animation_from
+        {
+            self.runtime().state_advance(&from, seconds, machine);
         }
         self.apply();
         let mut changed = false;
@@ -947,17 +969,21 @@ impl StateMachineLayerInstance {
                 return false;
             }
         }
-        let current = self.current_state;
-        self.runtime().state_clear_spilled_time(current);
+        if let Some(current) = self.current_state.clone() {
+            self.runtime().state_clear_spilled_time(&current);
+        }
         changed
             || self.mix != 1.0
             || self.waiting_for_exit
-            || (self.current_state != 0 && self.runtime().state_keep_going(self.current_state))
+            || self
+                .current_state
+                .as_ref()
+                .is_some_and(|current| self.runtime().state_keep_going(current))
     }
 
     fn is_transitioning(&mut self) -> bool {
         self.transition.is_some()
-            && self.state_from != 0
+            && self.state_from.is_some()
             && self.resolved_duration() != 0
             && self.mix < 1.0
     }
@@ -971,10 +997,10 @@ impl StateMachineLayerInstance {
             return false;
         }
         self.waiting_for_exit = false;
-        if self.try_change_state_from(machine, self.any_state_instance) {
+        if self.try_change_state_from(machine, self.any_state_instance.clone()) {
             return true;
         }
-        self.try_change_state_from(machine, self.current_state)
+        self.try_change_state_from(machine, self.current_state.clone())
     }
 
     fn fire_events(
@@ -1006,42 +1032,44 @@ impl StateMachineLayerInstance {
     }
 
     fn can_change_state(&mut self, state_to: &CoreHandle) -> bool {
-        self.current_state == 0
-            || self.runtime().state_definition(self.current_state) != state_to.clone()
+        self.current_state
+            .as_ref()
+            .is_none_or(|current| self.runtime().state_definition(current) != state_to.clone())
     }
 
     fn change_state(&mut self, machine: &mut StateMachineInstance, state_to: CoreHandle) {
-        if self.current_state != 0
-            && self.runtime().state_definition(self.current_state) == state_to
+        if self
+            .current_state
+            .as_ref()
+            .is_some_and(|current| self.runtime().state_definition(current) == state_to)
         {
             return;
         }
-        if self.current_state != 0 {
-            let state = self.runtime().state_definition(self.current_state);
+        if let Some(current) = self.current_state.clone() {
+            let state = self.runtime().state_definition(&current);
             let events = self.runtime().state_events(&state);
             self.fire_events(machine, 1, &events);
             let actions = self.runtime().state_listener_actions(&state);
             self.perform_listener_actions(machine, 1, &actions);
         }
-        self.current_state = self
+        let current = self
             .runtime()
             .make_state_instance(state_to, &self.artboard_instance);
-        if self.current_state != 0 {
-            machine.build_state_keyframe_binds(self.current_state);
-            let state = self.runtime().state_definition(self.current_state);
-            let events = self.runtime().state_events(&state);
-            self.fire_events(machine, 0, &events);
-            let actions = self.runtime().state_listener_actions(&state);
-            self.perform_listener_actions(machine, 0, &actions);
-        }
+        machine.build_state_keyframe_binds(&current);
+        let state = self.runtime().state_definition(&current);
+        let events = self.runtime().state_events(&state);
+        self.fire_events(machine, 0, &events);
+        let actions = self.runtime().state_listener_actions(&state);
+        self.perform_listener_actions(machine, 0, &actions);
+        self.current_state = Some(current);
     }
 
     fn find_random_transition(
         &mut self,
         machine: &mut StateMachineInstance,
-        from_instance: Object,
+        from_instance: RuntimeStateInstanceHandle,
     ) -> Option<CoreHandle> {
-        let state = self.runtime().state_definition(from_instance);
+        let state = self.runtime().state_definition(&from_instance);
         let mut total_weight = 0;
         for index in 0..self.runtime().state_transition_count(&state) {
             let transition = self.runtime().state_transition(&state, index);
@@ -1049,7 +1077,7 @@ impl StateMachineLayerInstance {
             if self.can_change_state(&state_to) {
                 let allowed = self.runtime().transition_allowed(
                     &transition,
-                    from_instance,
+                    &from_instance,
                     machine,
                     self.occurrence.clone(),
                 );
@@ -1091,9 +1119,9 @@ impl StateMachineLayerInstance {
     fn find_allowed_transition(
         &mut self,
         machine: &mut StateMachineInstance,
-        from_instance: Object,
+        from_instance: RuntimeStateInstanceHandle,
     ) -> Option<CoreHandle> {
-        let state = self.runtime().state_definition(from_instance);
+        let state = self.runtime().state_definition(&from_instance);
         if self.runtime().state_flags(&state) & 1 != 0 {
             return self.find_random_transition(machine, from_instance);
         }
@@ -1105,7 +1133,7 @@ impl StateMachineLayerInstance {
             }
             let allowed = self.runtime().transition_allowed(
                 &transition,
-                from_instance,
+                &from_instance,
                 machine,
                 self.occurrence.clone(),
             );
@@ -1137,12 +1165,12 @@ impl StateMachineLayerInstance {
     fn try_change_state_from(
         &mut self,
         machine: &mut StateMachineInstance,
-        from_instance: Object,
+        from_instance: Option<RuntimeStateInstanceHandle>,
     ) -> bool {
-        if from_instance == 0 {
+        let Some(from_instance) = from_instance else {
             return false;
-        }
-        let out_state = self.current_state;
+        };
+        let out_state = self.current_state.clone();
         let Some(transition) = self.find_allowed_transition(machine, from_instance) else {
             return false;
         };
@@ -1165,40 +1193,42 @@ impl StateMachineLayerInstance {
             self.fire_events(machine, 1, &events);
             self.perform_listener_actions(machine, 1, &actions);
         }
-        if self.state_from != 0 && self.state_from != self.any_state_instance {
-            machine.remove_state_keyframe_binds(self.state_from);
-            let old = self.state_from;
-            self.runtime().delete_state_instance(old);
+        if let Some(state_from) = self.state_from.as_ref()
+            && self
+                .any_state_instance
+                .as_ref()
+                .is_none_or(|any| !state_from.ptr_eq(any))
+        {
+            machine.remove_state_keyframe_binds(state_from);
         }
         self.state_from = out_state;
         if !self.transition_completed {
             self.animation_reset = self.runtime().make_animation_reset(
-                self.state_from,
-                self.current_state,
+                self.state_from.as_ref(),
+                self.current_state.as_ref(),
                 &self.artboard_instance,
             );
         }
-        if out_state != 0
+        if let Some(out_state) = self.state_from.clone()
             && self
                 .runtime()
-                .transition_apply_exit_condition(&transition, out_state)
+                .transition_apply_exit_condition(&transition, &out_state)
         {
-            let instance = self.runtime().state_animation_instance(self.state_from);
-            self.hold_animation = self.runtime().state_animation(self.state_from);
-            self.hold_time = self.runtime().animation_instance_time(instance);
+            self.hold_animation = self.runtime().state_animation(&out_state);
+            self.hold_time = self.runtime().state_animation_instance_time(&out_state);
         }
         self.mix_from = self.mix;
         if self.mix != 0.0 {
             self.hold_animation_from = self.runtime().transition_pause_on_exit(&transition);
         }
-        if self.current_state != 0 {
-            let advance_time = if self.state_from == 0 {
-                0.0
-            } else {
-                self.runtime().state_spilled_time(self.state_from)
-            };
+        if let Some(current) = self.current_state.clone() {
+            let advance_time = self
+                .state_from
+                .as_ref()
+                .map(|from| self.runtime().state_spilled_time(from))
+                .unwrap_or(0.0);
             self.runtime()
-                .state_advance(self.current_state, advance_time, machine);
+                .state_advance(&current, advance_time, machine);
         }
         self.mix = 0.0;
         self.update_mix(machine, 0.0);
@@ -1223,7 +1253,7 @@ impl StateMachineLayerInstance {
             .transition
             .clone()
             .and_then(|transition| self.runtime().transition_interpolator(&transition));
-        if self.state_from != 0 && self.mix < 1.0 {
+        if let Some(state_from) = self.state_from.clone().filter(|_| self.mix < 1.0) {
             let mix = interpolator
                 .as_ref()
                 .map(|interpolator| {
@@ -1232,9 +1262,9 @@ impl StateMachineLayerInstance {
                 })
                 .unwrap_or(self.mix_from);
             self.runtime()
-                .state_apply(self.state_from, &self.artboard_instance, mix);
+                .state_apply(&state_from, &self.artboard_instance, mix);
         }
-        if self.current_state != 0 {
+        if let Some(current_state) = self.current_state.clone() {
             let mix = interpolator
                 .as_ref()
                 .map(|interpolator| {
@@ -1243,44 +1273,19 @@ impl StateMachineLayerInstance {
                 })
                 .unwrap_or(self.mix);
             self.runtime()
-                .state_apply(self.current_state, &self.artboard_instance, mix);
+                .state_apply(&current_state, &self.artboard_instance, mix);
         }
     }
 
     fn current_state(&mut self) -> Option<CoreHandle> {
-        if self.current_state == 0 {
-            None
-        } else {
-            Some(self.runtime().state_definition(self.current_state))
-        }
+        let current = self.current_state.clone()?;
+        Some(self.runtime().state_definition(&current))
     }
 
-    fn current_animation(&mut self) -> Object {
-        if self.current_state == 0 {
-            0
-        } else {
-            self.runtime().state_animation_instance(self.current_state)
-        }
-    }
-}
-
-impl Drop for StateMachineLayerInstance {
-    fn drop(&mut self) {
-        if self.runtime_services.is_none() {
-            return;
-        }
-        let any = self.any_state_instance;
-        let current = self.current_state;
-        let from = self.state_from;
-        if any != 0 {
-            self.runtime().delete_state_instance(any);
-        }
-        if current != 0 {
-            self.runtime().delete_state_instance(current);
-        }
-        if from != 0 {
-            self.runtime().delete_state_instance(from);
-        }
+    fn current_animation(&mut self) -> Option<RuntimeStateInstanceHandle> {
+        self.current_state
+            .clone()
+            .filter(|current| self.runtime().state_animation(current).is_some())
     }
 }
 
@@ -2076,7 +2081,7 @@ pub struct StateMachineInstance {
     bindable_data_binds_to_target: HashMap<CoreHandle, CoreHandle>,
     bindable_data_binds_to_source: HashMap<CoreHandle, CoreHandle>,
     transition_property_instances: HashMap<CoreHandle, HashMap<u32, CoreHandle>>,
-    state_keyframe_data_binds: HashMap<Object, Vec<CoreHandle>>,
+    state_keyframe_data_binds: HashMap<RuntimeStateInstanceHandle, Vec<CoreHandle>>,
     draw_order_change_counter: u8,
     focus_manager: Object,
     external_focus_manager: Object,
@@ -3543,19 +3548,22 @@ impl StateMachineInstance {
     pub fn current_animation_count(&mut self) -> usize {
         self.layers
             .iter()
-            .filter(|layer| layer.with_layer_mut(StateMachineLayerInstance::current_animation) != 0)
+            .filter(|layer| {
+                layer
+                    .with_layer_mut(StateMachineLayerInstance::current_animation)
+                    .is_some()
+            })
             .count()
     }
 
-    pub fn current_animation_by_index(&mut self, index: usize) -> Object {
+    pub fn current_animation_by_index(
+        &mut self,
+        index: usize,
+    ) -> Option<RuntimeStateInstanceHandle> {
         self.layers
             .iter()
-            .filter_map(|layer| {
-                let animation = layer.with_layer_mut(StateMachineLayerInstance::current_animation);
-                (animation != 0).then_some(animation)
-            })
+            .filter_map(|layer| layer.with_layer_mut(StateMachineLayerInstance::current_animation))
             .nth(index)
-            .unwrap_or(0)
     }
 
     pub fn state_changed_count(&self) -> usize {
@@ -3565,7 +3573,7 @@ impl StateMachineInstance {
             .count()
     }
 
-    pub fn state_changed_by_index(&mut self, index: usize) -> Object {
+    pub fn state_changed_by_index(&mut self, index: usize) -> Option<CoreHandle> {
         let mut count = 0;
         for layer in &self.layers {
             if layer.with_layer(|layer| layer.state_machine_changed_on_advance) {
@@ -3575,7 +3583,7 @@ impl StateMachineInstance {
                 count += 1;
             }
         }
-        0
+        None
     }
 
     pub fn enable_pointer_events(&mut self, pointer_id: i32) {
@@ -4016,8 +4024,8 @@ impl StateMachineInstance {
         }
     }
 
-    pub fn build_state_keyframe_binds(&mut self, state_instance: Object) {
-        if state_instance == 0 || self.artboard_instance.upgrade().is_none() {
+    pub fn build_state_keyframe_binds(&mut self, state_instance: &RuntimeStateInstanceHandle) {
+        if self.artboard_instance.upgrade().is_none() {
             return;
         }
         let mut first_bind_by_target = HashMap::new();
@@ -4067,7 +4075,7 @@ impl StateMachineInstance {
                     machine.data_binds.push(clone.clone());
                     machine
                         .state_keyframe_data_binds
-                        .entry(state_instance)
+                        .entry(state_instance.clone())
                         .or_default()
                         .push(clone);
                 }
@@ -4075,8 +4083,8 @@ impl StateMachineInstance {
         );
     }
 
-    pub fn remove_state_keyframe_binds(&mut self, state_instance: Object) {
-        let Some(data_binds) = self.state_keyframe_data_binds.remove(&state_instance) else {
+    pub fn remove_state_keyframe_binds(&mut self, state_instance: &RuntimeStateInstanceHandle) {
+        let Some(data_binds) = self.state_keyframe_data_binds.remove(state_instance) else {
             return;
         };
         for data_bind in data_binds {
@@ -4097,7 +4105,7 @@ impl StateMachineInstance {
 
     fn find_random_transition(
         &mut self,
-        state_from: Object,
+        state_from: RuntimeStateInstanceHandle,
         layer_index: usize,
     ) -> Option<CoreHandle> {
         if layer_index >= self.layers.len() {
@@ -4109,7 +4117,7 @@ impl StateMachineInstance {
 
     fn find_allowed_transition(
         &mut self,
-        state_from: Object,
+        state_from: RuntimeStateInstanceHandle,
         layer_index: usize,
     ) -> Option<CoreHandle> {
         if layer_index >= self.layers.len() {
@@ -4130,11 +4138,11 @@ impl StateMachineInstance {
     }
 
     #[cfg(test)]
-    pub fn layer_state(&mut self, index: usize) -> Object {
+    pub fn layer_state(&mut self, index: usize) -> Option<CoreHandle> {
         self.layers
             .get(index)
             .map(|layer| layer.with_layer_mut(StateMachineLayerInstance::current_state))
-            .unwrap_or(0)
+            .flatten()
     }
 
     fn remove_event_listeners(&mut self) {

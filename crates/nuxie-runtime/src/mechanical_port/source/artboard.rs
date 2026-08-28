@@ -1222,10 +1222,14 @@ impl Artboard {
     }
 
     pub fn on_component_dirty(&mut self, component: &Component) {
+        self.on_component_dirty_at(component.graph_order());
+    }
+
+    pub fn on_component_dirty_at(&mut self, graph_order: u32) {
         self.did_change = true;
         self.dirt |= ComponentDirt::COMPONENTS;
-        if component.graph_order() < self.dirt_depth {
-            self.dirt_depth = component.graph_order();
+        if graph_order < self.dirt_depth {
+            self.dirt_depth = graph_order;
         }
     }
 

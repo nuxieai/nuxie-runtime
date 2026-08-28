@@ -74,7 +74,10 @@ use nuxie_runtime::{
     ScriptingVm as RuntimeScriptingVm,
 };
 pub(crate) use renderer::RendererBindings;
-use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
+use view_model::{
+    ScriptViewModelFrameContext, ScriptedContext, ScriptedPropertyListenerOwner,
+    create_scripted_view_model,
+};
 
 use crate::envelope::SignedContent;
 use crate::gpu_canvas::{
@@ -698,6 +701,7 @@ pub struct LuaScriptInstance {
     gpu_canvas: Option<ImportedGpuCanvasInstance>,
     gpu_canvas_context: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     logging: LoggingScriptingContext,
+    property_listener_owner: ScriptedPropertyListenerOwner,
 }
 
 impl LuaScriptInstance {
@@ -724,6 +728,7 @@ impl LuaScriptInstance {
             gpu_canvas: None,
             gpu_canvas_context: None,
             logging: LoggingScriptingContext::default(),
+            property_listener_owner: ScriptedPropertyListenerOwner::default(),
         }
     }
 
@@ -750,6 +755,11 @@ impl LuaScriptInstance {
             .and_then(|context| context.borrow::<ScriptedContext>().ok())
             .map(|context| context.mark_needs_update_requested())
             .unwrap_or_else(|| Rc::new(Cell::new(false)));
+        let property_listener_owner = context
+            .as_ref()
+            .and_then(|context| context.borrow::<ScriptedContext>().ok())
+            .map(|context| context.listener_owner())
+            .unwrap_or_default();
         Self {
             table: Some(table),
             execution_budget,
@@ -771,6 +781,7 @@ impl LuaScriptInstance {
             gpu_canvas,
             gpu_canvas_context,
             logging,
+            property_listener_owner,
         }
     }
 
@@ -882,6 +893,9 @@ impl LuaScriptInstance {
     }
 
     fn dispose_script_lifetime(&mut self) {
+        // Pinned `ScriptedObject::scriptDispose` disposes tracked properties
+        // in their registration order before releasing `m_self` and Context.
+        self.property_listener_owner.dispose();
         // Pinned `tryLuaUserInit` drops `m_self` before disposing the Context
         // (`scripted_object.cpp:277-303`). Taking the registry-backed Table
         // here immediately releases the failed occurrence and its captures.
@@ -1008,6 +1022,12 @@ impl LuaScriptInstance {
             .and_then(|context| context.borrow::<ScriptedContext>().ok())
             .map(|context| context.mark_needs_update_requested())
             .unwrap_or_else(|| Rc::new(Cell::new(false)));
+        self.property_listener_owner = self
+            .context
+            .as_ref()
+            .and_then(|context| context.borrow::<ScriptedContext>().ok())
+            .map(|context| context.listener_owner())
+            .unwrap_or_default();
         self.context_alive = Some(context_alive);
         self.context_missing_requested_data = missing_requested_data;
         self.user_init_done = false;

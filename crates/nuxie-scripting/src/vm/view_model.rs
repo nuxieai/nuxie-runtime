@@ -38,6 +38,76 @@ const LIST_MUTATING_METHODS: &[&str] = &[
     "removeAllOf",
 ];
 
+enum TrackedScriptedPropertyWatch {
+    Property(Weak<ScriptedPropertyWatch>),
+    Blob(Weak<ScriptedBlobWatch>),
+    Trigger(Weak<ScriptedTriggerWatch>),
+}
+
+/// Owns the listener-registration lifetime for one scripted-object occurrence.
+///
+/// Pinned `ScriptedObject::scriptDispose` visits tracked properties in their
+/// registration order and immediately releases every listener registry pair.
+/// Keeping weak watch references here avoids extending the property userdata
+/// lifetime while still allowing the owning script instance to perform that
+/// ordered teardown before dropping its Lua table.
+#[derive(Clone, Default)]
+pub(super) struct ScriptedPropertyListenerOwner {
+    watches: Rc<RefCell<Vec<TrackedScriptedPropertyWatch>>>,
+}
+
+impl ScriptedPropertyListenerOwner {
+    fn track_property(&self, watch: &Rc<ScriptedPropertyWatch>) {
+        self.watches
+            .borrow_mut()
+            .push(TrackedScriptedPropertyWatch::Property(Rc::downgrade(watch)));
+    }
+
+    fn track_blob(&self, watch: &Rc<ScriptedBlobWatch>) {
+        self.watches
+            .borrow_mut()
+            .push(TrackedScriptedPropertyWatch::Blob(Rc::downgrade(watch)));
+    }
+
+    fn track_trigger(&self, watch: &Rc<ScriptedTriggerWatch>) {
+        self.watches
+            .borrow_mut()
+            .push(TrackedScriptedPropertyWatch::Trigger(Rc::downgrade(watch)));
+    }
+
+    pub(super) fn dispose(&self) {
+        let watches = std::mem::take(&mut *self.watches.borrow_mut());
+        for watch in watches {
+            match watch {
+                TrackedScriptedPropertyWatch::Property(watch) => {
+                    if let Some(watch) = watch.upgrade() {
+                        for listener in watch.listeners.borrow_mut().drain(..) {
+                            drop(listener);
+                        }
+                        watch._change_registration.borrow_mut().take();
+                    }
+                }
+                TrackedScriptedPropertyWatch::Blob(watch) => {
+                    if let Some(watch) = watch.upgrade() {
+                        for listener in watch.listeners.borrow_mut().drain(..) {
+                            drop(listener);
+                        }
+                        watch._change_registration.borrow_mut().take();
+                    }
+                }
+                TrackedScriptedPropertyWatch::Trigger(watch) => {
+                    if let Some(watch) = watch.upgrade() {
+                        for listener in watch.listeners.borrow_mut().drain(..) {
+                            drop(listener);
+                        }
+                        watch._change_registration.borrow_mut().take();
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn instance_key(instance: &ViewModelInstance) -> ViewModelInstanceKey {
     Rc::as_ptr(instance) as usize
 }
@@ -296,13 +366,21 @@ pub(super) fn create_scripted_view_model(
     lua: &Lua,
     model: ScriptViewModel,
 ) -> luaur_rt::Result<Table> {
+    create_scripted_view_model_with_listener_owner(lua, model, None)
+}
+
+fn create_scripted_view_model_with_listener_owner(
+    lua: &Lua,
+    model: ScriptViewModel,
+    listener_owner: Option<ScriptedPropertyListenerOwner>,
+) -> luaur_rt::Result<Table> {
     if lua
         .named_registry_value::<Function>(PROPERTY_METATABLE_PATCHER)
         .is_err()
     {
         install_property_binding_support(lua)?;
     }
-    create_scripted_view_model_retained(lua, model)
+    create_scripted_view_model_retained(lua, model, listener_owner)
 }
 
 pub(super) fn install_property_binding_support(lua: &Lua) -> luaur_rt::Result<()> {
@@ -399,6 +477,7 @@ fn create_property_userdata<T: UserData + 'static>(
 fn create_scripted_view_model_retained(
     lua: &Lua,
     model: ScriptViewModel,
+    listener_owner: Option<ScriptedPropertyListenerOwner>,
 ) -> luaur_rt::Result<Table> {
     let frame_context = ScriptViewModelFrameContext::for_lua(lua);
     let registration = frame_context.register(&model);
@@ -521,33 +600,40 @@ fn create_scripted_view_model_retained(
             }
         })?,
     )?;
-    let instance_method = |model: ScriptViewModel| {
-        lua.create_function(move |lua, args: MultiValue| {
-            let args = args.into_vec();
-            let name = if args.len() == 2 {
-                match &args[1] {
-                    Value::String(_) | Value::Integer(_) | Value::Number(_) => {
-                        let value: luaur_rt::LuaString = lua.unpack(args[1].clone())?;
-                        Some(value.to_string_lossy())
+    let instance_method =
+        |model: ScriptViewModel, listener_owner: Option<ScriptedPropertyListenerOwner>| {
+            lua.create_function(move |lua, args: MultiValue| {
+                let args = args.into_vec();
+                let name = if args.len() == 2 {
+                    match &args[1] {
+                        Value::String(_) | Value::Integer(_) | Value::Number(_) => {
+                            let value: luaur_rt::LuaString = lua.unpack(args[1].clone())?;
+                            Some(value.to_string_lossy())
+                        }
+                        _ => None,
                     }
-                    _ => None,
-                }
-            } else {
-                None
-            };
-            let model = model
-                .named_instance(name.as_deref())
-                .or_else(|| model.named_instance(None))
-                .ok_or_else(|| luaur_rt::Error::runtime("view-model instance not found"))?;
-            create_scripted_view_model(lua, model)
-        })
-    };
+                } else {
+                    None
+                };
+                let model = model
+                    .named_instance(name.as_deref())
+                    .or_else(|| model.named_instance(None))
+                    .ok_or_else(|| luaur_rt::Error::runtime("view-model instance not found"))?;
+                create_scripted_view_model_with_listener_owner(lua, model, listener_owner.clone())
+            })
+        };
     // Pinned `ScriptedViewModel` dispatches both `instance` and the `new`
     // atom to the same `ScriptedViewModel::instance` owner. The latter is what
     // authored scripts use when minting list items from a hydrated ViewModel
     // input (`lua_properties.cpp:940-955`).
-    table.set("instance", instance_method(model.clone())?)?;
-    table.set("new", instance_method(model.clone())?)?;
+    table.set(
+        "instance",
+        instance_method(model.clone(), listener_owner.clone())?,
+    )?;
+    table.set(
+        "new",
+        instance_method(model.clone(), listener_owner.clone())?,
+    )?;
     let get_view_model = model.clone();
     table.set(
         "getViewModel",
@@ -573,69 +659,74 @@ fn create_scripted_view_model_retained(
         if *kind == ScriptViewModelProperty::List {
             table.set(
                 name.as_str(),
-                create_scripted_property_list(lua, model.clone(), name.clone())?,
+                create_scripted_property_list(
+                    lua,
+                    model.clone(),
+                    name.clone(),
+                    listener_owner.clone(),
+                )?,
             )?;
             continue;
         }
         let property = match kind {
             ScriptViewModelProperty::Number => create_property_userdata(
                 lua,
-                ScriptedPropertyNumber::new(model.clone(), name.clone()),
+                ScriptedPropertyNumber::new(model.clone(), name.clone(), listener_owner.as_ref()),
                 true,
                 &[],
             )?,
             ScriptViewModelProperty::Color => create_property_userdata(
                 lua,
-                ScriptedPropertyColor::new(model.clone(), name.clone()),
+                ScriptedPropertyColor::new(model.clone(), name.clone(), listener_owner.as_ref()),
                 true,
                 &[],
             )?,
             ScriptViewModelProperty::String => create_property_userdata(
                 lua,
-                ScriptedPropertyString::new(model.clone(), name.clone()),
+                ScriptedPropertyString::new(model.clone(), name.clone(), listener_owner.as_ref()),
                 true,
                 &[],
             )?,
             ScriptViewModelProperty::Boolean => create_property_userdata(
                 lua,
-                ScriptedPropertyBoolean::new(model.clone(), name.clone()),
+                ScriptedPropertyBoolean::new(model.clone(), name.clone(), listener_owner.as_ref()),
                 true,
                 &[],
             )?,
             ScriptViewModelProperty::Enum => create_property_userdata(
                 lua,
-                ScriptedPropertyEnum::new(model.clone(), name.clone()),
+                ScriptedPropertyEnum::new(model.clone(), name.clone(), listener_owner.as_ref()),
                 true,
                 &[],
             )?,
             ScriptViewModelProperty::Trigger => create_property_userdata(
                 lua,
-                ScriptedPropertyTrigger::new(model.clone(), name.clone()),
+                ScriptedPropertyTrigger::new(model.clone(), name.clone(), listener_owner.as_ref()),
                 false,
                 TRIGGER_MUTATING_METHODS,
             )?,
             ScriptViewModelProperty::Image => create_property_userdata(
                 lua,
-                ScriptedPropertyImage::new(model.clone(), name.clone()),
+                ScriptedPropertyImage::new(model.clone(), name.clone(), listener_owner.as_ref()),
                 true,
                 &[],
             )?,
             ScriptViewModelProperty::Blob => create_property_userdata(
                 lua,
-                ScriptedPropertyBlob::new(model.clone(), name.clone()),
+                ScriptedPropertyBlob::new(model.clone(), name.clone(), listener_owner.as_ref()),
                 true,
                 &[],
             )?,
             ScriptViewModelProperty::Font => create_property_userdata(
                 lua,
-                ScriptedPropertyFont::new(model.clone(), name.clone()),
+                ScriptedPropertyFont::new(model.clone(), name.clone(), listener_owner.as_ref()),
                 true,
                 &[],
             )?,
             ScriptViewModelProperty::List => unreachable!("lists are installed before wrapping"),
             ScriptViewModelProperty::ViewModel => create_property_userdata(
                 lua,
-                ScriptedPropertyViewModel::new(model.clone(), name.clone()),
+                ScriptedPropertyViewModel::new(model.clone(), name.clone(), listener_owner.clone()),
                 true,
                 &[],
             )?,
@@ -681,7 +772,11 @@ struct ScriptedPropertyWatch {
     _change_registration: RefCell<Option<ScriptViewModelChangeRegistration>>,
 }
 
-fn property_watch(model: &ScriptViewModel, name: &str) -> Rc<ScriptedPropertyWatch> {
+fn property_watch(
+    model: &ScriptViewModel,
+    name: &str,
+    listener_owner: Option<&ScriptedPropertyListenerOwner>,
+) -> Rc<ScriptedPropertyWatch> {
     let listeners = Rc::new(RefCell::new(Vec::new()));
     let weak_listeners = Rc::downgrade(&listeners);
     let sink = model
@@ -710,6 +805,9 @@ fn property_watch(model: &ScriptViewModel, name: &str) -> Rc<ScriptedPropertyWat
         }),
     );
     *watch._change_registration.borrow_mut() = registration;
+    if let Some(listener_owner) = listener_owner {
+        listener_owner.track_property(&watch);
+    }
     watch
 }
 
@@ -775,12 +873,17 @@ struct ScriptedPropertyViewModel {
     name: String,
     watch: Rc<ScriptedPropertyWatch>,
     cached_value: Rc<RefCell<Option<Table>>>,
+    listener_owner: Option<ScriptedPropertyListenerOwner>,
     _change_sink: RuntimeCellDirtSink,
 }
 
 impl ScriptedPropertyViewModel {
-    fn new(parent: ScriptViewModel, name: String) -> Self {
-        let watch = property_watch(&parent, &name);
+    fn new(
+        parent: ScriptViewModel,
+        name: String,
+        listener_owner: Option<ScriptedPropertyListenerOwner>,
+    ) -> Self {
+        let watch = property_watch(&parent, &name, listener_owner.as_ref());
         let cached_value = Rc::new(RefCell::new(None));
         let weak_cached_value = Rc::downgrade(&cached_value);
         let change_sink = parent
@@ -795,6 +898,7 @@ impl ScriptedPropertyViewModel {
             name,
             watch,
             cached_value,
+            listener_owner,
             _change_sink: change_sink,
         }
     }
@@ -809,7 +913,11 @@ impl UserData for ScriptedPropertyViewModel {
             let Some(model) = this.parent.active_view_model(&this.name) else {
                 return Ok(Value::Nil);
             };
-            let value = create_scripted_view_model(lua, model)?;
+            let value = create_scripted_view_model_with_listener_owner(
+                lua,
+                model,
+                this.listener_owner.clone(),
+            )?;
             *this.cached_value.borrow_mut() = Some(value.clone());
             Ok(Value::Table(value))
         });
@@ -844,8 +952,12 @@ struct ScriptedPropertyColor {
 }
 
 impl ScriptedPropertyColor {
-    fn new(model: ScriptViewModel, name: String) -> Self {
-        let watch = property_watch(&model, &name);
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
+        let watch = property_watch(&model, &name, listener_owner);
         Self { model, name, watch }
     }
 }
@@ -874,8 +986,12 @@ impl UserData for ScriptedPropertyColor {
 }
 
 impl ScriptedPropertyNumber {
-    fn new(model: ScriptViewModel, name: String) -> Self {
-        let watch = property_watch(&model, &name);
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
+        let watch = property_watch(&model, &name, listener_owner);
         Self { model, name, watch }
     }
 }
@@ -916,8 +1032,12 @@ struct ScriptedPropertyBoolean {
 }
 
 impl ScriptedPropertyBoolean {
-    fn new(model: ScriptViewModel, name: String) -> Self {
-        let watch = property_watch(&model, &name);
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
+        let watch = property_watch(&model, &name, listener_owner);
         Self { model, name, watch }
     }
 }
@@ -945,8 +1065,12 @@ impl UserData for ScriptedPropertyBoolean {
 }
 
 impl ScriptedPropertyString {
-    fn new(model: ScriptViewModel, name: String) -> Self {
-        let watch = property_watch(&model, &name);
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
+        let watch = property_watch(&model, &name, listener_owner);
         Self { model, name, watch }
     }
 }
@@ -983,8 +1107,12 @@ struct ScriptedPropertyEnum {
 }
 
 impl ScriptedPropertyEnum {
-    fn new(model: ScriptViewModel, name: String) -> Self {
-        let watch = property_watch(&model, &name);
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
+        let watch = property_watch(&model, &name, listener_owner);
         Self { model, name, watch }
     }
 }
@@ -1099,7 +1227,11 @@ struct ScriptedPropertyBlob {
 }
 
 impl ScriptedPropertyBlob {
-    fn new(model: ScriptViewModel, name: String) -> Self {
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
         let listeners = Rc::new(RefCell::new(Vec::new()));
         let weak_listeners = Rc::downgrade(&listeners);
         let sink = model
@@ -1137,6 +1269,9 @@ impl ScriptedPropertyBlob {
             }),
         );
         *watch._change_registration.borrow_mut() = registration;
+        if let Some(listener_owner) = listener_owner {
+            listener_owner.track_blob(&watch);
+        }
         Self {
             model,
             name,
@@ -1227,7 +1362,11 @@ impl UserData for ScriptedPropertyBlob {
 }
 
 impl ScriptedPropertyImage {
-    fn new(model: ScriptViewModel, name: String) -> Self {
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
         let cached_value = Rc::new(RefCell::new(None));
         let weak_cached_value = Rc::downgrade(&cached_value);
         let change_sink = model
@@ -1237,7 +1376,7 @@ impl ScriptedPropertyImage {
                 }
             })
             .unwrap_or_default();
-        let watch = property_watch(&model, &name);
+        let watch = property_watch(&model, &name, listener_owner);
         Self {
             model,
             name,
@@ -1308,7 +1447,11 @@ struct ScriptedPropertyFont {
 }
 
 impl ScriptedPropertyFont {
-    fn new(model: ScriptViewModel, name: String) -> Self {
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
         let cached_value = Rc::new(RefCell::new(None));
         let weak_cached_value = Rc::downgrade(&cached_value);
         let change_sink = model
@@ -1318,7 +1461,7 @@ impl ScriptedPropertyFont {
                 }
             })
             .unwrap_or_default();
-        let watch = property_watch(&model, &name);
+        let watch = property_watch(&model, &name, listener_owner);
         Self {
             model,
             name,
@@ -1375,16 +1518,22 @@ struct ScriptedPropertyList {
     name: String,
     item_refs: BTreeMap<ViewModelInstanceKey, Table>,
     watch: Rc<ScriptedPropertyWatch>,
+    listener_owner: Option<ScriptedPropertyListenerOwner>,
 }
 
 impl ScriptedPropertyList {
-    fn new(model: ScriptViewModel, name: String) -> Self {
-        let watch = property_watch(&model, &name);
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<ScriptedPropertyListenerOwner>,
+    ) -> Self {
+        let watch = property_watch(&model, &name, listener_owner.as_ref());
         Self {
             model,
             name,
             item_refs: BTreeMap::new(),
             watch,
+            listener_owner,
         }
     }
 
@@ -1408,7 +1557,11 @@ impl ScriptedPropertyList {
                 if let Some(table) = self.item_refs.get(&key) {
                     return Ok(Value::Table(table.clone()));
                 }
-                let table = create_scripted_view_model(lua, item)?;
+                let table = create_scripted_view_model_with_listener_owner(
+                    lua,
+                    item,
+                    self.listener_owner.clone(),
+                )?;
                 self.item_refs.insert(key, table.clone());
                 Ok(Value::Table(table))
             }
@@ -1421,8 +1574,9 @@ fn create_scripted_property_list(
     lua: &Lua,
     model: ScriptViewModel,
     name: String,
+    listener_owner: Option<ScriptedPropertyListenerOwner>,
 ) -> luaur_rt::Result<AnyUserData> {
-    let property = lua.create_userdata(ScriptedPropertyList::new(model, name))?;
+    let property = lua.create_userdata(ScriptedPropertyList::new(model, name, listener_owner))?;
 
     // luaur-rt synthesizes an `__index` dispatcher for registered fields and
     // methods, overwriting a UserData-provided `__index` metamethod. Preserve
@@ -1494,8 +1648,12 @@ impl UserData for ScriptedPropertyList {
                 .model
                 .defer_property_change_callbacks(|| this.model.pop_list_item(&this.name));
             match item {
-                Some(item) => create_scripted_view_model(lua, item)
-                    .map(|item| MultiValue::from_vec(vec![Value::Table(item)])),
+                Some(item) => create_scripted_view_model_with_listener_owner(
+                    lua,
+                    item,
+                    this.listener_owner.clone(),
+                )
+                .map(|item| MultiValue::from_vec(vec![Value::Table(item)])),
                 // Pinned `property_namecall_atom` returns zero Lua values when
                 // `ViewModelInstanceList::pop()` has no item. Returning one
                 // explicit nil changes `select("#", ...)` and table packing.
@@ -1507,8 +1665,12 @@ impl UserData for ScriptedPropertyList {
                 .model
                 .defer_property_change_callbacks(|| this.model.shift_list_item(&this.name));
             match item {
-                Some(item) => create_scripted_view_model(lua, item)
-                    .map(|item| MultiValue::from_vec(vec![Value::Table(item)])),
+                Some(item) => create_scripted_view_model_with_listener_owner(
+                    lua,
+                    item,
+                    this.listener_owner.clone(),
+                )
+                .map(|item| MultiValue::from_vec(vec![Value::Table(item)])),
                 // Same zero-result contract as the pinned empty `shift` path.
                 None => Ok(MultiValue::new()),
             }
@@ -1580,6 +1742,7 @@ pub(super) struct ScriptedContext {
     gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     alive: Rc<Cell<bool>>,
     mark_needs_update_requested: Rc<Cell<bool>>,
+    listener_owner: ScriptedPropertyListenerOwner,
 }
 
 impl ScriptedContext {
@@ -1616,7 +1779,12 @@ impl ScriptedContext {
             gpu_canvas,
             alive,
             mark_needs_update_requested: Rc::new(Cell::new(false)),
+            listener_owner: ScriptedPropertyListenerOwner::default(),
         }
+    }
+
+    pub(super) fn listener_owner(&self) -> ScriptedPropertyListenerOwner {
+        self.listener_owner.clone()
     }
 
     pub(super) fn mark_needs_update_requested(&self) -> Rc<Cell<bool>> {
@@ -1643,7 +1811,11 @@ impl UserData for ScriptedContext {
         methods.add_method("viewModel", |lua, this, ()| {
             this.require_live("viewModel")?;
             Ok(match this.model.borrow().clone() {
-                Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
+                Some(model) => Value::Table(create_scripted_view_model_with_listener_owner(
+                    lua,
+                    model,
+                    Some(this.listener_owner.clone()),
+                )?),
                 None => {
                     this.missing_requested_data.set(true);
                     Value::Nil
@@ -1658,7 +1830,11 @@ impl UserData for ScriptedContext {
                 .cloned()
                 .unwrap_or_else(|| this.model.borrow().clone());
             Ok(match root {
-                Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
+                Some(model) => Value::Table(create_scripted_view_model_with_listener_owner(
+                    lua,
+                    model,
+                    Some(this.listener_owner.clone()),
+                )?),
                 None => {
                     this.missing_requested_data.set(true);
                     Value::Nil
@@ -1674,6 +1850,7 @@ impl UserData for ScriptedContext {
             lua.create_userdata(ScriptedDataContext {
                 model: this.model.borrow().clone(),
                 parents: this.parents.clone(),
+                listener_owner: Some(this.listener_owner.clone()),
             })
             .map(Value::UserData)
         });
@@ -1795,12 +1972,18 @@ impl UserData for ScriptedContext {
 struct ScriptedDataContext {
     model: Option<ScriptViewModel>,
     parents: Vec<Option<ScriptViewModel>>,
+    listener_owner: Option<ScriptedPropertyListenerOwner>,
 }
 
 impl UserData for ScriptedDataContext {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("viewModel", |lua, this, ()| match this.model.clone() {
-            Some(model) => create_scripted_view_model(lua, model).map(Value::Table),
+            Some(model) => create_scripted_view_model_with_listener_owner(
+                lua,
+                model,
+                this.listener_owner.clone(),
+            )
+            .map(Value::Table),
             None => Ok(Value::Nil),
         });
         methods.add_method("parent", |lua, this, ()| {
@@ -1810,6 +1993,7 @@ impl UserData for ScriptedDataContext {
             lua.create_userdata(ScriptedDataContext {
                 model: parent.clone(),
                 parents: remaining.to_vec(),
+                listener_owner: this.listener_owner.clone(),
             })
             .map(Value::UserData)
         });
@@ -1865,7 +2049,11 @@ struct ScriptedPropertyTrigger {
 }
 
 impl ScriptedPropertyTrigger {
-    fn new(model: ScriptViewModel, name: String) -> Self {
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
         let listeners = Rc::new(RefCell::new(Vec::new()));
         let weak_listeners = Rc::downgrade(&listeners);
         let sink = model
@@ -1894,6 +2082,9 @@ impl ScriptedPropertyTrigger {
             }),
         );
         *watch._change_registration.borrow_mut() = registration;
+        if let Some(listener_owner) = listener_owner {
+            listener_owner.track_trigger(&watch);
+        }
         Self { model, name, watch }
     }
 }

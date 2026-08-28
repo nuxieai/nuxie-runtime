@@ -100,9 +100,13 @@ impl Shape {
         if !self.base.collapse(value) {
             return false;
         }
+        self.collapse_after_super(value);
+        true
+    }
+
+    pub(crate) fn collapse_after_super(&mut self, value: bool) {
         self.path_composer.component.collapse(value);
         self.invalidate_intrinsic_bounds();
-        true
     }
 
     pub fn length(&mut self) -> f32 {
@@ -265,14 +269,20 @@ impl Shape {
         primary: bool,
     ) -> bool {
         if !primary {
-            return self
-                .base
-                .hit_test_point(position, skip_on_unclipped, primary);
+            return crate::mechanical_port::source::component::Component::hit_test_point(
+                &self.base.base.base.base.base.base,
+                &position,
+                skip_on_unclipped,
+                primary,
+            );
         }
         self.hit_test_aabb(position)
-            && self
-                .base
-                .hit_test_point(position, skip_on_unclipped, primary)
+            && crate::mechanical_port::source::component::Component::hit_test_point(
+                &self.base.base.base.base.base.base,
+                &position,
+                skip_on_unclipped,
+                primary,
+            )
             && self.hit_test_hi_fi(position, 2.0)
     }
 

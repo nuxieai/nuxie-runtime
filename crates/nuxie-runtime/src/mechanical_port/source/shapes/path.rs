@@ -491,15 +491,19 @@ impl Path {
     pub fn collapse(&mut self, value: bool) -> bool {
         let changed = self.base.collapse(value);
         if changed {
-            if let Some(shape) = self.shape.as_ref() {
-                shape.with_mut(|shape| {
-                    if let Some(shape) = shape.as_shape_mut() {
-                        shape.path_collapse_changed();
-                    }
-                });
-            }
+            self.collapse_after_super();
         }
         changed
+    }
+
+    pub(crate) fn collapse_after_super(&mut self) {
+        if let Some(shape) = self.shape.as_ref() {
+            shape.with_mut(|shape| {
+                if let Some(shape) = shape.as_shape_mut() {
+                    shape.path_collapse_changed();
+                }
+            });
+        }
     }
 }
 

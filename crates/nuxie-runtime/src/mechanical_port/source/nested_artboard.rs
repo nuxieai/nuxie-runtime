@@ -685,11 +685,15 @@ impl NestedArtboard {
         if !self.base.base.collapse(value) {
             return false;
         }
+        self.collapse_after_super(value);
+        true
+    }
+
+    pub(crate) fn collapse_after_super(&mut self, value: bool) {
         let Some(instance) = self.instance.as_ref() else {
-            return true;
+            return;
         };
         instance.with_artboard_mut(|instance| instance.collapse_semantic_boundary(value));
-        true
     }
 
     pub fn has_nested_state_machines(&self) -> bool {

@@ -99,9 +99,9 @@ impl Drawable {
         {
             return hittable
                 .with_mut(|hittable| {
-                    hittable.as_drawable_mut().is_some_and(|hittable| {
-                        hittable.hit_test_point(position, skip_on_unclipped, is_primary_hit)
-                    })
+                    hittable
+                        .component_hit_test_point(position, skip_on_unclipped, is_primary_hit)
+                        .unwrap_or(false)
                 })
                 .unwrap_or(false);
         }

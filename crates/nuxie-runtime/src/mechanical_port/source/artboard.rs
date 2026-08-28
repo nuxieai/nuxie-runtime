@@ -1237,6 +1237,10 @@ impl Artboard {
         self.dirt |= ComponentDirt::COMPONENTS;
     }
 
+    pub fn has_component_dirt(&self) -> bool {
+        self.dirt.contains(ComponentDirt::COMPONENTS)
+    }
+
     pub fn propagate_size(&mut self) {
         self.add_dirt(ComponentDirt::PATH, false);
         if self.shares_layout_with_host() {

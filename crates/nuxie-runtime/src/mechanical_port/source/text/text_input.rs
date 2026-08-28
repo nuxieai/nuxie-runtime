@@ -62,7 +62,12 @@ impl TextInput {
         if !self.local_bounds().contains(inverse_world * position) {
             return false;
         }
-        self.base.component_hit_test_point(position, skip, primary)
+        crate::mechanical_port::source::component::Component::hit_test_point(
+            &self.base.base.base.base.base.base,
+            &position,
+            skip,
+            primary,
+        )
     }
     pub fn raw_text_input(&mut self) -> &mut RawTextInput {
         &mut self.raw_text_input

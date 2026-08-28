@@ -278,7 +278,12 @@ impl TextValueRun {
     }
     pub fn hit_test_point(&self, position: Vec2D, skip: bool, primary: bool) -> bool {
         self.hit_test_aabb(position)
-            && self.base.component_hit_test_point(position, skip, primary)
+            && crate::mechanical_port::source::component::Component::hit_test_point(
+                &self.base.base,
+                &position,
+                skip,
+                primary,
+            )
             && self.hit_test_hi_fi(position, 2.0)
     }
 }

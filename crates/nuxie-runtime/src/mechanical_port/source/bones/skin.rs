@@ -274,7 +274,7 @@ impl Skin {
         }
     }
 
-    pub fn on_dirty(&mut self, _dirt: ComponentDirt, _context: &mut dyn CoreContext) {
+    pub fn on_dirty(&mut self, _dirt: ComponentDirt) {
         if let Some(skinnable) = self.skinnable.clone() {
             skinnable
                 .with_mut(|skinnable| {

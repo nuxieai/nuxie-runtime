@@ -228,13 +228,17 @@ impl ArtboardComponentList {
         if !self.transform_mut().collapse(value) {
             return false;
         }
+        self.collapse_after_super(value);
+        true
+    }
+
+    pub(crate) fn collapse_after_super(&mut self, value: bool) {
         for index in 0..self.artboard_count() {
             if let Some(nested_artboard) = self.artboard_instance(index as i32) {
                 nested_artboard
                     .with_artboard_mut(|artboard| artboard.collapse_semantic_boundary(value));
             }
         }
-        true
     }
 
     pub fn clear(&mut self) {

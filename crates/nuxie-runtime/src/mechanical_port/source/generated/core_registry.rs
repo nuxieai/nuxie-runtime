@@ -1362,6 +1362,190 @@ pub trait CoreCapabilities: Any {
         component.set_graph_order(value);
         true
     }
+    fn component_add_dirt(
+        &mut self,
+        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
+        recurse: bool,
+    ) -> bool {
+        let Some((dirt, self_handle, artboard, graph_order, dependents)) = (|| {
+            let component = self.as_component_mut()?;
+            let dirt = component.add_dirt_state(value)?;
+            Some((
+                dirt,
+                component.base.base.handle(),
+                component.artboard_handle(),
+                component.graph_order(),
+                component.dependents_snapshot(),
+            ))
+        })() else {
+            return false;
+        };
+
+        self.component_on_dirty(dirt);
+        if let Some(artboard) = artboard {
+            if self_handle.as_ref() == Some(&artboard) {
+                self.artboard_on_component_dirty_at(graph_order);
+            } else {
+                artboard.with_mut(|artboard| {
+                    artboard.artboard_on_component_dirty_at(graph_order);
+                });
+            }
+        }
+        if recurse {
+            for dependent in dependents {
+                dependent.with_mut(|dependent| {
+                    dependent.component_add_dirt(value, true);
+                });
+            }
+        }
+        true
+    }
+    fn component_collapse(&mut self, value: bool) -> bool {
+        let Some((dirt, self_handle, artboard, graph_order, collapsables)) = (|| {
+            let component = self.as_component_mut()?;
+            let dirt = component.collapse_state(value)?;
+            Some((
+                dirt,
+                component.base.base.handle(),
+                component.artboard_handle(),
+                component.graph_order(),
+                component.collapsables_snapshot(),
+            ))
+        })() else {
+            return false;
+        };
+
+        self.component_on_dirty(dirt);
+        if let Some(artboard) = artboard {
+            if self_handle.as_ref() == Some(&artboard) {
+                self.artboard_on_component_dirty_at(graph_order);
+            } else {
+                artboard.with_mut(|artboard| {
+                    artboard.artboard_on_component_dirty_at(graph_order);
+                });
+            }
+        }
+        for collapsable in collapsables {
+            collapsable.with_mut(|collapsable| {
+                if let Some(data_bind) = collapsable.as_data_bind_mut() {
+                    data_bind.collapse(value);
+                }
+            });
+        }
+        self.component_collapse_post(value);
+        true
+    }
+    fn component_collapse_post(&mut self, value: bool) -> bool {
+        if self.as_layout_component().is_some() {
+            self.component_container_collapse_post(value);
+            self.component_transform_collapse_post();
+            let layout = self
+                .as_layout_component_mut()
+                .expect("layout capability remained available");
+            layout.collapse_after_component(value);
+            return true;
+        }
+        self.component_container_collapse_post(value);
+        self.component_transform_collapse_post();
+        if let Some(shape) = self.as_shape_mut() {
+            shape.collapse_after_super(value);
+        }
+        if let Some(path) = self.as_path_mut() {
+            path.collapse_after_super();
+        }
+        true
+    }
+    fn component_container_collapse_post(&mut self, value: bool) -> bool {
+        let Some(container) = self.as_container_component_mut() else {
+            return false;
+        };
+        container.collapse_after_component(value);
+        true
+    }
+    fn component_transform_collapse_post(&mut self) -> bool {
+        let Some(transform) = self.as_transform_component_mut() else {
+            return false;
+        };
+        transform.collapse_after_super();
+        true
+    }
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        if let Some(layout) = self.as_layout_component_mut() {
+            layout.on_dirty(dirt);
+            return true;
+        }
+        if let Some(path) = self.as_path_mut() {
+            path.on_dirty(dirt);
+            return true;
+        }
+        if let Some(text) = self.as_text_mut() {
+            text.on_dirty(dirt);
+            return true;
+        }
+        if let Some(text_style) = self.as_text_style_mut() {
+            text_style.on_dirty(dirt);
+            return true;
+        }
+        self.as_component_mut().is_some()
+    }
+    fn component_hit_test_point(
+        &mut self,
+        position: &crate::mechanical_port::source::math::vec2d::Vec2D,
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> Option<bool> {
+        if let Some(layout) = self.as_layout_component_mut() {
+            return Some(layout.hit_test_point(
+                position,
+                skip_on_unclipped,
+                is_primary_hit,
+            ));
+        }
+        if let Some(text_input) = self.as_text_input_mut() {
+            return Some(text_input.hit_test_point(
+                *position,
+                skip_on_unclipped,
+                is_primary_hit,
+            ));
+        }
+        if let Some(text_value_run) = self.as_text_value_run_mut() {
+            return Some(text_value_run.hit_test_point(
+                *position,
+                skip_on_unclipped,
+                is_primary_hit,
+            ));
+        }
+        if let Some(shape) = self.as_shape_mut() {
+            return Some(shape.hit_test_point(
+                *position,
+                skip_on_unclipped,
+                is_primary_hit,
+            ));
+        }
+        if let Some(drawable) = self.as_drawable_mut() {
+            return Some(drawable.hit_test_point(
+                position,
+                skip_on_unclipped,
+                is_primary_hit,
+            ));
+        }
+        self.as_component().map(|component| {
+            component.hit_test_point(position, skip_on_unclipped, is_primary_hit)
+        })
+    }
+    fn world_transform_child_opacity(&self) -> Option<f32> {
+        if let Some(transform) = self.as_transform_component() {
+            return Some(transform.child_opacity());
+        }
+        self.as_world_transform_component()
+            .map(|component| component.child_opacity())
+    }
+    fn artboard_on_component_dirty_at(&mut self, _graph_order: u32) -> bool {
+        false
+    }
     fn component_update(
         &mut self,
         value: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -48381,6 +48565,10 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_viewmodel
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::distance_constraint::DistanceConstraint
 {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn constraint_apply(
         &mut self,
         component: crate::mechanical_port::source::core::CoreHandle,
@@ -48422,6 +48610,10 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::follow_path_constraint::FollowPathConstraint
 {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn constraint_apply(
         &mut self,
         component: crate::mechanical_port::source::core::CoreHandle,
@@ -48467,6 +48659,10 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::list_follow_path_constraint::ListFollowPathConstraint {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::constraints::list_follow_path_constraint::ListFollowPathConstraint::build_dependencies(&mut self);
         true
@@ -48488,6 +48684,10 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::list_foll
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base.base.base.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constraint::IkConstraint {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn constraint_apply(
         &mut self,
         component: crate::mechanical_port::source::core::CoreHandle,
@@ -48539,6 +48739,10 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constr
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::translation_constraint::TranslationConstraint
 {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn constraint_apply(
         &mut self,
         component: crate::mechanical_port::source::core::CoreHandle,
@@ -48614,6 +48818,10 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint
 {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn layout_constraint_add_child(
         &mut self,
         child: crate::mechanical_port::source::core::CoreHandle,
@@ -48687,6 +48895,10 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn constraint_apply(&mut self, component: crate::mechanical_port::source::core::CoreHandle) -> bool {
         component.with_mut(|component| {
             let Some(component) = component.as_transform_component_mut() else {
@@ -48716,6 +48928,10 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::transform_constraint::TransformConstraint
 {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn constraint_apply(
         &mut self,
         component: crate::mechanical_port::source::core::CoreHandle,
@@ -48757,6 +48973,10 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::scale_constraint::ScaleConstraint
 {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn constraint_apply(
         &mut self,
         component: crate::mechanical_port::source::core::CoreHandle,
@@ -48826,6 +49046,10 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::rotation_constraint::RotationConstraint
 {
+    fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
+        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
+        true
+    }
     fn constraint_apply(
         &mut self,
         component: crate::mechanical_port::source::core::CoreHandle,
@@ -49132,6 +49356,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::NestedArtboard {
+    fn component_collapse_post(&mut self, value: bool) -> bool {
+        self.component_container_collapse_post(value);
+        self.component_transform_collapse_post();
+        self.collapse_after_super(value);
+        true
+    }
     fn drawable_hit_test(
         &mut self,
         info: &mut crate::mechanical_port::source::hit_info::HitInfo,
@@ -49337,6 +49567,12 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
 impl CoreCapabilities
     for crate::mechanical_port::source::artboard_component_list::ArtboardComponentList
 {
+    fn component_collapse_post(&mut self, value: bool) -> bool {
+        self.component_container_collapse_post(value);
+        self.component_transform_collapse_post();
+        self.collapse_after_super(value);
+        true
+    }
     fn drawable_hit_test(
         &mut self,
         info: &mut crate::mechanical_port::source::hit_info::HitInfo,
@@ -49615,6 +49851,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::solo::Solo {
+    fn component_collapse_post(&mut self, value: bool) -> bool {
+        self.component_container_collapse_post(value);
+        self.component_transform_collapse_post();
+        self.collapse_after_component(value);
+        true
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::transform_component::TransformComponent::build_dependencies(
             &mut self.base.base.base.base,
@@ -57486,6 +57728,32 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        self.on_dirty(dirt);
+        true
+    }
+    fn component_hit_test_point(
+        &mut self,
+        position: &crate::mechanical_port::source::math::vec2d::Vec2D,
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> Option<bool> {
+        Some(self.hit_test_point(
+            position,
+            skip_on_unclipped,
+            is_primary_hit,
+        ))
+    }
+    fn world_transform_child_opacity(&self) -> Option<f32> {
+        Some(self.child_opacity())
+    }
+    fn artboard_on_component_dirty_at(&mut self, graph_order: u32) -> bool {
+        self.on_component_dirty_at(graph_order);
+        true
+    }
     fn drawable_draw(
         &mut self,
         renderer: &mut crate::mechanical_port::source::renderer::Renderer,
@@ -58869,6 +59137,13 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::root_bone::Root
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::skin::Skin {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        self.on_dirty(dirt);
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,

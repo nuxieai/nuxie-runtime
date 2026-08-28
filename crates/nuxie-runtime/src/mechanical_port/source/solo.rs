@@ -116,8 +116,12 @@ impl Solo {
         if !self.base.base.base.base.base.collapse(value) {
             return false;
         }
-        self.propagate_collapse(value);
+        self.collapse_after_component(value);
         true
+    }
+
+    pub(crate) fn collapse_after_component(&mut self, value: bool) {
+        self.propagate_collapse(value);
     }
 
     pub fn active_component_id_changed(&mut self) {

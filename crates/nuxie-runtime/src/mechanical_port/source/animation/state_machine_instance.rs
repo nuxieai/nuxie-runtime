@@ -478,8 +478,13 @@ impl StateMachineLayerInstance {
                 eprintln!(
                     "{} StateMachine exceeded max iterations in layer {} on artboard {}",
                     machine_name,
-                    layer.is_some(),
-                    artboard.upgrade().is_some()
+                    layer
+                        .and_then(|layer| layer.with(|layer| layer.state_machine_component_name()))
+                        .flatten()
+                        .unwrap_or_else(|| "[LY Not found]".to_owned()),
+                    artboard
+                        .with_artboard(|artboard| artboard.name().to_owned())
+                        .unwrap_or_else(|| "[AB Not found]".to_owned())
                 );
                 return false;
             }
@@ -594,13 +599,13 @@ impl StateMachineLayerInstance {
             return;
         };
         let current = Self::make_state_instance(state_to, &self.artboard_instance);
+        self.current_state = Some(current.clone());
         machine.build_state_keyframe_binds(&current);
         let state = current.definition();
         let events = Self::layer_component_events(&state);
         self.fire_events(machine, 0, &events);
         let actions = Self::layer_component_listener_actions(&state);
         self.perform_listener_actions(machine, 0, &actions);
-        self.current_state = Some(current);
     }
 
     fn find_random_transition(
@@ -609,7 +614,7 @@ impl StateMachineLayerInstance {
         from_instance: RuntimeStateInstanceHandle,
     ) -> Option<CoreHandle> {
         let state = from_instance.definition();
-        let mut total_weight = 0;
+        let mut total_weight = 0u32;
         let transition_count = state
             .with(|state| state.layer_state_transition_count())
             .flatten()
@@ -643,7 +648,7 @@ impl StateMachineLayerInstance {
                     transition.with_mut(|transition| {
                         transition.state_transition_set_evaluated_random_weight(weight);
                     });
-                    total_weight += weight;
+                    total_weight = total_weight.wrapping_add(weight);
                 } else {
                     transition.with_mut(|transition| {
                         transition.state_transition_set_evaluated_random_weight(0);
@@ -887,6 +892,11 @@ impl StateMachineLayerInstance {
             let advance_time = self
                 .state_from
                 .as_ref()
+                .filter(|from| {
+                    from.definition()
+                        .with_downcast::<AnimationState, _>(|_| ())
+                        .is_some()
+                })
                 .and_then(|from| from.first_animation(LinearAnimationInstance::spilled_time))
                 .unwrap_or(0.0);
             current.with_state_mut(|state| state.advance(advance_time, machine));
@@ -960,18 +970,21 @@ impl StateMachineLayerInstance {
 }
 
 pub(crate) struct DirectTransitionRuntime {
+    is_blend: bool,
     exit_blend_animation: Option<CoreHandle>,
 }
 
 impl DirectTransitionRuntime {
     pub(crate) fn plain() -> Self {
         Self {
+            is_blend: false,
             exit_blend_animation: None,
         }
     }
 
     pub(crate) fn blend(exit_blend_animation: Option<CoreHandle>) -> Self {
         Self {
+            is_blend: true,
             exit_blend_animation,
         }
     }
@@ -1016,19 +1029,15 @@ impl TransitionRuntime for DirectTransitionRuntime {
     }
 
     fn animation_duration(&self, state: &LayerState) -> Option<f32> {
-        let animation = if self.exit_blend_animation.is_some() {
-            self.selected_blend_animation()?
-        } else {
-            let state = state.base.base.base.base.handle()?;
-            state
-                .with_downcast::<AnimationState, _>(AnimationState::animation)
-                .flatten()?
-        };
+        let state = state.base.base.base.base.handle()?;
+        let animation = state
+            .with_downcast::<AnimationState, _>(AnimationState::animation)
+            .flatten()?;
         animation.with_downcast::<LinearAnimation, _>(LinearAnimation::duration_seconds)
     }
 
     fn exit_animation(&self, state: &LayerState) -> Option<(f32, f32)> {
-        let animation = if self.exit_blend_animation.is_some() {
+        let animation = if self.is_blend {
             self.selected_blend_animation()?
         } else {
             let state = state.base.base.base.base.handle()?;
@@ -1053,8 +1062,8 @@ impl TransitionRuntime for DirectTransitionRuntime {
                 animation.loop_value(),
             )
         };
-        if let Some(blend) = self.exit_blend_animation.as_ref() {
-            from.animation_for_blend(blend, use_animation)
+        if self.is_blend {
+            from.animation_for_blend(self.exit_blend_animation.as_ref()?, use_animation)
         } else if from
             .definition()
             .with_downcast::<AnimationState, _>(|_| ())

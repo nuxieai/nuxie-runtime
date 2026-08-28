@@ -1,22 +1,26 @@
-use std::{cell::RefCell, rc::Rc};
-
 pub use nuxie_render_api::Factory;
+use nuxie_render_api::PersistentFactoryContext;
 
 /// Cloneable ownership seam for the one renderer factory occurrence shared by
-/// importers. Borrowing is closure-scoped so an importer can be `'static`
-/// without retaining a pointer or leaking a mutable factory reference.
+/// the imported File, its Artboards, and scripting. Borrowing is closure-scoped
+/// and every clone retains the same persistent renderer identity.
 #[derive(Clone)]
-pub struct RuntimeFactoryHandle(Rc<RefCell<Box<dyn nuxie_render_api::Factory>>>);
+pub struct RuntimeFactoryHandle(PersistentFactoryContext);
 
 impl RuntimeFactoryHandle {
-    pub fn new(factory: Box<dyn nuxie_render_api::Factory>) -> Self {
-        Self(Rc::new(RefCell::new(factory)))
+    pub fn from_factory(factory: &mut dyn Factory) -> Option<Self> {
+        factory.persistent_context().map(Self)
     }
 
-    pub fn with_factory_mut<R>(
-        &self,
-        use_factory: impl FnOnce(&mut dyn nuxie_render_api::Factory) -> R,
-    ) -> R {
-        use_factory(self.0.borrow_mut().as_mut())
+    pub fn from_context(context: PersistentFactoryContext) -> Self {
+        Self(context)
+    }
+
+    pub fn persistent_context(&self) -> PersistentFactoryContext {
+        self.0.clone()
+    }
+
+    pub fn with_factory_mut<R>(&self, use_factory: impl FnOnce(&mut dyn Factory) -> R) -> R {
+        self.0.with_factory(use_factory)
     }
 }

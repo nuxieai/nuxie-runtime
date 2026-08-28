@@ -214,6 +214,9 @@ impl LinearAnimationInstance {
     pub fn duration_seconds(&self) -> f32 {
         self.with_animation(LinearAnimation::duration_seconds)
     }
+    pub fn global_to_local_seconds(&self, seconds: f32) -> f32 {
+        self.with_animation(|animation| animation.global_to_local_seconds(seconds))
+    }
     pub fn fps(&self) -> u32 {
         self.with_animation(|animation| animation.base.fps())
     }
@@ -321,6 +324,14 @@ impl LinearAnimationInstance {
             more = true
         }
         more || self.keep_going()
+    }
+    pub fn advance_and_report_to_self(&mut self, seconds: f32) -> bool {
+        let mut reporter = PendingKeyedCallbacks::default();
+        let more = self.advance(seconds, Some(&mut reporter));
+        for (object_id, property_key, elapsed_seconds) in reporter.0 {
+            self.report_keyed_callback(object_id, property_key, elapsed_seconds);
+        }
+        more
     }
     pub fn advance(
         &mut self,

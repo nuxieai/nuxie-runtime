@@ -1,7 +1,8 @@
 use crate::mechanical_port::source::{
-    animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle, core::CoreHandle,
+    animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
+    artboard::RuntimeArtboardInstanceWeakHandle, core::CoreHandle, core_context::CoreContext,
     event_report::EventReport, generated::nested_animation_base::NestedAnimationBase,
-    status_code::StatusCode,
+    nested_artboard::NestedArtboard, status_code::StatusCode,
 };
 
 #[derive(Clone)]
@@ -21,13 +22,6 @@ impl Default for NestedEventNotifier {
 
 impl NestedEventNotifier {
     pub fn add_nested_event_listener(&mut self, listener: RuntimeStateMachineInstanceWeakHandle) {
-        if self
-            .nested_event_listeners
-            .iter()
-            .any(|candidate| candidate.ptr_eq(&listener))
-        {
-            return;
-        }
         self.nested_event_listeners.push(listener);
     }
 
@@ -52,19 +46,17 @@ impl NestedEventNotifier {
     }
 
     pub fn notify_listeners(&mut self, events: &[CoreHandle]) {
-        let Some(nested_artboard) = self.nested_artboard.clone() else {
-            return;
-        };
         let event_reports: Vec<_> = events
             .iter()
             .cloned()
             .map(|event| EventReport::new(event, 0.0))
             .collect();
+        let nested_artboard = self.nested_artboard.clone();
         self.nested_event_listeners
             .retain(|listener| listener.upgrade().is_some());
         for listener in &self.nested_event_listeners {
             listener.with_instance_mut(|listener| {
-                listener.notify(&event_reports, nested_artboard.clone())
+                listener.notify_nested(&event_reports, nested_artboard.clone())
             });
         }
     }
@@ -88,25 +80,26 @@ pub trait NestedAnimationBehavior {
     fn release_dependencies(&mut self);
 }
 
-pub trait NestedAnimationContext {
-    fn super_validate(&self, animation: &NestedAnimation) -> bool;
-    fn parent_is_nested_artboard(&self, parent_id: u32) -> bool;
-    fn super_on_added_dirty(&mut self, animation: &mut NestedAnimation) -> StatusCode;
-    fn add_nested_animation(&mut self, animation: &mut NestedAnimation);
-}
-
 impl NestedAnimation {
-    pub fn validate(&self, context: &dyn NestedAnimationContext) -> bool {
-        if !context.super_validate(self) {
+    pub fn validate(&mut self, context: &mut dyn CoreContext) -> bool {
+        if !self.base.base.validate(context) {
             return false;
         }
-        context.parent_is_nested_artboard(self.base.base.parent_id())
+        context
+            .resolve(self.base.base.parent_id())
+            .is_some_and(|parent| parent.with_downcast::<NestedArtboard, _>(|_| ()).is_some())
     }
 
-    pub fn on_added_dirty(&mut self, context: &mut dyn NestedAnimationContext) -> StatusCode {
-        let code = context.super_on_added_dirty(self);
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        let code = self.base.base.on_added_dirty(context);
         if code == StatusCode::Ok {
-            context.add_nested_animation(self);
+            let animation = self.base.handle();
+            let parent = context.resolve(self.base.base.parent_id());
+            if let (Some(animation), Some(parent)) = (animation, parent) {
+                parent.with_downcast_mut::<NestedArtboard, _>(|parent| {
+                    parent.add_nested_animation_handle(animation);
+                });
+            }
         }
         code
     }

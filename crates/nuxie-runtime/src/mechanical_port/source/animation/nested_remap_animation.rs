@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::nested_linear_animation::NestedLinearAnimationArtboard,
+    artboard::RuntimeArtboardInstanceWeakHandle,
     generated::animation::nested_remap_animation_base::NestedRemapAnimationBase,
 };
 
@@ -18,7 +18,7 @@ impl NestedRemapAnimation {
         }
     }
 
-    pub fn initialize_animation(&mut self, artboard: &mut dyn NestedLinearAnimationArtboard) {
+    pub fn initialize_animation(&mut self, artboard: RuntimeArtboardInstanceWeakHandle) {
         self.base.base.initialize_animation(artboard);
         self.time_changed();
     }

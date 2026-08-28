@@ -1,23 +1,15 @@
-use crate::mechanical_port::source::generated::animation::nested_linear_animation_base::NestedLinearAnimationBase;
-
-pub trait NestedLinearAnimationInstance {
-    fn advance_and_report_to_self(&mut self, elapsed_seconds: f32) -> bool;
-    fn apply(&mut self, mix: f32);
-    fn duration_seconds(&self) -> f32;
-    fn global_to_local_seconds(&self, seconds: f32) -> f32;
-    fn set_time(&mut self, value: f32);
-}
-
-pub trait NestedLinearAnimationArtboard {
-    fn make_linear_animation_instance(
-        &mut self,
-        animation_id: u32,
-    ) -> Box<dyn NestedLinearAnimationInstance>;
-}
+use crate::mechanical_port::source::{
+    animation::{
+        linear_animation_instance::LinearAnimationInstance,
+        nested_animation::NestedAnimationBehavior,
+    },
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    generated::animation::nested_linear_animation_base::NestedLinearAnimationBase,
+};
 
 pub struct NestedLinearAnimation {
     pub base: NestedLinearAnimationBase,
-    animation_instance: Option<Box<dyn NestedLinearAnimationInstance>>,
+    animation_instance: Option<LinearAnimationInstance>,
 }
 
 impl Default for NestedLinearAnimation {
@@ -34,34 +26,59 @@ impl NestedLinearAnimation {
         Self::default()
     }
 
-    pub fn initialize_animation(&mut self, artboard: &mut dyn NestedLinearAnimationArtboard) {
+    pub fn initialize_animation(&mut self, artboard: RuntimeArtboardInstanceWeakHandle) {
+        let animation_id = self.base.animation_id() as usize;
+        let animation = artboard
+            .with_artboard(|artboard| artboard.animation_handle_at(animation_id))
+            .flatten();
         self.animation_instance =
-            Some(artboard.make_linear_animation_instance(self.base.base.base.animation_id()));
+            animation.map(|animation| LinearAnimationInstance::new(animation, artboard, 1.0));
     }
 
+    /// Pinned `NestedLinearAnimation::releaseDependencies` is intentionally a
+    /// no-op. The occurrence retains its animation instance until it is
+    /// initialized again or destroyed.
     pub fn release_dependencies(&mut self) {}
 
-    pub fn animation_instance(&self) -> Option<&dyn NestedLinearAnimationInstance> {
-        self.animation_instance.as_deref()
+    pub fn animation_instance(&self) -> Option<&LinearAnimationInstance> {
+        self.animation_instance.as_ref()
     }
 
-    pub fn animation_instance_mut(
-        &mut self,
-    ) -> Option<&mut (dyn NestedLinearAnimationInstance + 'static)> {
-        self.animation_instance.as_deref_mut()
+    pub fn animation_instance_mut(&mut self) -> Option<&mut LinearAnimationInstance> {
+        self.animation_instance.as_mut()
     }
 }
+
+impl NestedAnimationBehavior for NestedLinearAnimation {
+    /// This is the pinned abstract base for the simple and remap variants.
+    /// Their concrete generated owners override advancing; invoking the
+    /// embedded base directly therefore performs no advance or apply.
+    fn advance(&mut self, _elapsed_seconds: f32, _new_frame: bool) -> bool {
+        false
+    }
+
+    fn initialize_animation(&mut self, artboard: RuntimeArtboardInstanceWeakHandle) {
+        Self::initialize_animation(self, artboard);
+    }
+
+    fn release_dependencies(&mut self) {
+        Self::release_dependencies(self);
+    }
+}
+
 impl std::ops::Deref for NestedLinearAnimation {
     type Target = NestedLinearAnimationBase;
     fn deref(&self) -> &Self::Target {
         &self.base
     }
 }
+
 impl std::ops::DerefMut for NestedLinearAnimation {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
     }
 }
+
 impl crate::mechanical_port::source::generated::nested_animation_base::NestedAnimationBaseCallbacks
     for NestedLinearAnimation
 {
@@ -69,4 +86,11 @@ impl crate::mechanical_port::source::generated::nested_animation_base::NestedAni
         self.base.notify_property_changed(key);
     }
 }
-impl crate::mechanical_port::source::generated::animation::nested_linear_animation_base::NestedLinearAnimationBaseCallbacks for NestedLinearAnimation { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }
+
+impl crate::mechanical_port::source::generated::animation::nested_linear_animation_base::NestedLinearAnimationBaseCallbacks
+    for NestedLinearAnimation
+{
+    fn notify_property_changed(&mut self, key: u16) {
+        self.base.notify_property_changed(key);
+    }
+}

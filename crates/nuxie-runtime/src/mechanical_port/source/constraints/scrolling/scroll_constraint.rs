@@ -39,8 +39,7 @@ enum ScrollSpace {
 
 impl LayoutConstraint for ScrollConstraint {
     fn constrain_layout_child(&mut self, child: CoreHandle) {
-        Self::with_layout_child_mut(&child, |child| self.constrain_child(child))
-            .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+        self.constrain_child_handle(child);
     }
 
     fn add_layout_child(&mut self, child: CoreHandle) {
@@ -420,21 +419,47 @@ impl ScrollConstraint {
         self.child_constraint_applied_count = 0;
     }
 
-    pub fn constrain_child(&mut self, child: &mut dyn LayoutNodeProvider) {
-        let Some(component) = child.transform_component_mut() else {
-            return;
+    pub fn constrain_child_handle(&mut self, provider: CoreHandle) -> bool {
+        let Some(owner) = provider
+            .with(|provider| {
+                provider
+                    .as_layout_node_provider()
+                    .and_then(LayoutNodeProvider::owner_handle)
+            })
+            .flatten()
+        else {
+            return false;
         };
-        let target = Mat2D::multiply(*component.world_transform(), self.scroll_transform);
-        TransformConstraint::constrain_world(
-            component,
-            *component.world_transform(),
-            self.components_a,
-            target,
-            self.components_b,
-            self.base.strength(),
-        );
+        let applied = owner
+            .with_mut(|owner| {
+                let component = owner.as_transform_component_mut()?;
+                let current = *component.world_transform();
+                let target = Mat2D::multiply(current, self.scroll_transform);
+                TransformConstraint::constrain_world(
+                    component,
+                    current,
+                    self.components_a,
+                    target,
+                    self.components_b,
+                    self.base.strength(),
+                );
+                Some(())
+            })
+            .flatten()
+            .is_some();
+        if !applied {
+            return false;
+        }
         self.child_constraint_applied_count += 1;
         self.constrain_virtualized(false);
+        true
+    }
+
+    pub fn constrain_child(&mut self, child: &mut dyn LayoutNodeProvider) {
+        let Some(provider) = child.provider_handle() else {
+            return;
+        };
+        self.constrain_child_handle(provider);
     }
 
     pub fn constrain_virtualized(&mut self, force: bool) {

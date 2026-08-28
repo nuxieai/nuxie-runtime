@@ -13,7 +13,7 @@ use crate::mechanical_port::source::{
         layer_state::LayerState,
         linear_animation::LinearAnimation,
         linear_animation_instance::LinearAnimationInstance,
-        listener_invocation::ListenerInvocation,
+        listener_invocation::{ListenerInvocation, ListenerInvocationKind},
         listener_types::listener_input_type_semantic::ListenerInputTypeSemantic,
         listener_types::listener_input_type_viewmodel::ListenerInputTypeViewModel,
         nested_bool::NestedBool,
@@ -34,6 +34,7 @@ use crate::mechanical_port::source::{
         state_transition::{AllowTransition, TransitionRuntime},
     },
     artboard::{Artboard, RuntimeArtboardInstanceWeakHandle},
+    artboard_component_list::ArtboardComponentList,
     audio_event::AudioEvent,
     component_dirt::ComponentDirt,
     core::CoreHandle,
@@ -75,6 +76,7 @@ use crate::mechanical_port::source::{
     input::{
         focus_manager::{FocusManager, RuntimeFocusManagerHandle},
         focus_node::FocusNodeRef,
+        gamepad_batch::{GamepadBatchState, GamepadDispatcher, GamepadInvocation},
     },
     listener_group::{ListenerGroup, ListenerGroupProvider, RuntimeListenerGroupHandle},
     listener_type::ListenerType,
@@ -1244,7 +1246,6 @@ pub trait HitComponent {
     }
     fn process_event(
         &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
         machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
@@ -1254,30 +1255,90 @@ pub trait HitComponent {
     ) -> HitResult;
     fn process_gamepad_invocation(
         &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
         invocation: &ListenerInvocation,
         already_dispatched: Option<&CoreHandle>,
     ) -> HitResult;
-    fn prepare_event(
-        &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
-        position: Vec2D,
-        hit_type: ListenerType,
-        pointer_id: i32,
-    );
-    fn hit_test(&self, runtime: &dyn StateMachineInstanceRuntime, position: Vec2D) -> bool;
-    fn enable_pointer_events(
-        &mut self,
-        _runtime: &mut dyn StateMachineInstanceRuntime,
-        _pointer_id: i32,
-    ) {
-    }
-    fn disable_pointer_events(
-        &mut self,
-        _runtime: &mut dyn StateMachineInstanceRuntime,
-        _pointer_id: i32,
-    ) {
-    }
+    fn prepare_event(&mut self, position: Vec2D, hit_type: ListenerType, pointer_id: i32);
+    fn hit_test(&self, position: Vec2D) -> bool;
+    fn enable_pointer_events(&mut self, _pointer_id: i32) {}
+    fn disable_pointer_events(&mut self, _pointer_id: i32) {}
+}
+
+fn component_is_collapsed(component: &CoreHandle) -> bool {
+    component
+        .with(|component| {
+            component
+                .as_component()
+                .map(|component| component.is_collapsed())
+        })
+        .flatten()
+        .expect("a hit target is a live Component")
+}
+
+fn nested_is_paused(component: &CoreHandle) -> bool {
+    component
+        .with(|component| {
+            component
+                .as_nested_artboard()
+                .map(|nested| nested.base.is_paused())
+        })
+        .flatten()
+        .expect("a nested hit target is a NestedArtboard")
+}
+
+fn nested_world_to_local(component: &CoreHandle, position: Vec2D) -> Option<Vec2D> {
+    component
+        .with(|component| {
+            let nested = component.as_nested_artboard()?;
+            let mut local = Vec2D::new(0.0, 0.0);
+            nested.world_to_local(position, &mut local).then_some(local)
+        })
+        .flatten()
+}
+
+fn nested_animations(component: &CoreHandle) -> Vec<CoreHandle> {
+    component
+        .with(|component| {
+            component
+                .as_nested_artboard()
+                .map(|nested| nested.nested_animations().to_vec())
+        })
+        .flatten()
+        .expect("a nested hit target is a NestedArtboard")
+}
+
+fn nested_state_machine(animation: &CoreHandle) -> Option<RuntimeStateMachineInstanceHandle> {
+    animation.with_downcast::<crate::mechanical_port::source::animation::nested_state_machine::NestedStateMachine, _>(|nested| nested.state_machine_instance())
+        .flatten()
+}
+
+fn component_list_indices(component: &CoreHandle) -> Vec<i32> {
+    component
+        .with_downcast_mut::<ArtboardComponentList, _>(|list| list.ordered_list_indices().to_vec())
+        .expect("a component-list hit target is an ArtboardComponentList")
+}
+
+fn component_list_world_to_local(
+    component: &CoreHandle,
+    position: Vec2D,
+    index: i32,
+) -> Option<Vec2D> {
+    component
+        .with_downcast_mut::<ArtboardComponentList, _>(|list| {
+            let mut local = Vec2D::new(0.0, 0.0);
+            list.world_to_local(position, &mut local, index)
+                .then_some(local)
+        })
+        .flatten()
+}
+
+fn component_list_state_machine(
+    component: &CoreHandle,
+    index: i32,
+) -> Option<RuntimeStateMachineInstanceHandle> {
+    component
+        .with_downcast::<ArtboardComponentList, _>(|list| list.state_machine_instance(index))
+        .flatten()
 }
 
 pub struct HitDrawable {
@@ -1302,7 +1363,6 @@ type HitLayout = HitDrawable;
 
 impl HitDrawable {
     fn new(
-        runtime: &dyn StateMachineInstanceRuntime,
         drawable: CoreHandle,
         component: CoreHandle,
         is_opaque: bool,
@@ -1314,7 +1374,14 @@ impl HitDrawable {
             drawable,
             hit_radius: 2.0,
             is_hovered: false,
-            can_early_out: !runtime.component_is_target_opaque(&drawable),
+            can_early_out: !drawable
+                .with(|drawable| {
+                    drawable
+                        .as_drawable()
+                        .map(|drawable| drawable.is_target_opaque())
+                })
+                .flatten()
+                .expect("a drawable hit target retains its Drawable"),
             has_down_listener: false,
             has_up_listener: false,
             is_opaque,
@@ -1370,17 +1437,16 @@ impl HitComponent for HitDrawable {
         self.early_out_count
     }
 
-    fn hit_test(&self, runtime: &dyn StateMachineInstanceRuntime, position: Vec2D) -> bool {
-        runtime.component_hit_test(&self.component, position, self.hit_path, self.hit_clip)
+    fn hit_test(&self, position: Vec2D) -> bool {
+        self.component
+            .with_mut(|component| {
+                component.component_hit_test_point(&position, self.hit_path, self.hit_clip)
+            })
+            .flatten()
+            .expect("a hit target retains its Component")
     }
 
-    fn prepare_event(
-        &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
-        position: Vec2D,
-        hit_type: ListenerType,
-        pointer_id: i32,
-    ) {
+    fn prepare_event(&mut self, position: Vec2D, hit_type: ListenerType, pointer_id: i32) {
         if self.can_early_out
             && (hit_type != ListenerType::Down || !self.has_down_listener)
             && (hit_type != ListenerType::Up || !self.has_up_listener)
@@ -1391,7 +1457,7 @@ impl HitComponent for HitDrawable {
             }
             return;
         }
-        self.is_hovered = hit_type != ListenerType::Exit && self.hit_test(runtime, position);
+        self.is_hovered = hit_type != ListenerType::Exit && self.hit_test(position);
         if self.is_hovered {
             for listener in &self.listeners {
                 listener.with_group_mut(|listener| listener.hover(pointer_id));
@@ -1401,7 +1467,6 @@ impl HitComponent for HitDrawable {
 
     fn process_gamepad_invocation(
         &mut self,
-        _runtime: &mut dyn StateMachineInstanceRuntime,
         _invocation: &ListenerInvocation,
         _already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
@@ -1410,7 +1475,6 @@ impl HitComponent for HitDrawable {
 
     fn process_event(
         &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
         machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
@@ -1448,28 +1512,31 @@ impl HitComponent for HitDrawable {
         }
         if !self.is_hovered || !can_hit {
             HitResult::None
-        } else if self.is_opaque || runtime.component_is_target_opaque(&self.drawable) || blocking {
+        } else if self.is_opaque
+            || self
+                .drawable
+                .with(|drawable| {
+                    drawable
+                        .as_drawable()
+                        .map(|drawable| drawable.is_target_opaque())
+                })
+                .flatten()
+                .unwrap_or(false)
+            || blocking
+        {
             HitResult::HitOpaque
         } else {
             HitResult::Hit
         }
     }
 
-    fn enable_pointer_events(
-        &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
-        pointer_id: i32,
-    ) {
+    fn enable_pointer_events(&mut self, pointer_id: i32) {
         for listener in &self.listeners {
             listener.with_group_mut(|listener| listener.enable(pointer_id));
         }
     }
 
-    fn disable_pointer_events(
-        &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
-        pointer_id: i32,
-    ) {
+    fn disable_pointer_events(&mut self, pointer_id: i32) {
         for listener in &self.listeners {
             listener.with_group_mut(|listener| listener.disable(pointer_id));
         }
@@ -1485,29 +1552,24 @@ impl HitComponent for HitNestedArtboard {
         self.component.clone()
     }
 
-    fn hit_test(&self, runtime: &dyn StateMachineInstanceRuntime, position: Vec2D) -> bool {
-        if runtime.component_is_collapsed(&self.component)
-            || runtime.component_is_paused(&self.component)
-        {
+    fn hit_test(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return false;
         }
-        let Some(local) = runtime.component_world_to_local(&self.component, position, None) else {
+        let Some(local) = nested_world_to_local(&self.component, position) else {
             return false;
         };
-        runtime
-            .nested_animations(&self.component)
+        nested_animations(&self.component)
             .into_iter()
-            .filter(|animation| runtime.nested_is_state_machine(animation))
+            .filter(|animation| animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY))
             .any(|animation| {
-                runtime
-                    .nested_state_machine_instance(&animation)
+                nested_state_machine(&animation)
                     .is_some_and(|instance| instance.with_instance(|nested| nested.hit_test(local)))
             })
     }
 
     fn process_event(
         &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
         _machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
@@ -1515,20 +1577,18 @@ impl HitComponent for HitNestedArtboard {
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        if runtime.component_is_collapsed(&self.component)
-            || runtime.component_is_paused(&self.component)
-        {
+        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return HitResult::None;
         }
-        let Some(local) = runtime.component_world_to_local(&self.component, position, None) else {
+        let Some(local) = nested_world_to_local(&self.component, position) else {
             return HitResult::None;
         };
         let mut result = HitResult::None;
-        for animation in runtime.nested_animations(&self.component) {
-            if !runtime.nested_is_state_machine(&animation) {
+        for animation in nested_animations(&self.component) {
+            if !animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY) {
                 continue;
             }
-            let Some(instance) = runtime.nested_state_machine_instance(&animation) else {
+            let Some(instance) = nested_state_machine(&animation) else {
                 continue;
             };
             instance.with_instance_mut(|nested| {
@@ -1561,13 +1621,12 @@ impl HitComponent for HitNestedArtboard {
 
     fn process_gamepad_invocation(
         &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
         invocation: &ListenerInvocation,
         already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
-        for animation in runtime.nested_animations(&self.component) {
-            if runtime.nested_is_state_machine(&animation) {
-                if let Some(instance) = runtime.nested_state_machine_instance(&animation) {
+        for animation in nested_animations(&self.component) {
+            if animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY) {
+                if let Some(instance) = nested_state_machine(&animation) {
                     instance.with_instance_mut(|nested| {
                         nested.broadcast_gamepad_to_scripted_drawables(
                             invocation,
@@ -1580,14 +1639,7 @@ impl HitComponent for HitNestedArtboard {
         HitResult::None
     }
 
-    fn prepare_event(
-        &mut self,
-        _runtime: &mut dyn StateMachineInstanceRuntime,
-        _position: Vec2D,
-        _hit_type: ListenerType,
-        _pointer_id: i32,
-    ) {
-    }
+    fn prepare_event(&mut self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
 }
 
 struct HitComponentList {
@@ -1599,22 +1651,16 @@ impl HitComponent for HitComponentList {
         self.component.clone()
     }
 
-    fn hit_test(&self, runtime: &dyn StateMachineInstanceRuntime, position: Vec2D) -> bool {
-        if runtime.component_is_collapsed(&self.component) {
+    fn hit_test(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component) {
             return false;
         }
-        for index in runtime
-            .component_ordered_indices(&self.component)
-            .into_iter()
-            .rev()
-        {
-            let Some(local) =
-                runtime.component_world_to_local(&self.component, position, Some(index))
+        for index in component_list_indices(&self.component).into_iter().rev() {
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
             else {
                 continue;
             };
-            if runtime
-                .component_state_machine(&self.component, index)
+            if component_list_state_machine(&self.component, index)
                 .is_some_and(|machine| machine.with_instance(|nested| nested.hit_test(local)))
             {
                 return true;
@@ -1625,7 +1671,6 @@ impl HitComponent for HitComponentList {
 
     fn process_event(
         &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
         _machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
@@ -1633,22 +1678,17 @@ impl HitComponent for HitComponentList {
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        if runtime.component_is_collapsed(&self.component) {
+        if component_is_collapsed(&self.component) {
             return HitResult::None;
         }
         let mut result = HitResult::None;
         let mut running_can_hit = can_hit;
-        for index in runtime
-            .component_ordered_indices(&self.component)
-            .into_iter()
-            .rev()
-        {
-            let Some(local) =
-                runtime.component_world_to_local(&self.component, position, Some(index))
+        for index in component_list_indices(&self.component).into_iter().rev() {
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
             else {
                 continue;
             };
-            let Some(machine) = runtime.component_state_machine(&self.component, index) else {
+            let Some(machine) = component_list_state_machine(&self.component, index) else {
                 continue;
             };
             let item = machine.with_instance_mut(|nested| {
@@ -1695,21 +1735,16 @@ impl HitComponent for HitComponentList {
 
     fn process_gamepad_invocation(
         &mut self,
-        runtime: &mut dyn StateMachineInstanceRuntime,
         invocation: &ListenerInvocation,
         already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
-        if runtime.component_is_collapsed(&self.component) {
+        if component_is_collapsed(&self.component) {
             return HitResult::None;
         }
         let mut result = HitResult::None;
         let mut running_can_hit = true;
-        for index in runtime
-            .component_ordered_indices(&self.component)
-            .into_iter()
-            .rev()
-        {
-            let Some(machine) = runtime.component_state_machine(&self.component, index) else {
+        for index in component_list_indices(&self.component).into_iter().rev() {
+            let Some(machine) = component_list_state_machine(&self.component, index) else {
                 continue;
             };
             let item = if running_can_hit {
@@ -1731,14 +1766,7 @@ impl HitComponent for HitComponentList {
         result
     }
 
-    fn prepare_event(
-        &mut self,
-        _runtime: &mut dyn StateMachineInstanceRuntime,
-        _position: Vec2D,
-        _hit_type: ListenerType,
-        _pointer_id: i32,
-    ) {
-    }
+    fn prepare_event(&mut self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
 }
 
 fn data_context_property(
@@ -2093,6 +2121,7 @@ pub struct StateMachineInstance {
     keyboard_listener_groups: Vec<RuntimeKeyboardListenerGroupHandle>,
     gamepad_listener_groups: Vec<RuntimeGamepadListenerGroupHandle>,
     gamepad_scripted_drawables: Vec<CoreHandle>,
+    embedder_gamepads: GamepadBatchState,
     semantic_manager: Option<RuntimeSemanticManagerHandle>,
     external_semantic_manager: Option<RuntimeSemanticManagerHandle>,
     queued_focus_events: Vec<QueuedFocusEvent>,
@@ -2102,6 +2131,27 @@ pub struct StateMachineInstance {
     nested_artboard: Option<CoreHandle>,
     #[cfg(feature = "tools")]
     input_changed_callback: Option<Box<dyn FnMut(RuntimeStateMachineInstanceWeakHandle, u64)>>,
+}
+
+impl GamepadDispatcher for StateMachineInstance {
+    fn dispatch(&mut self, invocation: GamepadInvocation) {
+        let invocation = match invocation {
+            GamepadInvocation::Connected(snapshot) => ListenerInvocation::gamepad_connected(&snapshot),
+            GamepadInvocation::Disconnected(id) => ListenerInvocation::gamepad_disconnected(id),
+            GamepadInvocation::Event(event) => ListenerInvocation::gamepad_event(
+                crate::mechanical_port::source::animation::listener_invocation::GamepadEventInvocation {
+                    full_state: event.full_state,
+                    change: event.change,
+                    standard_button: event.standard_button,
+                    standard_axis: event.standard_axis,
+                }),
+        };
+        let mut dispatched = None;
+        self.focus_manager().with_focus_manager_mut(|manager| {
+            manager.gamepad_dispatch(&invocation, Some(&mut dispatched));
+        });
+        self.broadcast_gamepad_to_scripted_drawables(&invocation, dispatched.as_ref());
+    }
 }
 
 impl StateMachineInstance {
@@ -2143,6 +2193,7 @@ impl StateMachineInstance {
             keyboard_listener_groups: Vec::new(),
             gamepad_listener_groups: Vec::new(),
             gamepad_scripted_drawables: Vec::new(),
+            embedder_gamepads: GamepadBatchState::default(),
             semantic_manager: None,
             external_semantic_manager: None,
             queued_focus_events: Vec::new(),
@@ -2543,43 +2594,39 @@ impl StateMachineInstance {
 
     fn initialize_nested_hit_components(&mut self) {
         for nested in self
-            .runtime
-            .borrow_mut()
-            .artboard_nested_artboards(&self.artboard_instance)
+            .artboard_instance
+            .with_artboard(|artboard| artboard.nested_artboards())
+            .expect("a state machine retains its ArtboardInstance")
         {
-            self.hit_components
-                .push(Box::new(HitNestedArtboard { component: nested }));
-            for animation in self.runtime.borrow_mut().nested_animations(&nested) {
-                if self
-                    .runtime
-                    .borrow_mut()
-                    .nested_is_state_machine(&animation)
+            self.hit_components.push(Box::new(HitNestedArtboard {
+                component: nested.clone(),
+            }));
+            for animation in nested_animations(&nested) {
+                if animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY)
                 {
-                    let notifier = self
-                        .runtime
-                        .borrow_mut()
-                        .nested_state_machine_instance(&animation);
+                    let notifier = nested_state_machine(&animation);
                     if let Some(notifier) = notifier {
                         let listener = self.occurrence.clone();
                         notifier.with_instance_mut(|notifier| {
-                            notifier.set_parent_nested_artboard(nested.clone());
                             notifier.set_nested_artboard(nested.clone());
                             notifier.add_nested_event_listener(listener);
                         });
                     }
                 } else {
-                    self.runtime.borrow_mut().nested_add_event_listener(
-                        &animation,
-                        &nested,
-                        self.occurrence.clone(),
-                    );
+                    animation.with_mut(|animation| {
+                        if let Some(notifier) = animation.as_nested_linear_animation_mut()
+                            .and_then(|animation| animation.animation_instance_mut()) {
+                            notifier.set_nested_artboard(nested.clone());
+                            notifier.add_nested_event_listener(self.occurrence.clone());
+                        }
+                    });
                 }
             }
         }
         for list in self
-            .runtime
-            .borrow_mut()
-            .artboard_component_lists(&self.artboard_instance)
+            .artboard_instance
+            .with_artboard(|artboard| artboard.artboard_component_lists())
+            .expect("a state machine retains its ArtboardInstance")
         {
             self.hit_components
                 .push(Box::new(HitComponentList { component: list }));
@@ -2597,14 +2644,7 @@ impl StateMachineInstance {
                 .runtime
                 .borrow_mut()
                 .make_text_input_listener_group(&text_input, machine);
-            let mut hit = HitDrawable::new(
-                self.runtime.borrow_mut().as_ref(),
-                text_input.clone(),
-                text_input,
-                true,
-                true,
-                true,
-            );
+            let mut hit = HitDrawable::new(text_input.clone(), text_input, true, true, true);
             hit.add_listener(group.clone());
             self.hit_components.push(Box::new(hit));
             self.listener_groups.push(group);
@@ -2667,14 +2707,7 @@ impl StateMachineInstance {
             let index = if let Some(&index) = hit_lookup.get(&target) {
                 index
             } else {
-                let hit = HitDrawable::new(
-                    self.runtime.borrow_mut().as_ref(),
-                    target.clone(),
-                    target.clone(),
-                    is_opaque,
-                    false,
-                    true,
-                );
+                let hit = HitDrawable::new(target.clone(), target.clone(), is_opaque, false, true);
                 let index = self.hit_components.len();
                 self.hit_components.push(Box::new(hit));
                 hit_lookup.insert(target, index);
@@ -2702,14 +2735,7 @@ impl StateMachineInstance {
                 } else {
                     target.clone()
                 };
-                let hit = HitDrawable::new(
-                    self.runtime.borrow_mut().as_ref(),
-                    drawable,
-                    target.clone(),
-                    false,
-                    true,
-                    true,
-                );
+                let hit = HitDrawable::new(drawable, target.clone(), false, true, true);
                 let index = self.hit_components.len();
                 self.hit_components.push(Box::new(hit));
                 hit_lookup.insert(target, index);
@@ -2764,29 +2790,19 @@ impl StateMachineInstance {
         }
         let mut hit_components = std::mem::take(&mut self.hit_components);
         for component in &mut hit_components {
-            component.prepare_event(
-                self.runtime.borrow_mut().as_mut(),
-                position,
-                hit_type,
-                pointer_id,
-            );
+            component.prepare_event(position, hit_type, pointer_id);
         }
         let mut hit_something = false;
         let mut hit_opaque = false;
         for component in &mut hit_components {
-            let runtime = Rc::clone(&self.runtime);
-            let result = {
-                let mut runtime = runtime.borrow_mut();
-                component.process_event(
-                    runtime.as_mut(),
-                    self,
-                    position,
-                    hit_type,
-                    !hit_opaque,
-                    timestamp,
-                    pointer_id,
-                )
-            };
+            let result = component.process_event(
+                self,
+                position,
+                hit_type,
+                !hit_opaque,
+                timestamp,
+                pointer_id,
+            );
             if result != HitResult::None {
                 hit_something = true;
                 hit_opaque |= result == HitResult::HitOpaque;
@@ -2811,7 +2827,7 @@ impl StateMachineInstance {
         let position = self.normalize_pointer_position(position);
         self.hit_components
             .iter()
-            .any(|component| component.hit_test(self.runtime.borrow_mut().as_ref(), position))
+            .any(|component| component.hit_test(position))
     }
 
     pub fn pointer_move(&mut self, position: Vec2D, timestamp: f32, id: i32) -> HitResult {
@@ -3822,13 +3838,13 @@ impl StateMachineInstance {
 
     pub fn enable_pointer_events(&mut self, pointer_id: i32) {
         for component in &mut self.hit_components {
-            component.enable_pointer_events(self.runtime.borrow_mut().as_mut(), pointer_id);
+            component.enable_pointer_events(pointer_id);
         }
     }
 
     pub fn disable_pointer_events(&mut self, pointer_id: i32) {
         for component in &mut self.hit_components {
-            component.disable_pointer_events(self.runtime.borrow_mut().as_mut(), pointer_id);
+            component.disable_pointer_events(pointer_id);
         }
     }
 
@@ -3877,8 +3893,10 @@ impl StateMachineInstance {
     }
 
     pub fn submit_gamepads_from_buffer(&mut self, data: &[u8]) -> bool {
-        let runtime = Rc::clone(&self.runtime);
-        runtime.borrow_mut().gamepad_submit_buffer(self, data)
+        let mut gamepads = std::mem::take(&mut self.embedder_gamepads);
+        let result = gamepads.submit(Some(data), self);
+        self.embedder_gamepads = gamepads;
+        result
     }
 
     pub fn broadcast_gamepad_to_scripted_drawables(
@@ -3886,10 +3904,45 @@ impl StateMachineInstance {
         invocation: &ListenerInvocation,
         already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
-        let runtime = Rc::clone(&self.runtime);
-        runtime
-            .borrow_mut()
-            .gamepad_broadcast(self, invocation, already_dispatched)
+        let mut hit_something = false;
+        let mut hit_opaque = false;
+        for component in &mut self.hit_components {
+            let result = component.process_gamepad_invocation(invocation, already_dispatched);
+            hit_something |= result != HitResult::None;
+            hit_opaque |= result == HitResult::HitOpaque;
+        }
+        for drawable in self.gamepad_scripted_drawables.clone() {
+            if Some(&drawable) == already_dispatched {
+                continue;
+            }
+            hit_something |= drawable
+                .with_mut(|drawable| {
+                    let Some(drawable) = drawable.as_scripted_drawable_mut() else {
+                        return false;
+                    };
+                    let accepts = match invocation.kind() {
+                        ListenerInvocationKind::GamepadConnected => {
+                            drawable.scripted.wants_gamepad_connect()
+                        }
+                        ListenerInvocationKind::GamepadEvent => {
+                            drawable.scripted.wants_gamepad_event()
+                        }
+                        ListenerInvocationKind::GamepadDisconnected => {
+                            drawable.scripted.wants_gamepad_disconnect()
+                        }
+                        _ => false,
+                    };
+                    accepts && drawable.gamepad_dispatch(invocation)
+                })
+                .unwrap_or(false);
+        }
+        if !hit_something {
+            HitResult::None
+        } else if hit_opaque {
+            HitResult::HitOpaque
+        } else {
+            HitResult::Hit
+        }
     }
 
     pub fn duration_seconds(&self) -> f32 {
@@ -4403,14 +4456,25 @@ impl StateMachineInstance {
 
     fn remove_event_listeners(&mut self) {
         for nested in self
-            .runtime
-            .borrow_mut()
-            .artboard_nested_artboards(&self.artboard_instance)
+            .artboard_instance
+            .with_artboard(|artboard| artboard.nested_artboards())
+            .unwrap_or_default()
         {
-            for animation in self.runtime.borrow_mut().nested_animations(&nested) {
-                self.runtime
-                    .borrow_mut()
-                    .nested_remove_event_listener(&animation, self.occurrence.clone());
+            for animation in nested_animations(&nested) {
+                if let Some(machine) = nested_state_machine(&animation) {
+                    machine.with_instance_mut(|machine| {
+                        machine.remove_nested_event_listener(self.occurrence.clone())
+                    });
+                } else {
+                    animation.with_mut(|animation| {
+                        if let Some(notifier) = animation
+                            .as_nested_linear_animation_mut()
+                            .and_then(|animation| animation.animation_instance_mut())
+                        {
+                            notifier.remove_nested_event_listener(self.occurrence.clone());
+                        }
+                    });
+                }
             }
         }
     }

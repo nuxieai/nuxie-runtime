@@ -1,8 +1,11 @@
 use crate::mechanical_port::source::{
     core::CoreHandle,
-    data_bind::data_values::{
-        data_type::DataType, data_value::DataValue, data_value_color::DataValueColor,
-        data_value_number::DataValueNumber,
+    data_bind::{
+        data_context::RuntimeDataContextHandle,
+        data_values::{
+            data_type::DataType, data_value::DataValue, data_value_color::DataValueColor,
+            data_value_number::DataValueNumber,
+        },
     },
     generated::data_bind::converters::data_converter_interpolator_base::{
         DataConverterInterpolatorBase, DataConverterInterpolatorBaseCallbacks,
@@ -341,15 +344,7 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         Self::output_type(self)
     }
 
-    fn bind_from_context(
-        &mut self,
-        context: std::rc::Rc<
-            std::cell::RefCell<
-                crate::mechanical_port::source::data_bind::data_context::DataContext,
-            >,
-        >,
-        data_bind: CoreHandle,
-    ) {
+    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
         self.base.base.bind_from_context(context, data_bind);
     }
 

@@ -19,9 +19,10 @@ use crate::mechanical_port::source::{
         constrainable_list::{ConstrainableList, ConstrainableListState},
         scrolling::scroll_constraint::ScrollConstraint,
     },
-    core::{Core, CoreHandle},
+    core::CoreHandle,
     data_bind::{
-        data_bind_list_item_consumer::DataBindListItemConsumer, data_context::DataContext,
+        data_bind_list_item_consumer::DataBindListItemConsumer,
+        data_context::{DataContext, RuntimeDataContextHandle},
     },
     dirtyable::Dirtyable,
     file::{File, RuntimeFileWeakHandle},
@@ -645,7 +646,7 @@ impl ArtboardComponentList {
         let data_context = artboard_instance.with_artboard(|artboard| artboard.base.data_context());
         state_machine_instance.with_instance_mut(|state_machine_instance| {
             if let Some(data_context) = data_context {
-                state_machine_instance.data_context(data_context);
+                state_machine_instance.set_data_context_handle(data_context);
                 state_machine_instance.update_data_binds(false);
             }
         });
@@ -828,10 +829,9 @@ impl ArtboardComponentList {
                 }
                 if let Some(artboard) = self.artboard_instances_map.get(&item) {
                     let bound_instance = artboard.with_artboard(|artboard| {
-                        artboard
-                            .base
-                            .data_context()
-                            .and_then(|context| context.main_view_model_instance_handle())
+                        artboard.base.data_context().and_then(|context| {
+                            context.with_context(DataContext::main_view_model_instance)
+                        })
                     });
                     if let Some(bound_instance) =
                         bound_instance.filter(|bound| Some(bound) != view_model_instance.as_ref())
@@ -1110,7 +1110,7 @@ impl ArtboardComponentList {
         }
     }
 
-    pub fn hit_test(&mut self, _hit_info: &mut HitInfo, _transform: &Mat2D) -> Option<&mut Core> {
+    pub fn hit_test(&mut self, _hit_info: &mut HitInfo, _transform: &Mat2D) -> Option<CoreHandle> {
         None
     }
 
@@ -1291,20 +1291,24 @@ impl ArtboardComponentList {
         }
     }
 
-    pub fn internal_data_context(&mut self, value: Rc<DataContext>) {
+    pub fn internal_data_context(&mut self, value: RuntimeDataContextHandle) {
         for artboard in self.artboard_instances_map.values() {
             artboard.with_artboard_mut(|artboard| {
                 if let Some(data_context) = artboard.base.data_context() {
-                    data_context.set_parent(Some(value.clone()));
+                    data_context.with_context_mut(|context| {
+                        context.set_parent(Some(value.clone()));
+                    });
                     artboard.internal_data_context(data_context);
                 }
             });
         }
         for state_machine in self.state_machines_map.values() {
             state_machine.with_instance_mut(|state_machine| {
-                if let Some(data_context) = state_machine.data_context() {
-                    data_context.set_parent(Some(value.clone()));
-                    state_machine.internal_data_context(data_context);
+                if let Some(data_context) = state_machine.data_context_handle() {
+                    data_context.with_context_mut(|context| {
+                        context.set_parent(Some(value.clone()));
+                    });
+                    state_machine.internal_data_context_handle(data_context);
                 }
             });
         }
@@ -1313,7 +1317,7 @@ impl ArtboardComponentList {
     pub fn bind_view_model_instance(
         &mut self,
         _view_model_instance: CoreHandle,
-        _parent: Rc<DataContext>,
+        _parent: RuntimeDataContextHandle,
     ) {
     }
 
@@ -1376,10 +1380,10 @@ impl ArtboardComponentList {
         self.file.clone()
     }
 
-    pub fn clone_core(&self) -> Box<dyn Core> {
+    pub fn clone_core(&self) -> Self {
         let mut cloned = self.base.clone_into(&mut ArtboardComponentList::default());
         cloned.set_file(self.file());
-        Box::new(cloned)
+        cloned
     }
 
     pub fn create_artboard_at(&mut self, index: i32, force_layout_sync: bool) {
@@ -2030,14 +2034,14 @@ impl ArtboardHost for ArtboardComponentList {
         ArtboardComponentList::artboard_instance(self, index)
     }
 
-    fn internal_data_context(&mut self, data_context: Rc<DataContext>) {
+    fn internal_data_context(&mut self, data_context: RuntimeDataContextHandle) {
         ArtboardComponentList::internal_data_context(self, data_context);
     }
 
     fn bind_view_model_instance(
         &mut self,
         view_model_instance: CoreHandle,
-        parent: Rc<DataContext>,
+        parent: RuntimeDataContextHandle,
     ) {
         ArtboardComponentList::bind_view_model_instance(self, view_model_instance, parent);
     }

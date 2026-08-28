@@ -3,7 +3,6 @@ use std::cell::RefCell;
 use crate::mechanical_port::source::{
     assets::script_asset::{ScriptInput, ScriptInputBehavior},
     core_context::CoreContext,
-    data_bind::data_context::DataContext,
     data_bind_path_referencer::DataBindPathReferencer,
     generated::{
         script_input_viewmodel_property_base::{
@@ -100,9 +99,8 @@ impl ScriptInputViewModelProperty {
         else {
             return false;
         };
-        let Some(instance_value) = data_context
-            .borrow()
-            .get_view_model_property(&data_bind_path)
+        let Some(instance_value) =
+            data_context.with_context(|context| context.get_view_model_property(&data_bind_path))
         else {
             return false;
         };
@@ -136,9 +134,8 @@ impl ScriptInputViewModelProperty {
         else {
             return false;
         };
-        let Some(instance_value) = data_context
-            .borrow()
-            .get_view_model_property(&data_bind_path)
+        let Some(instance_value) =
+            data_context.with_context(|context| context.get_view_model_property(&data_bind_path))
         else {
             return false;
         };

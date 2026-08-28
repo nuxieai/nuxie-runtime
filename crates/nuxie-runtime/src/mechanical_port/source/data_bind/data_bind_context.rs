@@ -1,9 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
-
 use crate::mechanical_port::source::{
     assets::manifest_asset::ManifestAsset,
     core::CoreHandle,
-    data_bind::data_context::DataContext,
+    data_bind::data_context::RuntimeDataContextHandle,
     generated::data_bind::data_bind_context_base::{
         DataBindContextBase, DataBindContextBaseCallbacks,
     },
@@ -11,7 +9,7 @@ use crate::mechanical_port::source::{
 
 pub trait BoundSource {}
 pub trait ContextConverter {
-    fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle);
+    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle);
 }
 pub const RECONCILE_DIRT: u32 = 3;
 pub struct DataBindContext {
@@ -71,7 +69,7 @@ impl DataBindContext {
             }
         }
     }
-    pub fn bind_from_context(&mut self, data_context: Option<Rc<RefCell<DataContext>>>) {
+    pub fn bind_from_context(&mut self, data_context: Option<RuntimeDataContextHandle>) {
         let Some(data_context) = data_context else {
             return;
         };
@@ -83,18 +81,20 @@ impl DataBindContext {
                 .with_file(|file| {
                     file.manifest()?
                         .with_downcast::<ManifestAsset, _>(|resolver| {
-                            data_context.borrow().get_relative_view_model_property(
-                                &self.base.source_path_ids_buffer,
-                                Some(resolver),
-                            )
+                            data_context.with_context(|context| {
+                                context.get_relative_view_model_property(
+                                    &self.base.source_path_ids_buffer,
+                                    Some(resolver),
+                                )
+                            })
                         })
                 })
                 .flatten()
                 .flatten()
         } else {
-            data_context
-                .borrow()
-                .get_view_model_property(&self.base.source_path_ids_buffer)
+            data_context.with_context(|context| {
+                context.get_view_model_property(&self.base.source_path_ids_buffer)
+            })
         };
         if self.base.base.source() != source {
             if let Some(source) = source {

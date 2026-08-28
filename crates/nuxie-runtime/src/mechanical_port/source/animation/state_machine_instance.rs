@@ -8,7 +8,7 @@ use crate::mechanical_port::source::{
     },
     artboard::RuntimeArtboardInstanceWeakHandle,
     core::CoreHandle,
-    data_bind::data_context::DataContext,
+    data_bind::data_context::RuntimeDataContextHandle,
     generated::{
         animation::{
             keyframe_bool_base::KeyFrameBoolBase, keyframe_color_base::KeyFrameColorBase,
@@ -597,7 +597,7 @@ pub trait StateMachineInstanceRuntime {
     fn retain_semantic_manager(&mut self, manager: RuntimeSemanticManagerHandle) -> Object;
     fn retain_semantic_node(&mut self, node: Option<CoreHandle>) -> Object;
     fn retain_view_model_instance(&mut self, instance: CoreHandle) -> Object;
-    fn retain_data_context(&mut self, context: Rc<DataContext>) -> Object;
+    fn retain_data_context(&mut self, context: RuntimeDataContextHandle) -> Object;
     fn data_context_advanced(&mut self, context: Object);
     fn data_context_add_container(
         &mut self,
@@ -2066,6 +2066,7 @@ pub struct StateMachineInstance {
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
     data_context: Object,
+    data_context_handle: Option<RuntimeDataContextHandle>,
     data_binds: Vec<CoreHandle>,
     listener_view_models: Vec<RuntimeListenerViewModelHandle>,
     reported_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
@@ -2117,6 +2118,7 @@ impl StateMachineInstance {
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
             data_context: RuntimeObjectHandle::NONE,
+            data_context_handle: None,
             data_binds: Vec::new(),
             listener_view_models: Vec::new(),
             reported_listener_view_models: Vec::new(),
@@ -3822,9 +3824,13 @@ impl StateMachineInstance {
         self.internal_data_context(data_context);
     }
 
-    pub fn bind_data_context_handle(&mut self, data_context: Rc<DataContext>) {
-        let retained = self.runtime.borrow_mut().retain_data_context(data_context);
+    pub fn bind_data_context_handle(&mut self, data_context: RuntimeDataContextHandle) {
+        let retained = self
+            .runtime
+            .borrow_mut()
+            .retain_data_context(data_context.clone());
         self.bind_data_context(retained);
+        self.data_context_handle = Some(data_context);
     }
 
     pub fn inherit_data_context(&mut self, data_context: Object) {
@@ -3837,9 +3843,13 @@ impl StateMachineInstance {
         self.internal_data_context(data_context);
     }
 
-    pub fn inherit_data_context_handle(&mut self, data_context: Rc<DataContext>) {
-        let retained = self.runtime.borrow_mut().retain_data_context(data_context);
+    pub fn inherit_data_context_handle(&mut self, data_context: RuntimeDataContextHandle) {
+        let retained = self
+            .runtime
+            .borrow_mut()
+            .retain_data_context(data_context.clone());
         self.inherit_data_context(retained);
+        self.data_context_handle = Some(data_context);
     }
 
     pub fn set_data_context(&mut self, data_context: Object) {
@@ -3847,13 +3857,39 @@ impl StateMachineInstance {
         self.internal_data_context(data_context);
     }
 
-    pub fn set_data_context_handle(&mut self, data_context: Rc<DataContext>) {
-        let retained = self.runtime.borrow_mut().retain_data_context(data_context);
+    pub fn set_data_context_handle(&mut self, data_context: RuntimeDataContextHandle) {
+        let retained = self
+            .runtime
+            .borrow_mut()
+            .retain_data_context(data_context.clone());
         self.set_data_context(retained);
+        self.data_context_handle = Some(data_context);
     }
 
     pub fn data_context(&self) -> Object {
         self.data_context
+    }
+
+    pub fn data_context_handle(&self) -> Option<RuntimeDataContextHandle> {
+        self.data_context_handle.clone()
+    }
+
+    pub fn internal_data_context_handle(&mut self, data_context: RuntimeDataContextHandle) {
+        if self
+            .data_context_handle
+            .as_ref()
+            .is_some_and(|current| current.ptr_eq(&data_context))
+            && self.data_context != RuntimeObjectHandle::NONE
+        {
+            self.internal_data_context(self.data_context);
+            return;
+        }
+        let retained = self
+            .runtime
+            .borrow_mut()
+            .retain_data_context(data_context.clone());
+        self.internal_data_context(retained);
+        self.data_context_handle = Some(data_context);
     }
 
     fn init_scripted_objects(&mut self) {
@@ -3897,6 +3933,7 @@ impl StateMachineInstance {
                 .data_context_remove_container(self.data_context, self.occurrence.clone());
             self.data_context = RuntimeObjectHandle::NONE;
         }
+        self.data_context_handle = None;
         for listener in &self.listener_view_models {
             listener.with_listener_mut(ListenerViewModel::clear_data_context);
         }

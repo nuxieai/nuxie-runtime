@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
     assets::manifest_asset::ManifestAsset, core::CoreHandle,
@@ -13,10 +13,33 @@ struct GlobalSlots {
 }
 
 pub struct DataContext {
-    parent: Option<Rc<DataContext>>,
+    parent: Option<RuntimeDataContextHandle>,
     instances: Vec<CoreHandle>,
     dependent_containers: Vec<CoreHandle>,
     global_slots: Option<GlobalSlots>,
+}
+
+/// One shared mutable occurrence corresponding to upstream `rcp<DataContext>`.
+/// Borrows are closure-scoped so references cannot escape the occurrence.
+#[derive(Clone)]
+pub struct RuntimeDataContextHandle(Rc<RefCell<DataContext>>);
+
+impl RuntimeDataContextHandle {
+    pub fn new(context: DataContext) -> Self {
+        Self(Rc::new(RefCell::new(context)))
+    }
+
+    pub fn with_context<R>(&self, use_context: impl FnOnce(&DataContext) -> R) -> R {
+        use_context(&self.0.borrow())
+    }
+
+    pub fn with_context_mut<R>(&self, use_context: impl FnOnce(&mut DataContext) -> R) -> R {
+        use_context(&mut self.0.borrow_mut())
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 impl Drop for DataContext {
@@ -316,7 +339,9 @@ impl DataContext {
                 return Some(value);
             }
         }
-        self.parent.as_ref()?.get_view_model_property(path)
+        self.parent
+            .as_ref()?
+            .with_context(|parent| parent.get_view_model_property(path))
     }
 
     pub fn get_relative_view_model_property(
@@ -335,7 +360,7 @@ impl DataContext {
         }
         self.parent
             .as_ref()?
-            .get_relative_view_model_property(path, Some(resolver))
+            .with_context(|parent| parent.get_relative_view_model_property(path, Some(resolver)))
     }
 
     pub fn get_view_model_instance(&self, path: &[u32]) -> Option<CoreHandle> {
@@ -347,7 +372,9 @@ impl DataContext {
                 return Some(value);
             }
         }
-        self.parent.as_ref()?.get_view_model_instance(path)
+        self.parent
+            .as_ref()?
+            .with_context(|parent| parent.get_view_model_instance(path))
     }
 
     pub fn get_relative_view_model_instance(
@@ -366,7 +393,7 @@ impl DataContext {
         }
         self.parent
             .as_ref()?
-            .get_relative_view_model_instance(path, Some(resolver))
+            .with_context(|parent| parent.get_relative_view_model_instance(path, Some(resolver)))
     }
 
     pub fn get_property_from_path(&self, path: &mut DataBindPath) -> Option<CoreHandle> {
@@ -404,11 +431,11 @@ impl DataContext {
         }
     }
 
-    pub fn set_parent(&mut self, value: Option<Rc<DataContext>>) {
+    pub fn set_parent(&mut self, value: Option<RuntimeDataContextHandle>) {
         self.parent = value
     }
 
-    pub fn parent(&self) -> Option<Rc<DataContext>> {
+    pub fn parent(&self) -> Option<RuntimeDataContextHandle> {
         self.parent.clone()
     }
 
@@ -419,13 +446,13 @@ impl DataContext {
     pub fn root_view_model_instance(&self) -> Option<CoreHandle> {
         self.parent.as_ref().map_or_else(
             || self.main_view_model_instance(),
-            |parent| parent.root_view_model_instance(),
+            |parent| parent.with_context(DataContext::root_view_model_instance),
         )
     }
 
     pub fn view_model_value(&self) -> Option<CoreHandle> {
         self.parent
             .as_ref()
-            .and_then(|parent| parent.view_model_value())
+            .and_then(|parent| parent.with_context(DataContext::view_model_value))
     }
 }

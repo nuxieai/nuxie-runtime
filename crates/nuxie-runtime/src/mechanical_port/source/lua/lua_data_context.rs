@@ -1,8 +1,5 @@
-use crate::mechanical_port::source::{
-    data_bind::data_context::DataContext,
-    lua::rive_lua_libs::{
-        LuaAtoms, LuaState, ScriptedDataContext, ScriptedDataContextHandle, ScriptedViewModel,
-    },
+use crate::mechanical_port::source::lua::rive_lua_libs::{
+    LuaAtoms, LuaState, ScriptedDataContext, ScriptedDataContextHandle, ScriptedViewModel,
 };
 impl ScriptedDataContext {
     pub fn new(data_context: ScriptedDataContextHandle) -> Self {
@@ -10,9 +7,7 @@ impl ScriptedDataContext {
     }
     pub fn push_parent(&self, state: &mut LuaState) -> i32 {
         if let Some(parent) = self.data_context.parent() {
-            state.new_rive(ScriptedDataContext::new(ScriptedDataContextHandle::Shared(
-                parent,
-            )));
+            state.new_rive(ScriptedDataContext::new(parent));
         } else {
             state.push_nil();
         }

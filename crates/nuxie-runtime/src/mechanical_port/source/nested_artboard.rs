@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::AdvancingComponent,
@@ -16,7 +14,7 @@ use crate::mechanical_port::source::{
     component_origin::ComponentOrigin,
     core::{Core, CoreHandle},
     core_context::CoreContext,
-    data_bind::{data_bind::DataBind, data_context::DataContext},
+    data_bind::{data_bind::DataBind, data_context::RuntimeDataContextHandle},
     data_bind_path_referencer::DataBindPathReferencer,
     file::RuntimeFileWeakHandle,
     focus_data::FocusData,
@@ -59,7 +57,7 @@ pub struct NestedArtboard {
     nested_animations: Vec<CoreHandle>,
     file: RuntimeFileWeakHandle,
     view_model_instance: Option<CoreHandle>,
-    data_context: Option<Rc<DataContext>>,
+    data_context: Option<RuntimeDataContextHandle>,
     active_view_model_instance: Option<CoreHandle>,
     global_view_model_instances: Vec<CoreHandle>,
     focus_scope: Option<FocusNodeRef>,
@@ -813,7 +811,7 @@ impl NestedArtboard {
         self.data_bind_path_referencer.decode_data_bind_path(value);
     }
 
-    pub fn internal_data_context(&mut self, value: Option<Rc<DataContext>>) {
+    pub fn internal_data_context(&mut self, value: Option<RuntimeDataContextHandle>) {
         self.data_context = value.clone();
         self.view_model_instance = None;
         let Some(instance) = self.instance.clone() else {
@@ -841,7 +839,7 @@ impl NestedArtboard {
         self.set_nested_state_machine_context(value);
     }
 
-    fn set_nested_state_machine_context(&mut self, value: Option<Rc<DataContext>>) {
+    fn set_nested_state_machine_context(&mut self, value: Option<RuntimeDataContextHandle>) {
         for animation in &self.nested_animations {
             animation.with_downcast_mut::<NestedStateMachine, _>(|state_machine| {
                 match value.clone() {
@@ -891,7 +889,7 @@ impl NestedArtboard {
     pub fn bind_view_model_instance(
         &mut self,
         view_model_instance: Option<CoreHandle>,
-        parent: Option<Rc<DataContext>>,
+        parent: Option<RuntimeDataContextHandle>,
     ) {
         self.data_context = parent.clone();
         self.view_model_instance = view_model_instance.clone();
@@ -1176,14 +1174,14 @@ impl ArtboardHost for NestedArtboard {
         self.artboard_instance_handle(index)
     }
 
-    fn internal_data_context(&mut self, data_context: Rc<DataContext>) {
+    fn internal_data_context(&mut self, data_context: RuntimeDataContextHandle) {
         NestedArtboard::internal_data_context(self, Some(data_context));
     }
 
     fn bind_view_model_instance(
         &mut self,
         view_model_instance: CoreHandle,
-        parent: Rc<DataContext>,
+        parent: RuntimeDataContextHandle,
     ) {
         NestedArtboard::bind_view_model_instance(self, Some(view_model_instance), Some(parent));
     }

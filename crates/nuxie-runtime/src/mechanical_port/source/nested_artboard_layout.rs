@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
     core::CoreHandle,
     core_context::CoreContext,
-    data_bind::data_context::DataContext,
+    data_bind::data_context::RuntimeDataContextHandle,
     file::RuntimeFileWeakHandle,
     generated::nested_artboard_layout_base::{
         NestedArtboardLayoutBase, NestedArtboardLayoutBaseCallbacks,
@@ -17,7 +17,6 @@ use crate::mechanical_port::source::{
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     status_code::StatusCode,
 };
-use std::rc::Rc;
 
 pub struct NestedArtboardLayout {
     pub base: NestedArtboardLayoutBase,
@@ -321,14 +320,14 @@ impl ArtboardHost for NestedArtboardLayout {
         self.base.base.artboard_instance_handle(index)
     }
 
-    fn internal_data_context(&mut self, data_context: Rc<DataContext>) {
+    fn internal_data_context(&mut self, data_context: RuntimeDataContextHandle) {
         self.base.base.internal_data_context(Some(data_context));
     }
 
     fn bind_view_model_instance(
         &mut self,
         view_model_instance: CoreHandle,
-        parent: Rc<DataContext>,
+        parent: RuntimeDataContextHandle,
     ) {
         self.base
             .base

@@ -35,7 +35,7 @@ pub use crate::mechanical_port::source::{
     },
     core::CoreHandle,
     data_bind::{
-        data_context::DataContext,
+        data_context::{DataContext, RuntimeDataContextHandle},
         data_values::{
             DataValue, DataValueBoolean, DataValueColor, DataValueNumber, DataValueString,
         },
@@ -2069,6 +2069,7 @@ impl_lua_rive!(ScriptedNoneInvocation, 61, "NoneInvocation");
 pub enum ScriptedDataContextHandle {
     Shared(Rc<DataContext>),
     Mutable(Rc<RefCell<DataContext>>),
+    Runtime(RuntimeDataContextHandle),
 }
 
 pub struct ScriptedDataContext {
@@ -2076,10 +2077,11 @@ pub struct ScriptedDataContext {
 }
 
 impl ScriptedDataContextHandle {
-    pub fn parent(&self) -> Option<Rc<DataContext>> {
+    pub fn parent(&self) -> Option<Self> {
         match self {
-            Self::Shared(context) => context.parent(),
-            Self::Mutable(context) => context.borrow().parent(),
+            Self::Shared(context) => context.parent().map(Self::Runtime),
+            Self::Mutable(context) => context.borrow().parent().map(Self::Runtime),
+            Self::Runtime(context) => context.with_context(DataContext::parent).map(Self::Runtime),
         }
     }
 
@@ -2087,6 +2089,7 @@ impl ScriptedDataContextHandle {
         match self {
             Self::Shared(context) => context.main_view_model_instance(),
             Self::Mutable(context) => context.borrow().main_view_model_instance(),
+            Self::Runtime(context) => context.with_context(DataContext::main_view_model_instance),
         }
     }
 }

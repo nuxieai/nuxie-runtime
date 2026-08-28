@@ -1,7 +1,7 @@
 use super::data_converter_operation::ArithmeticOperation;
 use crate::mechanical_port::source::{
     core::CoreHandle,
-    data_bind::{data_context::DataContext, data_values::data_value::DataValue},
+    data_bind::{data_context::RuntimeDataContextHandle, data_values::data_value::DataValue},
     generated::data_bind::converters::{
         data_converter_operation_base::DataConverterOperationBaseCallbacks,
         data_converter_operation_viewmodel_base::{
@@ -11,7 +11,6 @@ use crate::mechanical_port::source::{
     viewmodel::viewmodel_instance_number::ViewModelInstanceNumber,
     viewmodel::viewmodel_instance_value::ValueDependentHandle,
 };
-use std::{cell::RefCell, rc::Rc};
 pub struct DataConverterOperationViewModel {
     pub base: DataConverterOperationViewModelBase,
     source: Option<CoreHandle>,
@@ -76,14 +75,13 @@ impl DataConverterOperationViewModel {
     pub fn source_path_ids(&self) -> &[u32] {
         &self.source_path_ids
     }
-    pub fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle) {
+    pub fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
         self.base
             .base
             .base
-            .bind_from_context(Rc::clone(&context), data_bind.clone());
+            .bind_from_context(context.clone(), data_bind.clone());
         self.source = context
-            .borrow()
-            .get_view_model_property(&self.source_path_ids)
+            .with_context(|context| context.get_view_model_property(&self.source_path_ids))
             .filter(|source| {
                 source
                     .with_downcast::<ViewModelInstanceNumber, _>(|_| true)
@@ -135,7 +133,7 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         self.base.base.output_type()
     }
 
-    fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle) {
+    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
         Self::bind_from_context(self, context, data_bind);
     }
 

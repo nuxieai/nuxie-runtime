@@ -88,7 +88,7 @@ impl ScriptedContext {
                     .with(|object| object.as_scripted_object()?.data_context())
                     .flatten()
             })
-            .and_then(|context| context.borrow().main_view_model_instance())
+            .and_then(|context| context.with_context(DataContext::main_view_model_instance))
         {
             let model = instance
                 .with(|instance| instance.as_view_model_instance()?.get_view_model())
@@ -108,7 +108,7 @@ impl ScriptedContext {
                     .with(|object| object.as_scripted_object()?.data_context())
                     .flatten()
             })
-            .and_then(|context| context.borrow().root_view_model_instance())
+            .and_then(|context| context.with_context(DataContext::root_view_model_instance))
         {
             let model = instance
                 .with(|instance| instance.as_view_model_instance()?.get_view_model())
@@ -126,7 +126,7 @@ impl ScriptedContext {
                 .flatten()
         }) {
             state.new_rive(ScriptedDataContext::new(
-                ScriptedDataContextHandle::Mutable(context),
+                ScriptedDataContextHandle::Runtime(context),
             ));
             return 1;
         }

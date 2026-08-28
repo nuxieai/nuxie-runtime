@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::mechanical_port::source::{
     assets::file_asset_referencer::FileAssetReferencer, core::CoreHandle,
-    data_bind::data_context::DataContext, importers::import_stack::ImportStack,
+    data_bind::data_context::RuntimeDataContextHandle, importers::import_stack::ImportStack,
     status_code::StatusCode,
 };
 
@@ -142,7 +142,7 @@ pub struct ScriptedObject {
     asset: Option<Rc<[u8]>>,
     inputs: HashMap<String, ScriptValue>,
     tracked_properties: Vec<usize>,
-    data_context: Option<Rc<RefCell<DataContext>>>,
+    data_context: Option<RuntimeDataContextHandle>,
     in_update_phase: bool,
     user_init_done: bool,
     disposed: bool,
@@ -450,10 +450,10 @@ impl ScriptedObject {
     pub fn self_ref(&self) -> i32 {
         self.self_ref
     }
-    pub fn data_context(&self) -> Option<Rc<RefCell<DataContext>>> {
+    pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
         self.data_context.clone()
     }
-    pub fn set_data_context(&mut self, v: Option<Rc<RefCell<DataContext>>>) {
+    pub fn set_data_context(&mut self, v: Option<RuntimeDataContextHandle>) {
         self.data_context = v
     }
     pub fn in_update_phase(&self) -> bool {

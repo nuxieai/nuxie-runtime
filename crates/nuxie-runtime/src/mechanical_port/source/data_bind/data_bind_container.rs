@@ -1,6 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
-
-use crate::mechanical_port::source::{core::CoreHandle, data_bind::data_context::DataContext};
+use crate::mechanical_port::source::{
+    core::CoreHandle, data_bind::data_context::RuntimeDataContextHandle,
+};
 
 pub const NONE: u32 = 0;
 pub const DEPENDENTS: u32 = 1;
@@ -18,7 +18,7 @@ pub struct DataBindContainer {
     pending_dirty: Vec<CoreHandle>,
     pending_additions: Vec<CoreHandle>,
     pending_removals: Vec<CoreHandle>,
-    data_context: Option<Rc<RefCell<DataContext>>>,
+    data_context: Option<RuntimeDataContextHandle>,
     is_processing: bool,
 }
 
@@ -56,9 +56,9 @@ impl DataBindContainer {
         self.data_context = None;
     }
 
-    pub fn bind_data_binds_from_context(&mut self, context: Rc<RefCell<DataContext>>) {
+    pub fn bind_data_binds_from_context(&mut self, context: RuntimeDataContextHandle) {
         for bind in &self.data_binds {
-            let context = Rc::clone(&context);
+            let context = context.clone();
             bind.with_mut(|bind| {
                 if let Some(bind) = bind.as_data_bind_context_mut() {
                     bind.bind_from_context(Some(context));

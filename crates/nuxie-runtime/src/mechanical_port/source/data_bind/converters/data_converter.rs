@@ -1,10 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
 use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::{
         data_bind_container::DataBindContainer,
-        data_context::DataContext,
+        data_context::RuntimeDataContextHandle,
         data_values::{data_type::DataType, data_value::DataValue},
     },
     generated::core_registry::DataConverterCapability,
@@ -22,7 +20,7 @@ pub trait DataBindNode {
     fn clone_bind(&self) -> Option<CoreHandle>;
     fn set_target_converter(&mut self, converter: CoreHandle);
     fn copy_file_from(&mut self, source: CoreHandle);
-    fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>);
+    fn bind_from_context(&mut self, context: RuntimeDataContextHandle);
     fn unbind(&mut self);
     fn update(&mut self, force: bool);
 }
@@ -42,11 +40,7 @@ macro_rules! data_converter_capability_lifecycle {
     ($($base:ident).+) => {
         fn bind_from_context(
             &mut self,
-            context: std::rc::Rc<
-                std::cell::RefCell<
-                    $crate::mechanical_port::source::data_bind::data_context::DataContext,
-                >,
-            >,
+            context: $crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
             data_bind: $crate::mechanical_port::source::core::CoreHandle,
         ) {
             self.$($base).+.bind_from_context(context, data_bind);
@@ -213,7 +207,7 @@ impl DataConverter {
 
     pub fn bind_from_context(
         &mut self,
-        data_context: Rc<RefCell<DataContext>>,
+        data_context: RuntimeDataContextHandle,
         data_bind: CoreHandle,
     ) {
         self.parent_data_bind = Some(data_bind);
@@ -319,7 +313,7 @@ impl DataConverterCapability for DataConverter {
         Self::output_type(self)
     }
 
-    fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle) {
+    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
         Self::bind_from_context(self, context, data_bind);
     }
 

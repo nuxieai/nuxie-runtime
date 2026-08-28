@@ -1,9 +1,12 @@
 use super::data_converter_operation::ArithmeticOperation;
 use crate::mechanical_port::source::{
     core::CoreHandle,
-    data_bind::data_values::{
-        data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
-        data_value_symbol_list_index::DataValueSymbolListIndex,
+    data_bind::{
+        data_context::RuntimeDataContextHandle,
+        data_values::{
+            data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
+            data_value_symbol_list_index::DataValueSymbolListIndex,
+        },
     },
     generated::data_bind::converters::data_converter_formula_base::{
         DataConverterFormulaBase, DataConverterFormulaBaseCallbacks,
@@ -11,7 +14,7 @@ use crate::mechanical_port::source::{
     math::random::RandomProvider,
     viewmodel::viewmodel_instance_value::{ValueDependentHandle, ViewModelInstanceValue},
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, rc::Rc};
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RandomMode {
@@ -346,9 +349,7 @@ impl DataConverterFormula {
     }
     pub fn bind_from_context(
         &mut self,
-        data_context: Rc<
-            RefCell<crate::mechanical_port::source::data_bind::data_context::DataContext>,
-        >,
+        data_context: RuntimeDataContextHandle,
         data_bind: CoreHandle,
     ) {
         self.base
@@ -461,15 +462,7 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         Self::output_type(self)
     }
 
-    fn bind_from_context(
-        &mut self,
-        context: std::rc::Rc<
-            std::cell::RefCell<
-                crate::mechanical_port::source::data_bind::data_context::DataContext,
-            >,
-        >,
-        data_bind: CoreHandle,
-    ) {
+    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
         Self::bind_from_context(self, context, data_bind);
     }
 

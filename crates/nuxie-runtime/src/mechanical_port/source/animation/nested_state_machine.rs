@@ -12,15 +12,13 @@ use crate::mechanical_port::source::{
     artboard::{Artboard, RuntimeArtboardInstanceWeakHandle},
     core::CoreHandle,
     core_context::CoreContext,
-    data_bind::data_context::DataContext,
+    data_bind::data_context::RuntimeDataContextHandle,
     focus_data::FocusData,
     generated::animation::nested_state_machine_base::NestedStateMachineBase,
     hit_result::HitResult,
     math::vec2d::Vec2D,
     nested_artboard::NestedArtboard,
 };
-use std::rc::Rc;
-
 #[derive(Default)]
 pub struct NestedStateMachine {
     pub base: NestedStateMachineBase,
@@ -246,7 +244,7 @@ impl NestedStateMachine {
         }
     }
 
-    pub fn data_context(&mut self, data_context: Rc<DataContext>) {
+    pub fn data_context(&mut self, data_context: RuntimeDataContextHandle) {
         if let Some(instance) = &self.instance {
             instance.with_instance_mut(|instance| instance.set_data_context_handle(data_context));
         }

@@ -1,10 +1,9 @@
 use crate::mechanical_port::source::{
     core::CoreHandle,
-    data_bind::data_context::DataContext,
+    data_bind::data_context::RuntimeDataContextHandle,
     generated::scripted::scripted_data_converter_base::ScriptedDataConverterBase,
     scripted::scripted_object::{ScriptProtocol, ScriptValue, ScriptedObject},
 };
-use std::{cell::RefCell, rc::Rc};
 #[derive(Clone, Debug, PartialEq)]
 pub enum DataValue {
     None,
@@ -19,7 +18,7 @@ pub enum DataValue {
 pub struct ScriptedDataConverter {
     pub base: ScriptedDataConverterBase,
     pub scripted: ScriptedObject,
-    data_context: Option<Rc<RefCell<DataContext>>>,
+    data_context: Option<RuntimeDataContextHandle>,
     data_value: Option<DataValue>,
     properties: Vec<CoreHandle>,
     converter_dirty: bool,
@@ -76,7 +75,7 @@ impl ScriptedDataConverter {
         let out = self.apply_conversion(v, "reverseConvert");
         out
     }
-    pub fn bind_from_context(&mut self, c: Option<Rc<RefCell<DataContext>>>) {
+    pub fn bind_from_context(&mut self, c: Option<RuntimeDataContextHandle>) {
         self.data_context = c.clone();
         self.scripted.set_data_context(c);
         self.scripted.reinit();

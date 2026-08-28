@@ -1,8 +1,6 @@
-use std::{cell::RefCell, rc::Rc};
-
 use crate::mechanical_port::source::{
     core::CoreHandle,
-    data_bind::data_context::DataContext,
+    data_bind::data_context::RuntimeDataContextHandle,
     data_bind::data_values::{data_type::DataType, data_value::DataValue},
     generated::data_bind::converters::data_converter_group_base::DataConverterGroupBase,
 };
@@ -20,7 +18,7 @@ pub trait GroupConverter {
         output: &mut dyn FnMut(&dyn DataValue),
     );
     fn output_type(&self) -> DataType;
-    fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle);
+    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle);
     fn unbind(&mut self);
     fn update(&mut self);
     fn reset(&mut self);
@@ -101,10 +99,10 @@ impl DataConverterGroup {
         }
         cloned
     }
-    pub fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle) {
+    pub fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
         self.base
             .base
-            .bind_from_context(Rc::clone(&context), data_bind.clone());
+            .bind_from_context(context.clone(), data_bind.clone());
         for item in &self.items {
             let converter = item
                 .with(|item| {
@@ -115,7 +113,7 @@ impl DataConverterGroup {
             if let Some(converter) = converter {
                 converter.with_mut(|converter| {
                     if let Some(converter) = converter.as_data_converter_capability_mut() {
-                        converter.bind_from_context(Rc::clone(&context), data_bind.clone());
+                        converter.bind_from_context(context.clone(), data_bind.clone());
                     }
                 });
             }
@@ -271,7 +269,7 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         Self::output_type(self, self.base.base.output_type())
     }
 
-    fn bind_from_context(&mut self, context: Rc<RefCell<DataContext>>, data_bind: CoreHandle) {
+    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
         Self::bind_from_context(self, context, data_bind);
     }
 

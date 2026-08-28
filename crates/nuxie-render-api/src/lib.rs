@@ -1361,6 +1361,13 @@ pub trait RenderImage: Any {
     fn uv_transform(&self) -> Mat2D {
         Mat2D::IDENTITY
     }
+
+    /// Install the owner callback used by asynchronously decoded browser
+    /// images. Backends whose `decode_image` result is already complete keep
+    /// the default: there is no later completion event to report.
+    fn set_decoded_async_callback(&mut self, callback: Option<Rc<dyn Fn()>>) {
+        drop(callback);
+    }
 }
 
 /// One entry-point stage in a Rive whole-module shader source container.

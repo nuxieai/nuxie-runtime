@@ -3,19 +3,19 @@ use crate::mechanical_port::source::{
         draggable_constraint::{DraggableConstraintDirection, DraggableProxy},
         scrolling::scroll_constraint::ScrollConstraint,
     },
-    drawable::Drawable,
+    core::CoreHandle,
     math::vec2d::Vec2D,
 };
 
 pub struct ViewportDraggableProxy {
-    constraint: *mut ScrollConstraint,
-    hittable: *mut Drawable,
+    constraint: CoreHandle,
+    hittable: CoreHandle,
     last_position: Vec2D,
     is_dragging: bool,
 }
 
 impl ViewportDraggableProxy {
-    pub fn new(constraint: &mut ScrollConstraint, hittable: &mut Drawable) -> Self {
+    pub fn new(constraint: CoreHandle, hittable: CoreHandle) -> Self {
         Self {
             constraint,
             hittable,
@@ -30,52 +30,63 @@ impl DraggableProxy for ViewportDraggableProxy {
         false
     }
     fn drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool {
-        let constraint = unsafe { &mut *self.constraint };
-        if !constraint.interactive() {
-            return false;
-        }
-        let delta_position = mouse_position - self.last_position;
-        if !self.is_dragging {
-            let crossed = match constraint.direction() {
-                DraggableConstraintDirection::Vertical => {
-                    delta_position.y.abs() > constraint.threshold()
+        let handle = self.constraint.clone();
+        handle
+            .with_downcast_mut::<ScrollConstraint, _>(|constraint| {
+                if !constraint.interactive() {
+                    return false;
                 }
-                DraggableConstraintDirection::Horizontal => {
-                    delta_position.x.abs() > constraint.threshold()
+                let delta_position = mouse_position - self.last_position;
+                if !self.is_dragging {
+                    let crossed = match constraint.direction() {
+                        DraggableConstraintDirection::Vertical => {
+                            delta_position.y.abs() > constraint.threshold()
+                        }
+                        DraggableConstraintDirection::Horizontal => {
+                            delta_position.x.abs() > constraint.threshold()
+                        }
+                        DraggableConstraintDirection::All => {
+                            delta_position.length() > constraint.threshold()
+                        }
+                    };
+                    if crossed {
+                        self.is_dragging = true;
+                    } else {
+                        return false;
+                    }
                 }
-                DraggableConstraintDirection::All => {
-                    delta_position.length() > constraint.threshold()
-                }
-            };
-            if crossed {
-                self.is_dragging = true;
-            } else {
-                return false;
-            }
-        }
-        constraint.drag_view(delta_position, time_stamp);
-        self.last_position = mouse_position;
-        true
+                constraint.drag_view(delta_position, time_stamp);
+                self.last_position = mouse_position;
+                true
+            })
+            .expect("live ScrollConstraint occurrence")
     }
     fn start_drag(&mut self, mouse_position: Vec2D, _time_stamp: f32) -> bool {
-        let constraint = unsafe { &mut *self.constraint };
-        if !constraint.interactive() {
-            return false;
-        }
-        self.is_dragging = false;
-        constraint.init_physics();
-        self.last_position = mouse_position;
-        true
+        let handle = self.constraint.clone();
+        handle
+            .with_downcast_mut::<ScrollConstraint, _>(|constraint| {
+                if !constraint.interactive() {
+                    return false;
+                }
+                self.is_dragging = false;
+                constraint.init_physics();
+                self.last_position = mouse_position;
+                true
+            })
+            .expect("live ScrollConstraint occurrence")
     }
     fn end_drag(&mut self, _mouse_position: Vec2D, _time_stamp: f32) -> bool {
-        let constraint = unsafe { &mut *self.constraint };
-        if !constraint.interactive() {
-            return false;
-        }
-        constraint.run_physics();
-        true
+        self.constraint
+            .with_downcast_mut::<ScrollConstraint, _>(|constraint| {
+                if !constraint.interactive() {
+                    return false;
+                }
+                constraint.run_physics();
+                true
+            })
+            .expect("live ScrollConstraint occurrence")
     }
-    fn hittable(&mut self) -> Option<&mut Drawable> {
-        Some(unsafe { &mut *self.hittable })
+    fn hittable(&self) -> Option<CoreHandle> {
+        Some(self.hittable.clone())
     }
 }

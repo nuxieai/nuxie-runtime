@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::{
     constraints::{
         draggable_constraint::DraggableConstraintDirection,
-        scrolling::scroll_physics::{ScrollPhysics, ScrollPhysicsState},
+        scrolling::scroll_physics::{ScrollPhysics, ScrollPhysicsRuntime},
     },
     generated::constraints::scrolling::elastic_scroll_physics_base::ElasticScrollPhysicsBase,
     math::vec2d::Vec2D,
@@ -176,9 +176,18 @@ impl ElasticScrollPhysicsHelper {
 
 pub struct ElasticScrollPhysics {
     pub base: ElasticScrollPhysicsBase,
-    pub physics: ScrollPhysicsState,
     physics_x: Option<Box<ElasticScrollPhysicsHelper>>,
     physics_y: Option<Box<ElasticScrollPhysicsHelper>>,
+}
+
+impl Default for ElasticScrollPhysics {
+    fn default() -> Self {
+        Self {
+            base: ElasticScrollPhysicsBase::default(),
+            physics_x: None,
+            physics_y: None,
+        }
+    }
 }
 
 impl ElasticScrollPhysics {
@@ -214,10 +223,10 @@ impl ElasticScrollPhysics {
             .as_mut()
             .map_or(0.0, |p| p.advance(elapsed_seconds));
         if elapsed_seconds > 0.0 {
-            self.physics.speed = Vec2D::new(
+            self.base.base.set_speed(Vec2D::new(
                 (advance_x - previous_x) / elapsed_seconds,
                 (advance_y - previous_y) / elapsed_seconds,
-            );
+            ));
         }
         let running_x = self.physics_x.as_ref().is_some_and(|p| p.is_running());
         let running_y = self.physics_y.as_ref().is_some_and(|p| p.is_running());
@@ -247,20 +256,12 @@ impl ElasticScrollPhysics {
         content_size: f32,
         viewport_size: f32,
     ) {
-        ScrollPhysics::run(
-            self,
-            range_min,
-            range_max,
-            value,
-            snapping_points.clone(),
-            content_size,
-            viewport_size,
-        );
+        self.base.base.run_base();
         let x_points = snapping_points.iter().map(|point| point.x).collect();
         let y_points = snapping_points.iter().map(|point| point.y).collect();
         if let Some(physics) = &mut self.physics_x {
             physics.run(
-                self.physics.acceleration.x,
+                self.base.base.acceleration().x,
                 range_min.x,
                 range_max.x,
                 value.x,
@@ -271,7 +272,7 @@ impl ElasticScrollPhysics {
         }
         if let Some(physics) = &mut self.physics_y {
             physics.run(
-                self.physics.acceleration.y,
+                self.base.base.acceleration().y,
                 range_min.y,
                 range_max.y,
                 value.y,
@@ -283,7 +284,10 @@ impl ElasticScrollPhysics {
     }
 
     pub fn prepare(&mut self, direction: DraggableConstraintDirection) {
-        ScrollPhysics::prepare(self, direction);
+        // `ScrollPhysics::prepare` invokes virtual `reset` before assigning the
+        // direction. Preserve that ordering explicitly in Rust.
+        self.reset();
+        self.base.base.set_direction(direction);
         if matches!(
             direction,
             DraggableConstraintDirection::Horizontal | DraggableConstraintDirection::All
@@ -307,7 +311,7 @@ impl ElasticScrollPhysics {
     }
 
     pub fn reset(&mut self) {
-        ScrollPhysics::reset(self);
+        self.base.base.reset_base();
         self.physics_x = None;
         self.physics_y = None;
     }
@@ -345,5 +349,89 @@ impl ElasticScrollPhysics {
                 physics.scroll_to(current.y, target.y, range_min.y, range_max.y);
             }
         }
+    }
+}
+
+impl ScrollPhysicsRuntime for ElasticScrollPhysics {
+    fn physics(&self) -> &ScrollPhysics {
+        &self.base.base
+    }
+
+    fn physics_mut(&mut self) -> &mut ScrollPhysics {
+        &mut self.base.base
+    }
+
+    fn enabled(&self) -> bool {
+        ElasticScrollPhysics::enabled(self)
+    }
+
+    fn is_running(&self) -> bool {
+        ElasticScrollPhysics::is_running(self)
+    }
+
+    fn target_x(&self) -> f32 {
+        ElasticScrollPhysics::target_x(self)
+    }
+
+    fn target_y(&self) -> f32 {
+        ElasticScrollPhysics::target_y(self)
+    }
+
+    fn has_target_x(&self) -> bool {
+        ElasticScrollPhysics::has_target_x(self)
+    }
+
+    fn has_target_y(&self) -> bool {
+        ElasticScrollPhysics::has_target_y(self)
+    }
+
+    fn advance(&mut self, elapsed_seconds: f32) -> Vec2D {
+        ElasticScrollPhysics::advance(self, elapsed_seconds)
+    }
+
+    fn clamp(&self, range_min: Vec2D, range_max: Vec2D, value: Vec2D) -> Vec2D {
+        ElasticScrollPhysics::clamp(self, range_min, range_max, value)
+    }
+
+    fn run(
+        &mut self,
+        range_min: Vec2D,
+        range_max: Vec2D,
+        value: Vec2D,
+        snapping_points: Vec<Vec2D>,
+        content_size: f32,
+        viewport_size: f32,
+    ) {
+        ElasticScrollPhysics::run(
+            self,
+            range_min,
+            range_max,
+            value,
+            snapping_points,
+            content_size,
+            viewport_size,
+        );
+    }
+
+    fn prepare(&mut self, direction: DraggableConstraintDirection) {
+        ElasticScrollPhysics::prepare(self, direction);
+    }
+
+    fn reset(&mut self) {
+        ElasticScrollPhysics::reset(self);
+    }
+
+    fn scroll_to_position(
+        &mut self,
+        current: Vec2D,
+        target: Vec2D,
+        range_min: Vec2D,
+        range_max: Vec2D,
+        horizontal: bool,
+        vertical: bool,
+    ) {
+        ElasticScrollPhysics::scroll_to_position(
+            self, current, target, range_min, range_max, horizontal, vertical,
+        );
     }
 }

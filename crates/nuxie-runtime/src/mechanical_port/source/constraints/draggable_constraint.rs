@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use crate::mechanical_port::source::{
     animation::{
         state_machine_instance::StateMachineInstance,
@@ -5,16 +7,42 @@ use crate::mechanical_port::source::{
         state_machine_listener_single::StateMachineListenerSingle,
     },
     component::Component,
-    drawable::Drawable,
-    generated::constraints::draggable_constraint_base::DraggableConstraintBase,
-    hit_component::HitComponent,
-    listener_group::{
-        GestureClickPhase, HitTarget, ListenerGroup, ListenerGroupProvider,
-        ListenerGroupWithTargets,
+    core::{Core, CoreHandle},
+    generated::{
+        component_base::ComponentBaseCallbacks,
+        constraints::{
+            constraint_base::ConstraintBaseCallbacks,
+            draggable_constraint_base::{
+                DraggableConstraintBase, DraggableConstraintBaseCallbacks,
+            },
+        },
     },
+    listener_group::{GestureClickPhase, HitTarget, ListenerGroup, ListenerGroupWithTargets},
     math::vec2d::Vec2D,
     process_event_result::ProcessEventResult,
 };
+
+impl ComponentBaseCallbacks for DraggableConstraint {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        Core::notify_property_changed(self, property_key);
+    }
+}
+
+impl ConstraintBaseCallbacks for DraggableConstraint {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        Core::notify_property_changed(self, property_key);
+    }
+
+    fn strength_changed(&mut self) {
+        crate::mechanical_port::source::constraints::constraint::Constraint::strength_changed(self);
+    }
+}
+
+impl DraggableConstraintBaseCallbacks for DraggableConstraint {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        Core::notify_property_changed(self, property_key);
+    }
+}
 
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -31,13 +59,43 @@ pub trait DraggableProxy {
     fn start_drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool;
     fn drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool;
     fn end_drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool;
-    fn hittable(&mut self) -> Option<&mut Drawable>;
+    fn hittable(&self) -> Option<CoreHandle>;
 }
 
-pub trait DraggableConstraint: DraggableConstraintBase + ListenerGroupProvider {
-    fn draggables(&mut self) -> Vec<Box<dyn DraggableProxy>>;
+#[derive(Default)]
+pub struct DraggableConstraint {
+    pub base: DraggableConstraintBase,
+}
 
-    fn direction(&self) -> DraggableConstraintDirection {
+impl Deref for DraggableConstraint {
+    type Target = DraggableConstraintBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl DerefMut for DraggableConstraint {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl DraggableConstraint {
+    pub fn copy(&mut self, object: &Self, callbacks: &mut impl DraggableConstraintBaseCallbacks) {
+        self.base.copy(&object.base, callbacks);
+    }
+
+    pub fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+        callbacks: &mut impl DraggableConstraintBaseCallbacks,
+    ) -> bool {
+        self.base.deserialize(property_key, reader, callbacks)
+    }
+
+    pub fn direction(&self) -> DraggableConstraintDirection {
         match self.direction_value() {
             0 => DraggableConstraintDirection::Horizontal,
             1 => DraggableConstraintDirection::Vertical,
@@ -45,35 +103,33 @@ pub trait DraggableConstraint: DraggableConstraintBase + ListenerGroupProvider {
         }
     }
 
-    fn constrains_horizontal(&self) -> bool {
+    pub fn constrains_horizontal(&self) -> bool {
         matches!(
             self.direction(),
             DraggableConstraintDirection::Horizontal | DraggableConstraintDirection::All
         )
     }
 
-    fn constrains_vertical(&self) -> bool {
+    pub fn constrains_vertical(&self) -> bool {
         matches!(
             self.direction(),
             DraggableConstraintDirection::Vertical | DraggableConstraintDirection::All
         )
     }
 
-    fn listener_groups(&mut self) -> Vec<ListenerGroupWithTargets> {
+    pub fn listener_groups(
+        constraint: CoreHandle,
+        draggables: Vec<Box<dyn DraggableProxy>>,
+    ) -> Vec<ListenerGroupWithTargets> {
         let mut result = Vec::new();
-        for mut drag_proxy in self.draggables() {
+        for drag_proxy in draggables {
             let mut listener = Box::new(StateMachineListenerSingle::default());
             listener.set_listener_type_value(ListenerType::ComponentProvided as u32);
-            let target = drag_proxy.hittable().and_then(|hittable| {
-                hittable
-                    .as_component_mut()
-                    .map(|component| HitTarget::new(component, drag_proxy.is_opaque()))
-            });
-            let listener_group = DraggableConstraintListenerGroup::new(
-                listener,
-                self.as_draggable_constraint_ptr(),
-                drag_proxy,
-            );
+            let target = drag_proxy
+                .hittable()
+                .map(|hittable| HitTarget::new(hittable, drag_proxy.is_opaque()));
+            let listener_group =
+                DraggableConstraintListenerGroup::new(listener, constraint.clone(), drag_proxy);
             if let Some(target) = target {
                 result.push(ListenerGroupWithTargets::new(
                     Box::new(listener_group),
@@ -83,15 +139,11 @@ pub trait DraggableConstraint: DraggableConstraintBase + ListenerGroupProvider {
         }
         result
     }
-
-    fn hit_components(&self, _state_machine: &StateMachineInstance) -> Vec<&HitComponent> {
-        Vec::new()
-    }
 }
 
 pub struct DraggableConstraintListenerGroup {
     base: ListenerGroup,
-    constraint: *mut dyn DraggableConstraint,
+    constraint: CoreHandle,
     draggable: Box<dyn DraggableProxy>,
     has_scrolled: bool,
 }
@@ -99,7 +151,7 @@ pub struct DraggableConstraintListenerGroup {
 impl DraggableConstraintListenerGroup {
     pub fn new(
         listener: Box<dyn StateMachineListener>,
-        constraint: *mut dyn DraggableConstraint,
+        constraint: CoreHandle,
         draggable: Box<dyn DraggableProxy>,
     ) -> Self {
         Self {
@@ -112,8 +164,8 @@ impl DraggableConstraintListenerGroup {
 
     pub fn enable(&mut self, _pointer_id: i32) {}
     pub fn disable(&mut self, _pointer_id: i32) {}
-    pub fn constraint(&mut self) -> *mut dyn DraggableConstraint {
-        self.constraint
+    pub fn constraint(&self) -> CoreHandle {
+        self.constraint.clone()
     }
     pub fn can_early_out(&self, _drawable: &Component) -> bool {
         false

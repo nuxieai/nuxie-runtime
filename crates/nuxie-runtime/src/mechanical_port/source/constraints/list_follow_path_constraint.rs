@@ -1,13 +1,13 @@
 use crate::mechanical_port::source::{
-    constraints::{
-        constrainable_list::{self, ConstrainableList},
-        list_constraint::ListConstraint,
-    },
+    constraints::{constrainable_list::ConstrainableList, list_constraint::ListConstraint},
+    core::CoreObject,
+    generated::core_registry::CoreCapabilities,
     math::{mat2d::Mat2D, transform_components::TransformComponents},
 };
 
 pub use crate::mechanical_port::source::generated::constraints::list_follow_path_constraint_base::ListFollowPathConstraintBase;
 
+#[derive(Default)]
 pub struct ListFollowPathConstraint {
     pub base: ListFollowPathConstraintBase,
 }
@@ -27,10 +27,18 @@ impl ListFollowPathConstraint {
         parent_transform: &Mat2D,
         component_offset: f32,
     ) -> TransformComponents {
-        let Some(target) = self.base.target_mut() else {
+        let Some(target) = self.base.target() else {
             return TransformComponents::default();
         };
-        if target.is_collapsed() {
+        let target_collapsed = target
+            .with(|target| {
+                target
+                    .as_transform_component()
+                    .expect("validated ListFollowPathConstraint target")
+                    .is_collapsed()
+            })
+            .expect("ListFollowPathConstraint retains a live target");
+        if target_collapsed {
             return TransformComponents::default();
         }
         let mut transform_b = self.base.target_transform(component_offset);
@@ -40,9 +48,17 @@ impl ListFollowPathConstraint {
 
     pub fn build_dependencies(&mut self) {
         self.base.build_dependencies();
-        if let Some(list) = constrainable_list::from(self.base.parent_mut()) {
-            list.add_list_constraint(self as *mut Self as *mut dyn ListConstraint);
-        }
+        let Some(constraint) = self.core().handle() else {
+            return;
+        };
+        let Some(parent) = self.component_parent_handle() else {
+            return;
+        };
+        parent.with_mut(|parent| {
+            if let Some(list) = parent.as_constrainable_list_mut() {
+                list.add_list_constraint(constraint);
+            }
+        });
     }
 }
 

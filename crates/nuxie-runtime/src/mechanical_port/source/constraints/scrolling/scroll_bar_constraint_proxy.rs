@@ -2,18 +2,18 @@ use crate::mechanical_port::source::{
     constraints::{
         draggable_constraint::DraggableProxy, scrolling::scroll_bar_constraint::ScrollBarConstraint,
     },
-    drawable::Drawable,
+    core::CoreHandle,
     math::vec2d::Vec2D,
 };
 
 pub struct ThumbDraggableProxy {
-    constraint: *mut ScrollBarConstraint,
-    hittable: *mut Drawable,
+    constraint: CoreHandle,
+    hittable: CoreHandle,
     last_position: Vec2D,
 }
 
 impl ThumbDraggableProxy {
-    pub fn new(constraint: &mut ScrollBarConstraint, hittable: &mut Drawable) -> Self {
+    pub fn new(constraint: CoreHandle, hittable: CoreHandle) -> Self {
         Self {
             constraint,
             hittable,
@@ -27,36 +27,41 @@ impl DraggableProxy for ThumbDraggableProxy {
         true
     }
     fn drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool {
-        unsafe { (*self.constraint).drag_thumb(mouse_position - self.last_position, time_stamp) };
+        let delta = mouse_position - self.last_position;
+        self.constraint
+            .with_downcast_mut::<ScrollBarConstraint, _>(|constraint| {
+                constraint.drag_thumb(delta, time_stamp)
+            })
+            .expect("live ScrollBarConstraint occurrence");
         self.last_position = mouse_position;
         true
     }
     fn start_drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool {
         self.last_position = mouse_position;
-        let scroll = unsafe { (*self.constraint).scroll_constraint_mut() };
-        scroll.set_is_scroll_bar_dragging(true);
-        if let Some(physics) = scroll.physics_mut() {
-            physics.accumulate(Vec2D::default(), time_stamp);
-        }
+        self.constraint
+            .with_downcast_mut::<ScrollBarConstraint, _>(|constraint| {
+                constraint.start_thumb_drag(time_stamp)
+            })
+            .expect("live ScrollBarConstraint occurrence");
         true
     }
     fn end_drag(&mut self, _mouse_position: Vec2D, _time_stamp: f32) -> bool {
-        let scroll = unsafe { (*self.constraint).scroll_constraint_mut() };
-        scroll.set_is_scroll_bar_dragging(false);
-        scroll.clear_velocity();
+        self.constraint
+            .with_downcast_mut::<ScrollBarConstraint, _>(ScrollBarConstraint::end_thumb_drag)
+            .expect("live ScrollBarConstraint occurrence");
         true
     }
-    fn hittable(&mut self) -> Option<&mut Drawable> {
-        Some(unsafe { &mut *self.hittable })
+    fn hittable(&self) -> Option<CoreHandle> {
+        Some(self.hittable.clone())
     }
 }
 
 pub struct TrackDraggableProxy {
-    constraint: *mut ScrollBarConstraint,
-    hittable: *mut Drawable,
+    constraint: CoreHandle,
+    hittable: CoreHandle,
 }
 impl TrackDraggableProxy {
-    pub fn new(constraint: &mut ScrollBarConstraint, hittable: &mut Drawable) -> Self {
+    pub fn new(constraint: CoreHandle, hittable: CoreHandle) -> Self {
         Self {
             constraint,
             hittable,
@@ -65,7 +70,11 @@ impl TrackDraggableProxy {
 }
 impl DraggableProxy for TrackDraggableProxy {
     fn start_drag(&mut self, mouse_position: Vec2D, _time_stamp: f32) -> bool {
-        unsafe { (*self.constraint).hit_track(mouse_position) };
+        self.constraint
+            .with_downcast_mut::<ScrollBarConstraint, _>(|constraint| {
+                constraint.hit_track(mouse_position)
+            })
+            .expect("live ScrollBarConstraint occurrence");
         true
     }
     fn drag(&mut self, _mouse_position: Vec2D, _time_stamp: f32) -> bool {
@@ -74,7 +83,7 @@ impl DraggableProxy for TrackDraggableProxy {
     fn end_drag(&mut self, _mouse_position: Vec2D, _time_stamp: f32) -> bool {
         true
     }
-    fn hittable(&mut self) -> Option<&mut Drawable> {
-        Some(unsafe { &mut *self.hittable })
+    fn hittable(&self) -> Option<CoreHandle> {
+        Some(self.hittable.clone())
     }
 }

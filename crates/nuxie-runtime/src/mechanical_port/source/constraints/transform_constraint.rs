@@ -1,10 +1,14 @@
 use crate::mechanical_port::source::{
     constraints::constraint::get_parent_world,
-    generated::constraints::transform_constraint_base::{TransformConstraintBase, TransformSpace},
+    generated::{
+        constraints::transform_constraint_base::{TransformConstraintBase, TransformSpace},
+        core_registry::CoreCapabilities,
+    },
     math::{mat2d::Mat2D, math_types, transform_components::TransformComponents},
     transform_component::TransformComponent,
 };
 
+#[derive(Default)]
 pub struct TransformConstraint {
     pub base: TransformConstraintBase,
     components_a: TransformComponents,
@@ -14,31 +18,46 @@ pub struct TransformConstraint {
 impl TransformConstraint {
     pub fn target_transform(&self) -> Mat2D {
         let target = self.base.target().expect("targeted constraint has target");
-        let bounds = target.constraint_bounds();
-        let local = Mat2D::from_translate(
-            bounds.left() + bounds.width() * self.base.origin_x(),
-            bounds.top() + bounds.height() * self.base.origin_y(),
-        );
-        *target.world_transform() * local
+        target
+            .with(|target| {
+                let target = target
+                    .as_transform_component()
+                    .expect("validated targeted constraint target");
+                let bounds = target.constraint_bounds();
+                let local = Mat2D::from_translate(
+                    bounds.left() + bounds.width() * self.base.origin_x(),
+                    bounds.top() + bounds.height() * self.base.origin_y(),
+                );
+                *target.world_transform() * local
+            })
+            .expect("TargetedConstraint retains a live target")
     }
 
     pub fn constrain(&mut self, component: &mut TransformComponent) {
         let Some(target) = self.base.target() else {
             return;
         };
-        if target.is_collapsed() {
+        let (target_collapsed, target_parent_world) = target
+            .with(|target| {
+                let target = target
+                    .as_transform_component()
+                    .expect("validated targeted constraint target");
+                (target.is_collapsed(), get_parent_world(target))
+            })
+            .expect("TargetedConstraint retains a live target");
+        if target_collapsed {
             return;
         }
         let transform_a = *component.world_transform();
         let mut transform_b = self.target_transform();
         if self.base.source_space() == TransformSpace::Local {
-            let Some(inverse) = get_parent_world(target).inverted() else {
+            let Some(inverse) = target_parent_world.inverted() else {
                 return;
             };
             transform_b = inverse * transform_b;
         }
         if self.base.dest_space() == TransformSpace::Local {
-            transform_b = *get_parent_world(component) * transform_b;
+            transform_b = get_parent_world(component) * transform_b;
         }
         Self::constrain_world(
             component,

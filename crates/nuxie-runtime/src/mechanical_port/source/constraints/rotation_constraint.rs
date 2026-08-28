@@ -1,10 +1,14 @@
 use crate::mechanical_port::source::{
     constraints::constraint::get_parent_world,
-    generated::constraints::rotation_constraint_base::{RotationConstraintBase, TransformSpace},
+    generated::{
+        constraints::rotation_constraint_base::{RotationConstraintBase, TransformSpace},
+        core_registry::CoreCapabilities,
+    },
     math::{mat2d::Mat2D, math_types, transform_components::TransformComponents},
     transform_component::TransformComponent,
 };
 
+#[derive(Default)]
 pub struct RotationConstraint {
     pub base: RotationConstraintBase,
     components_a: TransformComponents,
@@ -17,24 +21,34 @@ impl RotationConstraint {
     }
 
     pub fn constrain(&mut self, component: &mut TransformComponent) {
-        if self
-            .base
-            .target()
-            .is_some_and(|target| target.is_collapsed())
-        {
+        let target_state = self.base.target().map(|target| {
+            target
+                .with(|target| {
+                    let target = target
+                        .as_transform_component()
+                        .expect("validated targeted constraint target");
+                    (
+                        target.is_collapsed(),
+                        *target.world_transform(),
+                        get_parent_world(target),
+                    )
+                })
+                .expect("TargetedConstraint retains a live target")
+        });
+        if target_state.is_some_and(|target| target.0) {
             return;
         }
         let transform_a = *component.world_transform();
         let mut transform_b;
         self.components_a = transform_a.decompose();
-        if self.base.target().is_none() {
+        if target_state.is_none() {
             transform_b = transform_a;
             self.components_b = self.components_a;
         } else {
-            let target = self.base.target().unwrap();
-            transform_b = *target.world_transform();
+            let (_, target_world, target_parent_world) = target_state.unwrap();
+            transform_b = target_world;
             if self.base.source_space() == TransformSpace::Local {
-                let Some(inverse) = get_parent_world(target).inverted() else {
+                let Some(inverse) = target_parent_world.inverted() else {
                     return;
                 };
                 transform_b = inverse * transform_b;
@@ -58,7 +72,7 @@ impl RotationConstraint {
             }
             if self.base.dest_space() == TransformSpace::Local {
                 transform_b = Mat2D::compose(self.components_b);
-                transform_b = *get_parent_world(component) * transform_b;
+                transform_b = get_parent_world(component) * transform_b;
                 self.components_b = transform_b.decompose();
             }
         }
@@ -78,7 +92,7 @@ impl RotationConstraint {
         }
         if clamp_local {
             transform_b = Mat2D::compose(self.components_b);
-            transform_b = *get_parent_world(component) * transform_b;
+            transform_b = get_parent_world(component) * transform_b;
             self.components_b = transform_b.decompose();
         }
         let angle_a = self.components_a.rotation() % (math_types::PI * 2.0);

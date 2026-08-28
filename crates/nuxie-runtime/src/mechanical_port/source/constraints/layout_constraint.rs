@@ -1,9 +1,6 @@
-use crate::mechanical_port::source::{
-    constraints::constraint::Constraint, layout::layout_node_provider::LayoutNodeProvider,
-};
+use crate::mechanical_port::source::core::CoreHandle;
 
 pub trait LayoutConstraint {
-    fn constrain_child(&mut self, _child: &mut dyn LayoutNodeProvider) {}
-    fn add_layout_child(&mut self, _child: &mut dyn LayoutNodeProvider) {}
-    fn constraint(&mut self) -> &mut dyn Constraint;
+    fn constrain_layout_child(&mut self, child: CoreHandle);
+    fn add_layout_child(&mut self, child: CoreHandle);
 }

@@ -1,11 +1,12 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
 use crate::mechanical_port::source::{
-    artboard::ArtboardInstance,
     constraints::scrolling::scroll_constraint::ScrollConstraint,
+    core::CoreHandle,
+    generated::core_registry::CoreCapabilities,
     layout::layout_node_provider::LayoutNodeProvider,
     math::vec2d::Vec2D,
-    virtualizing_component::{Virtualizable, VirtualizedDirection, VirtualizingComponent},
+    virtualizing_component::{VirtualizedDirection, VirtualizingComponent},
 };
 
 pub struct ScrollVirtualizer {
@@ -42,10 +43,30 @@ impl ScrollVirtualizer {
         self.visible_index_start = self.visible_index_end;
     }
 
+    fn with_provider<R>(
+        child: &CoreHandle,
+        use_provider: impl FnOnce(&dyn LayoutNodeProvider) -> R,
+    ) -> R {
+        child
+            .with(|child| child.as_layout_node_provider().map(use_provider))
+            .flatten()
+            .expect("ScrollVirtualizer children remain LayoutNodeProviders")
+    }
+
+    fn with_provider_mut<R>(
+        child: &CoreHandle,
+        use_provider: impl FnOnce(&mut dyn LayoutNodeProvider) -> R,
+    ) -> R {
+        child
+            .with_mut(|child| child.as_layout_node_provider_mut().map(use_provider))
+            .flatten()
+            .expect("ScrollVirtualizer children remain LayoutNodeProviders")
+    }
+
     pub fn constrain(
         &mut self,
         scroll: &mut ScrollConstraint,
-        children: &mut [*mut dyn LayoutNodeProvider],
+        children: &[CoreHandle],
         offset: f32,
         direction: VirtualizedDirection,
     ) -> bool {
@@ -85,14 +106,10 @@ impl ScrollVirtualizer {
         true
     }
 
-    pub fn virtualize(
-        &mut self,
-        scroll: &mut ScrollConstraint,
-        children: &mut [*mut dyn LayoutNodeProvider],
-    ) {
+    pub fn virtualize(&mut self, scroll: &mut ScrollConstraint, children: &[CoreHandle]) {
         let total_item_count: i32 = children
             .iter()
-            .map(|child| unsafe { (**child).num_layout_nodes() as i32 })
+            .map(|child| Self::with_provider(child, |child| child.num_layout_nodes() as i32))
             .sum();
         let last_start = if self.infinite && total_item_count > 0 {
             self.visible_index_start % total_item_count
@@ -117,22 +134,22 @@ impl ScrollVirtualizer {
         } else {
             scroll.gap().y
         };
-        let mut changed_components = BTreeSet::<usize>::new();
+        let mut changed_components = Vec::<CoreHandle>::new();
 
-        for child in children.iter().copied() {
-            unsafe {
-                if let Some(component) = (*child).transform_component_mut() {
+        for child in children {
+            Self::with_provider_mut(child, |child| {
+                if let Some(component) = child.transform_component_mut() {
                     if let Some(virtualizer) = VirtualizingComponent::from(component) {
                         virtualizer.set_visible_indices(-1, -1);
                     }
                 }
-            }
+            });
         }
 
-        'find_start: for child in children.iter().copied() {
-            let count = unsafe { (*child).num_layout_nodes() };
+        'find_start: for child in children {
+            let count = Self::with_provider(child, LayoutNodeProvider::num_layout_nodes);
             for item_index in 0..count {
-                let size = self.get_item_size(unsafe { &mut *child }, item_index, horizontal);
+                let size = self.get_item_size(child, item_index, horizontal);
                 if running_size + size > self.offset {
                     running_offset = running_size - self.offset;
                     self.visible_index_start = running_index;
@@ -172,10 +189,10 @@ impl ScrollVirtualizer {
         let mut wrapped = false;
         let mut cycle_count = 0;
         'find_end: while item < total_item_count && cycle_count < 2 {
-            let child = children[child_index];
-            let count = unsafe { (*child).num_layout_nodes() };
+            let child = &children[child_index];
+            let count = Self::with_provider(child, LayoutNodeProvider::num_layout_nodes);
             for local in current_child_index..count {
-                let size = self.get_item_size(unsafe { &mut *child }, local, horizontal);
+                let size = self.get_item_size(child, local, horizontal);
                 if running_size + size + gap >= self.offset + self.viewport_size {
                     self.visible_index_end = if self.infinite && wrapped {
                         item + total_item_count
@@ -248,78 +265,90 @@ impl ScrollVirtualizer {
                 global_index
             };
             let mut running_total = 0;
-            for (provider_index, child) in children.iter().copied().enumerate() {
+            'providers: for (provider_index, child) in children.iter().enumerate() {
+                let count = Self::with_provider(child, LayoutNodeProvider::num_layout_nodes) as i32;
                 let start = running_total;
-                let end = start + unsafe { (*child).num_layout_nodes() as i32 };
-                unsafe {
-                    if let Some(component) = (*child).transform_component_mut() {
-                        if let Some(virtualizer) = VirtualizingComponent::from(component) {
-                            if start < end && actual_index < end && actual_index >= start {
-                                let local = (actual_index - start) as usize;
-                                if visible_indices[provider_index].x == -1.0 {
-                                    visible_indices[provider_index].x = local as f32;
-                                }
-                                visible_indices[provider_index].y = local as f32;
-                                if virtualizer.item(local).is_none() {
-                                    virtualizer.add_virtualizable(local);
-                                    changed_components
-                                        .insert(virtualizer as *mut _ as *mut () as usize);
-                                }
-                                let size = self.get_item_size(&mut *child, local, horizontal);
-                                if let Some(virtualizable) = virtualizer.item_mut(local) {
-                                    if let Some(component) =
-                                        virtualizable.virtualizable_component_mut()
-                                    {
-                                        if let Some(artboard) =
-                                            component.as_mut::<ArtboardInstance>()
-                                        {
-                                            let parent_world = *(*child)
-                                                .transform_component()
-                                                .unwrap()
-                                                .world_transform();
-                                            let Some(_inverse) = parent_world.inverted() else {
-                                                continue;
-                                            };
-                                            let location = if horizontal {
-                                                Vec2D::new(running_offset, artboard.layout_y())
-                                            } else {
-                                                Vec2D::new(artboard.layout_x(), running_offset)
-                                            };
-                                            virtualizer.set_virtualizable_position(local, location);
-                                        }
-                                    }
-                                }
-                                running_offset += size + gap;
-                                break;
-                            }
-                        }
+                let end = start + count;
+                if start < end && actual_index < end && actual_index >= start {
+                    let local = (actual_index - start) as usize;
+                    if visible_indices[provider_index].x == -1.0 {
+                        visible_indices[provider_index].x = local as f32;
                     }
+                    visible_indices[provider_index].y = local as f32;
+                    let size = self.get_item_size(child, local, horizontal);
+                    let parent_world_invertible = Self::with_provider(child, |child| {
+                        child.transform_component().is_some_and(|component| {
+                            component.world_transform().inverted().is_some()
+                        })
+                    });
+                    let (is_virtualizing, changed, invertible) =
+                        Self::with_provider_mut(child, |child| {
+                            let Some(component) = child.transform_component_mut() else {
+                                return (false, false, true);
+                            };
+                            let Some(virtualizer) = VirtualizingComponent::from(component) else {
+                                return (false, false, true);
+                            };
+                            let local = local as i32;
+                            let changed = virtualizer.item(local).is_none();
+                            if changed {
+                                virtualizer.add_virtualizable(local);
+                            }
+                            if let Some(virtualizable) = virtualizer.item(local) {
+                                if !parent_world_invertible {
+                                    return (true, changed, false);
+                                }
+                                let location = if horizontal {
+                                    Vec2D::new(running_offset, virtualizable.layout_y())
+                                } else {
+                                    Vec2D::new(virtualizable.layout_x(), running_offset)
+                                };
+                                virtualizer.set_virtualizable_position(local, location);
+                            }
+                            (true, changed, true)
+                        });
+                    if !is_virtualizing {
+                        running_total = end;
+                        continue;
+                    }
+                    if changed && !changed_components.contains(child) {
+                        changed_components.push(child.clone());
+                    }
+                    if !invertible {
+                        continue 'providers;
+                    }
+                    running_offset += size + gap;
+                    break;
                 }
                 running_total = end;
             }
         }
 
-        for (index, child) in children.iter().copied().enumerate() {
-            unsafe {
-                if let Some(component) = (*child).transform_component_mut() {
+        for (index, child) in children.iter().enumerate() {
+            let visible = visible_indices[index];
+            Self::with_provider_mut(child, |child| {
+                if let Some(component) = child.transform_component_mut() {
                     if let Some(virtualizer) = VirtualizingComponent::from(component) {
-                        let visible = visible_indices[index];
                         virtualizer.set_visible_indices(visible.x as i32, visible.y as i32);
                     }
                 }
-            }
+            });
         }
-        for address in changed_components {
-            unsafe {
-                (&mut *(address as *mut VirtualizingComponent)).virtualizable_changed();
-            }
+        for child in changed_components {
+            Self::with_provider_mut(&child, |child| {
+                if let Some(component) = child.transform_component_mut() {
+                    if let Some(virtualizer) = VirtualizingComponent::from(component) {
+                        virtualizer.virtualizable_changed();
+                    }
+                }
+            });
         }
     }
 
     fn recycle_items(
         &mut self,
         mut indices: Vec<i32>,
-        children: &mut [*mut dyn LayoutNodeProvider],
+        children: &[CoreHandle],
         total_item_count: i32,
     ) {
         if total_item_count == 0 {
@@ -333,41 +362,39 @@ impl ScrollVirtualizer {
                 global_index
             };
             let mut running_total = 0;
-            for child in children.iter().copied() {
+            for child in children {
                 let start = running_total;
-                let end = start + unsafe { (*child).num_layout_nodes() as i32 };
-                unsafe {
-                    if let Some(component) = (*child).transform_component_mut() {
-                        if let Some(virtualizer) = VirtualizingComponent::from(component) {
-                            if start < end && actual_index < end && actual_index >= start {
-                                virtualizer.remove_virtualizable((actual_index - start) as usize);
-                                break;
+                let end =
+                    start + Self::with_provider(child, LayoutNodeProvider::num_layout_nodes) as i32;
+                if start < end && actual_index < end && actual_index >= start {
+                    Self::with_provider_mut(child, |child| {
+                        if let Some(component) = child.transform_component_mut() {
+                            if let Some(virtualizer) = VirtualizingComponent::from(component) {
+                                virtualizer.remove_virtualizable(actual_index - start);
                             }
                         }
-                    }
+                    });
+                    break;
                 }
                 running_total = end;
             }
         }
     }
 
-    fn get_item_size(
-        &self,
-        child: &mut dyn LayoutNodeProvider,
-        index: usize,
-        horizontal: bool,
-    ) -> f32 {
-        if let Some(component) = child.transform_component_mut() {
-            if let Some(virtualizer) = VirtualizingComponent::from(component) {
-                let size = virtualizer.item_size(index);
-                return if horizontal { size.x } else { size.y };
+    fn get_item_size(&self, child: &CoreHandle, index: usize, horizontal: bool) -> f32 {
+        Self::with_provider_mut(child, |child| {
+            if let Some(component) = child.transform_component_mut() {
+                if let Some(virtualizer) = VirtualizingComponent::from(component) {
+                    let size = virtualizer.item_size(index as i32);
+                    return if horizontal { size.x } else { size.y };
+                }
             }
-        }
-        let bounds = child.layout_bounds();
-        if horizontal {
-            bounds.width()
-        } else {
-            bounds.height()
-        }
+            let bounds = child.layout_bounds();
+            if horizontal {
+                bounds.width()
+            } else {
+                bounds.height()
+            }
+        })
     }
 }

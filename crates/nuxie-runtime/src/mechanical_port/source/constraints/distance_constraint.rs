@@ -1,6 +1,10 @@
 use crate::mechanical_port::source::{
     constraints::constraint::Constraint,
-    generated::constraints::distance_constraint_base::DistanceConstraintBase, math::vec2d::Vec2D,
+    generated::{
+        constraints::distance_constraint_base::DistanceConstraintBase,
+        core_registry::CoreCapabilities,
+    },
+    math::vec2d::Vec2D,
     transform_component::TransformComponent,
 };
 
@@ -11,20 +15,27 @@ enum Mode {
     Exact = 2,
 }
 
+#[derive(Default)]
 pub struct DistanceConstraint {
     pub base: DistanceConstraintBase,
 }
 
 impl DistanceConstraint {
     pub fn constrain(&mut self, component: &mut TransformComponent) {
-        let Some(target) = self.base.target_mut() else {
+        let Some(target) = self.base.target() else {
             return;
         };
-        if target.is_collapsed() {
+        let (target_collapsed, target_translation) = target
+            .with(|target| {
+                let target = target
+                    .as_transform_component()
+                    .expect("validated DistanceConstraint target");
+                (target.is_collapsed(), target.world_translation())
+            })
+            .expect("DistanceConstraint retains a live target");
+        if target_collapsed {
             return;
         }
-
-        let target_translation = target.world_translation();
         let our_translation = component.world_translation();
         let mut to_target = our_translation - target_translation;
         let current_distance = to_target.length();

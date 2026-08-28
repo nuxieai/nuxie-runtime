@@ -371,8 +371,8 @@ impl RawText {
                             let mut paint = self
                                 .factory
                                 .with_factory_mut(|factory| factory.make_render_paint());
-                            paint.set_style(RenderPaintStyle::Fill);
-                            paint.set_color(layer.color);
+                            paint.style(RenderPaintStyle::Fill);
+                            paint.color(layer.color);
                             renderer.draw_path(path.render_path(&self.factory), paint.as_ref());
                         }
                         renderer.restore();

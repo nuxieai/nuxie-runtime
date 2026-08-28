@@ -2,7 +2,7 @@ use crate::mechanical_port::source::{
     artboard::Artboard,
     lua::rive_lua_libs::*,
     math::{mat2d::Mat2D, path_verb::PathVerb, vec2d::Vec2D},
-    renderer::FillRule,
+    renderer::{FillRule, to_render_raw_path},
 };
 
 impl ScriptedPathData {
@@ -17,7 +17,7 @@ impl ScriptedPathData {
                     .thread_data::<dyn ScriptingContext>()
                     .factory()
                     .make_empty_render_path();
-                path.set_fill_rule(FillRule::Clockwise);
+                path.fill_rule(FillRule::Clockwise);
                 self.render_path = Some(path);
             } else {
                 self.render_path.as_mut().unwrap().rewind();
@@ -25,9 +25,9 @@ impl ScriptedPathData {
             self.render_path
                 .as_mut()
                 .unwrap()
-                .add_raw_path(&self.raw_path);
+                .add_raw_path(&to_render_raw_path(&self.raw_path));
         }
-        self.render_path.as_mut().unwrap()
+        self.render_path.as_deref_mut().unwrap()
     }
 
     pub fn from_raw_path(path: &RawPath) -> Self {

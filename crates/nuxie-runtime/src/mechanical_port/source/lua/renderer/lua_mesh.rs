@@ -84,41 +84,47 @@ fn register_callable<T: LuaRive>(s: &mut LuaState, construct: LuaFunction, namec
     s.pop(1);
 }
 impl ScriptedVertexBuffer {
-    pub fn update(&mut self, factory: &mut Factory) {
+    pub fn update(&mut self, factory: &mut dyn Factory) {
         if self.vertex_buffer.is_some() {
             return;
         }
         let mut buffer = factory.make_render_buffer(
             RenderBufferType::Vertex,
-            RenderBufferFlags::MAPPED_ONCE_AT_INITIALIZATION,
+            RenderBufferFlags::MappedOnceAtInitialization,
             self.values.len() * std::mem::size_of::<Vec2D>(),
         );
-        if let Some(buffer) = buffer.as_mut() {
-            if let Some(mapped) = buffer.map_as_mut::<Vec2D>() {
-                mapped.copy_from_slice(&self.values);
-                buffer.unmap();
+        {
+            let mapped = buffer.map_mut();
+            for (bytes, value) in mapped
+                .chunks_exact_mut(std::mem::size_of::<Vec2D>())
+                .zip(&self.values)
+            {
+                bytes[..4].copy_from_slice(&value.x.to_ne_bytes());
+                bytes[4..8].copy_from_slice(&value.y.to_ne_bytes());
             }
+            buffer.unmap();
         }
-        self.vertex_buffer = buffer;
+        self.vertex_buffer = Some(buffer);
     }
 }
 impl ScriptedTriangleBuffer {
-    pub fn update(&mut self, factory: &mut Factory) {
+    pub fn update(&mut self, factory: &mut dyn Factory) {
         if self.index_buffer.is_some() {
             return;
         }
         let mut buffer = factory.make_render_buffer(
             RenderBufferType::Index,
-            RenderBufferFlags::MAPPED_ONCE_AT_INITIALIZATION,
+            RenderBufferFlags::MappedOnceAtInitialization,
             self.values.len() * 2,
         );
-        if let Some(buffer) = buffer.as_mut() {
-            if let Some(mapped) = buffer.map_as_mut::<u16>() {
-                mapped.copy_from_slice(&self.values);
-                buffer.unmap();
+        {
+            let mapped = buffer.map_mut();
+            for (bytes, value) in mapped.chunks_exact_mut(2).zip(&self.values) {
+                bytes.copy_from_slice(&value.to_ne_bytes());
             }
+            buffer.unmap();
         }
-        self.index_buffer = buffer;
+        self.index_buffer = Some(buffer);
     }
 }
 pub fn luaopen_rive_mesh(s: &mut LuaState) -> i32 {

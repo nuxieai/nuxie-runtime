@@ -28,7 +28,8 @@ impl ScriptedRenderer {
         self.save_count -= 1;
     }
     pub fn transform(&mut self, state: &mut LuaState, matrix: Mat2D) {
-        self.validate(state).transform(matrix);
+        self.validate(state)
+            .transform(nuxie_render_api::Mat2D(*matrix.values()));
     }
     pub fn clip_path(&mut self, state: &mut LuaState, path: &mut ScriptedPathData) {
         let render = path.render_path(state);
@@ -48,7 +49,7 @@ fn namecall(s: &mut LuaState) -> i32 {
             let (r, p, paint) = s.rive3_mut::<ScriptedRenderer, ScriptedPath, ScriptedPaint>();
             let path = p.render_path(s);
             r.validate(s)
-                .draw_path(path, paint.render_paint.as_mut().unwrap());
+                .draw_path(path, paint.render_paint.as_ref().unwrap().as_ref());
             0
         }
         LuaAtoms::Save => {
@@ -74,12 +75,8 @@ fn namecall(s: &mut LuaState) -> i32 {
                 s.rive3_mut::<ScriptedRenderer, ScriptedImage, ScriptedImageSampler>();
             let blend = s.to_blend_mode(4);
             let opacity = s.check_number(5) as f32;
-            r.validate(s).draw_image(
-                image.image.as_ref().unwrap(),
-                sampler.sampler,
-                blend,
-                opacity,
-            );
+            r.validate(s)
+                .draw_image(image.image.as_deref(), sampler.sampler, blend, opacity);
             0
         }
         LuaAtoms::DrawImageMesh => {
@@ -91,11 +88,11 @@ fn namecall(s: &mut LuaState) -> i32 {
             uv.update(factory);
             index.update(factory);
             r.validate(s).draw_image_mesh(
-                image.image.as_ref().unwrap(),
+                image.image.as_deref(),
                 sampler.sampler,
-                v.vertex_buffer.as_ref(),
-                uv.vertex_buffer.as_ref(),
-                index.index_buffer.as_ref(),
+                v.vertex_buffer.as_deref(),
+                uv.vertex_buffer.as_deref(),
+                index.index_buffer.as_deref(),
                 v.values.len() as u32,
                 index.values.len() as u32,
                 blend,

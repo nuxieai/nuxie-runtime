@@ -1,7 +1,7 @@
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
 use std::rc::Rc;
 
-use crate::mechanical_port::source::factory::Factory;
+use crate::mechanical_port::source::factory::RuntimeFactoryHandle;
 use crate::mechanical_port::source::math::aabb::Aabb;
 use crate::mechanical_port::source::math::mat2d::Mat2D;
 use crate::mechanical_port::source::math::raw_path::RawPath;
@@ -131,7 +131,7 @@ pub struct RawTextInput {
     wrap: TextWrap,
     max_width: f32,
     max_height: f32,
-    clip_render_path: Option<Rc<dyn RenderPath>>,
+    clip_render_path: Option<Rc<RenderPath>>,
     ideal_cursor_x: f32,
     cursor_visual_position: CursorVisualPosition,
     selection_rects: Vec<Aabb>,
@@ -192,8 +192,8 @@ impl RawTextInput {
 
     pub fn draw(
         &mut self,
-        factory: &mut Factory,
-        renderer: &mut dyn Renderer,
+        factory: &RuntimeFactoryHandle,
+        renderer: &mut Renderer,
         _world_transform: &Mat2D,
         text_paint: &mut RenderPaint,
         selection_paint: &mut RenderPaint,
@@ -346,7 +346,7 @@ impl RawTextInput {
         &mut self.selection_path
     }
 
-    pub fn clip_render_path(&self) -> Option<Rc<dyn RenderPath>> {
+    pub fn clip_render_path(&self) -> Option<Rc<RenderPath>> {
         self.clip_render_path.clone()
     }
 

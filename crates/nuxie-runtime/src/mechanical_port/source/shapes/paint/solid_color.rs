@@ -28,7 +28,7 @@ impl SolidColor {
             return;
         };
         let value = color_modulate_opacity(self.base.color_value(), self.base.render_opacity());
-        paint.set_color(value);
+        paint.color(value);
         let opacity = color_opacity(value);
         self.flags = MutatorFlags::NONE;
         if opacity > 0.0 {
@@ -41,7 +41,7 @@ impl SolidColor {
         }
     }
     pub fn apply_to(&self, paint: &mut RenderPaint, opacity_modifier: f32) {
-        paint.set_color(color_modulate_opacity(
+        paint.color(color_modulate_opacity(
             self.base.color_value(),
             self.base.render_opacity() * opacity_modifier,
         ));

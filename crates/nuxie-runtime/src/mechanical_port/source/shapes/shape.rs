@@ -157,10 +157,11 @@ impl Shape {
     pub fn add_to_render_path(&mut self, path: &mut RenderPath, transform: Mat2D) {
         if self.is_flagged(PathFlags::LOCAL) {
             let render = self.path_composer.local_path().render_path(self);
-            path.add_path(render, transform * self.base.world_transform());
+            let transform = transform * self.base.world_transform();
+            path.add_render_path(render, nuxie_render_api::Mat2D(*transform.values()));
         } else {
             let render = self.path_composer.world_path().render_path(self);
-            path.add_path(render, transform);
+            path.add_render_path(render, nuxie_render_api::Mat2D(*transform.values()));
         }
     }
 

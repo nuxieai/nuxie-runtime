@@ -55,7 +55,7 @@ pub use crate::mechanical_port::source::{
         vec2d::Vec2D,
     },
     renderer::{
-        ImageFilter, ImageSampler, ImageWrap, RenderBuffer, RenderImage, RenderPaint,
+        ImageFilter, ImageSampler, ImageWrap, RenderBuffer, RenderImageRef, RenderPaint,
         RenderPaintStyle, RenderPath, RenderShader, Renderer,
     },
     shapes::paint::{
@@ -1021,7 +1021,7 @@ impl_lua_rive!(ScriptedPathCommand, 29, "PathCommand");
 
 pub struct ScriptedPathData {
     pub raw_path: RawPath,
-    pub render_path: Option<RenderPath>,
+    pub render_path: Option<Box<RenderPath>>,
     pub is_render_path_dirty: bool,
     pub render_frame_id: u64,
 }
@@ -1078,7 +1078,7 @@ impl_lua_rive!(ScriptedPath, 2, "Path");
 
 #[derive(Default)]
 pub struct ScriptedGradient {
-    pub shader: Option<RenderShader>,
+    pub shader: Option<Rc<RenderShader>>,
 }
 
 impl_lua_rive!(ScriptedGradient, 3, "Gradient", no_metatable);
@@ -1086,7 +1086,7 @@ impl_lua_rive!(ScriptedGradient, 3, "Gradient", no_metatable);
 #[derive(Default)]
 pub struct ScriptedVertexBuffer {
     pub values: Vec<Vec2D>,
-    pub vertex_buffer: Option<RenderBuffer>,
+    pub vertex_buffer: Option<Box<RenderBuffer>>,
 }
 
 impl_lua_rive!(ScriptedVertexBuffer, 4, "VertexBuffer");
@@ -1094,7 +1094,7 @@ impl_lua_rive!(ScriptedVertexBuffer, 4, "VertexBuffer");
 #[derive(Default)]
 pub struct ScriptedTriangleBuffer {
     pub values: Vec<u16>,
-    pub index_buffer: Option<RenderBuffer>,
+    pub index_buffer: Option<Box<RenderBuffer>>,
     pub max: u16,
 }
 
@@ -1102,9 +1102,9 @@ impl_lua_rive!(ScriptedTriangleBuffer, 5, "TriangleBuffer");
 
 #[derive(Default)]
 pub struct ScriptedImage {
-    pub image: Option<RenderImage>,
+    pub image: Option<RenderImageRef>,
     pub cached_ore_view: Option<OreTextureView>,
-    pub cached_mirror_image: Option<RenderImage>,
+    pub cached_mirror_image: Option<RenderImageRef>,
 }
 
 impl ScriptedImage {
@@ -1248,7 +1248,7 @@ pub struct ScriptedGPURenderPass {
 impl_lua_rive!(ScriptedGPURenderPass, 46, "GPURenderPass");
 pub struct ScriptedGPUTextureView {
     pub view: Option<OreTextureView>,
-    pub retained_image: Option<RenderImage>,
+    pub retained_image: Option<RenderImageRef>,
 }
 impl_lua_rive!(ScriptedGPUTextureView, 51, "GPUTextureView", no_metatable);
 
@@ -1375,7 +1375,7 @@ impl_lua_rive!(ScriptedImageSampler, 7, "ImageSampler", no_metatable);
 
 pub struct ScriptedPaintData {
     pub style: RenderPaintStyle,
-    pub gradient: Option<RenderShader>,
+    pub gradient: Option<Rc<RenderShader>>,
     pub thickness: f32,
     pub join: StrokeJoin,
     pub cap: StrokeCap,
@@ -1413,10 +1413,10 @@ impl ScriptedPaintData {
     }
 
     pub fn gradient(&self) -> Option<&RenderShader> {
-        self.gradient.as_ref()
+        self.gradient.as_deref()
     }
 
-    pub fn set_gradient(&mut self, value: Option<RenderShader>) {
+    pub fn set_gradient(&mut self, value: Option<Rc<RenderShader>>) {
         self.gradient = value;
     }
 
@@ -1473,11 +1473,11 @@ impl_lua_rive!(ScriptedPaintData, 33, "PaintData");
 
 pub struct ScriptedPaint {
     pub data: ScriptedPaintData,
-    pub render_paint: RenderPaint,
+    pub render_paint: Box<RenderPaint>,
 }
 
 impl ScriptedPaint {
-    pub fn with_render_paint(render_paint: RenderPaint) -> Self {
+    pub fn with_render_paint(render_paint: Box<RenderPaint>) -> Self {
         Self {
             data: ScriptedPaintData::new(),
             render_paint,
@@ -1486,42 +1486,42 @@ impl ScriptedPaint {
 
     pub fn set_style(&mut self, value: RenderPaintStyle) {
         self.data.set_style(value);
-        self.render_paint.set_style(value);
+        self.render_paint.style(value);
     }
 
     pub fn set_color(&mut self, value: ColorInt) {
         self.data.set_color(value);
-        self.render_paint.set_color(value);
+        self.render_paint.color(value);
     }
 
     pub fn set_thickness(&mut self, value: f32) {
         self.data.set_thickness(value);
-        self.render_paint.set_thickness(value);
+        self.render_paint.thickness(value);
     }
 
     pub fn set_join(&mut self, value: StrokeJoin) {
         self.data.set_join(value);
-        self.render_paint.set_join(value);
+        self.render_paint.join(value.into());
     }
 
     pub fn set_cap(&mut self, value: StrokeCap) {
         self.data.set_cap(value);
-        self.render_paint.set_cap(value);
+        self.render_paint.cap(value.into());
     }
 
     pub fn set_feather(&mut self, value: f32) {
         self.data.set_feather(value);
-        self.render_paint.set_feather(value);
+        self.render_paint.feather(value);
     }
 
     pub fn set_blend_mode(&mut self, value: BlendMode) {
         self.data.set_blend_mode(value);
-        self.render_paint.set_blend_mode(value);
+        self.render_paint.blend_mode(value.into());
     }
 
-    pub fn set_gradient(&mut self, value: Option<RenderShader>) {
+    pub fn set_gradient(&mut self, value: Option<Rc<RenderShader>>) {
         self.data.set_gradient(value.clone());
-        self.render_paint.set_shader(value);
+        self.render_paint.shader(value.as_deref());
     }
 }
 

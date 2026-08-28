@@ -153,16 +153,15 @@ impl LinearGradient {
         colors: &[ColorInt],
         stops: &[f32],
     ) {
-        let shader = self.base.artboard().factory().make_linear_gradient(
-            start.x,
-            start.y,
-            end.x,
-            end.y,
-            colors,
-            stops,
-            colors.len(),
-        );
-        render_paint.set_shader(Some(shader));
+        let factory = self
+            .base
+            .artboard()
+            .factory()
+            .expect("LinearGradient requires its Artboard renderer factory");
+        let shader = factory.with_factory_mut(|factory| {
+            factory.make_linear_gradient(start.x, start.y, end.x, end.y, colors, stops)
+        });
+        render_paint.shader(Some(shader.as_ref()));
     }
 
     pub fn mark_gradient_dirty(&mut self) {

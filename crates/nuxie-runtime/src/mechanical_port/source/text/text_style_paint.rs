@@ -56,9 +56,14 @@ impl TextStylePaint {
             if let Some(path) = self.opacity_paths.get_mut(&1.0.into()) {
                 paint.draw(renderer, path, world, true, None);
             }
+            let factory = self
+                .base
+                .artboard()
+                .factory()
+                .expect("TextStylePaint requires its Artboard renderer factory");
             while self.paint_pool.len() < self.opacity_paths.len() {
                 self.paint_pool
-                    .push(self.base.artboard().factory().make_render_paint());
+                    .push(factory.with_factory_mut(|factory| factory.make_render_paint()));
             }
             let mut index = 0;
             for (opacity, path) in &mut self.opacity_paths {
@@ -68,7 +73,7 @@ impl TextStylePaint {
                 let pooled = &mut self.paint_pool[index];
                 index += 1;
                 paint.apply_to(pooled, opacity.value());
-                pooled.set_feather(paint.feather().map_or(0.0, |f| f.strength()));
+                pooled.feather(paint.feather().map_or(0.0, |f| f.strength()));
                 paint.draw(renderer, path, world, true, Some(pooled));
             }
         }

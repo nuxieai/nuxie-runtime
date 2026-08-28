@@ -61,7 +61,7 @@ impl ForegroundLayoutDrawable {
         }
     }
 
-    pub fn draw(&mut self, renderer: &mut dyn Renderer) {
+    pub fn draw(&mut self, renderer: &mut Renderer) {
         let Some(parent_layout) = self
             .base
             .base

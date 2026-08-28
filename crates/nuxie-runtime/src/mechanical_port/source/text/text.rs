@@ -22,7 +22,7 @@ use crate::mechanical_port::source::{
         transform_components::TransformComponents,
         vec2d::Vec2D,
     },
-    renderer::{BlendMode, ImageSampler, RenderPaintStyle, Renderer},
+    renderer::{BlendMode, ImageSampler, RenderPaintStyle, Renderer, to_render_raw_path},
     shapes::{
         paint::color::{ColorInt, color_modulate_opacity},
         shape_paint_path::ShapePaintPath,
@@ -397,7 +397,7 @@ pub struct Text {
     layout_width_scale_type: u8,
     layout_height_scale_type: u8,
     layout_direction: LayoutDirection,
-    emoji_image_cache: Vec<(FontRef, u16, Rc<dyn nuxie_render_api::RenderImage>)>,
+    emoji_image_cache: Vec<(FontRef, u16, Option<Rc<dyn nuxie_render_api::RenderImage>>)>,
     draw_commands: Vec<TextDrawCommand>,
     value_run_listeners: Vec<Box<TextValueRunListener>>,
 }
@@ -1317,8 +1317,12 @@ impl Text {
         if self.overflow() == TextOverflow::Clipped
             && (!self.clip_path.empty() || self.clip_path.has_render_path())
         {
-            let factory = self.base.artboard().factory();
-            renderer.clip_path(self.clip_path.render_path_for_factory(factory));
+            let factory = self
+                .base
+                .artboard()
+                .factory()
+                .expect("Text requires its Artboard renderer factory");
+            renderer.clip_path(self.clip_path.render_path(&factory));
         }
         let world_transform = self.shape_world_transform;
         for index in 0..self.draw_commands.len() {
@@ -1364,9 +1368,15 @@ impl Text {
         if font.get_color_layers(glyph_id, &mut layers, foreground_color) == 0 {
             return;
         }
-        let factory = self.base.artboard().factory();
+        let factory = self
+            .base
+            .artboard()
+            .factory()
+            .expect("Text requires its Artboard renderer factory");
         renderer.save();
-        renderer.transform(&(world_transform * transform));
+        renderer.transform(nuxie_render_api::Mat2D(
+            *(world_transform * transform).values(),
+        ));
         for mut layer in layers {
             if layer.paint_type
                 == crate::mechanical_port::source::text_engine::ColorGlyphPaintType::Image
@@ -1379,36 +1389,49 @@ impl Text {
                         }) {
                     image.clone()
                 } else {
-                    let image = factory.decode_image(&layer.image_bytes);
+                    let image = factory
+                        .with_factory_mut(|factory| factory.decode_image(&layer.image_bytes))
+                        .ok()
+                        .map(Rc::<dyn nuxie_render_api::RenderImage>::from);
                     self.emoji_image_cache
                         .push((font.clone(), glyph_id, image.clone()));
                     image
                 };
+                let Some(image) = image else {
+                    continue;
+                };
                 renderer.save();
-                renderer.transform(&Mat2D::new(
-                    layer.image_extent_x / layer.image_width as f32,
-                    0.0,
-                    0.0,
-                    layer.image_extent_y / layer.image_height as f32,
-                    layer.image_bearing_x,
-                    layer.image_bearing_y,
+                renderer.transform(nuxie_render_api::Mat2D(
+                    *Mat2D::new(
+                        layer.image_extent_x / layer.image_width as f32,
+                        0.0,
+                        0.0,
+                        layer.image_extent_y / layer.image_height as f32,
+                        layer.image_bearing_x,
+                        layer.image_bearing_y,
+                    )
+                    .values(),
                 ));
                 renderer.draw_image(
-                    &image,
-                    ImageSampler::linear_clamp(),
+                    Some(image.as_ref()),
+                    ImageSampler::LINEAR_CLAMP,
                     BlendMode::SrcOver,
                     opacity,
                 );
                 renderer.restore();
             } else {
-                let mut path = factory.make_render_path(
-                    &mut layer.path,
-                    crate::mechanical_port::source::renderer::FillRule::NonZero,
-                );
-                let mut paint = factory.make_render_paint();
+                let (path, mut paint) = factory.with_factory_mut(|factory| {
+                    (
+                        factory.make_render_path(
+                            to_render_raw_path(&layer.path),
+                            crate::mechanical_port::source::renderer::FillRule::NonZero,
+                        ),
+                        factory.make_render_paint(),
+                    )
+                });
                 paint.style(RenderPaintStyle::Fill);
                 paint.color(color_modulate_opacity(layer.color, opacity));
-                renderer.draw_path(&mut path, &mut paint);
+                renderer.draw_path(path.as_ref(), paint.as_ref());
             }
         }
         renderer.restore();

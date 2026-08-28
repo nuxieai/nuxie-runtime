@@ -1067,12 +1067,14 @@ impl ArtboardComponentList {
 }
 
 impl ArtboardComponentList {
-    pub fn draw(&mut self, renderer: &mut dyn Renderer) {
+    pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.drawable().needs_save_operation() {
             renderer.save();
         }
         if self.virtualization_enabled() {
-            self.layout_parent_ref(|parent| renderer.transform(parent.world_transform()));
+            self.layout_parent_ref(|parent| {
+                renderer.transform(nuxie_render_api::Mat2D(*parent.world_transform().values()));
+            });
             if self.visible_start_index != -1 && self.visible_end_index != -1 {
                 let indices = self.ordered_list_indices().to_vec();
                 for index in indices {
@@ -1081,7 +1083,7 @@ impl ArtboardComponentList {
                     {
                         renderer.save();
                         let transform = self.artboard_transforms[&item];
-                        renderer.transform(&transform);
+                        renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
                         artboard.with_artboard_mut(|artboard| artboard.draw_internal(renderer));
                         renderer.restore();
                     }
@@ -1089,7 +1091,7 @@ impl ArtboardComponentList {
             }
         } else {
             let transform = *self.transform().world_transform();
-            renderer.transform(&transform);
+            renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
             let indices = self.ordered_list_indices().to_vec();
             for index in indices {
                 if let (Some(artboard), Some(item)) =
@@ -1097,7 +1099,7 @@ impl ArtboardComponentList {
                 {
                     renderer.save();
                     let transform = self.artboard_transforms[&item];
-                    renderer.transform(&transform);
+                    renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
                     artboard.with_artboard_mut(|artboard| artboard.draw_internal(renderer));
                     renderer.restore();
                 }

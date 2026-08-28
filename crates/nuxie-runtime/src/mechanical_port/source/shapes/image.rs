@@ -75,21 +75,23 @@ impl Image {
                 mesh.mesh_drawable_draw(
                     renderer,
                     render_image,
-                    ImageSampler::linear_clamp(),
-                    self.base.blend_mode(),
+                    ImageSampler::LINEAR_CLAMP,
+                    self.base.blend_mode().into(),
                     self.base.render_opacity(),
                 );
             });
         } else {
-            renderer.transform(self.base.world_transform());
+            renderer.transform(nuxie_render_api::Mat2D(
+                *self.base.world_transform().values(),
+            ));
             renderer.translate(
                 -width * self.base.origin_x(),
                 -height * self.base.origin_y(),
             );
             renderer.draw_image(
-                render_image,
-                ImageSampler::linear_clamp(),
-                self.base.blend_mode(),
+                Some(render_image),
+                ImageSampler::LINEAR_CLAMP,
+                self.base.blend_mode().into(),
                 self.base.render_opacity(),
             );
         }

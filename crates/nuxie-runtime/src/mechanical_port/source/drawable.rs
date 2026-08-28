@@ -76,7 +76,7 @@ impl Drawable {
         }
     }
 
-    pub fn draw(&mut self, _renderer: &mut dyn Renderer) {
+    pub fn draw(&mut self, _renderer: &mut Renderer) {
         panic!("abstract Drawable::draw");
     }
 

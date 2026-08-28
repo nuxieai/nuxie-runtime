@@ -194,7 +194,7 @@ struct LayoutProxy {
     owner: CoreHandle,
 }
 impl ProxyDrawing for LayoutProxy {
-    fn draw_proxy(&mut self, renderer: &mut dyn Renderer, _needs_save_operation: bool) {
+    fn draw_proxy(&mut self, renderer: &mut Renderer, _needs_save_operation: bool) {
         self.owner.with_mut(|owner| {
             if let Some(owner) = owner.as_layout_component_mut() {
                 owner.draw_proxy(renderer);
@@ -647,7 +647,7 @@ impl LayoutComponent {
         self.propagate_collapse(self.is_collapsed());
         StatusCode::Ok
     }
-    pub fn draw_proxy(&mut self, renderer: &mut dyn Renderer) {
+    pub fn draw_proxy(&mut self, renderer: &mut Renderer) {
         {
             if self.base.clip() {
                 renderer.save();
@@ -663,7 +663,7 @@ impl LayoutComponent {
             }
         }
     }
-    pub fn draw(&mut self, renderer: &mut dyn Renderer) {
+    pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.base.clip() {
             renderer.restore();
         }

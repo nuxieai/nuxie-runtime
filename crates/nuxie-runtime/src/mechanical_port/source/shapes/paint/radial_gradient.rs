@@ -14,14 +14,20 @@ impl RadialGradient {
         colors: &[ColorInt],
         stops: &[f32],
     ) {
-        let shader = self.base.artboard().factory().make_radial_gradient(
-            start.x,
-            start.y,
-            Vec2D::distance(start, end),
-            colors,
-            stops,
-            colors.len(),
-        );
-        paint.set_shader(Some(shader));
+        let factory = self
+            .base
+            .artboard()
+            .factory()
+            .expect("RadialGradient requires its Artboard renderer factory");
+        let shader = factory.with_factory_mut(|factory| {
+            factory.make_radial_gradient(
+                start.x,
+                start.y,
+                Vec2D::distance(start, end),
+                colors,
+                stops,
+            )
+        });
+        paint.shader(Some(shader.as_ref()));
     }
 }

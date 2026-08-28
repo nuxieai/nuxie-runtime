@@ -2034,6 +2034,10 @@ impl Artboard {
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
+        let Some(artboard) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return StatusCode::MissingObject;
+        };
         let Some(backboard_importer) = import_stack.latest::<BackboardImporter>(
             crate::mechanical_port::source::backboard::Backboard::TYPE_KEY,
         ) else {
@@ -2041,7 +2045,7 @@ impl Artboard {
         };
         let result = self.base.base.import(import_stack);
         if result == StatusCode::Ok {
-            backboard_importer.add_artboard(self);
+            backboard_importer.add_artboard(artboard);
         } else {
             backboard_importer.add_missing_artboard();
         }

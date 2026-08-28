@@ -19,12 +19,16 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[derive(Debug, Clone)]
 pub struct AudioEngine {
     backend: nuxie_audio::AudioEngine,
+    #[cfg(feature = "tools")]
+    levels: Arc<Mutex<Vec<f32>>>,
 }
 
 impl AudioEngine {
     pub fn make(channels: u32, sample_rate: u32) -> Option<AudioEngineRef> {
         Some(Arc::new(Self {
             backend: nuxie_audio::AudioEngine::new(channels, sample_rate).ok()?,
+            #[cfg(feature = "tools")]
+            levels: Arc::new(Mutex::new(vec![0.0; channels as usize])),
         }))
     }
 
@@ -115,16 +119,40 @@ impl AudioEngine {
     }
 
     #[cfg(feature = "tools")]
-    pub fn measure_levels(&self, _frames: &[f32], _frame_count: u32) {}
+    pub fn measure_levels(&self, frames: &[f32], frame_count: u32) {
+        let channel_count = self.channels() as usize;
+        if channel_count == 0 {
+            return;
+        }
+        let mut levels = lock(&self.levels);
+        for frame in frames
+            .chunks_exact(channel_count)
+            .take(frame_count as usize)
+        {
+            for (level, sample) in levels.iter_mut().zip(frame) {
+                *level = level.max(*sample);
+            }
+        }
+    }
 
     #[cfg(feature = "tools")]
     pub fn levels(&self, out: &mut [f32]) {
-        self.backend.levels(out);
+        let mut levels = lock(&self.levels);
+        for (output, level) in out.iter_mut().zip(levels.iter_mut()) {
+            *output = *level;
+            *level = 0.0;
+        }
     }
 
     #[cfg(feature = "tools")]
     pub fn level(&self, channel: u32) -> f32 {
-        self.backend.level(channel)
+        let mut levels = lock(&self.levels);
+        let Some(level) = levels.get_mut(channel as usize) else {
+            return 0.0;
+        };
+        let value = *level;
+        *level = 0.0;
+        value
     }
 
     pub fn sum_audio_frames(&self, frames: &mut [f32], num_frames: u64) -> bool {
@@ -156,7 +184,11 @@ impl AudioEngine {
 
     pub fn make_and_store(channels: u32, sample_rate: u32) -> Option<AudioEngineRef> {
         let backend = nuxie_audio::AudioEngine::make_and_store(channels, sample_rate).ok()?;
-        let engine = Arc::new(Self { backend });
+        let engine = Arc::new(Self {
+            backend,
+            #[cfg(feature = "tools")]
+            levels: Arc::new(Mutex::new(vec![0.0; channels as usize])),
+        });
         if let Some(previous) = lock(&RUNTIME_AUDIO_ENGINE).replace(engine.clone()) {
             #[cfg(feature = "tools")]
             previous.stop_all();
@@ -169,8 +201,13 @@ impl AudioEngine {
     pub fn runtime_engine(make_when_necessary: bool) -> Option<AudioEngineRef> {
         let mut runtime = lock(&RUNTIME_AUDIO_ENGINE);
         if runtime.is_none() && make_when_necessary {
+            let backend = nuxie_audio::AudioEngine::runtime_engine();
+            #[cfg(feature = "tools")]
+            let channels = backend.channels();
             *runtime = Some(Arc::new(Self {
-                backend: nuxie_audio::AudioEngine::runtime_engine(),
+                backend,
+                #[cfg(feature = "tools")]
+                levels: Arc::new(Mutex::new(vec![0.0; channels as usize])),
             }));
         }
         runtime.clone()

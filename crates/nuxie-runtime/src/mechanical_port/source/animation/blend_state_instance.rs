@@ -153,6 +153,20 @@ where
             .map(BlendStateAnimationInstance::animation_instance)
     }
 
+    pub fn with_animation_instance_mut(
+        &mut self,
+        blend_animation: &CoreHandle,
+        callback: &mut dyn FnMut(&mut LinearAnimationInstance),
+    ) {
+        if let Some(animation) = self
+            .animation_instances
+            .iter_mut()
+            .find(|animation| &animation.blend_animation == blend_animation)
+        {
+            callback(&mut animation.animation_instance);
+        }
+    }
+
     pub fn with_blend_state<R>(&self, f: impl FnOnce(&K) -> R) -> R {
         self.blend_state
             .with_downcast::<K, _>(f)

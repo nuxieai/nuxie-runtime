@@ -65,6 +65,23 @@ impl RuntimeStateInstanceHandle {
         });
         result
     }
+
+    pub fn animation_for_blend<R>(
+        &self,
+        blend_animation: &CoreHandle,
+        use_animation: impl FnOnce(&mut LinearAnimationInstance) -> R,
+    ) -> Option<R> {
+        let mut use_animation = Some(use_animation);
+        let mut result = None;
+        self.with_state_mut(|state| {
+            state.with_animation_instance_for_blend(blend_animation, &mut |animation| {
+                if let Some(use_animation) = use_animation.take() {
+                    result = Some(use_animation(animation));
+                }
+            });
+        });
+        result
+    }
 }
 
 impl PartialEq for RuntimeStateInstanceHandle {
@@ -114,6 +131,12 @@ pub trait StateInstanceBehavior {
     fn clear_spilled_time(&mut self) {}
     fn for_each_animation_instance(
         &mut self,
+        _callback: &mut dyn FnMut(&mut LinearAnimationInstance),
+    ) {
+    }
+    fn with_animation_instance_for_blend(
+        &mut self,
+        _blend_animation: &CoreHandle,
         _callback: &mut dyn FnMut(&mut LinearAnimationInstance),
     ) {
     }

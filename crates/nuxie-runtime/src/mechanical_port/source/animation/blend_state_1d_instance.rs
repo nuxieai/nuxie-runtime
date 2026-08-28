@@ -47,6 +47,15 @@ where
     ) {
         self.base.for_each_animation_instance(callback);
     }
+
+    fn with_animation_instance_for_blend(
+        &mut self,
+        blend_animation: &CoreHandle,
+        callback: &mut dyn FnMut(&mut LinearAnimationInstance),
+    ) {
+        self.base
+            .with_animation_instance_mut(blend_animation, callback);
+    }
 }
 
 #[derive(Clone)]

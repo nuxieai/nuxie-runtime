@@ -4,9 +4,14 @@ use crate::mechanical_port::source::{
         animation_reset::AnimationReset,
         animation_reset_factory::AnimationResetFactory,
         animation_state::AnimationState,
+        blend_animation_1d::BlendAnimation1D,
+        blend_animation_direct::BlendAnimationDirect,
+        blend_state_instance::BlendAnimationDefinition,
         focus_listener_group::RuntimeFocusListenerGroupHandle,
         gamepad_listener_group::RuntimeGamepadListenerGroupHandle,
         keyboard_listener_group::RuntimeKeyboardListenerGroupHandle,
+        layer_state::LayerState,
+        linear_animation::LinearAnimation,
         linear_animation_instance::LinearAnimationInstance,
         listener_invocation::ListenerInvocation,
         listener_types::listener_input_type_semantic::ListenerInputTypeSemantic,
@@ -21,10 +26,12 @@ use crate::mechanical_port::source::{
         state_machine_input_instance::{
             InputInstanceNotifier, SMIBool, SMIInput, SMINumber, SMITrigger,
         },
+        state_machine_layer::StateMachineLayer,
         state_machine_listener::StateMachineListener,
         state_machine_listener_single::StateMachineListenerSingle,
         state_machine_number::StateMachineNumber,
         state_machine_trigger::StateMachineTrigger,
+        state_transition::{AllowTransition, TransitionRuntime},
     },
     artboard::{Artboard, RuntimeArtboardInstanceWeakHandle},
     audio_event::AudioEvent,
@@ -40,6 +47,7 @@ use crate::mechanical_port::source::{
         data_context::{DataContext, RuntimeDataContextHandle},
     },
     dirtyable::Dirtyable,
+    file::DETERMINISTIC_MODE,
     focus_data::FocusData,
     generated::{
         animation::{
@@ -81,6 +89,7 @@ use std::{
     cell::{Cell, RefCell, RefMut},
     collections::HashMap,
     rc::{Rc, Weak},
+    sync::atomic::Ordering,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -203,101 +212,6 @@ pub trait StateMachineInstanceRuntime {
         property: &CoreHandle,
         layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
     );
-    fn deterministic_mode(&self) -> bool;
-    fn layer_any_state(&self, layer: &CoreHandle) -> CoreHandle;
-    fn layer_entry_state(&self, layer: &CoreHandle) -> CoreHandle;
-    fn make_state_instance(
-        &mut self,
-        state: CoreHandle,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-    ) -> RuntimeStateInstanceHandle;
-    fn state_definition(&self, instance: &RuntimeStateInstanceHandle) -> CoreHandle;
-    fn state_advance(
-        &mut self,
-        instance: &RuntimeStateInstanceHandle,
-        seconds: f32,
-        machine: &mut StateMachineInstance,
-    );
-    fn state_apply(
-        &mut self,
-        instance: &RuntimeStateInstanceHandle,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        mix: f32,
-    );
-    fn state_keep_going(&self, instance: &RuntimeStateInstanceHandle) -> bool;
-    fn state_clear_spilled_time(&mut self, instance: &RuntimeStateInstanceHandle);
-    fn state_spilled_time(&self, instance: &RuntimeStateInstanceHandle) -> f32;
-    fn state_animation(&self, instance: &RuntimeStateInstanceHandle) -> Option<CoreHandle>;
-    fn state_animation_instance_time(&self, instance: &RuntimeStateInstanceHandle) -> f32;
-    fn state_for_each_animation_instance(
-        &mut self,
-        machine: &mut StateMachineInstance,
-        state: &RuntimeStateInstanceHandle,
-        callback: &mut dyn FnMut(
-            &mut dyn StateMachineInstanceRuntime,
-            &mut StateMachineInstance,
-            &mut LinearAnimationInstance,
-        ),
-    );
-    fn state_transition_count(&self, state: &CoreHandle) -> usize;
-    fn state_transition(&self, state: &CoreHandle, index: usize) -> CoreHandle;
-    fn state_flags(&self, state: &CoreHandle) -> u32;
-    fn state_events(&self, state: &CoreHandle) -> Vec<CoreHandle>;
-    fn state_listener_actions(&self, state: &CoreHandle) -> Vec<CoreHandle>;
-    fn transition_state_to(&self, transition: &CoreHandle) -> CoreHandle;
-    fn transition_allowed(
-        &mut self,
-        transition: &CoreHandle,
-        from: &RuntimeStateInstanceHandle,
-        machine: &mut StateMachineInstance,
-        layer: RuntimeStateMachineLayerInstanceWeakHandle,
-    ) -> u8;
-    fn transition_random_weight(&self, transition: &CoreHandle) -> u32;
-    fn transition_evaluated_weight(&self, transition: &CoreHandle) -> u32;
-    fn set_transition_evaluated_weight(&mut self, transition: &CoreHandle, value: u32);
-    fn transition_use_layer(
-        &mut self,
-        transition: &CoreHandle,
-        machine: &mut StateMachineInstance,
-        layer: RuntimeStateMachineLayerInstanceWeakHandle,
-    );
-    fn transition_duration(&self, transition: &CoreHandle) -> u32;
-    fn transition_duration_is_percentage(&self, transition: &CoreHandle) -> bool;
-    fn transition_interpolator(&self, transition: &CoreHandle) -> Option<CoreHandle>;
-    fn transition_enable_early_exit(&self, transition: &CoreHandle) -> bool;
-    fn transition_pause_on_exit(&self, transition: &CoreHandle) -> bool;
-    fn transition_apply_exit_condition(
-        &mut self,
-        transition: &CoreHandle,
-        from: &RuntimeStateInstanceHandle,
-    ) -> bool;
-    fn transition_events(&self, transition: &CoreHandle) -> Vec<CoreHandle>;
-    fn transition_listener_actions(&self, transition: &CoreHandle) -> Vec<CoreHandle>;
-    fn transition_property_value(&self, property: &CoreHandle) -> f32;
-    fn transition_property_instance(
-        &self,
-        machine: &StateMachineInstance,
-        transition: &CoreHandle,
-        property_key: u32,
-    ) -> Option<CoreHandle>;
-    fn fire_action_occurs(&self, action: &CoreHandle) -> u8;
-    fn fire_action_perform(&mut self, action: &CoreHandle, machine: &mut StateMachineInstance);
-    fn listener_action_matches(&self, action: &CoreHandle, occurrence: u8) -> bool;
-    fn listener_action_perform(
-        &mut self,
-        action: &CoreHandle,
-        machine: &mut StateMachineInstance,
-        invocation: &ListenerInvocation,
-    );
-    fn animation_apply(
-        &mut self,
-        animation: &CoreHandle,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        time: f32,
-        mix: f32,
-    );
-    fn animation_duration_seconds(&self, animation: &CoreHandle) -> f32;
-    fn interpolator_transform(&self, interpolator: &CoreHandle, value: f32) -> f32;
     fn artboard_frame_origin(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> bool;
     fn artboard_origin(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Vec2D;
     fn artboard_layout_size(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Vec2D;
@@ -441,7 +355,6 @@ pub trait StateMachineInstanceRuntime {
 pub type RuntimeServicesHandle = Rc<RefCell<Box<dyn StateMachineInstanceRuntime>>>;
 
 pub struct StateMachineLayerInstance {
-    runtime_services: Option<RuntimeServicesHandle>,
     occurrence: RuntimeStateMachineLayerInstanceWeakHandle,
     layer: Option<CoreHandle>,
     artboard_instance: RuntimeArtboardInstanceWeakHandle,
@@ -506,7 +419,6 @@ impl RuntimeStateMachineLayerInstanceWeakHandle {
 impl Default for StateMachineLayerInstance {
     fn default() -> Self {
         Self {
-            runtime_services: None,
             occurrence: RuntimeStateMachineLayerInstanceWeakHandle::default(),
             layer: None,
             artboard_instance: RuntimeArtboardInstanceWeakHandle::default(),
@@ -531,36 +443,55 @@ impl Default for StateMachineLayerInstance {
 impl StateMachineLayerInstance {
     const MAX_ITERATIONS: usize = 100;
 
-    fn runtime(&self) -> RefMut<'_, dyn StateMachineInstanceRuntime> {
-        RefMut::map(
-            self.runtime_services
-                .as_ref()
-                .expect("initialized layer retains runtime services")
-                .borrow_mut(),
-            |runtime| runtime.as_mut(),
-        )
-    }
-
     fn init(
         &mut self,
         state_machine_instance: &mut StateMachineInstance,
-        runtime_services: RuntimeServicesHandle,
         layer: CoreHandle,
         artboard: RuntimeArtboardInstanceWeakHandle,
     ) {
-        self.runtime_services = Some(runtime_services);
         self.artboard_instance = artboard.clone();
-        let deterministic = self.runtime().deterministic_mode();
+        let deterministic = DETERMINISTIC_MODE.load(Ordering::Relaxed);
         let seed = RandomProvider::layer_seed(deterministic);
         RandomProvider::seed(seed);
         debug_assert!(self.layer.is_none());
-        let any_state = self.runtime().layer_any_state(&layer);
-        let any_state_instance = self.runtime().make_state_instance(any_state, &artboard);
+        let any_state = layer
+            .with_downcast::<StateMachineLayer, _>(StateMachineLayer::any_state)
+            .flatten()
+            .expect("an imported state-machine layer has AnyState");
+        let any_state_instance = Self::make_state_instance(any_state, &artboard);
         state_machine_instance.build_state_keyframe_binds(&any_state_instance);
         self.any_state_instance = Some(any_state_instance);
-        let entry = self.runtime().layer_entry_state(&layer);
+        let entry = layer
+            .with_downcast::<StateMachineLayer, _>(StateMachineLayer::entry_state)
+            .flatten()
+            .expect("an imported state-machine layer has EntryState");
         self.layer = Some(layer);
-        self.change_state(state_machine_instance, entry);
+        self.change_state(state_machine_instance, Some(entry));
+    }
+
+    fn make_state_instance(
+        state: CoreHandle,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+    ) -> RuntimeStateInstanceHandle {
+        let behavior = state
+            .with(|state| state.layer_state_make_instance(artboard.clone()))
+            .flatten()
+            .expect("an imported LayerState must provide makeInstance");
+        RuntimeStateInstanceHandle::new(state, behavior)
+    }
+
+    fn layer_component_events(component: &CoreHandle) -> Vec<CoreHandle> {
+        component
+            .with(|component| component.state_machine_layer_component_events())
+            .flatten()
+            .expect("an authored state/transition must expose fire events")
+    }
+
+    fn layer_component_listener_actions(component: &CoreHandle) -> Vec<CoreHandle> {
+        component
+            .with(|component| component.state_machine_layer_component_listener_actions())
+            .flatten()
+            .expect("an authored state/transition must expose listener actions")
     }
 
     fn reset_state(&mut self, machine: &mut StateMachineInstance) {
@@ -587,23 +518,36 @@ impl StateMachineLayerInstance {
         }
         self.current_state = None;
         let entry = self
-            .runtime()
-            .layer_entry_state(self.layer.as_ref().expect("initialized layer"));
-        self.change_state(machine, entry);
+            .layer
+            .as_ref()
+            .expect("initialized layer")
+            .with_downcast::<StateMachineLayer, _>(StateMachineLayer::entry_state)
+            .flatten()
+            .expect("an imported state-machine layer has EntryState");
+        self.change_state(machine, Some(entry));
     }
 
     fn resolved_duration(&mut self) -> u32 {
         if let Some(property) = self.transition_duration_property.clone() {
             return self
-                .runtime()
-                .transition_property_value(&property)
+                .transition_duration_property_value(&property)
                 .round()
                 .max(0.0) as u32;
         }
         self.transition
-            .clone()
-            .map(|transition| self.runtime().transition_duration(&transition))
+            .as_ref()
+            .and_then(|transition| {
+                transition
+                    .with(|transition| transition.state_transition_duration())
+                    .flatten()
+            })
             .unwrap_or(0)
+    }
+
+    fn transition_duration_property_value(&self, property: &CoreHandle) -> f32 {
+        property
+            .with_downcast::<BindablePropertyNumber, _>(|property| property.base.property_value())
+            .unwrap_or(0.0)
     }
 
     fn resolved_mix_time(&mut self) -> f32 {
@@ -614,17 +558,22 @@ impl StateMachineLayerInstance {
         let Some(transition) = self.transition.clone() else {
             return 0.0;
         };
-        if self
-            .runtime()
-            .transition_duration_is_percentage(&transition)
-        {
-            let animation = self
-                .state_from
-                .as_ref()
-                .and_then(|state| self.runtime().state_animation(state));
+        let duration_is_percentage = transition
+            .with(|transition| transition.state_transition_duration_is_percentage())
+            .flatten()
+            .expect("an authored StateTransition must expose percentage duration");
+        if duration_is_percentage {
+            let animation = self.state_from.as_ref().and_then(|state| {
+                state
+                    .definition()
+                    .with_downcast::<AnimationState, _>(AnimationState::animation)
+                    .flatten()
+            });
             let animation_duration = animation
                 .as_ref()
-                .map(|animation| self.runtime().animation_duration_seconds(animation))
+                .and_then(|animation| {
+                    animation.with_downcast::<LinearAnimation, _>(LinearAnimation::duration_seconds)
+                })
                 .unwrap_or(0.0);
             duration as f32 / 100.0 * animation_duration
         } else {
@@ -644,9 +593,9 @@ impl StateMachineLayerInstance {
                 self.transition_completed = true;
                 self.clear_animation_reset();
                 let transition = self.transition.clone().expect("active transition");
-                let events = self.runtime().transition_events(&transition);
+                let events = Self::layer_component_events(&transition);
                 self.fire_events(machine, 1, &events);
-                let actions = self.runtime().transition_listener_actions(&transition);
+                let actions = Self::layer_component_listener_actions(&transition);
                 self.perform_listener_actions(machine, 1, &actions);
             }
         } else {
@@ -664,14 +613,14 @@ impl StateMachineLayerInstance {
             self.state_machine_changed_on_advance = false;
         }
         if let Some(current) = self.current_state.clone() {
-            self.runtime().state_advance(&current, seconds, machine);
+            current.with_state_mut(|state| state.advance(seconds, machine));
         }
         self.update_mix(machine, seconds);
         if let Some(from) = self.state_from.clone()
             && self.mix < 1.0
             && !self.hold_animation_from
         {
-            self.runtime().state_advance(&from, seconds, machine);
+            from.with_state_mut(|state| state.advance(seconds, machine));
         }
         self.apply();
         let mut changed = false;
@@ -695,7 +644,7 @@ impl StateMachineLayerInstance {
             }
         }
         if let Some(current) = self.current_state.clone() {
-            self.runtime().state_clear_spilled_time(&current);
+            current.with_state_mut(|state| state.clear_spilled_time());
         }
         changed
             || self.mix != 1.0
@@ -703,7 +652,7 @@ impl StateMachineLayerInstance {
             || self
                 .current_state
                 .as_ref()
-                .is_some_and(|current| self.runtime().state_keep_going(current))
+                .is_some_and(|current| current.with_state(|state| state.keep_going()))
     }
 
     fn is_transitioning(&mut self) -> bool {
@@ -716,8 +665,12 @@ impl StateMachineLayerInstance {
     fn update_state(&mut self, machine: &mut StateMachineInstance) -> bool {
         if self.is_transitioning()
             && !self
-                .runtime()
-                .transition_enable_early_exit(self.transition.as_ref().expect("active transition"))
+                .transition
+                .as_ref()
+                .expect("active transition")
+                .with(|transition| transition.state_transition_enable_early_exit())
+                .flatten()
+                .expect("an authored StateTransition must expose early-exit enablement")
         {
             return false;
         }
@@ -735,8 +688,15 @@ impl StateMachineLayerInstance {
         events: &[CoreHandle],
     ) {
         for event in events {
-            if self.runtime().fire_action_occurs(event) == occurrence {
-                self.runtime().fire_action_perform(event, machine);
+            let scheduled = event
+                .with(|event| event.state_machine_fire_action_occurs())
+                .flatten()
+                .expect("an authored fire action must expose occurrence");
+            if scheduled.0 == occurrence as i32 {
+                let performed = event
+                    .with_mut(|event| event.state_machine_fire_action_perform(machine))
+                    .unwrap_or(false);
+                assert!(performed, "an authored fire action must expose perform");
             }
         }
     }
@@ -748,43 +708,56 @@ impl StateMachineLayerInstance {
         actions: &[CoreHandle],
     ) {
         for action in actions {
-            if self.runtime().listener_action_matches(action, occurrence) {
-                let invocation = self.runtime().listener_invocation_none();
-                self.runtime()
-                    .listener_action_perform(action, machine, &invocation);
+            let scheduled = crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance(occurrence as i32);
+            let matches = action
+                .with(|action| action.listener_action_matches(scheduled))
+                .flatten()
+                .expect("an authored listener action must expose scheduled occurrence");
+            if matches {
+                let invocation = ListenerInvocation::none();
+                let performed = action
+                    .with_mut(|action| action.listener_action_perform(machine, &invocation))
+                    .unwrap_or(false);
+                assert!(performed, "an authored listener action must expose perform");
             }
         }
     }
 
-    fn can_change_state(&mut self, state_to: &CoreHandle) -> bool {
+    fn can_change_state(&mut self, state_to: &Option<CoreHandle>) -> bool {
         self.current_state
             .as_ref()
-            .is_none_or(|current| self.runtime().state_definition(current) != state_to.clone())
+            .map(RuntimeStateInstanceHandle::definition)
+            .as_ref()
+            != state_to.as_ref()
     }
 
-    fn change_state(&mut self, machine: &mut StateMachineInstance, state_to: CoreHandle) {
+    fn change_state(&mut self, machine: &mut StateMachineInstance, state_to: Option<CoreHandle>) {
         if self
             .current_state
             .as_ref()
-            .is_some_and(|current| self.runtime().state_definition(current) == state_to)
+            .map(RuntimeStateInstanceHandle::definition)
+            .as_ref()
+            == state_to.as_ref()
         {
             return;
         }
         if let Some(current) = self.current_state.clone() {
-            let state = self.runtime().state_definition(&current);
-            let events = self.runtime().state_events(&state);
+            let state = current.definition();
+            let events = Self::layer_component_events(&state);
             self.fire_events(machine, 1, &events);
-            let actions = self.runtime().state_listener_actions(&state);
+            let actions = Self::layer_component_listener_actions(&state);
             self.perform_listener_actions(machine, 1, &actions);
         }
-        let current = self
-            .runtime()
-            .make_state_instance(state_to, &self.artboard_instance);
+        let Some(state_to) = state_to else {
+            self.current_state = None;
+            return;
+        };
+        let current = Self::make_state_instance(state_to, &self.artboard_instance);
         machine.build_state_keyframe_binds(&current);
-        let state = self.runtime().state_definition(&current);
-        let events = self.runtime().state_events(&state);
+        let state = current.definition();
+        let events = Self::layer_component_events(&state);
         self.fire_events(machine, 0, &events);
-        let actions = self.runtime().state_listener_actions(&state);
+        let actions = Self::layer_component_listener_actions(&state);
         self.perform_listener_actions(machine, 0, &actions);
         self.current_state = Some(current);
     }
@@ -794,33 +767,54 @@ impl StateMachineLayerInstance {
         machine: &mut StateMachineInstance,
         from_instance: RuntimeStateInstanceHandle,
     ) -> Option<CoreHandle> {
-        let state = self.runtime().state_definition(&from_instance);
+        let state = from_instance.definition();
         let mut total_weight = 0;
-        for index in 0..self.runtime().state_transition_count(&state) {
-            let transition = self.runtime().state_transition(&state, index);
-            let state_to = self.runtime().transition_state_to(&transition);
+        let transition_count = state
+            .with(|state| state.layer_state_transition_count())
+            .flatten()
+            .expect("an authored LayerState must expose transition count");
+        for index in 0..transition_count {
+            let Some(transition) = state
+                .with(|state| state.layer_state_transition(index))
+                .flatten()
+            else {
+                continue;
+            };
+            let state_to = transition
+                .with(|transition| transition.state_transition_state_to())
+                .flatten();
             if self.can_change_state(&state_to) {
-                let allowed = self.runtime().transition_allowed(
-                    &transition,
-                    &from_instance,
-                    machine,
-                    self.occurrence.clone(),
-                );
-                if allowed == 2 {
-                    let weight = self.runtime().transition_random_weight(&transition);
-                    self.runtime()
-                        .set_transition_evaluated_weight(&transition, weight);
+                let allowed = transition
+                    .with_mut(|transition| {
+                        transition.state_transition_allowed(
+                            &from_instance,
+                            machine,
+                            self.occurrence.clone(),
+                        )
+                    })
+                    .flatten()
+                    .unwrap_or(AllowTransition::No);
+                if allowed == AllowTransition::Yes {
+                    let weight = transition
+                        .with(|transition| transition.state_transition_random_weight())
+                        .flatten()
+                        .expect("an authored StateTransition must expose random weight");
+                    transition.with_mut(|transition| {
+                        transition.state_transition_set_evaluated_random_weight(weight);
+                    });
                     total_weight += weight;
                 } else {
-                    self.runtime()
-                        .set_transition_evaluated_weight(&transition, 0);
-                    if allowed == 1 {
+                    transition.with_mut(|transition| {
+                        transition.state_transition_set_evaluated_random_weight(0);
+                    });
+                    if allowed == AllowTransition::WaitingForExit {
                         self.waiting_for_exit = true;
                     }
                 }
             } else {
-                self.runtime()
-                    .set_transition_evaluated_weight(&transition, 0);
+                transition.with_mut(|transition| {
+                    transition.state_transition_set_evaluated_random_weight(0);
+                });
             }
         }
         if total_weight == 0 {
@@ -828,12 +822,22 @@ impl StateMachineLayerInstance {
         }
         let random_weight = RandomProvider::generate_random_float() as f64 * total_weight as f64;
         let mut current_weight = 0.0;
-        for index in 0..self.runtime().state_transition_count(&state) {
-            let transition = self.runtime().state_transition(&state, index);
-            let weight = self.runtime().transition_evaluated_weight(&transition) as f64;
+        for index in 0..transition_count {
+            let Some(transition) = state
+                .with(|state| state.layer_state_transition(index))
+                .flatten()
+            else {
+                continue;
+            };
+            let weight = transition
+                .with(|transition| transition.state_transition_evaluated_random_weight())
+                .flatten()
+                .expect("an authored StateTransition must expose evaluated random weight")
+                as f64;
             if current_weight + weight > random_weight {
-                self.runtime()
-                    .transition_use_layer(&transition, machine, self.occurrence.clone());
+                transition.with_mut(|transition| {
+                    transition.state_transition_use_layer(machine, self.occurrence.clone());
+                });
                 return Some(transition);
             }
             current_weight += weight;
@@ -846,33 +850,58 @@ impl StateMachineLayerInstance {
         machine: &mut StateMachineInstance,
         from_instance: RuntimeStateInstanceHandle,
     ) -> Option<CoreHandle> {
-        let state = self.runtime().state_definition(&from_instance);
-        if self.runtime().state_flags(&state) & 1 != 0 {
+        let state = from_instance.definition();
+        let flags = state
+            .with(|state| state.layer_state_flags())
+            .flatten()
+            .expect("an imported LayerState must expose flags");
+        if flags & 1 != 0 {
             return self.find_random_transition(machine, from_instance);
         }
-        for index in 0..self.runtime().state_transition_count(&state) {
-            let transition = self.runtime().state_transition(&state, index);
-            let state_to = self.runtime().transition_state_to(&transition);
+        let transition_count = state
+            .with(|state| state.layer_state_transition_count())
+            .flatten()
+            .expect("an authored LayerState must expose transition count");
+        for index in 0..transition_count {
+            let Some(transition) = state
+                .with(|state| state.layer_state_transition(index))
+                .flatten()
+            else {
+                continue;
+            };
+            let state_to = transition
+                .with(|transition| transition.state_transition_state_to())
+                .flatten();
             if !self.can_change_state(&state_to) {
                 continue;
             }
-            let allowed = self.runtime().transition_allowed(
-                &transition,
-                &from_instance,
-                machine,
-                self.occurrence.clone(),
-            );
-            if allowed == 2 {
-                let weight = self.runtime().transition_random_weight(&transition);
-                self.runtime()
-                    .set_transition_evaluated_weight(&transition, weight);
-                self.runtime()
-                    .transition_use_layer(&transition, machine, self.occurrence.clone());
+            let allowed = transition
+                .with_mut(|transition| {
+                    transition.state_transition_allowed(
+                        &from_instance,
+                        machine,
+                        self.occurrence.clone(),
+                    )
+                })
+                .flatten()
+                .unwrap_or(AllowTransition::No);
+            if allowed == AllowTransition::Yes {
+                let weight = transition
+                    .with(|transition| transition.state_transition_random_weight())
+                    .flatten()
+                    .expect("an authored StateTransition must expose random weight");
+                transition.with_mut(|transition| {
+                    transition.state_transition_set_evaluated_random_weight(weight);
+                });
+                transition.with_mut(|transition| {
+                    transition.state_transition_use_layer(machine, self.occurrence.clone());
+                });
                 return Some(transition);
             }
-            self.runtime()
-                .set_transition_evaluated_weight(&transition, 0);
-            if allowed == 1 {
+            transition.with_mut(|transition| {
+                transition.state_transition_set_evaluated_random_weight(0);
+            });
+            if allowed == AllowTransition::WaitingForExit {
                 self.waiting_for_exit = true;
             }
         }
@@ -918,18 +947,19 @@ impl StateMachineLayerInstance {
             return false;
         };
         self.clear_animation_reset();
-        let state_to = self.runtime().transition_state_to(&transition);
+        let state_to = transition
+            .with(|transition| transition.state_transition_state_to())
+            .flatten();
         self.change_state(machine, state_to);
         self.state_machine_changed_on_advance = true;
         self.transition = Some(transition.clone());
-        self.transition_duration_property = self.runtime().transition_property_instance(
-            machine,
+        self.transition_duration_property = machine.find_transition_property_instance(
             &transition,
             StateTransitionBase::DURATION_PROPERTY_KEY as u32,
         );
-        let events = self.runtime().transition_events(&transition);
+        let events = Self::layer_component_events(&transition);
         self.fire_events(machine, 0, &events);
-        let actions = self.runtime().transition_listener_actions(&transition);
+        let actions = Self::layer_component_listener_actions(&transition);
         self.perform_listener_actions(machine, 0, &actions);
         self.transition_completed = self.resolved_duration() == 0;
         if self.transition_completed {
@@ -948,26 +978,65 @@ impl StateMachineLayerInstance {
         if !self.transition_completed {
             self.build_animation_reset_for_transition();
         }
-        if let Some(out_state) = self.state_from.clone()
-            && self
-                .runtime()
-                .transition_apply_exit_condition(&transition, &out_state)
-        {
-            self.hold_animation = self.runtime().state_animation(&out_state);
-            self.hold_time = self.runtime().state_animation_instance_time(&out_state);
+        if let Some(out_state) = self.state_from.clone() {
+            let hold_animation = out_state
+                .definition()
+                .with_downcast::<AnimationState, _>(AnimationState::animation)
+                .flatten();
+            let use_exit = transition
+                .with(|transition| transition.state_transition_enable_exit_time())
+                .flatten()
+                .expect("an authored StateTransition must expose exit-time enablement")
+                && hold_animation.is_some();
+            let pause_on_exit = transition
+                .with(|transition| transition.state_transition_pause_on_exit())
+                .flatten()
+                .expect("an authored StateTransition must expose pause-on-exit");
+            let applied = if pause_on_exit && use_exit {
+                let flags = transition
+                    .with(|transition| transition.state_transition_flags())
+                    .flatten()
+                    .expect("an authored StateTransition must expose flags");
+                let authored_exit_time = transition
+                    .with(|transition| transition.state_transition_exit_time())
+                    .flatten()
+                    .expect("an authored StateTransition must expose exit time");
+                let exit_time = out_state
+                    .first_animation(|animation| {
+                        if flags & 32 != 0 {
+                            animation.start_time()
+                                + authored_exit_time as f32 / 100.0 * animation.duration_seconds()
+                        } else {
+                            authored_exit_time as f32 / 1000.0
+                        }
+                    })
+                    .unwrap_or(0.0);
+                out_state.first_animation(|animation| animation.set_time(exit_time));
+                true
+            } else {
+                use_exit
+            };
+            if applied {
+                self.hold_animation = hold_animation;
+                self.hold_time = out_state
+                    .first_animation(LinearAnimationInstance::time)
+                    .unwrap_or(0.0);
+            }
         }
         self.mix_from = self.mix;
         if self.mix != 0.0 {
-            self.hold_animation_from = self.runtime().transition_pause_on_exit(&transition);
+            self.hold_animation_from = transition
+                .with(|transition| transition.state_transition_pause_on_exit())
+                .flatten()
+                .expect("an authored StateTransition must expose pause-on-exit");
         }
         if let Some(current) = self.current_state.clone() {
             let advance_time = self
                 .state_from
                 .as_ref()
-                .map(|from| self.runtime().state_spilled_time(from))
+                .and_then(|from| from.first_animation(LinearAnimationInstance::spilled_time))
                 .unwrap_or(0.0);
-            self.runtime()
-                .state_advance(&current, advance_time, machine);
+            current.with_state_mut(|state| state.advance(advance_time, machine));
         }
         self.mix = 0.0;
         self.update_mix(machine, 0.0);
@@ -982,50 +1051,178 @@ impl StateMachineLayerInstance {
                 .expect("a state-machine layer retains its artboard instance");
         }
         if let Some(hold_animation) = self.hold_animation.take() {
-            self.runtime().animation_apply(
-                &hold_animation,
-                &self.artboard_instance,
-                self.hold_time,
-                self.mix_from,
-            );
+            self.artboard_instance.with_artboard_mut(|artboard| {
+                hold_animation.with_downcast_mut::<LinearAnimation, _>(|animation| {
+                    animation.apply(artboard, self.hold_time, self.mix_from, None)
+                });
+            });
         }
-        let interpolator = self
-            .transition
-            .clone()
-            .and_then(|transition| self.runtime().transition_interpolator(&transition));
+        let interpolator = self.transition.as_ref().and_then(|transition| {
+            transition
+                .with(|transition| transition.state_transition_interpolator())
+                .flatten()
+        });
         if let Some(state_from) = self.state_from.clone().filter(|_| self.mix < 1.0) {
             let mix = interpolator
                 .as_ref()
-                .map(|interpolator| {
-                    self.runtime()
-                        .interpolator_transform(interpolator, self.mix_from)
+                .and_then(|interpolator| {
+                    interpolator
+                        .with_mut(|interpolator| {
+                            interpolator.keyframe_interpolator_transform(self.mix_from)
+                        })
+                        .flatten()
                 })
                 .unwrap_or(self.mix_from);
-            self.runtime()
-                .state_apply(&state_from, &self.artboard_instance, mix);
+            state_from.with_state_mut(|state| state.apply(&self.artboard_instance, mix));
         }
         if let Some(current_state) = self.current_state.clone() {
             let mix = interpolator
                 .as_ref()
-                .map(|interpolator| {
-                    self.runtime()
-                        .interpolator_transform(interpolator, self.mix)
+                .and_then(|interpolator| {
+                    interpolator
+                        .with_mut(|interpolator| {
+                            interpolator.keyframe_interpolator_transform(self.mix)
+                        })
+                        .flatten()
                 })
                 .unwrap_or(self.mix);
-            self.runtime()
-                .state_apply(&current_state, &self.artboard_instance, mix);
+            current_state.with_state_mut(|state| state.apply(&self.artboard_instance, mix));
         }
     }
 
     fn current_state(&mut self) -> Option<CoreHandle> {
         let current = self.current_state.clone()?;
-        Some(self.runtime().state_definition(&current))
+        Some(current.definition())
     }
 
     fn current_animation(&mut self) -> Option<RuntimeStateInstanceHandle> {
-        self.current_state
-            .clone()
-            .filter(|current| self.runtime().state_animation(current).is_some())
+        self.current_state.clone().filter(|current| {
+            current
+                .definition()
+                .with_downcast::<AnimationState, _>(AnimationState::animation)
+                .flatten()
+                .is_some()
+        })
+    }
+}
+
+pub(crate) struct DirectTransitionRuntime {
+    exit_blend_animation: Option<CoreHandle>,
+}
+
+impl DirectTransitionRuntime {
+    pub(crate) fn plain() -> Self {
+        Self {
+            exit_blend_animation: None,
+        }
+    }
+
+    pub(crate) fn blend(exit_blend_animation: Option<CoreHandle>) -> Self {
+        Self {
+            exit_blend_animation,
+        }
+    }
+
+    fn selected_blend_animation(&self) -> Option<CoreHandle> {
+        let blend = self.exit_blend_animation.as_ref()?;
+        blend
+            .with_downcast::<BlendAnimation1D, _>(BlendAnimationDefinition::animation)
+            .or_else(|| {
+                blend.with_downcast::<BlendAnimationDirect, _>(BlendAnimationDefinition::animation)
+            })
+            .flatten()
+    }
+}
+
+impl TransitionRuntime for DirectTransitionRuntime {
+    fn evaluate_condition(
+        &self,
+        condition: &CoreHandle,
+        machine: &mut StateMachineInstance,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> bool {
+        condition
+            .with_mut(|condition| condition.transition_condition_allowed(machine, layer))
+            .flatten()
+            .expect("an authored TransitionCondition must expose allowed")
+    }
+
+    fn use_condition_in_layer(
+        &self,
+        condition: &CoreHandle,
+        machine: &mut StateMachineInstance,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
+    ) {
+        let used = condition
+            .with_mut(|condition| condition.transition_condition_use_layer(machine, layer))
+            .unwrap_or(false);
+        assert!(
+            used,
+            "an authored TransitionCondition must expose useInLayer"
+        );
+    }
+
+    fn animation_duration(&self, state: &LayerState) -> Option<f32> {
+        let animation = if self.exit_blend_animation.is_some() {
+            self.selected_blend_animation()?
+        } else {
+            let state = state.base.base.base.base.handle()?;
+            state
+                .with_downcast::<AnimationState, _>(AnimationState::animation)
+                .flatten()?
+        };
+        animation.with_downcast::<LinearAnimation, _>(LinearAnimation::duration_seconds)
+    }
+
+    fn exit_animation(&self, state: &LayerState) -> Option<(f32, f32)> {
+        let animation = if self.exit_blend_animation.is_some() {
+            self.selected_blend_animation()?
+        } else {
+            let state = state.base.base.base.base.handle()?;
+            state
+                .with_downcast::<AnimationState, _>(AnimationState::animation)
+                .flatten()?
+        };
+        animation.with_downcast::<LinearAnimation, _>(|animation| {
+            (animation.start_time(), animation.duration_seconds())
+        })
+    }
+
+    fn exit_instance_times(
+        &self,
+        from: &RuntimeStateInstanceHandle,
+    ) -> Option<(f32, f32, f32, i32)> {
+        let use_animation = |animation: &mut LinearAnimationInstance| {
+            (
+                animation.last_total_time(),
+                animation.total_time(),
+                animation.duration_seconds(),
+                animation.loop_value(),
+            )
+        };
+        if let Some(blend) = self.exit_blend_animation.as_ref() {
+            from.animation_for_blend(blend, use_animation)
+        } else if from
+            .definition()
+            .with_downcast::<AnimationState, _>(|_| ())
+            .is_some()
+        {
+            from.first_animation(use_animation)
+        } else {
+            None
+        }
+    }
+
+    fn set_exit_instance_time(&self, from: &RuntimeStateInstanceHandle, time: f32) {
+        if let Some(blend) = self.exit_blend_animation.as_ref() {
+            from.animation_for_blend(blend, |animation| animation.set_time(time));
+        } else if from
+            .definition()
+            .with_downcast::<AnimationState, _>(|_| ())
+            .is_some()
+        {
+            from.first_animation(|animation| animation.set_time(time));
+        }
     }
 }
 
@@ -1991,14 +2188,8 @@ impl StateMachineInstance {
                 let layer_instance = RuntimeStateMachineLayerInstanceHandle::new(
                     StateMachineLayerInstance::default(),
                 );
-                let runtime_services = Rc::clone(&instance.runtime);
                 layer_instance.with_layer_mut(|layer_instance| {
-                    layer_instance.init(
-                        instance,
-                        runtime_services,
-                        layer,
-                        artboard_instance.clone(),
-                    );
+                    layer_instance.init(instance, layer, artboard_instance.clone());
                 });
                 instance.layers.push(layer_instance);
             }

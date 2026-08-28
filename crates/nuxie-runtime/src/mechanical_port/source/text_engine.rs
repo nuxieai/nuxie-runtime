@@ -433,6 +433,22 @@ pub trait Font: Any {
 
 pub type FontRef = Rc<dyn Font>;
 pub type FallbackProc = fn(Unichar, u32, &dyn Font) -> Option<FontRef>;
+thread_local! {
+    // A host RawText occurrence may provide a scoped fallback chain without
+    // racing another thread's process-level fallback provider.
+    static HOST_FALLBACK_PROC: std::cell::Cell<Option<FallbackProc>> = const { std::cell::Cell::new(None) };
+}
+pub fn with_host_fallback_proc<R>(callback: FallbackProc, work: impl FnOnce() -> R) -> R {
+    struct Restore(Option<FallbackProc>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            HOST_FALLBACK_PROC.with(|slot| slot.set(self.0));
+        }
+    }
+    let previous = HOST_FALLBACK_PROC.with(|slot| slot.replace(Some(callback)));
+    let _restore = Restore(previous);
+    work()
+}
 static G_FALLBACK_PROC: std::sync::Mutex<Option<FallbackProc>> = std::sync::Mutex::new(None);
 static G_FALLBACK_PROC_ENABLED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(true);
@@ -445,6 +461,9 @@ pub fn set_fallback_proc(value: Option<FallbackProc>) {
 }
 
 pub fn fallback_proc() -> Option<FallbackProc> {
+    if let Some(callback) = HOST_FALLBACK_PROC.with(|slot| slot.get()) {
+        return Some(callback);
+    }
     *G_FALLBACK_PROC
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)

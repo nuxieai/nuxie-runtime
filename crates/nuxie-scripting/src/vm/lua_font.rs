@@ -28,6 +28,14 @@ pub(super) struct ScriptedFont {
 
 impl ScriptedFont {
     fn from_asset(lua: &Lua, font: ScriptFont) -> Option<Self> {
+        let font = if let Some(native) = font
+            .asset_global_id()
+            .and_then(|id| ScriptedFontAssetOwners::for_lua(lua)?.native_font(id))
+        {
+            font.with_native_font(native)
+        } else {
+            font
+        };
         let font_bytes = font.live_font_bytes_arc().cloned().or_else(|| {
             let asset_global_id = font.asset_global_id()?;
             ScriptedFontAssetOwners::for_lua(lua)?.get(asset_global_id)

@@ -91,12 +91,7 @@ impl NativeScriptArtboard {
         &self,
         animation: &'a ScriptAnimation,
     ) -> Result<&'a Rc<RefCell<NativeLinearAnimation>>, ScriptError> {
-        match &animation.instance {
-            ScriptAnimationOwner::Native(instance) => Ok(instance),
-            ScriptAnimationOwner::Legacy(_) => Err(ScriptError::new(
-                "animation belongs to a different runtime projection",
-            )),
-        }
+        Ok(&animation.instance)
     }
 }
 
@@ -174,9 +169,7 @@ impl ScriptArtboard for NativeScriptArtboard {
             .artboard
             .animation_named(name)
             .map(|instance| ScriptAnimation {
-                duration: instance.duration() as f32 / instance.fps() as f32,
-                fps: instance.fps() as f32,
-                instance: ScriptAnimationOwner::Native(Rc::new(RefCell::new(*instance))),
+                instance: Rc::new(RefCell::new(*instance)),
             }))
     }
 

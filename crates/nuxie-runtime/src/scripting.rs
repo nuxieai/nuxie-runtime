@@ -4,28 +4,14 @@ use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::{error::Error, fmt};
 
-use nuxie_binary::{RuntimeFile, RuntimeObject};
-use nuxie_graph::{ArtboardGraph, ShapePaintKind, ShapePaintNode, ShapePaintStateNode};
 use nuxie_render_api::{
     BlendMode, Factory as RenderFactory, RawPath, RenderPaintStyle, Renderer, StrokeCap, StrokeJoin,
 };
 
-use crate::artboard_data_bind::RuntimeOwnedDataContext;
-use crate::data_bind_graph::{
-    RuntimeDataBindGraphConverter, RuntimeDataBindGraphValue,
-    runtime_data_bind_graph_convert_value, runtime_data_bind_graph_converter,
-};
-use crate::properties::property_key_for_name;
 use crate::state_machine::ScriptListenerInvocation;
 use crate::view_model_cell::{
     RuntimeBlobAsset, RuntimeCellDirtSink, RuntimeHostMutationNotifications,
-    RuntimeViewModelCellValue,
 };
-use crate::{
-    ArtboardInstance, LinearAnimationInstance, RuntimeOwnedViewModelContextHandle,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeViewModelImage,
-};
-
 mod native_artboard;
 pub(crate) use native_artboard::native_script_artboard;
 
@@ -140,7 +126,7 @@ impl ScriptListenerActionDefinition {
             asset_name,
             has_protocol_asset: true,
             serialized_implemented_methods:
-                crate::script_asset::RuntimeScriptImplementedMethods::METHOD_MASK,
+                crate::mechanical_port::source::assets::script_asset::OptionalScriptedMethods::METHOD_MASK,
             inputs: Vec::new(),
         }
     }
@@ -220,10 +206,11 @@ impl ScriptListenerActionDefinition {
     }
 
     pub fn inits(&self) -> bool {
-        crate::script_asset::RuntimeScriptImplementedMethods::from_serialized(
-            self.serialized_implemented_methods,
-        )
-        .inits()
+        let mut methods =
+            crate::mechanical_port::source::assets::script_asset::OptionalScriptedMethods::default(
+            );
+        methods.set_implemented_methods(self.serialized_implemented_methods as i32);
+        methods.inits()
     }
 
     /// Authored inputs owned by this exact listener-action occurrence.
@@ -270,296 +257,6 @@ pub enum ScriptListenerInputKind {
     Trigger,
     Artboard,
     ViewModelProperty,
-}
-
-/// Current cloned Core state for one authored ScriptInput occurrence.
-///
-/// This snapshot deliberately excludes live DataBind source values. C++
-/// hydrates Lua from the cloned target objects before the first
-/// `updateDataBinds(false)` applies those sources.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ScriptListenerInputSnapshot {
-    pub input_global_id: u32,
-    pub kind: ScriptListenerInputKind,
-    pub name: ScriptCoreString,
-    pub value: Option<ScriptListenerInputSnapshotValue>,
-    pub view_model_path: Option<crate::ScriptInputViewModelPropertyPath>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ScriptListenerInputSnapshotValue {
-    Value(ScriptValue),
-    Artboard(crate::script_input_artboard::ScriptArtboardSource),
-}
-
-/// An occurrence-local listener hydration batch.
-///
-/// Callers construct the whole batch before touching a script table. Applying
-/// it always installs `Context.viewModel` first, then the authored/bound input
-/// values in source order. Trigger entries represent a bound trigger edge;
-/// ordinary initial trigger hydration intentionally produces no entry because
-/// the table field is the authored callback itself.
-#[derive(Clone)]
-pub struct ScriptListenerActionHydration {
-    context_view_model: Option<ScriptViewModel>,
-    context_parent_view_models: Vec<Option<ScriptViewModel>>,
-    context_resolved: bool,
-    inputs: Vec<ScriptListenerInputHydration>,
-}
-
-impl ScriptListenerActionHydration {
-    pub fn new(
-        context_view_model: Option<ScriptViewModel>,
-        inputs: Vec<ScriptListenerInputHydration>,
-    ) -> Self {
-        Self {
-            context_view_model,
-            context_parent_view_models: Vec::new(),
-            context_resolved: true,
-            inputs,
-        }
-    }
-
-    pub fn new_with_context_chain(
-        context_view_model: Option<ScriptViewModel>,
-        context_parent_view_models: Vec<Option<ScriptViewModel>>,
-        inputs: Vec<ScriptListenerInputHydration>,
-    ) -> Self {
-        Self {
-            context_view_model,
-            context_parent_view_models,
-            context_resolved: true,
-            inputs,
-        }
-    }
-
-    pub fn unresolved(inputs: Vec<ScriptListenerInputHydration>) -> Self {
-        Self {
-            context_view_model: None,
-            context_parent_view_models: Vec::new(),
-            context_resolved: false,
-            inputs,
-        }
-    }
-
-    /// Install only the already-selected DataContext chain.
-    ///
-    /// This operation is deliberately allocation-free with respect to typed
-    /// ScriptInput prerequisites. Retry owners use it before recreating the
-    /// generated table, then validate Artboard/ViewModel inputs only after the
-    /// recreated table has passed its concrete lifetime guard.
-    #[doc(hidden)]
-    pub fn install_context(&self, instance: &mut dyn ScriptInstance) -> Result<(), ScriptError> {
-        if self.context_resolved {
-            instance.set_context_view_model_chain(
-                self.context_view_model.clone(),
-                self.context_parent_view_models.clone(),
-            )?;
-        }
-        Ok(())
-    }
-
-    /// Validate every facade-owned typed prerequisite and retain the authority
-    /// needed to apply it later. Pinned C++ performs this validation in its
-    /// first loop, but repeats the live ViewModel lookup and does not construct
-    /// an Artboard until the input's authored position in the second loop.
-    pub fn preflight_artboards(self) -> Result<PreparedScriptListenerActionHydration, ScriptError> {
-        let mut inputs = Vec::with_capacity(self.inputs.len());
-        for input in self.inputs {
-            match input {
-                ScriptListenerInputHydration::Artboard {
-                    name,
-                    source,
-                    resolver,
-                    parent_context,
-                } => {
-                    if matches!(
-                        &source,
-                        crate::script_input_artboard::ScriptArtboardSource::Live(bindable)
-                            if !bindable.has_artboard_instance()
-                    ) {
-                        return Err(ScriptError::new(
-                            "live scripted artboard source is unavailable",
-                        ));
-                    }
-                    inputs.push(PreparedScriptListenerInputHydration::Artboard {
-                        name,
-                        recipe: resolver
-                            .prepare_script_artboard(&source, parent_context.as_ref())?,
-                    });
-                }
-                ScriptListenerInputHydration::Value { name, value } => {
-                    inputs.push(PreparedScriptListenerInputHydration::Value { name, value });
-                }
-                ScriptListenerInputHydration::ViewModel {
-                    name,
-                    input_global_id,
-                    path,
-                    resolver,
-                } => {
-                    // `Ok(None)` is a valid ViewModel-valued property whose
-                    // current child reference is null. An error means the
-                    // property/path prerequisite itself is unresolved and
-                    // rejects the complete batch before any table setter.
-                    // Discard the selected child: pinned phase two resolves it
-                    // again after any earlier authored setters have run.
-                    let _ = resolver.resolve_script_view_model(input_global_id, &path)?;
-                    inputs.push(PreparedScriptListenerInputHydration::ViewModel {
-                        name,
-                        input_global_id,
-                        path,
-                        resolver,
-                    });
-                }
-                ScriptListenerInputHydration::Trigger { name } => {
-                    inputs.push(PreparedScriptListenerInputHydration::Trigger { name });
-                }
-            }
-        }
-        Ok(PreparedScriptListenerActionHydration {
-            context_view_model: self.context_view_model,
-            context_parent_view_models: self.context_parent_view_models,
-            context_resolved: self.context_resolved,
-            inputs,
-        })
-    }
-
-    pub fn apply(
-        self,
-        instance: &mut dyn ScriptInstance,
-        host: &mut dyn ScriptHost,
-    ) -> Result<(), ScriptError> {
-        self.preflight_artboards()?.apply(instance, host)
-    }
-
-    /// Apply the already validated authored inputs after the context is live
-    /// and, when needed, the failed occurrence has recreated its table.
-    pub fn apply_inputs(
-        self,
-        instance: &mut dyn ScriptInstance,
-        host: &mut dyn ScriptHost,
-    ) -> Result<(), ScriptError> {
-        self.preflight_artboards()?.apply_inputs(instance, host)
-    }
-}
-
-/// A hydration batch whose every typed prerequisite has been validated and
-/// whose deferred/re-resolution authority has been retained. Its fields are
-/// private and it can only be created by
-/// `ScriptListenerActionHydration::preflight_artboards`, making the validation
-/// boundary a type-state invariant rather than a caller convention.
-pub struct PreparedScriptListenerActionHydration {
-    context_view_model: Option<ScriptViewModel>,
-    context_parent_view_models: Vec<Option<ScriptViewModel>>,
-    context_resolved: bool,
-    inputs: Vec<PreparedScriptListenerInputHydration>,
-}
-
-impl PreparedScriptListenerActionHydration {
-    pub fn apply(
-        self,
-        instance: &mut dyn ScriptInstance,
-        host: &mut dyn ScriptHost,
-    ) -> Result<(), ScriptError> {
-        self.install_context(instance)?;
-        self.apply_inputs(instance, host)
-    }
-
-    /// Install the live DataContext only after every typed input in this batch
-    /// has crossed the non-bypassable prerequisite-validation boundary.
-    pub fn install_context(&self, instance: &mut dyn ScriptInstance) -> Result<(), ScriptError> {
-        if self.context_resolved {
-            instance.set_context_view_model_chain(
-                self.context_view_model.clone(),
-                self.context_parent_view_models.clone(),
-            )?;
-        } else {
-            instance.clear_unresolved_context_view_model()?;
-        }
-        Ok(())
-    }
-
-    pub fn apply_inputs(
-        self,
-        instance: &mut dyn ScriptInstance,
-        host: &mut dyn ScriptHost,
-    ) -> Result<(), ScriptError> {
-        for input in self.inputs {
-            match input {
-                PreparedScriptListenerInputHydration::Value { name, value } => {
-                    instance.set_input_core(&name, value)?;
-                }
-                PreparedScriptListenerInputHydration::Artboard { name, recipe } => {
-                    // The backend owns the pinned state/m_self/scriptAsset
-                    // guards. Hand it the deferred recipe intact so an inert
-                    // occurrence returns before cloning or binding the child.
-                    instance.set_prepared_artboard_input_core(&name, recipe)?;
-                }
-                PreparedScriptListenerInputHydration::ViewModel {
-                    name,
-                    input_global_id,
-                    path,
-                    resolver,
-                } => {
-                    let view_model = resolver.resolve_script_view_model(input_global_id, &path)?;
-                    // A valid ViewModel-valued property may currently select
-                    // no child. C++ still considers that input hydrated and
-                    // leaves the table field untouched.
-                    if let Some(view_model) = view_model {
-                        instance.set_view_model_input_core(&name, view_model)?;
-                    }
-                }
-                PreparedScriptListenerInputHydration::Trigger { name } => {
-                    instance.call_input_trigger_core(&name, host)?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
-/// One resolved listener input operation.
-#[derive(Clone)]
-pub enum ScriptListenerInputHydration {
-    Value {
-        name: ScriptCoreString,
-        value: ScriptValue,
-    },
-    Artboard {
-        name: ScriptCoreString,
-        source: crate::script_input_artboard::ScriptArtboardSource,
-        resolver: Rc<dyn ScriptArtboardResolver>,
-        parent_context: Option<ScriptArtboardParentContext>,
-    },
-    ViewModel {
-        name: ScriptCoreString,
-        input_global_id: u32,
-        path: crate::ScriptInputViewModelPropertyPath,
-        resolver: Rc<dyn ScriptViewModelInputResolver>,
-    },
-    Trigger {
-        name: ScriptCoreString,
-    },
-}
-
-enum PreparedScriptListenerInputHydration {
-    Value {
-        name: ScriptCoreString,
-        value: ScriptValue,
-    },
-    Artboard {
-        name: ScriptCoreString,
-        recipe: Box<dyn PreparedScriptArtboard>,
-    },
-    ViewModel {
-        name: ScriptCoreString,
-        input_global_id: u32,
-        path: crate::ScriptInputViewModelPropertyPath,
-        resolver: Rc<dyn ScriptViewModelInputResolver>,
-    },
-    Trigger {
-        name: ScriptCoreString,
-    },
 }
 
 /// Lifecycle/input methods carried by scripted object instance tables.
@@ -1141,125 +838,16 @@ impl ScriptPaint {
 
 /// Ports the lookup/snapshot portion of C++ `src/lua/lua_artboards.cpp`'s
 /// `ScriptedNode`, leaving userdata construction to the scripting backend.
-pub fn script_node_for_artboard(
-    instance: &ArtboardInstance,
-    graph: &ArtboardGraph,
-    name: &str,
-) -> Option<ScriptNode> {
-    let component = graph.component_named(name)?;
-    let path = graph
-        .paths
-        .iter()
-        .find(|path| path.local_id == component.local_id)
-        // C++ exposes the current retained `Path::rawPath()` at lookup time.
-        // Before the child artboard's first update that path is intentionally
-        // empty; afterward it snapshots the authored, dependency-settled path
-        // (`src/lua/lua_artboards.cpp:884-900`).
-        .map(|path| {
-            instance
-                .runtime_shapes
-                .retained_script_path(path.local_id)
-                .map(|path| path.as_ref().clone())
-                .unwrap_or_else(RawPath::new)
-        });
-    let paint = graph
-        .shape_paint_containers
-        .iter()
-        .flat_map(|container| &container.paints)
-        .find(|paint| paint.local_id == component.local_id)
-        .map(|paint| script_paint_for_shape(instance, paint));
-    Some(ScriptNode::snapshot(path, paint))
-}
-
-pub(crate) fn script_paint_for_shape(
-    instance: &ArtboardInstance,
-    paint: &ShapePaintNode,
-) -> ScriptPaint {
-    let object = instance
-        .runtime_file()
-        .and_then(|file| file.object(paint.global_id as usize));
-    let authored_color = match paint.paint_state {
-        Some(ShapePaintStateNode::SolidColor { color }) => color,
-        _ => 0xff000000,
-    };
-    let color = paint
-        .mutator_local
-        .zip(property_key_for_name("SolidColor", "colorValue"))
-        .and_then(|(local_id, key)| instance.color_property(local_id, key))
-        .unwrap_or(authored_color);
-    ScriptPaint {
-        style: match paint.paint_type {
-            ShapePaintKind::Stroke => RenderPaintStyle::Stroke,
-            _ => RenderPaintStyle::Fill,
-        },
-        color,
-        thickness: object
-            .and_then(|object| object.double_property("thickness"))
-            .unwrap_or(1.0),
-        join: match object.and_then(|object| object.uint_property("join")) {
-            Some(1) => StrokeJoin::Round,
-            Some(2) => StrokeJoin::Bevel,
-            _ => StrokeJoin::Miter,
-        },
-        cap: match object.and_then(|object| object.uint_property("cap")) {
-            Some(1) => StrokeCap::Round,
-            Some(2) => StrokeCap::Square,
-            _ => StrokeCap::Butt,
-        },
-        feather: paint
-            .feather
-            .as_ref()
-            .map(|feather| feather.strength)
-            .unwrap_or(0.0),
-        blend_mode: script_blend_mode(paint.blend_mode_value),
-    }
-}
-
-fn script_blend_mode(value: u32) -> BlendMode {
-    match value {
-        14 => BlendMode::Screen,
-        15 => BlendMode::Overlay,
-        16 => BlendMode::Darken,
-        17 => BlendMode::Lighten,
-        18 => BlendMode::ColorDodge,
-        19 => BlendMode::ColorBurn,
-        20 => BlendMode::HardLight,
-        21 => BlendMode::SoftLight,
-        22 => BlendMode::Difference,
-        23 => BlendMode::Exclusion,
-        24 => BlendMode::Multiply,
-        25 => BlendMode::Hue,
-        26 => BlendMode::Saturation,
-        27 => BlendMode::Color,
-        28 => BlendMode::Luminosity,
-        _ => BlendMode::SrcOver,
-    }
-}
-
-/// A shared runtime-owned view-model instance exposed to scripting backends.
 #[derive(Debug, Clone)]
 pub struct ScriptViewModel {
     properties: BTreeMap<String, ScriptViewModelProperty>,
-    nested_view_models: BTreeMap<String, ScriptViewModel>,
-    backing: ScriptViewModelBacking,
-    view_model_index: usize,
-    ancestors: Rc<Vec<usize>>,
-    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
+    backing: NativeScriptViewModel,
     change_callbacks: ScriptViewModelChangeCallbacks,
 }
 
 #[path = "scripting/native_view_model.rs"]
 mod native_view_model;
 use native_view_model::NativeScriptViewModel;
-
-#[derive(Debug, Clone)]
-enum ScriptViewModelBacking {
-    Legacy {
-        context: RuntimeOwnedViewModelContextHandle,
-        file: Rc<RuntimeFile>,
-    },
-    Native(NativeScriptViewModel),
-}
 
 type ScriptViewModelChangeCallback = Rc<dyn Fn()>;
 type ScriptViewModelChangeCallbackEntry = (u64, ScriptViewModelChangeCallback);
@@ -1340,22 +928,20 @@ impl ScriptImageAssets {
     }
 }
 
-pub fn script_image_assets(file: &RuntimeFile) -> ScriptImageAssets {
+pub fn script_image_assets(source: &impl ScriptFileSource) -> ScriptImageAssets {
+    let file = source.script_file();
+    let assets = file.with_file(|file| file.assets().to_vec());
     let mut by_name = BTreeMap::new();
-    for (file_asset_index, asset) in file.file_assets().into_iter().enumerate() {
-        if asset.type_name != "ImageAsset" {
-            continue;
+    for (index, asset) in assets.iter().enumerate() {
+        if let Some((name, id)) = asset
+            .with_downcast::<crate::mechanical_port::source::assets::image_asset::ImageAsset, _>(
+            |asset| (asset.base.name().to_owned(), asset.base.asset_id()),
+        ) {
+            by_name.entry(name).or_insert(ScriptImage {
+                file_asset_index: index as u64,
+                asset_global_id: id,
+            });
         }
-        let Some(name) = asset.string_property("name") else {
-            continue;
-        };
-        let Ok(file_asset_index) = u64::try_from(file_asset_index) else {
-            continue;
-        };
-        by_name.entry(name.to_owned()).or_insert(ScriptImage {
-            file_asset_index,
-            asset_global_id: asset.id,
-        });
     }
     ScriptImageAssets { by_name }
 }
@@ -1383,6 +969,14 @@ impl std::fmt::Debug for ScriptFont {
 }
 
 impl ScriptFont {
+    #[doc(hidden)]
+    pub fn with_native_font(
+        mut self,
+        font: crate::mechanical_port::source::text_engine::FontRef,
+    ) -> Self {
+        self.native_font = Some(font);
+        self
+    }
     #[doc(hidden)]
     pub fn with_resolved_font_bytes(mut self, bytes: Arc<[u8]>) -> Self {
         self.live_font_bytes = Some(bytes);
@@ -1436,20 +1030,13 @@ impl ScriptViewModel {
         let properties = native.properties();
         Self {
             properties,
-            nested_view_models: BTreeMap::new(),
-            backing: ScriptViewModelBacking::Native(native),
-            view_model_index: 0,
-            ancestors: Rc::new(Vec::new()),
-            blob_assets: Rc::new(RefCell::new(BTreeMap::new())),
+            backing: native,
             change_callbacks: ScriptViewModelChangeCallbacks::default(),
         }
     }
 
-    fn native(&self) -> Option<&NativeScriptViewModel> {
-        match &self.backing {
-            ScriptViewModelBacking::Native(native) => Some(native),
-            _ => None,
-        }
+    fn native(&self) -> &NativeScriptViewModel {
+        &self.backing
     }
 
     pub(crate) fn from_native_file_definition(
@@ -1457,81 +1044,45 @@ impl ScriptViewModel {
         file: &crate::mechanical_port::source::file::RuntimeFileHandle,
     ) -> Self {
         let mut facade = Self::from_native_definition(model, None, file.clone());
-        let ScriptViewModelBacking::Native(native) = &mut facade.backing else {
-            unreachable!()
-        };
-        native.file = native_view_model::NativeScriptFile::definition(file);
+        facade.backing.file = native_view_model::NativeScriptFile::definition(file);
         facade
     }
 
     pub fn native_instance(&self) -> Option<crate::mechanical_port::source::core::CoreHandle> {
-        self.native()?.instance.clone()
+        self.native().instance.clone()
     }
 
     /// Exact identity for VM userdata caches and owner-counted registrations.
     pub fn identity_key(&self) -> (u8, usize, usize, u64) {
-        if let Some(native) = self.native() {
-            let (arena, slot, generation) = native
-                .instance
-                .as_ref()
-                .unwrap_or(&native.model)
-                .identity_key();
-            return (
-                if native.instance.is_some() { 1 } else { 2 },
-                arena,
-                slot,
-                generation,
-            );
-        }
-        (
-            0,
-            Rc::as_ptr(&self.legacy_context().root_handle().shared()) as usize,
-            0,
-            0,
-        )
-    }
-
-    fn legacy_context(&self) -> &RuntimeOwnedViewModelContextHandle {
-        match &self.backing {
-            ScriptViewModelBacking::Legacy { context, .. } => context,
-            ScriptViewModelBacking::Native(_) => {
-                panic!("native ViewModel cannot be projected into a legacy graph")
-            }
-        }
-    }
-
-    fn legacy_file(&self) -> &Rc<RuntimeFile> {
-        match &self.backing {
-            ScriptViewModelBacking::Legacy { file, .. } => file,
-            ScriptViewModelBacking::Native(_) => {
-                panic!("native ViewModel cannot use a legacy RuntimeFile")
-            }
-        }
+        let native = self.native();
+        let (arena, slot, generation) = native
+            .instance
+            .as_ref()
+            .unwrap_or(&native.model)
+            .identity_key();
+        return (
+            if native.instance.is_some() { 1 } else { 2 },
+            arena,
+            slot,
+            generation,
+        );
     }
 
     pub fn advance_script_models(models: &[Self]) -> bool {
-        let mut seen_native = BTreeSet::new();
-        let mut legacy = Vec::new();
+        let mut seen = BTreeSet::new();
         let mut changed = false;
         for model in models {
-            if let Some(native) = model.native() {
-                if seen_native.insert(model.identity_key()) {
-                    changed |= native.advance();
-                }
-            } else {
-                legacy.push(model.owned_instance());
+            if seen.insert(model.identity_key()) {
+                changed |= model.native().advance();
             }
         }
-        changed | Self::advance_owned_instances(&legacy)
+        changed
     }
 
     /// Read the retained runtime's structural parent topology.
     pub fn has_parents(&self) -> bool {
-        if let Some(native) = self.native() {
-            return native.has_parents();
-        }
-
-        self.legacy_context().root_handle().borrow().has_parents()
+        let native = self.native();
+        return native.has_parents();
     }
 
     pub fn property(&self, name: &str) -> Option<ScriptViewModelProperty> {
@@ -1547,19 +1098,8 @@ impl ScriptViewModel {
     /// Lua property delegates use this to observe host/state-machine writes
     /// before the end-of-frame reset consumes transient trigger values.
     pub fn property_dirt_sink(&self, name: &str) -> Option<RuntimeCellDirtSink> {
-        if let Some(native) = self.native() {
-            return native.property_dirt_sink(name);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        let cell = self
-            .legacy_context()
-            .root_handle()
-            .borrow()
-            .cell_by_property_path(&path)?;
-        let sink = RuntimeCellDirtSink::new();
-        cell.add_dependent(&sink);
-        Some(sink)
+        let native = self.native();
+        return native.property_dirt_sink(name);
     }
 
     /// Retain a property observer whose callback runs synchronously before
@@ -1668,364 +1208,108 @@ impl ScriptViewModel {
     }
 
     pub fn named_instance(&self, name: Option<&str>) -> Option<Self> {
-        if let Some(native) = self.native() {
-            return native.named_instance(name);
-        }
-
-        let instance = match name {
-            Some(name) => crate::view_model::RuntimeAuthoredViewModel::new(
-                self.legacy_file(),
-                self.view_model_index,
-            )?
-            .create_from_instance(name)
-            .or_else(|| {
-                RuntimeOwnedViewModelInstance::new(self.legacy_file(), self.view_model_index)
-            })?,
-            None => RuntimeOwnedViewModelInstance::new(self.legacy_file(), self.view_model_index)?,
-        };
-        build_script_view_model_with_blob_assets(
-            Rc::clone(self.legacy_file()),
-            self.view_model_index,
-            instance,
-            self.ancestors.as_slice(),
-            Rc::clone(&self.blob_assets),
-        )
-    }
-
-    /// Compatibility access to the retained graph root.
-    ///
-    /// Scoped integrations should prefer [`Self::owned_handle`] so a nested
-    /// view model keeps its property path as well as the shared root identity.
-    pub fn owned_instance(&self) -> Rc<RefCell<RuntimeOwnedViewModelInstance>> {
-        self.legacy_context().root_handle().shared()
-    }
-
-    pub fn owned_handle(&self) -> RuntimeOwnedViewModelContextHandle {
-        self.legacy_context().clone()
+        let native = self.native();
+        return native.named_instance(name);
     }
 
     pub fn number(&self, name: &str) -> Option<f32> {
-        if let Some(native) = self.native() {
-            return native.number(name);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        self.legacy_context()
-            .root_handle()
-            .borrow()
-            .number_value_by_property_path(&path)
+        let native = self.native();
+        return native.number(name);
     }
 
     pub fn set_number(&self, name: &str, value: f32) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_number(name, value);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .set_number_by_property_path(&path, value)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_number(name, value);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn color(&self, name: &str) -> Option<u32> {
-        if let Some(native) = self.native() {
-            return native.color(name);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        self.legacy_context()
-            .root_handle()
-            .borrow()
-            .color_value_by_property_path(&path)
+        let native = self.native();
+        return native.color(name);
     }
 
     pub fn set_color(&self, name: &str, value: u32) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_color(name, value);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .set_color_by_property_path(&path, value)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_color(name, value);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn string(&self, name: &str) -> Option<String> {
-        if let Some(native) = self.native() {
-            return native.string(name);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        self.legacy_context()
-            .root_handle()
-            .borrow()
-            .string_value_by_property_path(&path)
-            .map(|value| String::from_utf8_lossy(value.as_ref()).into_owned())
+        let native = self.native();
+        return native.string(name);
     }
 
     pub fn set_string(&self, name: &str, value: &str) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_string(name, value);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .set_string_by_property_path(&path, value.as_bytes())
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_string(name, value);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn boolean(&self, name: &str) -> Option<bool> {
-        if let Some(native) = self.native() {
-            return native.boolean(name);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        self.legacy_context()
-            .root_handle()
-            .borrow()
-            .boolean_value_by_property_path(&path)
+        let native = self.native();
+        return native.boolean(name);
     }
 
     pub fn enum_value(&self, name: &str) -> Option<String> {
-        if let Some(native) = self.native() {
-            return native.enum_value(name);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Enum) {
-            return None;
-        }
-        let path = self.scoped_property_path(name)?;
-        let value_index = usize::try_from(
-            self.legacy_context()
-                .root_handle()
-                .borrow()
-                .enum_value_by_property_path(&path)?,
-        )
-        .ok()?;
-        let view_model = self.legacy_file().view_model(self.view_model_index)?;
-        let property = view_model
-            .properties
-            .iter()
-            .find(|property| property.string_property("name") == Some(name))?;
-        self.legacy_file()
-            .view_model_property_enum_value_key_for_index_object(property, value_index)
-            .map(|value| String::from_utf8_lossy(value).into_owned())
+        let native = self.native();
+        return native.enum_value(name);
     }
 
     pub fn enum_values(&self, name: &str) -> Option<Vec<String>> {
-        if let Some(native) = self.native() {
-            return native.enum_values(name);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Enum) {
-            return None;
-        }
-        let view_model = self.legacy_file().view_model(self.view_model_index)?;
-        let property = view_model
-            .properties
-            .iter()
-            .find(|property| property.string_property("name") == Some(name))?;
-        Some(
-            (0..)
-                .map_while(|index| {
-                    self.legacy_file()
-                        .view_model_property_enum_value_key_for_index_object(property, index)
-                })
-                .map(|value| String::from_utf8_lossy(value).into_owned())
-                .collect(),
-        )
+        let native = self.native();
+        return native.enum_values(name);
     }
 
     pub fn set_enum_value(&self, name: &str, value: &str) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_enum_value(name, value);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Enum) {
-            return false;
-        }
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let Some(view_model) = self.legacy_file().view_model(self.view_model_index) else {
-            return false;
-        };
-        let Some(property) = view_model
-            .properties
-            .iter()
-            .find(|property| property.string_property("name") == Some(name))
-        else {
-            return false;
-        };
-        let Some(value_index) = self
-            .legacy_file()
-            .view_model_property_enum_value_index_for_key_bytes_object(property, value.as_bytes())
-        else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .set_enum_by_property_path(&path, value_index as u64)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_enum_value(name, value);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn image(&self, name: &str) -> Option<ScriptImage> {
-        if let Some(native) = self.native() {
-            return native.image(name);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Image) {
-            return None;
-        }
-        let path = self.scoped_property_path(name)?;
-        let file_asset_index = self
-            .legacy_context()
-            .root_handle()
-            .borrow()
-            .asset_value_by_property_path(&path)?;
-        let asset = self
-            .legacy_file()
-            .file_asset(usize::try_from(file_asset_index).ok()?)?;
-        (asset.type_name == "ImageAsset").then_some(ScriptImage {
-            file_asset_index,
-            asset_global_id: asset.id,
-        })
+        let native = self.native();
+        return native.image(name);
     }
 
     pub fn font(&self, name: &str) -> Option<ScriptFont> {
-        if let Some(native) = self.native() {
-            return native.font(name);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Font) {
-            return None;
-        }
-        let path = self.scoped_property_path(name)?;
-        let value = self
-            .legacy_context()
-            .root_handle()
-            .borrow()
-            .font_asset_value_by_property_path(&path)?;
-        let asset_global_id = usize::try_from(value.file_asset_index())
-            .ok()
-            .and_then(|index| self.legacy_file().file_asset(index))
-            .filter(|asset| asset.type_name == "FontAsset")
-            .map(|asset| asset.id);
-        (asset_global_id.is_some() || value.live_font_bytes_arc().is_some()).then(|| ScriptFont {
-            asset_global_id,
-            live_font_bytes: value.live_font_bytes_arc().cloned(),
-            native_font: None,
-        })
+        let native = self.native();
+        return native.font(name);
     }
 
     pub fn set_font(&self, name: &str, font: Option<&ScriptFont>) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_font(name, font);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-        self.set_font_bytes(name, font.and_then(|font| font.live_font_bytes.clone()))
+        let native = self.native();
+        let changed = native.set_font(name, font);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     #[doc(hidden)]
     pub fn set_font_bytes(&self, name: &str, font_bytes: Option<Arc<[u8]>>) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_font_bytes(name, font_bytes);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Font) {
-            return false;
-        }
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .set_live_font_bytes_by_property_path(&path, font_bytes)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_font_bytes(name, font_bytes);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn render_image(&self, name: &str) -> Option<Rc<dyn nuxie_render_api::RenderImage>> {
-        if let Some(native) = self.native() {
-            return native.render_image(name);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Image) {
-            return None;
-        }
-        let path = self.scoped_property_path(name)?;
-        self.legacy_context()
-            .root_handle()
-            .borrow()
-            .runtime_image_by_property_path(&path)?
-            .render_image()
+        let native = self.native();
+        return native.render_image(name);
     }
 
     pub fn image_asset_named(&self, name: &str) -> Option<ScriptImage> {
-        if let Some(native) = self.native() {
-            return native.image_asset_named(name);
-        }
-
-        script_image_assets(self.legacy_file().as_ref()).named(name)
+        let native = self.native();
+        return native.image_asset_named(name);
     }
 
     pub fn set_image(&self, name: &str, image: Option<ScriptImage>) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_image(name, image);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Image) {
-            return false;
-        }
-        let file_asset_index = image
-            .map(ScriptImage::file_asset_index)
-            .unwrap_or(u64::from(u32::MAX));
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .set_asset_by_property_path(&path, file_asset_index)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_image(name, image);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn set_render_image(
@@ -2033,69 +1317,15 @@ impl ScriptViewModel {
         name: &str,
         image: Option<Rc<dyn nuxie_render_api::RenderImage>>,
     ) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_render_image(name, image);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Image) {
-            return false;
-        }
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .set_runtime_image_by_property_path(
-                    &path,
-                    image.map(RuntimeViewModelImage::from_render_image),
-                )
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_render_image(name, image);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn blob_asset(&self, name: &str) -> Option<Arc<RuntimeBlobAsset>> {
-        if let Some(native) = self.native() {
-            return native.blob_asset(name);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Blob) {
-            return None;
-        }
-        let path = self.scoped_property_path(name)?;
-        let cell = self
-            .legacy_context()
-            .root_handle()
-            .borrow()
-            .cell_by_property_path(&path)?;
-        let RuntimeViewModelCellValue::AssetBlob(value) = cell.value() else {
-            return None;
-        };
-        if let Some(asset) = value.live_blob_asset() {
-            return Some(Arc::clone(asset));
-        }
-        let asset = self
-            .legacy_file()
-            .file_asset(usize::try_from(value.file_asset_index()).ok()?)?;
-        if asset.type_name != "BlobAsset" {
-            return None;
-        }
-        if let Some(retained) = self.blob_assets.borrow().get(&asset.id) {
-            return Some(Arc::clone(retained));
-        }
-        let bytes = self
-            .legacy_file()
-            .imported_file_asset_contents(asset.id)
-            .map(<[u8]>::to_vec)?;
-        let name = asset.string_property("name").unwrap_or_default();
-        let retained = Arc::new(RuntimeBlobAsset::from_decoded(name, bytes));
-        self.blob_assets
-            .borrow_mut()
-            .insert(asset.id, Arc::clone(&retained));
-        Some(retained)
+        let native = self.native();
+        return native.blob_asset(name);
     }
 
     pub fn blob(&self, name: &str) -> Option<Arc<[u8]>> {
@@ -2103,117 +1333,45 @@ impl ScriptViewModel {
     }
 
     pub fn set_blob(&self, name: &str, bytes: Option<Arc<[u8]>>) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_blob(name, bytes);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Blob) {
-            return false;
-        }
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let Some(cell) = self
-            .legacy_context()
-            .root_handle()
-            .borrow()
-            .cell_by_property_path(&path)
-        else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| cell.set_live_blob_bytes(bytes));
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_blob(name, bytes);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn set_blob_asset(&self, name: &str, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_blob_asset(name, asset);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        if self.property(name) != Some(ScriptViewModelProperty::Blob) {
-            return false;
-        }
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let Some(cell) = self
-            .legacy_context()
-            .root_handle()
-            .borrow()
-            .cell_by_property_path(&path)
-        else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| cell.set_live_blob_asset(asset));
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_blob_asset(name, asset);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     /// Mirrors C++ `ScriptedViewModel::pushIndex` for component-list rows.
     pub fn component_list_item_index(&self) -> Option<u64> {
-        if let Some(native) = self.native() {
-            return native.component_list_item_index();
-        }
-
-        self.legacy_context()
-            .detached_snapshot()
-            .and_then(|instance| instance.component_list_item_index())
+        let native = self.native();
+        return native.component_list_item_index();
     }
 
     pub fn set_boolean(&self, name: &str, value: bool) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_boolean(name, value);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .set_boolean_by_property_path(&path, value)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.set_boolean(name, value);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn trigger(&self, name: &str) -> Option<u64> {
-        if let Some(native) = self.native() {
-            return native.trigger(name);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        self.legacy_context()
-            .root_handle()
-            .borrow()
-            .trigger_value_by_property_path(&path)
+        let native = self.native();
+        return native.trigger(name);
     }
 
     /// Fire a trigger the same way C++ `ViewModelInstanceTrigger::trigger()`
     /// does: increment the backing counter and leave consumption/reset to the
     /// end-of-frame `advanced()` pass.
     pub fn fire_trigger(&self, name: &str) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.fire_trigger(name);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .fire_trigger_by_property_path(&path)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.fire_trigger(name);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     /// Consume transient values at the end of a script host frame.
@@ -2222,67 +1380,22 @@ impl ScriptViewModel {
     /// without invoking script listeners, embedded view models recurse, and
     /// shared list instances recurse exactly once even if the graph cycles.
     pub fn advance_script_frame(&self) -> bool {
-        if let Some(native) = self.native() {
-            return native.advance();
-        }
-
-        Self::advance_owned_instance(&self.legacy_context().root_handle().shared())
+        let native = self.native();
+        return native.advance();
     }
 
     /// Advance a shared owned instance without requiring its schema wrapper.
     /// Scripting backends use this for owner-counted registrations that retain
     /// precisely the backing instance, matching C++ `rcp<ViewModelInstance>`.
-    pub fn advance_owned_instance(instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>) -> bool {
-        Self::advance_owned_instances(std::slice::from_ref(instance))
-    }
 
     /// Advance several owned roots with one identity set shared across their
     /// complete embedded/list graphs. This is the frame-context entry point:
     /// registry relationships can name an instance that is also reachable
     /// structurally, and it must still be consumed only once per frame.
-    pub fn advance_owned_instances(
-        instances: &[Rc<RefCell<RuntimeOwnedViewModelInstance>>],
-    ) -> bool {
-        let mut visited = BTreeSet::new();
-        let mut changed = false;
-        for instance in instances {
-            changed |= advance_owned_view_model_instance(instance, &mut visited);
-        }
-        changed
-    }
 
     pub fn view_model(&self, name: &str) -> Option<Self> {
-        if let Some(native) = self.native() {
-            return native.view_model(name, false);
-        }
-
-        let property_index = self
-            .legacy_file()
-            .view_model(self.view_model_index)?
-            .properties
-            .iter()
-            .position(|property| property.string_property("name") == Some(name))?;
-        let mut property_path = self.legacy_context().scope_path().to_vec();
-        property_path.push(property_index);
-        let concrete = self
-            .legacy_context()
-            .root_handle()
-            .linked_view_model_by_property_path(&property_path);
-        if let Some(concrete) = concrete {
-            let view_model_index = concrete.borrow().view_model_index();
-            return build_script_view_model_shared_with_blob_assets_and_callbacks(
-                Rc::clone(self.legacy_file()),
-                view_model_index,
-                concrete,
-                self.ancestors.as_slice(),
-                Rc::clone(&self.blob_assets),
-                self.change_callbacks.clone(),
-            );
-        }
-        // Generated schema-only contexts are still represented inline by the
-        // current Rust ViewModel owner. Preserve that projection until FL-D
-        // replaces it with the complete retained C++ instance graph.
-        self.nested_view_models.get(name).cloned()
+        let native = self.native();
+        return native.view_model(name, false);
     }
 
     /// Return only the currently linked nested ViewModel occurrence.
@@ -2292,305 +1405,85 @@ impl ScriptViewModel {
     /// however, produce `nil` until that property links a concrete occurrence;
     /// this accessor preserves that distinction without discarding the schema.
     pub fn active_view_model(&self, name: &str) -> Option<Self> {
-        if let Some(native) = self.native() {
-            return native.view_model(name, true);
-        }
-
-        let property_index = self
-            .legacy_file()
-            .view_model(self.view_model_index)?
-            .properties
-            .iter()
-            .position(|property| property.string_property("name") == Some(name))?;
-        let mut property_path = self.legacy_context().scope_path().to_vec();
-        property_path.push(property_index);
-        let concrete = self
-            .legacy_context()
-            .root_handle()
-            .linked_view_model_by_property_path(&property_path)?;
-        let view_model_index = concrete.borrow().view_model_index();
-        build_script_view_model_shared_with_blob_assets_and_callbacks(
-            Rc::clone(self.legacy_file()),
-            view_model_index,
-            concrete,
-            self.ancestors.as_slice(),
-            Rc::clone(&self.blob_assets),
-            self.change_callbacks.clone(),
-        )
+        let native = self.native();
+        return native.view_model(name, true);
     }
 
     /// Port of `ScriptedPropertyViewModel::setValue`: replace the actual
     /// retained child occurrence and synchronously notify/relink its parent.
     pub fn set_view_model(&self, name: &str, value: &ScriptViewModel) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.set_view_model(name, value);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(property_path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let value_context = value.owned_handle();
-        let Some(value) = (if value_context.is_root() {
-            Some(value_context.root_handle())
-        } else {
-            value_context
-                .root_handle()
-                .linked_view_model_by_property_path(value_context.scope_path())
-        }) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .link_view_model_by_property_path(&property_path, &value)
-                .unwrap_or(false)
-        });
-        self.finish_property_change(&property_path, changed)
+        let native = self.native();
+        let changed = native.set_view_model(name, value);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn list_len(&self, name: &str) -> Option<usize> {
-        if let Some(native) = self.native() {
-            return native.list_len(name);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        self.legacy_context()
-            .root_handle()
-            .borrow()
-            .list_item_count_by_property_path(&path)
+        let native = self.native();
+        return native.list_len(name);
     }
 
     pub fn list_item(&self, name: &str, index: usize) -> Option<Self> {
-        if let Some(native) = self.native() {
-            return native.list_item(name, index);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        let item = self
-            .legacy_context()
-            .root_handle()
-            .borrow()
-            .list_handle_by_property_path(&path)?
-            .item_at(index)?;
-        let view_model_index = item.borrow().view_model_index();
-        build_script_view_model_shared_with_blob_assets_and_callbacks(
-            Rc::clone(self.legacy_file()),
-            view_model_index,
-            item,
-            self.ancestors.as_slice(),
-            Rc::clone(&self.blob_assets),
-            self.change_callbacks.clone(),
-        )
+        let native = self.native();
+        return native.list_item(name, index);
     }
 
     pub fn push_list_item(&self, name: &str, item: &ScriptViewModel) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.insert_list_item(name, None, item);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let item_context = item.owned_handle();
-        if !item_context.is_root() {
-            return false;
-        }
-        let root = self.legacy_context().root_handle();
-        let changed = self.with_released_listener_callbacks(|| {
-            root.push_list_item_by_property_path(&path, item_context.root_handle().shared())
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.insert_list_item(name, None, item);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn insert_list_item(&self, name: &str, index: usize, item: &ScriptViewModel) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.insert_list_item(name, Some(index), item);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let item_context = item.owned_handle();
-        if !item_context.is_root() {
-            return false;
-        }
-        let root = self.legacy_context().root_handle();
-        let changed = self.with_released_listener_callbacks(|| {
-            root.insert_list_item_by_property_path(
-                &path,
-                index,
-                item_context.root_handle().shared(),
-            )
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.insert_list_item(name, Some(index), item);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn pop_list_item(&self, name: &str) -> Option<Self> {
-        if let Some(native) = self.native() {
-            return native.pop_list_item(name, false);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        let item = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .pop_list_item_by_property_path(&path)
-        })?;
-        self.notify_property_change(&path);
-        let view_model_index = item.borrow().view_model_index();
-        build_script_view_model_shared_with_blob_assets_and_callbacks(
-            Rc::clone(self.legacy_file()),
-            view_model_index,
-            RuntimeOwnedViewModelHandle::from_shared(item),
-            self.ancestors.as_slice(),
-            Rc::clone(&self.blob_assets),
-            self.change_callbacks.clone(),
-        )
+        let native = self.native();
+        return native.pop_list_item(name, false);
     }
 
     pub fn shift_list_item(&self, name: &str) -> Option<Self> {
-        if let Some(native) = self.native() {
-            return native.pop_list_item(name, true);
-        }
-
-        let path = self.scoped_property_path(name)?;
-        let item = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .shift_list_item_by_property_path(&path)
-        })?;
-        self.notify_property_change(&path);
-        let view_model_index = item.borrow().view_model_index();
-        build_script_view_model_shared_with_blob_assets_and_callbacks(
-            Rc::clone(self.legacy_file()),
-            view_model_index,
-            RuntimeOwnedViewModelHandle::from_shared(item),
-            self.ancestors.as_slice(),
-            Rc::clone(&self.blob_assets),
-            self.change_callbacks.clone(),
-        )
+        let native = self.native();
+        return native.pop_list_item(name, true);
     }
 
     pub fn swap_list_items(&self, name: &str, first: usize, second: usize) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.swap_list_items(name, first, second);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .swap_list_items_by_property_path(&path, first, second)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.swap_list_items(name, first, second);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn clear_list_items(&self, name: &str) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.clear_list_items(name);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .clear_list_items_by_property_path(&path)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.clear_list_items(name);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn remove_list_item_at(&self, name: &str, index: usize) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.remove_list_item_at(name, index);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .remove_list_item_at_by_property_path(&path, index)
-        });
-        self.finish_property_change(&path, changed)
+        let native = self.native();
+        let changed = native.remove_list_item_at(name, index);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     pub fn remove_list_item(&self, name: &str, item: &ScriptViewModel, remove_all: bool) -> bool {
-        if let Some(native) = self.native() {
-            let changed = native.remove_list_item(name, item, remove_all);
-            return self
-                .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
-        }
-
-        let Some(path) = self.scoped_property_path(name) else {
-            return false;
-        };
-        let item_context = item.owned_handle();
-        if !item_context.is_root() {
-            return false;
-        }
-        let item = item_context.root_handle().shared();
-        let changed = self.with_released_listener_callbacks(|| {
-            self.legacy_context()
-                .root_handle()
-                .borrow_mut()
-                .remove_list_items_by_identity_at_property_path(&path, &item, remove_all)
-        });
-        self.finish_property_change(&path, changed)
-    }
-
-    fn with_released_listener_callbacks<R>(&self, mutation: impl FnOnce() -> R) -> R {
-        let notifications = RuntimeHostMutationNotifications::begin();
-        let result = mutation();
-        if let Some(notifications) = notifications {
-            notifications.commit();
-        }
-        result
+        let native = self.native();
+        let changed = native.remove_list_item(name, item, remove_all);
+        return self
+            .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
     fn scoped_property_path(&self, name: &str) -> Option<Vec<usize>> {
-        if let Some(native) = self.native() {
-            return native.property_path(name);
-        }
-
-        let property_index = self
-            .legacy_file()
-            .view_model(self.view_model_index)?
-            .properties
-            .iter()
-            .position(|property| property.string_property("name") == Some(name))?;
-        let mut path = self.legacy_context().scope_path().to_vec();
-        path.push(property_index);
-        Some(path)
+        let native = self.native();
+        return native.property_path(name);
     }
-}
-
-fn advance_owned_view_model_instance(
-    instance: &Rc<RefCell<RuntimeOwnedViewModelInstance>>,
-    visited: &mut BTreeSet<u64>,
-) -> bool {
-    RuntimeOwnedViewModelInstance::advance_script_frame(instance, visited)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2609,259 +1502,59 @@ pub enum ScriptViewModelProperty {
     SymbolListIndex,
 }
 
-pub fn script_view_models(file: &RuntimeFile) -> BTreeMap<String, ScriptViewModel> {
-    let file = Rc::new(file.clone());
-    let blob_assets = Rc::new(RefCell::new(BTreeMap::new()));
-    file.view_models()
+/// A native File source. Descriptor input is only a construction adapter for
+/// authored metadata and tests; the imported native graph remains the owner.
+pub trait ScriptFileSource {
+    fn script_file(&self) -> crate::mechanical_port::source::file::RuntimeFileHandle;
+}
+impl ScriptFileSource for crate::mechanical_port::source::file::RuntimeFileHandle {
+    fn script_file(&self) -> crate::mechanical_port::source::file::RuntimeFileHandle {
+        self.clone()
+    }
+}
+impl ScriptFileSource for nuxie_binary::RuntimeFile {
+    fn script_file(&self) -> crate::mechanical_port::source::file::RuntimeFileHandle {
+        let bytes = nuxie_binary::encode_runtime_file(self).expect("scripting fixture must encode");
+        let mut factory =
+            nuxie_render_api::PersistentFactory::new(nuxie_render_api::NullFactory::new());
+        let factory = crate::mechanical_port::source::factory::RuntimeFactoryHandle::from_factory(
+            &mut factory,
+        )
+        .expect("persistent fixture factory");
+        crate::mechanical_port::source::file::File::import(&bytes, factory, None, None, None)
+            .expect("authored scripting fixture must be a valid native File")
+    }
+}
+impl<T: ScriptFileSource> ScriptFileSource for Rc<T> {
+    fn script_file(&self) -> crate::mechanical_port::source::file::RuntimeFileHandle {
+        (**self).script_file()
+    }
+}
+impl<T: ScriptFileSource> ScriptFileSource for Arc<T> {
+    fn script_file(&self) -> crate::mechanical_port::source::file::RuntimeFileHandle {
+        (**self).script_file()
+    }
+}
+
+pub fn script_view_models(source: &impl ScriptFileSource) -> BTreeMap<String, ScriptViewModel> {
+    let file = source.script_file();
+    let models = file.with_file(|file| {
+        (0..file.view_model_count())
+            .filter_map(|i| file.view_model(i))
+            .collect::<Vec<_>>()
+    });
+    models
         .into_iter()
-        .enumerate()
-        .filter_map(|(view_model_index, view_model)| {
-            let name = view_model.object.string_property("name")?.to_owned();
-            let instance = RuntimeOwnedViewModelInstance::new(&file, view_model_index)?;
+        .filter_map(|model| {
+            let name = model
+                .with(|owner| owner.as_view_model().map(|model| model.name().to_owned()))
+                .flatten()?;
             Some((
                 name,
-                build_script_view_model_with_blob_assets(
-                    Rc::clone(&file),
-                    view_model_index,
-                    instance,
-                    &[],
-                    Rc::clone(&blob_assets),
-                )?,
+                ScriptViewModel::from_native_definition(model, None, file.clone()),
             ))
         })
         .collect()
-}
-
-pub fn script_view_model_from_owned(
-    file: &RuntimeFile,
-    instance: &RuntimeOwnedViewModelHandle,
-) -> Option<ScriptViewModel> {
-    let view_model_index = instance.borrow().view_model_index();
-    build_script_view_model_shared(
-        Rc::new(file.clone()),
-        view_model_index,
-        instance.clone(),
-        &[],
-    )
-}
-
-#[doc(hidden)]
-pub fn script_view_model_from_owned_context(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelContextHandle,
-) -> Option<ScriptViewModel> {
-    let view_model_index = context.view_model_index()?;
-    build_script_view_model_scoped(
-        Rc::new(file.clone()),
-        view_model_index,
-        context.clone(),
-        &[],
-    )
-}
-
-/// Build a detached scripting snapshot from one owned view-model value.
-///
-/// Product integrations should normally use [`script_view_model_from_owned`]
-/// so artboards, state machines, and scripts retain the same mutable graph.
-pub fn script_view_model_from_owned_snapshot(
-    file: &RuntimeFile,
-    instance: &RuntimeOwnedViewModelInstance,
-) -> Option<ScriptViewModel> {
-    let view_model_index = instance.view_model_index();
-    build_script_view_model_shared(
-        Rc::new(file.clone()),
-        view_model_index,
-        RuntimeOwnedViewModelHandle::new(instance.clone()),
-        &[],
-    )
-}
-
-pub(crate) fn build_script_view_model(
-    file: Rc<RuntimeFile>,
-    view_model_index: usize,
-    instance: RuntimeOwnedViewModelInstance,
-    ancestors: &[usize],
-) -> Option<ScriptViewModel> {
-    build_script_view_model_with_blob_assets(
-        file,
-        view_model_index,
-        instance,
-        ancestors,
-        Rc::new(RefCell::new(BTreeMap::new())),
-    )
-}
-
-fn build_script_view_model_with_blob_assets(
-    file: Rc<RuntimeFile>,
-    view_model_index: usize,
-    instance: RuntimeOwnedViewModelInstance,
-    ancestors: &[usize],
-    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
-) -> Option<ScriptViewModel> {
-    build_script_view_model_shared_with_blob_assets_and_callbacks(
-        file,
-        view_model_index,
-        RuntimeOwnedViewModelHandle::new(instance),
-        ancestors,
-        blob_assets,
-        ScriptViewModelChangeCallbacks::default(),
-    )
-}
-
-fn build_script_view_model_shared(
-    file: Rc<RuntimeFile>,
-    view_model_index: usize,
-    instance: RuntimeOwnedViewModelHandle,
-    ancestors: &[usize],
-) -> Option<ScriptViewModel> {
-    build_script_view_model_shared_with_blob_assets(
-        file,
-        view_model_index,
-        instance,
-        ancestors,
-        Rc::new(RefCell::new(BTreeMap::new())),
-    )
-}
-
-fn build_script_view_model_shared_with_blob_assets(
-    file: Rc<RuntimeFile>,
-    view_model_index: usize,
-    instance: RuntimeOwnedViewModelHandle,
-    ancestors: &[usize],
-    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
-) -> Option<ScriptViewModel> {
-    build_script_view_model_shared_with_blob_assets_and_callbacks(
-        file,
-        view_model_index,
-        instance,
-        ancestors,
-        blob_assets,
-        ScriptViewModelChangeCallbacks::default(),
-    )
-}
-
-fn build_script_view_model_shared_with_blob_assets_and_callbacks(
-    file: Rc<RuntimeFile>,
-    view_model_index: usize,
-    instance: RuntimeOwnedViewModelHandle,
-    ancestors: &[usize],
-    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
-    change_callbacks: ScriptViewModelChangeCallbacks,
-) -> Option<ScriptViewModel> {
-    let context = RuntimeOwnedViewModelContextHandle::root(&file, instance);
-    build_script_view_model_scoped_with_blob_assets_and_callbacks(
-        file,
-        view_model_index,
-        context,
-        ancestors,
-        blob_assets,
-        change_callbacks,
-    )
-}
-
-pub(crate) fn build_script_view_model_scoped(
-    file: Rc<RuntimeFile>,
-    view_model_index: usize,
-    context: RuntimeOwnedViewModelContextHandle,
-    ancestors: &[usize],
-) -> Option<ScriptViewModel> {
-    build_script_view_model_scoped_with_blob_assets(
-        file,
-        view_model_index,
-        context,
-        ancestors,
-        Rc::new(RefCell::new(BTreeMap::new())),
-    )
-}
-
-fn build_script_view_model_scoped_with_blob_assets(
-    file: Rc<RuntimeFile>,
-    view_model_index: usize,
-    context: RuntimeOwnedViewModelContextHandle,
-    ancestors: &[usize],
-    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
-) -> Option<ScriptViewModel> {
-    build_script_view_model_scoped_with_blob_assets_and_callbacks(
-        file,
-        view_model_index,
-        context,
-        ancestors,
-        blob_assets,
-        ScriptViewModelChangeCallbacks::default(),
-    )
-}
-
-fn build_script_view_model_scoped_with_blob_assets_and_callbacks(
-    file: Rc<RuntimeFile>,
-    view_model_index: usize,
-    context: RuntimeOwnedViewModelContextHandle,
-    ancestors: &[usize],
-    blob_assets: Rc<RefCell<BTreeMap<u32, Arc<RuntimeBlobAsset>>>>,
-    change_callbacks: ScriptViewModelChangeCallbacks,
-) -> Option<ScriptViewModel> {
-    let view_model = file.view_model(view_model_index)?;
-    let properties = view_model
-        .properties
-        .iter()
-        .filter_map(|property| {
-            let kind = match property.type_name {
-                "ViewModelPropertyNumber" => ScriptViewModelProperty::Number,
-                "ViewModelPropertyColor" => ScriptViewModelProperty::Color,
-                "ViewModelPropertyString" => ScriptViewModelProperty::String,
-                "ViewModelPropertyBoolean" => ScriptViewModelProperty::Boolean,
-                "ViewModelPropertyEnum"
-                | "ViewModelPropertyEnumCustom"
-                | "ViewModelPropertyEnumSystem" => ScriptViewModelProperty::Enum,
-                "ViewModelPropertyTrigger" => ScriptViewModelProperty::Trigger,
-                "ViewModelPropertyAssetImage" => ScriptViewModelProperty::Image,
-                "ViewModelPropertyAssetBlob" => ScriptViewModelProperty::Blob,
-                "ViewModelPropertyAssetFont" => ScriptViewModelProperty::Font,
-                "ViewModelPropertyList" => ScriptViewModelProperty::List,
-                "ViewModelPropertyViewModel" => ScriptViewModelProperty::ViewModel,
-                "ViewModelPropertySymbolListIndex" => ScriptViewModelProperty::SymbolListIndex,
-                _ => return None,
-            };
-            Some((property.string_property("name")?.to_owned(), kind))
-        })
-        .collect();
-    let mut child_ancestors = ancestors.to_vec();
-    child_ancestors.push(view_model_index);
-    let nested_view_models = view_model
-        .properties
-        .iter()
-        .enumerate()
-        .filter(|(_, property)| property.type_name == "ViewModelPropertyViewModel")
-        .filter_map(|(property_index, property)| {
-            let name = property.string_property("name")?.to_owned();
-            let mut nested_scope_path = context.scope_path().to_vec();
-            nested_scope_path.push(property_index);
-            let nested_context = context.scoped(nested_scope_path)?;
-            let nested_index = nested_context.view_model_index()?;
-            if child_ancestors.contains(&nested_index) {
-                return None;
-            }
-            Some((
-                name,
-                build_script_view_model_scoped_with_blob_assets_and_callbacks(
-                    Rc::clone(&file),
-                    nested_index,
-                    nested_context,
-                    &child_ancestors,
-                    Rc::clone(&blob_assets),
-                    change_callbacks.clone(),
-                )?,
-            ))
-        })
-        .collect();
-    Some(ScriptViewModel {
-        properties,
-        nested_view_models,
-        backing: ScriptViewModelBacking::Legacy { context, file },
-        view_model_index,
-        ancestors: Rc::new(ancestors.to_vec()),
-        blob_assets,
-        change_callbacks,
-    })
 }
 
 impl ScriptValue {
@@ -2873,387 +1566,6 @@ impl ScriptValue {
     }
 }
 
-/// Resolves the source-to-target `DataBindContext` value owned by a script input.
-///
-/// C++ keeps script-input data binds on the scripted object rather than in the
-/// artboard data-bind container, so callers must hydrate them separately from
-/// ordinary component bindings.
-pub fn bound_script_input_value(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelInstance,
-    input: &RuntimeObject,
-) -> Result<Option<ScriptValue>, ScriptError> {
-    if !matches!(
-        input.type_name,
-        "ScriptInputBoolean" | "ScriptInputNumber" | "ScriptInputColor" | "ScriptInputString"
-    ) {
-        return Ok(None);
-    }
-    let Some(value) = bound_script_input_graph_value(file, context, input, "propertyValue")? else {
-        return Ok(None);
-    };
-    let value = match (input.type_name, value) {
-        ("ScriptInputBoolean", RuntimeDataBindGraphValue::Boolean(value)) => {
-            ScriptValue::Bool(value)
-        }
-        ("ScriptInputNumber", RuntimeDataBindGraphValue::Number(value)) => {
-            ScriptValue::Number(f64::from(value))
-        }
-        ("ScriptInputColor", RuntimeDataBindGraphValue::Color(value)) => ScriptValue::Color(value),
-        ("ScriptInputString", RuntimeDataBindGraphValue::String(value)) => {
-            ScriptValue::CoreString(ScriptCoreString::from_bytes(value))
-        }
-        (_, value) => {
-            return Err(ScriptError::new(format!(
-                "{} global {} data binding produced incompatible value {value:?}",
-                input.type_name, input.id
-            )));
-        }
-    };
-    Ok(Some(value))
-}
-
-/// Resolves a data-bound `ScriptInputArtboard` to its referenced artboard id.
-pub fn bound_script_artboard_input(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelInstance,
-    input: &RuntimeObject,
-) -> Result<Option<u64>, ScriptError> {
-    if input.type_name != "ScriptInputArtboard" {
-        return Ok(None);
-    }
-    match bound_script_input_graph_value(file, context, input, "artboardId")? {
-        Some(RuntimeDataBindGraphValue::Artboard(value)) => Ok(Some(value)),
-        Some(value) => Err(ScriptError::new(format!(
-            "{} global {} data binding produced incompatible value {value:?}",
-            input.type_name, input.id
-        ))),
-        None => Ok(None),
-    }
-}
-
-pub(crate) fn bound_script_input_value_from_data_context(
-    file: &RuntimeFile,
-    context: &crate::artboard_data_bind::RuntimeOwnedDataContext,
-    input: &RuntimeObject,
-) -> Result<Option<ScriptValue>, ScriptError> {
-    if !matches!(
-        input.type_name,
-        "ScriptInputBoolean" | "ScriptInputNumber" | "ScriptInputColor" | "ScriptInputString"
-    ) {
-        return Ok(None);
-    }
-    let Some(value) =
-        bound_script_input_graph_value_from_data_context(file, context, input, "propertyValue")?
-    else {
-        return Ok(None);
-    };
-    match (input.type_name, value) {
-        ("ScriptInputBoolean", RuntimeDataBindGraphValue::Boolean(value)) => {
-            Ok(Some(ScriptValue::Bool(value)))
-        }
-        ("ScriptInputNumber", RuntimeDataBindGraphValue::Number(value)) => {
-            Ok(Some(ScriptValue::Number(f64::from(value))))
-        }
-        ("ScriptInputColor", RuntimeDataBindGraphValue::Color(value)) => {
-            Ok(Some(ScriptValue::Color(value)))
-        }
-        ("ScriptInputString", RuntimeDataBindGraphValue::String(value)) => Ok(Some(
-            ScriptValue::CoreString(ScriptCoreString::from_bytes(value)),
-        )),
-        (_, value) => Err(ScriptError::new(format!(
-            "{} global {} data binding produced incompatible value {value:?}",
-            input.type_name, input.id
-        ))),
-    }
-}
-
-pub(crate) fn bound_script_artboard_input_from_data_context(
-    file: &RuntimeFile,
-    context: &crate::artboard_data_bind::RuntimeOwnedDataContext,
-    input: &RuntimeObject,
-) -> Result<Option<u64>, ScriptError> {
-    if input.type_name != "ScriptInputArtboard" {
-        return Ok(None);
-    }
-    match bound_script_input_graph_value_from_data_context(file, context, input, "artboardId")? {
-        Some(RuntimeDataBindGraphValue::Artboard(value)) => Ok(Some(value)),
-        Some(value) => Err(ScriptError::new(format!(
-            "{} global {} data binding produced incompatible value {value:?}",
-            input.type_name, input.id
-        ))),
-        None => Ok(None),
-    }
-}
-
-/// Resolves the current count of a data-bound `ScriptInputTrigger`.
-///
-/// The listener hydrator compares counts across retained data-context rebinds
-/// and calls the table's authored trigger function only for a changed,
-/// non-zero value, matching `ScriptInputTrigger::propertyValueChanged`.
-pub fn bound_script_trigger_input(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelInstance,
-    input: &RuntimeObject,
-) -> Result<Option<u64>, ScriptError> {
-    if input.type_name != "ScriptInputTrigger" {
-        return Ok(None);
-    }
-    match bound_script_input_graph_value(file, context, input, "propertyValue")? {
-        Some(RuntimeDataBindGraphValue::Trigger(value)) => Ok(Some(value)),
-        Some(value) => Err(ScriptError::new(format!(
-            "{} global {} data binding produced incompatible value {value:?}",
-            input.type_name, input.id
-        ))),
-        None => Ok(None),
-    }
-}
-
-fn bound_script_input_graph_value(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelInstance,
-    input: &RuntimeObject,
-    property_name: &str,
-) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
-    let Some(property_key) = property_key_for_name(input.type_name, property_name) else {
-        return Ok(None);
-    };
-    // `ScriptInput::dataBind` is one retained pointer. Every DataBind
-    // subclass assigns it during import, so the last authored occurrence wins
-    // even when that winner is not a DataBindContext
-    // (`data_bind.cpp:66-95`; `scripted_object.cpp:569-584`).
-    let Some(data_bind) = (0..file.object_count())
-        .filter_map(|id| file.object(id))
-        .filter(|candidate| {
-            nuxie_schema::definition_by_name(candidate.type_name)
-                .is_some_and(|definition| definition.is_a("DataBind"))
-        })
-        .filter(|candidate| {
-            file.data_bind_target_for_object(candidate)
-                .is_some_and(|target| target.id == input.id)
-        })
-        .last()
-    else {
-        return Ok(None);
-    };
-    if data_bind.type_name != "DataBindContext"
-        || data_bind.uint_property("propertyKey") != Some(u64::from(property_key))
-        || !file
-            .data_bind_to_target_for_object(data_bind)
-            .unwrap_or(false)
-    {
-        return Ok(None);
-    }
-    let Some(source_path) = file.data_bind_context_source_path_ids_for_object(data_bind) else {
-        return Ok(None);
-    };
-    let name_based = file
-        .data_bind_is_name_based_for_object(data_bind)
-        .unwrap_or(false);
-    let Some(source) = owned_script_input_source_value(file, context, &source_path, name_based)
-    else {
-        return Ok(None);
-    };
-
-    convert_bound_script_input_graph_value(file, input, data_bind, source)
-}
-
-fn bound_script_input_graph_value_from_data_context(
-    file: &RuntimeFile,
-    context: &crate::artboard_data_bind::RuntimeOwnedDataContext,
-    input: &RuntimeObject,
-    property_name: &str,
-) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
-    let Some(property_key) = property_key_for_name(input.type_name, property_name) else {
-        return Ok(None);
-    };
-    let Some(data_bind) = (0..file.object_count())
-        .filter_map(|id| file.object(id))
-        .filter(|candidate| {
-            nuxie_schema::definition_by_name(candidate.type_name)
-                .is_some_and(|definition| definition.is_a("DataBind"))
-        })
-        .filter(|candidate| {
-            file.data_bind_target_for_object(candidate)
-                .is_some_and(|target| target.id == input.id)
-        })
-        .last()
-    else {
-        return Ok(None);
-    };
-    if data_bind.type_name != "DataBindContext"
-        || data_bind.uint_property("propertyKey") != Some(u64::from(property_key))
-        || !file
-            .data_bind_to_target_for_object(data_bind)
-            .unwrap_or(false)
-    {
-        return Ok(None);
-    }
-    let Some(source_path) = file.data_bind_context_source_path_ids_for_object(data_bind) else {
-        return Ok(None);
-    };
-    let name_based = file
-        .data_bind_is_name_based_for_object(data_bind)
-        .unwrap_or(false);
-    let Some(source) = context.resolve_instance(&mut |_, candidate, scope_path| {
-        owned_script_input_source_value_for_scope(
-            file,
-            candidate,
-            scope_path,
-            &source_path,
-            name_based,
-        )
-    }) else {
-        return Ok(None);
-    };
-    convert_bound_script_input_graph_value(file, input, data_bind, source)
-}
-
-fn convert_bound_script_input_graph_value(
-    file: &RuntimeFile,
-    input: &RuntimeObject,
-    data_bind: &RuntimeObject,
-    source: RuntimeDataBindGraphValue,
-) -> Result<Option<RuntimeDataBindGraphValue>, ScriptError> {
-    let Some(converter_object) = file.resolved_data_converter_for_data_bind_object(data_bind)
-    else {
-        // Backboard importer resolution leaves an invalid/out-of-range
-        // converter ordinal as a null pointer. DataBind then applies the
-        // source unchanged (`backboard_importer.cpp:136-145`;
-        // `data_bind.cpp:429-457`).
-        return Ok(Some(source));
-    };
-    let Some(converter) = runtime_data_bind_graph_converter(file, data_bind) else {
-        return Err(ScriptError::new(format!(
-            "{} global {} data converter '{}' could not be resolved",
-            input.type_name, input.id, converter_object.type_name
-        )));
-    };
-    if !script_input_converter_is_stateless(&converter) {
-        return Err(ScriptError::new(format!(
-            "{} global {} data converter '{}' requires retained converter state and is unsupported for scripted-listener inputs",
-            input.type_name, input.id, converter_object.type_name
-        )));
-    }
-    runtime_data_bind_graph_convert_value(&converter, &source)
-        .map(Some)
-        .ok_or_else(|| {
-            ScriptError::new(format!(
-                "{} global {} data converter '{}' rejected its bound source value",
-                input.type_name, input.id, converter_object.type_name
-            ))
-        })
-}
-
-fn script_input_converter_is_stateless(converter: &RuntimeDataBindGraphConverter) -> bool {
-    match converter {
-        RuntimeDataBindGraphConverter::PassThrough
-        | RuntimeDataBindGraphConverter::BooleanNegate
-        | RuntimeDataBindGraphConverter::TriggerIncrement
-        | RuntimeDataBindGraphConverter::ToNumber
-        | RuntimeDataBindGraphConverter::ListToLength
-        | RuntimeDataBindGraphConverter::NumberToList { .. }
-        | RuntimeDataBindGraphConverter::ToString { .. }
-        | RuntimeDataBindGraphConverter::OperationValue { .. }
-        | RuntimeDataBindGraphConverter::SystemOperationValue { .. }
-        | RuntimeDataBindGraphConverter::Rounder { .. }
-        | RuntimeDataBindGraphConverter::StringTrim { .. }
-        | RuntimeDataBindGraphConverter::StringRemoveZeros
-        | RuntimeDataBindGraphConverter::StringPad { .. } => true,
-        RuntimeDataBindGraphConverter::Group(converters) => {
-            converters.iter().all(script_input_converter_is_stateless)
-        }
-        RuntimeDataBindGraphConverter::Scripted { .. }
-        | RuntimeDataBindGraphConverter::External { .. }
-        | RuntimeDataBindGraphConverter::OperationViewModel { .. }
-        | RuntimeDataBindGraphConverter::RangeMapper { .. }
-        | RuntimeDataBindGraphConverter::Formula { .. }
-        | RuntimeDataBindGraphConverter::Interpolator { .. }
-        | RuntimeDataBindGraphConverter::Unsupported => false,
-    }
-}
-
-pub(crate) fn owned_script_input_source_value(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelInstance,
-    source_path: &[u32],
-    name_based: bool,
-) -> Option<RuntimeDataBindGraphValue> {
-    owned_script_input_source_value_for_scope(file, context, &[], source_path, name_based)
-}
-
-pub(crate) fn owned_script_input_source_value_for_scope(
-    file: &RuntimeFile,
-    context: &RuntimeOwnedViewModelInstance,
-    scope_path: &[usize],
-    source_path: &[u32],
-    name_based: bool,
-) -> Option<RuntimeDataBindGraphValue> {
-    context
-        .number_value_by_context_source_path(file, scope_path, source_path, name_based)
-        .map(RuntimeDataBindGraphValue::Number)
-        .or_else(|| {
-            context
-                .boolean_value_by_context_source_path(file, scope_path, source_path, name_based)
-                .map(RuntimeDataBindGraphValue::Boolean)
-        })
-        .or_else(|| {
-            context
-                .string_value_by_context_source_path(file, scope_path, source_path, name_based)
-                .map(|value| RuntimeDataBindGraphValue::String(value.to_vec()))
-        })
-        .or_else(|| {
-            context
-                .color_value_by_context_source_path(file, scope_path, source_path, name_based)
-                .map(RuntimeDataBindGraphValue::Color)
-        })
-        .or_else(|| {
-            context
-                .enum_value_by_context_source_path(file, scope_path, source_path, name_based)
-                .map(RuntimeDataBindGraphValue::Enum)
-        })
-        .or_else(|| {
-            context
-                .symbol_list_index_value_by_context_source_path(
-                    file,
-                    scope_path,
-                    source_path,
-                    name_based,
-                )
-                .map(RuntimeDataBindGraphValue::SymbolListIndex)
-        })
-        .or_else(|| {
-            context
-                .list_item_count_by_context_source_path(file, scope_path, source_path, name_based)
-                .map(|item_count| RuntimeDataBindGraphValue::List { item_count })
-        })
-        .or_else(|| {
-            context
-                .asset_value_by_context_source_path(file, scope_path, source_path, name_based)
-                .map(RuntimeDataBindGraphValue::Asset)
-        })
-        .or_else(|| {
-            context
-                .artboard_value_by_context_source_path(file, scope_path, source_path, name_based)
-                .map(RuntimeDataBindGraphValue::Artboard)
-        })
-        .or_else(|| {
-            context
-                .trigger_value_by_context_source_path(file, scope_path, source_path, name_based)
-                .map(RuntimeDataBindGraphValue::Trigger)
-        })
-        .or_else(|| {
-            context
-                .view_model_value_by_context_source_path(file, scope_path, source_path, name_based)
-                .map(RuntimeDataBindGraphValue::ViewModel)
-        })
-}
-
-/// Host callbacks exposed to scripted objects.
-///
-/// The first scripting slice only needs a dirt/update marker; richer access
-/// to artboards, renderers, and view-model data lives behind this same trait
-/// as the C++ `src/lua/` glue is ported.
 pub trait ScriptHost {
     fn mark_script_update(&mut self) {}
 
@@ -3274,91 +1586,28 @@ impl ScriptHost for NoopScriptHost {}
 type NativeLinearAnimation =
     crate::mechanical_port::source::animation::linear_animation_instance::LinearAnimationInstance;
 
-// The legacy variant serves the existing public host API until integration
-// removes that implementation; native owners never dispatch through it.
-#[derive(Clone)]
-enum ScriptAnimationOwner {
-    Legacy(LinearAnimationInstance),
-    Native(Rc<RefCell<NativeLinearAnimation>>),
-}
-
 /// Runtime-owned linear-animation handle exposed to scripts.
 #[derive(Clone)]
 pub struct ScriptAnimation {
-    instance: ScriptAnimationOwner,
-    duration: f32,
-    fps: f32,
+    instance: Rc<RefCell<NativeLinearAnimation>>,
 }
-
 impl fmt::Debug for ScriptAnimation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ScriptAnimation")
-            .field("duration", &self.duration)
-            .field("fps", &self.fps)
+            .field("duration", &self.duration())
             .finish_non_exhaustive()
     }
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScriptAnimationTime {
     Seconds,
     Frames,
     Percentage,
 }
-
 impl ScriptAnimation {
-    pub fn named(artboard: &ArtboardInstance, name: &str) -> Option<Self> {
-        let (index, animation) = artboard
-            .linear_animations()
-            .iter()
-            .enumerate()
-            .find(|(_, animation)| animation.name.as_deref() == Some(name))?;
-        Some(Self {
-            instance: ScriptAnimationOwner::Legacy(artboard.linear_animation_instance(index)?),
-            duration: animation.duration as f32 / animation.fps as f32,
-            fps: animation.fps as f32,
-        })
-    }
-
     pub fn duration(&self) -> f32 {
-        match &self.instance {
-            ScriptAnimationOwner::Legacy(_) => self.duration,
-            ScriptAnimationOwner::Native(instance) => {
-                let instance = instance.borrow();
-                instance.duration() as f32 / instance.fps() as f32
-            }
-        }
-    }
-
-    pub fn advance(&mut self, artboard: &mut ArtboardInstance, seconds: f32) -> bool {
-        let ScriptAnimationOwner::Legacy(instance) = &mut self.instance else {
-            panic!("native animation must be advanced through its native artboard");
-        };
-        let keep_going = artboard.advance_linear_animation_instance(instance, seconds);
-        artboard.apply_linear_animation_instance(instance, 1.0);
-        keep_going
-    }
-
-    pub fn set_time(
-        &mut self,
-        artboard: &mut ArtboardInstance,
-        value: f32,
-        mode: ScriptAnimationTime,
-    ) {
-        let seconds = match mode {
-            ScriptAnimationTime::Seconds => value,
-            ScriptAnimationTime::Frames => value / self.fps,
-            ScriptAnimationTime::Percentage => value * self.duration,
-        };
-        let definitions = artboard.linear_animations.clone();
-        let ScriptAnimationOwner::Legacy(instance) = &mut self.instance else {
-            panic!("native animation time must be set through its native artboard");
-        };
-        let Some(animation) = definitions.get(instance.animation_index()) else {
-            return;
-        };
-        instance.set_time(animation, animation.global_to_local_seconds(seconds));
-        artboard.apply_linear_animation_instance(instance, 1.0);
+        let instance = self.instance.borrow();
+        instance.duration() as f32 / instance.fps() as f32
     }
 }
 
@@ -3453,133 +1702,6 @@ pub trait ScriptArtboard {
     }
 }
 
-/// Opaque retained parent context passed into one projected ScriptArtboard.
-///
-/// C++ `ScriptedObject::setArtboardInput` passes its current `DataContext`
-/// into every fresh child instance. The facade may carry this handle but
-/// cannot inspect or rebuild the runtime's local/global/parent ordering
-/// (`scripted_object.cpp:43-59`; `lua_artboards.cpp:20-50`).
-#[doc(hidden)]
-#[derive(Debug, Clone)]
-pub struct ScriptArtboardParentContext {
-    inner: RuntimeOwnedDataContext,
-}
-
-impl ScriptArtboardParentContext {
-    #[doc(hidden)]
-    pub fn root(local: &RuntimeOwnedViewModelContextHandle) -> Self {
-        Self {
-            inner: RuntimeOwnedDataContext::from_context_handle(local),
-        }
-    }
-
-    pub(crate) fn from_runtime(inner: RuntimeOwnedDataContext) -> Self {
-        Self { inner }
-    }
-
-    pub fn with_local_view_model(
-        &self,
-        local: &RuntimeOwnedViewModelContextHandle,
-    ) -> ScriptArtboardDataContext {
-        ScriptArtboardDataContext {
-            inner: RuntimeOwnedDataContext::with_local_context_handles(
-                [local.clone()],
-                Some(&self.inner),
-            ),
-        }
-    }
-
-    #[doc(hidden)]
-    pub fn resolve_script_view_model_input(
-        &self,
-        file: &RuntimeFile,
-        path: &crate::ScriptInputViewModelPropertyPath,
-    ) -> Option<Option<ScriptViewModel>> {
-        self.inner.bound_script_view_model(file, path)
-    }
-
-    /// Resolve one primitive ScriptInput through this exact retained
-    /// local-plus-parent occurrence context.
-    #[doc(hidden)]
-    pub fn resolve_script_input_value(
-        &self,
-        file: &RuntimeFile,
-        input: &RuntimeObject,
-    ) -> Result<Option<ScriptValue>, ScriptError> {
-        bound_script_input_value_from_data_context(file, &self.inner, input)
-    }
-
-    /// Resolve one ScriptInputArtboard id through this exact retained
-    /// local-plus-parent occurrence context.
-    #[doc(hidden)]
-    pub fn resolve_script_artboard_input(
-        &self,
-        file: &RuntimeFile,
-        input: &RuntimeObject,
-    ) -> Result<Option<u64>, ScriptError> {
-        bound_script_artboard_input_from_data_context(file, &self.inner, input)
-    }
-}
-
-/// Opaque complete context bound to a projected child artboard and its
-/// default state machine.
-#[doc(hidden)]
-#[derive(Debug, Clone)]
-pub struct ScriptArtboardDataContext {
-    inner: RuntimeOwnedDataContext,
-}
-
-impl ScriptArtboardDataContext {
-    pub fn root(local: &RuntimeOwnedViewModelContextHandle) -> Self {
-        Self {
-            inner: RuntimeOwnedDataContext::from_context_handle(local),
-        }
-    }
-
-    pub(crate) fn runtime_context(&self) -> &RuntimeOwnedDataContext {
-        &self.inner
-    }
-
-    /// Resolve one numeric source path through the child's complete local and
-    /// retained-parent chain. This is exposed for facade conformance checks;
-    /// ordinary script access continues through the bound state machine.
-    #[doc(hidden)]
-    pub fn resolve_number_source_path(&self, path: &[u32]) -> Option<f32> {
-        let (context, property_path) = self.inner.resolved_property_path(path)?;
-        context
-            .borrow()
-            .number_value_by_property_path(&property_path)
-    }
-}
-
-/// Occurrence-owned resolver used by a live ScriptInputArtboard DataBind.
-///
-/// The low-level state-machine owns exact binding timing while the facade owns
-/// file-backed artboard userdata construction. Keeping that boundary explicit
-/// lets chained `applyEvents` batches update the script table synchronously,
-/// matching `ScriptInputArtboard::artboardIdChanged/updateArtboard`, without
-/// moving renderer/file authority into the state-machine core.
-pub trait ScriptArtboardResolver: fmt::Debug {
-    /// Validate immutable prerequisites and retain the authority needed to
-    /// construct one Artboard facade later. This method must not construct the
-    /// facade: fallible semantic construction remains in authored phase-two
-    /// order.
-    fn prepare_script_artboard(
-        &self,
-        source: &crate::script_input_artboard::ScriptArtboardSource,
-        parent_context: Option<&ScriptArtboardParentContext>,
-    ) -> Result<Box<dyn PreparedScriptArtboard>, ScriptError>;
-
-    fn resolve_script_artboard(
-        &self,
-        source: &crate::script_input_artboard::ScriptArtboardSource,
-        parent_context: Option<&ScriptArtboardParentContext>,
-    ) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
-        self.prepare_script_artboard(source, parent_context)?
-            .construct()
-    }
-}
-
 /// Deferred Artboard construction produced by resolver validation.
 ///
 /// The prepared value is a non-bypassable type-state fence, but it retains
@@ -3589,20 +1711,6 @@ pub trait ScriptArtboardResolver: fmt::Debug {
 /// `expect`.
 pub trait PreparedScriptArtboard: fmt::Debug {
     fn construct(self: Box<Self>) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
-}
-
-/// Occurrence-owned phase-two lookup for ScriptInputViewModelProperty.
-///
-/// C++ validates the path first, then resolves it again at the input's
-/// authored hydration position after any earlier table setters have run
-/// (`script_input_viewmodel_property.cpp:60-113`;
-/// `scripted_object.cpp:399-426`).
-pub trait ScriptViewModelInputResolver: fmt::Debug {
-    fn resolve_script_view_model(
-        &self,
-        input_global_id: u32,
-        path: &crate::ScriptInputViewModelPropertyPath,
-    ) -> Result<Option<ScriptViewModel>, ScriptError>;
 }
 
 /// Runtime-owned handle for one scripted object instance.
@@ -4070,22 +2178,6 @@ pub trait ScriptInstance {
     }
 }
 
-impl ArtboardInstance {
-    pub(crate) fn apply_scripted_path_effect(
-        &self,
-        global_id: u32,
-        source: RawPath,
-        node: ScriptNode,
-    ) -> Result<RawPath, ScriptError> {
-        let handle = self
-            .script_instance_for_global(global_id)
-            .ok_or_else(|| ScriptError::new(format!("missing script path effect {global_id}")))?;
-        handle
-            .borrow_mut()
-            .call_path_effect_update(source, node, &mut NoopScriptHost)
-    }
-}
-
 #[derive(Clone)]
 pub(crate) struct RuntimeScriptInstanceHandle {
     inner: Rc<RefCell<Box<dyn ScriptInstance>>>,
@@ -4101,25 +2193,6 @@ impl RuntimeScriptInstanceHandle {
     pub(crate) fn borrow_mut(&self) -> RefMut<'_, Box<dyn ScriptInstance>> {
         self.inner.borrow_mut()
     }
-}
-
-/// Shared pinned `ensureScriptInitialized` boundary for every retained Rust
-/// ScriptedObject owner. Context installation cannot resolve typed inputs;
-/// table recreation then runs before the concrete `m_self` guard. Callers may
-/// prepare Artboard/ViewModel recipes only after this returns true.
-pub(crate) fn install_context_recreate_and_guard_script_lifetime(
-    handle: &RuntimeScriptInstanceHandle,
-    context: &ScriptListenerActionHydration,
-    factory: &mut Option<&mut dyn RenderFactory>,
-) -> Result<bool, ScriptError> {
-    let mut instance = handle.borrow_mut();
-    context.install_context(&mut **instance)?;
-    if let Some(factory) = factory.as_deref_mut() {
-        instance.prepare_init_retry_with_factory(factory)?;
-    } else {
-        instance.prepare_init_retry()?;
-    }
-    Ok(instance.script_lifetime_valid())
 }
 
 impl PartialEq for RuntimeScriptInstanceHandle {
@@ -4165,7 +2238,71 @@ pub struct ScriptAssetRegistrationResult {
 }
 
 /// Runtime-owned VM seam implemented by concrete scripting backends.
+
+impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
+    fn install_native_file_assets(
+        &self,
+        file: crate::mechanical_port::source::file::RuntimeFileWeakHandle,
+    ) -> Result<(), ScriptError> {
+        (**self).install_native_file_assets(file)
+    }
+    fn initializes_data_global_externally(&self) -> bool {
+        (**self).initializes_data_global_externally()
+    }
+    fn initialize_data_global(
+        &self,
+        models: BTreeMap<String, ScriptViewModel>,
+    ) -> Result<(), ScriptError> {
+        (**self).initialize_data_global(models)
+    }
+    fn install_render_factory(&self, factory: &mut dyn RenderFactory) -> Result<(), ScriptError> {
+        (**self).install_render_factory(factory)
+    }
+    fn install_rive_globals(&self) -> Result<(), ScriptError> {
+        (**self).install_rive_globals()
+    }
+    fn register_module(&self, name: &str, payload: &[u8]) -> Result<(), ScriptError> {
+        (**self).register_module(name, payload)
+    }
+    fn register_script_assets(
+        &self,
+        scripts: &[ScriptAssetRegistration<'_>],
+    ) -> Vec<ScriptAssetRegistrationResult> {
+        (**self).register_script_assets(scripts)
+    }
+    fn instantiate_program(
+        &self,
+        program: &RuntimeScriptProgram,
+        present: bool,
+        model: Option<ScriptViewModel>,
+        parents: Vec<Option<ScriptViewModel>>,
+        host: &mut dyn ScriptHost,
+    ) -> Result<Box<dyn ScriptInstance>, ScriptError> {
+        (**self).instantiate_program(program, present, model, parents, host)
+    }
+    fn instantiate_script(
+        &self,
+        name: &str,
+        payload: &[u8],
+        host: &mut dyn ScriptHost,
+    ) -> Result<Box<dyn ScriptInstance>, ScriptError> {
+        (**self).instantiate_script(name, payload, host)
+    }
+    fn advance_detached_view_models(&self) -> bool {
+        (**self).advance_detached_view_models()
+    }
+    fn perform_registration(&self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {
+        (**self).perform_registration(modules)
+    }
+}
+
 pub trait ScriptingVm {
+    /// Install the importing file's asset catalog without making a File → VM
+    /// → catalog → File ownership cycle. Executing chunks comes afterward.
+    fn install_native_file_assets(
+        &self,
+        file: crate::mechanical_port::source::file::RuntimeFileWeakHandle,
+    ) -> Result<(), ScriptError>;
     fn initializes_data_global_externally(&self) -> bool {
         false
     }
@@ -4235,343 +2372,5 @@ pub trait ScriptingVm {
             }
             pending = failures.into_iter().map(|(index, _)| index).collect();
         }
-    }
-}
-
-#[cfg(test)]
-mod hydration_atomicity_tests {
-    use super::*;
-
-    #[derive(Debug)]
-    struct FailingArtboardResolver {
-        calls: Rc<Cell<usize>>,
-    }
-
-    impl ScriptArtboardResolver for FailingArtboardResolver {
-        fn prepare_script_artboard(
-            &self,
-            _source: &crate::ScriptArtboardSource,
-            _parent_context: Option<&ScriptArtboardParentContext>,
-        ) -> Result<Box<dyn PreparedScriptArtboard>, ScriptError> {
-            self.calls.set(self.calls.get() + 1);
-            Err(ScriptError::new("facade rejected the live artboard"))
-        }
-    }
-
-    #[derive(Debug)]
-    struct DeferredFailureRecipe {
-        constructions: Rc<Cell<usize>>,
-    }
-
-    impl PreparedScriptArtboard for DeferredFailureRecipe {
-        fn construct(self: Box<Self>) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
-            self.constructions.set(self.constructions.get() + 1);
-            Err(ScriptError::new("deferred Artboard construction ran"))
-        }
-    }
-
-    #[derive(Debug)]
-    struct DeferredFailureResolver {
-        constructions: Rc<Cell<usize>>,
-    }
-
-    impl ScriptArtboardResolver for DeferredFailureResolver {
-        fn prepare_script_artboard(
-            &self,
-            _source: &crate::ScriptArtboardSource,
-            _parent_context: Option<&ScriptArtboardParentContext>,
-        ) -> Result<Box<dyn PreparedScriptArtboard>, ScriptError> {
-            Ok(Box::new(DeferredFailureRecipe {
-                constructions: Rc::clone(&self.constructions),
-            }))
-        }
-    }
-
-    struct InertScriptInstance;
-
-    impl ScriptInstance for InertScriptInstance {
-        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
-            Ok(false)
-        }
-
-        fn call_method(
-            &mut self,
-            _method: ScriptMethod,
-            _args: &[ScriptValue],
-            _host: &mut dyn ScriptHost,
-        ) -> Result<ScriptValue, ScriptError> {
-            Ok(ScriptValue::Nil)
-        }
-
-        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
-            Ok(ScriptValue::Nil)
-        }
-
-        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
-            Ok(())
-        }
-
-        fn script_lifetime_valid(&self) -> bool {
-            false
-        }
-    }
-
-    struct RetryOrderingScript {
-        trace: Rc<RefCell<Vec<&'static str>>>,
-    }
-
-    impl ScriptInstance for RetryOrderingScript {
-        fn set_context_view_model_chain(
-            &mut self,
-            _view_model: Option<ScriptViewModel>,
-            _parents: Vec<Option<ScriptViewModel>>,
-        ) -> Result<(), ScriptError> {
-            self.trace.borrow_mut().push("context");
-            Ok(())
-        }
-
-        fn prepare_init_retry(&mut self) -> Result<(), ScriptError> {
-            self.trace.borrow_mut().push("recreate");
-            Ok(())
-        }
-
-        fn script_lifetime_valid(&self) -> bool {
-            self.trace.borrow_mut().push("guard");
-            false
-        }
-
-        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
-            Ok(false)
-        }
-
-        fn call_method(
-            &mut self,
-            _method: ScriptMethod,
-            _args: &[ScriptValue],
-            _host: &mut dyn ScriptHost,
-        ) -> Result<ScriptValue, ScriptError> {
-            Ok(ScriptValue::Nil)
-        }
-
-        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
-            Ok(ScriptValue::Nil)
-        }
-
-        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn every_retry_owner_uses_the_shared_recreate_then_guard_boundary() {
-        let trace = Rc::new(RefCell::new(Vec::new()));
-        let handle = RuntimeScriptInstanceHandle::new(Box::new(RetryOrderingScript {
-            trace: Rc::clone(&trace),
-        }));
-        let context = ScriptListenerActionHydration::new(None, Vec::new());
-        assert!(
-            !install_context_recreate_and_guard_script_lifetime(&handle, &context, &mut None)
-                .expect("retry boundary")
-        );
-        assert_eq!(&*trace.borrow(), &["context", "recreate", "guard"]);
-
-        let owners = [
-            include_str!("state_machine/state_machine_instance/state_machine_instance.rs"),
-            include_str!("state_machine/state_machine_instance/data_converter_group.rs"),
-            include_str!("scripted_interpolator.rs"),
-        ];
-        let owner_calls = owners
-            .iter()
-            .map(|source| {
-                source
-                    .matches("install_context_recreate_and_guard_script_lifetime(")
-                    .count()
-            })
-            .sum::<usize>();
-        assert_eq!(
-            owner_calls, 5,
-            "the complete retry-owner census must stay on the shared boundary"
-        );
-        assert_eq!(
-            owners
-                .iter()
-                .map(|source| source.matches(".prepare_init_retry").count())
-                .sum::<usize>(),
-            0,
-            "no retry sibling may reacquire recipes before the shared lifetime guard"
-        );
-    }
-
-    #[derive(Debug)]
-    struct UnresolvedViewModelResolver;
-
-    impl ScriptViewModelInputResolver for UnresolvedViewModelResolver {
-        fn resolve_script_view_model(
-            &self,
-            _input_global_id: u32,
-            _path: &crate::ScriptInputViewModelPropertyPath,
-        ) -> Result<Option<ScriptViewModel>, ScriptError> {
-            Err(ScriptError::new("unresolved ViewModel prerequisite"))
-        }
-    }
-
-    struct SetterCountingScriptInstance {
-        calls: Rc<Cell<usize>>,
-    }
-
-    impl ScriptInstance for SetterCountingScriptInstance {
-        fn set_context_view_model(
-            &mut self,
-            _view_model: Option<ScriptViewModel>,
-        ) -> Result<(), ScriptError> {
-            self.calls.set(self.calls.get() + 1);
-            Ok(())
-        }
-
-        fn has_method(&self, _method: ScriptMethod) -> Result<bool, ScriptError> {
-            Ok(false)
-        }
-
-        fn call_method(
-            &mut self,
-            _method: ScriptMethod,
-            _args: &[ScriptValue],
-            _host: &mut dyn ScriptHost,
-        ) -> Result<ScriptValue, ScriptError> {
-            Ok(ScriptValue::Nil)
-        }
-
-        fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
-            Ok(ScriptValue::Nil)
-        }
-
-        fn set_input(&mut self, _name: &str, _value: ScriptValue) -> Result<(), ScriptError> {
-            self.calls.set(self.calls.get() + 1);
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn artboard_facade_failure_precedes_every_hydration_write() {
-        let calls = Rc::new(Cell::new(0));
-        let hydration = ScriptListenerActionHydration::new(
-            None,
-            vec![
-                ScriptListenerInputHydration::Value {
-                    name: ScriptCoreString::from("before"),
-                    value: ScriptValue::Number(7.0),
-                },
-                ScriptListenerInputHydration::Artboard {
-                    name: ScriptCoreString::from("panel"),
-                    source: crate::ScriptArtboardSource::File(0),
-                    resolver: Rc::new(FailingArtboardResolver {
-                        calls: Rc::clone(&calls),
-                    }),
-                    parent_context: None,
-                },
-            ],
-        );
-
-        let error = match hydration.preflight_artboards() {
-            Ok(_) => panic!("facade failure must reject the complete batch"),
-            Err(error) => error,
-        };
-        assert_eq!(error.message(), "facade rejected the live artboard");
-        assert_eq!(calls.get(), 1);
-        // Preflight owns no ScriptInstance parameter. Therefore the staged
-        // scalar preceding the failed artboard cannot have reached a table.
-    }
-
-    #[test]
-    fn empty_live_occurrence_is_rejected_in_the_first_validation_loop() {
-        let resolver_calls = Rc::new(Cell::new(0));
-        let hydration = ScriptListenerActionHydration::new(
-            None,
-            vec![ScriptListenerInputHydration::Artboard {
-                name: ScriptCoreString::from("panel"),
-                source: crate::ScriptArtboardSource::Live(crate::RuntimeBindableArtboard::new(
-                    "empty live source",
-                )),
-                resolver: Rc::new(FailingArtboardResolver {
-                    calls: Rc::clone(&resolver_calls),
-                }),
-                parent_context: None,
-            }],
-        );
-
-        let error = match hydration.preflight_artboards() {
-            Ok(_) => panic!("an absent concrete occurrence must fail preflight"),
-            Err(error) => error,
-        };
-        assert_eq!(
-            error.message(),
-            "live scripted artboard source is unavailable"
-        );
-        assert_eq!(
-            resolver_calls.get(),
-            0,
-            "the shared prerequisite guard runs before facade preparation"
-        );
-    }
-
-    #[test]
-    fn unresolved_view_model_preflight_precedes_public_apply_setters() {
-        let setter_calls = Rc::new(Cell::new(0));
-        let hydration = ScriptListenerActionHydration::new(
-            None,
-            vec![
-                ScriptListenerInputHydration::Value {
-                    name: ScriptCoreString::from("before"),
-                    value: ScriptValue::Number(7.0),
-                },
-                ScriptListenerInputHydration::ViewModel {
-                    name: ScriptCoreString::from("child"),
-                    input_global_id: 42,
-                    path: crate::ScriptInputViewModelPropertyPath {
-                        path_ids: vec![1],
-                        resolved_path_ids: vec![1],
-                        is_relative: false,
-                    },
-                    resolver: Rc::new(UnresolvedViewModelResolver),
-                },
-            ],
-        );
-        let mut instance = SetterCountingScriptInstance {
-            calls: Rc::clone(&setter_calls),
-        };
-
-        let error = hydration
-            .apply(&mut instance, &mut NoopScriptHost)
-            .expect_err("an unresolved ViewModel rejects public apply");
-
-        assert_eq!(error.message(), "unresolved ViewModel prerequisite");
-        assert_eq!(
-            setter_calls.get(),
-            0,
-            "phase one rejects before Context or the earlier scalar setter"
-        );
-    }
-
-    #[test]
-    fn inert_script_lifetime_returns_before_deferred_artboard_construction() {
-        let constructions = Rc::new(Cell::new(0));
-        let hydration = ScriptListenerActionHydration::new(
-            None,
-            vec![ScriptListenerInputHydration::Artboard {
-                name: ScriptCoreString::from("panel"),
-                source: crate::ScriptArtboardSource::File(0),
-                resolver: Rc::new(DeferredFailureResolver {
-                    constructions: Rc::clone(&constructions),
-                }),
-                parent_context: None,
-            }],
-        )
-        .preflight_artboards()
-        .expect("immutable File prerequisite is valid");
-
-        hydration
-            .apply_inputs(&mut InertScriptInstance, &mut NoopScriptHost)
-            .expect("pinned inert setter returns without construction failure");
-        assert_eq!(constructions.get(), 0);
     }
 }

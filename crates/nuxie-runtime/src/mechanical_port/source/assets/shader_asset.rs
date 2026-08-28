@@ -21,6 +21,9 @@ struct ShaderVariant {
 
 pub struct ShaderAsset {
     pub base: ShaderAssetBase,
+    // Exact imported bytes are retained solely for the host's authenticated
+    // shader provenance check; variant ownership remains the fields below.
+    encoded_payload: Vec<u8>,
     bytes: Vec<u8>,
     index: HashMap<u8, ShaderVariant>,
     pairs: Vec<TextureSamplerPair>,
@@ -30,6 +33,7 @@ impl Default for ShaderAsset {
     fn default() -> Self {
         Self {
             base: ShaderAssetBase::default(),
+            encoded_payload: Vec::new(),
             bytes: Vec::new(),
             index: HashMap::new(),
             pairs: Vec::new(),
@@ -43,6 +47,7 @@ impl ShaderAsset {
     }
 
     pub fn decode(&mut self, data: &[u8], _factory: &RuntimeFactoryHandle) -> bool {
+        self.encoded_payload = data.to_vec();
         let envelope = SignedContentHeader::new(data);
         if !envelope.is_valid() {
             return false;
@@ -140,6 +145,13 @@ impl ShaderAsset {
 
     pub fn file_extension(&self) -> &'static str {
         "rstb"
+    }
+
+    pub fn encoded_payload(&self) -> &[u8] {
+        &self.encoded_payload
+    }
+    pub fn content_bytes(&self) -> &[u8] {
+        &self.bytes
     }
 
     pub fn find_shader(&self, target: u8) -> &[u8] {

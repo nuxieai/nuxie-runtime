@@ -71,28 +71,9 @@ impl HbFont {
         )))
     }
 
-    /// Reconstruct a server-local font from the public Send-safe byte payload.
-    /// RawTextFont is a host DTO here, never a shaping or fallback owner.
+    /// The public host font retains this exact native occurrence.
     pub fn from_raw_text(font: &crate::text::RawTextFont) -> Option<FontRef> {
-        let decoded = Self::decode_face(font.source_bytes().as_ref(), font.face_index())?;
-        let coords: Vec<_> = (0..font.axis_count())
-            .map(|index| {
-                let axis = font.axis(index);
-                Coord {
-                    axis: axis.tag,
-                    value: font.axis_value(axis.tag),
-                }
-            })
-            .collect();
-        let features: Vec<_> = font
-            .features()
-            .into_iter()
-            .filter_map(|tag| {
-                let value = font.feature_value(tag);
-                (value != u32::MAX).then_some(Feature { tag, value })
-            })
-            .collect();
-        Some(decoded.with_options(&coords, &features))
+        Some(font.native_handle())
     }
 
     /// System fonts cross the approved Rust host boundary as owned bytes plus

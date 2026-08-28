@@ -46,6 +46,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub use bytecode::BytecodeValidationError;
 use bytecode::validate_luau_bytecode;
@@ -674,6 +675,8 @@ pub struct ScriptVm {
     blob_assets: lua_blob::ScriptedBlobAssets,
     audio_assets: lua_audio::ScriptedAudioAssets,
     gpu_canvas_shaders: ImportedGpuCanvasShaderAssets,
+    native_shader_authorities:
+        RefCell<Vec<(Arc<[u8]>, nuxie_render_api::GpuCanvasShaderProvenance)>>,
     logging: LoggingScriptingContext,
 }
 
@@ -1508,6 +1511,7 @@ impl ScriptVm {
             blob_assets,
             audio_assets,
             gpu_canvas_shaders: Rc::new(RefCell::new(Vec::new())),
+            native_shader_authorities: RefCell::new(Vec::new()),
             logging: LoggingScriptingContext::default(),
         }
     }
@@ -1762,6 +1766,15 @@ impl ScriptVm {
     /// optional DataContext, matching `ScriptAsset::file()` ownership in C++.
     pub fn set_image_assets(&self, assets: nuxie_runtime::ScriptImageAssets) {
         lua_image::set_script_image_assets(&self.lua, assets);
+    }
+
+    /// Install proof for exact original bytes before native File import.
+    /// The catalog never grants authority from an asset name or a trust flag.
+    pub fn set_native_shader_authorities(
+        &self,
+        entries: Vec<(Arc<[u8]>, nuxie_render_api::GpuCanvasShaderProvenance)>,
+    ) {
+        *self.native_shader_authorities.borrow_mut() = entries;
     }
 
     pub fn set_default_context_view_model(&mut self, view_model: Option<ScriptViewModel>) {
@@ -2243,6 +2256,38 @@ pub fn validate_executable_luau_bytecode(
 }
 
 impl RuntimeScriptingVm for ScriptVm {
+    fn install_native_file_assets(
+        &self,
+        file: nuxie_runtime::mechanical_port::source::file::RuntimeFileWeakHandle,
+    ) -> std::result::Result<(), ScriptError> {
+        self.set_image_asset_owners(Arc::new(
+            nuxie_runtime::RuntimeImageAssetOwners::from_native_file(file.clone()),
+        ));
+        self.set_font_asset_owners(Arc::new(
+            nuxie_runtime::RuntimeFontAssetOwners::from_native_file(file.clone()),
+        ));
+        self.set_audio_asset_owners(Arc::new(
+            nuxie_runtime::RuntimeAudioAssetOwners::from_native_file(file.clone()),
+        ));
+        self.blob_assets.set_native_file(file.clone());
+        if let Some(file) = file.upgrade() {
+            self.set_image_assets(nuxie_runtime::script_image_assets(&file));
+            let assets = file.with_file(|file| file.assets().to_vec());
+            for asset in assets {
+                if let Some((name, payload)) = asset.with_downcast::<nuxie_runtime::mechanical_port::source::assets::shader_asset::ShaderAsset,_>(|asset|(asset.base.name().to_owned(),asset.encoded_payload().to_vec())) {
+                    let provenance = self.native_shader_authorities.borrow().iter().find(|(bytes,_)|bytes.as_ref()==payload.as_slice()).map(|(_,proof)|proof.clone());
+                    self.gpu_canvas_shaders.borrow_mut().push(ImportedGpuCanvasShaderAssetEntry {
+                        name:name.clone(), short_name:name,
+                        owner:Rc::new(RefCell::new(RegisteredGpuCanvasShaderAsset::from_native(asset.clone(),provenance))),
+                    });
+                }
+                if let Some((name,id)) = asset.with_downcast::<nuxie_runtime::mechanical_port::source::assets::audio_asset::AudioAsset,_>(|asset|(asset.base.name().to_owned(),asset.base.asset_id())) {
+                    self.register_audio_asset_identity(&name,id);
+                }
+            }
+        }
+        Ok(())
+    }
     fn initializes_data_global_externally(&self) -> bool {
         self.initializes_data_global_externally.get()
     }

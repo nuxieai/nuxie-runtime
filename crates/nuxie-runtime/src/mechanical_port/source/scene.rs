@@ -1,42 +1,44 @@
-use std::rc::Rc;
-
 use crate::mechanical_port::source::{
     animation::{keyed_callback_reporter::KeyedCallbackReporter, loop_::Loop},
-    artboard::ArtboardInstance,
+    artboard::RuntimeArtboardInstanceWeakHandle,
     core::field_types::core_callback_type::{CallbackContext, CallbackData},
     generated::core_registry::CoreRegistry,
     hit_result::HitResult,
     math::{aabb::Aabb, vec2d::Vec2D},
     renderer::Renderer,
     state_machine::{SmiBool, SmiInput, SmiNumber, SmiTrigger},
-    viewmodel::viewmodel_instance::ViewModelInstance,
+    viewmodel::runtime::viewmodel_instance_runtime::RuntimeViewModelInstanceHandle,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Scene {
-    artboard_instance: *mut ArtboardInstance,
+    artboard_instance: RuntimeArtboardInstanceWeakHandle,
 }
 
 impl Scene {
-    pub fn new(artboard_instance: *mut ArtboardInstance) -> Self {
-        assert!(unsafe { (*artboard_instance).is_instance() });
+    pub fn new(artboard_instance: RuntimeArtboardInstanceWeakHandle) -> Self {
+        assert!(
+            artboard_instance
+                .with_artboard(|artboard| artboard.is_instance())
+                .unwrap_or(false)
+        );
         Self { artboard_instance }
     }
 
-    pub fn artboard_instance(&self) -> &ArtboardInstance {
-        unsafe { &*self.artboard_instance }
-    }
-
-    pub fn artboard_instance_mut(&mut self) -> &mut ArtboardInstance {
-        unsafe { &mut *self.artboard_instance }
+    pub fn artboard_instance(&self) -> RuntimeArtboardInstanceWeakHandle {
+        self.artboard_instance.clone()
     }
 
     pub fn width(&self) -> f32 {
-        self.artboard_instance().width()
+        self.artboard_instance
+            .with_artboard(|artboard| artboard.width())
+            .expect("Scene outlived its ArtboardInstance")
     }
 
     pub fn height(&self) -> f32 {
-        self.artboard_instance().height()
+        self.artboard_instance
+            .with_artboard(|artboard| artboard.height())
+            .expect("Scene outlived its ArtboardInstance")
     }
 
     pub fn bounds(&self) -> Aabb {
@@ -44,7 +46,9 @@ impl Scene {
     }
 
     pub fn draw(&mut self, renderer: &mut Renderer) {
-        self.artboard_instance_mut().draw(renderer);
+        self.artboard_instance
+            .with_artboard_mut(|artboard| artboard.draw(renderer))
+            .expect("Scene outlived its ArtboardInstance");
     }
 
     pub fn report_keyed_callback(
@@ -53,9 +57,14 @@ impl Scene {
         property_key: u32,
         elapsed_seconds: f32,
     ) {
-        let core_object = self.artboard_instance_mut().resolve(object_id);
-        let mut data = CallbackData::new(Some(self), elapsed_seconds);
-        CoreRegistry::set_callback(core_object, property_key, &mut data);
+        let core_object = self
+            .artboard_instance
+            .with_artboard(|artboard| artboard.resolve_handle(object_id))
+            .flatten();
+        if let Some(core_object) = core_object {
+            let data = CallbackData::new(Some(self), elapsed_seconds);
+            CoreRegistry::set_callback_handle(&core_object, property_key as i32, data);
+        }
     }
 }
 
@@ -76,7 +85,7 @@ pub trait SceneBehavior: KeyedCallbackReporter + CallbackContext {
     fn duration_seconds(&self) -> f32;
     fn advance_and_apply(&mut self, elapsed_seconds: f32) -> bool;
 
-    fn bind_view_model_instance(&mut self, _view_model_instance: Rc<ViewModelInstance>) {}
+    fn bind_view_model_instance(&mut self, _view_model_instance: RuntimeViewModelInstanceHandle) {}
 
     fn pointer_down(&mut self, _position: Vec2D, _pointer_id: i32) -> HitResult {
         HitResult::None
@@ -98,19 +107,19 @@ pub trait SceneBehavior: KeyedCallbackReporter + CallbackContext {
         0
     }
 
-    fn input(&self, _index: usize) -> Option<*mut SmiInput> {
+    fn input(&self, _index: usize) -> Option<&SmiInput> {
         None
     }
 
-    fn get_bool(&self, _name: &str) -> Option<*mut SmiBool> {
+    fn get_bool(&self, _name: &str) -> Option<&SmiBool> {
         None
     }
 
-    fn get_number(&self, _name: &str) -> Option<*mut SmiNumber> {
+    fn get_number(&self, _name: &str) -> Option<&SmiNumber> {
         None
     }
 
-    fn get_trigger(&self, _name: &str) -> Option<*mut SmiTrigger> {
+    fn get_trigger(&self, _name: &str) -> Option<&SmiTrigger> {
         None
     }
 }

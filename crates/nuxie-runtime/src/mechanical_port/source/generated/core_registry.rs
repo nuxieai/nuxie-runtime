@@ -4,6 +4,57 @@ use crate::mechanical_port::source::core::{
     CoreHandle, field_types::core_callback_type::CallbackData,
 };
 
+pub fn drawable_draw_handle(
+    handle: &CoreHandle,
+    renderer: &mut crate::mechanical_port::source::renderer::Renderer,
+) -> bool {
+    if handle
+        .with(|owner| owner.as_scripted_drawable().is_some())
+        .unwrap_or(false)
+    {
+        crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::draw_occurrence(handle, renderer);
+        true
+    } else if handle
+        .with(|owner| owner.as_artboard().is_some())
+        .unwrap_or(false)
+    {
+        crate::mechanical_port::source::artboard::Artboard::draw_handle(handle, renderer);
+        true
+    } else {
+        handle
+            .with_mut(|owner| owner.drawable_draw(renderer))
+            .unwrap_or(false)
+    }
+}
+
+pub fn advancing_component_advance_handle(
+    handle: &CoreHandle,
+    elapsed_seconds: f32,
+    flags: crate::mechanical_port::source::advance_flags::AdvanceFlags,
+) -> Option<bool> {
+    if handle
+        .with(|owner| owner.as_scripted_drawable().is_some())
+        .unwrap_or(false)
+    {
+        Some(crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::advance_occurrence(handle, elapsed_seconds, flags))
+    } else if handle
+        .with(|owner| owner.as_artboard().is_some())
+        .unwrap_or(false)
+    {
+        Some(
+            crate::mechanical_port::source::artboard::Artboard::advance_internal_handle(
+                handle,
+                elapsed_seconds,
+                flags,
+            ),
+        )
+    } else {
+        handle
+            .with_mut(|owner| owner.advancing_component_advance(elapsed_seconds, flags))
+            .flatten()
+    }
+}
+
 /// Execute the C++ virtual update chain without retaining an authored-object
 /// borrow across a constraint callback. Constraints are part of the super call:
 /// they run before opacity and before each derived update tail, not at the end.
@@ -146,6 +197,12 @@ pub fn component_update_handle(
         }
         component_update_after_transform(object, dirt);
     });
+    if handle
+        .with(|owner| owner.as_scripted_drawable().is_some())
+        .unwrap_or(false)
+    {
+        crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::update_after_super_occurrence(handle, dirt);
+    }
     true
 }
 
@@ -1903,8 +1960,6 @@ pub trait CoreCapabilities: Any {
     }
     fn component_collapse_post(&mut self, value: bool) -> bool {
         if self.as_layout_component().is_some() {
-            self.component_container_collapse_post(value);
-            self.component_transform_collapse_post();
             let layout = self
                 .as_layout_component_mut()
                 .expect("layout capability remained available");
@@ -16561,7 +16616,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.base.clone_into()))
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -17327,7 +17382,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::scripted::scripted_path_effect_base::ScriptedPathEffectBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.base.clone_into()))
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -51492,13 +51547,7 @@ impl CoreCapabilities
     {
         Some(&mut self)
     }
-    fn drawable_draw(
-        &mut self,
-        _renderer: &mut crate::mechanical_port::source::renderer::Renderer,
-    ) -> bool {
-        self.draw();
-        true
-    }
+
     fn drawable_will_draw(&self) -> bool {
         self.will_draw()
     }
@@ -51585,12 +51634,7 @@ impl CoreCapabilities
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(
-            crate::mechanical_port::source::drawable::Drawable::on_added_dirty(
-                &mut self.base.base,
-                context,
-            ),
-        )
+        Some(self.on_added_dirty(context))
     }
     fn lifecycle_on_added_clean(
         &mut self,
@@ -51607,24 +51651,7 @@ impl CoreCapabilities
         &mut self,
         stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(
-            crate::mechanical_port::source::component::Component::import(
-                &mut self
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base,
-                stack,
-            ),
-        )
+        Some(self.import(stack))
     }
 
     fn as_file_asset_referencer_mut(
@@ -51697,6 +51724,9 @@ impl CoreCapabilities
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::container_component::ContainerComponent> {
         Some(&mut self.base.base.base.base.base.base.base.base.base.base)
+    }
+    fn is_advancing_component(&self) -> bool {
+        true
     }
 }
 impl CoreCapabilities
@@ -51886,13 +51916,7 @@ impl CoreCapabilities
     {
         Some(&mut self.base.base)
     }
-    fn drawable_draw(
-        &mut self,
-        _renderer: &mut crate::mechanical_port::source::renderer::Renderer,
-    ) -> bool {
-        self.base.base.draw();
-        true
-    }
+
     fn drawable_will_draw(&self) -> bool {
         self.base.base.will_draw()
     }
@@ -51981,12 +52005,7 @@ impl CoreCapabilities
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(
-            crate::mechanical_port::source::drawable::Drawable::on_added_dirty(
-                &mut self.base.base.base.base,
-                context,
-            ),
-        )
+        Some(self.base.base.on_added_dirty(context))
     }
     fn lifecycle_on_added_clean(
         &mut self,
@@ -52003,26 +52022,7 @@ impl CoreCapabilities
         &mut self,
         stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(
-            crate::mechanical_port::source::component::Component::import(
-                &mut self
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base,
-                stack,
-            ),
-        )
+        Some(self.base.base.import(stack))
     }
 
     fn as_file_asset_referencer_mut(
@@ -52132,6 +52132,9 @@ impl CoreCapabilities
                 .base,
         )
     }
+    fn is_advancing_component(&self) -> bool {
+        true
+    }
 }
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_path_effect::ScriptedPathEffect
@@ -52176,23 +52179,13 @@ impl CoreCapabilities
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(
-            crate::mechanical_port::source::component::Component::on_added_dirty(
-                &mut self.base.base.base.base,
-                context,
-            ),
-        )
+        Some(self.on_added_dirty(context))
     }
     fn lifecycle_import(
         &mut self,
         stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(
-            crate::mechanical_port::source::component::Component::import(
-                &mut self.base.base.base.base,
-                stack,
-            ),
-        )
+        Some(self.import(stack))
     }
 
     fn as_file_asset_referencer_mut(
@@ -52237,6 +52230,39 @@ impl CoreCapabilities
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::container_component::ContainerComponent> {
         Some(&mut self.base.base)
+    }
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(self.on_added_clean(context))
+    }
+    fn component_build_dependencies(&mut self) -> bool {
+        self.build_dependencies();
+        true
+    }
+    fn component_update(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        self.update(dirt);
+        true
+    }
+    fn is_advancing_component(&self) -> bool {
+        true
+    }
+    fn advancing_component_advance(
+        &mut self,
+        elapsed_seconds: f32,
+        flags: crate::mechanical_port::source::advance_flags::AdvanceFlags,
+    ) -> Option<bool> {
+        Some(self.advance_component(elapsed_seconds, flags))
+    }
+    fn as_stroke_effect_mut(
+        &mut self,
+    ) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect>
+    {
+        Some(self)
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::script_input_number::ScriptInputNumber {

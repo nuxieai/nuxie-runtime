@@ -341,9 +341,11 @@ impl RuntimeDrawableOccurrence {
 
     pub fn draw(&self, renderer: &mut Renderer) -> bool {
         match self {
-            Self::Authored(handle) => handle
-                .with_mut(|object| object.drawable_draw(renderer))
-                .unwrap_or(false),
+            Self::Authored(handle) => {
+                crate::mechanical_port::source::generated::core_registry::drawable_draw_handle(
+                    handle, renderer,
+                )
+            }
             Self::RuntimeProxy(proxy) => {
                 proxy.borrow_mut().draw(renderer);
                 true

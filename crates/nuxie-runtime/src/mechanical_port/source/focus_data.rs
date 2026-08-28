@@ -2,6 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
     animation::{
+        focus_listener_group::RuntimeFocusListenerGroupWeakHandle,
         listener_invocation::ListenerInvocation,
         state_machine_instance::{RuntimeObjectHandle, RuntimeStateMachineInstanceWeakHandle},
     },
@@ -26,26 +27,32 @@ use crate::mechanical_port::source::{
 
 #[derive(Clone)]
 pub struct RuntimeFocusListenerHandle {
-    machine: RuntimeStateMachineInstanceWeakHandle,
-    group: RuntimeObjectHandle,
+    group: RuntimeFocusListenerGroupWeakHandle,
 }
 
 impl RuntimeFocusListenerHandle {
-    pub fn new(machine: RuntimeStateMachineInstanceWeakHandle, group: RuntimeObjectHandle) -> Self {
-        Self { machine, group }
+    pub fn new(group: RuntimeFocusListenerGroupWeakHandle) -> Self {
+        Self { group }
     }
 
     fn is_alive(&self) -> bool {
-        self.machine.upgrade().is_some()
+        self.group.upgrade().is_some()
     }
 
     fn ptr_eq(&self, other: &Self) -> bool {
-        self.group == other.group && self.machine.ptr_eq(&other.machine)
+        self.group.ptr_eq(&other.group)
     }
 
     fn notify(&self, focused: bool) {
-        self.machine
-            .with_instance_mut(|machine| machine.queue_focus_event(self.group, focused));
+        if let Some(group) = self.group.upgrade() {
+            group.with_group_mut(|group| {
+                if focused {
+                    group.on_focused();
+                } else {
+                    group.on_blurred();
+                }
+            });
+        }
     }
 }
 

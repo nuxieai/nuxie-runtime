@@ -3,6 +3,7 @@ use crate::mechanical_port::source::{
         animation_reset::AnimationReset,
         animation_reset_factory::AnimationResetFactory,
         animation_state::AnimationState,
+        focus_listener_group::RuntimeFocusListenerGroupHandle,
         linear_animation_instance::LinearAnimationInstance,
         listener_invocation::ListenerInvocation,
         state_instance::RuntimeStateInstanceHandle,
@@ -116,9 +117,9 @@ pub struct FocusState {
     pub expects_keyboard_input: bool,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 pub struct QueuedFocusEvent {
-    pub group: Object,
+    pub group: RuntimeFocusListenerGroupHandle,
     pub is_focus: bool,
 }
 
@@ -415,12 +416,6 @@ pub trait StateMachineInstanceRuntime {
         text_input: &CoreHandle,
         machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> RuntimeListenerGroupHandle;
-    fn make_focus_listener_group(
-        &mut self,
-        focus_data: &CoreHandle,
-        listener: &CoreHandle,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Object;
     fn make_keyboard_listener_group(
         &mut self,
         focus_data: &CoreHandle,
@@ -468,7 +463,6 @@ pub trait StateMachineInstanceRuntime {
         invocation: &ListenerInvocation,
     );
     fn listener_invocation_none(&mut self) -> ListenerInvocation;
-    fn listener_invocation_focus(&mut self, group: Object, focused: bool) -> ListenerInvocation;
     fn listener_invocation_semantic(&mut self, group: Object, action: u8) -> ListenerInvocation;
     fn listener_invocation_event(&mut self, event: &CoreHandle, delay: f32) -> ListenerInvocation;
     fn listener_invocation_view_model(
@@ -547,7 +541,6 @@ pub trait StateMachineInstanceRuntime {
         machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> Object;
     fn semantic_data_remove_listener(&mut self, semantic_data: &CoreHandle, group: Object);
-    fn listener_for_focus_group(&self, group: Object) -> Option<CoreHandle>;
     fn listener_for_semantic_group(&self, group: Object) -> Option<CoreHandle>;
     fn retain_view_model_instance(&mut self, instance: CoreHandle) -> Object;
     fn retain_data_context(&mut self, context: RuntimeDataContextHandle) -> Object;
@@ -2063,7 +2056,7 @@ pub struct StateMachineInstance {
     draw_order_change_counter: u8,
     focus_manager: RuntimeFocusManagerHandle,
     external_focus_manager: Option<RuntimeFocusManagerHandle>,
-    focus_listener_groups: Vec<Object>,
+    focus_listener_groups: Vec<RuntimeFocusListenerGroupHandle>,
     keyboard_listener_groups: Vec<Object>,
     gamepad_listener_groups: Vec<Object>,
     gamepad_scripted_drawables: Vec<CoreHandle>,
@@ -2348,9 +2341,9 @@ impl StateMachineInstance {
                     .as_ref()
                     .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
                 {
-                    let group = self.runtime.borrow_mut().make_focus_listener_group(
-                        &focus_data,
-                        &listener,
+                    let group = RuntimeFocusListenerGroupHandle::new(
+                        focus_data,
+                        listener.clone(),
                         machine.clone(),
                     );
                     self.focus_listener_groups.push(group);
@@ -2955,7 +2948,7 @@ impl StateMachineInstance {
         self.set_external_semantic_manager(Some(manager), parent_node);
     }
 
-    pub fn queue_focus_event(&mut self, group: Object, is_focus: bool) {
+    pub fn queue_focus_event(&mut self, group: RuntimeFocusListenerGroupHandle, is_focus: bool) {
         self.queued_focus_events
             .push(QueuedFocusEvent { group, is_focus });
         self.needs_advance.set(true);
@@ -2989,33 +2982,26 @@ impl StateMachineInstance {
     fn process_focus_events(&mut self) {
         let events = std::mem::take(&mut self.queued_focus_events);
         for event in events {
-            let Some(listener) = self
-                .runtime
-                .borrow_mut()
-                .listener_for_focus_group(event.group)
-            else {
+            let (listener, listens) = event.group.with_group(|group| {
+                (
+                    group.listener(),
+                    if event.is_focus {
+                        group.is_focus_listener()
+                    } else {
+                        group.is_blur_listener()
+                    },
+                )
+            });
+            if !listens {
                 continue;
-            };
-            if (event.is_focus
-                && self
-                    .runtime
-                    .borrow_mut()
-                    .listener_has(&listener, ListenerType::Focus))
-                || (!event.is_focus
-                    && self
-                        .runtime
-                        .borrow_mut()
-                        .listener_has(&listener, ListenerType::Blur))
-            {
-                let invocation = self
-                    .runtime
-                    .borrow_mut()
-                    .listener_invocation_focus(event.group, event.is_focus);
-                let runtime = Rc::clone(&self.runtime);
-                runtime
-                    .borrow_mut()
-                    .listener_perform_changes(&listener, self, &invocation);
             }
+            let listener_index = self
+                .focus_listener_groups
+                .iter()
+                .position(|group| group.ptr_eq(&event.group))
+                .expect("a queued focus listener remains owned until dispatch");
+            let invocation = ListenerInvocation::focus(listener_index, event.is_focus);
+            self.perform_listener_changes(&listener, invocation);
         }
     }
 

@@ -729,9 +729,6 @@ impl LayoutComponent {
         value: ComponentDirt,
         child_opacity: f32,
     ) -> bool {
-        if value == ComponentDirt::FILTHY {
-            self.interrupt_animation();
-        }
         if value.contains(ComponentDirt::RENDER_OPACITY) {
             self.paints.propagate_opacity(child_opacity);
         }

@@ -72,6 +72,21 @@ impl DataConverterOperationViewModel {
     pub fn copy_source_path_ids(&mut self, other: &Self) {
         self.source_path_ids = other.source_path_ids.clone()
     }
+
+    /// Clones the complete concrete converter occurrence.
+    ///
+    /// Pinned `copySourcePathIds` downcasts the generated base reference back
+    /// to this concrete owner. Rust cannot recover an enclosing owner from an
+    /// embedded base reference, so copy the generated base first and then copy
+    /// the owner-held path buffer while both concrete owners are available.
+    pub fn clone_core(&self) -> Self {
+        let mut cloned = Self::default();
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(&self.base, &mut cloned);
+        cloned.base = base;
+        cloned.copy_source_path_ids(self);
+        cloned
+    }
     pub fn source_path_ids(&self) -> &[u32] {
         &self.source_path_ids
     }
@@ -102,7 +117,11 @@ impl DataConverterOperationViewModelBaseCallbacks for DataConverterOperationView
         Self::decode_source_path_ids(self, value);
     }
 
-    fn copy_source_path_ids(&mut self, _object: &DataConverterOperationViewModelBase) {}
+    fn copy_source_path_ids(&mut self, _object: &DataConverterOperationViewModelBase) {
+        // `clone_core` performs this owner-held copy after the generated-base
+        // copy. The callback receives only an embedded base and therefore
+        // cannot safely recover the source owner as the pinned C++ cast does.
+    }
 }
 
 impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability

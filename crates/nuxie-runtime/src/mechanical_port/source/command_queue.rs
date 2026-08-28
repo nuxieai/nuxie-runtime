@@ -1,26 +1,25 @@
 use std::{
     collections::HashMap,
     ops::Deref,
-    rc::Rc,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Condvar, Mutex, MutexGuard, Weak,
     },
 };
 
+use nuxie_render_api::RenderImage;
+
 use crate::mechanical_port::source::{
-    assets::blob_asset::BlobAsset,
-    audio::audio_source::{AudioSource, AudioSourceRef},
+    audio::audio_source::AudioSourceRef,
     command_server::CommandServer,
     factory::RuntimeFactoryHandle,
     layout::{Alignment, Fit},
     lua::scripting_vm::RuntimeScriptingVmHandle,
     math::vec2d::Vec2D,
     object_stream::{ObjectStream, PodStream},
-    renderer::RenderImageRef,
     semantic::semantic_snapshot::{SemanticActionType, SemanticsDiff},
-    text_engine::{Font, FontRef},
 };
+use crate::{RawTextFont, RuntimeBlobAsset};
 
 pub use crate::mechanical_port::source::{
     data_bind::data_values::data_type::DataType,
@@ -205,6 +204,7 @@ define_handle!(DrawKey, DrawKeyPlaceholder);
 
 pub type CommandServerCallback = Box<dyn FnOnce(&mut CommandServer) + Send>;
 pub type CommandServerDrawCallback = Box<dyn FnMut(DrawKey, &mut CommandServer) + Send>;
+pub type ExternalRenderImage = Box<dyn RenderImage + Send>;
 
 pub type ScriptingContextFactory =
     Box<dyn FnOnce(RuntimeFactoryHandle) -> Option<RuntimeScriptingVmHandle> + Send>;
@@ -758,10 +758,10 @@ pub struct CommandQueueShared {
     current_draw_key_idx: AtomicU64,
     command_gate: Arc<CommandGate>,
     command_stream: SynchronizedPodStream,
-    external_images: SynchronizedObjectStream<Option<RenderImageRef>>,
+    external_images: SynchronizedObjectStream<Option<ExternalRenderImage>>,
     external_audio_sources: SynchronizedObjectStream<Option<AudioSourceRef>>,
-    external_fonts: SynchronizedObjectStream<Option<FontRef>>,
-    external_blobs: SynchronizedObjectStream<Option<Rc<BlobAsset>>>,
+    external_fonts: SynchronizedObjectStream<Option<RawTextFont>>,
+    external_blobs: SynchronizedObjectStream<Option<Arc<RuntimeBlobAsset>>>,
     byte_vectors: SynchronizedObjectStream<Vec<u8>>,
     scripting_context_factories: SynchronizedObjectStream<Option<ScriptingContextFactory>>,
     pointer_events: SynchronizedObjectStream<PointerEvent>,
@@ -1022,7 +1022,7 @@ impl CommandQueue {
         self.draw_callbacks.read()
     }
 
-    pub(crate) fn pop_external_image(&self) -> Option<RenderImageRef> {
+    pub(crate) fn pop_external_image(&self) -> Option<ExternalRenderImage> {
         self.external_images.read()
     }
 
@@ -1030,11 +1030,11 @@ impl CommandQueue {
         self.external_audio_sources.read()
     }
 
-    pub(crate) fn pop_external_font(&self) -> Option<FontRef> {
+    pub(crate) fn pop_external_font(&self) -> Option<RawTextFont> {
         self.external_fonts.read()
     }
 
-    pub(crate) fn pop_external_blob(&self) -> Option<Rc<BlobAsset>> {
+    pub(crate) fn pop_external_blob(&self) -> Option<Arc<RuntimeBlobAsset>> {
         self.external_blobs.read()
     }
 
@@ -1916,7 +1916,7 @@ impl CommandQueue {
     }
     pub fn add_external_image(
         &mut self,
-        image: Option<RenderImageRef>,
+        image: Option<ExternalRenderImage>,
         listener: Option<&RenderImageListenerHandle>,
         request_id: u64,
     ) -> RenderImageHandle {
@@ -2002,7 +2002,7 @@ impl CommandQueue {
     }
     pub fn add_external_font(
         &mut self,
-        font: Option<FontRef>,
+        font: Option<RawTextFont>,
         listener: Option<&FontListenerHandle>,
         request_id: u64,
     ) -> FontHandle {
@@ -2045,7 +2045,7 @@ impl CommandQueue {
     }
     pub fn add_external_blob(
         &mut self,
-        blob: Option<Rc<BlobAsset>>,
+        blob: Option<Arc<RuntimeBlobAsset>>,
         listener: Option<&BlobAssetListenerHandle>,
         request_id: u64,
     ) -> BlobAssetHandle {

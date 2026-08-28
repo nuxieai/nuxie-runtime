@@ -3516,6 +3516,26 @@ impl StateMachineInstance {
             .with_focus_manager_mut(FocusManager::focus_previous)
     }
 
+    pub fn focus_up(&mut self) -> bool {
+        self.focus_manager()
+            .with_focus_manager_mut(FocusManager::focus_up)
+    }
+
+    pub fn focus_down(&mut self) -> bool {
+        self.focus_manager()
+            .with_focus_manager_mut(FocusManager::focus_down)
+    }
+
+    pub fn focus_left(&mut self) -> bool {
+        self.focus_manager()
+            .with_focus_manager_mut(FocusManager::focus_left)
+    }
+
+    pub fn focus_right(&mut self) -> bool {
+        self.focus_manager()
+            .with_focus_manager_mut(FocusManager::focus_right)
+    }
+
     pub fn clear_focus(&mut self) {
         self.focus_manager()
             .with_focus_manager_mut(FocusManager::clear_focus);

@@ -1,18 +1,10 @@
 use crate::mechanical_port::source::{
-    animation::listener_invocation::ListenerInvocation, core::CoreHandle,
+    animation::{
+        listener_invocation::ListenerInvocation, state_machine_instance::StateMachineInstance,
+    },
+    focus_data::FocusData,
     generated::animation::focus_action_target_base::FocusActionTargetBase,
 };
-
-#[derive(Clone)]
-pub enum FocusTargetChild {
-    FocusData(CoreHandle),
-    Other,
-}
-
-pub trait FocusActionStateMachine {
-    fn resolved_node_children(&mut self, target_id: u32) -> Option<Vec<FocusTargetChild>>;
-    fn set_focus(&mut self, focus_data: CoreHandle);
-}
 
 #[derive(Default)]
 pub struct FocusActionTarget {
@@ -22,23 +14,24 @@ pub struct FocusActionTarget {
 impl FocusActionTarget {
     pub fn perform(
         &self,
-        state_machine_instance: &mut dyn FocusActionStateMachine,
+        state_machine_instance: &mut StateMachineInstance,
         _invocation: &ListenerInvocation,
     ) {
-        let Some(children) = state_machine_instance.resolved_node_children(self.base.target_id())
+        let Some(target) = state_machine_instance.resolve_artboard_object(self.base.target_id())
         else {
             return;
         };
-
-        let mut focus_data = None;
-        for child in children {
-            if let FocusTargetChild::FocusData(value) = child {
-                focus_data = Some(value);
-                break;
-            }
-        }
+        let focus_data = target
+            .with(|target| {
+                target
+                    .as_node()?
+                    .children()
+                    .iter()
+                    .find_map(|child| child.with_downcast::<FocusData, _>(|_| child.clone()))
+            })
+            .flatten();
         if let Some(focus_data) = focus_data {
-            state_machine_instance.set_focus(focus_data);
+            state_machine_instance.set_focus(Some(focus_data));
         }
     }
 }

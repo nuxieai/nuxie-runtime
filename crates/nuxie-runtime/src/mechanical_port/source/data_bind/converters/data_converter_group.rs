@@ -271,9 +271,26 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
 
     fn bind_context_handler(&self) -> crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler{
         |owner, context, data_bind| {
-            owner
-                .with_downcast_mut::<Self, _>(|owner| owner.bind_from_context(context, data_bind))
-                .expect("the retained converter keeps its concrete type");
+            super::data_converter::DataConverter::bind_from_context_handle(
+                owner,
+                context.clone(),
+                data_bind.clone(),
+            );
+            let items = owner
+                .with_downcast::<Self, _>(|owner| owner.items.clone())
+                .expect("live DataConverterGroup");
+            for item in items {
+                if let Some(converter) = item
+                    .with(|item| item.as_data_converter_group_item().unwrap().converter())
+                    .flatten()
+                {
+                    super::data_converter::bind_converter_context(
+                        &converter,
+                        context.clone(),
+                        data_bind.clone(),
+                    );
+                }
+            }
         }
     }
 

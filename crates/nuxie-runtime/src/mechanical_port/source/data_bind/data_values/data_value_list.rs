@@ -1,7 +1,7 @@
 use super::{data_type::DataType, data_value::DataValue};
 use crate::mechanical_port::source::core::CoreHandle;
 use core::any::Any;
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct DataValueList {
     value: Vec<CoreHandle>,
 }

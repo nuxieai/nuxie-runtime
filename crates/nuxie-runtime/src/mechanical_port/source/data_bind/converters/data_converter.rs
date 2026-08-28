@@ -12,9 +12,9 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 
-pub const DEPENDENTS: u32 = 1;
-pub const BINDINGS: u32 = 2;
-pub const BINDINGS_TARGET: u32 = 4;
+pub use crate::mechanical_port::source::data_bind::data_bind::{
+    BINDINGS, BINDINGS_TARGET, DEPENDENTS,
+};
 
 pub type ConverterBindContextHandler = fn(&CoreHandle, RuntimeDataContextHandle, CoreHandle);
 
@@ -59,11 +59,7 @@ pub trait ConverterImporter {
 macro_rules! data_converter_capability_lifecycle {
     ($($base:ident).+) => {
         fn bind_context_handler(&self) -> $crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler {
-            |owner, context, data_bind| {
-                owner.with_downcast_mut::<Self, _>(|owner| {
-                    owner.$($base).+.bind_from_context(context, data_bind);
-                }).expect("the retained converter keeps its concrete type");
-            }
+            $crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::bind_from_context_handle
         }
 
         fn unbind(&mut self) {
@@ -165,7 +161,7 @@ macro_rules! impl_data_converter_capability_forward {
 pub struct DataConverter {
     pub base: DataConverterBase,
     parent_data_bind: Option<CoreHandle>,
-    data_binds: DataBindContainer,
+    pub(crate) data_binds: DataBindContainer,
 }
 
 impl std::ops::Deref for DataConverter {
@@ -191,6 +187,113 @@ impl Default for DataConverter {
 }
 
 impl DataConverter {
+    pub fn convert_handle(
+        owner: &CoreHandle,
+        input: &dyn DataValue,
+        bind: &CoreHandle,
+        reverse: bool,
+    ) -> Box<dyn DataValue> {
+        use super::data_converter_group::DataConverterGroup;
+        use crate::mechanical_port::source::{
+            data_bind::data_values::data_value::clone_data_value,
+            scripted::scripted_data_converter::ScriptedDataConverter,
+        };
+        if owner
+            .with_downcast::<ScriptedDataConverter, _>(|_| ())
+            .is_some()
+        {
+            return ScriptedDataConverter::convert_handle(owner, input, reverse);
+        }
+        if let Some(mut items) =
+            owner.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec())
+        {
+            if reverse {
+                items.reverse();
+            }
+            let mut value = clone_data_value(input);
+            for item in items {
+                if let Some(converter) = item
+                    .with(|item| item.as_data_converter_group_item().unwrap().converter())
+                    .flatten()
+                {
+                    value = Self::convert_handle(&converter, value.as_ref(), bind, reverse);
+                }
+            }
+            return value;
+        }
+        owner
+            .with_mut(|owner| {
+                let converter = owner
+                    .as_data_converter_capability_mut()
+                    .expect("retained converter capability");
+                let mut result = None;
+                let mut output = |value: &dyn DataValue| {
+                    result = Some(clone_data_value(value));
+                };
+                if reverse {
+                    converter.reverse_convert(input, bind, &mut output);
+                } else {
+                    converter.convert(input, bind, &mut output);
+                }
+                result.expect("a concrete converter returns one value")
+            })
+            .expect("live converter")
+    }
+
+    pub fn bind_from_context_handle(
+        owner: &CoreHandle,
+        context: RuntimeDataContextHandle,
+        data_bind: CoreHandle,
+    ) {
+        owner.with_mut(|owner| {
+            owner.as_data_converter_mut().unwrap().parent_data_bind = Some(data_bind)
+        });
+        crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).bind_data_binds_from_context(context);
+    }
+    pub(crate) fn parent_data_bind(&self) -> Option<CoreHandle> {
+        self.parent_data_bind.clone()
+    }
+    pub fn update_handle(owner: &CoreHandle) {
+        use super::data_converter_group::DataConverterGroup;
+        if let Some(items) =
+            owner.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec())
+        {
+            for item in items {
+                if let Some(converter) = item
+                    .with(|item| item.as_data_converter_group_item().unwrap().converter())
+                    .flatten()
+                {
+                    Self::update_handle(&converter);
+                }
+            }
+        } else {
+            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).update_data_binds(false);
+        }
+    }
+
+    pub fn unbind_handle(owner: &CoreHandle) {
+        use super::{
+            data_converter_formula::DataConverterFormula, data_converter_group::DataConverterGroup,
+        };
+        if let Some(items) =
+            owner.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec())
+        {
+            for item in items {
+                if let Some(converter) = item
+                    .with(|item| item.as_data_converter_group_item().unwrap().converter())
+                    .flatten()
+                {
+                    Self::unbind_handle(&converter);
+                }
+            }
+        } else if owner
+            .with_downcast_mut::<DataConverterFormula, _>(DataConverterFormula::unbind)
+            .is_none()
+        {
+            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).unbind_data_binds();
+        }
+    }
+
     fn handle(&self) -> Option<CoreHandle> {
         self.base.base.handle()
     }
@@ -354,11 +457,7 @@ impl DataConverterCapability for DataConverter {
     }
 
     fn bind_context_handler(&self) -> ConverterBindContextHandler {
-        |owner, context, data_bind| {
-            owner
-                .with_downcast_mut::<Self, _>(|owner| owner.bind_from_context(context, data_bind))
-                .expect("the retained converter keeps its concrete type");
-        }
+        Self::bind_from_context_handle
     }
 
     fn unbind(&mut self) {

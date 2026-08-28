@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::RuntimeBlobAsset;
 
+#[derive(Clone)]
 pub struct DataValueAssetBlob {
     integer: DataValueInteger,
     file_asset: Option<Arc<RuntimeBlobAsset>>,

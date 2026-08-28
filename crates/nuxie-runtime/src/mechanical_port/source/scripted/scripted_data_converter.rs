@@ -73,6 +73,67 @@ impl Drop for ScriptedDataConverter {
 }
 
 impl ScriptedDataConverter {
+    pub fn convert_handle(
+        owner: &CoreHandle,
+        input: &dyn DataValue,
+        reverse: bool,
+    ) -> Box<dyn DataValue> {
+        use crate::mechanical_port::source::data_bind::data_values::data_value::clone_data_value;
+        let instance = owner
+            .with_downcast::<Self, _>(|owner| {
+                let implemented = if reverse {
+                    owner.scripted.data_reverse_converts()
+                } else {
+                    owner.scripted.data_converts()
+                };
+                if implemented && owner.scripted.self_ref() != 0 {
+                    owner.scripted.runtime_instance()
+                } else {
+                    None
+                }
+            })
+            .flatten();
+        let Some(instance) = instance else {
+            return clone_data_value(input);
+        };
+        let method = if reverse {
+            ScriptDataConverterMethod::ReverseConvert
+        } else {
+            ScriptDataConverterMethod::Convert
+        };
+        let result = instance
+            .borrow_mut()
+            .call_optional_data_converter(method, Self::script_value(input));
+        if matches!(&result, Ok(ScriptDataConverterOptionalCall::Missing)) {
+            return clone_data_value(input);
+        }
+        owner
+            .with_downcast_mut::<Self, _>(|owner| {
+                match result {
+                    Ok(ScriptDataConverterOptionalCall::Returned(ScriptValue::Number(value))) => {
+                        owner.store::<DataValueNumber>(|cache| cache.set_value(value as f32))
+                    }
+                    Ok(ScriptDataConverterOptionalCall::Returned(ScriptValue::Bool(value))) => {
+                        owner.store::<DataValueBoolean>(|cache| cache.set_value(value))
+                    }
+                    Ok(ScriptDataConverterOptionalCall::Returned(ScriptValue::String(value))) => {
+                        owner.store::<DataValueString>(|cache| cache.set_value(value))
+                    }
+                    Ok(ScriptDataConverterOptionalCall::Returned(ScriptValue::Color(value))) => {
+                        owner.store::<DataValueColor>(|cache| cache.set_value(value))
+                    }
+                    _ => {}
+                }
+                clone_data_value(
+                    owner
+                        .data_value
+                        .get_or_insert_with(|| Box::new(EmptyDataValue))
+                        .as_ref(),
+                )
+            })
+            .expect("live scripted converter")
+    }
+
     pub fn asset_id(&self) -> u32 {
         self.base.script_asset_id()
     }
@@ -186,13 +247,10 @@ impl ScriptedDataConverter {
             .with_downcast_mut::<Self, _>(|converter| {
                 converter.data_context = Some(context.clone());
                 converter.scripted.set_data_context(Some(context.clone()));
-                converter
-                    .base
-                    .base
-                    .bind_from_context(context.clone(), data_bind);
                 converter.properties.clone()
             })
             .expect("a retained scripted converter keeps its type");
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::bind_from_context_handle(owner, context.clone(), data_bind);
         let mut host = ScriptUpdateRequestHost::default();
         ScriptedObject::reinit_occurrence(owner, &properties, &mut host);
         for property in properties {
@@ -200,11 +258,7 @@ impl ScriptedDataConverter {
                 .with(|property| property.script_input_data_bind())
                 .flatten()
             {
-                bind.with_mut(|bind| {
-                    bind.as_data_bind_context_mut()
-                        .expect("script input bindings are DataBindContext")
-                        .bind_from_context(Some(context.clone()));
-                });
+                crate::mechanical_port::source::data_bind::data_bind_context::DataBindContext::bind_from_context_handle(&bind, Some(context.clone()));
             }
         }
     }

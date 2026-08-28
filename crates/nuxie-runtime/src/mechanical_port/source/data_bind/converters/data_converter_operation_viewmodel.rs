@@ -95,14 +95,15 @@ impl DataConverterOperationViewModel {
             .base
             .base
             .bind_from_context(context.clone(), data_bind.clone());
-        self.source = context
+        let resolved = context
             .with_context(|context| context.get_view_model_property(&self.source_path_ids))
             .filter(|source| {
                 source
                     .with_downcast::<ViewModelInstanceNumber, _>(|_| true)
                     .unwrap_or(false)
             });
-        if let Some(source) = self.source.as_ref() {
+        if let Some(source) = resolved {
+            self.source = Some(source.clone());
             source.with_mut(|source| {
                 if let Some(source) = source.as_view_model_instance_value_mut() {
                     source.add_dependent(ValueDependentHandle::core(data_bind));
@@ -154,9 +155,28 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
 
     fn bind_context_handler(&self) -> crate::mechanical_port::source::data_bind::converters::data_converter::ConverterBindContextHandler{
         |owner, context, data_bind| {
-            owner
-                .with_downcast_mut::<Self, _>(|owner| owner.bind_from_context(context, data_bind))
-                .expect("the retained converter keeps its concrete type");
+            super::data_converter::DataConverter::bind_from_context_handle(
+                owner,
+                context.clone(),
+                data_bind.clone(),
+            );
+            let path = owner
+                .with_downcast::<Self, _>(|owner| owner.source_path_ids.clone())
+                .expect("live operation converter");
+            let source = context.with_context(|context| context.get_view_model_property(&path));
+            if let Some(source) = source.filter(|source| {
+                source
+                    .with_downcast::<ViewModelInstanceNumber, _>(|_| ())
+                    .is_some()
+            }) {
+                owner.with_downcast_mut::<Self, _>(|owner| owner.source = Some(source.clone()));
+                source.with_mut(|source| {
+                    source
+                        .as_view_model_instance_value_mut()
+                        .unwrap()
+                        .add_dependent(ValueDependentHandle::core(data_bind))
+                });
+            }
         }
     }
 

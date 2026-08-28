@@ -18,6 +18,7 @@ impl FontAsset {
         self.font.borrow().clone()
     }
 }
+#[derive(Clone)]
 pub struct DataValueAssetFont {
     integer: DataValueInteger,
     file_asset: Rc<FontAsset>,

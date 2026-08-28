@@ -18,6 +18,7 @@ impl ImageAsset {
         self.image.borrow().clone()
     }
 }
+#[derive(Clone)]
 pub struct DataValueAssetImage {
     integer: DataValueInteger,
     file_asset: Rc<ImageAsset>,

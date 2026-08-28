@@ -61,11 +61,7 @@ impl ScriptInputViewModelProperty {
         };
         let name = self.name().to_owned();
         if let Some(object) = self.script_input.scripted_object() {
-            object.with_mut(|object| {
-                if let Some(object) = object.as_scripted_object_mut() {
-                    object.set_view_model_input(name, view_model_instance_value);
-                }
-            });
+            crate::mechanical_port::source::scripted::scripted_object::ScriptedObject::set_view_model_input_occurrence(&object, name, view_model_instance_value);
         }
     }
 

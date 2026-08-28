@@ -1936,7 +1936,7 @@ pub struct StateMachineInstance {
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
     data_context_handle: Option<RuntimeDataContextHandle>,
-    data_bind_container: DataBindContainer,
+    pub(crate) data_bind_container: DataBindContainer,
     listener_view_models: Vec<RuntimeListenerViewModelHandle>,
     reported_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
     reporting_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
@@ -3123,7 +3123,8 @@ impl StateMachineInstance {
         manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
         if self
             .artboard_instance
-            .with_artboard_mut(|artboard| artboard.base.advance_internal(seconds, root_flags))
+            .upgrade()
+            .map(|artboard| artboard.advance_internal(seconds, root_flags))
             .unwrap_or(false)
         {
             keep_going = true;
@@ -3131,7 +3132,8 @@ impl StateMachineInstance {
         for _ in 0..5 {
             if self
                 .artboard_instance
-                .with_artboard_mut(|artboard| artboard.base.update_pass(true))
+                .upgrade()
+                .map(|artboard| artboard.update_pass(true))
                 .unwrap_or(false)
             {
                 keep_going = true;
@@ -3142,7 +3144,8 @@ impl StateMachineInstance {
             }
             if self
                 .artboard_instance
-                .with_artboard_mut(|artboard| artboard.base.advance_internal(0.0, loop_flags))
+                .upgrade()
+                .map(|artboard| artboard.advance_internal(0.0, loop_flags))
                 .unwrap_or(false)
             {
                 keep_going = true;

@@ -4,9 +4,7 @@ use crate::mechanical_port::source::{
 };
 
 pub const NONE: u32 = 0;
-pub const DEPENDENTS: u32 = 1;
-pub const BINDINGS: u32 = 2;
-pub const BINDINGS_TARGET: u32 = 4;
+pub use super::data_bind::{BINDINGS, BINDINGS_TARGET, DEPENDENTS};
 
 #[derive(Clone)]
 pub enum DataBindContainerOwner {
@@ -15,34 +13,260 @@ pub enum DataBindContainerOwner {
 }
 
 impl DataBindContainerOwner {
-    pub fn add_dirty_data_bind(&self, bind: CoreHandle) {
+    fn with_container_mut<R>(&self, f: impl FnOnce(&mut DataBindContainer) -> R) -> Option<R> {
         match self {
-            Self::Authored(container) => {
-                container.with_mut(|container| {
-                    if let Some(container) = container.as_bind_container_mut() {
-                        container.add_dirty_data_bind(bind);
-                    }
-                });
-            }
-            Self::StateMachine(container) => {
-                container.with_instance_mut(|container| container.add_dirty_data_bind(bind));
+            Self::Authored(owner) => owner.with_mut(|owner| {
+                if owner.as_artboard().is_some() {
+                    f(&mut owner.as_artboard_mut().unwrap().data_bind_container)
+                } else {
+                    f(&mut owner
+                        .as_data_converter_mut()
+                        .expect("a binding container is an Artboard or DataConverter")
+                        .data_binds)
+                }
+            }),
+            Self::StateMachine(owner) => {
+                owner.with_instance_mut(|owner| f(&mut owner.data_bind_container))
             }
         }
     }
 
-    pub fn rebuild_data_bind(&self, bind: CoreHandle) {
-        match self {
-            Self::Authored(container) => {
-                container.with_mut(|container| {
-                    if let Some(container) = container.as_bind_container_mut() {
-                        container.rebuild_data_bind(bind);
-                    }
-                });
-            }
-            Self::StateMachine(container) => {
-                container.with_instance_mut(|container| container.rebuild_data_bind(bind));
+    /// The container stays on its actual owner. Only the list operation is
+    /// borrowed; every bind/converter/script callback runs after that borrow.
+    pub fn data_binds(&self) -> Vec<CoreHandle> {
+        self.with_container_mut(|container| container.data_binds.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn bind_data_binds_from_context(&self, context: RuntimeDataContextHandle) {
+        for bind in self.data_binds() {
+            super::data_bind_context::DataBindContext::bind_from_context_handle(
+                &bind,
+                Some(context.clone()),
+            );
+        }
+        self.with_container_mut(|container| container.data_context = Some(context));
+    }
+
+    pub fn unbind_data_binds(&self) {
+        for bind in self.data_binds() {
+            super::data_bind::DataBind::unbind_handle(&bind);
+        }
+        self.with_container_mut(|container| container.data_context = None);
+    }
+
+    pub fn advance_data_binds(&self, elapsed: f32) -> bool {
+        let mut updated = false;
+        for bind in self.data_binds() {
+            updated |= super::data_bind::DataBind::advance_handle(&bind, elapsed);
+        }
+        updated
+    }
+
+    pub fn add_data_bind(&self, bind: CoreHandle) {
+        let deferred = self
+            .with_container_mut(|container| {
+                if container.is_processing {
+                    container.pending_additions.push(bind.clone());
+                    true
+                } else {
+                    container.data_binds.push(bind.clone());
+                    false
+                }
+            })
+            .unwrap_or(true);
+        if deferred {
+            return;
+        }
+        let persist = bind
+            .with(|bind| {
+                let bind = bind
+                    .as_data_bind()
+                    .expect("container owns DataBind occurrences");
+                bind.to_source() && !bind.target_supports_push()
+            })
+            .unwrap_or(false);
+        if persist {
+            self.with_container_mut(|container| container.persisting.push(bind.clone()));
+            bind.with_mut(|bind| {
+                bind.as_data_bind_mut()
+                    .unwrap()
+                    .set_in_persisting_list(true)
+            });
+        }
+        bind.with_mut(|bind| {
+            bind.as_data_bind_mut()
+                .unwrap()
+                .set_container(Some(self.clone()))
+        });
+        let context = self
+            .with_container_mut(|container| container.data_context.clone())
+            .flatten();
+        if let Some(context) = context {
+            if bind
+                .with_downcast::<super::data_bind_context::DataBindContext, _>(|_| ())
+                .is_some()
+            {
+                super::data_bind_context::DataBindContext::bind_from_context_handle(
+                    &bind,
+                    Some(context),
+                );
+                super::data_bind::DataBind::update_data_bind_handle(&bind, true);
             }
         }
+    }
+
+    pub fn remove_data_bind(&self, bind: CoreHandle) {
+        // Removal has no user callbacks; retaining both short borrows here
+        // cannot reenter the owning Artboard or state machine.
+        self.with_container_mut(|container| container.remove_data_bind(bind));
+    }
+
+    pub fn sort_data_binds(&self) {
+        self.with_container_mut(DataBindContainer::sort_data_binds);
+    }
+
+    pub fn update_data_binds(&self, apply_target_to_source: bool) {
+        let active = self
+            .with_container_mut(|container| {
+                if container.is_processing
+                    || (container.persisting.is_empty()
+                        && container.dirty_to_source.is_empty()
+                        && container.dirty.is_empty())
+                {
+                    return None;
+                }
+                container.is_processing = true;
+                Some((
+                    container.persisting.clone(),
+                    container.dirty_to_source.clone(),
+                    container.dirty.clone(),
+                ))
+            })
+            .flatten();
+        let Some((persisting, to_source, dirty)) = active else {
+            return;
+        };
+        for bind in persisting {
+            let can_skip = bind
+                .with(|bind| bind.as_data_bind().unwrap().can_skip())
+                .unwrap_or(false);
+            if !can_skip {
+                super::data_bind::DataBind::update_data_bind_handle(&bind, apply_target_to_source);
+            }
+        }
+        for bind in to_source.into_iter().chain(dirty) {
+            bind.with_mut(|bind| bind.as_data_bind_mut().unwrap().set_in_dirty_list(false));
+            super::data_bind::DataBind::update_data_bind_handle(&bind, apply_target_to_source);
+        }
+        let additions = self
+            .with_container_mut(|container| {
+                container.dirty_to_source.clear();
+                container.dirty.clear();
+                if !container.pending_dirty_to_source.is_empty() {
+                    std::mem::swap(
+                        &mut container.dirty_to_source,
+                        &mut container.pending_dirty_to_source,
+                    );
+                }
+                if !container.pending_dirty.is_empty() {
+                    std::mem::swap(&mut container.dirty, &mut container.pending_dirty);
+                }
+                container.is_processing = false;
+                // These two swaps are upstream's explicit deferred add/remove
+                // queues, not a deferred callback or temporarily empty container.
+                std::mem::take(&mut container.pending_additions)
+            })
+            .unwrap_or_default();
+        for bind in additions {
+            self.add_data_bind(bind);
+        }
+        let removals = self
+            .with_container_mut(|container| std::mem::take(&mut container.pending_removals))
+            .unwrap_or_default();
+        for bind in removals {
+            self.remove_data_bind(bind);
+        }
+    }
+
+    pub fn add_dirty_data_bind(&self, bind: CoreHandle) {
+        bind.with_mut(|bind| self.add_dirty_data_bind_borrowed(bind.as_data_bind_mut().unwrap()));
+    }
+
+    pub fn add_dirty_data_bind_borrowed(&self, bind: &mut super::data_bind::DataBind) {
+        if let Self::Authored(owner) = self {
+            if owner
+                .with(|owner| owner.as_artboard().is_some())
+                .unwrap_or(false)
+            {
+                if let Some(target) = bind.target() {
+                    let order = target
+                        .with(|target| {
+                            target
+                                .as_component()
+                                .map(|component| component.graph_order())
+                        })
+                        .flatten();
+                    if let Some(order) = order {
+                        owner.with_mut(|owner| {
+                            owner
+                                .as_artboard_mut()
+                                .unwrap()
+                                .on_component_dirty_at(order)
+                        });
+                    }
+                }
+            } else {
+                let parent = owner
+                    .with(|owner| owner.as_data_converter().unwrap().parent_data_bind())
+                    .flatten();
+                if let Some(parent) = parent {
+                    parent.with_mut(|parent| {
+                        let parent = parent.as_data_bind_mut().unwrap();
+                        parent.add_dirt(
+                            DEPENDENTS
+                                | if parent.target_origin() {
+                                    BINDINGS_TARGET
+                                } else {
+                                    BINDINGS
+                                },
+                            false,
+                        );
+                    });
+                }
+            }
+        }
+        if bind.to_source() && bind.in_persisting_list() || bind.in_dirty_list() {
+            return;
+        }
+        let handle = bind.base.base.handle().expect("registered DataBind");
+        self.with_container_mut(|container| {
+            let list = if bind.to_source() {
+                if container.is_processing {
+                    &mut container.pending_dirty_to_source
+                } else {
+                    &mut container.dirty_to_source
+                }
+            } else if container.is_processing {
+                &mut container.pending_dirty
+            } else {
+                &mut container.dirty
+            };
+            list.push(handle);
+        });
+        bind.set_in_dirty_list(true);
+    }
+
+    pub fn rebuild_data_bind(&self, bind: CoreHandle) {
+        let context = match self {
+            Self::Authored(owner) => owner
+                .with(|owner| owner.as_artboard().and_then(|owner| owner.data_context()))
+                .flatten(),
+            Self::StateMachine(owner) => owner
+                .with_instance_mut(|owner| owner.data_context_handle())
+                .flatten(),
+        };
+        super::data_bind_context::DataBindContext::bind_from_context_handle(&bind, context);
     }
 }
 
@@ -156,9 +380,6 @@ impl DataBindContainer {
     pub fn add_data_bind(&mut self, bind: CoreHandle) {
         if self.is_processing {
             self.pending_additions.push(bind);
-            return;
-        }
-        if self.data_binds.contains(&bind) {
             return;
         }
         self.data_binds.push(bind.clone());

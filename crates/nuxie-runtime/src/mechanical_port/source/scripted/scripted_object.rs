@@ -621,6 +621,54 @@ impl ScriptedObject {
         }
     }
 
+    pub fn set_view_model_input_occurrence(owner: &CoreHandle, name: String, value: CoreHandle) {
+        use crate::mechanical_port::source::viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel;
+        use crate::scripting::{ScriptCoreString, ScriptViewModel};
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_scripted_object()
+                    .filter(|scripted| scripted.self_ref != 0)
+                    .and_then(Self::runtime_instance)
+            })
+            .flatten();
+        let Some(instance) = instance else {
+            return;
+        };
+        let view_model = value
+            .with_downcast::<ViewModelInstanceViewModel, _>(
+                ViewModelInstanceViewModel::reference_view_model_instance,
+            )
+            .flatten();
+        let Some(view_model) = view_model else {
+            eprintln!(
+                "riveLuaPushViewModelInstanceValue - passed in a ViewModelInstanceViewModel with no associated ViewModelInstance."
+            );
+            return;
+        };
+        let definition = view_model
+            .with(|value| {
+                value
+                    .as_view_model_instance()
+                    .and_then(|value| value.get_view_model())
+            })
+            .flatten()
+            .expect("bound view-model instance has a definition");
+        let file = definition
+            .with(|model| model.as_view_model().unwrap().file())
+            .and_then(|file| file.upgrade())
+            .expect("bound view-model definition retains a live file");
+        let facade = ScriptViewModel::from_native(view_model, file)
+            .expect("resolved native view-model can be projected");
+        let assigned = instance
+            .borrow_mut()
+            .set_view_model_input_core(&ScriptCoreString::from_bytes(name.into_bytes()), facade)
+            .is_ok();
+        if assigned {
+            Self::add_input_dirt(owner);
+        }
+    }
+
     pub fn install_script_instance(
         &mut self,
         instance: Box<dyn RuntimeScriptInstance>,
@@ -690,10 +738,7 @@ impl ScriptedObject {
     pub fn take_update_request(&mut self) -> bool {
         std::mem::take(&mut self.callback_update_requested)
     }
-    pub fn draw_canvas_occurrence(
-        owner: &CoreHandle,
-        factory: &mut dyn nuxie_render_api::RenderFactory,
-    ) {
+    pub fn draw_canvas_occurrence(owner: &CoreHandle, factory: &mut dyn nuxie_render_api::Factory) {
         let instance = owner
             .with(|owner| {
                 owner

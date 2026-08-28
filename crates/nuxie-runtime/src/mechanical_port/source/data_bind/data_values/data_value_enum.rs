@@ -25,6 +25,7 @@ impl DataEnumRef {
     }
 }
 
+#[derive(Clone)]
 pub struct DataValueEnum {
     integer: DataValueInteger,
     data_enum: Option<DataEnumRef>,

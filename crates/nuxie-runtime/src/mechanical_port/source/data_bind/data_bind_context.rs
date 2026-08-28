@@ -11,7 +11,7 @@ pub trait BoundSource {}
 pub trait ContextConverter {
     fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle);
 }
-pub const RECONCILE_DIRT: u32 = 3;
+pub const RECONCILE_DIRT: u32 = super::data_bind::BINDINGS | super::data_bind::BINDINGS_TARGET;
 pub struct DataBindContext {
     pub base: DataBindContextBase,
 }
@@ -23,6 +23,71 @@ impl Default for DataBindContext {
     }
 }
 impl DataBindContext {
+    pub fn bind_from_context_handle(
+        owner: &CoreHandle,
+        data_context: Option<RuntimeDataContextHandle>,
+    ) {
+        let Some(data_context) = data_context else {
+            return;
+        };
+        let state = owner.with_downcast_mut::<Self, _>(|bind| {
+            bind.resolve_path();
+            (
+                bind.base.base.is_name_based(),
+                bind.base.base.file(),
+                bind.source_path_ids().to_vec(),
+                bind.base.base.source(),
+            )
+        });
+        let Some((name_based, file, path, previous)) = state else {
+            return;
+        };
+        let source = if name_based && file.with_file(|_| ()).is_some() {
+            let resolver = file.with_file(|file| file.manifest()).flatten();
+            if let Some(resolver) = resolver {
+                resolver
+                    .with_downcast::<ManifestAsset, _>(|resolver| {
+                        data_context.with_context(|context| {
+                            context.get_relative_view_model_property(&path, Some(resolver))
+                        })
+                    })
+                    .flatten()
+            } else {
+                data_context
+                    .with_context(|context| context.get_relative_view_model_property(&path, None))
+            }
+        } else {
+            data_context.with_context(|context| context.get_view_model_property(&path))
+        };
+        if previous.is_none() || previous != source {
+            if let Some(source) = source {
+                owner.with_mut(|owner| {
+                    let bind = owner.as_data_bind_mut().unwrap();
+                    bind.clear_source();
+                    bind.set_source(source);
+                });
+                super::data_bind::DataBind::bind_handle(owner);
+            } else {
+                super::data_bind::DataBind::unbind_handle(owner);
+            }
+        } else {
+            owner.with_mut(|owner| {
+                let bind = owner.as_data_bind_mut().unwrap();
+                bind.add_dirt(bind.reconcile_dirt(), true);
+            });
+        }
+        let converter = owner
+            .with(|owner| owner.as_data_bind().unwrap().converter())
+            .flatten();
+        if let Some(converter) = converter {
+            super::converters::data_converter::bind_converter_context(
+                &converter,
+                data_context,
+                owner.clone(),
+            );
+        }
+    }
+
     pub fn decode_source_path_ids(&mut self, bytes: &[u8]) {
         let mut index = 0;
         while index < bytes.len() {

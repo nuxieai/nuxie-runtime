@@ -31,10 +31,14 @@ use crate::mechanical_port::source::{
     },
     status_code::StatusCode,
 };
+use std::{cell::RefCell, rc::Rc};
 
-pub const DEPENDENTS: u32 = 1;
-pub const BINDINGS: u32 = 2;
-pub const BINDINGS_TARGET: u32 = 4;
+pub const DEPENDENTS: u32 =
+    crate::mechanical_port::source::component_dirt::ComponentDirt::DEPENDENTS.0 as u32;
+pub const BINDINGS: u32 =
+    crate::mechanical_port::source::component_dirt::ComponentDirt::BINDINGS.0 as u32;
+pub const BINDINGS_TARGET: u32 =
+    crate::mechanical_port::source::component_dirt::ComponentDirt::BINDINGS_TARGET.0 as u32;
 pub const TO_SOURCE: u32 = 1;
 pub const TWO_WAY: u32 = 2;
 pub const DIRECTION: u32 = 3;
@@ -150,7 +154,7 @@ pub struct DataBind {
     next_observer: Option<CoreHandle>,
     target: Option<CoreHandle>,
     source: Option<CoreHandle>,
-    context_value: Option<Box<dyn BindContextValue>>,
+    context_value: Option<Rc<RefCell<Box<dyn BindContextValue>>>>,
     converter: Option<CoreHandle>,
     container: Option<DataBindContainerOwner>,
     file: RuntimeFileWeakHandle,
@@ -188,6 +192,205 @@ impl Default for DataBind {
 }
 
 impl DataBind {
+    pub fn bind_handle(owner: &CoreHandle) {
+        owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().context_value = None);
+        let context = super::context::context_value::create_context_value(owner);
+        owner.with_mut(|owner| {
+            owner.as_data_bind_mut().unwrap().context_value =
+                context.map(|context| Rc::new(RefCell::new(context)))
+        });
+        if let Some(converter) = owner
+            .with(|owner| owner.as_data_bind().unwrap().converter())
+            .flatten()
+        {
+            converter.with_mut(|converter| {
+                converter
+                    .as_data_converter_capability_mut()
+                    .unwrap()
+                    .reset()
+            });
+        }
+        let observing = owner
+            .with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                bind.has_flag(OBSERVING).then(|| bind.target()).flatten()
+            })
+            .flatten();
+        if let Some(target) = observing {
+            target.with_mut(|target| target.core_mut().remove_property_observer(owner));
+            owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_flag(OBSERVING, false));
+        }
+        let subscribe = owner
+            .with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                (bind.to_source() && bind.target_supports_push())
+                    .then(|| bind.target())
+                    .flatten()
+            })
+            .flatten();
+        if let Some(target) = subscribe {
+            target.with_mut(|target| target.core_mut().add_property_observer(owner.clone()));
+            owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_flag(OBSERVING, true));
+        }
+        owner.with_mut(|owner| {
+            let bind = owner.as_data_bind_mut().unwrap();
+            bind.add_dirt(bind.reconcile_dirt(), true);
+        });
+    }
+
+    pub fn update_data_bind_handle(owner: &CoreHandle, apply_target_to_source: bool) {
+        let dirt = owner
+            .with(|owner| owner.as_data_bind().unwrap().dirt())
+            .expect("live DataBind");
+        if dirt & DEPENDENTS == DEPENDENTS {
+            let converter = owner
+                .with(|owner| owner.as_data_bind().unwrap().converter())
+                .flatten();
+            if let Some(converter) = converter {
+                super::converters::data_converter::DataConverter::update_handle(&converter);
+            }
+        }
+        let wants = apply_target_to_source
+            && owner
+                .with(|owner| {
+                    owner.as_data_bind().unwrap().in_persisting_list()
+                        || dirt & BINDINGS_TARGET == BINDINGS_TARGET
+                })
+                .unwrap_or(false);
+        if wants
+            && !owner
+                .with(|owner| owner.as_data_bind().unwrap().source_to_target_runs_first())
+                .unwrap_or(false)
+        {
+            Self::update_source_binding_handle(owner, false);
+        }
+        if dirt != 0 {
+            owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_dirt(0));
+            Self::update_handle(owner, dirt);
+        }
+        if wants
+            && owner
+                .with(|owner| owner.as_data_bind().unwrap().source_to_target_runs_first())
+                .unwrap_or(false)
+        {
+            Self::update_source_binding_handle(owner, false);
+        }
+    }
+
+    pub fn update_handle(owner: &CoreHandle, dirt: u32) {
+        let state = owner
+            .with_mut(|owner| {
+                let bind = owner.as_data_bind_mut().unwrap();
+                if bind.source.is_none()
+                    || bind.context_value.is_none()
+                    || dirt & BINDINGS != BINDINGS
+                    || !bind.to_target()
+                {
+                    return None;
+                }
+                bind.set_flag(SUPPRESS_DIRT, true);
+                Some((
+                    bind.context_value.clone().unwrap(),
+                    bind.target(),
+                    bind.property_key(),
+                    bind.base.flags() & DIRECTION == 0,
+                ))
+            })
+            .flatten();
+        let Some((context, target, key, is_main)) = state else {
+            return;
+        };
+        context
+            .borrow_mut()
+            .apply(target, key, is_main, owner.clone());
+        context.borrow_mut().refresh_target_value(owner.clone());
+        owner.with_mut(|owner| {
+            owner
+                .as_data_bind_mut()
+                .unwrap()
+                .set_flag(SUPPRESS_DIRT, false)
+        });
+    }
+
+    pub fn update_source_binding_handle(owner: &CoreHandle, invalidate: bool) {
+        let state = owner
+            .with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                if !bind.to_source() {
+                    return None;
+                }
+                Some((
+                    bind.target()?,
+                    bind.context_value.clone()?,
+                    bind.property_key(),
+                    bind.is_main_to_source(),
+                ))
+            })
+            .flatten();
+        let Some((target, context, key, is_main)) = state else {
+            return;
+        };
+        if invalidate {
+            context.borrow_mut().invalidate();
+        }
+        context
+            .borrow_mut()
+            .apply_to_source(target, key, is_main, owner.clone());
+    }
+
+    pub fn advance_handle(owner: &CoreHandle, elapsed: f32) -> bool {
+        let converter = owner
+            .with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                if bind.source.is_some() && !bind.has_flag(COLLAPSED) {
+                    bind.converter()
+                } else {
+                    None
+                }
+            })
+            .flatten();
+        converter.is_some_and(|converter| {
+            converter
+                .with_mut(|converter| {
+                    converter
+                        .as_data_converter_capability_mut()
+                        .unwrap()
+                        .advance(elapsed)
+                })
+                .unwrap_or(false)
+        })
+    }
+
+    pub fn unbind_handle(owner: &CoreHandle) {
+        let source = owner
+            .with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                (!bind.binds_once()).then(|| bind.source()).flatten()
+            })
+            .flatten();
+        if let Some(source) = source {
+            source.with_mut(|source| source.as_view_model_instance_value_mut().unwrap().remove_dependent(&crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ValueDependentHandle::core(owner.clone())));
+        }
+        let observing = owner
+            .with_mut(|owner| {
+                let bind = owner.as_data_bind_mut().unwrap();
+                bind.source = None;
+                bind.has_flag(OBSERVING).then(|| bind.target()).flatten()
+            })
+            .flatten();
+        if let Some(target) = observing {
+            target.with_mut(|target| target.core_mut().remove_property_observer(owner));
+            owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_flag(OBSERVING, false));
+        }
+        if let Some(converter) = owner
+            .with(|owner| owner.as_data_bind().unwrap().converter())
+            .flatten()
+        {
+            super::converters::data_converter::DataConverter::unbind_handle(&converter);
+        }
+        owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().context_value = None);
+    }
+
     fn handle(&self) -> Option<CoreHandle> {
         self.base.base.handle()
     }
@@ -384,7 +587,9 @@ impl DataBind {
             return;
         };
         self.context_value = None;
-        self.context_value = factory.create(self.output_type(), bind.clone());
+        self.context_value = factory
+            .create(self.output_type(), bind.clone())
+            .map(|value| Rc::new(RefCell::new(value)));
         if let Some(converter) = self.converter.as_ref() {
             converter.with_mut(|converter| {
                 if let Some(converter) = converter.as_data_converter_capability_mut() {
@@ -543,7 +748,7 @@ impl DataBind {
                 self.set_flag(SUPPRESS_DIRT, false);
                 return;
             };
-            let context = self.context_value.as_mut().unwrap();
+            let mut context = self.context_value.as_ref().unwrap().borrow_mut();
             context.apply(target, self.base.property_key(), is_main, bind.clone());
             context.refresh_target_value(bind);
             self.set_flag(SUPPRESS_DIRT, false);
@@ -569,6 +774,7 @@ impl DataBind {
             if let (Some(target), Some(context)) =
                 (self.target.clone(), self.context_value.as_mut())
             {
+                let mut context = context.borrow_mut();
                 if invalidate {
                     context.invalidate();
                 }
@@ -610,13 +816,12 @@ impl DataBind {
         if self.dirt & DEPENDENTS != 0
             && let Some(context) = self.context_value.as_mut()
         {
-            context.invalidate();
+            context.borrow_mut().invalidate();
         }
         if !self.has_flag(COLLAPSED)
-            && let Some(container) = self.container.as_ref()
-            && let Some(bind) = self.handle()
+            && let Some(container) = self.container.clone()
         {
-            container.add_dirty_data_bind(bind);
+            container.add_dirty_data_bind_borrowed(self);
         }
     }
 
@@ -671,10 +876,9 @@ impl DataBind {
         self.set_flag(COLLAPSED, collapsed);
         if !collapsed
             && self.dirt != 0
-            && let Some(container) = self.container.as_ref()
-            && let Some(bind) = self.handle()
+            && let Some(container) = self.container.clone()
         {
-            container.add_dirty_data_bind(bind);
+            container.add_dirty_data_bind_borrowed(self);
         }
     }
 

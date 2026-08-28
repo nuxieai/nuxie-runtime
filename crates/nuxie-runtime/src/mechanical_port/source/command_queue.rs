@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    ptr::NonNull,
-    sync::{Condvar, Mutex, MutexGuard},
+    sync::{Arc, Condvar, Mutex, MutexGuard, Weak},
 };
 
 use crate::mechanical_port::source::{
@@ -9,11 +8,12 @@ use crate::mechanical_port::source::{
     audio::audio_source::AudioSource,
     command_server::CommandServer,
     data_bind::data_values::data_type::DataType,
+    factory::RuntimeFactoryHandle,
     layout::{Alignment, Fit},
     math::vec2d::Vec2D,
     object_stream::{ObjectStream, PodStream},
     refcnt::{Rcp, RefCnt, RefCounted},
-    renderer::RenderImage,
+    renderer::RenderImageRef,
     semantic::semantic_snapshot::{SemanticActionType, SemanticsDiff},
     text_engine::Font,
     viewmodel::runtime::viewmodel_instance_runtime::PropertyData,
@@ -42,6 +42,10 @@ impl Drop for AutoLockAndNotify<'_> {
         self.condition_variable.notify_one();
         self.guard.take();
     }
+}
+
+trait CommandHandle: Copy + Default {
+    fn is_null(self) -> bool;
 }
 
 macro_rules! define_handle {
@@ -97,6 +101,12 @@ macro_rules! define_handle {
                 Self::NULL
             }
         }
+
+        impl CommandHandle for $name {
+            fn is_null(self) -> bool {
+                self.is_null()
+            }
+        }
     };
 }
 
@@ -113,13 +123,12 @@ define_handle!(DrawKey, DrawKeyPlaceholder);
 pub type CommandServerCallback = Box<dyn FnOnce(&mut CommandServer) + Send>;
 pub type CommandServerDrawCallback = Box<dyn FnMut(DrawKey, &mut CommandServer) + Send>;
 
-#[cfg(feature = "rive_scripting")]
 pub type ScriptingContextFactory = Box<
     dyn FnOnce(
-            NonNull<crate::mechanical_port::source::factory::Factory>,
-        )
-            -> Option<Box<crate::mechanical_port::source::scripting_context::ScriptingContext>>
-        + Send,
+            RuntimeFactoryHandle,
+        ) -> Option<
+            Box<dyn crate::mechanical_port::source::lua::rive_lua_libs::ScriptingContext>,
+        > + Send,
 >;
 
 #[derive(Clone, Default)]
@@ -128,34 +137,74 @@ pub struct ViewModelEnum {
     pub enumerants: Vec<String>,
 }
 
-#[derive(Clone, Copy, Default)]
-enum ListenerKind {
-    #[default]
-    None,
-    File,
-    Image,
-    Audio,
-    Font,
-    Blob,
-    Artboard,
-    ViewModel,
-    StateMachine,
+/// Strong caller-owned lifetime for a command-queue listener.
+///
+/// Pinned C++ stores a non-owning pointer and unregisters it when the listener
+/// dies. Rust stores only the corresponding weak handle in the queue, so a
+/// dropped listener can never leave a dangling callback target.
+pub struct ListenerHandle<T: ?Sized>(Arc<Mutex<Box<T>>>);
+
+impl<T: ?Sized> Clone for ListenerHandle<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
 }
 
+impl<T: ?Sized> ListenerHandle<T> {
+    pub fn new(listener: Box<T>) -> Self {
+        Self(Arc::new(Mutex::new(listener)))
+    }
+
+    fn downgrade(&self) -> WeakListenerHandle<T> {
+        WeakListenerHandle(Arc::downgrade(&self.0))
+    }
+
+    fn with_mut<R>(&self, callback: impl FnOnce(&mut T) -> R) -> R {
+        let mut listener = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        callback(listener.as_mut())
+    }
+
+    fn borrow_mut(&self) -> MutexGuard<'_, Box<T>> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+struct WeakListenerHandle<T: ?Sized>(Weak<Mutex<Box<T>>>);
+
+impl<T: ?Sized> Clone for WeakListenerHandle<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T: ?Sized> WeakListenerHandle<T> {
+    fn upgrade(&self) -> Option<ListenerHandle<T>> {
+        self.0.upgrade().map(ListenerHandle)
+    }
+}
+
+pub type FileListenerHandle = ListenerHandle<dyn FileListener>;
+pub type RenderImageListenerHandle = ListenerHandle<dyn RenderImageListener>;
+pub type AudioSourceListenerHandle = ListenerHandle<dyn AudioSourceListener>;
+pub type FontListenerHandle = ListenerHandle<dyn FontListener>;
+pub type BlobAssetListenerHandle = ListenerHandle<dyn BlobAssetListener>;
+pub type ArtboardListenerHandle = ListenerHandle<dyn ArtboardListener>;
+pub type ViewModelInstanceListenerHandle = ListenerHandle<dyn ViewModelInstanceListener>;
+pub type StateMachineListenerHandle = ListenerHandle<dyn StateMachineListener>;
+
 pub struct ListenerBase<H: Copy + Default> {
-    pub owning_queue: Option<Rcp<CommandQueue>>,
     pub handle: H,
-    handle_index: u64,
-    kind: ListenerKind,
 }
 
 impl<H: Copy + Default> ListenerBase<H> {
     pub fn new() -> Self {
         Self {
-            owning_queue: None,
             handle: H::default(),
-            handle_index: 0,
-            kind: ListenerKind::None,
         }
     }
 }
@@ -163,57 +212,6 @@ impl<H: Copy + Default> ListenerBase<H> {
 impl<H: Copy + Default> Default for ListenerBase<H> {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl<H: Copy + Default> Drop for ListenerBase<H> {
-    fn drop(&mut self) {
-        let Some(queue) = self.owning_queue.as_deref_mut() else {
-            return;
-        };
-        match self.kind {
-            ListenerKind::None => {}
-            ListenerKind::File => {
-                queue
-                    .file_listeners
-                    .remove(&FileHandle::from_index(self.handle_index));
-            }
-            ListenerKind::Image => {
-                queue
-                    .image_listeners
-                    .remove(&RenderImageHandle::from_index(self.handle_index));
-            }
-            ListenerKind::Audio => {
-                queue
-                    .audio_listeners
-                    .remove(&AudioSourceHandle::from_index(self.handle_index));
-            }
-            ListenerKind::Font => {
-                queue
-                    .font_listeners
-                    .remove(&FontHandle::from_index(self.handle_index));
-            }
-            ListenerKind::Blob => {
-                queue
-                    .blob_listeners
-                    .remove(&BlobAssetHandle::from_index(self.handle_index));
-            }
-            ListenerKind::Artboard => {
-                queue
-                    .artboard_listeners
-                    .remove(&ArtboardHandle::from_index(self.handle_index));
-            }
-            ListenerKind::ViewModel => {
-                queue
-                    .view_model_listeners
-                    .remove(&ViewModelInstanceHandle::from_index(self.handle_index));
-            }
-            ListenerKind::StateMachine => {
-                queue
-                    .state_machine_listeners
-                    .remove(&StateMachineHandle::from_index(self.handle_index));
-            }
-        }
     }
 }
 
@@ -244,7 +242,7 @@ pub struct FileAssetData {
     pub asset_type: u16,
 }
 
-pub trait FileListener {
+pub trait FileListener: Send {
     fn listener_base(&mut self) -> &mut ListenerBase<FileHandle>;
     fn on_file_error(&mut self, _handle: FileHandle, _request_id: u64, _error: String) {}
     fn on_file_deleted(&mut self, _handle: FileHandle, _request_id: u64) {}
@@ -310,7 +308,7 @@ pub trait FileListener {
     }
 }
 
-pub trait RenderImageListener {
+pub trait RenderImageListener: Send {
     fn listener_base(&mut self) -> &mut ListenerBase<RenderImageHandle>;
     fn on_render_image_decoded(&mut self, _handle: RenderImageHandle, _request_id: u64) {}
     fn on_render_image_error(
@@ -323,7 +321,7 @@ pub trait RenderImageListener {
     fn on_render_image_deleted(&mut self, _handle: RenderImageHandle, _request_id: u64) {}
 }
 
-pub trait AudioSourceListener {
+pub trait AudioSourceListener: Send {
     fn listener_base(&mut self) -> &mut ListenerBase<AudioSourceHandle>;
     fn on_audio_source_decoded(&mut self, _handle: AudioSourceHandle, _request_id: u64) {}
     fn on_audio_source_error(
@@ -336,21 +334,21 @@ pub trait AudioSourceListener {
     fn on_audio_source_deleted(&mut self, _handle: AudioSourceHandle, _request_id: u64) {}
 }
 
-pub trait FontListener {
+pub trait FontListener: Send {
     fn listener_base(&mut self) -> &mut ListenerBase<FontHandle>;
     fn on_font_decoded(&mut self, _handle: FontHandle, _request_id: u64) {}
     fn on_font_error(&mut self, _handle: FontHandle, _request_id: u64, _error: String) {}
     fn on_font_deleted(&mut self, _handle: FontHandle, _request_id: u64) {}
 }
 
-pub trait BlobAssetListener {
+pub trait BlobAssetListener: Send {
     fn listener_base(&mut self) -> &mut ListenerBase<BlobAssetHandle>;
     fn on_blob_asset_decoded(&mut self, _handle: BlobAssetHandle, _request_id: u64) {}
     fn on_blob_asset_error(&mut self, _handle: BlobAssetHandle, _request_id: u64, _error: String) {}
     fn on_blob_asset_deleted(&mut self, _handle: BlobAssetHandle, _request_id: u64) {}
 }
 
-pub trait ArtboardListener {
+pub trait ArtboardListener: Send {
     fn listener_base(&mut self) -> &mut ListenerBase<ArtboardHandle>;
     fn on_artboard_error(&mut self, _handle: ArtboardHandle, _request_id: u64, _error: String) {}
     fn on_default_view_model_info_received(
@@ -408,7 +406,7 @@ pub struct ViewModelInstanceData {
     pub value: ViewModelInstanceValue,
 }
 
-pub trait ViewModelInstanceListener {
+pub trait ViewModelInstanceListener: Send {
     fn listener_base(&mut self) -> &mut ListenerBase<ViewModelInstanceHandle>;
     fn on_view_model_instance_error(
         &mut self,
@@ -456,7 +454,7 @@ pub trait ViewModelInstanceListener {
     }
 }
 
-pub trait StateMachineListener {
+pub trait StateMachineListener: Send {
     fn listener_base(&mut self) -> &mut ListenerBase<StateMachineHandle>;
     fn on_state_machine_error(
         &mut self,
@@ -475,6 +473,29 @@ pub trait StateMachineListener {
     ) {
     }
 }
+
+trait ListenerRegistration<H: Copy + Default> {
+    fn registration_base(&mut self) -> &mut ListenerBase<H>;
+}
+
+macro_rules! impl_listener_registration {
+    ($listener:ident, $handle:ident) => {
+        impl<T: $listener + ?Sized> ListenerRegistration<$handle> for T {
+            fn registration_base(&mut self) -> &mut ListenerBase<$handle> {
+                self.listener_base()
+            }
+        }
+    };
+}
+
+impl_listener_registration!(FileListener, FileHandle);
+impl_listener_registration!(RenderImageListener, RenderImageHandle);
+impl_listener_registration!(AudioSourceListener, AudioSourceHandle);
+impl_listener_registration!(FontListener, FontHandle);
+impl_listener_registration!(BlobAssetListener, BlobAssetHandle);
+impl_listener_registration!(ArtboardListener, ArtboardHandle);
+impl_listener_registration!(ViewModelInstanceListener, ViewModelInstanceHandle);
+impl_listener_registration!(StateMachineListener, StateMachineHandle);
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
@@ -649,12 +670,11 @@ pub struct CommandQueue {
     command_mutex: Mutex<()>,
     command_condition_variable: Condvar,
     command_stream: PodStream,
-    external_images: ObjectStream<Rcp<RenderImage>>,
+    external_images: ObjectStream<RenderImageRef>,
     external_audio_sources: ObjectStream<Rcp<AudioSource>>,
     external_fonts: ObjectStream<Rcp<Font>>,
     external_blobs: ObjectStream<Rcp<BlobAsset>>,
     byte_vectors: ObjectStream<Vec<u8>>,
-    #[cfg(feature = "rive_scripting")]
     scripting_context_factories: ObjectStream<Option<ScriptingContextFactory>>,
     pointer_events: ObjectStream<PointerEvent>,
     names: ObjectStream<String>,
@@ -664,22 +684,24 @@ pub struct CommandQueue {
     message_stream: PodStream,
     message_names: ObjectStream<String>,
     message_semantics_diffs: ObjectStream<SemanticsDiff>,
-    global_file_listener: Option<NonNull<dyn FileListener>>,
-    global_image_listener: Option<NonNull<dyn RenderImageListener>>,
-    global_audio_listener: Option<NonNull<dyn AudioSourceListener>>,
-    global_font_listener: Option<NonNull<dyn FontListener>>,
-    global_blob_listener: Option<NonNull<dyn BlobAssetListener>>,
-    global_artboard_listener: Option<NonNull<dyn ArtboardListener>>,
-    global_view_model_listener: Option<NonNull<dyn ViewModelInstanceListener>>,
-    global_state_machine_listener: Option<NonNull<dyn StateMachineListener>>,
-    file_listeners: HashMap<FileHandle, NonNull<dyn FileListener>>,
-    image_listeners: HashMap<RenderImageHandle, NonNull<dyn RenderImageListener>>,
-    audio_listeners: HashMap<AudioSourceHandle, NonNull<dyn AudioSourceListener>>,
-    font_listeners: HashMap<FontHandle, NonNull<dyn FontListener>>,
-    blob_listeners: HashMap<BlobAssetHandle, NonNull<dyn BlobAssetListener>>,
-    artboard_listeners: HashMap<ArtboardHandle, NonNull<dyn ArtboardListener>>,
-    view_model_listeners: HashMap<ViewModelInstanceHandle, NonNull<dyn ViewModelInstanceListener>>,
-    state_machine_listeners: HashMap<StateMachineHandle, NonNull<dyn StateMachineListener>>,
+    global_file_listener: Option<WeakListenerHandle<dyn FileListener>>,
+    global_image_listener: Option<WeakListenerHandle<dyn RenderImageListener>>,
+    global_audio_listener: Option<WeakListenerHandle<dyn AudioSourceListener>>,
+    global_font_listener: Option<WeakListenerHandle<dyn FontListener>>,
+    global_blob_listener: Option<WeakListenerHandle<dyn BlobAssetListener>>,
+    global_artboard_listener: Option<WeakListenerHandle<dyn ArtboardListener>>,
+    global_view_model_listener: Option<WeakListenerHandle<dyn ViewModelInstanceListener>>,
+    global_state_machine_listener: Option<WeakListenerHandle<dyn StateMachineListener>>,
+    file_listeners: HashMap<FileHandle, WeakListenerHandle<dyn FileListener>>,
+    image_listeners: HashMap<RenderImageHandle, WeakListenerHandle<dyn RenderImageListener>>,
+    audio_listeners: HashMap<AudioSourceHandle, WeakListenerHandle<dyn AudioSourceListener>>,
+    font_listeners: HashMap<FontHandle, WeakListenerHandle<dyn FontListener>>,
+    blob_listeners: HashMap<BlobAssetHandle, WeakListenerHandle<dyn BlobAssetListener>>,
+    artboard_listeners: HashMap<ArtboardHandle, WeakListenerHandle<dyn ArtboardListener>>,
+    view_model_listeners:
+        HashMap<ViewModelInstanceHandle, WeakListenerHandle<dyn ViewModelInstanceListener>>,
+    state_machine_listeners:
+        HashMap<StateMachineHandle, WeakListenerHandle<dyn StateMachineListener>>,
 }
 
 unsafe impl RefCounted for CommandQueue {
@@ -710,7 +732,6 @@ impl Default for CommandQueue {
             external_fonts: ObjectStream::default(),
             external_blobs: ObjectStream::default(),
             byte_vectors: ObjectStream::default(),
-            #[cfg(feature = "rive_scripting")]
             scripting_context_factories: ObjectStream::default(),
             pointer_events: ObjectStream::default(),
             names: ObjectStream::default(),
@@ -745,6 +766,23 @@ impl CommandQueue {
         Self::default()
     }
 
+    fn register_listener<T, H>(
+        &self,
+        listener: &ListenerHandle<T>,
+        handle: H,
+    ) -> WeakListenerHandle<T>
+    where
+        T: ListenerRegistration<H> + ?Sized,
+        H: CommandHandle,
+    {
+        listener.with_mut(|listener| {
+            let base = listener.registration_base();
+            assert!(base.handle.is_null());
+            base.handle = handle;
+        });
+        listener.downgrade()
+    }
+
     fn notify_command(&self) {
         self.command_condition_variable.notify_one();
     }
@@ -775,21 +813,13 @@ impl CommandQueue {
     pub fn load_file(
         &mut self,
         riv_bytes: Vec<u8>,
-        listener: Option<NonNull<dyn FileListener>>,
+        listener: Option<&FileListenerHandle>,
         request_id: u64,
-        #[cfg(feature = "rive_scripting")] scripting_context_factory: Option<
-            ScriptingContextFactory,
-        >,
+        scripting_context_factory: Option<ScriptingContextFactory>,
     ) -> FileHandle {
         let handle = self.next_file_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::File;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.file_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -798,7 +828,6 @@ impl CommandQueue {
             .write(handle)
             .write(request_id);
         self.byte_vectors.write(riv_bytes);
-        #[cfg(feature = "rive_scripting")]
         self.scripting_context_factories
             .write(scripting_context_factory);
         self.notify_command();
@@ -860,18 +889,12 @@ impl CommandQueue {
         &mut self,
         file: FileHandle,
         name: String,
-        listener: Option<NonNull<dyn ArtboardListener>>,
+        listener: Option<&ArtboardListenerHandle>,
         request_id: u64,
     ) -> ArtboardHandle {
         let handle = self.next_artboard_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::Artboard;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.artboard_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -888,7 +911,7 @@ impl CommandQueue {
     pub fn instantiate_default_artboard(
         &mut self,
         file: FileHandle,
-        listener: Option<NonNull<dyn ArtboardListener>>,
+        listener: Option<&ArtboardListenerHandle>,
         request_id: u64,
     ) -> ArtboardHandle {
         self.instantiate_artboard_named(file, String::new(), listener, request_id)
@@ -921,16 +944,10 @@ impl CommandQueue {
     fn attach_view_model_listener(
         &mut self,
         handle: ViewModelInstanceHandle,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
     ) {
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::ViewModel;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.view_model_listeners.insert(handle, listener).is_none());
         }
     }
@@ -939,7 +956,7 @@ impl CommandQueue {
         &mut self,
         file: FileHandle,
         artboard: ArtboardHandle,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
         request_id: u64,
     ) -> ViewModelInstanceHandle {
         let handle = self.next_view_model_handle();
@@ -958,7 +975,7 @@ impl CommandQueue {
         &mut self,
         file: FileHandle,
         view_model_name: String,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
         request_id: u64,
     ) -> ViewModelInstanceHandle {
         let handle = self.next_view_model_handle();
@@ -978,7 +995,7 @@ impl CommandQueue {
         file: FileHandle,
         artboard: ArtboardHandle,
         instance_name: String,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
         request_id: u64,
     ) -> ViewModelInstanceHandle {
         let handle = self.next_view_model_handle();
@@ -999,7 +1016,7 @@ impl CommandQueue {
         file: FileHandle,
         view_model_name: String,
         instance_name: String,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
         request_id: u64,
     ) -> ViewModelInstanceHandle {
         let handle = self.next_view_model_handle();
@@ -1018,7 +1035,7 @@ impl CommandQueue {
         &mut self,
         file: FileHandle,
         artboard: ArtboardHandle,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
         request_id: u64,
     ) -> ViewModelInstanceHandle {
         self.instantiate_view_model_instance_for_artboard(
@@ -1033,7 +1050,7 @@ impl CommandQueue {
         &mut self,
         file: FileHandle,
         name: String,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
         request_id: u64,
     ) -> ViewModelInstanceHandle {
         self.instantiate_view_model_instance_named(file, name, String::new(), listener, request_id)
@@ -1042,7 +1059,7 @@ impl CommandQueue {
         &mut self,
         source: ViewModelInstanceHandle,
         path: String,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
         request_id: u64,
     ) -> ViewModelInstanceHandle {
         let handle = self.next_view_model_handle();
@@ -1062,20 +1079,12 @@ impl CommandQueue {
         source: ViewModelInstanceHandle,
         path: String,
         index: i32,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
         request_id: u64,
     ) -> ViewModelInstanceHandle {
         let handle = self.next_view_model_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            // Preserve upstream's assignment of the source handle even though
-            // registration is keyed by the new handle.
-            base.handle = source;
-            base.handle_index = source.index();
-            base.kind = ListenerKind::ViewModel;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, source);
             assert!(self.view_model_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -1340,18 +1349,12 @@ impl CommandQueue {
         &mut self,
         artboard: ArtboardHandle,
         name: String,
-        listener: Option<NonNull<dyn StateMachineListener>>,
+        listener: Option<&StateMachineListenerHandle>,
         request_id: u64,
     ) -> StateMachineHandle {
         let handle = self.next_state_machine_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::StateMachine;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(
                 self.state_machine_listeners
                     .insert(handle, listener)
@@ -1371,7 +1374,7 @@ impl CommandQueue {
     pub fn instantiate_default_state_machine(
         &mut self,
         artboard: ArtboardHandle,
-        listener: Option<NonNull<dyn StateMachineListener>>,
+        listener: Option<&StateMachineListenerHandle>,
         request_id: u64,
     ) -> StateMachineHandle {
         self.instantiate_state_machine_named(artboard, String::new(), listener, request_id)
@@ -1464,7 +1467,7 @@ impl CommandQueue {
         &mut self,
         state_machine: StateMachineHandle,
         name: String,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
         request_id: u64,
     ) -> ViewModelInstanceHandle {
         let handle = self.next_view_model_handle();
@@ -1577,18 +1580,12 @@ impl CommandQueue {
     pub fn decode_image(
         &mut self,
         bytes: Vec<u8>,
-        listener: Option<NonNull<dyn RenderImageListener>>,
+        listener: Option<&RenderImageListenerHandle>,
         request_id: u64,
     ) -> RenderImageHandle {
         let handle = self.next_image_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::Image;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.image_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -1602,19 +1599,13 @@ impl CommandQueue {
     }
     pub fn add_external_image(
         &mut self,
-        image: Rcp<RenderImage>,
-        listener: Option<NonNull<dyn RenderImageListener>>,
+        image: RenderImageRef,
+        listener: Option<&RenderImageListenerHandle>,
         request_id: u64,
     ) -> RenderImageHandle {
         let handle = self.next_image_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::Image;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.image_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -1632,18 +1623,12 @@ impl CommandQueue {
     pub fn decode_audio(
         &mut self,
         bytes: Vec<u8>,
-        listener: Option<NonNull<dyn AudioSourceListener>>,
+        listener: Option<&AudioSourceListenerHandle>,
         request_id: u64,
     ) -> AudioSourceHandle {
         let handle = self.next_audio_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::Audio;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.audio_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -1658,18 +1643,12 @@ impl CommandQueue {
     pub fn add_external_audio(
         &mut self,
         audio: Rcp<AudioSource>,
-        listener: Option<NonNull<dyn AudioSourceListener>>,
+        listener: Option<&AudioSourceListenerHandle>,
         request_id: u64,
     ) -> AudioSourceHandle {
         let handle = self.next_audio_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::Audio;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.audio_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -1687,18 +1666,12 @@ impl CommandQueue {
     pub fn decode_font(
         &mut self,
         bytes: Vec<u8>,
-        listener: Option<NonNull<dyn FontListener>>,
+        listener: Option<&FontListenerHandle>,
         request_id: u64,
     ) -> FontHandle {
         let handle = self.next_font_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::Font;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.font_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -1713,18 +1686,12 @@ impl CommandQueue {
     pub fn add_external_font(
         &mut self,
         font: Rcp<Font>,
-        listener: Option<NonNull<dyn FontListener>>,
+        listener: Option<&FontListenerHandle>,
         request_id: u64,
     ) -> FontHandle {
         let handle = self.next_font_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::Font;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.font_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -1742,18 +1709,12 @@ impl CommandQueue {
     pub fn decode_blob(
         &mut self,
         bytes: Vec<u8>,
-        listener: Option<NonNull<dyn BlobAssetListener>>,
+        listener: Option<&BlobAssetListenerHandle>,
         request_id: u64,
     ) -> BlobAssetHandle {
         let handle = self.next_blob_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::Blob;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.blob_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -1768,18 +1729,12 @@ impl CommandQueue {
     pub fn add_external_blob(
         &mut self,
         blob: Rcp<BlobAsset>,
-        listener: Option<NonNull<dyn BlobAssetListener>>,
+        listener: Option<&BlobAssetListenerHandle>,
         request_id: u64,
     ) -> BlobAssetHandle {
         let handle = self.next_blob_handle();
-        if let Some(mut listener) = listener {
-            let base = unsafe { listener.as_mut() }.listener_base();
-            assert!(base.handle.is_null());
-            base.handle = handle;
-            base.handle_index = handle.index();
-            base.kind = ListenerKind::Blob;
-            base.owning_queue =
-                Some(unsafe { crate::mechanical_port::source::refcnt::ref_rcp(self) });
+        if let Some(listener) = listener {
+            let listener = self.register_listener(listener, handle);
             assert!(self.blob_listeners.insert(handle, listener).is_none());
         }
         let _lock = self.command_mutex.lock().unwrap();
@@ -1847,25 +1802,28 @@ impl CommandQueue {
         self.write_command(Command::CommandLoopBreak);
     }
     #[cfg(test)]
-    pub fn testing_get_file_listener(
-        &mut self,
-        handle: FileHandle,
-    ) -> Option<NonNull<dyn FileListener>> {
-        self.file_listeners.get(&handle).copied()
+    pub fn testing_get_file_listener(&mut self, handle: FileHandle) -> Option<FileListenerHandle> {
+        self.file_listeners
+            .get(&handle)
+            .and_then(WeakListenerHandle::upgrade)
     }
     #[cfg(test)]
     pub fn testing_get_artboard_listener(
         &mut self,
         handle: ArtboardHandle,
-    ) -> Option<NonNull<dyn ArtboardListener>> {
-        self.artboard_listeners.get(&handle).copied()
+    ) -> Option<ArtboardListenerHandle> {
+        self.artboard_listeners
+            .get(&handle)
+            .and_then(WeakListenerHandle::upgrade)
     }
     #[cfg(test)]
     pub fn testing_get_state_machine_listener(
         &mut self,
         handle: StateMachineHandle,
-    ) -> Option<NonNull<dyn StateMachineListener>> {
-        self.state_machine_listeners.get(&handle).copied()
+    ) -> Option<StateMachineListenerHandle> {
+        self.state_machine_listeners
+            .get(&handle)
+            .and_then(WeakListenerHandle::upgrade)
     }
     pub fn disconnect(&mut self) {
         self.write_command(Command::Disconnect);
@@ -2052,47 +2010,41 @@ impl CommandQueue {
         self.notify_command();
     }
 
-    pub fn set_global_file_listener(&mut self, listener: Option<NonNull<dyn FileListener>>) {
-        self.global_file_listener = listener;
+    pub fn set_global_file_listener(&mut self, listener: Option<&FileListenerHandle>) {
+        self.global_file_listener = listener.map(|listener| listener.downgrade());
     }
-    pub fn set_global_artboard_listener(
-        &mut self,
-        listener: Option<NonNull<dyn ArtboardListener>>,
-    ) {
-        self.global_artboard_listener = listener;
+    pub fn set_global_artboard_listener(&mut self, listener: Option<&ArtboardListenerHandle>) {
+        self.global_artboard_listener = listener.map(|listener| listener.downgrade());
     }
     pub fn set_global_state_machine_listener(
         &mut self,
-        listener: Option<NonNull<dyn StateMachineListener>>,
+        listener: Option<&StateMachineListenerHandle>,
     ) {
-        self.global_state_machine_listener = listener;
+        self.global_state_machine_listener = listener.map(|listener| listener.downgrade());
     }
     pub fn set_global_view_model_instance_listener(
         &mut self,
-        listener: Option<NonNull<dyn ViewModelInstanceListener>>,
+        listener: Option<&ViewModelInstanceListenerHandle>,
     ) {
-        self.global_view_model_listener = listener;
+        self.global_view_model_listener = listener.map(|listener| listener.downgrade());
     }
     pub fn set_global_render_image_listener(
         &mut self,
-        listener: Option<NonNull<dyn RenderImageListener>>,
+        listener: Option<&RenderImageListenerHandle>,
     ) {
-        self.global_image_listener = listener;
+        self.global_image_listener = listener.map(|listener| listener.downgrade());
     }
     pub fn set_global_audio_source_listener(
         &mut self,
-        listener: Option<NonNull<dyn AudioSourceListener>>,
+        listener: Option<&AudioSourceListenerHandle>,
     ) {
-        self.global_audio_listener = listener;
+        self.global_audio_listener = listener.map(|listener| listener.downgrade());
     }
-    pub fn set_global_font_listener(&mut self, listener: Option<NonNull<dyn FontListener>>) {
-        self.global_font_listener = listener;
+    pub fn set_global_font_listener(&mut self, listener: Option<&FontListenerHandle>) {
+        self.global_font_listener = listener.map(|listener| listener.downgrade());
     }
-    pub fn set_global_blob_asset_listener(
-        &mut self,
-        listener: Option<NonNull<dyn BlobAssetListener>>,
-    ) {
-        self.global_blob_listener = listener;
+    pub fn set_global_blob_asset_listener(&mut self, listener: Option<&BlobAssetListenerHandle>) {
+        self.global_blob_listener = listener.map(|listener| listener.downgrade());
     }
 
     fn read_message_pod<T: Copy + Default>(&mut self) -> T {
@@ -2131,15 +2083,24 @@ impl CommandQueue {
                         });
                     }
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }.on_view_model_enums_listed(
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_view_model_enums_listed(
                             handle,
                             request_id,
                             enums.clone(),
                         );
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_enums_listed(handle, request_id, enums);
                     }
                 }
@@ -2149,15 +2110,25 @@ impl CommandQueue {
                     let count = self.read_message_pod::<usize>();
                     let names = self.read_message_names(count);
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }.on_artboards_listed(
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_artboards_listed(
                             handle,
                             request_id,
                             names.clone(),
                         );
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_artboards_listed(handle, request_id, names);
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_artboards_listed(handle, request_id, names);
                     }
                 }
                 Message::FileAssetsListed => {
@@ -2176,15 +2147,24 @@ impl CommandQueue {
                         });
                     }
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }.on_file_assets_listed(
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_file_assets_listed(
                             handle,
                             request_id,
                             assets.clone(),
                         );
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_file_assets_listed(handle, request_id, assets);
                     }
                 }
@@ -2194,15 +2174,24 @@ impl CommandQueue {
                     let count = self.read_message_pod::<usize>();
                     let names = self.read_message_names(count);
                     drop(lock);
-                    if let Some(mut listener) = self.global_artboard_listener {
-                        unsafe { listener.as_mut() }.on_state_machines_listed(
+                    if let Some(listener) = self
+                        .global_artboard_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_state_machines_listed(
                             handle,
                             request_id,
                             names.clone(),
                         );
                     }
-                    if let Some(listener) = self.artboard_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .artboard_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_state_machines_listed(handle, request_id, names);
                     }
                 }
@@ -2212,16 +2201,24 @@ impl CommandQueue {
                     let view_model = self.message_names.read();
                     let instance = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_artboard_listener {
-                        unsafe { listener.as_mut() }.on_default_view_model_info_received(
+                    if let Some(listener) = self
+                        .global_artboard_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_default_view_model_info_received(
                             handle,
                             request_id,
                             view_model.clone(),
                             instance.clone(),
                         );
                     }
-                    if let Some(listener) = self.artboard_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_default_view_model_info_received(
+                    if let Some(listener) = self
+                        .artboard_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_default_view_model_info_received(
                             handle, request_id, view_model, instance,
                         );
                     }
@@ -2231,12 +2228,22 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let volume = self.read_message_pod::<f32>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_artboard_listener {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .global_artboard_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_artboard_volume_received(handle, request_id, volume);
                     }
-                    if let Some(listener) = self.artboard_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .artboard_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_artboard_volume_received(handle, request_id, volume);
                     }
                 }
@@ -2245,16 +2252,26 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let name = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_view_model_listener {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .global_view_model_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_instance_view_model_name_received(
                                 handle,
                                 request_id,
                                 name.clone(),
                             );
                     }
-                    if let Some(listener) = self.view_model_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .view_model_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_instance_view_model_name_received(
                                 handle, request_id, name,
                             );
@@ -2265,15 +2282,24 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let name = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_view_model_listener {
-                        unsafe { listener.as_mut() }.on_view_model_instance_name_received(
+                    if let Some(listener) = self
+                        .global_view_model_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_view_model_instance_name_received(
                             handle,
                             request_id,
                             name.clone(),
                         );
                     }
-                    if let Some(listener) = self.view_model_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .view_model_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_instance_name_received(handle, request_id, name);
                     }
                 }
@@ -2284,27 +2310,37 @@ impl CommandQueue {
                     let names = self.read_message_names(count);
                     let globals = matches!(message, Message::GlobalViewModelNamesListed);
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
                         if globals {
-                            unsafe { listener.as_mut() }.on_global_view_model_names_listed(
+                            listener.borrow_mut().on_global_view_model_names_listed(
                                 handle,
                                 request_id,
                                 names.clone(),
                             );
                         } else {
-                            unsafe { listener.as_mut() }.on_view_models_listed(
+                            listener.borrow_mut().on_view_models_listed(
                                 handle,
                                 request_id,
                                 names.clone(),
                             );
                         }
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&handle) {
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
                         if globals {
-                            unsafe { listener.as_mut() }
+                            listener
+                                .borrow_mut()
                                 .on_global_view_model_names_listed(handle, request_id, names);
                         } else {
-                            unsafe { listener.as_mut() }
+                            listener
+                                .borrow_mut()
                                 .on_view_models_listed(handle, request_id, names);
                         }
                     }
@@ -2316,16 +2352,25 @@ impl CommandQueue {
                     let model = self.message_names.read();
                     let names = self.read_message_names(count);
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }.on_view_model_instance_names_listed(
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_view_model_instance_names_listed(
                             handle,
                             request_id,
                             model.clone(),
                             names.clone(),
                         );
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_instance_names_listed(handle, request_id, model, names);
                     }
                 }
@@ -2351,16 +2396,25 @@ impl CommandQueue {
                         });
                     }
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }.on_view_model_properties_listed(
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_view_model_properties_listed(
                             handle,
                             request_id,
                             model.clone(),
                             properties.clone(),
                         );
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_properties_listed(handle, request_id, model, properties);
                     }
                 }
@@ -2387,15 +2441,24 @@ impl CommandQueue {
                         value,
                     };
                     drop(lock);
-                    if let Some(mut listener) = self.global_view_model_listener {
-                        unsafe { listener.as_mut() }.on_view_model_data_received(
+                    if let Some(listener) = self
+                        .global_view_model_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_view_model_data_received(
                             handle,
                             request_id,
                             data.clone(),
                         );
                     }
-                    if let Some(listener) = self.view_model_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .view_model_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_data_received(handle, request_id, data);
                     }
                 }
@@ -2405,16 +2468,25 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let path = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_view_model_listener {
-                        unsafe { listener.as_mut() }.on_view_model_list_size_received(
+                    if let Some(listener) = self
+                        .global_view_model_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_view_model_list_size_received(
                             handle,
                             request_id,
                             path.clone(),
                             size,
                         );
                     }
-                    if let Some(listener) = self.view_model_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .view_model_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_list_size_received(handle, request_id, path, size);
                     }
                 }
@@ -2423,15 +2495,24 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let path = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_view_model_listener {
-                        unsafe { listener.as_mut() }.on_view_model_list_cleared(
+                    if let Some(listener) = self
+                        .global_view_model_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_view_model_list_cleared(
                             handle,
                             request_id,
                             path.clone(),
                         );
                     }
-                    if let Some(listener) = self.view_model_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .view_model_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_list_cleared(handle, request_id, path);
                     }
                 }
@@ -2439,22 +2520,38 @@ impl CommandQueue {
                     let handle = self.read_message_pod::<FileHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }.on_file_loaded(handle, request_id);
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_file_loaded(handle, request_id);
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_file_loaded(handle, request_id);
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_file_loaded(handle, request_id);
                     }
                 }
                 Message::FileDeleted => {
                     let handle = self.read_message_pod::<FileHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }.on_file_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_file_deleted(handle, request_id);
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_file_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_file_deleted(handle, request_id);
                     }
                 }
                 Message::ArtboardInstantiated => {
@@ -2462,12 +2559,22 @@ impl CommandQueue {
                     let handle = self.read_message_pod::<ArtboardHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_artboard_instantiated(file, request_id, handle);
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&file) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&file)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_artboard_instantiated(file, request_id, handle);
                     }
                 }
@@ -2476,12 +2583,22 @@ impl CommandQueue {
                     let handle = self.read_message_pod::<StateMachineHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_artboard_listener {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .global_artboard_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_state_machine_instantiated(artboard, request_id, handle);
                     }
-                    if let Some(listener) = self.artboard_listeners.get_mut(&artboard) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .artboard_listeners
+                        .get(&artboard)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_state_machine_instantiated(artboard, request_id, handle);
                     }
                 }
@@ -2490,12 +2607,22 @@ impl CommandQueue {
                     let handle = self.read_message_pod::<ViewModelInstanceHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_instance_instantiated(file, request_id, handle);
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&file) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&file)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_instance_instantiated(file, request_id, handle);
                     }
                 }
@@ -2503,132 +2630,268 @@ impl CommandQueue {
                     let handle = self.read_message_pod::<RenderImageHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_image_listener {
-                        unsafe { listener.as_mut() }.on_render_image_decoded(handle, request_id);
+                    if let Some(listener) = self
+                        .global_image_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_render_image_decoded(handle, request_id);
                     }
-                    if let Some(listener) = self.image_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_render_image_decoded(handle, request_id);
+                    if let Some(listener) = self
+                        .image_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_render_image_decoded(handle, request_id);
                     }
                 }
                 Message::ImageDeleted => {
                     let handle = self.read_message_pod::<RenderImageHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_image_listener {
-                        unsafe { listener.as_mut() }.on_render_image_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .global_image_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_render_image_deleted(handle, request_id);
                     }
-                    if let Some(listener) = self.image_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_render_image_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .image_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_render_image_deleted(handle, request_id);
                     }
                 }
                 Message::AudioDecoded => {
                     let handle = self.read_message_pod::<AudioSourceHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_audio_listener {
-                        unsafe { listener.as_mut() }.on_audio_source_decoded(handle, request_id);
+                    if let Some(listener) = self
+                        .global_audio_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_audio_source_decoded(handle, request_id);
                     }
-                    if let Some(listener) = self.audio_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_audio_source_decoded(handle, request_id);
+                    if let Some(listener) = self
+                        .audio_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_audio_source_decoded(handle, request_id);
                     }
                 }
                 Message::AudioDeleted => {
                     let handle = self.read_message_pod::<AudioSourceHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_audio_listener {
-                        unsafe { listener.as_mut() }.on_audio_source_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .global_audio_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_audio_source_deleted(handle, request_id);
                     }
-                    if let Some(listener) = self.audio_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_audio_source_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .audio_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_audio_source_deleted(handle, request_id);
                     }
                 }
                 Message::FontDecoded => {
                     let handle = self.read_message_pod::<FontHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_font_listener {
-                        unsafe { listener.as_mut() }.on_font_decoded(handle, request_id);
+                    if let Some(listener) = self
+                        .global_font_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_font_decoded(handle, request_id);
                     }
-                    if let Some(listener) = self.font_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_font_decoded(handle, request_id);
+                    if let Some(listener) = self
+                        .font_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_font_decoded(handle, request_id);
                     }
                 }
                 Message::FontDeleted => {
                     let handle = self.read_message_pod::<FontHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_font_listener {
-                        unsafe { listener.as_mut() }.on_font_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .global_font_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_font_deleted(handle, request_id);
                     }
-                    if let Some(listener) = self.font_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_font_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .font_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_font_deleted(handle, request_id);
                     }
                 }
                 Message::BlobDecoded => {
                     let handle = self.read_message_pod::<BlobAssetHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_blob_listener {
-                        unsafe { listener.as_mut() }.on_blob_asset_decoded(handle, request_id);
+                    if let Some(listener) = self
+                        .global_blob_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_blob_asset_decoded(handle, request_id);
                     }
-                    if let Some(listener) = self.blob_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_blob_asset_decoded(handle, request_id);
+                    if let Some(listener) = self
+                        .blob_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_blob_asset_decoded(handle, request_id);
                     }
                 }
                 Message::BlobDeleted => {
                     let handle = self.read_message_pod::<BlobAssetHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_blob_listener {
-                        unsafe { listener.as_mut() }.on_blob_asset_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .global_blob_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_blob_asset_deleted(handle, request_id);
                     }
-                    if let Some(listener) = self.blob_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_blob_asset_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .blob_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_blob_asset_deleted(handle, request_id);
                     }
                 }
                 Message::ArtboardDeleted => {
                     let handle = self.read_message_pod::<ArtboardHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_artboard_listener {
-                        unsafe { listener.as_mut() }.on_artboard_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .global_artboard_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_artboard_deleted(handle, request_id);
                     }
-                    if let Some(listener) = self.artboard_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_artboard_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .artboard_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_artboard_deleted(handle, request_id);
                     }
                 }
                 Message::ViewModelDeleted => {
                     let handle = self.read_message_pod::<ViewModelInstanceHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_view_model_listener {
-                        unsafe { listener.as_mut() }.on_view_model_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .global_view_model_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_view_model_deleted(handle, request_id);
                     }
-                    if let Some(listener) = self.view_model_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_view_model_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .view_model_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_view_model_deleted(handle, request_id);
                     }
                 }
                 Message::StateMachineSettled => {
                     let handle = self.read_message_pod::<StateMachineHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_state_machine_listener {
-                        unsafe { listener.as_mut() }.on_state_machine_settled(handle, request_id);
+                    if let Some(listener) = self
+                        .global_state_machine_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_state_machine_settled(handle, request_id);
                     }
-                    if let Some(listener) = self.state_machine_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_state_machine_settled(handle, request_id);
+                    if let Some(listener) = self
+                        .state_machine_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_state_machine_settled(handle, request_id);
                     }
                 }
                 Message::StateMachineDeleted => {
                     let handle = self.read_message_pod::<StateMachineHandle>();
                     let request_id = self.read_message_pod::<u64>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_state_machine_listener {
-                        unsafe { listener.as_mut() }.on_state_machine_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .global_state_machine_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_state_machine_deleted(handle, request_id);
                     }
-                    if let Some(listener) = self.state_machine_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_state_machine_deleted(handle, request_id);
+                    if let Some(listener) = self
+                        .state_machine_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_state_machine_deleted(handle, request_id);
                     }
                 }
                 Message::SemanticsDiffReceived => {
@@ -2637,18 +2900,27 @@ impl CommandQueue {
                     let mut diff = Some(self.message_semantics_diffs.read());
                     drop(lock);
                     let has_specific = self.state_machine_listeners.contains_key(&handle);
-                    if let Some(mut listener) = self.global_state_machine_listener {
+                    if let Some(listener) = self
+                        .global_state_machine_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
                         let delivered = if has_specific {
                             diff.as_ref().unwrap().clone()
                         } else {
                             diff.take().unwrap()
                         };
-                        unsafe { listener.as_mut() }
+                        listener
+                            .borrow_mut()
                             .on_semantics_diff_received(handle, request_id, delivered);
                     }
                     if has_specific {
-                        if let Some(listener) = self.state_machine_listeners.get_mut(&handle) {
-                            unsafe { listener.as_mut() }.on_semantics_diff_received(
+                        if let Some(listener) = self
+                            .state_machine_listeners
+                            .get(&handle)
+                            .and_then(WeakListenerHandle::upgrade)
+                        {
+                            listener.borrow_mut().on_semantics_diff_received(
                                 handle,
                                 request_id,
                                 diff.take().unwrap(),
@@ -2662,12 +2934,22 @@ impl CommandQueue {
                     let width = self.read_message_pod::<f32>();
                     let height = self.read_message_pod::<f32>();
                     drop(lock);
-                    if let Some(mut listener) = self.global_artboard_listener {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .global_artboard_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_artboard_size_received(handle, request_id, width, height);
                     }
-                    if let Some(listener) = self.artboard_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .artboard_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_artboard_size_received(handle, request_id, width, height);
                     }
                 }
@@ -2676,15 +2958,23 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let error = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_file_listener {
-                        unsafe { listener.as_mut() }.on_file_error(
-                            handle,
-                            request_id,
-                            error.clone(),
-                        );
+                    if let Some(listener) = self
+                        .global_file_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_file_error(handle, request_id, error.clone());
                     }
-                    if let Some(listener) = self.file_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_file_error(handle, request_id, error);
+                    if let Some(listener) = self
+                        .file_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_file_error(handle, request_id, error);
                     }
                 }
                 Message::ViewModelError => {
@@ -2692,15 +2982,24 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let error = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_view_model_listener {
-                        unsafe { listener.as_mut() }.on_view_model_instance_error(
+                    if let Some(listener) = self
+                        .global_view_model_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_view_model_instance_error(
                             handle,
                             request_id,
                             error.clone(),
                         );
                     }
-                    if let Some(listener) = self.view_model_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .view_model_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_view_model_instance_error(handle, request_id, error);
                     }
                 }
@@ -2709,15 +3008,24 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let error = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_image_listener {
-                        unsafe { listener.as_mut() }.on_render_image_error(
+                    if let Some(listener) = self
+                        .global_image_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_render_image_error(
                             handle,
                             request_id,
                             error.clone(),
                         );
                     }
-                    if let Some(listener) = self.image_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .image_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_render_image_error(handle, request_id, error);
                     }
                 }
@@ -2726,15 +3034,24 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let error = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_audio_listener {
-                        unsafe { listener.as_mut() }.on_audio_source_error(
+                    if let Some(listener) = self
+                        .global_audio_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_audio_source_error(
                             handle,
                             request_id,
                             error.clone(),
                         );
                     }
-                    if let Some(listener) = self.audio_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .audio_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_audio_source_error(handle, request_id, error);
                     }
                 }
@@ -2743,15 +3060,23 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let error = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_font_listener {
-                        unsafe { listener.as_mut() }.on_font_error(
-                            handle,
-                            request_id,
-                            error.clone(),
-                        );
+                    if let Some(listener) = self
+                        .global_font_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_font_error(handle, request_id, error.clone());
                     }
-                    if let Some(listener) = self.font_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_font_error(handle, request_id, error);
+                    if let Some(listener) = self
+                        .font_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_font_error(handle, request_id, error);
                     }
                 }
                 Message::BlobError => {
@@ -2759,15 +3084,25 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let error = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_blob_listener {
-                        unsafe { listener.as_mut() }.on_blob_asset_error(
+                    if let Some(listener) = self
+                        .global_blob_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_blob_asset_error(
                             handle,
                             request_id,
                             error.clone(),
                         );
                     }
-                    if let Some(listener) = self.blob_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_blob_asset_error(handle, request_id, error);
+                    if let Some(listener) = self
+                        .blob_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_blob_asset_error(handle, request_id, error);
                     }
                 }
                 Message::StateMachineError => {
@@ -2775,15 +3110,24 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let error = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_state_machine_listener {
-                        unsafe { listener.as_mut() }.on_state_machine_error(
+                    if let Some(listener) = self
+                        .global_state_machine_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener.borrow_mut().on_state_machine_error(
                             handle,
                             request_id,
                             error.clone(),
                         );
                     }
-                    if let Some(listener) = self.state_machine_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }
+                    if let Some(listener) = self
+                        .state_machine_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
                             .on_state_machine_error(handle, request_id, error);
                     }
                 }
@@ -2792,15 +3136,23 @@ impl CommandQueue {
                     let request_id = self.read_message_pod::<u64>();
                     let error = self.message_names.read();
                     drop(lock);
-                    if let Some(mut listener) = self.global_artboard_listener {
-                        unsafe { listener.as_mut() }.on_artboard_error(
-                            handle,
-                            request_id,
-                            error.clone(),
-                        );
+                    if let Some(listener) = self
+                        .global_artboard_listener
+                        .as_ref()
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_artboard_error(handle, request_id, error.clone());
                     }
-                    if let Some(listener) = self.artboard_listeners.get_mut(&handle) {
-                        unsafe { listener.as_mut() }.on_artboard_error(handle, request_id, error);
+                    if let Some(listener) = self
+                        .artboard_listeners
+                        .get(&handle)
+                        .and_then(WeakListenerHandle::upgrade)
+                    {
+                        listener
+                            .borrow_mut()
+                            .on_artboard_error(handle, request_id, error);
                     }
                 }
             }

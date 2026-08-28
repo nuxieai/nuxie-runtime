@@ -90,5 +90,26 @@ impl std::ops::DerefMut for StateMachineListener {
         &mut self.base
     }
 }
+impl crate::mechanical_port::source::animation::listener_types::listener_input_type_keyboard::KeyboardConstraintListener
+    for StateMachineListener
+{
+    fn keyboard_input_types(&self) -> Vec<CoreHandle> {
+        self.listener_input_types.clone()
+    }
+}
+impl crate::mechanical_port::source::animation::listener_types::listener_input_type_gamepad::GamepadConstraintListener
+    for StateMachineListener
+{
+    fn gamepad_input_types(&self) -> Vec<CoreHandle> {
+        self.listener_input_types.clone()
+    }
+}
+impl crate::mechanical_port::source::animation::listener_types::listener_input_type_semantic::SemanticConstraintListener
+    for StateMachineListener
+{
+    fn semantic_input_types(&self) -> Vec<CoreHandle> {
+        self.listener_input_types.clone()
+    }
+}
 impl crate::mechanical_port::source::generated::animation::state_machine_component_base::StateMachineComponentBaseCallbacks for StateMachineListener { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }
 impl crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBaseCallbacks for StateMachineListener { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }

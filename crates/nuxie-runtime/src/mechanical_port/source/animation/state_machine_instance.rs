@@ -4,6 +4,7 @@ use crate::mechanical_port::source::{
         animation_reset_factory::AnimationResetFactory,
         animation_state::AnimationState,
         focus_listener_group::RuntimeFocusListenerGroupHandle,
+        keyboard_listener_group::RuntimeKeyboardListenerGroupHandle,
         linear_animation_instance::LinearAnimationInstance,
         listener_invocation::ListenerInvocation,
         semantic_listener_group::{RuntimeSemanticListenerGroupHandle, SemanticActionType},
@@ -417,18 +418,6 @@ pub trait StateMachineInstanceRuntime {
         text_input: &CoreHandle,
         machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> RuntimeListenerGroupHandle;
-    fn make_keyboard_listener_group(
-        &mut self,
-        focus_data: &CoreHandle,
-        listener: &CoreHandle,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Object;
-    fn make_keyboard_listener_group_for_scripted(
-        &mut self,
-        focus_data: &CoreHandle,
-        scripted_object: &CoreHandle,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Object;
     fn make_gamepad_listener_group(
         &mut self,
         focus_data: &CoreHandle,
@@ -469,14 +458,6 @@ pub trait StateMachineInstanceRuntime {
         listener: &CoreHandle,
         invocation: &ListenerInvocation,
     ) -> bool;
-    fn listener_keyboard_constraints_met(
-        &self,
-        listener: &CoreHandle,
-        key: u32,
-        modifiers: u32,
-        pressed: bool,
-        repeat: bool,
-    ) -> bool;
     fn focus_data_add_focus_listener(
         &mut self,
         focus_data: &CoreHandle,
@@ -496,38 +477,6 @@ pub trait StateMachineInstanceRuntime {
         focus_data: &CoreHandle,
         invocation: &ListenerInvocation,
     ) -> Option<(CoreHandle, bool)>;
-    fn focus_data_add_keyboard_listener(
-        &mut self,
-        focus_data: &CoreHandle,
-        listener: Option<&CoreHandle>,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Option<Object>;
-    fn focus_data_remove_keyboard_listener(&mut self, focus_data: &CoreHandle, group: Object);
-    fn focus_data_add_text_listener(
-        &mut self,
-        focus_data: &CoreHandle,
-        listener: Option<&CoreHandle>,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Option<Object>;
-    fn focus_data_remove_text_listener(&mut self, focus_data: &CoreHandle, group: Object);
-    fn focus_data_text_input_key(
-        &mut self,
-        focus_data: &CoreHandle,
-        key: u32,
-        modifiers: u32,
-        pressed: bool,
-        repeat: bool,
-    ) -> Option<bool>;
-    fn focus_data_text_input_text(&mut self, focus_data: &CoreHandle, text: &str) -> Option<bool>;
-    fn focus_data_scripted_key(
-        &mut self,
-        focus_data: &CoreHandle,
-        key: u32,
-        modifiers: u32,
-        pressed: bool,
-        repeat: bool,
-    ) -> Option<bool>;
-    fn focus_data_scripted_text(&mut self, focus_data: &CoreHandle, text: &str) -> Option<bool>;
     fn retain_view_model_instance(&mut self, instance: CoreHandle) -> Object;
     fn retain_data_context(&mut self, context: RuntimeDataContextHandle) -> Object;
     fn data_context_advanced(&mut self, context: Object);
@@ -2043,7 +1992,7 @@ pub struct StateMachineInstance {
     focus_manager: RuntimeFocusManagerHandle,
     external_focus_manager: Option<RuntimeFocusManagerHandle>,
     focus_listener_groups: Vec<RuntimeFocusListenerGroupHandle>,
-    keyboard_listener_groups: Vec<Object>,
+    keyboard_listener_groups: Vec<RuntimeKeyboardListenerGroupHandle>,
     gamepad_listener_groups: Vec<Object>,
     gamepad_scripted_drawables: Vec<CoreHandle>,
     embedder_gamepads: HashMap<i32, Object>,
@@ -2348,9 +2297,9 @@ impl StateMachineInstance {
                     .as_ref()
                     .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
                 {
-                    let group = self.runtime.borrow_mut().make_keyboard_listener_group(
-                        &focus_data,
-                        &listener,
+                    let group = RuntimeKeyboardListenerGroupHandle::new(
+                        focus_data,
+                        Some(listener.clone()),
                         machine.clone(),
                     );
                     self.keyboard_listener_groups.push(group);
@@ -2559,14 +2508,11 @@ impl StateMachineInstance {
                 || self.runtime.borrow_mut().scripted_wants_text(&scripted)
             {
                 if let Some(focus_data) = self.runtime.borrow_mut().resolve_focus_data(&object) {
-                    let group = self
-                        .runtime
-                        .borrow_mut()
-                        .make_keyboard_listener_group_for_scripted(
-                            &focus_data,
-                            &scripted,
-                            self.occurrence.clone(),
-                        );
+                    let group = RuntimeKeyboardListenerGroupHandle::new(
+                        focus_data,
+                        None,
+                        self.occurrence.clone(),
+                    );
                     self.keyboard_listener_groups.push(group);
                 }
             }

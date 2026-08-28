@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::mechanical_port::source::{
     animation::{
         focus_listener_group::RuntimeFocusListenerGroupWeakHandle,
+        keyboard_listener_group::RuntimeKeyboardListenerGroupWeakHandle,
         listener_invocation::ListenerInvocation,
         state_machine_instance::{RuntimeObjectHandle, RuntimeStateMachineInstanceWeakHandle},
     },
@@ -58,21 +59,20 @@ impl RuntimeFocusListenerHandle {
 
 #[derive(Clone)]
 pub struct RuntimeKeyboardListenerHandle {
-    machine: RuntimeStateMachineInstanceWeakHandle,
-    group: RuntimeObjectHandle,
+    group: RuntimeKeyboardListenerGroupWeakHandle,
 }
 
 impl RuntimeKeyboardListenerHandle {
-    pub fn new(machine: RuntimeStateMachineInstanceWeakHandle, group: RuntimeObjectHandle) -> Self {
-        Self { machine, group }
+    pub fn new(group: RuntimeKeyboardListenerGroupWeakHandle) -> Self {
+        Self { group }
     }
 
     fn is_alive(&self) -> bool {
-        self.machine.upgrade().is_some()
+        self.group.upgrade().is_some()
     }
 
     fn ptr_eq(&self, other: &Self) -> bool {
-        self.group == other.group && self.machine.ptr_eq(&other.machine)
+        self.group.ptr_eq(&other.group)
     }
 
     fn key_input(
@@ -82,18 +82,18 @@ impl RuntimeKeyboardListenerHandle {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        self.machine
-            .with_instance_mut(|machine| {
-                machine.dispatch_keyboard_listener_group(
-                    self.group, key, modifiers, is_pressed, is_repeat,
-                )
+        self.group
+            .upgrade()
+            .map(|group| {
+                group.with_group_mut(|group| group.key_input(key, modifiers, is_pressed, is_repeat))
             })
             .unwrap_or(false)
     }
 
     fn text_input(&self, text: &str) -> bool {
-        self.machine
-            .with_instance_mut(|machine| machine.dispatch_text_listener_group(self.group, text))
+        self.group
+            .upgrade()
+            .map(|group| group.with_group_mut(|group| group.text_input(text)))
             .unwrap_or(false)
     }
 }

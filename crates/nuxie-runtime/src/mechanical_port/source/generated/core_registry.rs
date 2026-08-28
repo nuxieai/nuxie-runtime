@@ -1210,6 +1210,147 @@ pub trait DataConverterCapability {
 }
 
 pub trait CoreCapabilities: Any {
+    fn as_scripted_drawable(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
+    {
+        None
+    }
+    fn as_scripted_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
+    {
+        None
+    }
+    fn as_scripted_layout(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout> {
+        None
+    }
+    fn as_scripted_layout_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout>
+    {
+        None
+    }
+    fn as_scroll_constraint(&self) -> Option<&crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint>{
+        None
+    }
+    fn as_scroll_constraint_mut(&mut self) -> Option<&mut crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint>{
+        None
+    }
+    fn as_scroll_bar_constraint(&self) -> Option<&crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint>{
+        None
+    }
+    fn as_scroll_bar_constraint_mut(&mut self) -> Option<&mut crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint>{
+        None
+    }
+    fn as_state_transition(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::animation::state_transition::StateTransition> {
+        None
+    }
+    fn as_state_transition_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::animation::state_transition::StateTransition>
+    {
+        None
+    }
+    fn as_nested_artboard(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::nested_artboard::NestedArtboard> {
+        None
+    }
+    fn as_nested_artboard_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::nested_artboard::NestedArtboard> {
+        None
+    }
+    fn as_nested_linear_animation(
+        &self,
+    ) -> Option<
+        &crate::mechanical_port::source::animation::nested_linear_animation::NestedLinearAnimation,
+    > {
+        None
+    }
+    fn as_nested_linear_animation_mut(&mut self) -> Option<&mut crate::mechanical_port::source::animation::nested_linear_animation::NestedLinearAnimation>{
+        None
+    }
+    fn as_state_machine_listener(
+        &self,
+    ) -> Option<
+        &crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener,
+    > {
+        None
+    }
+    fn as_state_machine_listener_mut(&mut self) -> Option<&mut crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener>{
+        None
+    }
+    fn state_transition_state_to(&self) -> Option<CoreHandle> {
+        self.as_state_transition()
+            .and_then(|owner| owner.state_to())
+    }
+    fn state_transition_duration(&self) -> Option<u32> {
+        self.as_state_transition()
+            .map(|owner| owner.base.duration())
+    }
+    fn state_transition_duration_is_percentage(&self) -> Option<bool> {
+        self.as_state_transition()
+            .map(|owner| owner.duration_is_percentage())
+    }
+    fn state_transition_random_weight(&self) -> Option<u32> {
+        self.as_state_transition()
+            .map(|owner| owner.base.random_weight())
+    }
+    fn state_transition_evaluated_random_weight(&self) -> Option<u32> {
+        self.as_state_transition()
+            .map(|owner| owner.evaluated_random_weight())
+    }
+    fn state_transition_interpolator(&self) -> Option<CoreHandle> {
+        self.as_state_transition()
+            .and_then(|owner| owner.interpolator())
+    }
+    fn state_transition_enable_early_exit(&self) -> Option<bool> {
+        self.as_state_transition()
+            .map(|owner| owner.enable_early_exit())
+    }
+    fn state_transition_pause_on_exit(&self) -> Option<bool> {
+        self.as_state_transition()
+            .map(|owner| owner.pause_on_exit())
+    }
+    fn state_transition_set_evaluated_random_weight(&mut self, value: u32) -> bool {
+        let Some(owner) = self.as_state_transition_mut() else {
+            return false;
+        };
+        owner.set_evaluated_random_weight(value);
+        true
+    }
+    fn state_transition_allowed(
+        &self,
+        from: &crate::mechanical_port::source::animation::state_instance::RuntimeStateInstanceHandle,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        layer: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+        runtime: &dyn crate::mechanical_port::source::animation::state_transition::TransitionRuntime,
+    ) -> Option<crate::mechanical_port::source::animation::state_transition::AllowTransition> {
+        self.as_state_transition()
+            .map(|owner| owner.allowed(from, machine, layer, runtime))
+    }
+    fn state_transition_use_layer(
+        &self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        layer: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+        runtime: &dyn crate::mechanical_port::source::animation::state_transition::TransitionRuntime,
+    ) -> bool {
+        let Some(owner) = self.as_state_transition() else {
+            return false;
+        };
+        owner.use_layer_in_conditions(machine, layer, runtime);
+        true
+    }
+    fn state_machine_listener_target_id(&self) -> Option<u32> {
+        self.as_state_machine_listener()
+            .map(|owner| owner.base.target_id())
+    }
     fn drawable_hit_test(
         &mut self,
         _info: &mut crate::mechanical_port::source::hit_info::HitInfo,
@@ -49204,6 +49345,12 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint
 {
+    fn as_scroll_constraint(&self) -> Option<&crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint>{
+        Some(&self)
+    }
+    fn as_scroll_constraint_mut(&mut self) -> Option<&mut crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint>{
+        Some(&mut self)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -49284,6 +49431,8 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint {
+    fn as_scroll_bar_constraint(&self) -> Option<&crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint> { Some(&self) }
+    fn as_scroll_bar_constraint_mut(&mut self) -> Option<&mut crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint> { Some(&mut self) }
     fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
@@ -49737,6 +49886,16 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::NestedArtboard {
+    fn as_nested_artboard(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::nested_artboard::NestedArtboard> {
+        Some(&self)
+    }
+    fn as_nested_artboard_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::nested_artboard::NestedArtboard> {
+        Some(&mut self)
+    }
     fn component_collapse_post(&mut self, value: bool) -> bool {
         self.component_container_collapse_post(value);
         self.component_transform_collapse_post();
@@ -50312,6 +50471,18 @@ impl CoreCapabilities for crate::mechanical_port::source::solo::Solo {
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable
 {
+    fn as_scripted_drawable(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
+    {
+        Some(&self)
+    }
+    fn as_scripted_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
+    {
+        Some(&mut self)
+    }
     fn drawable_draw(
         &mut self,
         _renderer: &mut crate::mechanical_port::source::renderer::Renderer,
@@ -50668,6 +50839,29 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout
 {
+    fn as_scripted_layout(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout> {
+        Some(&self)
+    }
+    fn as_scripted_layout_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout>
+    {
+        Some(&mut self)
+    }
+    fn as_scripted_drawable(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
+    {
+        Some(&self.base.base)
+    }
+    fn as_scripted_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
+    {
+        Some(&mut self.base.base)
+    }
     fn drawable_draw(
         &mut self,
         _renderer: &mut crate::mechanical_port::source::renderer::Renderer,
@@ -51098,6 +51292,16 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_number::S
 impl CoreCapabilities
     for crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout
 {
+    fn as_nested_artboard(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::nested_artboard::NestedArtboard> {
+        Some(&self.base.base)
+    }
+    fn as_nested_artboard_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::nested_artboard::NestedArtboard> {
+        Some(&mut self.base.base)
+    }
     fn nested_artboard_source_handle(
         &self,
     ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
@@ -52069,6 +52273,16 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_ui
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::nested_simple_animation::NestedSimpleAnimation
 {
+    fn as_nested_linear_animation(
+        &self,
+    ) -> Option<
+        &crate::mechanical_port::source::animation::nested_linear_animation::NestedLinearAnimation,
+    > {
+        Some(&self.base.base)
+    }
+    fn as_nested_linear_animation_mut(&mut self) -> Option<&mut crate::mechanical_port::source::animation::nested_linear_animation::NestedLinearAnimation>{
+        Some(&mut self.base.base)
+    }
     fn nested_animation_initialize(
         &mut self,
         artboard: crate::mechanical_port::source::artboard::RuntimeArtboardInstanceWeakHandle,
@@ -52459,6 +52673,16 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener
 {
+    fn as_state_machine_listener(
+        &self,
+    ) -> Option<
+        &crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener,
+    > {
+        Some(&self)
+    }
+    fn as_state_machine_listener_mut(&mut self) -> Option<&mut crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener>{
+        Some(&mut self)
+    }
     fn lifecycle_on_added_dirty(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -52530,6 +52754,8 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::state_machine_listener_single::StateMachineListenerSingle {
+    fn as_state_machine_listener(&self) -> Option<&crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener> { Some(&self.base.base) }
+    fn as_state_machine_listener_mut(&mut self) -> Option<&mut crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener> { Some(&mut self.base.base) }
     fn lifecycle_on_added_dirty(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener::on_added_dirty(&mut self.base.base, context))
     }
@@ -53355,6 +53581,17 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::state_transition::StateTransition
 {
+    fn as_state_transition(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::animation::state_transition::StateTransition> {
+        Some(&self)
+    }
+    fn as_state_transition_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::animation::state_transition::StateTransition>
+    {
+        Some(&mut self)
+    }
     fn state_machine_layer_component_events(
         &self,
     ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
@@ -54248,6 +54485,16 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::nested_remap_animation::NestedRemapAnimation
 {
+    fn as_nested_linear_animation(
+        &self,
+    ) -> Option<
+        &crate::mechanical_port::source::animation::nested_linear_animation::NestedLinearAnimation,
+    > {
+        Some(&self.base.base)
+    }
+    fn as_nested_linear_animation_mut(&mut self) -> Option<&mut crate::mechanical_port::source::animation::nested_linear_animation::NestedLinearAnimation>{
+        Some(&mut self.base.base)
+    }
     fn nested_animation_initialize(
         &mut self,
         artboard: crate::mechanical_port::source::artboard::RuntimeArtboardInstanceWeakHandle,
@@ -54471,6 +54718,17 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::blend_state_transition::BlendStateTransition
 {
+    fn as_state_transition(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::animation::state_transition::StateTransition> {
+        Some(&self.base.base)
+    }
+    fn as_state_transition_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::animation::state_transition::StateTransition>
+    {
+        Some(&mut self.base.base)
+    }
     fn state_machine_layer_component_events(
         &self,
     ) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> {
@@ -59195,6 +59453,16 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::data_bind::bindable_property_viewmodel::BindablePropertyViewModel {
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf {
+    fn as_nested_artboard(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::nested_artboard::NestedArtboard> {
+        Some(&self.base.base)
+    }
+    fn as_nested_artboard_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::nested_artboard::NestedArtboard> {
+        Some(&mut self.base.base)
+    }
     fn nested_artboard_source_handle(
         &self,
     ) -> Option<crate::mechanical_port::source::core::CoreHandle> {

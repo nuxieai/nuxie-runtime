@@ -6,6 +6,7 @@ use crate::mechanical_port::source::{
         focus_listener_group::RuntimeFocusListenerGroupHandle,
         linear_animation_instance::LinearAnimationInstance,
         listener_invocation::ListenerInvocation,
+        semantic_listener_group::{RuntimeSemanticListenerGroupHandle, SemanticActionType},
         state_instance::RuntimeStateInstanceHandle,
         state_machine_input_instance::{
             InputInstanceNotifier, SMIBool, SMIInput, SMINumber, SMITrigger,
@@ -123,10 +124,10 @@ pub struct QueuedFocusEvent {
     pub is_focus: bool,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 pub struct QueuedSemanticEvent {
-    pub group: Object,
-    pub action_type: u8,
+    pub group: RuntimeSemanticListenerGroupHandle,
+    pub action_type: SemanticActionType,
 }
 
 pub enum InputInstance {
@@ -434,12 +435,6 @@ pub trait StateMachineInstanceRuntime {
         listener: &CoreHandle,
         machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> Object;
-    fn make_semantic_listener_group(
-        &mut self,
-        semantic_data: &CoreHandle,
-        listener: &CoreHandle,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Object;
     fn resolve_focus_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
     fn resolve_semantic_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
     fn provided_hit_components(
@@ -463,7 +458,6 @@ pub trait StateMachineInstanceRuntime {
         invocation: &ListenerInvocation,
     );
     fn listener_invocation_none(&mut self) -> ListenerInvocation;
-    fn listener_invocation_semantic(&mut self, group: Object, action: u8) -> ListenerInvocation;
     fn listener_invocation_event(&mut self, event: &CoreHandle, delay: f32) -> ListenerInvocation;
     fn listener_invocation_view_model(
         &mut self,
@@ -534,14 +528,6 @@ pub trait StateMachineInstanceRuntime {
         repeat: bool,
     ) -> Option<bool>;
     fn focus_data_scripted_text(&mut self, focus_data: &CoreHandle, text: &str) -> Option<bool>;
-    fn semantic_data_add_listener(
-        &mut self,
-        semantic_data: &CoreHandle,
-        listener: &CoreHandle,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Object;
-    fn semantic_data_remove_listener(&mut self, semantic_data: &CoreHandle, group: Object);
-    fn listener_for_semantic_group(&self, group: Object) -> Option<CoreHandle>;
     fn retain_view_model_instance(&mut self, instance: CoreHandle) -> Object;
     fn retain_data_context(&mut self, context: RuntimeDataContextHandle) -> Object;
     fn data_context_advanced(&mut self, context: Object);
@@ -2064,7 +2050,7 @@ pub struct StateMachineInstance {
     semantic_manager: Option<RuntimeSemanticManagerHandle>,
     external_semantic_manager: Option<RuntimeSemanticManagerHandle>,
     queued_focus_events: Vec<QueuedFocusEvent>,
-    semantic_listener_groups: Vec<Object>,
+    semantic_listener_groups: Vec<RuntimeSemanticListenerGroupHandle>,
     queued_semantic_events: Vec<QueuedSemanticEvent>,
     nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
     nested_artboard: Option<CoreHandle>,
@@ -2379,9 +2365,9 @@ impl StateMachineInstance {
                     .as_ref()
                     .and_then(|target| self.runtime.borrow_mut().resolve_semantic_data(target))
                 {
-                    let group = self.runtime.borrow_mut().make_semantic_listener_group(
-                        &semantic_data,
-                        &listener,
+                    let group = RuntimeSemanticListenerGroupHandle::new(
+                        semantic_data,
+                        listener.clone(),
                         machine.clone(),
                     );
                     self.semantic_listener_groups.push(group);
@@ -3005,7 +2991,11 @@ impl StateMachineInstance {
         }
     }
 
-    pub fn queue_semantic_event(&mut self, group: Object, action_type: u8) {
+    pub fn queue_semantic_event(
+        &mut self,
+        group: RuntimeSemanticListenerGroupHandle,
+        action_type: SemanticActionType,
+    ) {
         self.queued_semantic_events
             .push(QueuedSemanticEvent { group, action_type });
         self.needs_advance.set(true);
@@ -3014,24 +3004,14 @@ impl StateMachineInstance {
     fn process_semantic_events(&mut self) {
         let events = std::mem::take(&mut self.queued_semantic_events);
         for event in events {
-            if event.group == 0 {
-                continue;
-            }
-            let Some(listener) = self
-                .runtime
-                .borrow_mut()
-                .listener_for_semantic_group(event.group)
-            else {
-                continue;
-            };
-            let invocation = self
-                .runtime
-                .borrow_mut()
-                .listener_invocation_semantic(event.group, event.action_type);
-            let runtime = Rc::clone(&self.runtime);
-            runtime
-                .borrow_mut()
-                .listener_perform_changes(&listener, self, &invocation);
+            let listener = event.group.with_group(|group| group.listener());
+            let listener_index = self
+                .semantic_listener_groups
+                .iter()
+                .position(|group| group.ptr_eq(&event.group))
+                .expect("a queued semantic listener remains owned until dispatch");
+            let invocation = ListenerInvocation::semantic(listener_index, event.action_type as u8);
+            self.perform_listener_changes(&listener, invocation);
         }
     }
 

@@ -2263,9 +2263,7 @@ impl Artboard {
             });
         } else {
             component.with_downcast_mut::<ArtboardComponentList, _>(|list| {
-                focus_manager.with_focus_manager_mut(|manager| {
-                    list.ensure_list_scope_focus_node(manager, focus_node.clone())
-                });
+                list.ensure_list_scope_focus_node(focus_manager.clone(), focus_node.clone());
             });
         }
         let children = component

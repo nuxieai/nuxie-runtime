@@ -29,7 +29,7 @@ use crate::mechanical_port::source::{
     generated::artboard_component_list_base::ArtboardComponentListBaseCallbacks,
     hit_info::HitInfo,
     input::{
-        focus_manager::FocusManager,
+        focus_manager::RuntimeFocusManagerHandle,
         focus_node::{FocusNode, FocusNodeRef},
     },
     layout::{
@@ -431,7 +431,7 @@ impl ArtboardComponentList {
 
     pub fn ensure_list_scope_focus_node(
         &mut self,
-        focus_manager: &mut FocusManager,
+        focus_manager: RuntimeFocusManagerHandle,
         host_parent: Option<FocusNodeRef>,
     ) {
         if self.list_scope_focus_node.is_none() {
@@ -439,11 +439,13 @@ impl ArtboardComponentList {
             node.borrow_mut().name = "ArtboardComponentListScope".to_owned();
             self.list_scope_focus_node = Some(node);
         }
-        focus_manager.add_child(
-            host_parent,
-            self.list_scope_focus_node.clone().unwrap(),
-            None,
-        );
+        focus_manager.with_focus_manager_mut(|manager| {
+            manager.add_child(
+                host_parent,
+                self.list_scope_focus_node.clone().unwrap(),
+                None,
+            );
+        });
         self.sync_list_row_nodes_with_list(focus_manager);
     }
 
@@ -484,7 +486,7 @@ impl ArtboardComponentList {
         node
     }
 
-    fn reparent_list_rows_in_scope(&mut self, focus_manager: &mut FocusManager) {
+    fn reparent_list_rows_in_scope(&mut self, focus_manager: &RuntimeFocusManagerHandle) {
         let Some(scope) = self.list_scope_focus_node.clone() else {
             return;
         };
@@ -493,11 +495,13 @@ impl ArtboardComponentList {
                 FocusNode::remove_child(&parent, row);
             }
         }
-        for (index, row) in self.list_row_focus_nodes.iter().enumerate() {
-            if let Some(row) = row {
-                focus_manager.add_child(Some(scope.clone()), row.clone(), Some(index));
+        focus_manager.with_focus_manager_mut(|manager| {
+            for (index, row) in self.list_row_focus_nodes.iter().enumerate() {
+                if let Some(row) = row {
+                    manager.add_child(Some(scope.clone()), row.clone(), Some(index));
+                }
             }
-        }
+        });
     }
 }
 
@@ -529,7 +533,7 @@ fn artboard_has_focus_content(artboard: &RuntimeArtboardInstanceHandle) -> bool 
 impl ArtboardComponentList {
     fn list_item_needs_build_under_row(
         &self,
-        parent_focus_manager: &FocusManager,
+        parent_focus_manager: &RuntimeFocusManagerHandle,
         instance: &RuntimeArtboardInstanceHandle,
         row: Option<FocusNodeRef>,
     ) -> bool {
@@ -539,7 +543,7 @@ impl ArtboardComponentList {
         if instance.with_artboard(|instance| {
             instance
                 .focus_manager()
-                .is_none_or(|manager| !std::ptr::eq(manager, parent_focus_manager))
+                .is_none_or(|manager| !manager.ptr_eq(parent_focus_manager))
         }) {
             return true;
         }
@@ -549,11 +553,11 @@ impl ArtboardComponentList {
         false
     }
 
-    fn sync_list_row_nodes_with_list(&mut self, focus_manager: &mut FocusManager) {
+    fn sync_list_row_nodes_with_list(&mut self, focus_manager: RuntimeFocusManagerHandle) {
         if self.list_items.is_empty() {
             while let Some(row) = self.list_row_focus_nodes.pop() {
                 if let Some(row) = row {
-                    focus_manager.remove_child(&row);
+                    focus_manager.with_focus_manager_mut(|manager| manager.remove_child(&row));
                 }
             }
             return;
@@ -565,7 +569,7 @@ impl ArtboardComponentList {
 
     fn sync_list_row_nodes_with_previous(
         &mut self,
-        focus_manager: &mut FocusManager,
+        focus_manager: RuntimeFocusManagerHandle,
         previous_list_items: &[CoreHandle],
         previous_row_nodes: &[Option<FocusNodeRef>],
     ) {
@@ -599,7 +603,7 @@ impl ArtboardComponentList {
                 }
             }
             if !in_new {
-                focus_manager.remove_child(&unmapped);
+                focus_manager.with_focus_manager_mut(|manager| manager.remove_child(&unmapped));
             }
         }
         self.list_row_focus_nodes = new_rows;
@@ -608,7 +612,7 @@ impl ArtboardComponentList {
                 self.list_row_focus_nodes[index] = Some(self.make_list_row_focus_node());
             }
         }
-        self.reparent_list_rows_in_scope(focus_manager);
+        self.reparent_list_rows_in_scope(&focus_manager);
         for index in 0..count {
             let Some(instance) = self.artboard_instance(index as i32) else {
                 continue;
@@ -619,20 +623,18 @@ impl ArtboardComponentList {
             }
             if let Some(state_machine) = self.state_machine_instance(index as i32) {
                 state_machine.with_instance_mut(|state_machine| {
-                    let needs_parent = state_machine
-                        .focus_manager()
-                        .is_none_or(|manager| !std::ptr::eq(manager, focus_manager));
+                    let needs_parent = !state_machine.focus_manager().ptr_eq(&focus_manager);
                     if needs_parent {
-                        state_machine.set_external_focus_manager(focus_manager);
+                        state_machine.set_external_focus_manager(Some(focus_manager.clone()));
                     }
                 });
             }
-            if self.list_item_needs_build_under_row(focus_manager, &instance, row.clone()) {
+            if self.list_item_needs_build_under_row(&focus_manager, &instance, row.clone()) {
                 instance.with_artboard_mut(|instance| {
                     if instance.focus_manager().is_some() {
                         instance.cleanup_focus_tree();
                     }
-                    instance.build_focus_tree(focus_manager, row);
+                    instance.build_focus_tree(Some(focus_manager.clone()), row);
                 });
             }
         }
@@ -759,13 +761,11 @@ impl ArtboardComponentList {
             .flatten();
         if let Some(focus_manager) = focus_manager.filter(|_| self.list_scope_focus_node.is_some())
         {
-            focus_manager.with_focus_manager_mut(|focus_manager| {
-                self.sync_list_row_nodes_with_previous(
-                    focus_manager,
-                    &previous_list_items,
-                    &previous_row_nodes,
-                );
-            });
+            self.sync_list_row_nodes_with_previous(
+                focus_manager,
+                &previous_list_items,
+                &previous_row_nodes,
+            );
         }
     }
 
@@ -1598,9 +1598,7 @@ impl ArtboardComponentList {
             .flatten();
         if let Some(focus_manager) = focus_manager.filter(|_| self.list_scope_focus_node.is_some())
         {
-            focus_manager.with_focus_manager_mut(|focus_manager| {
-                self.sync_list_row_nodes_with_list(focus_manager);
-            });
+            self.sync_list_row_nodes_with_list(focus_manager);
         }
     }
 

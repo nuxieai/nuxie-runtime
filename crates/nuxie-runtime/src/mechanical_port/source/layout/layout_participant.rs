@@ -80,6 +80,17 @@ impl Drop for LayoutParticipant {
 }
 
 impl LayoutParticipant {
+    /// The approved layout backend owns native nodes; the Rive owner retains
+    /// its style, dirt, and result exactly as its upstream LayoutData did.
+    pub(crate) fn native_layout_data(&self) -> Option<&LayoutData> {
+        self.layout_data.as_deref()
+    }
+    pub(crate) fn native_layout_data_mut(&mut self) -> Option<&mut LayoutData> {
+        self.layout_data.as_deref_mut()
+    }
+    pub(crate) fn measurement_host_handle(&self) -> Option<CoreHandle> {
+        self.owner_handle()
+    }
     pub fn add_layout_style_applier(&mut self, applier: CoreHandle) {
         if let Some(data) = self.layout_data.as_deref_mut() {
             data.add_applier(applier);
@@ -354,7 +365,27 @@ impl LayoutParticipant {
             return false;
         };
         let mut style = std::mem::take(&mut data.style);
-        data.apply_layout_styles(&mut style, &context);
+        let appliers = data.appliers.as_deref().cloned().unwrap_or_default();
+        let this = self.base.handle();
+        for pass in 0..3 {
+            for applier in &appliers {
+                let mut apply = |applier: &dyn LayoutStyleApplier| match pass {
+                    0 => applier.apply_base_style(&mut style, &context),
+                    1 => applier.apply_container_style(&mut style, &context),
+                    _ => applier.apply_item_style(&mut style, &context),
+                };
+                if this.as_ref() == Some(applier) {
+                    apply(self);
+                } else {
+                    applier.with(|object| {
+                        if let Some(applier) = object.as_layout_style_applier() {
+                            apply(applier);
+                        }
+                    });
+                }
+            }
+        }
+        let data = self.layout_data.as_deref_mut().unwrap();
         data.style = style;
         data.dirty = true;
 

@@ -131,8 +131,10 @@ pub struct LayoutComponent {
     provider: LayoutNodeProviderState,
     style: Option<CoreHandle>,
     layout_data: Box<LayoutData>,
+    layout_children: Vec<LayoutNodeKey>,
     layout: Layout,
     layout_padding: LayoutPadding,
+    solved_padding: LayoutPadding,
     animation_data_a: LayoutAnimationData,
     animation_data_b: LayoutAnimationData,
     is_smoothing_animation: bool,
@@ -168,8 +170,10 @@ impl Default for LayoutComponent {
             provider: LayoutNodeProviderState::default(),
             style: None,
             layout_data: Box::new(LayoutData::default()),
+            layout_children: Vec::new(),
             layout: Layout::default(),
             layout_padding: LayoutPadding::default(),
+            solved_padding: LayoutPadding::default(),
             animation_data_a: LayoutAnimationData::default(),
             animation_data_b: LayoutAnimationData::default(),
             is_smoothing_animation: false,
@@ -221,6 +225,267 @@ impl ProxyDrawing for LayoutProxy {
 }
 
 impl LayoutComponent {
+    /// Pinned forEachLayoutProvider: groups are transparent, Solo exposes its
+    /// active child, and a nested component list must explicitly opt in.
+    pub fn layout_providers_occurrence(from: &CoreHandle) -> Vec<(CoreHandle, CoreHandle)> {
+        Self::layout_providers_nested_occurrence(from, false)
+    }
+    fn layout_providers_nested_occurrence(
+        from: &CoreHandle,
+        nested: bool,
+    ) -> Vec<(CoreHandle, CoreHandle)> {
+        let children = from
+            .with(|object| {
+                if let Some(solo) = object
+                    .as_any()
+                    .downcast_ref::<crate::mechanical_port::source::solo::Solo>()
+                {
+                    solo.active_component().into_iter().collect::<Vec<_>>()
+                } else {
+                    object
+                        .as_container_component()
+                        .expect("layout traversal container")
+                        .children()
+                        .to_vec()
+                }
+            })
+            .unwrap_or_default();
+        Self::layout_providers_children(&children, nested)
+    }
+    fn layout_providers_children(
+        children: &[CoreHandle],
+        nested: bool,
+    ) -> Vec<(CoreHandle, CoreHandle)> {
+        let mut result = Vec::new();
+        for child in children {
+            let Some((provider, transparent, joins)) = child.with(|object| {
+                    let is_list = object.as_any().is::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>();
+                    let joins = !is_list || object.as_drawable().is_some_and(|drawable| drawable.base.drawable_flags() & u32::from(crate::mechanical_port::source::drawable_flag::DrawableFlag::PARTICIPATES_IN_LAYOUT.0) != 0);
+                    (object.layout_provider_handle(), object.core_type() == crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY || object.as_any().is::<crate::mechanical_port::source::solo::Solo>(), joins)
+                }) else { continue; };
+            if let Some(provider) = provider {
+                if !nested || joins {
+                    result.push((child.clone(), provider));
+                }
+            } else if transparent {
+                result.extend(Self::layout_providers_nested_occurrence(child, true));
+            }
+        }
+        result
+    }
+
+    pub fn on_added_clean_occurrence(
+        owner: &CoreHandle,
+        context: &mut dyn CoreContext,
+    ) -> StatusCode {
+        let code = owner
+            .with_mut(|object| {
+                object
+                    .as_transform_component_mut()
+                    .expect("Layout transform super")
+                    .on_added_clean(context)
+            })
+            .unwrap_or(StatusCode::MissingObject);
+        if code != StatusCode::Ok {
+            return code;
+        }
+        Self::mark_layout_style_dirty_occurrence(owner);
+        Self::sync_layout_children_occurrence(owner);
+        let collapsed = owner
+            .with(|object| object.as_layout_component().unwrap().is_collapsed())
+            .unwrap();
+        Self::propagate_collapse_occurrence(owner, collapsed);
+        StatusCode::Ok
+    }
+
+    pub fn mark_layout_node_dirty_occurrence(owner: &CoreHandle, force: bool) {
+        let artboard = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                layout.force_update_layout_bounds |= force;
+                layout.layout_data.dirty = true;
+                layout.artboard_handle()
+            })
+            .flatten();
+        if let Some(artboard) = artboard {
+            artboard.with_mut(|object| {
+                object
+                    .as_artboard_mut()
+                    .expect("owning Artboard")
+                    .mark_layout_dirty(owner.clone())
+            });
+        }
+    }
+
+    pub fn mark_layout_style_dirty_occurrence(owner: &CoreHandle) {
+        let artboard = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                layout.clear_inherited_interpolation();
+                layout.artboard_handle()
+            })
+            .flatten();
+        owner.with_mut(|object| object.component_add_dirt(ComponentDirt::LAYOUT_STYLE, false));
+        if let Some(artboard) = artboard.filter(|artboard| artboard != owner) {
+            Self::mark_layout_style_dirty_occurrence(&artboard);
+        }
+    }
+
+    pub fn sync_layout_children_occurrence(owner: &CoreHandle) {
+        let mut children = Vec::new();
+        for (_, provider) in Self::layout_providers_occurrence(owner) {
+            let count = provider
+                .with_mut(|object| {
+                    object
+                        .as_layout_node_provider_mut()
+                        .expect("layout provider")
+                        .num_layout_nodes()
+                })
+                .unwrap_or(0);
+            for index in 0..count {
+                children.push(LayoutNodeKey {
+                    provider: provider.clone(),
+                    index,
+                });
+            }
+        }
+        owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut().unwrap();
+            layout.clear_layout_children();
+            #[cfg(feature = "tools")]
+            {
+                layout.layout_data.children =
+                    children.iter().map(|node| node.provider.clone()).collect();
+            }
+            layout.layout_children = children;
+        });
+        Self::mark_layout_node_dirty_occurrence(owner, false);
+    }
+
+    pub fn propagate_collapse_occurrence(owner: &CoreHandle, value: bool) {
+        let Some((collapsed, children, own_collapsed, collapsables)) = owner.with(|object| {
+            let layout = object.as_layout_component().unwrap();
+            let component = object.as_component().unwrap();
+            (
+                value || layout.is_collapsed(),
+                object.as_container_component().unwrap().children().to_vec(),
+                component.is_collapsed(),
+                component.collapsables_snapshot(),
+            )
+        }) else {
+            return;
+        };
+        for child in children {
+            child.with_mut(|object| object.component_collapse(collapsed));
+        }
+        for collapsable in collapsables {
+            collapsable.with_mut(|object| {
+                if let Some(bind) = object.as_data_bind_mut() {
+                    bind.collapse(own_collapsed);
+                }
+            });
+        }
+    }
+
+    pub fn sync_style_occurrence(owner: &CoreHandle) {
+        let Some((mut style, context, appliers)) = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                let context = layout.style_sync_context()?;
+                Some((
+                    std::mem::take(&mut layout.layout_data.style),
+                    context,
+                    layout
+                        .layout_data
+                        .appliers
+                        .as_deref()
+                        .cloned()
+                        .unwrap_or_default(),
+                ))
+            })
+            .flatten()
+        else {
+            return;
+        };
+        // Keep C++'s three sweeps and applier order. In particular the first
+        // applier is this LayoutComponent, borrowed only after extraction above.
+        for applier in &appliers {
+            applier.with(|object| {
+                if let Some(applier) = object.as_layout_style_applier() {
+                    applier.apply_base_style(&mut style, &context);
+                }
+            });
+        }
+        for applier in &appliers {
+            applier.with(|object| {
+                if let Some(applier) = object.as_layout_style_applier() {
+                    applier.apply_container_style(&mut style, &context);
+                }
+            });
+        }
+        for applier in &appliers {
+            applier.with(|object| {
+                if let Some(applier) = object.as_layout_style_applier() {
+                    applier.apply_item_style(&mut style, &context);
+                }
+            });
+        }
+        owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut().unwrap();
+            layout.layout_data.style = style;
+            layout.layout_data.dirty = true;
+        });
+        for (child, provider) in Self::layout_providers_occurrence(owner) {
+            let excluded = matches!(child.core_type(), Some(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY | crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY | crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY));
+            if !excluded {
+                Self::sync_provider_style_occurrence(&provider);
+            }
+        }
+    }
+
+    fn sync_provider_style_occurrence(provider: &CoreHandle) -> bool {
+        let kind = provider
+            .with(|object| {
+                (
+                    object.as_artboard().is_some(),
+                    object.as_layout_component().is_some(),
+                )
+            })
+            .unwrap_or_default();
+        if kind.0 {
+            return Artboard::sync_style_changes_handle(provider);
+        }
+        if kind.1 {
+            Self::sync_style_occurrence(provider);
+            return true;
+        }
+        if let Some((_, roots)) = Self::hosted_layout_roots(provider) {
+            let mut changed = false;
+            for (_, root) in roots {
+                changed |= Artboard::sync_style_changes_handle(&root);
+            }
+            return changed;
+        }
+        provider
+            .with_mut(|object| object.layout_provider_sync_style_changes())
+            .flatten()
+            .unwrap_or(false)
+    }
+
+    pub fn sync_child_provider_styles_occurrence(owner: &CoreHandle) {
+        for (_, provider) in Self::layout_providers_occurrence(owner) {
+            Self::sync_provider_style_occurrence(&provider);
+            if provider
+                .with(|object| object.as_layout_component().is_some())
+                .unwrap_or(false)
+            {
+                Self::mark_layout_node_dirty_occurrence(&provider, false);
+            } else {
+                provider.with_mut(|object| object.layout_provider_mark_node_dirty(false));
+            }
+        }
+    }
+
     fn layout_parent_handle(&self) -> Option<CoreHandle> {
         let mut parent = self.base.base.base.base.base.parent_handle();
         while let Some(value) = parent {
@@ -378,7 +643,10 @@ impl LayoutComponent {
         self.forced_height
     }
     pub fn can_have_overrides(&self) -> bool {
-        false
+        self.base.handle().and_then(|handle| handle.core_type())
+            == Some(
+                crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
+            )
     }
     pub fn has_shape_paints(&self) -> bool {
         !self.paints.shape_paints().is_empty()
@@ -625,7 +893,7 @@ impl LayoutComponent {
         .unwrap_or(0.0)
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        let code = self.base.base.base.base.base.on_added_dirty(context);
+        let code = self.base.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
@@ -810,25 +1078,11 @@ impl LayoutComponent {
         let provider = self.base.base.base.base.base.handle()?;
         (index == 0).then_some(LayoutNodeKey { provider, index })
     }
-    pub fn is_leaf(&mut self) -> bool {
-        !self
-            .base
-            .base
-            .base
-            .base
-            .base
-            .children()
-            .iter()
-            .any(|child| {
-                child
-                    .with(|child| child.layout_provider_handle().is_some())
-                    .unwrap_or(false)
-            })
+    pub fn is_leaf(&self) -> bool {
+        Self::layout_providers_children(self.base.children(), false).is_empty()
     }
-    pub fn sync_style(&mut self) {
-        let Some(style) = self.style_handle() else {
-            return;
-        };
+    fn style_sync_context(&mut self) -> Option<LayoutSyncContext> {
+        let style = self.style_handle()?;
         let parent = self.layout_parent_handle();
         let parent_style = parent.as_ref().and_then(|parent| {
             parent
@@ -856,7 +1110,7 @@ impl LayoutComponent {
                 style.width_scale_type() == LayoutScaleType::Hug
             })
             .unwrap_or(false);
-        let context = LayoutSyncContext {
+        Some(LayoutSyncContext {
             parent_is_grid,
             parent_is_stack,
             container_justify_items,
@@ -864,13 +1118,46 @@ impl LayoutComponent {
             parent_is_row: self.effective_parent_is_row(),
             is_ltr: self.actual_direction() != LayoutDirection::Rtl,
             has_layout_parent: parent.is_some(),
+        })
+    }
+    pub fn sync_style(&mut self) {
+        let Some(context) = self.style_sync_context() else {
+            return;
         };
         let mut taffy_style = std::mem::take(&mut self.layout_data.style);
-        self.layout_data
-            .apply_layout_styles(&mut taffy_style, &context);
+        let this = self.base.handle();
+        let appliers = self
+            .layout_data
+            .appliers
+            .as_deref()
+            .cloned()
+            .unwrap_or_default();
+        for pass in 0..3 {
+            for applier in &appliers {
+                let mut apply = |applier: &dyn LayoutStyleApplier| match pass {
+                    0 => applier.apply_base_style(&mut taffy_style, &context),
+                    1 => applier.apply_container_style(&mut taffy_style, &context),
+                    _ => applier.apply_item_style(&mut taffy_style, &context),
+                };
+                if this.as_ref() == Some(applier) {
+                    apply(self);
+                } else {
+                    applier.with(|object| {
+                        if let Some(applier) = object.as_layout_style_applier() {
+                            apply(applier);
+                        }
+                    });
+                }
+            }
+        }
         self.layout_data.style = taffy_style;
         self.layout_data.dirty = true;
-        self.sync_child_provider_styles();
+        for (child, provider) in Self::layout_providers_children(self.base.children(), false) {
+            let excluded = matches!(child.core_type(), Some(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY | crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY | crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY));
+            if !excluded {
+                Self::sync_provider_style_occurrence(&provider);
+            }
+        }
     }
     pub fn taffy_style(&self) -> taffy::style::Style {
         self.layout_data.style.taffy_style()
@@ -883,30 +1170,43 @@ impl LayoutComponent {
     }
     pub fn set_solved_layout(&mut self, layout: Layout, padding: LayoutPadding) {
         self.layout_data.solved_layout = layout;
-        self.layout_padding = padding;
+        self.solved_padding = padding;
         self.layout_data.has_new_layout = true;
     }
     pub fn clear_layout_children(&mut self) {
+        self.layout_children.clear();
         #[cfg(feature = "tools")]
         self.layout_data.clear_children();
     }
     pub fn sync_layout_children(&mut self) {
         self.clear_layout_children();
-        #[cfg(feature = "tools")]
-        for child in self.base.base.base.base.base.children() {
-            if child
-                .with(|child| child.layout_provider_handle().is_some())
-                .unwrap_or(false)
-            {
-                self.layout_data.children.push(child.clone());
+        for (_, provider) in Self::layout_providers_children(self.base.children(), false) {
+            let count = provider
+                .with_mut(|object| {
+                    object
+                        .as_layout_node_provider_mut()
+                        .expect("layout provider")
+                        .num_layout_nodes()
+                })
+                .unwrap_or(0);
+            for index in 0..count {
+                self.layout_children.push(LayoutNodeKey {
+                    provider: provider.clone(),
+                    index,
+                });
             }
+        }
+        #[cfg(feature = "tools")]
+        {
+            self.layout_data.children = self
+                .layout_children
+                .iter()
+                .map(|node| node.provider.clone())
+                .collect();
         }
         self.mark_layout_node_dirty(false);
     }
     pub fn propagate_size(&mut self) {
-        let Some(owner) = self.base.base.base.base.base.handle() else {
-            return;
-        };
         let direction = self.actual_direction();
         let style = self.with_style(|style| {
             (
@@ -916,14 +1216,14 @@ impl LayoutComponent {
             )
         });
         Self::propagate_size_to_children(
-            owner,
+            self.base.children().to_vec(),
             self.is_hidden(),
             Vec2D::new(self.layout.width(), self.layout.height()),
             style,
         );
     }
     fn propagate_size_to_children(
-        component: CoreHandle,
+        children: Vec<CoreHandle>,
         hidden: bool,
         size: Vec2D,
         style: Option<(LayoutScaleType, LayoutScaleType, LayoutDirection)>,
@@ -931,19 +1231,12 @@ impl LayoutComponent {
         if hidden {
             return;
         }
-        let children = component
-            .with(|component| {
-                component
-                    .as_container_component()
-                    .map(|container| container.children().to_vec())
-            })
-            .flatten()
-            .unwrap_or_default();
         for child in children {
             let skip = child
                 .with(|child| {
                     child.as_layout_component().is_some()
-                        || child.is_transparent_layout_container()
+                        || child.core_type() == crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY
+                        || child.as_any().is::<crate::mechanical_port::source::solo::Solo>()
                         || child.layout_provider_handle().is_some()
                 })
                 .unwrap_or(true);
@@ -962,9 +1255,39 @@ impl LayoutComponent {
                 })
                 .unwrap_or(false);
             if propagate {
-                Self::propagate_size_to_children(child, false, size, style);
+                if let Some(children) = child
+                    .with(|object| {
+                        object
+                            .as_container_component()
+                            .map(|container| container.children().to_vec())
+                    })
+                    .flatten()
+                {
+                    Self::propagate_size_to_children(children, false, size, style);
+                }
             }
         }
+    }
+
+    pub fn propagate_size_occurrence(owner: &CoreHandle) {
+        let Some((children, hidden, size, style)) = owner.with(|object| {
+            let layout = object.as_layout_component().unwrap();
+            (
+                object.as_container_component().unwrap().children().to_vec(),
+                layout.is_hidden(),
+                Vec2D::new(layout.layout.width(), layout.layout.height()),
+                layout.with_style(|style| {
+                    (
+                        style.width_scale_type(),
+                        style.height_scale_type(),
+                        layout.actual_direction(),
+                    )
+                }),
+            )
+        }) else {
+            return;
+        };
+        Self::propagate_size_to_children(children, hidden, size, style);
     }
     pub fn layout_solve_available_size(
         &self,
@@ -986,6 +1309,252 @@ impl LayoutComponent {
                 self.base.height()
             },
         )
+    }
+
+    /// Adapter for the pinned YGNodeCalculateLayout call. The tree contains
+    /// actual provider nodes, including complete hosted Artboard subtrees.
+    /// Taffy replaces Yoga only at this calculation boundary.
+    pub fn calculate_layout_occurrence(
+        owner: &CoreHandle,
+        available_width: f32,
+        available_height: f32,
+    ) {
+        use crate::mechanical_port::source::{
+            artboard_component_list::ArtboardComponentList,
+            layout::layout_participant::LayoutParticipant,
+            nested_artboard_layout::NestedArtboardLayout,
+        };
+        use taffy::prelude::{AvailableSpace, NodeId, Size, TaffyTree};
+
+        #[derive(Clone)]
+        enum Measure {
+            Layout(CoreHandle),
+            Participant(CoreHandle),
+        }
+        struct SolvedNode {
+            owner: CoreHandle,
+            node: NodeId,
+            subtree_dirty: bool,
+        }
+
+        fn target(key: &LayoutNodeKey) -> Option<CoreHandle> {
+            key.provider
+                .with(|object| {
+                    if object.as_layout_component().is_some()
+                        || object.as_any().is::<LayoutParticipant>()
+                    {
+                        assert_eq!(key.index, 0);
+                        Some(key.provider.clone())
+                    } else if let Some(nested) =
+                        object.as_any().downcast_ref::<NestedArtboardLayout>()
+                    {
+                        nested
+                            .base
+                            .base
+                            .artboard_instance_handle(key.index as i32)
+                            .map(|instance| instance.core_handle())
+                    } else if let Some(list) =
+                        object.as_any().downcast_ref::<ArtboardComponentList>()
+                    {
+                        list.item(key.index as i32)
+                            .map(|instance| instance.core_handle())
+                    } else {
+                        panic!("layout provider lacks a native node owner")
+                    }
+                })
+                .flatten()
+        }
+
+        fn build(
+            owner: CoreHandle,
+            tree: &mut TaffyTree<Measure>,
+            nodes: &mut Vec<SolvedNode>,
+            active: &mut Vec<CoreHandle>,
+        ) -> (NodeId, bool) {
+            assert!(!active.contains(&owner), "cyclic layout node ownership");
+            active.push(owner.clone());
+            let (style, children, measure, dirty) = owner
+                .with(|object| {
+                    if let Some(layout) = object.as_layout_component() {
+                        let measure = layout
+                            .is_intrinsic_leaf()
+                            .then(|| Measure::Layout(owner.clone()));
+                        (
+                            layout.taffy_style(),
+                            layout.layout_children.clone(),
+                            measure,
+                            layout.layout_data.dirty,
+                        )
+                    } else {
+                        let participant = object
+                            .as_any()
+                            .downcast_ref::<LayoutParticipant>()
+                            .expect("native layout node owner");
+                        let data = participant
+                            .native_layout_data()
+                            .expect("participating node");
+                        let host = participant
+                            .measurement_host_handle()
+                            .expect("participant host");
+                        (
+                            data.style.taffy_style(),
+                            Vec::new(),
+                            Some(Measure::Participant(host)),
+                            data.dirty,
+                        )
+                    }
+                })
+                .expect("live layout node");
+            let mut child_nodes = Vec::new();
+            let mut subtree_dirty = dirty;
+            for child in children {
+                if let Some(child) = target(&child) {
+                    let (node, dirty) = build(child, tree, nodes, active);
+                    child_nodes.push(node);
+                    subtree_dirty |= dirty;
+                }
+            }
+            let node = if let Some(measure) = measure {
+                assert!(child_nodes.is_empty(), "a measured Rive layout is a leaf");
+                tree.new_leaf_with_context(style, measure)
+            } else {
+                tree.new_with_children(style, &child_nodes)
+            }
+            .expect("valid native layout node");
+            nodes.push(SolvedNode {
+                owner: owner.clone(),
+                node,
+                subtree_dirty,
+            });
+            active.pop();
+            (node, subtree_dirty)
+        }
+
+        fn axis(known: Option<f32>, available: AvailableSpace) -> (f32, LayoutMeasureMode) {
+            if let Some(value) = known {
+                return (value, LayoutMeasureMode::Exactly);
+            }
+            match available {
+                AvailableSpace::Definite(value) => (value, LayoutMeasureMode::AtMost),
+                AvailableSpace::MinContent | AvailableSpace::MaxContent => {
+                    (f32::NAN, LayoutMeasureMode::Undefined)
+                }
+            }
+        }
+        fn measure_host(
+            host: &CoreHandle,
+            width: f32,
+            width_mode: LayoutMeasureMode,
+            height: f32,
+            height_mode: LayoutMeasureMode,
+        ) -> Vec2D {
+            host.with_mut(|object| {
+                object
+                    .as_intrinsically_sizeable_mut()
+                    .map(|sizeable| sizeable.measure_layout(width, width_mode, height, height_mode))
+            })
+            .flatten()
+            .unwrap_or_default()
+        }
+
+        let size = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .unwrap()
+                    .layout_solve_available_size(available_width, available_height)
+            })
+            .expect("layout calculation owner");
+        let mut tree = TaffyTree::<Measure>::new();
+        tree.disable_rounding();
+        let mut nodes = Vec::new();
+        let (root, _) = build(owner.clone(), &mut tree, &mut nodes, &mut Vec::new());
+        tree.compute_layout_with_measure(
+            root,
+            Size {
+                width: if size.x.is_nan() {
+                    AvailableSpace::MaxContent
+                } else {
+                    AvailableSpace::Definite(size.x)
+                },
+                height: if size.y.is_nan() {
+                    AvailableSpace::MaxContent
+                } else {
+                    AvailableSpace::Definite(size.y)
+                },
+            },
+            |known, available, _, context, _| {
+                let (width, width_mode) = axis(known.width, available.width);
+                let (height, height_mode) = axis(known.height, available.height);
+                let measured = match context {
+                    Some(Measure::Participant(host)) => {
+                        measure_host(host, width, width_mode, height, height_mode)
+                    }
+                    Some(Measure::Layout(owner)) => {
+                        let children = owner
+                            .with(|object| {
+                                object.as_container_component().unwrap().children().to_vec()
+                            })
+                            .expect("measurement owner");
+                        let mut measured = Vec2D::default();
+                        for child in children {
+                            let is_layout = child
+                                .with(|object| object.as_layout_component().is_some())
+                                .unwrap_or(false);
+                            if is_layout {
+                                continue;
+                            }
+                            let next = measure_host(&child, width, width_mode, height, height_mode);
+                            if measured.x < next.x {
+                                measured.x = next.x;
+                            }
+                            if measured.y < next.y {
+                                measured.y = next.y;
+                            }
+                        }
+                        measured
+                    }
+                    None => Vec2D::default(),
+                };
+                Size {
+                    width: known.width.unwrap_or(measured.x),
+                    height: known.height.unwrap_or(measured.y),
+                }
+            },
+        )
+        .expect("valid native layout calculation");
+        for entry in nodes {
+            let output = tree.layout(entry.node).expect("solved native node");
+            let next = Layout::new(
+                output.location.x,
+                output.location.y,
+                output.size.width,
+                output.size.height,
+            );
+            let padding = LayoutPadding::new(
+                output.padding.left,
+                output.padding.top,
+                output.padding.right,
+                output.padding.bottom,
+            );
+            entry.owner.with_mut(|object| {
+                let data = if let Some(layout) = object.as_layout_component_mut() {
+                    layout.layout_data.has_new_layout |= layout.solved_padding != padding;
+                    layout.solved_padding = padding;
+                    &mut *layout.layout_data
+                } else {
+                    object
+                        .as_any_mut()
+                        .downcast_mut::<LayoutParticipant>()
+                        .unwrap()
+                        .native_layout_data_mut()
+                        .unwrap()
+                };
+                data.has_new_layout |= entry.subtree_dirty || data.solved_layout != next;
+                data.solved_layout = next;
+                data.dirty = false;
+            });
+        }
     }
     pub fn style_display_hidden(&self) -> bool {
         self.with_style(|style| style.display() == YGDisplay::None)
@@ -1010,7 +1579,11 @@ impl LayoutComponent {
             return;
         }
         self.layout_data.has_new_layout = false;
+        for (_, provider) in Self::layout_providers_children(self.base.children(), false) {
+            Self::update_provider_layout_bounds(&provider, animate);
+        }
         let next = self.layout_data.solved_layout;
+        self.layout_padding = self.solved_padding;
         if self.just_added_to_host {
             self.just_added_to_host = false;
             self.layout = next;
@@ -1027,7 +1600,14 @@ impl LayoutComponent {
             let force = self.force_update_layout_bounds;
             let data = self.current_animation_data();
             if next != data.to || force {
-                self.is_smoothing_animation = data.elapsed_seconds != 0.0;
+                if data.elapsed_seconds != 0.0 {
+                    if self.is_smoothing_animation {
+                        self.animation_data_a = self.animation_data_b;
+                    }
+                    self.is_smoothing_animation = true;
+                } else {
+                    self.is_smoothing_animation = false;
+                }
                 let from = self.layout;
                 let data = self.current_animation_data();
                 data.from = from;
@@ -1047,6 +1627,340 @@ impl LayoutComponent {
         }
         self.force_update_layout_bounds = false;
     }
+    fn hosted_layout_roots(provider: &CoreHandle) -> Option<(bool, Vec<(i32, CoreHandle)>)> {
+        provider.with(|object| {
+            if let Some(nested) = object.as_any().downcast_ref::<crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout>() {
+                Some((false, nested.base.base.artboard_instance_handle(0).map(|instance| (0, instance.core_handle())).into_iter().collect()))
+            } else if let Some(list) = object.as_any().downcast_ref::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>() {
+                Some((true, (0..list.artboard_count() as i32).filter_map(|index| list.item(index).map(|instance| (index, instance.core_handle()))).collect()))
+            } else { None }
+        }).flatten()
+    }
+
+    fn update_provider_layout_bounds(provider: &CoreHandle, animate: bool) {
+        if provider
+            .with(|object| object.as_layout_component().is_some())
+            .unwrap_or(false)
+        {
+            Self::update_layout_bounds_occurrence(provider, animate);
+        } else if let Some((is_list, roots)) = Self::hosted_layout_roots(provider) {
+            for (index, root) in roots {
+                Self::update_layout_bounds_occurrence(&root, animate);
+                if is_list {
+                    let bounds = root
+                        .with(|object| object.as_layout_component().unwrap().layout_bounds())
+                        .unwrap();
+                    provider.with_mut(|object| object.as_any_mut().downcast_mut::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>().unwrap().set_item_size(Vec2D::new(bounds.width(), bounds.height()), index));
+                }
+            }
+            if is_list {
+                provider.with_mut(|object| object.as_any_mut().downcast_mut::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>().unwrap().finish_layout_bounds());
+            }
+        } else {
+            provider.with_mut(|object| object.layout_provider_update_layout_bounds(animate));
+        }
+    }
+
+    pub fn update_layout_bounds_occurrence(owner: &CoreHandle, animate: bool) {
+        let updated = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                std::mem::take(&mut layout.layout_data.has_new_layout)
+            })
+            .unwrap_or(false);
+        if !updated {
+            return;
+        }
+        for (_, provider) in Self::layout_providers_occurrence(owner) {
+            Self::update_provider_layout_bounds(&provider, animate);
+        }
+        let (next, old, just_added, animates, force, current) = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                layout.layout_padding = layout.solved_padding;
+                (
+                    layout.layout_data.solved_layout,
+                    layout.layout,
+                    layout.just_added_to_host,
+                    layout.animates(),
+                    layout.force_update_layout_bounds,
+                    *layout.current_animation_data(),
+                )
+            })
+            .unwrap();
+        let mut changed = false;
+        if just_added {
+            owner.with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                layout.just_added_to_host = false;
+                layout.layout = next;
+                *layout.current_animation_data() = LayoutAnimationData {
+                    from: next,
+                    to: next,
+                    elapsed_seconds: 0.0,
+                };
+            });
+            changed = true;
+        } else if animate && animates {
+            if next != current.to || force {
+                owner.with_mut(|object| {
+                    let layout = object.as_layout_component_mut().unwrap();
+                    if current.elapsed_seconds != 0.0 {
+                        if layout.is_smoothing_animation {
+                            layout.animation_data_a = layout.animation_data_b;
+                        }
+                        layout.is_smoothing_animation = true;
+                    } else {
+                        layout.is_smoothing_animation = false;
+                    }
+                    *layout.current_animation_data() = LayoutAnimationData {
+                        from: old,
+                        to: next,
+                        elapsed_seconds: 0.0,
+                    };
+                });
+                changed = true;
+            }
+        } else if next != old || force {
+            if next.width() != old.width() || next.height() != old.height() {
+                owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
+            }
+            owner.with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                layout.layout = next;
+                layout.animation_data_a.to = next;
+            });
+            changed = true;
+        }
+        if changed {
+            Self::propagate_size_occurrence(owner);
+            owner.with_mut(|object| object.world_transform_mark_dirty());
+        }
+        owner.with_mut(|object| {
+            object
+                .as_layout_component_mut()
+                .unwrap()
+                .force_update_layout_bounds = false
+        });
+    }
+
+    pub fn cascade_layout_style_occurrence(
+        owner: &CoreHandle,
+        interpolation: LayoutStyleInterpolation,
+        interpolator: Option<CoreHandle>,
+        time: f32,
+        direction: LayoutDirection,
+    ) -> bool {
+        let Some((mut updated, direction_changed)) = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut().unwrap();
+            let inherits = layout
+                .with_style(|style| style.animation_style() == LayoutAnimationStyle::Inherit)
+                .unwrap_or(false);
+            let updated = if inherits {
+                layout.set_inherited_interpolation(interpolation, interpolator, time)
+            } else {
+                layout.clear_inherited_interpolation();
+                false
+            };
+            let old = layout.inherited_direction;
+            layout.inherited_direction = if direction == LayoutDirection::Inherit
+                || layout
+                    .with_style(|style| style.direction() != YGDirection::Inherit)
+                    .unwrap_or(false)
+            {
+                LayoutDirection::Inherit
+            } else {
+                direction
+            };
+            (updated, old != layout.inherited_direction)
+        }) else {
+            return false;
+        };
+        if direction_changed {
+            Self::mark_layout_node_dirty_occurrence(owner, true);
+            owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
+            updated = true;
+        }
+        let (interpolation, interpolator, time, direction) = owner
+            .with(|object| {
+                let layout = object.as_layout_component().unwrap();
+                (
+                    layout.interpolation(),
+                    layout.interpolator(),
+                    layout.interpolation_time(),
+                    layout.actual_direction(),
+                )
+            })
+            .unwrap();
+        for (_, provider) in Self::layout_providers_occurrence(owner) {
+            if provider
+                .with(|object| object.as_layout_component().is_some())
+                .unwrap_or(false)
+            {
+                Self::cascade_layout_style_occurrence(
+                    &provider,
+                    interpolation,
+                    interpolator.clone(),
+                    time,
+                    direction,
+                );
+            } else if let Some((_, roots)) = Self::hosted_layout_roots(&provider) {
+                for (_, root) in roots {
+                    Self::cascade_layout_style_occurrence(
+                        &root,
+                        interpolation,
+                        interpolator.clone(),
+                        time,
+                        direction,
+                    );
+                }
+            } else {
+                provider.with_mut(|object| {
+                    object.layout_provider_cascade_style(
+                        interpolation,
+                        interpolator.clone(),
+                        time,
+                        direction,
+                    )
+                });
+            }
+        }
+        updated
+    }
+
+    pub fn advance_component_occurrence(
+        owner: &CoreHandle,
+        elapsed: f32,
+        flags: AdvanceFlags,
+    ) -> bool {
+        if flags.0 & AdvanceFlags::NEW_FRAME.0 == 0
+            || owner
+                .with(|object| object.as_layout_component().unwrap().is_collapsed())
+                .unwrap_or(true)
+        {
+            return false;
+        }
+        Self::apply_interpolation_occurrence(
+            owner,
+            elapsed,
+            flags.0 & (AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0) != 0,
+        )
+    }
+
+    pub fn apply_interpolation_occurrence(owner: &CoreHandle, elapsed: f32, animate: bool) -> bool {
+        let Some((time, interpolation, interpolator, smoothing, data_a)) = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                if !animate
+                    || !layout.animates()
+                    || layout.current_animation_data().to == layout.layout
+                {
+                    return None;
+                }
+                Some((
+                    layout.interpolation_time(),
+                    layout.interpolation(),
+                    layout.interpolator(),
+                    layout.is_smoothing_animation,
+                    layout.animation_data_a,
+                ))
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        let factor = |seconds: f32| {
+            let factor = 1.0_f32.min(if time > 0.0 { seconds / time } else { 1.0 });
+            if interpolation == LayoutStyleInterpolation::Linear {
+                return factor;
+            }
+            interpolator
+                .as_ref()
+                .and_then(|interpolator| {
+                    interpolator
+                        .with_mut(|object| object.keyframe_interpolator_transform(factor))
+                        .flatten()
+                })
+                .unwrap_or(factor)
+        };
+        if smoothing {
+            let f = factor(data_a.elapsed_seconds);
+            owner.with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                layout.animation_data_b.from = layout.animation_data_a.interpolate(f);
+                if f == 1.0 {
+                    layout.animation_data_a = layout.animation_data_b;
+                    layout.is_smoothing_animation = false;
+                } else {
+                    layout.animation_data_a.elapsed_seconds += elapsed;
+                }
+            });
+        }
+        let (data, old) = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                (*layout.current_animation_data(), layout.layout)
+            })
+            .unwrap();
+        if data.elapsed_seconds >= time {
+            if old.width() != data.to.width() || old.height() != data.to.height() {
+                owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
+            }
+            owner.with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                layout.layout = data.to;
+                if layout.is_smoothing_animation {
+                    layout.is_smoothing_animation = false;
+                    layout.animation_data_a = layout.animation_data_b;
+                    layout.animation_data_b.elapsed_seconds = 0.0;
+                }
+                layout.animation_data_a.elapsed_seconds = 0.0;
+            });
+            Self::propagate_size_occurrence(owner);
+            owner.with_mut(|object| object.world_transform_mark_dirty());
+            return false;
+        }
+        let f = factor(data.elapsed_seconds);
+        let current = data.interpolate(f);
+        if current != old {
+            let resized = old.width() != current.width() || old.height() != current.height();
+            owner.with_mut(|object| object.as_layout_component_mut().unwrap().layout = current);
+            if resized {
+                Self::propagate_size_occurrence(owner);
+            }
+            owner.with_mut(|object| object.world_transform_mark_dirty());
+        }
+        owner.with_mut(|object| {
+            object
+                .as_layout_component_mut()
+                .unwrap()
+                .current_animation_data()
+                .elapsed_seconds += elapsed
+        });
+        if f != 1.0 {
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn interrupt_animation_occurrence(owner: &CoreHandle) {
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().unwrap();
+                if !layout.animates() {
+                    return false;
+                }
+                layout.layout = layout.current_animation_data().to;
+                true
+            })
+            .unwrap_or(false);
+        if changed {
+            Self::propagate_size_occurrence(owner);
+        }
+    }
+
     pub fn animates(&self) -> bool {
         self.animation_style() != LayoutAnimationStyle::None
             && self.interpolation() != LayoutStyleInterpolation::Hold
@@ -1095,23 +2009,56 @@ impl LayoutComponent {
             return false;
         }
         let time = self.interpolation_time();
-        let data = self.current_animation_data();
+        let transform_factor = |seconds: f32,
+                                interpolation: LayoutStyleInterpolation,
+                                interpolator: Option<CoreHandle>| {
+            let factor = 1.0_f32.min(if time > 0.0 { seconds / time } else { 1.0 });
+            if interpolation == LayoutStyleInterpolation::Linear {
+                return factor;
+            }
+            interpolator
+                .and_then(|interpolator| {
+                    interpolator
+                        .with_mut(|object| object.keyframe_interpolator_transform(factor))
+                        .flatten()
+                })
+                .unwrap_or(factor)
+        };
+        if self.is_smoothing_animation {
+            let factor = transform_factor(
+                self.animation_data_a.elapsed_seconds,
+                self.interpolation(),
+                self.interpolator(),
+            );
+            self.animation_data_b.from = self.animation_data_a.interpolate(factor);
+            if factor == 1.0 {
+                self.animation_data_a = self.animation_data_b;
+                self.is_smoothing_animation = false;
+            } else {
+                self.animation_data_a.elapsed_seconds += elapsed;
+            }
+        }
+        let data = *self.current_animation_data();
         if data.elapsed_seconds >= time {
+            if self.layout.width() != data.to.width() || self.layout.height() != data.to.height() {
+                CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
+            }
             self.layout = data.to;
-            data.elapsed_seconds = 0.0;
+            if self.is_smoothing_animation {
+                self.is_smoothing_animation = false;
+                self.animation_data_a = self.animation_data_b;
+                self.animation_data_b.elapsed_seconds = 0.0;
+            }
+            self.animation_data_a.elapsed_seconds = 0.0;
             self.propagate_size();
             CoreCapabilities::world_transform_mark_dirty(self);
             return false;
         }
-        let mut factor = (data.elapsed_seconds / time).min(1.0);
-        if self.interpolation() != LayoutStyleInterpolation::Linear {
-            if let Some(interpolator) = self.interpolator() {
-                factor = interpolator
-                    .with(|interpolator| interpolator.keyframe_interpolator_transform(factor))
-                    .flatten()
-                    .unwrap_or(factor);
-            }
-        }
+        let factor = transform_factor(
+            data.elapsed_seconds,
+            self.interpolation(),
+            self.interpolator(),
+        );
         let current = self.current_animation_data().interpolate(factor);
         if self.layout != current {
             let resized =
@@ -1224,17 +2171,53 @@ impl LayoutComponent {
             CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             updated = true;
         }
+        let (interpolation, interpolator, time, direction) = (
+            self.interpolation(),
+            self.interpolator(),
+            self.interpolation_time(),
+            self.actual_direction(),
+        );
+        for (_, provider) in Self::layout_providers_children(self.base.children(), false) {
+            if provider
+                .with(|object| object.as_layout_component().is_some())
+                .unwrap_or(false)
+            {
+                Self::cascade_layout_style_occurrence(
+                    &provider,
+                    interpolation,
+                    interpolator.clone(),
+                    time,
+                    direction,
+                );
+            } else if let Some((_, roots)) = Self::hosted_layout_roots(&provider) {
+                for (_, root) in roots {
+                    Self::cascade_layout_style_occurrence(
+                        &root,
+                        interpolation,
+                        interpolator.clone(),
+                        time,
+                        direction,
+                    );
+                }
+            } else {
+                provider.with_mut(|object| {
+                    object.layout_provider_cascade_style(
+                        interpolation,
+                        interpolator.clone(),
+                        time,
+                        direction,
+                    )
+                });
+            }
+        }
         updated
     }
     pub fn sync_child_provider_styles(&mut self) {
-        for child in self.base.base.base.base.base.children() {
-            let provider = child.with(|child| child.layout_provider_handle()).flatten();
-            if let Some(provider) = provider {
-                provider.with_mut(|provider| {
-                    provider.layout_provider_sync_style_changes();
-                    provider.layout_provider_mark_node_dirty(false);
-                });
-            }
+        for (_, provider) in Self::layout_providers_children(self.base.children(), false) {
+            provider.with_mut(|provider| {
+                provider.layout_provider_sync_style_changes();
+                provider.layout_provider_mark_node_dirty(false);
+            });
         }
     }
     pub fn position_type_changed(&mut self) {

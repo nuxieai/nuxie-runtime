@@ -141,6 +141,25 @@ pub struct ScriptedObjectClone {
     pub data_binds: Vec<CoreHandle>,
 }
 
+/// Callback-local marker. Applying it after the VM returns avoids borrowing
+/// the authored owner again while its callback is active.
+#[derive(Default)]
+pub struct ScriptUpdateRequestHost {
+    requested: bool,
+}
+
+impl crate::scripting::ScriptHost for ScriptUpdateRequestHost {
+    fn mark_script_update(&mut self) {
+        self.requested = true;
+    }
+}
+
+impl ScriptUpdateRequestHost {
+    pub fn take_requested(&mut self) -> bool {
+        std::mem::take(&mut self.requested)
+    }
+}
+
 pub struct ScriptedObject {
     file_asset_referencer: FileAssetReferencer,
     self_ref: i32,
@@ -211,6 +230,16 @@ impl ScriptedObject {
         owner: &CoreHandle,
         container: &mut crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer,
     ) -> Vec<CoreHandle> {
+        Self::clone_properties_with(properties, owner, |bind| container.add_data_bind(bind))
+    }
+
+    /// Same upstream operation with a short-borrow container attachment, for
+    /// artboards whose callbacks may access the containing authored arena.
+    pub fn clone_properties_with(
+        properties: &[CoreHandle],
+        owner: &CoreHandle,
+        mut add_data_bind: impl FnMut(CoreHandle),
+    ) -> Vec<CoreHandle> {
         let mut clones = Vec::with_capacity(properties.len());
         for property in properties {
             let clone = property
@@ -254,7 +283,7 @@ impl ScriptedObject {
                     bind.set_target(Some(clone.clone()));
                 })
                 .expect("the cloned input bind remains live");
-                container.add_data_bind(bind.clone());
+                add_data_bind(bind.clone());
                 let attached = clone
                     .with_mut(|property| property.script_input_set_data_bind(Some(bind), false));
                 assert_eq!(attached, Some(true), "a cloned script input keeps its type");
@@ -262,6 +291,47 @@ impl ScriptedObject {
             clones.push(clone);
         }
         clones
+    }
+
+    pub fn apply_update_request(owner: &CoreHandle) {
+        use crate::mechanical_port::source::scripted::{
+            scripted_drawable::ScriptedDrawable, scripted_layout::ScriptedLayout,
+            scripted_path_effect::ScriptedPathEffect,
+        };
+        owner.with_mut(|owner| {
+            if let Some(drawable) = owner.as_any_mut().downcast_mut::<ScriptedDrawable>() {
+                drawable.mark_needs_update();
+            } else if let Some(layout) = owner.as_any_mut().downcast_mut::<ScriptedLayout>() {
+                layout.base.base.mark_needs_update();
+            } else if let Some(effect) = owner.as_any_mut().downcast_mut::<ScriptedPathEffect>() {
+                effect.mark_needs_update();
+            }
+            // Other scripted owners inherit ScriptedObject::markNeedsUpdate,
+            // whose pinned implementation is intentionally empty.
+        });
+    }
+
+    pub fn call_interpolator(
+        &self,
+        method: crate::scripting::ScriptInterpolatorMethod,
+        args: &[f32],
+    ) -> Option<f32> {
+        use crate::scripting::ScriptOptionalNumberResult;
+        if self.self_ref == 0 {
+            return None;
+        }
+        let instance = self.runtime_instance.as_ref()?;
+        // ScriptedInterpolator inherits the empty markNeedsUpdate; retain the
+        // real callback request without inventing a component dirt effect.
+        let mut host = ScriptUpdateRequestHost::default();
+        match instance
+            .borrow_mut()
+            .call_interpolator(method, args, &mut host)
+            .ok()?
+        {
+            ScriptOptionalNumberResult::Missing => None,
+            ScriptOptionalNumberResult::Returned(value) => Some(value),
+        }
     }
 
     /// Reinitialization releases the scripted owner before touching its

@@ -2,10 +2,10 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter, linear_animation::LinearAnimation,
-        r#loop::Loop, nested_animation::NestedEventNotifier,
+        nested_animation::NestedEventNotifier, r#loop::Loop,
     },
     artboard::RuntimeArtboardInstanceWeakHandle,
-    core::{CoreHandle, field_types::core_callback_type::CallbackContext},
+    core::{field_types::core_callback_type::CallbackContext, CoreHandle},
     data_bind::{
         bindable_property_boolean::BindablePropertyBoolean,
         bindable_property_color::BindablePropertyColor,
@@ -314,23 +314,43 @@ impl LinearAnimationInstance {
         {
             return Some(cached.clone());
         }
-        let cloned = shared
-            .with_downcast_mut::<ScriptedInterpolator, _>(|shared| shared.clone_scripted_object())
-            .flatten()?;
-        let owner = cloned.owner;
-        let data_binds = cloned.data_binds;
-        self.artboard.with_artboard_mut(|artboard| {
-            for bind in data_binds.iter().cloned() {
-                artboard.add_data_bind(bind);
-            }
+        use crate::mechanical_port::source::scripted::scripted_object::{
+            ScriptUpdateRequestHost, ScriptedObject,
+        };
+        let owner = ScriptedInterpolator::clone_scripted_occurrence(&shared, |bind| {
+            self.artboard
+                .with_artboard_mut(|artboard| artboard.add_data_bind(bind))
+                .expect("the animation retains its artboard while cloning an interpolator");
         })?;
+        let context = self
+            .artboard
+            .with_artboard(|artboard| artboard.data_context())?;
+        let (properties, needs_init) =
+            owner.with_downcast_mut::<ScriptedInterpolator, _>(|clone| {
+                clone.scripted.set_data_context(context);
+                (
+                    clone.properties.clone(),
+                    clone.scripted.script_asset().is_some() && !clone.scripted.user_lua_init_done(),
+                )
+            })?;
+        // The input backlink is installed after addDataBind by cloneProperties.
+        // Discover the same binds as the pinned owner, preserving their order.
+        for property in &properties {
+            if let Some(bind) = property
+                .with(|property| property.script_input_data_bind())
+                .flatten()
+            {
+                self.cloned_artboard_data_binds.borrow_mut().push(bind);
+            }
+        }
+        if needs_init {
+            let mut host = ScriptUpdateRequestHost::default();
+            ScriptedObject::reinit_occurrence(&owner, &properties, &mut host);
+        }
         self.scripted_interpolators
             .borrow_mut()
             .get_or_insert_with(HashMap::new)
             .insert(keyframe, owner.clone());
-        self.cloned_artboard_data_binds
-            .borrow_mut()
-            .extend(data_binds);
         Some(owner)
     }
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {

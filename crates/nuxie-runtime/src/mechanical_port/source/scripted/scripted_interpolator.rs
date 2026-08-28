@@ -1,86 +1,101 @@
 use crate::mechanical_port::source::{
-    core::CoreHandle,
+    core::{CoreHandle, CoreObject},
     generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase,
-    scripted::scripted_object::{ScriptProtocol, ScriptedObject, ScriptedObjectClone},
+    importers::import_stack::ImportStack,
+    scripted::scripted_object::{ScriptProtocol, ScriptUpdateRequestHost, ScriptedObject},
+    status_code::StatusCode,
 };
+use crate::scripting::ScriptInterpolatorMethod;
+
 #[derive(Default)]
 pub struct ScriptedInterpolator {
     pub base: ScriptedInterpolatorBase,
     pub scripted: ScriptedObject,
     pub properties: Vec<CoreHandle>,
 }
+
 impl ScriptedInterpolator {
     pub fn asset_id(&self) -> u32 {
         self.base.script_asset_id()
     }
 
-    pub fn transform(&mut self, factor: f32) -> f32 {
+    pub fn transform(&self, factor: f32) -> f32 {
         self.scripted
-            .call_number("transform", &[factor])
+            .call_interpolator(ScriptInterpolatorMethod::Transform, &[factor])
             .unwrap_or(factor)
     }
+
     pub fn transform_value(&mut self, from: f32, to: f32, factor: f32) -> f32 {
         self.scripted
-            .call_number("transformValue", &[from, to, factor])
+            .call_interpolator(
+                ScriptInterpolatorMethod::TransformValue,
+                &[from, to, factor],
+            )
             .unwrap_or(from + (to - from) * factor)
     }
-    pub fn add_property(&mut self, p: CoreHandle) {
-        self.properties.push(p)
+
+    pub fn add_scripted_dirt(&mut self, _value: u32, _recurse: bool) -> bool {
+        false
     }
+
+    pub fn component(&self) -> Option<CoreHandle> {
+        None
+    }
+
+    pub fn add_property(&mut self, property: CoreHandle) {
+        let owner = CoreObject::core(self).handle();
+        property.with_mut(|property| {
+            property.script_input_set_scripted_object(owner);
+        });
+        self.properties.push(property);
+    }
+
     pub fn remove_property(&mut self, property: &CoreHandle) {
-        self.properties.retain(|item| item != property)
-    }
-
-    /// Clone the template into the same Core arena and clone each scripted
-    /// input binding for the runtime host that owns the stateful occurrence.
-    pub fn clone_scripted_object(&self) -> Option<ScriptedObjectClone> {
-        let template = self.base.base.base.base.handle()?;
-        let owner = template.clone_occurrence()?;
-        let asset = self.scripted.script_asset();
-        let mut cloned_properties = Vec::with_capacity(self.properties.len());
-        let mut data_binds = Vec::new();
-
-        for property in &self.properties {
-            let Some(cloned_property) = property.clone_occurrence() else {
-                continue;
-            };
-            cloned_property.with_mut(|property| {
-                property.script_input_set_scripted_object(Some(owner.clone()));
-            });
-
-            let source_bind = property
-                .with(|property| property.script_input_data_bind())
-                .flatten();
-            if let Some(source_bind) = source_bind
-                && let Some(cloned_bind) = source_bind.clone_occurrence()
-            {
-                let file = source_bind
-                    .with(|bind| bind.as_data_bind().map(|bind| bind.file()))
-                    .flatten();
-                cloned_bind.with_mut(|bind| {
-                    if let Some(bind) = bind.as_data_bind_mut() {
-                        bind.set_target(Some(cloned_property.clone()));
-                        if let Some(file) = file {
-                            bind.set_file(file);
-                        }
-                    }
-                });
-                cloned_property.with_mut(|property| {
-                    property.script_input_set_data_bind(Some(cloned_bind.clone()), true);
-                });
-                data_binds.push(cloned_bind);
-            }
-            cloned_properties.push(cloned_property);
+        if let Some(index) = self.properties.iter().position(|item| item == property) {
+            self.properties.remove(index);
         }
-
-        owner.with_downcast_mut::<ScriptedInterpolator, _>(|clone| {
-            clone.properties = cloned_properties;
-            clone.scripted.set_asset(owner.clone(), asset);
-            clone.scripted.reinit();
-        })?;
-
-        Some(ScriptedObjectClone { owner, data_binds })
     }
+
+    pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
+        let Some(owner) = CoreObject::core(self).handle() else {
+            return StatusCode::MissingObject;
+        };
+        let result = self.scripted.register_referencer(owner, stack);
+        if result != StatusCode::Ok {
+            return result;
+        }
+        self.base.base.import(stack)
+    }
+
+    pub fn clone_definition(&self) -> Self {
+        let mut clone = Self::default();
+        let mut base = std::mem::take(&mut clone.base);
+        base.copy(&self.base, &mut clone);
+        clone.base = base;
+        clone
+            .scripted
+            .file_asset_referencer_mut()
+            .set_asset_unattached(self.scripted.script_asset());
+        clone
+    }
+
+    /// A short-borrow attachment callback preserves addDataBind's position
+    /// before the input backlink and before script initialization.
+    pub fn clone_scripted_occurrence(
+        source: &CoreHandle,
+        add_data_bind: impl FnMut(CoreHandle),
+    ) -> Option<CoreHandle> {
+        let (definition, properties) = source.with_downcast::<Self, _>(|source| {
+            (source.clone_definition(), source.properties.clone())
+        })?;
+        let owner = source.insert_sibling(definition)?;
+        let properties = ScriptedObject::clone_properties_with(&properties, &owner, add_data_bind);
+        let mut host = ScriptUpdateRequestHost::default();
+        ScriptedObject::reinit_occurrence(&owner, &properties, &mut host);
+        // ScriptedInterpolator inherits the empty markNeedsUpdate.
+        Some(owner)
+    }
+
     pub fn script_protocol(&self) -> ScriptProtocol {
         ScriptProtocol::Interpolator
     }

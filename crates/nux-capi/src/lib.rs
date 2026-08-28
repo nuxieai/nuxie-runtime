@@ -1919,7 +1919,7 @@ pub(crate) unsafe fn prepare_optional_host_command_import(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum NativeShaderImportAuthority {
     Denied,
-    #[cfg(feature = "apple-authored-msl")]
+    #[cfg(any(feature = "apple-authored-msl", feature = "android-authored-wgsl"))]
     TrustedExporter,
 }
 
@@ -1954,7 +1954,7 @@ pub(crate) fn import_file_with_prepared_host_commands(
                         // authenticated these exact bytes.
                         unsafe { File::import_trusted_with_host_commands(bytes, config) }
                     }
-                    #[cfg(feature = "apple-authored-msl")]
+                    #[cfg(any(feature = "apple-authored-msl", feature = "android-authored-wgsl"))]
                     NativeShaderImportAuthority::TrustedExporter => {
                         // SAFETY: only the product-specific Rust entrypoint
                         // selects this branch after its caller establishes

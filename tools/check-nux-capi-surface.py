@@ -17,6 +17,7 @@ CONTRACT_FILES = (
     "exports-v3-portable.txt",
     "exports-v3-apple-metal-extension.txt",
     "exports-v3-android-vulkan-extension.txt",
+    "exports-v3-android-authored-wgsl-extension.txt",
 )
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 COMMENTS = re.compile(r"/\*.*?\*/|//[^\r\n]*", re.DOTALL)

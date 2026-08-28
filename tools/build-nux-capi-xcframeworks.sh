@@ -109,6 +109,8 @@ contract_fingerprint="$({
         "${repo_root}/crates/nux-capi/abi-layout-v3.json" \
         "${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
         "${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
+        "${repo_root}/crates/nux-capi/exports-v3-android-vulkan-extension.txt" \
+        "${repo_root}/crates/nux-capi/exports-v3-android-authored-wgsl-extension.txt" \
         "${repo_root}/crates/nux-apple-product-extension/include/nux_product_extension.h" \
         "${repo_root}/crates/nux-apple-product-extension/include/module.modulemap" \
         "${repo_root}/crates/nux-apple-product-extension/exports-v1-product-extension.txt"

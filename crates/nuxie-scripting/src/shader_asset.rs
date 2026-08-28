@@ -17,7 +17,11 @@ use nuxie_render_api::{
     GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureSamplerPair,
     GpuCanvasShaderTextureViewDimension, GpuCanvasWebGl2Shader,
 };
-#[cfg(any(feature = "apple-authored-msl", test))]
+#[cfg(any(
+    feature = "apple-authored-msl",
+    feature = "android-authored-wgsl",
+    test
+))]
 use sha2::{Digest, Sha256};
 use std::array;
 use std::ops::Range;
@@ -68,9 +72,17 @@ pub(crate) struct ShaderAsset {
     texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
     #[cfg(any(feature = "apple-authored-msl", test))]
     supplemental_reflection: Option<Vec<u8>>,
-    #[cfg(any(feature = "apple-authored-msl", test))]
+    #[cfg(any(
+        feature = "apple-authored-msl",
+        feature = "android-authored-wgsl",
+        test
+    ))]
     artifact_size: u64,
-    #[cfg(any(feature = "apple-authored-msl", test))]
+    #[cfg(any(
+        feature = "apple-authored-msl",
+        feature = "android-authored-wgsl",
+        test
+    ))]
     artifact_sha256: [u8; 32],
 }
 
@@ -157,10 +169,18 @@ impl ShaderAsset {
             texture_sampler_pairs,
             #[cfg(any(feature = "apple-authored-msl", test))]
             supplemental_reflection,
-            #[cfg(any(feature = "apple-authored-msl", test))]
+            #[cfg(any(
+                feature = "apple-authored-msl",
+                feature = "android-authored-wgsl",
+                test
+            ))]
             artifact_size: u64::try_from(payload.len())
                 .map_err(|_| Error::runtime("ShaderAsset length does not fit in u64"))?,
-            #[cfg(any(feature = "apple-authored-msl", test))]
+            #[cfg(any(
+                feature = "apple-authored-msl",
+                feature = "android-authored-wgsl",
+                test
+            ))]
             artifact_sha256: Sha256::digest(payload).into(),
         })
     }
@@ -221,9 +241,19 @@ impl ShaderAsset {
         provenance: Option<GpuCanvasShaderProvenance>,
     ) -> Result<GpuCanvasShaderArtifact> {
         match profile {
-            GpuCanvasShaderProfile::WebGpu => self
-                .decode_webgpu(name)
-                .map(GpuCanvasShaderArtifact::WebGpu),
+            GpuCanvasShaderProfile::WebGpu => {
+                #[cfg(feature = "android-authored-wgsl")]
+                {
+                    self.decode_android_wgsl(name, provenance)
+                        .map(GpuCanvasShaderArtifact::WebGpu)
+                }
+                #[cfg(not(feature = "android-authored-wgsl"))]
+                {
+                    let _ = provenance;
+                    self.decode_webgpu(name)
+                        .map(GpuCanvasShaderArtifact::WebGpu)
+                }
+            }
             GpuCanvasShaderProfile::WebGl2 => self
                 .decode_webgl2(name)
                 .map(GpuCanvasShaderArtifact::WebGl2),
@@ -239,6 +269,25 @@ impl ShaderAsset {
                 )))
             }
         }
+    }
+
+    #[cfg(feature = "android-authored-wgsl")]
+    fn decode_android_wgsl(
+        &self,
+        name: &str,
+        provenance: Option<GpuCanvasShaderProvenance>,
+    ) -> Result<GpuCanvasShader> {
+        let provenance = provenance.ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no verified provenance for Android WGSL"
+            ))
+        })?;
+        if !provenance.authorizes_digest(self.artifact_size, &self.artifact_sha256) {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' Android WGSL provenance does not authorize this artifact"
+            )));
+        }
+        self.decode_webgpu(name)
     }
 
     #[cfg(any(feature = "apple-authored-msl", test))]
@@ -1159,6 +1208,38 @@ mod tests {
         ])
     }
 
+    #[cfg(feature = "android-authored-wgsl")]
+    #[test]
+    fn android_wgsl_requires_exact_unforgeable_provenance() {
+        let payload = imported_gpu_canvas_webgpu_payload();
+        let asset = ShaderAsset::decode("android", &payload).unwrap();
+        assert!(
+            asset
+                .decode_for_profile("android", GpuCanvasShaderProfile::WebGpu, None)
+                .is_err(),
+            "ordinary Android imports must not admit exporter-authored WGSL"
+        );
+
+        let other = [0u8; 8];
+        let error = asset
+            .decode_for_profile(
+                "android",
+                GpuCanvasShaderProfile::WebGpu,
+                Some(provenance(&other)),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("does not authorize"));
+
+        let artifact = asset
+            .decode_for_profile(
+                "android",
+                GpuCanvasShaderProfile::WebGpu,
+                Some(provenance(&payload)),
+            )
+            .expect("the trusted product proof admits exact WGSL exporter bytes");
+        assert!(matches!(artifact, GpuCanvasShaderArtifact::WebGpu(_)));
+    }
+
     #[test]
     fn decodes_pinned_cpp_webgpu_whole_module_and_binding_map() {
         let payload = imported_gpu_canvas_webgpu_payload();
@@ -1594,12 +1675,16 @@ mod tests {
     }
 
     #[test]
-    fn apple_metal_never_falls_back_to_webgpu_and_webgpu_default_is_unchanged() {
+    fn apple_metal_never_falls_back_and_webgpu_uses_its_profile_policy() {
         let web = imported_gpu_canvas_webgpu_payload();
         let asset = ShaderAsset::decode("web", &web).unwrap();
+        #[cfg(feature = "android-authored-wgsl")]
+        let web_provenance = Some(provenance(&web));
+        #[cfg(not(feature = "android-authored-wgsl"))]
+        let web_provenance = None;
         assert!(matches!(
             asset
-                .decode_for_profile("web", GpuCanvasShaderProfile::WebGpu, None)
+                .decode_for_profile("web", GpuCanvasShaderProfile::WebGpu, web_provenance)
                 .unwrap(),
             GpuCanvasShaderArtifact::WebGpu(_)
         ));
@@ -1614,9 +1699,17 @@ mod tests {
 
         let dual_profile = native_payload();
         let asset = ShaderAsset::decode("dual-profile", &dual_profile).unwrap();
+        #[cfg(feature = "android-authored-wgsl")]
+        let web_provenance = Some(provenance(&dual_profile));
+        #[cfg(not(feature = "android-authored-wgsl"))]
+        let web_provenance = None;
         assert!(matches!(
             asset
-                .decode_for_profile("dual-profile", GpuCanvasShaderProfile::WebGpu, None)
+                .decode_for_profile(
+                    "dual-profile",
+                    GpuCanvasShaderProfile::WebGpu,
+                    web_provenance,
+                )
                 .unwrap(),
             GpuCanvasShaderArtifact::WebGpu(_)
         ));

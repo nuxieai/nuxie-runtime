@@ -2048,6 +2048,24 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_allows_exact_android_authored_wgsl_feature_forwarding(self) -> None:
+        self.create_portable_abi_facade()
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-authored-wgsl = ["nuxie/android-authored-wgsl"]
+
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_rejects_android_vulkan_forwarding_under_an_alias(self) -> None:
         self.create_portable_abi_facade()
         self.create_package(

@@ -445,8 +445,9 @@ impl ScriptExecutionCapability {
     ///
     /// In addition to authenticating `artifact_bytes`, the caller must have
     /// established that every native shader payload was produced by the
-    /// product's trusted MSL compiler/exporter and is valid for unsafe Metal
-    /// passthrough. A signature or digest alone does not establish this.
+    /// product's trusted compiler/exporter and is valid for the selected
+    /// backend passthrough. A signature or digest alone does not establish
+    /// this.
     #[doc(hidden)]
     pub unsafe fn for_verified_native_shader_artifact_unchecked(
         artifact_bytes: &[u8],
@@ -660,7 +661,10 @@ struct FileScriptAsset {
     is_external_data_converter: bool,
 }
 
-#[cfg(all(feature = "scripting", feature = "ore-metal-authored-msl"))]
+#[cfg(all(
+    feature = "scripting",
+    any(feature = "ore-metal-authored-msl", feature = "android-authored-wgsl")
+))]
 fn mint_shader_provenance(
     native_shaders_are_authorized: bool,
     type_name: &str,
@@ -686,7 +690,10 @@ fn mint_shader_provenance(
     })
 }
 
-#[cfg(all(feature = "scripting", not(feature = "ore-metal-authored-msl")))]
+#[cfg(all(
+    feature = "scripting",
+    not(any(feature = "ore-metal-authored-msl", feature = "android-authored-wgsl"))
+))]
 fn mint_shader_provenance(
     _native_shaders_are_authorized: bool,
     _type_name: &str,
@@ -5791,7 +5798,7 @@ impl File {
     /// The caller must have authenticated `bytes` and established that every
     /// native shader payload was emitted by the trusted native-shader exporter.
     /// A package signature without compiler provenance is insufficient.
-    #[cfg(feature = "ore-metal-authored-msl")]
+    #[cfg(any(feature = "ore-metal-authored-msl", feature = "android-authored-wgsl"))]
     #[doc(hidden)]
     pub unsafe fn import_trusted_native_shader_artifact_with_host_commands(
         bytes: &[u8],
@@ -9242,7 +9249,7 @@ mod inert_script_import_tests {
         assert_eq!(assets[0].payload.as_deref(), Some([0, 1, 2, 3].as_slice()));
     }
 
-    #[cfg(feature = "ore-metal-authored-msl")]
+    #[cfg(any(feature = "ore-metal-authored-msl", feature = "android-authored-wgsl"))]
     #[test]
     fn only_trusted_exporter_exact_artifacts_mint_shader_provenance() {
         let shader_payload = [0, 1, 2, 3];
@@ -9294,7 +9301,7 @@ mod inert_script_import_tests {
         ));
     }
 
-    #[cfg(feature = "ore-metal-authored-msl")]
+    #[cfg(any(feature = "ore-metal-authored-msl", feature = "android-authored-wgsl"))]
     #[test]
     fn trusted_native_shader_host_command_import_mints_shader_provenance() {
         let shader_payload = [0, 1, 2, 3];

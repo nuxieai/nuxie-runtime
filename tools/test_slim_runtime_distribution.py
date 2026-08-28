@@ -88,6 +88,11 @@ class SlimRuntimeSourceTests(unittest.TestCase):
             'exports-v3-android-vulkan-extension.txt"',
             verifier,
         )
+        self.assertIn(
+            '"androidAuthoredWgslExtension=${repo_root}/crates/nux-capi/'
+            'exports-v3-android-authored-wgsl-extension.txt"',
+            verifier,
+        )
 
     def test_release_size_evidence_pins_the_exact_v040_baseline(self) -> None:
         baseline = json.loads(
@@ -123,6 +128,7 @@ class ShippedSurfaceGuardTests(unittest.TestCase):
             (root / "exports-v3-portable.txt").write_text(exports)
             (root / "exports-v3-apple-metal-extension.txt").write_text("")
             (root / "exports-v3-android-vulkan-extension.txt").write_text("")
+            (root / "exports-v3-android-authored-wgsl-extension.txt").write_text("")
             return subprocess.run(
                 [
                     "python3",

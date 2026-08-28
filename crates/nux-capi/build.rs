@@ -50,6 +50,10 @@ fn emit_build_provenance(revision: &str) {
             std::env::var_os("CARGO_FEATURE_ANDROID_VULKAN").is_some(),
         ),
         (
+            "android-authored-wgsl",
+            std::env::var_os("CARGO_FEATURE_ANDROID_AUTHORED_WGSL").is_some(),
+        ),
+        (
             "scripting",
             std::env::var_os("CARGO_FEATURE_SCRIPTING").is_some(),
         ),

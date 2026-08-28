@@ -14,6 +14,7 @@ scripting = ["nuxie/scripting"]
 apple-metal = ["nuxie/renderer-metal", "dep:dispatch2", "dep:nuxie-image-codec", "dep:nuxie-renderer", "nuxie-renderer/renderer-metal", "dep:objc2", "dep:objc2-metal", "dep:objc2-quartz-core"]
 android-vulkan = ["nuxie/renderer-vulkan", "dep:nuxie-image-codec", "dep:nuxie-project-data", "dep:nuxie-renderer", "nuxie-renderer/renderer-vulkan"]
 apple-authored-msl = ["nuxie/ore-metal-authored-msl"]
+android-authored-wgsl = ["scripting", "nuxie/android-authored-wgsl"]
 
 [dependencies]
 nuxie = { path = "../nuxie", default-features = false }
@@ -29,6 +30,7 @@ nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 nuxie-schema = { path = "../nuxie-schema" }
 serde_json = "1"
+sha2 = "0.10"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 dispatch2 = { version = "0.3.1", default-features = false, features = ["std"], optional = true }

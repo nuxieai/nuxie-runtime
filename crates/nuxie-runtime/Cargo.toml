@@ -25,6 +25,7 @@ required-features = ["tools"]
 [dependencies]
 anyhow = "1"
 harfrust = "0.12"
+libhydrogen = "=0.4.6"
 nuxie-audio = { path = "../nuxie-audio" }
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-graph = { path = "../nuxie-graph" }

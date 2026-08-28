@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
-use crate::mechanical_port::source::{component_dirt::ComponentDirt, core::CoreHandle};
+use crate::mechanical_port::source::{
+    component::ComponentOccurrenceHandle, component_dirt::ComponentDirt,
+};
 
 pub trait DirtDependent {
     fn add_dirt(&mut self, value: ComponentDirt, recurse: bool);
@@ -11,7 +13,7 @@ pub trait DependencyRoot<U> {
 }
 
 pub struct DependencyHelper<U> {
-    dependents: Vec<CoreHandle>,
+    dependents: Vec<ComponentOccurrenceHandle>,
     marker: PhantomData<fn() -> U>,
 }
 
@@ -25,13 +27,13 @@ impl<U> Default for DependencyHelper<U> {
 }
 
 impl<U: DirtDependent> DependencyHelper<U> {
-    pub fn add_dependent(&mut self, component: CoreHandle) {
+    pub fn add_dependent(&mut self, component: ComponentOccurrenceHandle) {
         if !self.dependents.contains(&component) {
             self.dependents.push(component);
         }
     }
 
-    pub fn remove_dependent(&mut self, component: &CoreHandle) {
+    pub fn remove_dependent(&mut self, component: &ComponentOccurrenceHandle) {
         self.dependents.retain(|candidate| candidate != component);
     }
 
@@ -40,9 +42,7 @@ impl<U: DirtDependent> DependencyHelper<U> {
             return;
         }
         for dependent in self.dependents.iter().cloned() {
-            dependent.with_mut(|dependent| {
-                dependent.component_add_dirt(value, true);
-            });
+            dependent.add_dirt(value, true);
         }
     }
 
@@ -50,7 +50,7 @@ impl<U: DirtDependent> DependencyHelper<U> {
         derived.on_component_dirty(component);
     }
 
-    pub fn dependents(&self) -> &[CoreHandle] {
+    pub fn dependents(&self) -> &[ComponentOccurrenceHandle] {
         &self.dependents
     }
 }

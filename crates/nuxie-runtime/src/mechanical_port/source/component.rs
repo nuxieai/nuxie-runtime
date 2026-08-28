@@ -1,6 +1,6 @@
+pub use crate::mechanical_port::source::component_dirt::ComponentDirt;
 use crate::mechanical_port::source::{
     artboard::Artboard,
-    component_dirt::ComponentDirt,
     container_component::ContainerComponent,
     core::CoreHandle,
     core_context::CoreContext,
@@ -15,6 +15,178 @@ use crate::mechanical_port::source::{
     math::vec2d::Vec2D,
     status_code::StatusCode,
 };
+pub fn has_dirt(value: ComponentDirt, flags: ComponentDirt) -> bool {
+    value.intersects(flags)
+}
+
+/// A dependency-graph occurrence is not always an authored Core object. The two
+/// upstream runtime-only Component helpers retain weak identity in the graph;
+/// their Shape/TextStyle owns the strong typed handle.
+#[derive(Clone)]
+pub enum ComponentOccurrenceHandle {
+    Authored(CoreHandle),
+    PathComposer(
+        std::rc::Weak<
+            std::cell::RefCell<crate::mechanical_port::source::shapes::path_composer::PathComposer>,
+        >,
+    ),
+    TextVariationHelper(
+        std::rc::Weak<
+            std::cell::RefCell<
+                crate::mechanical_port::source::text::text_variation_helper::TextVariationHelper,
+            >,
+        >,
+    ),
+}
+
+impl From<CoreHandle> for ComponentOccurrenceHandle {
+    fn from(value: CoreHandle) -> Self {
+        Self::Authored(value)
+    }
+}
+impl PartialEq for ComponentOccurrenceHandle {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Authored(left), Self::Authored(right)) => left == right,
+            (Self::PathComposer(left), Self::PathComposer(right)) => left.ptr_eq(right),
+            (Self::TextVariationHelper(left), Self::TextVariationHelper(right)) => {
+                left.ptr_eq(right)
+            }
+            _ => false,
+        }
+    }
+}
+impl Eq for ComponentOccurrenceHandle {}
+impl std::hash::Hash for ComponentOccurrenceHandle {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        use std::hash::Hash;
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Self::Authored(handle) => handle.hash(state),
+            Self::PathComposer(handle) => handle.as_ptr().hash(state),
+            Self::TextVariationHelper(handle) => handle.as_ptr().hash(state),
+        }
+    }
+}
+impl ComponentOccurrenceHandle {
+    pub fn authored(&self) -> Option<&CoreHandle> {
+        match self {
+            Self::Authored(handle) => Some(handle),
+            _ => None,
+        }
+    }
+    pub fn with_component<R>(&self, f: impl FnOnce(&Component) -> R) -> Option<R> {
+        match self {
+            Self::Authored(handle) => handle.with(|object| object.as_component().map(f)).flatten(),
+            Self::PathComposer(handle) => {
+                handle.upgrade().map(|owner| f(&owner.borrow().component))
+            }
+            Self::TextVariationHelper(handle) => {
+                handle.upgrade().map(|owner| f(&owner.borrow().component))
+            }
+        }
+    }
+    pub fn with_component_mut<R>(&self, f: impl FnOnce(&mut Component) -> R) -> Option<R> {
+        match self {
+            Self::Authored(handle) => handle
+                .with_mut(|object| object.as_component_mut().map(f))
+                .flatten(),
+            Self::PathComposer(handle) => handle
+                .upgrade()
+                .map(|owner| f(&mut owner.borrow_mut().component)),
+            Self::TextVariationHelper(handle) => handle
+                .upgrade()
+                .map(|owner| f(&mut owner.borrow_mut().component)),
+        }
+    }
+    fn on_dirty(&self, _dirt: ComponentDirt) {
+        // Release the composer borrow before Shape::pathChanged recursively
+        // marks this helper; its retained dirt bit must already be set.
+        if let Self::PathComposer(handle) = self {
+            let shape = handle
+                .upgrade()
+                .and_then(|owner| owner.borrow().dirty_shape());
+            if let Some(shape) = shape {
+                shape.with_mut(|shape| shape.as_shape_mut().map(|shape| shape.path_changed()));
+            }
+        }
+    }
+    pub(crate) fn notify_artboard(&self) {
+        if let Some((Some(artboard), order)) =
+            self.with_component(|component| (component.artboard_handle(), component.graph_order()))
+        {
+            artboard.with_mut(|artboard| artboard.artboard_on_component_dirty_at(order));
+        }
+    }
+    pub fn add_dirt(&self, value: ComponentDirt, recurse: bool) -> bool {
+        if let Self::Authored(handle) = self {
+            return handle
+                .with_mut(|object| object.component_add_dirt(value, recurse))
+                .unwrap_or(false);
+        }
+        let Some(dirt) = self
+            .with_component_mut(|component| component.add_dirt_state(value))
+            .flatten()
+        else {
+            return false;
+        };
+        self.on_dirty(dirt);
+        self.notify_artboard();
+        if recurse {
+            for dependent in self
+                .with_component(Component::dependents_snapshot)
+                .unwrap_or_default()
+            {
+                dependent.add_dirt(value, true);
+            }
+        }
+        true
+    }
+    pub fn collapse(&self, value: bool) -> bool {
+        if let Self::Authored(handle) = self {
+            return handle
+                .with_mut(|object| object.component_collapse(value))
+                .unwrap_or(false);
+        }
+        let Some(dirt) = self
+            .with_component_mut(|component| component.collapse_state(value))
+            .flatten()
+        else {
+            return false;
+        };
+        self.on_dirty(dirt);
+        self.notify_artboard();
+        self.with_component_mut(Component::update_collapsables);
+        true
+    }
+    pub fn update(&self, dirt: ComponentDirt) {
+        match self {
+            Self::Authored(handle) => {
+                crate::mechanical_port::source::generated::core_registry::component_update_handle(
+                    handle, dirt,
+                );
+            }
+            Self::PathComposer(handle) => {
+                let shape = handle
+                    .upgrade()
+                    .and_then(|owner| owner.borrow_mut().update(dirt));
+                if let Some(shape) = shape {
+                    shape.with_mut(|shape| {
+                        shape
+                            .as_shape_mut()
+                            .expect("PathComposer Shape")
+                            .mark_bounds_dirty()
+                    });
+                }
+            }
+            Self::TextVariationHelper(handle) => {
+                if let Some(owner) = handle.upgrade() {
+                    owner.borrow_mut().update(dirt);
+                }
+            }
+        }
+    }
+}
 
 pub struct Component {
     pub base: ComponentBase,
@@ -24,6 +196,7 @@ pub struct Component {
     artboard: Option<CoreHandle>,
     collapsables: Vec<CoreHandle>,
     dirt: ComponentDirt,
+    runtime_occurrence: Option<ComponentOccurrenceHandle>,
 }
 
 impl Default for Component {
@@ -36,6 +209,7 @@ impl Default for Component {
             artboard: None,
             collapsables: Vec::new(),
             dirt: ComponentDirt::FILTHY,
+            runtime_occurrence: None,
         }
     }
 }
@@ -47,6 +221,36 @@ impl ComponentBaseCallbacks for Component {
 }
 
 impl Component {
+    pub(crate) fn bind_runtime_occurrence(&mut self, occurrence: ComponentOccurrenceHandle) {
+        self.runtime_occurrence = Some(occurrence);
+    }
+    pub fn occurrence_handle(&self) -> Option<ComponentOccurrenceHandle> {
+        self.runtime_occurrence.clone().or_else(|| {
+            self.base
+                .base
+                .handle()
+                .map(ComponentOccurrenceHandle::Authored)
+        })
+    }
+    pub(crate) fn on_added_dirty_runtime(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        self.artboard = context.resolve_handle(0);
+        self.parent = context.resolve(self.base.parent_id());
+        let Some(occurrence) = self.runtime_occurrence.clone() else {
+            return StatusCode::MissingObject;
+        };
+        self.parent
+            .as_ref()
+            .and_then(|parent| {
+                parent
+                    .with_mut(|parent| {
+                        parent
+                            .as_container_component_mut()
+                            .map(|parent| parent.add_runtime_child(occurrence))
+                    })
+                    .flatten()
+            })
+            .map_or(StatusCode::MissingObject, |_| StatusCode::Ok)
+    }
     pub fn dependency_root(&self) -> Option<CoreHandle> {
         self.artboard.clone()
     }
@@ -181,7 +385,7 @@ impl Component {
         self.collapsables.clone()
     }
 
-    pub fn dependents_snapshot(&self) -> Vec<CoreHandle> {
+    pub fn dependents_snapshot(&self) -> Vec<ComponentOccurrenceHandle> {
         self.dependency_helper.dependents().to_vec()
     }
 
@@ -240,7 +444,7 @@ impl Component {
             .unwrap_or(true)
     }
 
-    pub fn dependents(&self) -> &[CoreHandle] {
+    pub fn dependents(&self) -> &[ComponentOccurrenceHandle] {
         self.dependency_helper.dependents()
     }
 
@@ -255,12 +459,13 @@ impl Component {
         }
     }
 
-    pub fn add_dependent(&mut self, dependent: CoreHandle) {
-        self.dependency_helper.add_dependent(dependent);
+    pub fn add_dependent(&mut self, dependent: impl Into<ComponentOccurrenceHandle>) {
+        self.dependency_helper.add_dependent(dependent.into());
     }
 
     pub fn remove_dependent(&mut self, dependent: &CoreHandle) {
-        self.dependency_helper.remove_dependent(dependent);
+        self.dependency_helper
+            .remove_dependent(&ComponentOccurrenceHandle::Authored(dependent.clone()));
     }
 }
 

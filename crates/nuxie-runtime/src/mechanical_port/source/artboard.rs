@@ -75,7 +75,7 @@ pub struct Artboard {
     invalid_objects: Vec<Option<CoreHandle>>,
     animations: Vec<CoreHandle>,
     state_machines: Vec<CoreHandle>,
-    dependency_order: Vec<CoreHandle>,
+    dependency_order: Vec<crate::mechanical_port::source::component::ComponentOccurrenceHandle>,
     drawables: Vec<RuntimeDrawableOccurrence>,
     clipping_shapes: Vec<CoreHandle>,
     draw_targets: Vec<CoreHandle>,
@@ -737,13 +737,7 @@ impl Artboard {
             .flatten()
             .filter_map(|object| component_draw_rules.get(object).cloned())
             .collect();
-        let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
-        else {
-            return StatusCode::MissingObject;
-        };
-        let Some(root) = owner.insert_sibling(DrawTarget::default()) else {
-            return StatusCode::MissingObject;
-        };
+        let mut draw_target_roots = Vec::new();
         for rules in rules_list {
             let children = rules
                 .with(|rules| {
@@ -759,7 +753,9 @@ impl Artboard {
                 ) {
                     continue;
                 }
-                root.with_mut(|root| root.component_add_dependent(target.clone()));
+                if !draw_target_roots.contains(&target) {
+                    draw_target_roots.push(target.clone());
+                }
                 let dependent_rules = target
                     .with_downcast::<DrawTarget, _>(DrawTarget::drawable)
                     .flatten()
@@ -790,14 +786,15 @@ impl Artboard {
                 }
             }
         }
-        let mut draw_target_order = Vec::<CoreHandle>::new();
-        crate::mechanical_port::source::dependency_sorter::DependencySorter::default()
-            .sort(root.clone(), &mut draw_target_order);
-        self.core_arena.remove(&root);
+        let mut draw_target_order = Vec::new();
+        crate::mechanical_port::source::dependency_sorter::DependencySorter::default().sort_roots(
+            draw_target_roots.into_iter().map(Into::into).collect(),
+            &mut draw_target_order,
+        );
         self.draw_targets.extend(
             draw_target_order
                 .into_iter()
-                .filter(|target| target != &root)
+                .filter_map(|target| target.authored().cloned())
                 .filter(|target| {
                     target.is_type_of(
                         crate::mechanical_port::source::generated::draw_target_base::DrawTargetBase::TYPE_KEY,
@@ -1104,11 +1101,17 @@ impl Artboard {
         else {
             return;
         };
+        let dependents = crate::mechanical_port::source::generated::core_registry::CoreCapabilities::as_component(self)
+            .expect("Artboard Component").dependents_snapshot();
         crate::mechanical_port::source::dependency_sorter::DependencySorter::default()
-            .sort(root, &mut self.dependency_order);
+            .sort_with_root_dependents(root.clone().into(), dependents, &mut self.dependency_order);
         for (graph_order, component) in self.dependency_order.iter().cloned().enumerate() {
-            component.with_mut(|component| {
-                component.component_set_graph_order(graph_order as u32);
+            if component.authored() == Some(&root) {
+                crate::mechanical_port::source::generated::core_registry::CoreCapabilities::component_set_graph_order(self, graph_order as u32);
+                continue;
+            }
+            component.with_component_mut(|component| {
+                component.set_graph_order(graph_order as u32);
             });
         }
         self.dirt |= ComponentDirt::COMPONENTS;
@@ -1404,18 +1407,15 @@ impl Artboard {
                 let component = self.dependency_order[i].clone();
                 self.dirt_depth = i as u32;
                 let dirt = component
-                    .with(|component| component.component_dirt())
-                    .flatten()
+                    .with_component(|component| component.dirt())
                     .unwrap_or(ComponentDirt::NONE);
                 if dirt == ComponentDirt::NONE || dirt.contains(ComponentDirt::COLLAPSED) {
                     continue;
                 }
-                component.with_mut(|component| {
-                    component.component_set_dirt(ComponentDirt::NONE);
+                component.with_component_mut(|component| {
+                    component.set_dirt(ComponentDirt::NONE);
                 });
-                crate::mechanical_port::source::generated::core_registry::component_update_handle(
-                    &component, dirt,
-                );
+                component.update(dirt);
                 if self.dirt_depth < i as u32 {
                     break;
                 }

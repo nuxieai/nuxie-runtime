@@ -227,10 +227,7 @@ impl FollowPathConstraint {
             target
                 .with_mut(|target| {
                     if let Some(shape) = target.as_shape_mut() {
-                        shape
-                            .path_composer_mut()
-                            .component
-                            .add_dependent(this.clone());
+                        shape.path_composer_mut().add_dependent(this.clone());
                     } else if let Some(path) = target.as_path_mut() {
                         if let Some(shape) = path.shape_handle() {
                             shape
@@ -239,7 +236,6 @@ impl FollowPathConstraint {
                                         .as_shape_mut()
                                         .expect("Path shape remains Shape-derived")
                                         .path_composer_mut()
-                                        .component
                                         .add_dependent(this.clone());
                                 })
                                 .expect("Path retains a live Shape");

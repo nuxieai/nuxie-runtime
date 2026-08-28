@@ -59,6 +59,9 @@ impl TransformComponent {
     pub(crate) fn collapse_after_super(&mut self) {
         let dependents = self.base.base.base.base.base.dependents().to_vec();
         for dependent in dependents {
+            let Some(dependent) = dependent.authored() else {
+                continue;
+            };
             dependent.with_mut(|dependent| {
                 let is_constrained = dependent
                     .as_transform_component()

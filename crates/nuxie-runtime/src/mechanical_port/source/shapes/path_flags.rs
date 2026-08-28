@@ -10,6 +10,9 @@ impl PathFlags {
     pub const FOLLOW_PATH: Self = Self(1 << 4);
     pub const NEVER_DEFER_UPDATE: Self = Self(1 << 5);
     pub const LOCAL_CLOCKWISE: Self = Self(1 << 6);
+    pub fn is_empty(self) -> bool {
+        self.0 == 0
+    }
 }
 impl BitAnd for PathFlags {
     type Output = Self;

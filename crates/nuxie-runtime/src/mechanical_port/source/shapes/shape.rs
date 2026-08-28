@@ -1,8 +1,11 @@
 use crate::mechanical_port::source::{
     artboard::Artboard,
-    component::{Component, ComponentDirt, has_dirt},
-    core::{Core, CoreContext, CoreHandle, StatusCode},
+    bones::skinnable::SkinnableBehavior,
+    component::{Component, ComponentDirt, ComponentOccurrenceHandle, has_dirt},
+    core::{Core, CoreHandle},
+    core_context::CoreContext,
     drawable::DrawableFlag,
+    generated::shapes::shape_base::ShapeBase,
     hit_info::HitInfo,
     hittest_command_path::HitTestCommandPath,
     layout::{
@@ -14,16 +17,21 @@ use crate::mechanical_port::source::{
     },
     renderer::{RenderPath, Renderer},
     shapes::{
-        deformer::RenderPathDeformer, parametric_path::ParametricPath, path::Path,
-        path_composer::PathComposer, path_flags::PathFlags,
-        shape_paint_container::ShapePaintContainer, shape_paint_path::ShapePaintPath,
+        deformer::RenderPathDeformer,
+        paint::{shape_paint::ShapePaintPathKind, shape_paint_path::ShapePaintPath},
+        parametric_path::ParametricPath,
+        path::Path,
+        path_composer::RuntimePathComposerHandle,
+        path_flags::PathFlags,
+        shape_paint_container::ShapePaintContainer,
     },
+    status_code::StatusCode,
 };
 
 pub struct Shape {
     pub base: ShapeBase,
     pub paint_container: ShapePaintContainer,
-    path_composer: Box<PathComposer>,
+    path_composer: RuntimePathComposerHandle,
     paths: Vec<CoreHandle>,
     world_bounds: Aabb,
     world_length: f32,
@@ -39,18 +47,16 @@ impl Shape {
         self.base.world_transform()
     }
     pub fn new() -> Self {
-        let mut value = Self {
+        Self {
             base: ShapeBase::default(),
             paint_container: ShapePaintContainer::default(),
-            path_composer: Box::new(PathComposer::unbound()),
+            path_composer: RuntimePathComposerHandle::new(),
             paths: Vec::new(),
             world_bounds: Aabb::default(),
             world_length: -1.0,
             want_difference_path: false,
             deformer: None,
-        };
-        value.path_composer = Box::new(PathComposer::new(value.shallow_handle()));
-        value
+        }
     }
 
     pub fn add_path(&mut self, path: CoreHandle) {
@@ -78,11 +84,15 @@ impl Shape {
         let can_defer = self.base.render_opacity() == 0.0
             && !self.is_flagged(PathFlags::CLIPPING | PathFlags::NEVER_DEFER_UPDATE);
         if can_defer
-            && self
-                .base
-                .dependents()
-                .iter()
-                .any(|d| d.as_points_path().is_some_and(|p| p.skin().is_some()))
+            && self.base.dependents().iter().any(|d| {
+                d.authored()
+                    .and_then(|handle| {
+                        handle.with(|object| {
+                            object.as_points_path().is_some_and(|p| p.skin().is_some())
+                        })
+                    })
+                    .unwrap_or(false)
+            })
         {
             return false;
         }
@@ -104,7 +114,7 @@ impl Shape {
     }
 
     pub(crate) fn collapse_after_super(&mut self, value: bool) {
-        self.path_composer.component.collapse(value);
+        self.path_composer.clone().collapse_from_shape(self, value);
         self.invalidate_intrinsic_bounds();
     }
 
@@ -147,56 +157,76 @@ impl Shape {
 
     pub fn path_changed(&mut self) {
         self.path_composer
-            .component
-            .add_dirt_with_recurse(ComponentDirt::PATH, true);
+            .clone()
+            .add_dirt_from_shape(self, ComponentDirt::PATH, true);
         self.world_length = -1.0;
         self.invalidate_intrinsic_bounds();
-        for constraint in self.base.constraints_mut() {
-            constraint.add_dirt(ComponentDirt::PATH);
+        for constraint in self.base.constraints().to_vec() {
+            constraint
+                .with_mut(|constraint| constraint.component_add_dirt(ComponentDirt::PATH, false));
         }
         self.paint_container.invalidate_stroke_effects();
     }
 
     pub fn add_to_render_path(&mut self, path: &mut RenderPath, transform: Mat2D) {
+        let factory = self
+            .base
+            .with_artboard(Artboard::factory)
+            .flatten()
+            .expect("Shape renderer factory");
         if self.is_flagged(PathFlags::LOCAL) {
-            let render = self.path_composer.local_path().render_path(self);
-            let transform = transform * self.base.world_transform();
-            path.add_render_path(render, nuxie_render_api::Mat2D(*transform.values()));
+            let transform = transform * *self.base.world_transform();
+            self.with_path_mut(ShapePaintPathKind::Local, |source| {
+                path.add_render_path(
+                    source.render_path(&factory),
+                    nuxie_render_api::Mat2D(*transform.values()),
+                );
+            });
         } else {
-            let render = self.path_composer.world_path().render_path(self);
-            path.add_render_path(render, nuxie_render_api::Mat2D(*transform.values()));
+            self.with_path_mut(ShapePaintPathKind::World, |source| {
+                path.add_render_path(
+                    source.render_path(&factory),
+                    nuxie_render_api::Mat2D(*transform.values()),
+                );
+            });
         }
     }
 
     pub fn add_to_raw_path(&mut self, path: &mut RawPath, transform: Option<Mat2D>) {
         if self.is_flagged(PathFlags::LOCAL) {
             let matrix = transform
-                .map(|v| v * self.base.world_transform())
-                .unwrap_or_else(|| self.base.world_transform());
-            path.add_path(self.path_composer.local_path().raw_path(), Some(matrix));
+                .map(|v| v * *self.base.world_transform())
+                .unwrap_or_else(|| *self.base.world_transform());
+            self.with_path_mut(ShapePaintPathKind::Local, |source| {
+                path.add_path(source.raw_path(), Some(&matrix));
+            });
         } else {
-            path.add_path(self.path_composer.world_path().raw_path(), transform);
+            self.with_path_mut(ShapePaintPathKind::World, |source| {
+                path.add_path(source.raw_path(), transform.as_ref());
+            });
         }
     }
 
     pub fn draw(&mut self, renderer: &mut Renderer) {
         let needs_save =
             self.base.needs_save_operation() || self.paint_container.shape_paints().len() > 1;
-        for paint in self.paint_container.shape_paints_mut() {
-            if !paint.base.is_visible() {
-                continue;
-            }
-            let Some(path) = paint.pick_path_option(self.paint_container()) else {
-                continue;
-            };
-            paint.draw(
-                renderer,
-                path,
-                self.base.world_transform(),
-                false,
-                None,
-                needs_save,
-            );
+        let transform = *self.base.world_transform();
+        for paint in self.paint_container.shape_paints() {
+            paint.with_mut(|object| {
+                let Some(behavior) = object.as_shape_paint_behavior_mut() else {
+                    return;
+                };
+                if !behavior.shape_paint().base.is_visible() {
+                    return;
+                }
+                let kind = behavior.pick_path_kind();
+                let fill_rule = behavior.fill_rule();
+                self.with_path_mut(kind, |path| {
+                    behavior.shape_paint_mut().draw_with_fill_rule(
+                        renderer, path, transform, false, None, needs_save, fill_rule,
+                    );
+                });
+            });
         }
     }
 
@@ -286,11 +316,19 @@ impl Shape {
     }
 
     pub fn build_dependencies(&mut self) {
-        self.path_composer.build_dependencies();
+        let helper = self.path_composer.occurrence();
+        self.base.add_dependent(helper);
+        let paths = self.paths();
+        self.path_composer
+            .with_mut(|helper| helper.build_path_dependencies(&paths));
         self.base.build_dependencies();
         let blend = self.base.blend_mode();
-        for paint in self.paint_container.shape_paints_mut() {
-            paint.blend_mode(blend);
+        for paint in self.paint_container.shape_paints() {
+            paint.with_mut(|paint| {
+                paint
+                    .as_shape_paint_mut()
+                    .map(|paint| paint.blend_mode(blend))
+            });
         }
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
@@ -298,7 +336,12 @@ impl Shape {
         if code != StatusCode::Ok {
             return code;
         }
-        self.path_composer.component.on_added_dirty(context)
+        let Some(this) = self.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        self.path_composer.bind_shape(this);
+        self.path_composer
+            .with_mut(|helper| helper.component.on_added_dirty_runtime(context))
     }
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_clean(context);
@@ -339,7 +382,16 @@ impl Shape {
         self.base.will_draw() && self.base.render_opacity() != 0.0
     }
     pub fn path_collapse_changed(&mut self) {
-        self.path_composer.path_collapse_changed();
+        let helper = self.path_composer.occurrence();
+        self.path_composer
+            .clone()
+            .add_dirt_from_shape(self, ComponentDirt::PATH, false);
+        for dependent in helper
+            .with_component(Component::dependents_snapshot)
+            .unwrap_or_default()
+        {
+            dependent.add_dirt(ComponentDirt::PATH, true);
+        }
     }
 
     pub fn world_bounds(&mut self) -> Aabb {
@@ -568,19 +620,40 @@ impl Shape {
         false
     }
 
-    pub fn world_path(&mut self) -> &mut ShapePaintPath {
-        self.path_composer.world_path()
+    pub fn with_path_mut<R>(
+        &self,
+        kind: ShapePaintPathKind,
+        f: impl FnOnce(&mut ShapePaintPath) -> R,
+    ) -> R {
+        self.path_composer.with_mut(|helper| {
+            f(match kind {
+                ShapePaintPathKind::Local => helper.local_path(),
+                ShapePaintPathKind::LocalClockwise => helper.local_clockwise_path(),
+                ShapePaintPathKind::World => helper.world_path(),
+            })
+        })
     }
-    pub fn local_path(&mut self) -> &mut ShapePaintPath {
-        self.path_composer.local_path()
+    pub fn path_builder(&self) -> ComponentOccurrenceHandle {
+        self.path_composer.occurrence()
     }
-    pub fn local_clockwise_path(&mut self) -> &mut ShapePaintPath {
-        self.path_composer.local_clockwise_path()
+    pub fn path_composer_mut(&mut self) -> &RuntimePathComposerHandle {
+        &self.path_composer
     }
-    pub fn path_builder(&mut self) -> &mut Component {
-        &mut self.path_composer.component
+}
+
+impl Default for Shape {
+    fn default() -> Self {
+        Self::new()
     }
-    pub fn path_composer_mut(&mut self) -> &mut PathComposer {
-        &mut self.path_composer
+}
+impl std::ops::Deref for Shape {
+    type Target = ShapeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for Shape {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -1,6 +1,6 @@
 use super::{
     text_interface::TextInterface, text_style_axis::TextStyleAxis,
-    text_style_feature::TextStyleFeature, text_variation_helper::TextVariationHelper,
+    text_style_feature::TextStyleFeature, text_variation_helper::RuntimeTextVariationHelperHandle,
 };
 use crate::mechanical_port::source::{
     assets::{file_asset_referencer::FileAssetReferencer, font_asset::FontAsset},
@@ -14,7 +14,7 @@ use crate::mechanical_port::source::{
 };
 pub struct TextStyle {
     pub base: TextStyleBase,
-    variation_helper: Option<Box<TextVariationHelper>>,
+    variation_helper: Option<RuntimeTextVariationHelperHandle>,
     file_asset_referencer: FileAssetReferencer,
     variable_font: Option<FontRef>,
     coords: Vec<FontCoord>,
@@ -62,13 +62,15 @@ impl TextStyle {
             if dirt.contains(ComponentDirt::TEXT_SHAPE) {
                 text.with_mut(|text| text.text_interface_mark_shape_dirty());
                 if let Some(helper) = &mut self.variation_helper {
-                    helper.component.add_dirt(ComponentDirt::TEXT_SHAPE);
+                    helper
+                        .occurrence()
+                        .add_dirt(ComponentDirt::TEXT_SHAPE, false);
                 }
             }
         }
     }
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        self.text = TextInterface::from_core(self.base.parent());
+        self.text = TextInterface::from_core(self.base.parent_handle());
         let mut code = self.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
@@ -77,14 +79,14 @@ impl TextStyle {
             let Some(this) = self.base.handle() else {
                 return StatusCode::MissingObject;
             };
-            self.variation_helper = Some(Box::new(TextVariationHelper::new(this)));
+            self.variation_helper = Some(RuntimeTextVariationHelperHandle::new(this));
         }
         if let Some(helper) = &mut self.variation_helper {
-            code = helper.component.on_added_dirty(context);
+            code = helper.with_mut(|helper| helper.component.on_added_dirty_runtime(context));
             if code != StatusCode::Ok {
                 return code;
             }
-            code = helper.component.on_added_clean(context);
+            code = helper.with_mut(|helper| helper.component.on_added_clean(context));
             if code != StatusCode::Ok {
                 return code;
             }
@@ -139,9 +141,12 @@ impl TextStyle {
     }
     pub fn build_dependencies(&mut self) {
         if let Some(helper) = &mut self.variation_helper {
-            helper.build_dependencies();
+            let text = self.base.parent_handle().expect("TextStyle parent");
+            helper.with_mut(|helper| helper.build_dependencies_for_text(text));
         }
-        self.base.parent_mut().add_dependent(self);
+        if let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) {
+            parent.with_mut(|parent| parent.component_add_dependent(this));
+        }
         self.base.build_dependencies();
     }
     pub fn asset_id(&self) -> u32 {

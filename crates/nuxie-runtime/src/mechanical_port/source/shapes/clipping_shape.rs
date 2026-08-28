@@ -280,9 +280,9 @@ impl ClippingShape {
                     if let Some(shape) = shape.as_shape_mut()
                         && !shape.is_empty()
                     {
-                        let path = shape.world_path();
-                        self.path
-                            .add_shape_paint_path(path, Some(&Mat2D::identity()));
+                        shape.with_path_mut(crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World, |path| {
+                            self.path.add_shape_paint_path(path, Some(&Mat2D::identity()));
+                        });
                         self.clip_path = true;
                     }
                 });

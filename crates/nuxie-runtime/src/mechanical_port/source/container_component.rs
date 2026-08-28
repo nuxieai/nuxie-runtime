@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    component::Component,
+    component::{Component, ComponentOccurrenceHandle},
     core::CoreHandle,
     generated::{
         container_component_base::ContainerComponentBase, core_registry::CoreCapabilities,
@@ -10,6 +10,7 @@ use crate::mechanical_port::source::{
 pub struct ContainerComponent {
     pub base: ContainerComponentBase,
     children: Vec<CoreHandle>,
+    component_children: Vec<ComponentOccurrenceHandle>,
 }
 
 impl Default for ContainerComponent {
@@ -17,6 +18,7 @@ impl Default for ContainerComponent {
         Self {
             base: ContainerComponentBase::default(),
             children: Vec::new(),
+            component_children: Vec::new(),
         }
     }
 }
@@ -27,7 +29,17 @@ impl ContainerComponent {
     }
 
     pub fn add_child(&mut self, component: CoreHandle) {
+        self.component_children.push(component.clone().into());
         self.children.push(component);
+    }
+
+    pub(crate) fn add_runtime_child(&mut self, component: ComponentOccurrenceHandle) {
+        assert!(component.authored().is_none());
+        self.component_children.push(component);
+    }
+
+    pub fn component_children(&self) -> &[ComponentOccurrenceHandle] {
+        &self.component_children
     }
 
     pub fn collapse(&mut self, value: bool) -> bool {
@@ -35,10 +47,8 @@ impl ContainerComponent {
     }
 
     pub(crate) fn collapse_after_component(&mut self, value: bool) {
-        for child in self.children.iter().cloned() {
-            child.with_mut(|child| {
-                child.component_collapse(value);
-            });
+        for child in self.component_children.iter().cloned() {
+            child.collapse(value);
         }
     }
 

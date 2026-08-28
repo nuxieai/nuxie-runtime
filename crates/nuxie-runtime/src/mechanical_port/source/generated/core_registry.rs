@@ -1801,9 +1801,7 @@ pub trait CoreCapabilities: Any {
         }
         if recurse {
             for dependent in dependents {
-                dependent.with_mut(|dependent| {
-                    dependent.component_add_dirt(value, true);
-                });
+                dependent.add_dirt(value, true);
             }
         }
         true

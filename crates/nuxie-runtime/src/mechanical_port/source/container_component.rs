@@ -1,13 +1,15 @@
-use std::any::Any;
-
 use crate::mechanical_port::source::{
-    component::Component, generated::container_component_base::ContainerComponentBase,
+    component::Component,
+    core::CoreHandle,
+    generated::{
+        container_component_base::ContainerComponentBase, core_registry::CoreCapabilities,
+    },
     math::vec2d::Vec2D,
 };
 
 pub struct ContainerComponent {
     pub base: ContainerComponentBase,
-    children: Vec<*mut Component>,
+    children: Vec<CoreHandle>,
 }
 
 impl Default for ContainerComponent {
@@ -20,63 +22,54 @@ impl Default for ContainerComponent {
 }
 
 impl ContainerComponent {
-    pub fn children_of<T: Any>(&self) -> impl Iterator<Item = &T> {
-        self.children.iter().filter_map(|child| {
-            let core = unsafe { &**child }.base.base.as_any();
-            core.downcast_ref::<T>()
-        })
-    }
-
-    pub fn first_child<T: Any>(&self) -> Option<&T> {
-        self.children_of::<T>().next()
-    }
-
-    pub fn children(&self) -> &[*mut Component] {
+    pub fn children(&self) -> &[CoreHandle] {
         &self.children
     }
 
-    pub fn add_child(&mut self, component: *mut Component) {
+    pub fn add_child(&mut self, component: CoreHandle) {
         self.children.push(component);
     }
 
     pub fn collapse(&mut self, value: bool) -> bool {
-        if !self.base.base.collapse(value) {
-            return false;
-        }
-        for child in self.children.iter().copied() {
-            unsafe { &mut *child }.collapse(value);
-        }
-        true
+        CoreCapabilities::component_collapse(self, value)
     }
 
-    pub fn for_all(&mut self, mut predicate: impl FnMut(*mut Component) -> bool) -> bool {
-        if !predicate((&mut self.base.base) as *mut Component) {
+    pub(crate) fn collapse_after_component(&mut self, value: bool) {
+        for child in self.children.iter().cloned() {
+            child.with_mut(|child| {
+                child.component_collapse(value);
+            });
+        }
+    }
+
+    pub fn for_all(&mut self, mut predicate: impl FnMut(CoreHandle) -> bool) -> bool {
+        let Some(this) = self.base.base.base.base.handle() else {
+            return false;
+        };
+        if !predicate(this) {
             return false;
         }
         self.for_each_child(predicate);
         true
     }
 
-    pub fn for_each_child(&mut self, mut predicate: impl FnMut(*mut Component) -> bool) {
+    pub fn for_each_child(&mut self, mut predicate: impl FnMut(CoreHandle) -> bool) {
         Self::for_each_child_with(&self.children, &mut predicate);
     }
 
     fn for_each_child_with(
-        children: &[*mut Component],
-        predicate: &mut impl FnMut(*mut Component) -> bool,
+        children: &[CoreHandle],
+        predicate: &mut impl FnMut(CoreHandle) -> bool,
     ) {
-        for child in children.iter().copied() {
-            if !predicate(child) {
+        for child in children.iter().cloned() {
+            if !predicate(child.clone()) {
                 continue;
             }
-            if unsafe { &*child }
-                .base
-                .base
-                .is_type_of(ContainerComponentBase::TYPE_KEY)
-            {
-                let container = unsafe { &mut *child.cast::<ContainerComponent>() };
-                Self::for_each_child_with(&container.children, predicate);
-            }
+            child.with_mut(|child| {
+                if let Some(container) = child.as_container_component_mut() {
+                    Self::for_each_child_with(&container.children, predicate);
+                }
+            });
         }
     }
 
@@ -89,5 +82,19 @@ impl ContainerComponent {
         self.base
             .base
             .hit_test_point(position, skip_on_unclipped, is_primary_hit)
+    }
+}
+
+impl std::ops::Deref for ContainerComponent {
+    type Target = ContainerComponentBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ContainerComponent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

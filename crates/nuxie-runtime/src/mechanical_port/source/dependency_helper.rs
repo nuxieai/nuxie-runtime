@@ -1,4 +1,6 @@
-use crate::mechanical_port::source::component_dirt::ComponentDirt;
+use std::marker::PhantomData;
+
+use crate::mechanical_port::source::{component_dirt::ComponentDirt, core::CoreHandle};
 
 pub trait DirtDependent {
     fn add_dirt(&mut self, value: ComponentDirt, recurse: bool);
@@ -9,39 +11,38 @@ pub trait DependencyRoot<U> {
 }
 
 pub struct DependencyHelper<U> {
-    dependents: Vec<*mut U>,
+    dependents: Vec<CoreHandle>,
+    marker: PhantomData<fn() -> U>,
 }
 
 impl<U> Default for DependencyHelper<U> {
     fn default() -> Self {
         Self {
             dependents: Vec::new(),
+            marker: PhantomData,
         }
     }
 }
 
 impl<U: DirtDependent> DependencyHelper<U> {
-    pub fn add_dependent(&mut self, component: *mut U) {
+    pub fn add_dependent(&mut self, component: CoreHandle) {
         if !self.dependents.contains(&component) {
             self.dependents.push(component);
         }
     }
 
-    pub fn remove_dependent(&mut self, component: *mut U) {
-        self.dependents.retain(|candidate| *candidate != component);
+    pub fn remove_dependent(&mut self, component: &CoreHandle) {
+        self.dependents.retain(|candidate| candidate != component);
     }
 
     pub fn add_dirt_to_dependents(&mut self, value: ComponentDirt) {
         if self.dependents.is_empty() {
             return;
         }
-        for dependent in self.dependents.iter().copied() {
-            unsafe {
-                dependent
-                    .as_mut()
-                    .expect("registered dependent must remain live")
-            }
-            .add_dirt(value, true);
+        for dependent in self.dependents.iter().cloned() {
+            dependent.with_mut(|dependent| {
+                dependent.component_add_dirt(value, true);
+            });
         }
     }
 
@@ -49,7 +50,7 @@ impl<U: DirtDependent> DependencyHelper<U> {
         derived.on_component_dirty(component);
     }
 
-    pub fn dependents(&self) -> &[*mut U] {
+    pub fn dependents(&self) -> &[CoreHandle] {
         &self.dependents
     }
 }

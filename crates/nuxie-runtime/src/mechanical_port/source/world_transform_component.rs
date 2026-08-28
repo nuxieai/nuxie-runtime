@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    component::ComponentDirt,
+    generated::core_registry::CoreCapabilities,
     generated::world_transform_component_base::{
         WorldTransformComponentBase, WorldTransformComponentBaseCallbacks,
     },
@@ -34,7 +34,7 @@ impl WorldTransformComponent {
     }
 
     pub fn mark_world_transform_dirty(&mut self) {
-        self.base.add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+        CoreCapabilities::world_transform_mark_dirty(self);
     }
 
     pub fn world_transform(&self) -> &Mat2D {
@@ -45,11 +45,29 @@ impl WorldTransformComponent {
         &mut self.world_transform
     }
 
+    pub fn set_world_transform(&mut self, transform: Mat2D) {
+        self.world_transform = transform;
+    }
+
     pub fn world_translation(&self) -> Vec2D {
         self.world_transform.translation()
     }
 
     pub fn opacity_changed(&mut self) {
-        self.base.add_dirt(ComponentDirt::RENDER_OPACITY, true);
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
+}
+
+impl std::ops::Deref for WorldTransformComponent {
+    type Target = WorldTransformComponentBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for WorldTransformComponent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

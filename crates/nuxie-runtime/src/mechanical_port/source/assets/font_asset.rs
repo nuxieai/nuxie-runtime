@@ -1,11 +1,54 @@
 use crate::mechanical_port::source::{
-    component::ComponentDirt, core::CoreHandle, core_context::CoreContext, factory::Factory,
-    generated::assets::font_asset_base::FontAssetBase, text_engine::FontRef,
+    assets::file_asset::FileAsset,
+    component_dirt::ComponentDirt,
+    core::CoreHandle,
+    factory::RuntimeFactoryHandle,
+    generated::assets::{
+        asset_base::AssetBaseCallbacks,
+        file_asset_base::{FileAssetBase, FileAssetBaseCallbacks},
+        font_asset_base::FontAssetBase,
+    },
+    text::font_hb::HbFont,
+    text_engine::FontRef,
 };
 
 pub struct FontAsset {
     pub base: FontAssetBase,
     font: Option<FontRef>,
+}
+
+impl AssetBaseCallbacks for FontAsset {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        AssetBaseCallbacks::notify_property_changed(&mut self.base.base, property_key);
+    }
+}
+
+impl FileAssetBaseCallbacks for FontAsset {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        AssetBaseCallbacks::notify_property_changed(self, property_key);
+    }
+
+    fn decode_cdn_uuid(&mut self, value: &[u8]) {
+        FileAsset::decode_cdn_uuid(&mut self.base.base, value);
+    }
+
+    fn copy_cdn_uuid(&mut self, object: &FileAssetBase) {
+        FileAsset::copy_cdn_uuid(&mut self.base.base, object);
+    }
+}
+
+impl std::ops::Deref for FontAsset {
+    type Target = FontAssetBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FontAsset {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
 }
 
 impl Default for FontAsset {
@@ -18,14 +61,14 @@ impl Default for FontAsset {
 }
 
 impl FontAsset {
-    pub fn decode(
-        &mut self,
-        data: &[u8],
-        factory: &mut Factory,
-        context: &mut CoreContext,
-    ) -> bool {
-        let font = factory.decode_font(data);
-        self.set_font(font, context);
+    pub fn decode(&mut self, data: &[u8], factory: &RuntimeFactoryHandle) -> bool {
+        let font = factory.with_factory_mut(|factory| {
+            factory
+                .decode_font(data)
+                .ok()
+                .and_then(|decoded| HbFont::decode(decoded.bytes()))
+        });
+        self.set_font(font);
         self.font.is_some()
     }
 
@@ -37,14 +80,15 @@ impl FontAsset {
         self.font.clone()
     }
 
-    pub fn set_font(&mut self, font: Option<FontRef>, context: &mut CoreContext) {
+    pub fn set_font(&mut self, font: Option<FontRef>) {
         self.font = font;
         let referencers: Vec<CoreHandle> = self.base.file_asset().file_asset_referencers().to_vec();
         for referencer in referencers {
-            context
-                .text_style_mut(referencer)
-                .expect("FontAsset referencers are TextStyle instances")
-                .add_dirt(ComponentDirt::TEXT_SHAPE);
+            referencer
+                .with_mut(|referencer| {
+                    referencer.component_add_dirt(ComponentDirt::TEXT_SHAPE, false)
+                })
+                .expect("FontAsset referencers are TextStyle instances");
         }
     }
 }

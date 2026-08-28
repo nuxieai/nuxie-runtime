@@ -7,7 +7,10 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     core_context::CoreContext,
     drawable::{Drawable, DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
-    generated::layout_component_base::{LayoutComponentBase, LayoutComponentBaseCallbacks},
+    generated::{
+        core_registry::CoreCapabilities,
+        layout_component_base::{LayoutComponentBase, LayoutComponentBaseCallbacks},
+    },
     hit_info::HitInfo,
     layout::{
         layout_component_style::LayoutComponentStyle,
@@ -24,7 +27,11 @@ use crate::mechanical_port::source::{
     },
     math::{aabb::Aabb, mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D},
     renderer::{RenderPath, Renderer},
-    shapes::{paint::shape_paint_path::ShapePaintPath, path::Path},
+    shapes::{
+        paint::{shape_paint::ShapePaintPathKind, shape_paint_path::ShapePaintPath},
+        path::Path,
+        shape_paint_container::ShapePaintContainer,
+    },
     status_code::StatusCode,
 };
 
@@ -120,6 +127,7 @@ impl LayoutAnimationData {
 
 pub struct LayoutComponent {
     pub base: LayoutComponentBase,
+    paints: ShapePaintContainer,
     provider: LayoutNodeProviderState,
     style: Option<CoreHandle>,
     layout_data: Box<LayoutData>,
@@ -156,6 +164,7 @@ impl Default for LayoutComponent {
     fn default() -> Self {
         Self {
             base: LayoutComponentBase::default(),
+            paints: ShapePaintContainer::default(),
             provider: LayoutNodeProviderState::default(),
             style: None,
             layout_data: Box::new(LayoutData::default()),
@@ -249,7 +258,7 @@ impl LayoutComponent {
         self.origin().map_or(0.0, |origin| origin.1)
     }
     pub fn shape_world_transform(&self) -> Mat2D {
-        self.base.base.base.base.world_transform()
+        *self.base.base.base.base.world_transform()
     }
     pub fn artboard_handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.base.artboard_handle()
@@ -372,7 +381,13 @@ impl LayoutComponent {
         false
     }
     pub fn has_shape_paints(&self) -> bool {
-        !self.base.base.base.base.shape_paints().is_empty()
+        !self.paints.shape_paints().is_empty()
+    }
+    pub fn shape_paint_container(&self) -> &ShapePaintContainer {
+        &self.paints
+    }
+    pub fn shape_paint_container_mut(&mut self) -> &mut ShapePaintContainer {
+        &mut self.paints
     }
     pub fn register_foreground_drawable(&mut self) {
         self.has_foreground_drawable = true;
@@ -393,11 +408,15 @@ impl LayoutComponent {
             parent.with_mut(|parent| parent.component_add_dependent(this));
         }
         let blend = self.base.base.blend_mode();
-        for paint in self.base.base.base.base.shape_paints_mut() {
-            paint.set_blend_mode(blend);
+        for paint in self.paints.shape_paints().iter().cloned() {
+            paint.with_mut(|paint| {
+                if let Some(paint) = paint.as_shape_paint_mut() {
+                    paint.blend_mode(blend);
+                }
+            });
         }
     }
-    pub fn hit_test(&mut self, _info: &mut HitInfo, _transform: &Mat2D) -> Option<&mut Core> {
+    pub fn hit_test(&mut self, _info: &mut HitInfo, _transform: &Mat2D) -> Option<CoreHandle> {
         None
     }
     pub fn hit_test_point(
@@ -434,21 +453,23 @@ impl LayoutComponent {
         }
         self.base.base.hit_test_point(position, true, primary)
     }
-    pub fn update(&mut self, value: ComponentDirt) {
-        self.base.base.update(value);
+    /// Execute the local part of `LayoutComponent::update` after the complete
+    /// TransformComponent super call. Returning true requests the pinned
+    /// Layout-then-Transform constraint pass after this CoreHandle borrow ends.
+    pub(crate) fn update_after_transform_super(
+        &mut self,
+        value: ComponentDirt,
+        child_opacity: f32,
+    ) -> bool {
         if value == ComponentDirt::FILTHY {
             self.interrupt_animation();
         }
         if value.contains(ComponentDirt::RENDER_OPACITY) {
-            self.base
-                .base
-                .base
-                .base
-                .propagate_opacity(self.base.base.base.base.child_opacity());
+            self.paints.propagate_opacity(child_opacity);
         }
-        if self.base.base.base.base.base.parent_handle().is_some()
-            && value.contains(ComponentDirt::WORLD_TRANSFORM)
-        {
+        let needs_layout_constraints = self.base.base.base.base.base.parent_handle().is_some()
+            && value.contains(ComponentDirt::WORLD_TRANSFORM);
+        if needs_layout_constraints {
             let parent = self
                 .base
                 .base
@@ -461,7 +482,7 @@ impl LayoutComponent {
                 .with(|parent| {
                     let world = parent
                         .as_world_transform_component()
-                        .map_or(Mat2D::identity(), |value| value.world_transform());
+                        .map_or(Mat2D::identity(), |value| *value.world_transform());
                     let origin = parent.as_artboard().map(|artboard| {
                         Vec2D::new(
                             artboard.layout_width() * artboard.origin_x(),
@@ -495,16 +516,19 @@ impl LayoutComponent {
                 .base
                 .base
                 .set_world_transform(parent_world * slot);
-            self.update_constraints();
         }
-        if (value
-            & (ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::LAYOUT_STYLE))
-            != ComponentDirt::NONE
-        {
-            self.update_render_path();
-        }
+        needs_layout_constraints
+    }
+
+    /// Called after the most-derived render-path update, preserving the pinned
+    /// virtual-call boundary before resetting the position flags.
+    pub(crate) fn reset_update_flags(&mut self) {
         self.position_left_changed = false;
         self.position_top_changed = false;
+    }
+
+    pub(crate) fn layout_constraint_handles(&self) -> Vec<CoreHandle> {
+        self.provider.layout_constraints().to_vec()
     }
     pub fn width_override(&mut self, width: f32, unit: i32, row: bool) {
         self.width_override = width;
@@ -548,17 +572,6 @@ impl LayoutComponent {
         self.mark_layout_style_dirty();
         self.mark_layout_node_dirty(false);
     }
-    pub fn update_constraints(&mut self) {
-        let Some(provider) = self.base.base.base.base.base.handle() else {
-            return;
-        };
-        for constraint in self.provider.layout_constraints().to_vec() {
-            constraint.with_mut(|constraint| {
-                constraint.layout_constraint_constrain_child(provider.clone());
-            });
-        }
-        self.base.base.base.base.update_constraints();
-    }
     pub fn overrides_keyed_interpolation(&mut self, key: i32) -> bool {
         if self.animates()
             && matches!(
@@ -579,23 +592,17 @@ impl LayoutComponent {
         }
         self.style_display_hidden()
     }
-    fn propagate_collapse(&mut self, value: bool) {
+    pub(crate) fn collapse_after_component(&mut self, value: bool) {
         let collapsed = value || self.is_collapsed();
         for child in self.base.base.base.base.base.children() {
             child.with_mut(|child| {
-                if let Some(component) = child.as_component_mut() {
-                    component.collapse(collapsed);
-                }
+                child.component_collapse(collapsed);
             });
         }
         self.base.base.base.base.base.update_collapsables();
     }
     pub fn collapse(&mut self, value: bool) -> bool {
-        if !self.base.base.base.base.base.collapse(value) {
-            return false;
-        }
-        self.propagate_collapse(value);
-        true
+        CoreCapabilities::component_collapse(self, value)
     }
     pub fn gap_horizontal(&self) -> f32 {
         self.with_style(|style| {
@@ -644,23 +651,37 @@ impl LayoutComponent {
         }
         self.mark_layout_style_dirty();
         self.sync_layout_children();
-        self.propagate_collapse(self.is_collapsed());
+        self.collapse_after_component(self.is_collapsed());
         StatusCode::Ok
     }
     pub fn draw_proxy(&mut self, renderer: &mut Renderer) {
-        {
-            if self.base.clip() {
-                renderer.save();
-                renderer.clip_path(self.world_path.render_path(self));
-            }
-            let world = self.shape_world_transform();
-            for paint in self.base.base.base.base.shape_paints_mut() {
-                if paint.should_draw() {
-                    if let Some(path) = paint.pick_path(self) {
-                        paint.draw(renderer, path, world);
-                    }
+        if self.base.clip() {
+            renderer.save();
+            let factory = self
+                .with_artboard(|artboard| artboard.factory())
+                .flatten()
+                .expect("a drawable LayoutComponent has its imported factory");
+            renderer.clip_path(self.world_path.render_path(&factory));
+        }
+        let world = self.shape_world_transform();
+        for paint in self.paints.shape_paints().to_vec() {
+            paint.with_mut(|paint| {
+                let Some(paint) = paint.as_shape_paint_behavior_mut() else {
+                    return;
+                };
+                if !paint.shape_paint().should_draw() {
+                    return;
                 }
-            }
+                let path = match paint.pick_path_kind() {
+                    ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise => {
+                        &mut self.local_path
+                    }
+                    ShapePaintPathKind::World => &mut self.world_path,
+                };
+                paint
+                    .shape_paint_mut()
+                    .draw(renderer, path, world, false, None, true);
+            });
         }
     }
     pub fn draw(&mut self, renderer: &mut Renderer) {
@@ -671,7 +692,7 @@ impl LayoutComponent {
     pub fn update_render_path(&mut self) {
         {
             if self.is_hidden()
-                || (self.base.base.base.base.shape_paints().is_empty()
+                || (self.paints.shape_paints().is_empty()
                     && !self.base.clip()
                     && !self.has_foreground_drawable)
             {
@@ -707,19 +728,21 @@ impl LayoutComponent {
                 radii,
             );
             self.local_path.rewind();
-            self.local_path.add_raw_path(&self.background_raw_path);
-            self.world_path.rewind_with_rule(
-                false,
-                crate::mechanical_port::source::shapes::paint::fill_rule::FillRule::Clockwise,
-            );
-            self.world_path.add_raw_path_with_transform(
+            self.local_path.add_path(&self.background_raw_path, None);
+            self.world_path
+                .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
+            self.world_path.add_path(
                 &self.background_raw_path,
-                &self.base.base.base.base.world_transform(),
+                Some(self.base.base.base.base.world_transform()),
             );
-            for paint in self.base.base.base.base.shape_paints_mut() {
-                if paint.should_draw() {
-                    paint.invalidate_effects();
-                }
+            for paint in self.paints.shape_paints().iter().cloned() {
+                paint.with_mut(|paint| {
+                    if let Some(paint) = paint.as_shape_paint_mut() {
+                        if paint.should_draw() {
+                            paint.invalidate_effects();
+                        }
+                    }
+                });
             }
         }
     }
@@ -978,12 +1001,7 @@ impl LayoutComponent {
     pub fn on_dirty(&mut self, value: ComponentDirt) {
         self.base.base.base.base.base.on_dirty(value);
         if value.contains(ComponentDirt::WORLD_TRANSFORM) && self.base.clip() {
-            self.base
-                .base
-                .base
-                .base
-                .base
-                .add_dirt(ComponentDirt::PATH, false);
+            CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
         }
     }
     pub fn update_layout_bounds(&mut self, animate: bool) {
@@ -1000,7 +1018,7 @@ impl LayoutComponent {
             data.to = next;
             data.elapsed_seconds = 0.0;
             self.propagate_size();
-            self.mark_world_transform_dirty();
+            CoreCapabilities::world_transform_mark_dirty(self);
             self.force_update_layout_bounds = false;
             return;
         }
@@ -1015,21 +1033,16 @@ impl LayoutComponent {
                 data.to = next;
                 data.elapsed_seconds = 0.0;
                 self.propagate_size();
-                self.mark_world_transform_dirty();
+                CoreCapabilities::world_transform_mark_dirty(self);
             }
         } else if next != self.layout || self.force_update_layout_bounds {
             if self.layout.width() != next.width() || self.layout.height() != next.height() {
-                self.base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .add_dirt(ComponentDirt::PATH, false);
+                CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             }
             self.layout = next;
             self.animation_data_a.to = next;
             self.propagate_size();
-            self.mark_world_transform_dirty();
+            CoreCapabilities::world_transform_mark_dirty(self);
         }
         self.force_update_layout_bounds = false;
     }
@@ -1086,7 +1099,7 @@ impl LayoutComponent {
             self.layout = data.to;
             data.elapsed_seconds = 0.0;
             self.propagate_size();
-            self.mark_world_transform_dirty();
+            CoreCapabilities::world_transform_mark_dirty(self);
             return false;
         }
         let mut factor = (data.elapsed_seconds / time).min(1.0);
@@ -1106,7 +1119,7 @@ impl LayoutComponent {
             if resized {
                 self.propagate_size();
             }
-            self.mark_world_transform_dirty();
+            CoreCapabilities::world_transform_mark_dirty(self);
         }
         self.current_animation_data().elapsed_seconds += elapsed;
         if factor != 1.0 {
@@ -1145,12 +1158,7 @@ impl LayoutComponent {
     }
     pub fn mark_layout_style_dirty(&mut self) {
         self.clear_inherited_interpolation();
-        self.base
-            .base
-            .base
-            .base
-            .base
-            .add_dirt(ComponentDirt::LAYOUT_STYLE, false);
+        CoreCapabilities::component_add_dirt(self, ComponentDirt::LAYOUT_STYLE, false);
         if let (Some(artboard), Some(this)) = (
             self.base.base.base.base.base.artboard_handle(),
             self.base.base.base.base.base.handle(),
@@ -1212,12 +1220,7 @@ impl LayoutComponent {
         };
         if old != self.inherited_direction {
             self.mark_layout_node_dirty(true);
-            self.base
-                .base
-                .base
-                .base
-                .base
-                .add_dirt(ComponentDirt::PATH, false);
+            CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             updated = true;
         }
         updated
@@ -1268,7 +1271,7 @@ impl LayoutComponent {
     }
     pub fn display_changed(&mut self) {
         if self.style.is_some() {
-            self.propagate_collapse(self.is_collapsed());
+            self.collapse_after_component(self.is_collapsed());
             self.mark_layout_node_dirty(false);
         }
     }
@@ -1286,12 +1289,7 @@ impl LayoutComponent {
     }
     pub fn clip_changed(&mut self) {
         self.mark_layout_node_dirty(false);
-        self.base
-            .base
-            .base
-            .base
-            .base
-            .add_dirt(ComponentDirt::PATH, false);
+        CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
     }
     pub fn width_changed(&mut self) {
         self.mark_layout_node_dirty(false);
@@ -1321,12 +1319,7 @@ impl LayoutComponent {
         self.base.base.base.base.base.as_component_mut()
     }
     pub fn mark_world_transform_dirty(&mut self) {
-        self.base
-            .base
-            .base
-            .base
-            .base
-            .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+        CoreCapabilities::world_transform_mark_dirty(self);
     }
     pub fn rotation(&self) -> f32 {
         self.base.base.base.base.rotation()

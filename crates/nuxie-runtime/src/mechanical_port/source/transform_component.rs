@@ -1,22 +1,22 @@
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
-    constraints::constraint::Constraint,
+    core::CoreHandle,
     core_context::CoreContext,
+    generated::core_registry::CoreCapabilities,
     generated::transform_component_base::{
         TransformComponentBase, TransformComponentBaseCallbacks,
     },
     intrinsically_sizeable::IntrinsicallySizeable,
     math::{aabb::Aabb, mat2d::Mat2D},
     status_code::StatusCode,
-    world_transform_component::WorldTransformComponent,
 };
 
 pub struct TransformComponent {
     pub base: TransformComponentBase,
     transform: Mat2D,
     render_opacity: f32,
-    parent_transform_component: Option<*mut WorldTransformComponent>,
-    constraints: Vec<*mut dyn Constraint>,
+    parent_transform_component: Option<CoreHandle>,
+    constraints: Vec<CoreHandle>,
 }
 
 impl Default for TransformComponent {
@@ -32,110 +32,101 @@ impl Default for TransformComponent {
 }
 
 impl TransformComponent {
-    pub fn constraints(&self) -> &[*mut dyn Constraint] {
+    pub fn constraints(&self) -> &[CoreHandle] {
         &self.constraints
     }
 
     pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
-        self.parent_transform_component = self
-            .base
-            .base
-            .base
-            .base
-            .parent_mut()
-            .and_then(|parent| parent.as_world_transform_component_mut())
-            .map(|parent| parent as *mut WorldTransformComponent);
-        StatusCode::Ok
-    }
-
-    pub fn collapse(&mut self, value: bool) -> bool {
-        if !self.base.base.base.base.base.collapse(value) {
-            return false;
-        }
-        let dependents = self.base.base.base.base.base.dependents().to_vec();
-        for dependent in dependents {
-            if let Some(transform) = unsafe { &mut *dependent }.as_transform_component_mut() {
-                transform.mark_dirty_if_constrained();
-            }
-        }
-        true
-    }
-
-    pub fn mark_dirty_if_constrained(&mut self) {
-        if !self.constraints.is_empty() {
+        self.parent_transform_component =
             self.base
                 .base
                 .base
                 .base
                 .base
-                .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+                .parent_handle()
+                .filter(|parent| {
+                    parent
+                        .with(|parent| parent.as_world_transform_component().is_some())
+                        .unwrap_or(false)
+                });
+        StatusCode::Ok
+    }
+
+    pub fn collapse(&mut self, value: bool) -> bool {
+        CoreCapabilities::component_collapse(self, value)
+    }
+
+    pub(crate) fn collapse_after_super(&mut self) {
+        let dependents = self.base.base.base.base.base.dependents().to_vec();
+        for dependent in dependents {
+            dependent.with_mut(|dependent| {
+                let is_constrained = dependent
+                    .as_transform_component()
+                    .is_some_and(|transform| !transform.constraints().is_empty());
+                if is_constrained {
+                    dependent.component_add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+                }
+            });
+        }
+    }
+
+    pub fn mark_dirty_if_constrained(&mut self) {
+        if !self.constraints.is_empty() {
+            CoreCapabilities::world_transform_mark_dirty(self);
         }
     }
 
     pub fn build_dependencies(&mut self) {
-        let this = self as *mut TransformComponent;
-        if let Some(parent) = self.base.base.base.base.parent_mut() {
-            parent
-                .base
-                .base
-                .add_dependent(this.cast::<crate::mechanical_port::source::component::Component>());
+        let component = &mut self.base.base.base.base.base;
+        let Some(this) = component.base.base.handle() else {
+            return;
+        };
+        if let Some(parent) = component.parent_handle() {
+            parent.with_mut(|parent| {
+                parent.component_add_dependent(this);
+            });
         }
     }
 
     pub fn mark_transform_dirty(&mut self) {
-        if !self
-            .base
-            .base
-            .base
-            .base
-            .base
-            .add_dirt(ComponentDirt::TRANSFORM, false)
-        {
-            return;
-        }
-        self.base.base.mark_world_transform_dirty();
+        CoreCapabilities::transform_mark_dirty(self);
     }
 
-    pub fn update_transform(&mut self) {
+    pub fn update_transform_state(&mut self, x: f32, y: f32) {
         self.transform = Mat2D::from_rotation(self.base.rotation());
-        self.transform[4] = self.x();
-        self.transform[5] = self.y();
+        self.transform[4] = x;
+        self.transform[5] = y;
         self.transform
             .scale_by_values(self.base.scale_x(), self.base.scale_y());
     }
 
     pub fn compose_world_transform(&mut self) {
-        *self.base.base.mutable_world_transform() =
-            if let Some(parent) = self.parent_transform_component {
-                *unsafe { &*parent }.world_transform() * self.transform
-            } else {
-                self.transform
-            };
+        let parent_transform = self.parent_transform_component.as_ref().and_then(|parent| {
+            parent
+                .with(|parent| {
+                    parent
+                        .as_world_transform_component()
+                        .map(|parent| *parent.world_transform())
+                })
+                .flatten()
+        });
+        *self.base.base.mutable_world_transform() = parent_transform
+            .map(|parent| parent * self.transform)
+            .unwrap_or(self.transform);
     }
 
-    pub fn update_world_transform(&mut self) {
-        self.compose_world_transform();
-        self.update_constraints();
-    }
-
-    pub fn update_constraints(&mut self) {
-        for constraint in self.constraints.iter().copied() {
-            unsafe { &mut *constraint }.constrain(self);
+    pub fn apply_constraints(component: CoreHandle, constraints: Vec<CoreHandle>) {
+        for constraint in constraints {
+            constraint.with_mut(|constraint| {
+                constraint.constraint_apply(component.clone());
+            });
         }
     }
 
-    pub fn update(&mut self, value: ComponentDirt) {
-        if value.contains(ComponentDirt::TRANSFORM) {
-            self.update_transform();
-        }
-        if value.contains(ComponentDirt::WORLD_TRANSFORM) {
-            self.update_world_transform();
-        }
-        if value.contains(ComponentDirt::RENDER_OPACITY) {
-            self.render_opacity = self.base.base.base.opacity();
-            if let Some(parent) = self.parent_transform_component {
-                self.render_opacity *= unsafe { &*parent }.child_opacity();
-            }
+    pub fn update_render_opacity_state(&mut self, parent_child_opacity: Option<f32>) {
+        self.render_opacity = self.base.base.base.opacity();
+        if let Some(parent_child_opacity) = parent_child_opacity {
+            self.render_opacity *= parent_child_opacity;
         }
     }
 
@@ -155,14 +146,6 @@ impl TransformComponent {
         &mut self.transform
     }
 
-    pub fn x(&self) -> f32 {
-        panic!("abstract TransformComponent::x");
-    }
-
-    pub fn y(&self) -> f32 {
-        panic!("abstract TransformComponent::y");
-    }
-
     pub fn rotation_changed(&mut self) {
         self.mark_transform_dirty();
     }
@@ -173,7 +156,7 @@ impl TransformComponent {
         self.mark_transform_dirty();
     }
 
-    pub fn add_constraint(&mut self, constraint: *mut dyn Constraint) {
+    pub fn add_constraint(&mut self, constraint: CoreHandle) {
         self.constraints.push(constraint);
     }
 
@@ -185,9 +168,8 @@ impl TransformComponent {
         Aabb::default()
     }
 
-    pub fn parent_transform_component(&mut self) -> Option<&mut WorldTransformComponent> {
-        self.parent_transform_component
-            .map(|parent| unsafe { &mut *parent })
+    pub fn parent_transform_component(&self) -> Option<CoreHandle> {
+        self.parent_transform_component.clone()
     }
 }
 
@@ -205,5 +187,19 @@ impl TransformComponentBaseCallbacks for TransformComponent {
     }
     fn scale_y_changed(&mut self) {
         TransformComponent::scale_y_changed(self);
+    }
+}
+
+impl std::ops::Deref for TransformComponent {
+    type Target = TransformComponentBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransformComponent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

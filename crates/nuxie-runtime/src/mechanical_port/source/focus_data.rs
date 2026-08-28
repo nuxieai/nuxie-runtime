@@ -1,56 +1,162 @@
-use std::{any::Any, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
-    animation::listener_invocation::ListenerInvocation,
-    artboard::{Artboard, ArtboardInstance},
-    artboard_host::ArtboardHost,
+    animation::{
+        listener_invocation::ListenerInvocation,
+        state_machine_instance::{RuntimeObjectHandle, RuntimeStateMachineInstanceWeakHandle},
+    },
+    artboard::Artboard,
     component::Component,
     component_dirt::ComponentDirt,
     constraints::scrolling::scroll_constraint::ScrollConstraint,
+    core::CoreHandle,
     generated::{
         component_base::ComponentBaseCallbacks,
         focus_data_base::{FocusDataBase, FocusDataBaseCallbacks},
     },
     input::{
-        focus_listener::FocusListener,
-        focus_manager::FocusManager,
         focus_node::{EdgeBehavior, FocusNode, FocusNodeRef, FocusableRef},
         focusable::{Focusable, Key, KeyModifiers},
-        gamepad_listener::GamepadListener,
-        keyboard_listener::KeyboardListener,
     },
     layout_component::LayoutComponent,
     math::{aabb::Aabb, vec2d::Vec2D},
     parent_traversal::ParentTraversal,
-    scripted::scripted_drawable::ScriptedDrawable,
     semantic::{semantic_data::SemanticData, semantic_snapshot::Bounds},
 };
 
-type KeyboardListenerObject = dyn KeyboardListener<Key, KeyModifiers>;
-type GamepadListenerObject = dyn GamepadListener<ListenerInvocation, ScriptedDrawable>;
-
-struct FocusDataFocusable {
-    owner: *mut FocusData,
+#[derive(Clone)]
+pub struct RuntimeFocusListenerHandle {
+    machine: RuntimeStateMachineInstanceWeakHandle,
+    group: RuntimeObjectHandle,
 }
 
-fn component_allows_focus_traversal(component: *const Component) -> bool {
-    let Some(component) = (unsafe { component.as_ref() }) else {
-        return false;
-    };
-    if component.is_collapsed() {
-        return false;
+impl RuntimeFocusListenerHandle {
+    pub fn new(machine: RuntimeStateMachineInstanceWeakHandle, group: RuntimeObjectHandle) -> Self {
+        Self { machine, group }
     }
-    if let Some(drawable) = component.as_drawable() {
-        if drawable.is_hidden() {
-            return false;
-        }
+
+    fn is_alive(&self) -> bool {
+        self.machine.upgrade().is_some()
     }
-    if let Some(transform_component) = component.as_transform_component() {
-        if transform_component.render_opacity() <= 0.0 {
-            return false;
-        }
+
+    fn ptr_eq(&self, other: &Self) -> bool {
+        self.group == other.group && self.machine.ptr_eq(&other.machine)
     }
-    true
+
+    fn notify(&self, focused: bool) {
+        self.machine
+            .with_instance_mut(|machine| machine.queue_focus_event(self.group, focused));
+    }
+}
+
+#[derive(Clone)]
+pub struct RuntimeKeyboardListenerHandle {
+    machine: RuntimeStateMachineInstanceWeakHandle,
+    group: RuntimeObjectHandle,
+}
+
+impl RuntimeKeyboardListenerHandle {
+    pub fn new(machine: RuntimeStateMachineInstanceWeakHandle, group: RuntimeObjectHandle) -> Self {
+        Self { machine, group }
+    }
+
+    fn is_alive(&self) -> bool {
+        self.machine.upgrade().is_some()
+    }
+
+    fn ptr_eq(&self, other: &Self) -> bool {
+        self.group == other.group && self.machine.ptr_eq(&other.machine)
+    }
+
+    fn key_input(
+        &self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        self.machine
+            .with_instance_mut(|machine| {
+                machine.dispatch_keyboard_listener_group(
+                    self.group, key, modifiers, is_pressed, is_repeat,
+                )
+            })
+            .unwrap_or(false)
+    }
+
+    fn text_input(&self, text: &str) -> bool {
+        self.machine
+            .with_instance_mut(|machine| machine.dispatch_text_listener_group(self.group, text))
+            .unwrap_or(false)
+    }
+}
+
+#[derive(Clone)]
+pub struct RuntimeGamepadListenerHandle {
+    machine: RuntimeStateMachineInstanceWeakHandle,
+    group: RuntimeObjectHandle,
+}
+
+impl RuntimeGamepadListenerHandle {
+    pub fn new(machine: RuntimeStateMachineInstanceWeakHandle, group: RuntimeObjectHandle) -> Self {
+        Self { machine, group }
+    }
+
+    fn is_alive(&self) -> bool {
+        self.machine.upgrade().is_some()
+    }
+
+    fn ptr_eq(&self, other: &Self) -> bool {
+        self.group == other.group && self.machine.ptr_eq(&other.machine)
+    }
+
+    fn dispatch(
+        &self,
+        invocation: &ListenerInvocation,
+        out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
+    ) -> bool {
+        self.machine
+            .with_instance_mut(|machine| {
+                machine.dispatch_gamepad_listener_group(
+                    self.group,
+                    invocation,
+                    out_dispatched_scripted_drawable,
+                )
+            })
+            .unwrap_or(false)
+    }
+}
+
+struct FocusDataFocusable {
+    owner: Option<CoreHandle>,
+}
+
+fn component_allows_focus_traversal(
+    component: &crate::mechanical_port::source::core::CoreHandle,
+) -> bool {
+    component
+        .with(|component| {
+            let Some(base) = component.as_component() else {
+                return false;
+            };
+            if base.is_collapsed() {
+                return false;
+            }
+            if component
+                .as_drawable()
+                .is_some_and(|drawable| drawable.is_hidden())
+            {
+                return false;
+            }
+            if component
+                .as_transform_component()
+                .is_some_and(|component| component.render_opacity() <= 0.0)
+            {
+                return false;
+            }
+            true
+        })
+        .unwrap_or(false)
 }
 
 impl FocusData {
@@ -58,34 +164,37 @@ impl FocusData {
         if self.component().is_collapsed() {
             return false;
         }
-        let Some(start) = self.component().parent() else {
+        let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
             return true;
         };
-        let start_component = &start.base.base as *const Component;
-        if !component_allows_focus_traversal(start_component) {
-            return false;
-        }
-        let mut traversal =
-            ParentTraversal::new(Some(unsafe { &mut *(start_component as *mut Component) }));
+        let mut traversal = ParentTraversal::new(Some(this));
         loop {
             let Some(parent) = traversal.next() else {
                 break;
             };
-            if !component_allows_focus_traversal(&parent.base.base) {
+            if !component_allows_focus_traversal(&parent) {
                 return false;
             }
             if traversal.did_cross_boundary() {
                 if let Some(host) = traversal.crossing_host() {
-                    let host = host as *const dyn ArtboardHost as *mut dyn ArtboardHost;
-                    if let Some(host_component) = unsafe { &mut *host }.host_component() {
-                        if !component_allows_focus_traversal(host_component) {
-                            return false;
-                        }
-                        if let Some(nested_artboard) = host_component.as_nested_artboard() {
-                            if nested_artboard.base.is_paused() {
-                                return false;
-                            }
-                        }
+                    let allowed = host
+                        .with(|host| {
+                            let host = host.as_artboard_host()?;
+                            let component = host.host_component()?;
+                            Some(
+                                component_allows_focus_traversal(&component)
+                                    && !component
+                                        .with(|component| {
+                                            component.nested_artboard_is_paused().unwrap_or(false)
+                                        })
+                                        .unwrap_or(false),
+                            )
+                        })
+                        .flatten()
+                        .unwrap_or(false);
+                    if !allowed {
+                        return false;
                     }
                 }
             }
@@ -93,30 +202,40 @@ impl FocusData {
         true
     }
 
-    pub fn world_position(&mut self, out_position: &mut Vec2D) -> bool {
-        let Some(parent) = self.component_mut().parent_mut() else {
-            return false;
-        };
-        let Some(world_transform_component) = parent.base.base.as_world_transform_component_mut()
+    pub fn world_position(&self, out_position: &mut Vec2D) -> bool {
+        let Some(local_position) = self
+            .component()
+            .parent_handle()
+            .and_then(|parent| {
+                parent.with(|parent| {
+                    parent
+                        .as_world_transform_component()
+                        .map(|component| component.world_translation())
+                })
+            })
+            .flatten()
         else {
             return false;
         };
-        let local_position = world_transform_component.world_translation();
         *out_position = self
-            .component_mut()
-            .artboard_mut()
-            .map_or(local_position, |artboard| {
-                artboard.root_transform(local_position)
-            });
+            .component()
+            .with_artboard_mut(|artboard| artboard.root_transform(local_position))
+            .unwrap_or(local_position);
         true
     }
 
     pub fn accepts_keyboard_input(&self) -> bool {
-        !self.keyboard_listeners.is_empty() || !self.text_input_listeners.is_empty()
+        self.keyboard_listeners
+            .iter()
+            .any(RuntimeKeyboardListenerHandle::is_alive)
+            || self
+                .text_input_listeners
+                .iter()
+                .any(RuntimeKeyboardListenerHandle::is_alive)
     }
 
-    pub fn focusable_artboard(&mut self) -> Option<&mut Artboard> {
-        self.component_mut().artboard_mut()
+    pub fn focusable_artboard(&self) -> Option<CoreHandle> {
+        self.component().artboard_handle()
     }
 
     pub fn name_changed(&mut self) {
@@ -127,9 +246,12 @@ impl FocusData {
 
     pub fn build_dependencies(&mut self) {
         self.component_mut().build_dependencies();
-        let this = self.component_mut() as *mut Component;
-        if let Some(parent) = self.component_mut().parent_mut() {
-            parent.base.base.add_dependent(this);
+        let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return;
+        };
+        if let Some(parent) = self.component().parent_handle() {
+            parent.with_mut(|parent| parent.component_add_dependent(this));
         }
     }
 
@@ -143,15 +265,22 @@ impl FocusData {
         let Some(node) = self.focus_node.clone() else {
             return;
         };
-        let layout = self
-            .component_mut()
-            .parent_mut()
-            .and_then(|parent| parent.base.base.as_layout_component_mut())
-            .map(|layout| layout.world_bounds());
+        let layout = self.component().parent_handle().and_then(|parent| {
+            parent
+                .with(|parent| {
+                    parent
+                        .as_layout_component()
+                        .map(LayoutComponent::world_bounds)
+                })
+                .flatten()
+        });
         if let Some(mut bounds) = layout {
-            if let Some(artboard) = self.component_mut().artboard_mut() {
-                let minimum = artboard.root_transform(Vec2D::new(bounds.left(), bounds.top()));
-                let maximum = artboard.root_transform(Vec2D::new(bounds.right(), bounds.bottom()));
+            if let Some((minimum, maximum)) = self.component().with_artboard_mut(|artboard| {
+                (
+                    artboard.root_transform(Vec2D::new(bounds.left(), bounds.top())),
+                    artboard.root_transform(Vec2D::new(bounds.right(), bounds.bottom())),
+                )
+            }) {
                 bounds = Aabb::new(minimum.x, minimum.y, maximum.x, maximum.y);
             }
             node.borrow_mut().world_bounds = Bounds {
@@ -181,10 +310,12 @@ impl Focusable for FocusData {
         FocusData::text_input(self, text)
     }
 
-    fn gamepad_dispatch(&mut self, invocation: &dyn Any) -> bool {
-        invocation
-            .downcast_ref::<ListenerInvocation>()
-            .is_some_and(|invocation| FocusData::gamepad_dispatch(self, invocation, None))
+    fn gamepad_dispatch(
+        &mut self,
+        invocation: &ListenerInvocation,
+        out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
+    ) -> bool {
+        FocusData::gamepad_dispatch(self, invocation, out_dispatched_scripted_drawable)
     }
 
     fn focused(&mut self) {
@@ -196,11 +327,8 @@ impl Focusable for FocusData {
     }
 
     fn world_position(&self) -> Option<(f32, f32)> {
-        let this = self as *const Self as *mut Self;
         let mut position = Vec2D::default();
-        unsafe { &mut *this }
-            .world_position(&mut position)
-            .then_some((position.x, position.y))
+        FocusData::world_position(self, &mut position).then_some((position.x, position.y))
     }
 
     fn is_eligible_for_focus_traversal(&self) -> bool {
@@ -252,52 +380,89 @@ impl Focusable for FocusDataFocusable {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        unsafe { &mut *self.owner }.key_input(key, modifiers, is_pressed, is_repeat)
+        self.owner
+            .as_ref()
+            .and_then(|owner| {
+                owner.with_downcast_mut::<FocusData, _>(|owner| {
+                    owner.key_input(key, modifiers, is_pressed, is_repeat)
+                })
+            })
+            .unwrap_or(false)
     }
 
     fn text_input(&mut self, text: &str) -> bool {
-        unsafe { &mut *self.owner }.text_input(text)
+        self.owner
+            .as_ref()
+            .and_then(|owner| {
+                owner.with_downcast_mut::<FocusData, _>(|owner| owner.text_input(text))
+            })
+            .unwrap_or(false)
     }
 
-    fn gamepad_dispatch(&mut self, invocation: &dyn Any) -> bool {
-        invocation
-            .downcast_ref::<ListenerInvocation>()
-            .is_some_and(|invocation| {
-                unsafe { &mut *self.owner }.gamepad_dispatch(invocation, None)
+    fn gamepad_dispatch(
+        &mut self,
+        invocation: &ListenerInvocation,
+        out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
+    ) -> bool {
+        self.owner
+            .as_ref()
+            .and_then(|owner| {
+                owner.with_downcast_mut::<FocusData, _>(|owner| {
+                    owner.gamepad_dispatch(invocation, out_dispatched_scripted_drawable)
+                })
             })
+            .unwrap_or(false)
     }
 
     fn focused(&mut self) {
-        unsafe { &mut *self.owner }.focused();
+        if let Some(owner) = &self.owner {
+            owner.with_downcast_mut::<FocusData, _>(FocusData::focused);
+        }
     }
 
     fn blurred(&mut self) {
-        unsafe { &mut *self.owner }.blurred();
+        if let Some(owner) = &self.owner {
+            owner.with_downcast_mut::<FocusData, _>(FocusData::blurred);
+        }
     }
 
     fn world_position(&self) -> Option<(f32, f32)> {
         let mut position = Vec2D::default();
-        unsafe { &mut *self.owner }
-            .world_position(&mut position)
+        self.owner
+            .as_ref()
+            .and_then(|owner| {
+                owner.with_downcast::<FocusData, _>(|owner| owner.world_position(&mut position))
+            })
+            .unwrap_or(false)
             .then_some((position.x, position.y))
     }
 
     fn is_eligible_for_focus_traversal(&self) -> bool {
-        unsafe { &*self.owner }.is_eligible_for_focus_traversal()
+        self.owner
+            .as_ref()
+            .and_then(|owner| {
+                owner.with_downcast::<FocusData, _>(FocusData::is_eligible_for_focus_traversal)
+            })
+            .unwrap_or(false)
     }
 
     fn accepts_keyboard_input(&self) -> bool {
-        unsafe { &*self.owner }.accepts_keyboard_input()
+        self.owner
+            .as_ref()
+            .and_then(|owner| {
+                owner.with_downcast::<FocusData, _>(FocusData::accepts_keyboard_input)
+            })
+            .unwrap_or(false)
     }
 }
 
 pub struct FocusData {
     pub base: FocusDataBase,
     focus_node: Option<FocusNodeRef>,
-    focus_listeners: Vec<*mut dyn FocusListener>,
-    keyboard_listeners: Vec<*mut KeyboardListenerObject>,
-    text_input_listeners: Vec<*mut KeyboardListenerObject>,
-    gamepad_listeners: Vec<*mut GamepadListenerObject>,
+    focus_listeners: Vec<RuntimeFocusListenerHandle>,
+    keyboard_listeners: Vec<RuntimeKeyboardListenerHandle>,
+    text_input_listeners: Vec<RuntimeKeyboardListenerHandle>,
+    gamepad_listeners: Vec<RuntimeGamepadListenerHandle>,
 }
 
 impl Default for FocusData {
@@ -318,18 +483,16 @@ impl Drop for FocusData {
         let Some(node) = self.focus_node.take() else {
             return;
         };
-        node.borrow_mut().focusable = None;
-        if let Some(parent) = node.borrow().parent() {
-            FocusNode::remove_child(&parent, &node);
-            return;
-        }
+        node.borrow_mut().clear_focusable();
+        let parent = node.borrow().parent();
         let manager = self
             .component()
-            .artboard()
-            .and_then(Artboard::focus_manager)
-            .map_or(std::ptr::null(), |value| value);
-        if !manager.is_null() {
-            unsafe { &mut *(manager as *mut FocusManager) }.remove_child(&node);
+            .with_artboard(Artboard::focus_manager_handle)
+            .flatten();
+        if let Some(manager) = manager {
+            manager.with_focus_manager_mut(|manager| manager.remove_child(&node));
+        } else if let Some(parent) = parent {
+            FocusNode::remove_child(&parent, &node);
         }
     }
 }
@@ -347,15 +510,16 @@ impl FocusData {
 
     pub fn focus_node(&mut self) -> FocusNodeRef {
         if self.focus_node.is_none() {
-            let focusable: FocusableRef = Rc::new(RefCell::new(FocusDataFocusable {
-                owner: self as *mut FocusData,
-            }));
+            let owner = crate::mechanical_port::source::core::CoreObject::core(self).handle();
+            let focusable: FocusableRef = Rc::new(RefCell::new(FocusDataFocusable { owner }));
             let node = FocusNode::new(Some(focusable));
             {
                 let mut node_ref = node.borrow_mut();
-                node_ref.can_focus(self.base.focus_flags() & FocusDataBase::CAN_FOCUS_BITMASK != 0);
-                node_ref.can_touch(self.base.focus_flags() & FocusDataBase::CAN_TOUCH_BITMASK != 0);
-                node_ref.can_traverse(
+                node_ref
+                    .set_can_focus(self.base.focus_flags() & FocusDataBase::CAN_FOCUS_BITMASK != 0);
+                node_ref
+                    .set_can_touch(self.base.focus_flags() & FocusDataBase::CAN_TOUCH_BITMASK != 0);
+                node_ref.set_can_traverse(
                     self.base.focus_flags() & FocusDataBase::CAN_TRAVERSE_BITMASK != 0,
                 );
                 node_ref.set_edge_behavior(edge_behavior(self.base.edge_behavior_value()));
@@ -367,57 +531,61 @@ impl FocusData {
         self.focus_node.as_ref().unwrap().clone()
     }
 
-    pub fn add_focus_listener(&mut self, listener: *mut dyn FocusListener) {
+    pub fn existing_focus_node(&self) -> Option<FocusNodeRef> {
+        self.focus_node.clone()
+    }
+
+    pub fn add_focus_listener(&mut self, listener: RuntimeFocusListenerHandle) {
         self.focus_listeners.push(listener);
     }
 
-    pub fn remove_focus_listener(&mut self, listener: *mut dyn FocusListener) {
+    pub fn remove_focus_listener(&mut self, listener: RuntimeFocusListenerHandle) {
         if let Some(index) = self
             .focus_listeners
             .iter()
-            .position(|value| std::ptr::addr_eq(*value, listener))
+            .position(|value| value.ptr_eq(&listener))
         {
             self.focus_listeners.remove(index);
         }
     }
 
-    pub fn add_keyboard_listener(&mut self, listener: *mut KeyboardListenerObject) {
+    pub fn add_keyboard_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
         self.keyboard_listeners.push(listener);
     }
 
-    pub fn remove_keyboard_listener(&mut self, listener: *mut KeyboardListenerObject) {
+    pub fn remove_keyboard_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
         if let Some(index) = self
             .keyboard_listeners
             .iter()
-            .position(|value| std::ptr::addr_eq(*value, listener))
+            .position(|value| value.ptr_eq(&listener))
         {
             self.keyboard_listeners.remove(index);
         }
     }
 
-    pub fn add_text_input_listener(&mut self, listener: *mut KeyboardListenerObject) {
+    pub fn add_text_input_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
         self.text_input_listeners.push(listener);
     }
 
-    pub fn remove_text_input_listener(&mut self, listener: *mut KeyboardListenerObject) {
+    pub fn remove_text_input_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
         if let Some(index) = self
             .text_input_listeners
             .iter()
-            .position(|value| std::ptr::addr_eq(*value, listener))
+            .position(|value| value.ptr_eq(&listener))
         {
             self.text_input_listeners.remove(index);
         }
     }
 
-    pub fn add_gamepad_listener(&mut self, listener: *mut GamepadListenerObject) {
+    pub fn add_gamepad_listener(&mut self, listener: RuntimeGamepadListenerHandle) {
         self.gamepad_listeners.push(listener);
     }
 
-    pub fn remove_gamepad_listener(&mut self, listener: *mut GamepadListenerObject) {
+    pub fn remove_gamepad_listener(&mut self, listener: RuntimeGamepadListenerHandle) {
         if let Some(index) = self
             .gamepad_listeners
             .iter()
-            .position(|value| std::ptr::addr_eq(*value, listener))
+            .position(|value| value.ptr_eq(&listener))
         {
             self.gamepad_listeners.remove(index);
         }
@@ -432,8 +600,10 @@ impl FocusData {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        for listener in self.keyboard_listeners.iter().copied() {
-            if unsafe { &mut *listener }.key_input(value, modifiers, is_pressed, is_repeat) {
+        self.keyboard_listeners
+            .retain(RuntimeKeyboardListenerHandle::is_alive);
+        for listener in &self.keyboard_listeners {
+            if listener.key_input(value, modifiers, is_pressed, is_repeat) {
                 return true;
             }
         }
@@ -441,8 +611,10 @@ impl FocusData {
     }
 
     pub fn text_input(&mut self, text: &str) -> bool {
-        for listener in self.text_input_listeners.iter().copied() {
-            if unsafe { &mut *listener }.text_input(text) {
+        self.text_input_listeners
+            .retain(RuntimeKeyboardListenerHandle::is_alive);
+        for listener in &self.text_input_listeners {
+            if listener.text_input(text) {
                 return true;
             }
         }
@@ -452,13 +624,13 @@ impl FocusData {
     pub fn gamepad_dispatch(
         &mut self,
         invocation: &ListenerInvocation,
-        out_dispatched_scripted_drawable: Option<&mut Option<*mut ScriptedDrawable>>,
+        out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
     ) -> bool {
-        let output = out_dispatched_scripted_drawable
-            .map(|value| value as *mut Option<*mut ScriptedDrawable>);
-        for listener in self.gamepad_listeners.iter().copied() {
-            let output = output.map(|value| unsafe { &mut *value });
-            if unsafe { &mut *listener }.gamepad_dispatch(invocation, output) {
+        self.gamepad_listeners
+            .retain(RuntimeGamepadListenerHandle::is_alive);
+        let mut output = out_dispatched_scripted_drawable;
+        for listener in &self.gamepad_listeners {
+            if listener.dispatch(invocation, output.as_deref_mut()) {
                 return true;
             }
         }
@@ -474,85 +646,92 @@ fn edge_behavior(value: u32) -> EdgeBehavior {
     }
 }
 
-fn find_sibling_semantic_data(component: &mut Component) -> Option<&mut SemanticData> {
-    let parent = component.parent_mut()?;
-    parent.base.base.as_node_mut()?;
-    for child in parent.children() {
-        if let Some(semantic_data) = unsafe { &mut **child }.as_semantic_data_mut() {
-            return Some(semantic_data);
-        }
-    }
-    None
+fn find_sibling_semantic_data(component: &Component) -> Option<CoreHandle> {
+    component
+        .parent_handle()?
+        .with(|parent| {
+            parent
+                .as_node()?
+                .children()
+                .iter()
+                .find(|child| {
+                    child
+                        .with(|child| child.as_semantic_data().is_some())
+                        .unwrap_or(false)
+                })
+                .cloned()
+        })
+        .flatten()
 }
 
 impl FocusData {
     fn scroll_into_view(&mut self) {
-        let mut layout_component = self
-            .component_mut()
-            .parent_mut()
-            .map(|value| value as *mut _);
-        while let Some(component) = layout_component {
-            if unsafe { &mut *component }
-                .base
-                .base
-                .as_layout_component_mut()
-                .is_some()
+        let mut layout_component = self.component().parent_handle();
+        while let Some(component) = layout_component.clone() {
+            if component
+                .with(|component| component.as_layout_component().is_some())
+                .unwrap_or(false)
             {
                 break;
             }
-            layout_component = unsafe { &mut *component }
-                .base
-                .base
-                .parent_mut()
-                .map(|value| value as *mut _);
+            layout_component = component
+                .with(|component| component.as_component()?.parent_handle())
+                .flatten();
         }
         let Some(layout_component) = layout_component else {
             return;
         };
-        let mut element_bounds = unsafe { &mut *layout_component }
-            .base
-            .base
-            .as_layout_component_mut()
-            .unwrap()
-            .world_bounds();
+        let Some(mut element_bounds) = layout_component
+            .with(|component| {
+                component
+                    .as_layout_component()
+                    .map(LayoutComponent::world_bounds)
+            })
+            .flatten()
+        else {
+            return;
+        };
 
-        let this = self.component_mut() as *mut Component;
-        let mut traversal = ParentTraversal::new(Some(unsafe { &mut *this }));
+        let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return;
+        };
+        let mut traversal = ParentTraversal::new(Some(this));
         while let Some(parent) = traversal.next() {
-            let parent = parent as *mut _;
             if traversal.did_cross_boundary() {
                 if let (Some(host), Some(source_artboard)) =
                     (traversal.crossing_host(), traversal.source_artboard())
                 {
-                    let instance = if source_artboard.is_instance() {
-                        source_artboard as *const Artboard as *mut ArtboardInstance
-                    } else {
-                        std::ptr::null_mut()
-                    };
-                    let host_transform = host.world_transform_for_artboard(instance);
-                    let minimum =
-                        host_transform * Vec2D::new(element_bounds.left(), element_bounds.top());
-                    let maximum = host_transform
-                        * Vec2D::new(element_bounds.right(), element_bounds.bottom());
-                    element_bounds = Aabb::new(minimum.x, minimum.y, maximum.x, maximum.y);
+                    if let Some(host_transform) = host
+                        .with(|host| {
+                            host.as_artboard_host().map(|host| {
+                                host.world_transform_for_artboard(source_artboard.clone())
+                            })
+                        })
+                        .flatten()
+                    {
+                        let minimum = host_transform
+                            * Vec2D::new(element_bounds.left(), element_bounds.top());
+                        let maximum = host_transform
+                            * Vec2D::new(element_bounds.right(), element_bounds.bottom());
+                        element_bounds = Aabb::new(minimum.x, minimum.y, maximum.x, maximum.y);
+                    }
                 }
             }
-            let parent_component = unsafe { &mut *parent }
-                .base
-                .base
-                .as_transform_component_mut();
-            let Some(transform_component) = parent_component else {
+            let constraints = parent
+                .with(|parent| {
+                    parent
+                        .as_transform_component()
+                        .map(|component| component.constraints().to_vec())
+                })
+                .flatten();
+            let Some(constraints) = constraints else {
                 continue;
             };
-            let constraints = transform_component.constraints().to_vec();
             for constraint in constraints {
-                let component = unsafe { &mut *constraint }.as_component_mut_ptr();
-                let Some(scroll_constraint) =
-                    (unsafe { &mut *component }).as_scroll_constraint_mut()
-                else {
-                    continue;
-                };
-                self.scroll_constraint_to_show_bounds(scroll_constraint, element_bounds);
+                constraint.with_downcast_mut::<ScrollConstraint, _>(|scroll_constraint| {
+                    self.scroll_constraint_to_show_bounds(scroll_constraint, element_bounds);
+                });
             }
         }
     }
@@ -562,12 +741,22 @@ impl FocusData {
         constraint: &mut ScrollConstraint,
         element_bounds: Aabb,
     ) {
-        let content = constraint.content() as *const LayoutComponent;
-        let viewport = constraint.viewport() as *const LayoutComponent;
-        if content.is_null() || viewport.is_null() {
+        let Some(_content) = constraint.content_handle() else {
             return;
-        }
-        let viewport_transform = unsafe { &*viewport }.world_transform();
+        };
+        let Some(viewport) = constraint.viewport_handle() else {
+            return;
+        };
+        let Some(viewport_transform) = viewport
+            .with(|viewport| {
+                viewport
+                    .as_layout_component()
+                    .map(|viewport| *viewport.world_transform())
+            })
+            .flatten()
+        else {
+            return;
+        };
         let viewport_world_x = viewport_transform[4];
         let viewport_world_y = viewport_transform[5];
         let viewport_width = constraint.viewport_width();
@@ -610,39 +799,50 @@ impl FocusData {
 
     pub fn focused(&mut self) {
         self.scroll_into_view();
-        for listener in self.focus_listeners.iter().copied() {
-            unsafe { &mut *listener }.on_focused();
+        self.focus_listeners
+            .retain(RuntimeFocusListenerHandle::is_alive);
+        for listener in &self.focus_listeners {
+            listener.notify(true);
         }
-        if let Some(sibling) = find_sibling_semantic_data(self.component_mut()) {
-            sibling.set_focused_state(true);
+        if let Some(sibling) = find_sibling_semantic_data(self.component()) {
+            sibling.with_downcast_mut::<SemanticData, _>(|sibling| sibling.set_focused_state(true));
         }
-        if let Some(parent) = self.component_mut().parent_mut() {
-            if let Some(text_input) = parent.base.base.as_text_input_mut() {
-                text_input.focused();
-            }
+        if let Some(parent) = self.component().parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(text_input) = parent.as_text_input_mut() {
+                    text_input.focused();
+                }
+            });
         }
     }
 
     pub fn blurred(&mut self) {
-        for listener in self.focus_listeners.iter().copied() {
-            unsafe { &mut *listener }.on_blurred();
+        self.focus_listeners
+            .retain(RuntimeFocusListenerHandle::is_alive);
+        for listener in &self.focus_listeners {
+            listener.notify(false);
         }
-        if let Some(sibling) = find_sibling_semantic_data(self.component_mut()) {
-            sibling.set_focused_state(false);
+        if let Some(sibling) = find_sibling_semantic_data(self.component()) {
+            sibling
+                .with_downcast_mut::<SemanticData, _>(|sibling| sibling.set_focused_state(false));
         }
-        if let Some(parent) = self.component_mut().parent_mut() {
-            if let Some(text_input) = parent.base.base.as_text_input_mut() {
-                text_input.blurred();
-            }
+        if let Some(parent) = self.component().parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(text_input) = parent.as_text_input_mut() {
+                    text_input.blurred();
+                }
+            });
         }
     }
 
     pub fn focus_flags_changed(&mut self) {
         if let Some(node) = &self.focus_node {
             let mut node = node.borrow_mut();
-            node.can_focus(self.base.focus_flags() & FocusDataBase::CAN_FOCUS_BITMASK != 0);
-            node.can_touch(self.base.focus_flags() & FocusDataBase::CAN_TOUCH_BITMASK != 0);
-            node.can_traverse(self.base.focus_flags() & FocusDataBase::CAN_TRAVERSE_BITMASK != 0);
+            node.set_can_focus(self.base.focus_flags() & FocusDataBase::CAN_FOCUS_BITMASK != 0);
+            node.set_can_touch(self.base.focus_flags() & FocusDataBase::CAN_TOUCH_BITMASK != 0);
+            node.set_can_traverse(
+                self.base.focus_flags() & FocusDataBase::CAN_TRAVERSE_BITMASK != 0,
+            );
         }
     }
 
@@ -653,66 +853,88 @@ impl FocusData {
         }
     }
 
-    pub fn find_parent_focus_data(&self) -> Option<&mut FocusData> {
-        let mut current = self
-            .component()
-            .parent()
-            .map(|value| value as *const _ as *mut _);
+    pub fn find_parent_focus_data(&self) -> Option<CoreHandle> {
+        let this = crate::mechanical_port::source::core::CoreObject::core(self).handle();
+        let mut current = self.component().parent_handle();
         while let Some(parent) = current {
-            let parent_ref = unsafe { &mut *parent };
-            if parent_ref.base.base.as_node_mut().is_some() {
-                for child in parent_ref.children() {
-                    if let Some(focus_data) = unsafe { &mut **child }.as_focus_data_mut() {
-                        if !std::ptr::eq(focus_data, self) {
-                            return Some(focus_data);
-                        }
-                    }
+            let children = parent
+                .with(|parent| parent.as_node().map(|parent| parent.children().to_vec()))
+                .flatten()
+                .unwrap_or_default();
+            for child in children {
+                if Some(&child) != this.as_ref()
+                    && child.with_downcast::<FocusData, _>(|_| ()).is_some()
+                {
+                    return Some(child);
                 }
             }
-            current = parent_ref
-                .base
-                .base
-                .parent_mut()
-                .map(|value| value as *mut _);
+            current = parent
+                .with(|parent| parent.as_component()?.parent_handle())
+                .flatten();
         }
         None
     }
 
-    pub fn find_closest_focus_node(component: *mut Component) -> Option<FocusNodeRef> {
-        let Some(component) = (unsafe { component.as_mut() }) else {
-            return None;
-        };
-        let mut current = component.parent_mut().map(|value| value as *mut _);
+    pub fn find_closest_focus_node_handle(
+        component: crate::mechanical_port::source::core::CoreHandle,
+    ) -> Option<FocusNodeRef> {
+        let mut current = component
+            .with(|component| component.as_component()?.parent_handle())
+            .flatten();
         while let Some(parent) = current {
-            let parent_ref = unsafe { &mut *parent };
-            if let Some(artboard) = parent_ref.base.base.as_artboard_mut() {
-                if let Some(host) = artboard.host() {
-                    if let Some(host_component) = unsafe { &mut *host }.host_component() {
-                        if let Some(container) = host_component.as_container_component_mut() {
-                            current = Some(container);
-                            continue;
-                        }
+            if parent.with_downcast::<Artboard, _>(|_| ()).is_some() {
+                if let Some(host) = parent
+                    .with_downcast::<Artboard, _>(Artboard::host)
+                    .flatten()
+                {
+                    let host_component = host
+                        .with(|host| host.as_artboard_host()?.host_component())
+                        .flatten();
+                    if host_component.as_ref().is_some_and(|component| {
+                        component
+                            .with(|component| component.as_container_component().is_some())
+                            .unwrap_or(false)
+                    }) {
+                        current = host_component;
+                        continue;
                     }
                 }
-                #[cfg(feature = "rive_tools")]
-                if let Some(external_node) = artboard.external_parent_focus_node() {
+                #[cfg(feature = "tools")]
+                if let Some(external_node) = parent
+                    .with_downcast::<Artboard, _>(Artboard::external_parent_focus_node)
+                    .flatten()
+                {
                     return Some(external_node);
                 }
                 return None;
             }
-            if parent_ref.base.base.as_node_mut().is_some() {
-                for child in parent_ref.children() {
-                    if let Some(focus_data) = unsafe { &mut **child }.as_focus_data_mut() {
-                        return Some(focus_data.focus_node());
-                    }
+            let children = parent
+                .with(|parent| parent.as_node().map(|node| node.children().to_vec()))
+                .flatten()
+                .unwrap_or_default();
+            for child in children {
+                if let Some(node) = child.with_downcast_mut::<FocusData, _>(FocusData::focus_node) {
+                    return Some(node);
                 }
             }
-            current = parent_ref
-                .base
-                .base
-                .parent_mut()
-                .map(|value| value as *mut _);
+            current = parent
+                .with(|parent| parent.as_component()?.parent_handle())
+                .flatten();
         }
         None
+    }
+}
+
+impl std::ops::Deref for FocusData {
+    type Target = FocusDataBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FocusData {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

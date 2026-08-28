@@ -13,45 +13,57 @@ pub struct AudioEvent {
 }
 
 impl AudioEvent {
+    pub(crate) fn file_asset_referencer_mut(&mut self) -> &mut FileAssetReferencer {
+        &mut self.file_asset_referencer
+    }
+
     pub fn play(&mut self) {
-        #[cfg(feature = "rive_audio")]
-        {
-            let Some(asset_handle) = self.file_asset_referencer.asset() else {
-                return;
-            };
-            let Some(artboard) = self.base.base.base.base.artboard_mut() else {
-                return;
-            };
-            let Some(audio_asset) = artboard
-                .resolve_handle_mut(asset_handle)
-                .and_then(|asset| asset.as_audio_asset_mut())
-            else {
-                return;
-            };
-            let Some(audio_source) = audio_asset.audio_source() else {
-                return;
-            };
-            let volume = audio_asset.base.volume() * artboard.volume();
-            if volume <= 0.0 {
-                return;
-            }
-            let Some(engine) = artboard.audio_engine().or_else(
-                crate::mechanical_port::source::audio::audio_engine::AudioEngine::runtime_engine,
-            ) else {
-                return;
-            };
-            let time = engine.borrow().time_in_frames();
-            let sound = crate::mechanical_port::source::audio::audio_engine::AudioEngine::play(
-                &engine,
-                audio_source,
-                time,
-                0,
-                0,
-                Some(artboard as *mut _ as usize),
-            );
-            if volume != 1.0 {
-                sound.borrow_mut().set_volume(volume);
-            }
+        let Some(asset) = self.file_asset_referencer.asset() else {
+            return;
+        };
+        let Some((audio_source, asset_volume)) = asset
+            .with_downcast::<AudioAsset, _>(|asset| {
+                Some((asset.audio_source()?, asset.base.volume()))
+            })
+            .flatten()
+        else {
+            return;
+        };
+        let Some(artboard) = self.base.base.base.base.artboard_handle() else {
+            return;
+        };
+        let Some((volume, engine, artboard_identity)) = artboard
+            .with_downcast::<crate::mechanical_port::source::artboard::Artboard, _>(|artboard| {
+                (
+                    asset_volume * artboard.volume(),
+                    artboard.audio_engine_handle().or_else(|| {
+                        crate::mechanical_port::source::audio::audio_engine::AudioEngine::runtime_engine(true)
+                    }),
+                    artboard.runtime_weak_handle().audio_identity(),
+                )
+            })
+        else {
+            return;
+        };
+        if volume <= 0.0 {
+            return;
+        }
+        let (Some(engine), Some(artboard_identity)) = (engine, artboard_identity) else {
+            return;
+        };
+        let time = engine.time_in_frames();
+        let Some(sound) = crate::mechanical_port::source::audio::audio_engine::AudioEngine::play(
+            &engine,
+            audio_source,
+            time,
+            0,
+            0,
+            Some(artboard_identity),
+        ) else {
+            return;
+        };
+        if volume != 1.0 {
+            sound.set_volume(volume);
         }
     }
 
@@ -63,9 +75,12 @@ impl AudioEvent {
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
+        let Some(this) = self.core_handle() else {
+            return StatusCode::MissingObject;
+        };
         let result = self
             .file_asset_referencer
-            .register_referencer(self.core_handle(), import_stack);
+            .register_referencer(this, import_stack);
         if result != StatusCode::Ok {
             return result;
         }
@@ -73,10 +88,14 @@ impl AudioEvent {
     }
 
     pub fn set_asset(&mut self, asset: Option<CoreHandle>) {
-        if asset.is_some_and(|asset| asset.is_type_of(AudioAsset::TYPE_KEY)) {
-            let this = self.core_handle();
-            let context = self.base.base.base.base.artboard_mut().unwrap();
-            self.file_asset_referencer.set_asset(this, asset, context);
+        if asset
+            .as_ref()
+            .is_some_and(|asset| asset.is_type_of(AudioAsset::TYPE_KEY))
+        {
+            let Some(this) = self.core_handle() else {
+                return;
+            };
+            self.file_asset_referencer.set_asset(this, asset);
         }
     }
 
@@ -85,7 +104,9 @@ impl AudioEvent {
         let mut callbacks = AudioEventCloneCallbacks;
         cloned.base = self.base.clone_into(&mut callbacks).base;
         if let Some(asset) = self.file_asset_referencer.asset() {
-            cloned.set_asset(Some(asset));
+            cloned
+                .file_asset_referencer
+                .set_asset_unattached(Some(asset));
         }
         cloned
     }
@@ -94,8 +115,8 @@ impl AudioEvent {
         self.base.asset_id()
     }
 
-    fn core_handle(&mut self) -> CoreHandle {
-        CoreHandle::from_ptr(self as *mut Self)
+    fn core_handle(&self) -> Option<CoreHandle> {
+        self.base.base.base.base.base.base.base.base.base.handle()
     }
 }
 
@@ -108,5 +129,19 @@ impl AudioEventBaseCallbacks for AudioEventCloneCallbacks {
 impl AudioEventBaseCallbacks for AudioEvent {
     fn notify_property_changed(&mut self, property_key: u16) {
         self.base.base.notify_property_changed(property_key);
+    }
+}
+
+impl std::ops::Deref for AudioEvent {
+    type Target = AudioEventBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AudioEvent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

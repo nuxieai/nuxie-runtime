@@ -13,16 +13,23 @@ pub struct CustomPropertyTrigger {
 
 impl CustomPropertyTrigger {
     pub fn fire(&mut self, _value: &CallbackData<'_>) {
-        let value = self.base.property_value() + 1;
-        let base = &mut self.base as *mut CustomPropertyTriggerBase;
-        unsafe { &mut *base }.set_property_value(value, self);
+        self.set_property_value(self.base.property_value().wrapping_add(1));
+    }
+
+    fn set_property_value(&mut self, value: u32) {
+        if self.base.set_property_value_value(value) {
+            CustomPropertyTriggerBaseCallbacks::property_value_changed(self);
+            CustomPropertyTriggerBaseCallbacks::notify_property_changed(
+                self,
+                CustomPropertyTriggerBase::PROPERTY_VALUE_PROPERTY_KEY,
+            );
+        }
     }
 }
 
 impl ResettingComponent for CustomPropertyTrigger {
     fn reset(&mut self) {
-        let base = &mut self.base as *mut CustomPropertyTriggerBase;
-        unsafe { &mut *base }.set_property_value(0, self);
+        self.set_property_value(0);
     }
 }
 
@@ -39,5 +46,19 @@ impl CustomPropertyTriggerBaseCallbacks for CustomPropertyTrigger {
             .base
             .base
             .notify_property_changed(property_key);
+    }
+}
+
+impl std::ops::Deref for CustomPropertyTrigger {
+    type Target = CustomPropertyTriggerBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CustomPropertyTrigger {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

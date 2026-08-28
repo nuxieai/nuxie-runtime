@@ -2,8 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use crate::mechanical_port::source::{
     animation::{
-        state_machine_instance::StateMachineInstance,
-        state_machine_listener::{ListenerType, StateMachineListener},
+        state_machine_instance::StateMachineInstance, state_machine_listener::ListenerType,
         state_machine_listener_single::StateMachineListenerSingle,
     },
     component::Component,
@@ -123,8 +122,11 @@ impl DraggableConstraint {
     ) -> Vec<ListenerGroupWithTargets> {
         let mut result = Vec::new();
         for drag_proxy in draggables {
-            let mut listener = Box::new(StateMachineListenerSingle::default());
+            let mut listener = StateMachineListenerSingle::default();
             listener.set_listener_type_value(ListenerType::ComponentProvided as u32);
+            let Some(listener) = constraint.insert_sibling(listener) else {
+                continue;
+            };
             let target = drag_proxy
                 .hittable()
                 .map(|hittable| HitTarget::new(hittable, drag_proxy.is_opaque()));
@@ -150,7 +152,7 @@ pub struct DraggableConstraintListenerGroup {
 
 impl DraggableConstraintListenerGroup {
     pub fn new(
-        listener: Box<dyn StateMachineListener>,
+        listener: CoreHandle,
         constraint: CoreHandle,
         draggable: Box<dyn DraggableProxy>,
     ) -> Self {

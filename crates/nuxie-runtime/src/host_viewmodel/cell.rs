@@ -37,6 +37,33 @@ pub(crate) fn defer_transaction_notification(notification: impl FnOnce() + 'stat
     HOST_TRANSACTION_PUBLICATION.with(Cell::get) && defer_host_mutation_notification(notification)
 }
 
+/// Tools observers follow the explicit host transaction's publication boundary.
+/// Callers capture the callback and its typed argument at the write, while the
+/// callback still receives the original native owner on commit. Detached values
+/// and ordinary runtime writes retain their synchronous source behavior.
+#[cfg(feature = "tools")]
+pub(crate) fn defer_transaction_tools_callback<
+    T: crate::mechanical_port::source::core::CoreObject,
+>(
+    value: &T,
+    callback: impl FnOnce(&mut T) + 'static,
+) -> bool {
+    if !HOST_TRANSACTION_PUBLICATION.with(Cell::get) {
+        return false;
+    }
+    let Some(owner) = value.core().handle() else {
+        return false;
+    };
+    defer_transaction_notification(move || {
+        owner.with_downcast_mut::<T, _>(|value| {
+            // One host observer must not prevent the remaining committed
+            // notifications from publishing. Normal synchronous callbacks
+            // intentionally do not enter this transaction-only firewall.
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(value)));
+        });
+    })
+}
+
 /// Copied typed after-value for one operation-scoped view-model write.
 ///
 /// Structural values are completed by the owning view-model graph after the

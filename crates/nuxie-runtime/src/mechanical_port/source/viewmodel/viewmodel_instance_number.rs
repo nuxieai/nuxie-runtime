@@ -41,7 +41,12 @@ impl ViewModelInstanceNumber {
         self.base.add_dirt(ComponentDirt::BINDINGS);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
-            callback(self, self.base.property_value());
+            let value = self.base.property_value();
+            if !crate::view_model_cell::defer_transaction_tools_callback(self, move |owner| {
+                callback(owner, value);
+            }) {
+                callback(self, value);
+            }
         }
         self.base.on_value_changed();
     }

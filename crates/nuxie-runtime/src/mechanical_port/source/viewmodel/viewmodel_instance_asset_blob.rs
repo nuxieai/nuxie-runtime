@@ -50,7 +50,11 @@ impl ViewModelInstanceAssetBlob {
         #[cfg(feature = "tools")]
         if let Some(callback) = self.base.changed_callback() {
             let value = self.base.property_value();
-            callback(&mut self.base.base, value);
+            if !crate::view_model_cell::defer_transaction_tools_callback(self, move |owner| {
+                callback(&mut owner.base.base, value);
+            }) {
+                callback(&mut self.base.base, value);
+            }
         }
         self.base.on_value_changed();
     }
@@ -62,15 +66,30 @@ impl ViewModelInstanceAssetBlob {
             self.set_property_value(u32::MAX);
             return;
         }
-        #[cfg(feature = "tools")]
         let already_sentinel = self.base.property_value() == u32::MAX;
         self.blob_asset = blob;
+        if already_sentinel {
+            // A live asset replacement is a write even when its serialized ID
+            // stays at the sentinel. ID transitions are captured by the setter.
+            if let Some(owner) =
+                crate::mechanical_port::source::core::CoreObject::core(self).handle()
+            {
+                crate::host_viewmodel::capture_native_change(
+                    owner,
+                    crate::RuntimeViewModelChangeValue::Blob(u32::MAX as u64),
+                );
+            }
+        }
         #[cfg(feature = "tools")]
         if !already_sentinel {
             self.set_property_value(u32::MAX);
         } else if let Some(callback) = self.base.changed_callback() {
             let value = self.base.property_value();
-            callback(&mut self.base.base, value);
+            if !crate::view_model_cell::defer_transaction_tools_callback(self, move |owner| {
+                callback(&mut owner.base.base, value);
+            }) {
+                callback(&mut self.base.base, value);
+            }
         }
         #[cfg(not(feature = "tools"))]
         self.set_property_value(u32::MAX);

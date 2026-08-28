@@ -44,7 +44,12 @@ impl ViewModelInstanceString {
         #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             let value = self.base.property_value().to_owned();
-            callback(self, &value);
+            let captured = value.clone();
+            if !crate::view_model_cell::defer_transaction_tools_callback(self, move |owner| {
+                callback(owner, &captured);
+            }) {
+                callback(self, &value);
+            }
         }
         self.base.on_value_changed();
     }

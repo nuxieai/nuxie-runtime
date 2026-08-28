@@ -20,6 +20,9 @@ impl KeyedProperty {
     pub fn add_key_frame(&mut self, value: CoreHandle) {
         self.keyframes.push(value)
     }
+    pub fn keyframes(&self) -> &[CoreHandle] {
+        &self.keyframes
+    }
     fn keyframe_seconds(&self, index: usize) -> f32 {
         self.keyframes[index]
             .with(|keyframe| keyframe.keyframe_seconds())

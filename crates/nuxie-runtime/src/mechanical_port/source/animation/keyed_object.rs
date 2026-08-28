@@ -26,6 +26,9 @@ impl KeyedObject {
     pub fn add_keyed_property(&mut self, value: CoreHandle) {
         self.keyed_properties.push(value);
     }
+    pub fn keyed_properties(&self) -> &[CoreHandle] {
+        &self.keyed_properties
+    }
     pub fn get_property(&self, index: usize) -> Option<CoreHandle> {
         self.keyed_properties.get(index).cloned()
     }

@@ -262,6 +262,30 @@ impl LinearAnimationInstance {
             .get_or_insert_with(HashMap::new)
             .insert(key, holder);
     }
+    pub fn keyframes(&self) -> Vec<CoreHandle> {
+        self.with_animation(|animation| {
+            animation
+                .keyed_objects()
+                .iter()
+                .flat_map(|keyed_object| {
+                    keyed_object
+                        .with_downcast::<
+                            crate::mechanical_port::source::animation::keyed_object::KeyedObject,
+                            _,
+                        >(|keyed_object| keyed_object.keyed_properties().to_vec())
+                        .unwrap_or_default()
+                })
+                .flat_map(|keyed_property| {
+                    keyed_property
+                        .with_downcast::<
+                            crate::mechanical_port::source::animation::keyed_property::KeyedProperty,
+                            _,
+                        >(|keyed_property| keyed_property.keyframes().to_vec())
+                        .unwrap_or_default()
+                })
+                .collect()
+        })
+    }
     pub fn keyframe_value_holder(&self, key: &CoreHandle) -> Option<CoreHandle> {
         self.keyframe_value_holders.as_ref()?.get(key).cloned()
     }

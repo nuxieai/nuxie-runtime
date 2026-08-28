@@ -39,6 +39,9 @@ impl LinearAnimation {
     pub fn add_keyed_object(&mut self, v: CoreHandle) {
         self.keyed_objects.push(v)
     }
+    pub fn keyed_objects(&self) -> &[CoreHandle] {
+        &self.keyed_objects
+    }
     pub fn on_added_dirty(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
         let mut status = StatusCode::Ok;
         let mut i = 0;

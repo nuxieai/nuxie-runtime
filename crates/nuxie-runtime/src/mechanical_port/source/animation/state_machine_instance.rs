@@ -23,11 +23,14 @@ use crate::mechanical_port::source::{
         state_machine_number::StateMachineNumber,
         state_machine_trigger::StateMachineTrigger,
     },
-    artboard::RuntimeArtboardInstanceWeakHandle,
+    artboard::{Artboard, RuntimeArtboardInstanceWeakHandle},
     component_dirt::ComponentDirt,
     core::CoreHandle,
     data_bind::{
+        bindable_property_boolean::BindablePropertyBoolean,
+        bindable_property_color::BindablePropertyColor,
         bindable_property_number::BindablePropertyNumber,
+        bindable_property_string::BindablePropertyString,
         data_bind::DataBind,
         data_bind_container::DataBindContainer,
         data_context::{DataContext, RuntimeDataContextHandle},
@@ -36,9 +39,9 @@ use crate::mechanical_port::source::{
     focus_data::FocusData,
     generated::{
         animation::{
-            keyframe_bool_base::KeyFrameBoolBase, keyframe_color_base::KeyFrameColorBase,
-            keyframe_double_base::KeyFrameDoubleBase, keyframe_string_base::KeyFrameStringBase,
-            state_transition_base::StateTransitionBase,
+            keyframe_base::KeyFrameBase, keyframe_bool_base::KeyFrameBoolBase,
+            keyframe_color_base::KeyFrameColorBase, keyframe_double_base::KeyFrameDoubleBase,
+            keyframe_string_base::KeyFrameStringBase, state_transition_base::StateTransitionBase,
         },
         data_bind::{
             bindable_property_base::BindablePropertyBase,
@@ -414,17 +417,7 @@ pub trait StateMachineInstanceRuntime {
         &mut self,
         view_model: RuntimeListenerViewModelWeakHandle,
     ) -> ListenerInvocation;
-    fn data_bind_is_keyframe_target(&self, bind: &CoreHandle) -> bool;
     fn delete_owned_object(&mut self, object: CoreHandle);
-    fn keyframe_type(&self, keyframe: &CoreHandle) -> u16;
-    fn animation_keyframes(&self, animation_instance: &LinearAnimationInstance) -> Vec<CoreHandle>;
-    fn make_keyframe_holder(&mut self, keyframe_type: u16) -> CoreHandle;
-    fn add_keyframe_holder(
-        &mut self,
-        animation_instance: &mut LinearAnimationInstance,
-        keyframe: &CoreHandle,
-        holder: CoreHandle,
-    );
     fn scripted_clone(
         &mut self,
         source: &CoreHandle,
@@ -3824,16 +3817,22 @@ impl StateMachineInstance {
             return;
         }
         let mut first_bind_by_target = HashMap::new();
-        for data_bind in self
-            .runtime
-            .borrow_mut()
-            .artboard_source_data_binds(&self.artboard_instance)
-        {
-            if let Some(target) = self.runtime.borrow_mut().data_bind_target(&data_bind)
-                && self
-                    .runtime
-                    .borrow_mut()
-                    .data_bind_is_keyframe_target(&data_bind)
+        let source_artboard = self
+            .artboard_instance
+            .with_artboard(|artboard| artboard.base.artboard_source_handle())
+            .flatten();
+        let Some(source_artboard) = source_artboard else {
+            return;
+        };
+        let source_data_binds = source_artboard
+            .with_downcast::<Artboard, _>(Artboard::data_bind_handles)
+            .unwrap_or_default();
+        for data_bind in source_data_binds {
+            let target = data_bind
+                .with(|data_bind| data_bind.as_data_bind().and_then(DataBind::target))
+                .flatten();
+            if let Some(target) = target
+                && target.is_type_of(KeyFrameBase::TYPE_KEY)
             {
                 first_bind_by_target.entry(target).or_insert(data_bind);
             }
@@ -3841,13 +3840,10 @@ impl StateMachineInstance {
         if first_bind_by_target.is_empty() {
             return;
         }
-        let runtime = Rc::clone(&self.runtime);
-        runtime.borrow_mut().state_for_each_animation_instance(
-            self,
-            state_instance,
-            &mut |runtime, machine, animation_instance| {
-                for keyframe in runtime.animation_keyframes(animation_instance) {
-                    let keyframe_type = runtime.keyframe_type(&keyframe);
+        state_instance.with_state_mut(|state| {
+            state.for_each_animation_instance(&mut |animation_instance| {
+                for keyframe in animation_instance.keyframes() {
+                    let keyframe_type = keyframe.core_type().unwrap_or_default();
                     let holder_property_key = Self::keyframe_holder_property_key(keyframe_type);
                     if holder_property_key == 0 {
                         continue;
@@ -3855,26 +3851,50 @@ impl StateMachineInstance {
                     let Some(source_bind) = first_bind_by_target.get(&keyframe) else {
                         continue;
                     };
-                    let holder = runtime.make_keyframe_holder(keyframe_type);
-                    runtime.add_keyframe_holder(animation_instance, &keyframe, holder.clone());
-                    let clone = runtime.clone_data_bind(source_bind);
-                    let file = runtime.data_bind_file(source_bind);
-                    runtime.data_bind_set_file(&clone, file);
-                    runtime.configure_data_bind_target(&clone, holder, holder_property_key);
-                    runtime.data_bind_initialize(&clone);
-                    if let Some(converter) = runtime.data_bind_converter(source_bind) {
-                        let converter_clone = runtime.clone_data_converter(&converter);
-                        runtime.data_bind_set_converter(&clone, converter_clone);
+                    let holder = match keyframe_type {
+                        KeyFrameDoubleBase::TYPE_KEY => {
+                            keyframe.insert_sibling(BindablePropertyNumber::default())
+                        }
+                        KeyFrameColorBase::TYPE_KEY => {
+                            keyframe.insert_sibling(BindablePropertyColor::default())
+                        }
+                        KeyFrameBoolBase::TYPE_KEY => {
+                            keyframe.insert_sibling(BindablePropertyBoolean::default())
+                        }
+                        KeyFrameStringBase::TYPE_KEY => {
+                            keyframe.insert_sibling(BindablePropertyString::default())
+                        }
+                        _ => None,
                     }
-                    machine.add_data_bind(clone.clone());
-                    machine
-                        .state_keyframe_data_binds
+                    .expect("a supported KeyFrame retains its authored arena");
+                    animation_instance.add_keyframe_value_holder(keyframe.clone(), holder.clone());
+                    let clone = source_bind
+                        .clone_occurrence()
+                        .expect("an artboard DataBind must be cloneable in its authored arena");
+                    let (file, converter) = source_bind
+                        .with(|source_bind| {
+                            let source_bind = source_bind.as_data_bind()?;
+                            Some((source_bind.file(), source_bind.converter()))
+                        })
+                        .flatten()
+                        .unwrap_or_default();
+                    let converter = converter.and_then(|converter| converter.clone_occurrence());
+                    clone.with_mut(|clone| {
+                        if let Some(clone) = clone.as_data_bind_mut() {
+                            clone.set_file(file);
+                            clone.configure_target(holder, holder_property_key);
+                            clone.initialize();
+                            clone.set_converter(converter);
+                        }
+                    });
+                    self.add_data_bind(clone.clone());
+                    self.state_keyframe_data_binds
                         .entry(state_instance.clone())
                         .or_default()
                         .push(clone);
                 }
-            },
-        );
+            });
+        });
     }
 
     pub fn remove_state_keyframe_binds(&mut self, state_instance: &RuntimeStateInstanceHandle) {

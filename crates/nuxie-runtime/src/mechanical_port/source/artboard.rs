@@ -2047,7 +2047,15 @@ impl Artboard {
         ) else {
             return StatusCode::MissingObject;
         };
-        let result = self.base.base.import(import_stack);
+        debug_assert!(self.objects.is_empty());
+        self.add_object(Some(artboard.clone()));
+        let result = self
+            .base
+            .base
+            .as_component_mut()
+            .base
+            .base
+            .import(import_stack);
         if result == StatusCode::Ok {
             backboard_importer.add_artboard(artboard);
         } else {

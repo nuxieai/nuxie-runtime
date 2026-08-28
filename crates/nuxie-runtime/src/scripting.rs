@@ -26,6 +26,9 @@ use crate::{
     RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeViewModelImage,
 };
 
+mod native_artboard;
+pub(crate) use native_artboard::native_script_artboard;
+
 /// Runtime-owned scripting error type.
 ///
 /// The concrete VM crate maps its native error into this type so
@@ -810,6 +813,7 @@ struct LiveScriptNode {
     // scope use its exact most-derived snapshot; retained nodes subsequently
     // construct new PaintData from the live paint occurrence.
     active_paint: Weak<ScriptPaint>,
+    artboard_owner: Option<Rc<native_artboard::NativeScriptArtboardOwner>>,
 }
 
 impl ScriptNode {
@@ -831,6 +835,7 @@ impl ScriptNode {
                 component,
                 paint: None,
                 active_paint: Weak::new(),
+                artboard_owner: None,
             }),
         }
     }
@@ -848,6 +853,7 @@ impl ScriptNode {
                 component,
                 paint: paint.handle(),
                 active_paint: paint.script_paint_scope(),
+                artboard_owner: None,
             }),
         }
     }
@@ -988,7 +994,7 @@ impl ScriptNode {
                     .with(|child| child.as_transform_component().is_some())
                     .unwrap_or(false)
             })
-            .map(Self::from_component)
+            .map(|component| self.related_node(component))
             .collect()
     }
     pub fn parent(&self) -> Option<Self> {
@@ -1000,7 +1006,13 @@ impl ScriptNode {
                     .with(|parent| parent.as_transform_component().is_some())
                     .unwrap_or(false)
             })
-            .map(Self::from_component)
+            .map(|component| self.related_node(component))
+    }
+    fn related_node(&self, component: crate::mechanical_port::source::core::CoreHandle) -> Self {
+        let mut node = Self::from_component(component);
+        node.live.as_mut().unwrap().artboard_owner =
+            self.live.as_ref().unwrap().artboard_owner.clone();
+        node
     }
     pub fn decompose(&mut self, transform: nuxie_render_api::Mat2D) {
         use crate::mechanical_port::source::math::mat2d::Mat2D;
@@ -3247,15 +3259,32 @@ pub struct NoopScriptHost;
 
 impl ScriptHost for NoopScriptHost {}
 
+type NativeLinearAnimation =
+    crate::mechanical_port::source::animation::linear_animation_instance::LinearAnimationInstance;
+
+// The legacy variant serves the existing public host API until integration
+// removes that implementation; native owners never dispatch through it.
+#[derive(Clone)]
+enum ScriptAnimationOwner {
+    Legacy(LinearAnimationInstance),
+    Native(Rc<RefCell<NativeLinearAnimation>>),
+}
+
 /// Runtime-owned linear-animation handle exposed to scripts.
-///
-/// Coarsely translated from `ScriptedAnimation` in
-/// `/Users/levi/dev/oss/rive-runtime/src/lua/lua_artboards.cpp`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ScriptAnimation {
-    instance: LinearAnimationInstance,
+    instance: ScriptAnimationOwner,
     duration: f32,
     fps: f32,
+}
+
+impl fmt::Debug for ScriptAnimation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ScriptAnimation")
+            .field("duration", &self.duration)
+            .field("fps", &self.fps)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3273,19 +3302,28 @@ impl ScriptAnimation {
             .enumerate()
             .find(|(_, animation)| animation.name.as_deref() == Some(name))?;
         Some(Self {
-            instance: artboard.linear_animation_instance(index)?,
+            instance: ScriptAnimationOwner::Legacy(artboard.linear_animation_instance(index)?),
             duration: animation.duration as f32 / animation.fps as f32,
             fps: animation.fps as f32,
         })
     }
 
     pub fn duration(&self) -> f32 {
-        self.duration
+        match &self.instance {
+            ScriptAnimationOwner::Legacy(_) => self.duration,
+            ScriptAnimationOwner::Native(instance) => {
+                let instance = instance.borrow();
+                instance.duration() as f32 / instance.fps() as f32
+            }
+        }
     }
 
     pub fn advance(&mut self, artboard: &mut ArtboardInstance, seconds: f32) -> bool {
-        let keep_going = artboard.advance_linear_animation_instance(&mut self.instance, seconds);
-        artboard.apply_linear_animation_instance(&self.instance, 1.0);
+        let ScriptAnimationOwner::Legacy(instance) = &mut self.instance else {
+            panic!("native animation must be advanced through its native artboard");
+        };
+        let keep_going = artboard.advance_linear_animation_instance(instance, seconds);
+        artboard.apply_linear_animation_instance(instance, 1.0);
         keep_going
     }
 
@@ -3301,23 +3339,42 @@ impl ScriptAnimation {
             ScriptAnimationTime::Percentage => value * self.duration,
         };
         let definitions = artboard.linear_animations.clone();
-        let Some(animation) = definitions.get(self.instance.animation_index()) else {
+        let ScriptAnimationOwner::Legacy(instance) = &mut self.instance else {
+            panic!("native animation time must be set through its native artboard");
+        };
+        let Some(animation) = definitions.get(instance.animation_index()) else {
             return;
         };
-        self.instance
-            .set_time(animation, animation.global_to_local_seconds(seconds));
-        artboard.apply_linear_animation_instance(&self.instance, 1.0);
+        instance.set_time(animation, animation.global_to_local_seconds(seconds));
+        artboard.apply_linear_animation_instance(instance, 1.0);
     }
 }
 
 /// Runtime-owned artboard userdata exposed to scripts.
 pub trait ScriptArtboard {
+    /// Retain this occurrence for a callback, without cloning the artboard.
+    /// The Lua wrapper must release its facade access before invoking user code.
+    fn retained_handle(&self) -> Box<dyn ScriptArtboard>;
     fn width(&self) -> f32;
     fn height(&self) -> f32;
     fn frame_origin(&self) -> bool;
     fn set_width(&mut self, width: f32);
     fn set_height(&mut self, height: f32);
     fn set_frame_origin(&mut self, frame_origin: bool);
+
+    fn bounds(&self) -> nuxie_render_api::Aabb;
+
+    fn add_to_path(
+        &mut self,
+        path: &mut RawPath,
+        transform: Option<nuxie_render_api::Mat2D>,
+    ) -> Result<(), ScriptError>;
+
+    fn dispatch_input(
+        &mut self,
+        method: ScriptMethod,
+        invocation: &ScriptListenerInvocation,
+    ) -> Result<u32, ScriptError>;
 
     fn data(&self) -> Option<ScriptViewModel> {
         None

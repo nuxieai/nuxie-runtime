@@ -84,6 +84,53 @@ struct ScriptedGamepadEvent {
 #[derive(Clone, Copy)]
 struct ScriptedGamepadDisconnected(i32);
 
+/// Recover the exact event userdata passed to ScriptedArtboard's input method.
+pub(super) fn artboard_input_invocation(
+    method: nuxie_runtime::ScriptMethod,
+    userdata: &AnyUserData,
+) -> Result<ScriptListenerInvocation> {
+    use nuxie_runtime::ScriptMethod;
+    Ok(match method {
+        ScriptMethod::PointerDown
+        | ScriptMethod::PointerMove
+        | ScriptMethod::PointerUp
+        | ScriptMethod::PointerExit => {
+            let event = userdata.borrow::<ScriptedPointerEvent>()?;
+            ScriptListenerInvocation::Pointer {
+                pointer_id: event.id as i32,
+                x: event.x,
+                y: event.y,
+                previous_x: event.previous_x,
+                previous_y: event.previous_y,
+                timestamp_seconds: event.timestamp_seconds,
+                event: match method {
+                    ScriptMethod::PointerDown => ScriptPointerEventKind::Down,
+                    ScriptMethod::PointerMove => ScriptPointerEventKind::Move,
+                    ScriptMethod::PointerUp => ScriptPointerEventKind::Up,
+                    ScriptMethod::PointerExit => ScriptPointerEventKind::Exit,
+                    _ => unreachable!(),
+                },
+            }
+        }
+        ScriptMethod::GamepadConnected => ScriptListenerInvocation::GamepadConnected {
+            snapshot: userdata.borrow::<ScriptedGamepadConnected>()?.0.clone(),
+        },
+        ScriptMethod::GamepadDisconnected => ScriptListenerInvocation::GamepadDisconnected {
+            device_id: userdata.borrow::<ScriptedGamepadDisconnected>()?.0,
+        },
+        ScriptMethod::GamepadEvent => {
+            let event = userdata.borrow::<ScriptedGamepadEvent>()?;
+            ScriptListenerInvocation::GamepadEvent {
+                full_state: event.snapshot.clone(),
+                change: event.change,
+                standard_button_intent: event.standard_button_intent,
+                standard_axis_intent: event.standard_axis_intent,
+            }
+        }
+        _ => return Err(luaur_rt::Error::runtime("invalid artboard input method")),
+    })
+}
+
 pub(super) fn listener_action_argument(
     lua: &Lua,
     method: ScriptListenerActionMethod,

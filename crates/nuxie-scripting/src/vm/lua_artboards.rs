@@ -4,10 +4,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use luaur_rt::{
-    AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
-    Value, Vector as LuaVector,
+    AnyUserData, Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value,
+    Vector as LuaVector,
 };
-use nuxie_runtime::{ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptNode};
+use nuxie_runtime::{
+    ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptMethod, ScriptNode,
+};
 
 use super::lua_mat2d::ScriptedMat2D;
 use super::lua_paint::ScriptedPaintData;
@@ -29,13 +31,14 @@ impl RendererBindings {
 }
 
 struct ScriptedArtboardOwner {
-    artboard: RefCell<Box<dyn ScriptArtboard>>,
     _registration: Option<ScriptViewModelRegistration>,
+    artboard: Box<dyn ScriptArtboard>,
 }
 
 struct ScriptedArtboard {
     owner: Rc<ScriptedArtboardOwner>,
     bindings: RendererBindings,
+    data: RefCell<Option<Value>>,
 }
 
 struct ScriptedAnimation {
@@ -49,47 +52,25 @@ impl UserData for ScriptedAnimation {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("advance", |_, this, seconds: f32| {
+        methods.add_method("advance", |_, this, seconds: f32| {
+            let mut animation = this.animation.clone();
             this.owner
                 .artboard
-                .borrow_mut()
-                .advance_animation(&mut this.animation, seconds)
+                .retained_handle()
+                .advance_animation(&mut animation, seconds)
                 .map_err(|error| Error::runtime(error.to_string()))
         });
-        methods.add_method("bounds", |_, this, ()| {
-            let bounds = this.owner.artboard.borrow().bounds();
-            Ok((
-                LuaVector::new(bounds.min_x, bounds.min_y, 0.0),
-                LuaVector::new(bounds.max_x, bounds.max_y, 0.0),
-            ))
-        });
-        methods.add_method_mut(
-            "addToPath",
-            |_, this, (path, transform): (AnyUserData, Option<AnyUserData>)| {
-                let transform = transform
-                    .as_ref()
-                    .map(|transform| transform.borrow::<ScriptedMat2D>().map(|value| value.0))
-                    .transpose()?;
-                let mut path = path.borrow_mut::<ScriptedPath>()?;
-                this.owner
-                    .artboard
-                    .borrow_mut()
-                    .add_to_path(&mut path.raw_path, transform)
-                    .map_err(|error| Error::runtime(error.to_string()))?;
-                path.mark_dirty();
-                Ok(())
-            },
-        );
         for (name, mode) in [
             ("setTime", ScriptAnimationTime::Seconds),
             ("setTimeFrames", ScriptAnimationTime::Frames),
             ("setTimePercentage", ScriptAnimationTime::Percentage),
         ] {
-            methods.add_method_mut(name, move |_, this, value: f32| {
+            methods.add_method(name, move |_, this, value: f32| {
+                let mut animation = this.animation.clone();
                 this.owner
                     .artboard
-                    .borrow_mut()
-                    .set_animation_time(&mut this.animation, value, mode)
+                    .retained_handle()
+                    .set_animation_time(&mut animation, value, mode)
                     .map_err(|error| Error::runtime(error.to_string()))
             });
         }
@@ -104,59 +85,108 @@ impl ScriptedArtboard {
             .map(|model| bindings.view_model_frame_context.register(model));
         Self {
             owner: Rc::new(ScriptedArtboardOwner {
-                artboard: RefCell::new(artboard),
+                artboard,
                 _registration: registration,
             }),
             bindings,
+            data: RefCell::new(None),
         }
     }
 }
 
 impl UserData for ScriptedArtboard {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("width", |_, this| Ok(this.owner.artboard.borrow().width()));
+        fields.add_field_method_get("width", |_, this| Ok(this.owner.artboard.width()));
         fields.add_field_method_set("width", |_, this, value: f32| {
-            this.owner.artboard.borrow_mut().set_width(value);
+            this.owner.artboard.retained_handle().set_width(value);
             Ok(())
         });
-        fields.add_field_method_get("height", |_, this| {
-            Ok(this.owner.artboard.borrow().height())
-        });
+        fields.add_field_method_get("height", |_, this| Ok(this.owner.artboard.height()));
         fields.add_field_method_set("height", |_, this, value: f32| {
-            this.owner.artboard.borrow_mut().set_height(value);
+            this.owner.artboard.retained_handle().set_height(value);
             Ok(())
         });
         fields.add_field_method_get("frameOrigin", |_, this| {
-            Ok(this.owner.artboard.borrow().frame_origin())
+            Ok(this.owner.artboard.frame_origin())
         });
         fields.add_field_method_set("frameOrigin", |_, this, value: bool| {
-            this.owner.artboard.borrow_mut().set_frame_origin(value);
+            this.owner
+                .artboard
+                .retained_handle()
+                .set_frame_origin(value);
             Ok(())
         });
         fields.add_field_method_get("data", |lua, this| {
-            Ok(match this.owner.artboard.borrow().data() {
+            if let Some(data) = this.data.borrow().as_ref() {
+                return Ok(data.clone());
+            }
+            let data = match this.owner.artboard.data() {
                 Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
                 None => Value::Nil,
-            })
+            };
+            *this.data.borrow_mut() = Some(data.clone());
+            Ok(data)
         });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("bounds", |_, this, ()| {
+            let bounds = this.owner.artboard.bounds();
+            Ok((
+                LuaVector::new(bounds.min_x, bounds.min_y, 0.0),
+                LuaVector::new(bounds.max_x, bounds.max_y, 0.0),
+            ))
+        });
+        methods.add_method(
+            "addToPath",
+            |_, this, (path, transform): (AnyUserData, Option<AnyUserData>)| {
+                let transform = transform
+                    .as_ref()
+                    .map(|transform| transform.borrow::<ScriptedMat2D>().map(|value| value.0))
+                    .transpose()?;
+                let mut path = path.borrow_mut::<ScriptedPath>()?;
+                this.owner
+                    .artboard
+                    .retained_handle()
+                    .add_to_path(&mut path.raw_path, transform)
+                    .map_err(|error| Error::runtime(error.to_string()))?;
+                path.mark_dirty();
+                Ok(())
+            },
+        );
+        for method in [
+            ScriptMethod::PointerDown,
+            ScriptMethod::PointerMove,
+            ScriptMethod::PointerUp,
+            ScriptMethod::PointerExit,
+            ScriptMethod::GamepadConnected,
+            ScriptMethod::GamepadEvent,
+            ScriptMethod::GamepadDisconnected,
+        ] {
+            methods.add_method(method.as_str(), move |_, this, event: AnyUserData| {
+                let invocation =
+                    super::listener_invocation::artboard_input_invocation(method, &event)?;
+                this.owner
+                    .artboard
+                    .retained_handle()
+                    .dispatch_input(method, &invocation)
+                    .map_err(|error| Error::runtime(error.to_string()))
+            });
+        }
         methods.add_method("instance", |lua, this, view_model: Option<Table>| {
             let view_model = view_model.as_ref().map(model_from_table).transpose()?;
             let instance = this.bindings.with_factory(|factory| {
                 this.owner
                     .artboard
-                    .borrow()
                     .instance_with_factory(view_model, factory)
                     .map_err(|error| Error::runtime(error.to_string()))
             })?;
             lua.create_userdata(ScriptedArtboard::new(instance, this.bindings.clone()))
         });
-        methods.add_method_mut("advance", |_, this, seconds: f32| {
+        methods.add_method("advance", |_, this, seconds: f32| {
             this.owner
                 .artboard
-                .borrow_mut()
+                .retained_handle()
                 .advance(seconds)
                 .map_err(|error| Error::runtime(error.to_string()))
         });
@@ -164,7 +194,6 @@ impl UserData for ScriptedArtboard {
             let animation = this
                 .owner
                 .artboard
-                .borrow()
                 .animation(&name)
                 .map_err(|error| Error::runtime(error.to_string()))?;
             Ok(match animation {
@@ -179,58 +208,33 @@ impl UserData for ScriptedArtboard {
             let node = this
                 .owner
                 .artboard
-                .borrow()
                 .node(&name)
                 .map_err(|error| Error::runtime(error.to_string()))?;
             Ok(match node {
-                Some(node) => Value::UserData(lua.create_userdata(ScriptedNode::new(node))?),
+                Some(node) => Value::UserData(lua.create_userdata(ScriptedNode {
+                    node,
+                    owner: Some(this.owner.clone()),
+                })?),
                 None => Value::Nil,
             })
         });
-        methods.add_method_mut("draw", |_, this, args: MultiValue| {
-            let arg_types = args
-                .iter()
-                .map(|value| match value {
-                    Value::UserData(userdata) if userdata.borrow::<ScriptedRenderer>().is_ok() => {
-                        "Renderer"
-                    }
-                    Value::UserData(userdata) if userdata.borrow::<ScriptedArtboard>().is_ok() => {
-                        "ScriptedArtboard"
-                    }
-                    other => other.type_name(),
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            let renderer = args
-                .into_iter()
-                .filter_map(|value| match value {
-                    Value::UserData(userdata) if userdata.borrow::<ScriptedRenderer>().is_ok() => {
-                        Some(userdata)
-                    }
-                    _ => None,
-                })
-                .next()
-                .ok_or_else(|| {
-                    Error::runtime(format!(
-                        "ScriptedArtboard.draw expected Renderer userdata, got [{arg_types}]"
-                    ))
-                })?;
+        methods.add_method("draw", |_, this, renderer: AnyUserData| {
             let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
             scripted_renderer.bindings.with_factory(|factory| {
                 scripted_renderer.with_renderer_mut(|renderer| {
                     this.owner
                         .artboard
-                        .borrow_mut()
+                        .retained_handle()
                         .draw(factory, renderer)
                         .map_err(|error| Error::runtime(error.to_string()))
                 })
             })
         });
-        methods.add_method_mut("drawCanvas", |_, this, ()| {
+        methods.add_method("drawCanvas", |_, this, ()| {
             this.bindings.with_factory(|factory| {
                 this.owner
                     .artboard
-                    .borrow_mut()
+                    .retained_handle()
                     .draw_canvas(factory)
                     .map_err(|error| Error::runtime(error.to_string()))
             })
@@ -240,11 +244,12 @@ impl UserData for ScriptedArtboard {
 
 pub(super) struct ScriptedNode {
     node: ScriptNode,
+    owner: Option<Rc<ScriptedArtboardOwner>>,
 }
 
 impl ScriptedNode {
     pub(super) fn new(node: ScriptNode) -> Self {
-        Self { node }
+        Self { node, owner: None }
     }
 }
 
@@ -307,13 +312,22 @@ impl UserData for ScriptedNode {
             let children = this.node.children();
             let table = lua.create_table_with_capacity(children.len(), 0)?;
             for (index, child) in children.into_iter().enumerate() {
-                table.raw_set(index + 1, lua.create_userdata(Self::new(child))?)?;
+                table.raw_set(
+                    index + 1,
+                    lua.create_userdata(Self {
+                        node: child,
+                        owner: this.owner.clone(),
+                    })?,
+                )?;
             }
             Ok(table)
         });
         fields.add_field_method_get("parent", |lua, this| {
             Ok(match this.node.parent() {
-                Some(parent) => Value::UserData(lua.create_userdata(Self::new(parent))?),
+                Some(parent) => Value::UserData(lua.create_userdata(Self {
+                    node: parent,
+                    owner: this.owner.clone(),
+                })?),
                 None => Value::Nil,
             })
         });

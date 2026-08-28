@@ -21,6 +21,8 @@ impl RuntimeFactoryHandle {
     }
 
     pub fn with_factory_mut<R>(&self, use_factory: impl FnOnce(&mut dyn Factory) -> R) -> R {
-        self.0.with_factory(use_factory)
+        // The proxy retains identity and borrows only for actual allocations.
+        // A VM installation or draw callback may enter this same factory again.
+        use_factory(&mut self.0.clone())
     }
 }

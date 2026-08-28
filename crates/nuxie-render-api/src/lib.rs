@@ -2617,6 +2617,123 @@ pub trait Factory {
     }
 }
 
+// A type-erased proxy borrows the concrete factory for each operation, not for
+// the surrounding script callback. That callback can enter an artboard which
+// retains this same factory identity without manufacturing an aliasing &mut.
+impl Factory for PersistentFactoryContext {
+    fn persistent_context(&self) -> Option<PersistentFactoryContext> {
+        Some(self.clone())
+    }
+    fn make_render_buffer(
+        &mut self,
+        kind: RenderBufferType,
+        flags: RenderBufferFlags,
+        size: usize,
+    ) -> Box<dyn RenderBuffer> {
+        self.with_factory(|factory| factory.make_render_buffer(kind, flags, size))
+    }
+    fn make_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.with_factory(|factory| factory.make_linear_gradient(sx, sy, ex, ey, colors, stops))
+    }
+    fn make_radial_gradient(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.with_factory(|factory| factory.make_radial_gradient(cx, cy, radius, colors, stops))
+    }
+    fn make_render_path(&mut self, path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
+        self.with_factory(|factory| factory.make_render_path(path, fill_rule))
+    }
+    fn make_render_path_from_aabb(&mut self, bounds: Aabb) -> Box<dyn RenderPath> {
+        self.with_factory(|factory| factory.make_render_path_from_aabb(bounds))
+    }
+    fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+        self.with_factory(|factory| factory.make_empty_render_path())
+    }
+    fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+        self.with_factory(|factory| factory.make_render_paint())
+    }
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.with_factory(|factory| factory.decode_image(data))
+    }
+    fn decode_font(&mut self, data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
+        self.with_factory(|factory| factory.decode_font(data))
+    }
+    fn decode_audio(&mut self, data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
+        self.with_factory(|factory| factory.decode_audio(data))
+    }
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.with_factory(|factory| factory.make_render_canvas(width, height))
+    }
+    fn make_gpu_canvas_image_view(
+        &mut self,
+        image: Rc<dyn RenderImage>,
+    ) -> Result<Rc<dyn RenderImage>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_image_view(image))
+    }
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        self.with_factory(|factory| factory.gpu_canvas_shader_profile())
+    }
+    fn make_gpu_canvas_shader(
+        &mut self,
+        shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_shader(shader))
+    }
+    fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
+        self.with_factory(|factory| factory.load_gpu_canvas_shader(shader))
+    }
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_shader_artifact(shader))
+    }
+    fn load_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> GpuCanvasShaderLoad {
+        self.with_factory(|factory| factory.load_gpu_canvas_shader_artifact(shader))
+    }
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_shader_occurrence(prepared))
+    }
+    fn make_gpu_canvas_image(
+        &mut self,
+        vertex: &Arc<dyn RenderGpuCanvasShader>,
+        fragment: &Arc<dyn RenderGpuCanvasShader>,
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_image(vertex, fragment, plan))
+    }
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_image_with_pipelines(pipelines, plan))
+    }
+}
+
 impl<F: Factory + 'static> Factory for PersistentFactory<F> {
     fn persistent_context(&self) -> Option<PersistentFactoryContext> {
         let identity = Rc::as_ptr(&self.access).cast::<()>();

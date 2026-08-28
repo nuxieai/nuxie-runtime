@@ -435,19 +435,70 @@ impl ListenerGroupWithTargets {
     }
 }
 
-pub trait ListenerGroupProvider {
-    fn listener_groups(&mut self) -> Vec<ListenerGroupWithTargets>;
-    fn hit_components(&mut self, state_machine: &mut StateMachineInstance) -> Vec<CoreHandle>;
+pub enum ListenerGroupProvider {
+    ScrollConstraint(CoreHandle),
+    ScrollBarConstraint(CoreHandle),
+    ScriptedDrawable(CoreHandle),
 }
 
-impl dyn ListenerGroupProvider {
-    pub fn from(component: &mut Core) -> Option<&mut dyn ListenerGroupProvider> {
-        match component.core_type() {
-            crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY => component.as_scroll_constraint_mut().map(|value| value as &mut dyn ListenerGroupProvider),
-            crate::mechanical_port::source::generated::constraints::scrolling::scroll_bar_constraint_base::ScrollBarConstraintBase::TYPE_KEY => component.as_scroll_bar_constraint_mut().map(|value| value as &mut dyn ListenerGroupProvider),
-            crate::mechanical_port::source::generated::scripted::scripted_layout_base::ScriptedLayoutBase::TYPE_KEY => component.as_scripted_layout_mut().map(|value| value as &mut dyn ListenerGroupProvider),
-            crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY => component.as_scripted_drawable_mut().map(|value| value as &mut dyn ListenerGroupProvider),
+impl ListenerGroupProvider {
+    pub fn from(component: &CoreHandle) -> Option<Self> {
+        match component.with(|component| component.core_type())? {
+            crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY => Some(Self::ScrollConstraint(component.clone())),
+            crate::mechanical_port::source::generated::constraints::scrolling::scroll_bar_constraint_base::ScrollBarConstraintBase::TYPE_KEY => Some(Self::ScrollBarConstraint(component.clone())),
+            crate::mechanical_port::source::generated::scripted::scripted_layout_base::ScriptedLayoutBase::TYPE_KEY |
+            crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY => Some(Self::ScriptedDrawable(component.clone())),
             _ => None,
+        }
+    }
+
+    pub fn listener_groups(&self) -> Vec<ListenerGroupWithTargets> {
+        use crate::mechanical_port::source::constraints::{
+            draggable_constraint::DraggableConstraint,
+            scrolling::{
+                scroll_bar_constraint::ScrollBarConstraint, scroll_constraint::ScrollConstraint,
+            },
+        };
+        let (owner, draggables) = match self {
+            Self::ScrollConstraint(owner) => (
+                owner,
+                owner
+                    .with_downcast_mut::<ScrollConstraint, _>(ScrollConstraint::draggables)
+                    .expect("a scroll listener provider remains alive"),
+            ),
+            Self::ScrollBarConstraint(owner) => (
+                owner,
+                owner
+                    .with_downcast_mut::<ScrollBarConstraint, _>(ScrollBarConstraint::draggables)
+                    .expect("a scroll-bar listener provider remains alive"),
+            ),
+            Self::ScriptedDrawable(_) => return Vec::new(),
+        };
+        DraggableConstraint::listener_groups(owner.clone(), draggables)
+    }
+
+    pub fn hit_components(
+        &self,
+    ) -> Vec<Box<dyn crate::mechanical_port::source::animation::state_machine_instance::HitComponent>>
+    {
+        let Self::ScriptedDrawable(owner) = self else {
+            return Vec::new();
+        };
+        let listens = owner
+            .with(|owner| {
+                owner.as_scripted_object().map(|scripted| {
+                    scripted.wants_pointer_down()
+                        || scripted.wants_pointer_up()
+                        || scripted.wants_pointer_move()
+                        || scripted.wants_pointer_exit()
+                })
+            })
+            .flatten()
+            .expect("a scripted listener provider retains ScriptedObject");
+        if listens {
+            vec![Box::new(crate::mechanical_port::source::scripted::scripted_drawable::HitScriptedDrawable::new(owner.clone()))]
+        } else {
+            Vec::new()
         }
     }
 }

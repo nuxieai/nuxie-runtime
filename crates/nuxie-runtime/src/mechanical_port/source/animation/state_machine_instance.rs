@@ -2529,35 +2529,36 @@ impl StateMachineInstance {
         &mut self,
         hit_lookup: &mut HashMap<RuntimeDrawableOccurrence, usize>,
     ) {
-        let providers: Vec<CoreHandle> = self
-            .runtime
-            .borrow_mut()
-            .artboard_objects(&self.artboard_instance)
+        let providers: Vec<ListenerGroupProvider> = self
+            .artboard_instance
+            .with_artboard(|artboard| {
+                artboard
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .expect("a state machine retains its ArtboardInstance")
             .into_iter()
-            .filter_map(|object| self.runtime.borrow_mut().object_listener_provider(&object))
+            .filter_map(|object| ListenerGroupProvider::from(&object))
             .collect();
         for provider in providers {
-            let groups = provider
-                .with_mut(|provider| {
-                    ListenerGroupProvider::from(provider)
-                        .expect("a listener provider exposes ListenerGroupProvider")
-                        .listener_groups()
-                })
-                .expect("a listener provider remains in its CoreArena");
+            let groups = provider.listener_groups();
             for group_with_targets in groups {
                 let (group, targets) = group_with_targets.into_parts();
                 for target in targets {
                     let target_handle = target.component();
-                    let layout = self
-                        .runtime
-                        .borrow_mut()
-                        .component_is_layout(&target_handle)
-                        || self
-                            .runtime
-                            .borrow_mut()
-                            .component_is_drawable_proxy(&target_handle);
+                    let layout = target_handle
+                        .with(|target| {
+                            target.as_layout_component().is_some()
+                                || target
+                                    .as_drawable()
+                                    .is_some_and(|drawable| drawable.is_proxy())
+                        })
+                        .unwrap_or(false);
                     self.add_to_hit_lookup(
-                        target_handle,
+                        RuntimeDrawableOccurrence::Authored(target_handle),
                         layout,
                         hit_lookup,
                         group.clone(),
@@ -2566,10 +2567,7 @@ impl StateMachineInstance {
                 }
                 self.listener_groups.push(group);
             }
-            let runtime = Rc::clone(&self.runtime);
-            let hits = runtime
-                .borrow_mut()
-                .provided_hit_components(&provider, self);
+            let hits = provider.hit_components();
             self.hit_components.extend(hits);
         }
     }

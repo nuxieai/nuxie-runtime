@@ -171,39 +171,48 @@ impl ScriptedDrawable {
         ScriptProtocol::Node
     }
 }
-pub struct HitScriptedDrawable<'a> {
-    pub drawable: &'a mut ScriptedDrawable,
+pub struct HitScriptedDrawable {
+    drawable: CoreHandle,
 }
-impl HitScriptedDrawable<'_> {
-    pub fn hit_test(&self, _p: Vec2) -> bool {
+impl HitScriptedDrawable {
+    pub fn new(drawable: CoreHandle) -> Self {
+        Self { drawable }
+    }
+}
+impl crate::mechanical_port::source::animation::state_machine_instance::HitComponent
+    for HitScriptedDrawable
+{
+    fn component(&self) -> crate::mechanical_port::source::drawable::RuntimeDrawableOccurrence {
+        crate::mechanical_port::source::drawable::RuntimeDrawableOccurrence::Authored(
+            self.drawable.clone(),
+        )
+    }
+    fn hit_test(&self, _position: crate::mechanical_port::source::math::vec2d::Vec2D) -> bool {
         true
     }
-    pub fn process_event(&mut self, p: Vec2, event: &str, can_hit: bool) -> HitResult {
-        let handles = if can_hit {
-            match event {
-                "pointerDown" => self.drawable.scripted.wants_pointer_down(),
-                "pointerUp" => self.drawable.scripted.wants_pointer_up(),
-                "pointerMove" => self.drawable.scripted.wants_pointer_move(),
-                _ => false,
-            }
-        } else {
-            event == "pointerExit" && self.drawable.scripted.wants_pointer_exit()
-        };
-        if !handles {
-            return HitResult::None;
-        }
-        let Some(local) = self.drawable.world_to_local(p) else {
-            return HitResult::None;
-        };
-        if let Some(result) = self.drawable.scripted.call_pointer(event, local.x, local.y) {
-            self.drawable.wake_advance();
-            match result {
-                1 => HitResult::Hit,
-                2 => HitResult::HitOpaque,
-                _ => HitResult::None,
-            }
-        } else {
-            HitResult::None
-        }
+    fn prepare_event(
+        &mut self,
+        _position: crate::mechanical_port::source::math::vec2d::Vec2D,
+        _hit_type: crate::mechanical_port::source::listener_type::ListenerType,
+        _pointer_id: i32,
+    ) {
+    }
+    fn process_event(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        position: crate::mechanical_port::source::math::vec2d::Vec2D,
+        hit_type: crate::mechanical_port::source::listener_type::ListenerType,
+        can_hit: bool,
+        _timestamp: f32,
+        pointer_id: i32,
+    ) -> crate::mechanical_port::source::hit_result::HitResult {
+        machine.perform_scripted_pointer(&self.drawable, hit_type, can_hit, position, pointer_id)
+    }
+    fn process_gamepad_invocation(
+        &mut self,
+        _invocation: &ListenerInvocation,
+        _already_dispatched: Option<&CoreHandle>,
+    ) -> crate::mechanical_port::source::hit_result::HitResult {
+        crate::mechanical_port::source::hit_result::HitResult::None
     }
 }

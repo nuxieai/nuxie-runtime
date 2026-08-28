@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+};
 
 use crate::mechanical_port::source::{
     animation::{
@@ -14,35 +18,35 @@ use crate::mechanical_port::source::{
 };
 
 pub struct PointerData {
-    pub is_hovered: bool,
-    pub is_prev_hovered: bool,
-    pub phase: GestureClickPhase,
-    previous_position: Vec2D,
+    pub is_hovered: Cell<bool>,
+    pub is_prev_hovered: Cell<bool>,
+    pub phase: Cell<GestureClickPhase>,
+    previous_position: Cell<Vec2D>,
 }
 
 impl Default for PointerData {
     fn default() -> Self {
         Self {
-            is_hovered: false,
-            is_prev_hovered: false,
-            phase: GestureClickPhase::Out,
-            previous_position: Vec2D::new(0.0, 0.0),
+            is_hovered: Cell::new(false),
+            is_prev_hovered: Cell::new(false),
+            phase: Cell::new(GestureClickPhase::Out),
+            previous_position: Cell::new(Vec2D::new(0.0, 0.0)),
         }
     }
 }
 
 impl PointerData {
-    pub fn previous_position(&mut self) -> &mut Vec2D {
-        &mut self.previous_position
+    pub fn previous_position(&self) -> Vec2D {
+        self.previous_position.get()
     }
 }
 
 pub struct ListenerGroup {
-    is_consumed: bool,
-    has_dragged: bool,
+    is_consumed: Cell<bool>,
+    has_dragged: Cell<bool>,
     listener: Option<CoreHandle>,
-    pointers: HashMap<i32, Box<PointerData>>,
-    pointers_pool: Vec<Box<PointerData>>,
+    pointers: RefCell<HashMap<i32, Rc<PointerData>>>,
+    pointers_pool: RefCell<Vec<Rc<PointerData>>>,
 }
 
 impl ListenerGroup {
@@ -52,63 +56,72 @@ impl ListenerGroup {
 
     pub fn new_optional(listener: Option<CoreHandle>) -> Self {
         Self {
-            is_consumed: false,
-            has_dragged: false,
+            is_consumed: Cell::new(false),
+            has_dragged: Cell::new(false),
             listener,
-            pointers: HashMap::new(),
-            pointers_pool: Vec::new(),
+            pointers: RefCell::new(HashMap::new()),
+            pointers_pool: RefCell::new(Vec::new()),
         }
     }
 
-    pub fn pointer_data(&mut self, id: i32) -> &mut PointerData {
-        self.pointers.entry(id).or_insert_with(|| {
-            self.pointers_pool
-                .pop()
-                .unwrap_or_else(|| Box::new(PointerData::default()))
-        })
+    pub fn pointer_data(&self, id: i32) -> Rc<PointerData> {
+        self.pointers
+            .borrow_mut()
+            .entry(id)
+            .or_insert_with(|| {
+                self.pointers_pool
+                    .borrow_mut()
+                    .pop()
+                    .unwrap_or_else(|| Rc::new(PointerData::default()))
+            })
+            .clone()
     }
 
-    pub fn consume(&mut self) {
-        self.is_consumed = true;
+    pub fn consume(&self) {
+        self.is_consumed.set(true);
     }
 
-    pub fn hover(&mut self, id: i32) {
-        self.pointer_data(id).is_hovered = true;
+    pub fn hover(&self, id: i32) {
+        self.pointer_data(id).is_hovered.set(true);
     }
 
-    pub fn reset(&mut self, pointer_id: i32) {
+    pub fn reset(&self, pointer_id: i32) {
         let pointer = self.pointer_data(pointer_id);
-        if pointer.phase != GestureClickPhase::Disabled {
-            self.is_consumed = false;
-            pointer.is_prev_hovered = pointer.is_hovered;
-            pointer.is_hovered = false;
+        if pointer.phase.get() != GestureClickPhase::Disabled {
+            self.is_consumed.set(false);
+            pointer.is_prev_hovered.set(pointer.is_hovered.get());
+            pointer.is_hovered.set(false);
         }
-        if pointer.phase == GestureClickPhase::Clicked {
-            pointer.phase = GestureClickPhase::Out;
-        }
-    }
-
-    pub fn release_event(&mut self, pointer_id: i32) {
-        if let Some(mut pointer) = self.pointers.remove(&pointer_id) {
-            pointer.is_hovered = false;
-            pointer.is_prev_hovered = false;
-            pointer.phase = GestureClickPhase::Out;
-            *pointer.previous_position() = Vec2D::new(0.0, 0.0);
-            self.pointers_pool.push(pointer);
+        if pointer.phase.get() == GestureClickPhase::Clicked {
+            pointer.phase.set(GestureClickPhase::Out);
         }
     }
 
-    pub fn enable(&mut self, pointer_id: i32) {
-        self.pointer_data(pointer_id).phase = GestureClickPhase::Out;
+    pub fn release_event(&self, pointer_id: i32) {
+        if let Some(pointer) = self.pointers.borrow_mut().remove(&pointer_id) {
+            pointer.is_hovered.set(false);
+            pointer.is_prev_hovered.set(false);
+            pointer.phase.set(GestureClickPhase::Out);
+            pointer.previous_position.set(Vec2D::new(0.0, 0.0));
+            self.pointers_pool.borrow_mut().push(pointer);
+        }
     }
 
-    pub fn disable(&mut self, pointer_id: i32) {
-        self.pointer_data(pointer_id).phase = GestureClickPhase::Disabled;
+    pub fn enable(&self, pointer_id: i32) {
+        self.pointer_data(pointer_id)
+            .phase
+            .set(GestureClickPhase::Out);
+    }
+
+    pub fn disable(&self, pointer_id: i32) {
+        self.pointer_data(pointer_id)
+            .phase
+            .set(GestureClickPhase::Disabled);
         self.consume();
     }
 
     pub fn is_consumed(&self) -> bool {
-        self.is_consumed
+        self.is_consumed.get()
     }
 
     fn has_listener(&self, kind: ListenerType) -> bool {
@@ -143,7 +156,7 @@ impl ListenerGroup {
 
     #[allow(clippy::too_many_arguments)]
     pub fn process_event(
-        &mut self,
+        &self,
         _component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
@@ -152,41 +165,39 @@ impl ListenerGroup {
         time_stamp: f32,
         state_machine_instance: &mut StateMachineInstance,
     ) -> ProcessEventResult {
-        let mut pointer = self.pointers.remove(&pointer_id).unwrap_or_else(|| {
-            self.pointers_pool
-                .pop()
-                .unwrap_or_else(|| Box::new(PointerData::default()))
-        });
-        let previous_phase = pointer.phase;
-        if !can_hit && pointer.is_hovered {
-            pointer.is_hovered = false;
+        let pointer = self.pointer_data(pointer_id);
+        let previous_phase = pointer.phase.get();
+        if !can_hit && pointer.is_hovered.get() {
+            pointer.is_hovered.set(false);
         }
 
-        let is_group_hovered = can_hit && pointer.is_hovered;
-        let hover_change = pointer.is_prev_hovered != is_group_hovered;
+        let is_group_hovered = can_hit && pointer.is_hovered.get();
+        let hover_change = pointer.is_prev_hovered.get() != is_group_hovered;
         if hover_change && is_group_hovered {
-            pointer.previous_position = position;
+            pointer.previous_position.set(position);
         }
 
         if is_group_hovered {
             if hit_event == ListenerType::Down {
-                pointer.phase = GestureClickPhase::Down;
-            } else if hit_event == ListenerType::Up && pointer.phase == GestureClickPhase::Down {
-                pointer.phase = GestureClickPhase::Clicked;
+                pointer.phase.set(GestureClickPhase::Down);
+            } else if hit_event == ListenerType::Up
+                && pointer.phase.get() == GestureClickPhase::Down
+            {
+                pointer.phase.set(GestureClickPhase::Clicked);
             }
         } else if hit_event == ListenerType::Down || hit_event == ListenerType::Up {
-            pointer.phase = GestureClickPhase::Out;
+            pointer.phase.set(GestureClickPhase::Out);
         }
 
         if previous_phase == GestureClickPhase::Down
             && matches!(
-                pointer.phase,
+                pointer.phase.get(),
                 GestureClickPhase::Clicked | GestureClickPhase::Out
             )
-            && self.has_dragged
+            && self.has_dragged.get()
         {
             state_machine_instance.drag_end(position, time_stamp, pointer_id);
-            self.has_dragged = false;
+            self.has_dragged.set(false);
         }
 
         let listener = self
@@ -208,7 +219,7 @@ impl ListenerGroup {
                 listener_type_matched = ListenerType::Exit;
             }
         }
-        if pointer.phase == GestureClickPhase::Clicked
+        if pointer.phase.get() == GestureClickPhase::Clicked
             && state_machine_instance.listener_has(&listener, ListenerType::Click)
         {
             should_perform_changes = true;
@@ -216,15 +227,15 @@ impl ListenerGroup {
         } else if is_group_hovered && state_machine_instance.listener_has(&listener, hit_event) {
             should_perform_changes = true;
         }
-        if pointer.phase == GestureClickPhase::Down
+        if pointer.phase.get() == GestureClickPhase::Down
             && state_machine_instance.listener_has(&listener, ListenerType::Drag)
             && hit_event == ListenerType::Move
         {
             should_perform_changes = true;
             listener_type_matched = ListenerType::Drag;
-            if !self.has_dragged {
+            if !self.has_dragged.get() {
                 state_machine_instance.drag_start(position, time_stamp, false, pointer_id);
-                self.has_dragged = true;
+                self.has_dragged.set(true);
             }
         }
 
@@ -233,7 +244,7 @@ impl ListenerGroup {
                 &listener,
                 ListenerInvocation::pointer(
                     position,
-                    pointer.previous_position,
+                    pointer.previous_position.get(),
                     pointer_id,
                     listener_type_matched as u32,
                     time_stamp,
@@ -242,8 +253,7 @@ impl ListenerGroup {
             state_machine_instance.mark_needs_advance();
             self.consume();
         }
-        pointer.previous_position = position;
-        self.pointers.insert(pointer_id, pointer);
+        pointer.previous_position.set(position);
         ProcessEventResult::Pointer
     }
 
@@ -275,18 +285,18 @@ impl HitTarget {
 }
 
 pub trait ListenerGroupBehavior {
-    fn reset(&mut self, pointer_id: i32);
-    fn release_event(&mut self, pointer_id: i32);
-    fn hover(&mut self, pointer_id: i32);
-    fn enable(&mut self, pointer_id: i32);
-    fn disable(&mut self, pointer_id: i32);
+    fn reset(&self, pointer_id: i32);
+    fn release_event(&self, pointer_id: i32);
+    fn hover(&self, pointer_id: i32);
+    fn enable(&self, pointer_id: i32);
+    fn disable(&self, pointer_id: i32);
     fn is_consumed(&self) -> bool;
     fn can_early_out(&self, drawable: &Component) -> bool;
     fn needs_down_listener(&self, drawable: &Component) -> bool;
     fn needs_up_listener(&self, drawable: &Component) -> bool;
     #[allow(clippy::too_many_arguments)]
     fn process_event(
-        &mut self,
+        &self,
         component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
@@ -298,22 +308,15 @@ pub trait ListenerGroupBehavior {
 }
 
 #[derive(Clone)]
-pub struct RuntimeListenerGroupHandle(Rc<RefCell<Box<dyn ListenerGroupBehavior>>>);
+pub struct RuntimeListenerGroupHandle(Rc<dyn ListenerGroupBehavior>);
 
 impl RuntimeListenerGroupHandle {
     pub fn new(group: Box<dyn ListenerGroupBehavior>) -> Self {
-        Self(Rc::new(RefCell::new(group)))
+        Self(Rc::from(group))
     }
 
     pub fn with_group<R>(&self, use_group: impl FnOnce(&dyn ListenerGroupBehavior) -> R) -> R {
-        use_group(self.0.borrow().as_ref())
-    }
-
-    pub fn with_group_mut<R>(
-        &self,
-        use_group: impl FnOnce(&mut dyn ListenerGroupBehavior) -> R,
-    ) -> R {
-        use_group(self.0.borrow_mut().as_mut())
+        use_group(self.0.as_ref())
     }
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
@@ -322,19 +325,19 @@ impl RuntimeListenerGroupHandle {
 }
 
 impl ListenerGroupBehavior for ListenerGroup {
-    fn reset(&mut self, pointer_id: i32) {
+    fn reset(&self, pointer_id: i32) {
         ListenerGroup::reset(self, pointer_id);
     }
-    fn release_event(&mut self, pointer_id: i32) {
+    fn release_event(&self, pointer_id: i32) {
         ListenerGroup::release_event(self, pointer_id);
     }
-    fn hover(&mut self, pointer_id: i32) {
+    fn hover(&self, pointer_id: i32) {
         ListenerGroup::hover(self, pointer_id);
     }
-    fn enable(&mut self, pointer_id: i32) {
+    fn enable(&self, pointer_id: i32) {
         ListenerGroup::enable(self, pointer_id);
     }
-    fn disable(&mut self, pointer_id: i32) {
+    fn disable(&self, pointer_id: i32) {
         ListenerGroup::disable(self, pointer_id);
     }
     fn is_consumed(&self) -> bool {
@@ -350,7 +353,7 @@ impl ListenerGroupBehavior for ListenerGroup {
         ListenerGroup::needs_up_listener(self, drawable)
     }
     fn process_event(
-        &mut self,
+        &self,
         component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
@@ -375,19 +378,19 @@ impl ListenerGroupBehavior for ListenerGroup {
 impl ListenerGroupBehavior
     for crate::mechanical_port::source::constraints::draggable_constraint::DraggableConstraintListenerGroup
 {
-    fn reset(&mut self, pointer_id: i32) {
+    fn reset(&self, pointer_id: i32) {
         Self::reset(self, pointer_id);
     }
-    fn release_event(&mut self, pointer_id: i32) {
+    fn release_event(&self, pointer_id: i32) {
         Self::release_event(self, pointer_id);
     }
-    fn hover(&mut self, pointer_id: i32) {
+    fn hover(&self, pointer_id: i32) {
         Self::hover(self, pointer_id);
     }
-    fn enable(&mut self, pointer_id: i32) {
+    fn enable(&self, pointer_id: i32) {
         Self::enable(self, pointer_id);
     }
-    fn disable(&mut self, pointer_id: i32) {
+    fn disable(&self, pointer_id: i32) {
         Self::disable(self, pointer_id);
     }
     fn is_consumed(&self) -> bool {
@@ -403,7 +406,7 @@ impl ListenerGroupBehavior
         Self::needs_up_listener(self, drawable)
     }
     fn process_event(
-        &mut self,
+        &self,
         component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,

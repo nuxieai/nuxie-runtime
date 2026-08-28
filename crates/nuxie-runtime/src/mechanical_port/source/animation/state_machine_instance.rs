@@ -1093,7 +1093,7 @@ impl TransitionRuntime for DirectTransitionRuntime {
 
 pub trait HitComponent {
     fn component(&self) -> RuntimeDrawableOccurrence;
-    fn as_hit_drawable_mut(&mut self) -> Option<&mut HitDrawable> {
+    fn as_hit_drawable(&self) -> Option<&HitDrawable> {
         None
     }
     #[cfg(test)]
@@ -1101,7 +1101,7 @@ pub trait HitComponent {
         0
     }
     fn process_event(
-        &mut self,
+        &self,
         machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
@@ -1110,14 +1110,14 @@ pub trait HitComponent {
         pointer_id: i32,
     ) -> HitResult;
     fn process_gamepad_invocation(
-        &mut self,
+        &self,
         invocation: &ListenerInvocation,
         already_dispatched: Option<&CoreHandle>,
     ) -> HitResult;
-    fn prepare_event(&mut self, position: Vec2D, hit_type: ListenerType, pointer_id: i32);
+    fn prepare_event(&self, position: Vec2D, hit_type: ListenerType, pointer_id: i32);
     fn hit_test(&self, position: Vec2D) -> bool;
-    fn enable_pointer_events(&mut self, _pointer_id: i32) {}
-    fn disable_pointer_events(&mut self, _pointer_id: i32) {}
+    fn enable_pointer_events(&self, _pointer_id: i32) {}
+    fn disable_pointer_events(&self, _pointer_id: i32) {}
 }
 
 fn component_is_collapsed(component: &CoreHandle) -> bool {
@@ -1201,16 +1201,16 @@ pub struct HitDrawable {
     component: RuntimeDrawableOccurrence,
     drawable: RuntimeDrawableOccurrence,
     hit_radius: f32,
-    is_hovered: bool,
-    can_early_out: bool,
-    has_down_listener: bool,
-    has_up_listener: bool,
-    is_opaque: bool,
-    listeners: Vec<RuntimeListenerGroupHandle>,
+    is_hovered: Cell<bool>,
+    can_early_out: Cell<bool>,
+    has_down_listener: Cell<bool>,
+    has_up_listener: Cell<bool>,
+    is_opaque: Cell<bool>,
+    listeners: RefCell<Vec<RuntimeListenerGroupHandle>>,
     hit_path: bool,
     hit_clip: bool,
     #[cfg(test)]
-    early_out_count: i32,
+    early_out_count: Cell<i32>,
 }
 
 type HitExpandable = HitDrawable;
@@ -1230,20 +1230,20 @@ impl HitDrawable {
             component,
             drawable,
             hit_radius: 2.0,
-            is_hovered: false,
-            can_early_out,
-            has_down_listener: false,
-            has_up_listener: false,
-            is_opaque,
-            listeners: Vec::new(),
+            is_hovered: Cell::new(false),
+            can_early_out: Cell::new(can_early_out),
+            has_down_listener: Cell::new(false),
+            has_up_listener: Cell::new(false),
+            is_opaque: Cell::new(is_opaque),
+            listeners: RefCell::new(Vec::new()),
             hit_path,
             hit_clip,
             #[cfg(test)]
-            early_out_count: 0,
+            early_out_count: Cell::new(0),
         }
     }
 
-    fn add_listener(&mut self, group: RuntimeListenerGroupHandle) {
+    fn add_listener(&self, group: RuntimeListenerGroupHandle) {
         let (can_early_out, needs_down, needs_up) = self
             .component
             .with_component(|component| {
@@ -1257,16 +1257,16 @@ impl HitDrawable {
             })
             .expect("a hit target remains in its CoreArena");
         if !can_early_out {
-            self.can_early_out = false;
+            self.can_early_out.set(false);
         } else {
             if needs_down {
-                self.has_down_listener = true;
+                self.has_down_listener.set(true);
             }
             if needs_up {
-                self.has_up_listener = true;
+                self.has_up_listener.set(true);
             }
         }
-        self.listeners.push(group);
+        self.listeners.borrow_mut().push(group);
     }
 }
 
@@ -1275,13 +1275,13 @@ impl HitComponent for HitDrawable {
         self.component.clone()
     }
 
-    fn as_hit_drawable_mut(&mut self) -> Option<&mut HitDrawable> {
+    fn as_hit_drawable(&self) -> Option<&HitDrawable> {
         Some(self)
     }
 
     #[cfg(test)]
     fn early_out_count(&self) -> i32 {
-        self.early_out_count
+        self.early_out_count.get()
     }
 
     fn hit_test(&self, position: Vec2D) -> bool {
@@ -1289,27 +1289,28 @@ impl HitComponent for HitDrawable {
             .hit_test_point(&position, self.hit_path, self.hit_clip)
     }
 
-    fn prepare_event(&mut self, position: Vec2D, hit_type: ListenerType, pointer_id: i32) {
-        if self.can_early_out
-            && (hit_type != ListenerType::Down || !self.has_down_listener)
-            && (hit_type != ListenerType::Up || !self.has_up_listener)
+    fn prepare_event(&self, position: Vec2D, hit_type: ListenerType, pointer_id: i32) {
+        if self.can_early_out.get()
+            && (hit_type != ListenerType::Down || !self.has_down_listener.get())
+            && (hit_type != ListenerType::Up || !self.has_up_listener.get())
         {
             #[cfg(test)]
             {
-                self.early_out_count += 1;
+                self.early_out_count.set(self.early_out_count.get() + 1);
             }
             return;
         }
-        self.is_hovered = hit_type != ListenerType::Exit && self.hit_test(position);
-        if self.is_hovered {
-            for listener in &self.listeners {
-                listener.with_group_mut(|listener| listener.hover(pointer_id));
+        self.is_hovered
+            .set(hit_type != ListenerType::Exit && self.hit_test(position));
+        if self.is_hovered.get() {
+            for listener in self.listeners.borrow().iter() {
+                listener.with_group(|listener| listener.hover(pointer_id));
             }
         }
     }
 
     fn process_gamepad_invocation(
-        &mut self,
+        &self,
         _invocation: &ListenerInvocation,
         _already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
@@ -1317,7 +1318,7 @@ impl HitComponent for HitDrawable {
     }
 
     fn process_event(
-        &mut self,
+        &self,
         machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
@@ -1325,20 +1326,20 @@ impl HitComponent for HitDrawable {
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        if self.can_early_out
-            && (hit_type != ListenerType::Down || !self.has_down_listener)
-            && (hit_type != ListenerType::Up || !self.has_up_listener)
+        if self.can_early_out.get()
+            && (hit_type != ListenerType::Down || !self.has_down_listener.get())
+            && (hit_type != ListenerType::Up || !self.has_up_listener.get())
         {
             return HitResult::None;
         }
         let mut blocking = false;
-        for listener in &self.listeners {
+        for listener in self.listeners.borrow().clone() {
             if listener.with_group(|listener| listener.is_consumed()) {
                 continue;
             }
             // Listener callbacks may mutate the target (notably TextInput)
             // or invoke scripted actions. Retain identity, not its Core borrow.
-            let result = listener.with_group_mut(|listener| {
+            let result = listener.with_group(|listener| {
                 listener.process_event(
                     &self.component,
                     position,
@@ -1353,24 +1354,24 @@ impl HitComponent for HitDrawable {
                 blocking = true;
             }
         }
-        if !self.is_hovered || !can_hit {
+        if !self.is_hovered.get() || !can_hit {
             HitResult::None
-        } else if self.is_opaque || self.drawable.is_target_opaque() || blocking {
+        } else if self.is_opaque.get() || self.drawable.is_target_opaque() || blocking {
             HitResult::HitOpaque
         } else {
             HitResult::Hit
         }
     }
 
-    fn enable_pointer_events(&mut self, pointer_id: i32) {
-        for listener in &self.listeners {
-            listener.with_group_mut(|listener| listener.enable(pointer_id));
+    fn enable_pointer_events(&self, pointer_id: i32) {
+        for listener in self.listeners.borrow().iter() {
+            listener.with_group(|listener| listener.enable(pointer_id));
         }
     }
 
-    fn disable_pointer_events(&mut self, pointer_id: i32) {
-        for listener in &self.listeners {
-            listener.with_group_mut(|listener| listener.disable(pointer_id));
+    fn disable_pointer_events(&self, pointer_id: i32) {
+        for listener in self.listeners.borrow().iter() {
+            listener.with_group(|listener| listener.disable(pointer_id));
         }
     }
 }
@@ -1401,7 +1402,7 @@ impl HitComponent for HitNestedArtboard {
     }
 
     fn process_event(
-        &mut self,
+        &self,
         _machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
@@ -1452,7 +1453,7 @@ impl HitComponent for HitNestedArtboard {
     }
 
     fn process_gamepad_invocation(
-        &mut self,
+        &self,
         invocation: &ListenerInvocation,
         already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
@@ -1471,7 +1472,7 @@ impl HitComponent for HitNestedArtboard {
         HitResult::None
     }
 
-    fn prepare_event(&mut self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
+    fn prepare_event(&self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
 }
 
 struct HitComponentList {
@@ -1502,7 +1503,7 @@ impl HitComponent for HitComponentList {
     }
 
     fn process_event(
-        &mut self,
+        &self,
         _machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
@@ -1566,7 +1567,7 @@ impl HitComponent for HitComponentList {
     }
 
     fn process_gamepad_invocation(
-        &mut self,
+        &self,
         invocation: &ListenerInvocation,
         already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
@@ -1598,7 +1599,7 @@ impl HitComponent for HitComponentList {
         result
     }
 
-    fn prepare_event(&mut self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
+    fn prepare_event(&self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
 }
 
 fn data_context_property(
@@ -1930,7 +1931,7 @@ pub struct StateMachineInstance {
     needs_advance: Rc<Cell<bool>>,
     input_instances: Vec<Option<InputInstance>>,
     layers: Vec<RuntimeStateMachineLayerInstanceHandle>,
-    hit_components: Vec<Box<dyn HitComponent>>,
+    hit_components: Vec<Rc<dyn HitComponent>>,
     listener_groups: Vec<RuntimeListenerGroupHandle>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
@@ -2425,7 +2426,7 @@ impl StateMachineInstance {
                 self.listener_groups.push(group);
             }
             let hits = provider.hit_components();
-            self.hit_components.extend(hits);
+            self.hit_components.extend(hits.into_iter().map(Rc::from));
         }
     }
 
@@ -2435,7 +2436,7 @@ impl StateMachineInstance {
             .with_artboard(|artboard| artboard.nested_artboards())
             .expect("a state machine retains its ArtboardInstance")
         {
-            self.hit_components.push(Box::new(HitNestedArtboard {
+            self.hit_components.push(Rc::new(HitNestedArtboard {
                 component: nested.clone(),
             }));
             for animation in nested_animations(&nested) {
@@ -2466,7 +2467,7 @@ impl StateMachineInstance {
             .expect("a state machine retains its ArtboardInstance")
         {
             self.hit_components
-                .push(Box::new(HitComponentList { component: list }));
+                .push(Rc::new(HitComponentList { component: list }));
         }
     }
 
@@ -2497,7 +2498,7 @@ impl StateMachineInstance {
                 true,
             );
             hit.add_listener(group.clone());
-            self.hit_components.push(Box::new(hit));
+            self.hit_components.push(Rc::new(hit));
             self.listener_groups.push(group);
         }
     }
@@ -2589,14 +2590,16 @@ impl StateMachineInstance {
             } else {
                 let hit = HitDrawable::new(target.clone(), target.clone(), is_opaque, false, true);
                 let index = self.hit_components.len();
-                self.hit_components.push(Box::new(hit));
+                self.hit_components.push(Rc::new(hit));
                 hit_lookup.insert(target, index);
                 index
             };
-            let drawable = self.hit_components[index].as_mut().as_hit_drawable_mut();
+            let drawable = self.hit_components[index].as_hit_drawable();
             if let Some(drawable) = drawable {
                 drawable.add_listener(listener_group);
-                drawable.is_opaque |= is_opaque;
+                drawable
+                    .is_opaque
+                    .set(drawable.is_opaque.get() || is_opaque);
             }
             return;
         }
@@ -2636,11 +2639,11 @@ impl StateMachineInstance {
                 };
                 let hit = HitDrawable::new(drawable, target.clone(), false, true, true);
                 let index = self.hit_components.len();
-                self.hit_components.push(Box::new(hit));
+                self.hit_components.push(Rc::new(hit));
                 hit_lookup.insert(target, index);
                 index
             };
-            if let Some(drawable) = self.hit_components[index].as_mut().as_hit_drawable_mut() {
+            if let Some(drawable) = self.hit_components[index].as_hit_drawable() {
                 drawable.add_listener(listener_group);
             }
             return;
@@ -2694,15 +2697,15 @@ impl StateMachineInstance {
     ) -> HitResult {
         let position = self.normalize_pointer_position(position);
         for group in &self.listener_groups {
-            group.with_group_mut(|group| group.reset(pointer_id));
+            group.with_group(|group| group.reset(pointer_id));
         }
-        let mut hit_components = std::mem::take(&mut self.hit_components);
-        for component in &mut hit_components {
+        let hit_components = self.hit_components.clone();
+        for component in &hit_components {
             component.prepare_event(position, hit_type, pointer_id);
         }
         let mut hit_something = false;
         let mut hit_opaque = false;
-        for component in &mut hit_components {
+        for component in &hit_components {
             let result = component.process_event(
                 self,
                 position,
@@ -2716,10 +2719,9 @@ impl StateMachineInstance {
                 hit_opaque |= result == HitResult::HitOpaque;
             }
         }
-        self.hit_components = hit_components;
         if hit_type == ListenerType::Exit {
             for group in &self.listener_groups {
-                group.with_group_mut(|group| group.release_event(pointer_id));
+                group.with_group(|group| group.release_event(pointer_id));
             }
         }
         if !hit_something {
@@ -4465,7 +4467,7 @@ impl StateMachineInstance {
 
     #[cfg(test)]
     pub fn hit_component(&self, index: usize) -> Option<&dyn HitComponent> {
-        self.hit_components.get(index).map(Box::as_ref)
+        self.hit_components.get(index).map(Rc::as_ref)
     }
 
     #[cfg(test)]

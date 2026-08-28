@@ -1,4 +1,7 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    cell::{Cell, RefCell},
+    ops::{Deref, DerefMut},
+};
 
 use crate::mechanical_port::source::{
     animation::{
@@ -147,8 +150,8 @@ impl DraggableConstraint {
 pub struct DraggableConstraintListenerGroup {
     base: ListenerGroup,
     constraint: CoreHandle,
-    draggable: Box<dyn DraggableProxy>,
-    has_scrolled: bool,
+    draggable: RefCell<Box<dyn DraggableProxy>>,
+    has_scrolled: Cell<bool>,
 }
 
 impl DraggableConstraintListenerGroup {
@@ -160,20 +163,20 @@ impl DraggableConstraintListenerGroup {
         Self {
             base: ListenerGroup::new(listener),
             constraint,
-            draggable,
-            has_scrolled: false,
+            draggable: RefCell::new(draggable),
+            has_scrolled: Cell::new(false),
         }
     }
 
-    pub fn enable(&mut self, _pointer_id: i32) {}
-    pub fn disable(&mut self, _pointer_id: i32) {}
-    pub fn reset(&mut self, pointer_id: i32) {
+    pub fn enable(&self, _pointer_id: i32) {}
+    pub fn disable(&self, _pointer_id: i32) {}
+    pub fn reset(&self, pointer_id: i32) {
         self.base.reset(pointer_id);
     }
-    pub fn release_event(&mut self, pointer_id: i32) {
+    pub fn release_event(&self, pointer_id: i32) {
         self.base.release_event(pointer_id);
     }
-    pub fn hover(&mut self, pointer_id: i32) {
+    pub fn hover(&self, pointer_id: i32) {
         self.base.hover(pointer_id);
     }
     pub fn is_consumed(&self) -> bool {
@@ -194,7 +197,7 @@ impl DraggableConstraintListenerGroup {
 
     #[allow(clippy::too_many_arguments)]
     pub fn process_event(
-        &mut self,
+        &self,
         component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
@@ -203,7 +206,8 @@ impl DraggableConstraintListenerGroup {
         time_stamp: f32,
         state_machine_instance: &mut StateMachineInstance,
     ) -> ProcessEventResult {
-        let previous_phase = self.base.pointer_data(pointer_id).phase;
+        let pointer = self.base.pointer_data(pointer_id);
+        let previous_phase = pointer.phase.get();
         self.base.process_event(
             component,
             position,
@@ -213,26 +217,26 @@ impl DraggableConstraintListenerGroup {
             time_stamp,
             state_machine_instance,
         );
-        let phase = self.base.pointer_data(pointer_id).phase;
+        let phase = pointer.phase.get();
         if previous_phase == GestureClickPhase::Down
             && matches!(phase, GestureClickPhase::Clicked | GestureClickPhase::Out)
         {
-            self.draggable.end_drag(position, time_stamp);
-            if self.has_scrolled {
+            self.draggable.borrow_mut().end_drag(position, time_stamp);
+            if self.has_scrolled.get() {
                 state_machine_instance.drag_end(position, time_stamp, pointer_id);
-                self.has_scrolled = false;
+                self.has_scrolled.set(false);
                 return ProcessEventResult::Scroll;
             }
         } else if previous_phase != GestureClickPhase::Down && phase == GestureClickPhase::Down {
-            self.draggable.start_drag(position, time_stamp);
-            self.has_scrolled = false;
+            self.draggable.borrow_mut().start_drag(position, time_stamp);
+            self.has_scrolled.set(false);
         } else if hit_event == ListenerType::Move && phase == GestureClickPhase::Down {
-            let has_dragged = self.draggable.drag(position, time_stamp);
+            let has_dragged = self.draggable.borrow_mut().drag(position, time_stamp);
             if has_dragged {
-                if !self.has_scrolled {
+                if !self.has_scrolled.get() {
                     state_machine_instance.drag_start(position, time_stamp, false, pointer_id);
                 }
-                self.has_scrolled = true;
+                self.has_scrolled.set(true);
                 return ProcessEventResult::Scroll;
             }
         }

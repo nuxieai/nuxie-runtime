@@ -12,6 +12,7 @@ use crate::mechanical_port::source::{
     process_event_result::ProcessEventResult,
 };
 use std::{
+    cell::Cell,
     sync::atomic::Ordering,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -19,10 +20,10 @@ use std::{
 pub struct TextInputListenerGroup {
     base: ListenerGroup,
     text_input: CoreHandle,
-    is_dragging: bool,
-    click_count: i32,
-    last_click_time: i64,
-    last_click_position: Vec2D,
+    is_dragging: Cell<bool>,
+    click_count: Cell<i32>,
+    last_click_time: Cell<i64>,
+    last_click_position: Cell<Vec2D>,
 }
 
 impl TextInputListenerGroup {
@@ -30,10 +31,10 @@ impl TextInputListenerGroup {
         Self {
             base: ListenerGroup::new_optional(None),
             text_input,
-            is_dragging: false,
-            click_count: 0,
-            last_click_time: 0,
-            last_click_position: Vec2D::new(0.0, 0.0),
+            is_dragging: Cell::new(false),
+            click_count: Cell::new(0),
+            last_click_time: Cell::new(0),
+            last_click_position: Cell::new(Vec2D::new(0.0, 0.0)),
         }
     }
 
@@ -50,19 +51,19 @@ impl TextInputListenerGroup {
 }
 
 impl ListenerGroupBehavior for TextInputListenerGroup {
-    fn reset(&mut self, id: i32) {
+    fn reset(&self, id: i32) {
         self.base.reset(id);
     }
-    fn release_event(&mut self, id: i32) {
+    fn release_event(&self, id: i32) {
         self.base.release_event(id);
     }
-    fn hover(&mut self, id: i32) {
+    fn hover(&self, id: i32) {
         self.base.hover(id);
     }
-    fn enable(&mut self, id: i32) {
+    fn enable(&self, id: i32) {
         self.base.enable(id);
     }
-    fn disable(&mut self, id: i32) {
+    fn disable(&self, id: i32) {
         self.base.disable(id);
     }
     fn is_consumed(&self) -> bool {
@@ -79,7 +80,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
     }
 
     fn process_event(
-        &mut self,
+        &self,
         _component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
@@ -89,43 +90,44 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
         machine: &mut StateMachineInstance,
     ) -> ProcessEventResult {
         let pointer = self.base.pointer_data(pointer_id);
-        let previous = pointer.phase;
-        if !can_hit && pointer.is_hovered {
-            pointer.is_hovered = false;
+        let previous = pointer.phase.get();
+        if !can_hit && pointer.is_hovered.get() {
+            pointer.is_hovered.set(false);
         }
-        let hovered = can_hit && pointer.is_hovered;
+        let hovered = can_hit && pointer.is_hovered.get();
         if hovered {
             if event == ListenerType::Down {
-                pointer.phase = GestureClickPhase::Down;
-            } else if event == ListenerType::Up && pointer.phase == GestureClickPhase::Down {
-                pointer.phase = GestureClickPhase::Clicked;
+                pointer.phase.set(GestureClickPhase::Down);
+            } else if event == ListenerType::Up && pointer.phase.get() == GestureClickPhase::Down {
+                pointer.phase.set(GestureClickPhase::Clicked);
             }
         } else if matches!(event, ListenerType::Down | ListenerType::Up) {
-            pointer.phase = GestureClickPhase::Out;
+            pointer.phase.set(GestureClickPhase::Out);
         }
-        let phase = pointer.phase;
+        let phase = pointer.phase.get();
         if previous != GestureClickPhase::Down && phase == GestureClickPhase::Down {
             let now = Self::now_micros(timestamp);
-            let dt = now - self.last_click_time;
-            let distance = Vec2D::distance(position, self.last_click_position);
-            self.click_count = if dt >= 0 && dt <= 500_000 && distance <= 16.0 {
-                if self.click_count >= 3 {
-                    1
+            let dt = now - self.last_click_time.get();
+            let distance = Vec2D::distance(position, self.last_click_position.get());
+            self.click_count
+                .set(if dt >= 0 && dt <= 500_000 && distance <= 16.0 {
+                    if self.click_count.get() >= 3 {
+                        1
+                    } else {
+                        self.click_count.get() + 1
+                    }
                 } else {
-                    self.click_count + 1
-                }
-            } else {
-                1
-            };
-            self.last_click_time = now;
-            self.last_click_position = position;
+                    1
+                });
+            self.last_click_time.set(now);
+            self.last_click_position.set(position);
             self.text_input.with_mut(|input| {
                 input
                     .as_text_input_mut()
                     .expect("text hit owner remains TextInput")
                     .start_drag(position)
             });
-            self.is_dragging = true;
+            self.is_dragging.set(true);
             let children = self
                 .text_input
                 .with(|input| {
@@ -147,16 +149,16 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
                 let input = input
                     .as_text_input_mut()
                     .expect("text hit owner remains TextInput");
-                if self.click_count == 2 {
+                if self.click_count.get() == 2 {
                     input.select_word();
-                } else if self.click_count == 3 {
+                } else if self.click_count.get() == 3 {
                     input.select_line();
                 }
             });
             ProcessEventResult::Scroll
         } else if event == ListenerType::Move
             && phase == GestureClickPhase::Down
-            && self.is_dragging
+            && self.is_dragging.get()
         {
             self.text_input.with_mut(|input| {
                 input
@@ -168,7 +170,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
         } else {
             if previous == GestureClickPhase::Down
                 && matches!(phase, GestureClickPhase::Clicked | GestureClickPhase::Out)
-                && self.is_dragging
+                && self.is_dragging.get()
             {
                 self.text_input.with_mut(|input| {
                     input
@@ -176,7 +178,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
                         .expect("text hit owner remains TextInput")
                         .end_drag(position)
                 });
-                self.is_dragging = false;
+                self.is_dragging.set(false);
             }
             ProcessEventResult::None
         }

@@ -191,14 +191,14 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
         true
     }
     fn prepare_event(
-        &mut self,
+        &self,
         _position: crate::mechanical_port::source::math::vec2d::Vec2D,
         _hit_type: crate::mechanical_port::source::listener_type::ListenerType,
         _pointer_id: i32,
     ) {
     }
     fn process_event(
-        &mut self,
+        &self,
         machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
         position: crate::mechanical_port::source::math::vec2d::Vec2D,
         hit_type: crate::mechanical_port::source::listener_type::ListenerType,
@@ -209,7 +209,7 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
         machine.perform_scripted_pointer(&self.drawable, hit_type, can_hit, position, pointer_id)
     }
     fn process_gamepad_invocation(
-        &mut self,
+        &self,
         _invocation: &ListenerInvocation,
         _already_dispatched: Option<&CoreHandle>,
     ) -> crate::mechanical_port::source::hit_result::HitResult {

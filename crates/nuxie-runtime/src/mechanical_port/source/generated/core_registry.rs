@@ -39200,7 +39200,7 @@ impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port
     fn core_type(&self) -> u16 { crate::mechanical_port::source::generated::data_bind::converters::data_converter_operation_viewmodel_base::DataConverterOperationViewModelBase::TYPE_KEY }
     fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::data_bind::converters::data_converter_operation_viewmodel_base::DataConverterOperationViewModelBase::is_type_of(type_key) }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        { let mut callbacks = Self::default(); Some(Box::new(self.base.clone_into(&mut callbacks))) }
+        Some(Box::new(self.clone_core()))
     }
     fn deserialize(&mut self, property_key: u16, reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>) -> bool {
         let mut base = std::mem::take(&mut self.base);
@@ -60951,7 +60951,37 @@ impl FileAssetCapability for crate::mechanical_port::source::assets::shader_asse
         true
     }
 }
-impl CoreCapabilities for crate::mechanical_port::source::assets::font_asset::FontAsset {}
+impl FileAssetCapability for crate::mechanical_port::source::assets::font_asset::FontAsset {
+    fn file_asset_base(&self) -> &crate::mechanical_port::source::assets::file_asset::FileAsset {
+        self.base.file_asset()
+    }
+    fn file_asset_base_mut(
+        &mut self,
+    ) -> &mut crate::mechanical_port::source::assets::file_asset::FileAsset {
+        self.base.file_asset_mut()
+    }
+    fn file_asset_decode(
+        &mut self,
+        data: &mut Vec<u8>,
+        factory: &crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    ) -> bool {
+        self.decode(data.as_slice(), factory)
+    }
+    fn file_extension(&self) -> &'static str {
+        self.file_extension()
+    }
+    fn adds_to_backboard(&self) -> bool {
+        true
+    }
+}
+impl CoreCapabilities for crate::mechanical_port::source::assets::font_asset::FontAsset {
+    fn as_file_asset(&self) -> Option<&dyn FileAssetCapability> {
+        Some(self)
+    }
+    fn as_file_asset_mut(&mut self) -> Option<&mut dyn FileAssetCapability> {
+        Some(self)
+    }
+}
 impl FileAssetCapability for crate::mechanical_port::source::assets::audio_asset::AudioAsset {
     fn file_asset_base(&self) -> &crate::mechanical_port::source::assets::file_asset::FileAsset {
         self.base.base.base.file_asset()

@@ -1543,6 +1543,41 @@ pub trait CoreCapabilities: Any {
         self.as_world_transform_component()
             .map(|component| component.child_opacity())
     }
+    fn world_transform_mark_dirty(&mut self) -> bool {
+        if self.as_world_transform_component().is_none() {
+            return false;
+        }
+        self.component_add_dirt(
+            crate::mechanical_port::source::component_dirt::ComponentDirt::WORLD_TRANSFORM,
+            true,
+        );
+        true
+    }
+    fn world_transform_opacity_changed(&mut self) -> bool {
+        if self.as_world_transform_component().is_none() {
+            return false;
+        }
+        self.component_add_dirt(
+            crate::mechanical_port::source::component_dirt::ComponentDirt::RENDER_OPACITY,
+            true,
+        );
+        true
+    }
+    fn transform_mark_dirty(&mut self) -> bool {
+        if self.as_transform_component().is_none() {
+            return false;
+        }
+        if self.component_add_dirt(
+            crate::mechanical_port::source::component_dirt::ComponentDirt::TRANSFORM,
+            false,
+        ) {
+            self.component_add_dirt(
+                crate::mechanical_port::source::component_dirt::ComponentDirt::WORLD_TRANSFORM,
+                true,
+            );
+        }
+        true
+    }
     fn artboard_on_component_dirty_at(&mut self, _graph_order: u32) -> bool {
         false
     }
@@ -2242,6 +2277,9 @@ pub trait CoreCapabilities: Any {
         false
     }
     fn layer_state_transition_count(&self) -> Option<usize> {
+        None
+    }
+    fn layer_state_flags(&self) -> Option<u32> {
         None
     }
     fn layer_state_transition(
@@ -51960,6 +51998,9 @@ impl CoreCapabilities
     fn layer_state_transition_count(&self) -> Option<usize> {
         Some(self.base.base.base.base.transition_count())
     }
+    fn layer_state_flags(&self) -> Option<u32> {
+        Some(self.base.base.base.base.flags())
+    }
     fn layer_state_transition(
         &self,
         index: usize,
@@ -52740,6 +52781,9 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::any_state::
     fn layer_state_transition_count(&self) -> Option<usize> {
         Some(self.base.base.transition_count())
     }
+    fn layer_state_flags(&self) -> Option<u32> {
+        Some(self.base.base.flags())
+    }
     fn layer_state_transition(
         &self,
         index: usize,
@@ -52835,6 +52879,9 @@ impl CoreCapabilities
     }
     fn layer_state_transition_count(&self) -> Option<usize> {
         Some(self.base.base.base.base.base.base.base.transition_count())
+    }
+    fn layer_state_flags(&self) -> Option<u32> {
+        Some(self.base.base.base.base.base.base.base.flags())
     }
     fn layer_state_transition(
         &self,
@@ -53396,6 +53443,9 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::entry_state
     fn layer_state_transition_count(&self) -> Option<usize> {
         Some(self.base.base.transition_count())
     }
+    fn layer_state_flags(&self) -> Option<u32> {
+        Some(self.base.base.flags())
+    }
     fn layer_state_transition(
         &self,
         index: usize,
@@ -53556,6 +53606,9 @@ impl CoreCapabilities
     }
     fn layer_state_transition_count(&self) -> Option<usize> {
         Some(self.base.base.base.base.base.transition_count())
+    }
+    fn layer_state_flags(&self) -> Option<u32> {
+        Some(self.base.base.base.base.base.flags())
     }
     fn layer_state_transition(
         &self,
@@ -53809,6 +53862,9 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::exit_state:
     }
     fn layer_state_transition_count(&self) -> Option<usize> {
         Some(self.base.base.transition_count())
+    }
+    fn layer_state_flags(&self) -> Option<u32> {
+        Some(self.base.base.flags())
     }
     fn layer_state_transition(
         &self,
@@ -54089,6 +54145,9 @@ impl CoreCapabilities
     }
     fn layer_state_transition_count(&self) -> Option<usize> {
         Some(self.base.base.base.base.base.base.base.transition_count())
+    }
+    fn layer_state_flags(&self) -> Option<u32> {
+        Some(self.base.base.base.base.base.base.base.flags())
     }
     fn layer_state_transition(
         &self,
@@ -62732,13 +62791,23 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::node::Node {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::node::Node {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
@@ -62841,13 +62910,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -62962,13 +63041,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::nested_artboard::NestedArtboard {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::nested_artboard::NestedArtboard {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -63083,13 +63172,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::artboard_component_list::ArtboardComponentList {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::artboard_component_list::ArtboardComponentList {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -63183,13 +63282,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::solo::Solo {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::solo::Solo {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -63297,13 +63406,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -63454,13 +63573,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -63631,13 +63760,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -63889,13 +64028,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -65057,13 +65206,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::shape::Shape {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::shape::Shape {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -65273,13 +65432,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::points_path::PointsPath {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::points_path::PointsPath {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -65451,13 +65620,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::rectangle::Rectangle {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::rectangle::Rectangle {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -65620,13 +65799,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::triangle::Triangle {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::triangle::Triangle {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -65766,13 +65955,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::ellipse::Ellipse {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::ellipse::Ellipse {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -65918,13 +66117,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::list_path::ListPath {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::list_path::ListPath {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -66088,13 +66297,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::polygon::Polygon {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::polygon::Polygon {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -66250,13 +66469,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::star::Star {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::star::Star {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -66382,13 +66611,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::image::Image {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::shapes::image::Image {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -66586,13 +66825,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::layout_component::LayoutComponent {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::layout_component::LayoutComponent {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -66731,13 +66980,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::artboard::Artboard {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::artboard::Artboard {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -67153,13 +67412,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -67214,13 +67483,23 @@ impl crate::mechanical_port::source::generated::bones::bone_base::BoneBaseCallba
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::bones::bone::Bone {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::bones::bone::Bone {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -67249,13 +67528,23 @@ impl crate::mechanical_port::source::generated::bones::bone_base::BoneBaseCallba
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::bones::root_bone::RootBone {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::bones::root_bone::RootBone {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -67478,13 +67767,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input_cursor::TextInputCursor {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input_cursor::TextInputCursor {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -67617,13 +67916,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input_text::TextInputText {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input_text::TextInputText {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -67839,13 +68148,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -67970,13 +68289,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input::TextInput {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input::TextInput {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -68123,13 +68452,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input_selection::TextInputSelection {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::text::text_input_selection::TextInputSelection {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }
@@ -68254,13 +68593,23 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
     }
 }
 impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::text::text::Text {
-    forward_callback_methods!(crate::mechanical_port::source::transform_component::TransformComponent; rotation_changed, scale_x_changed, scale_y_changed);
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::text::text::Text {
-    forward_callback_methods!(crate::mechanical_port::source::world_transform_component::WorldTransformComponent; opacity_changed);
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
     }

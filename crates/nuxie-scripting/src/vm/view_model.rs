@@ -183,7 +183,7 @@ impl ScriptViewModelFrameContext {
             }
             changed = true;
             let listeners = watch.listeners.borrow().clone();
-            for listener in listeners.into_iter().rev() {
+            for listener in listeners {
                 let _ = listener
                     .callback
                     .call::<()>(listener.userdata.unwrap_or(Value::Nil));
@@ -204,7 +204,7 @@ impl ScriptViewModelFrameContext {
             }
             changed = true;
             let listeners = watch.listeners.borrow().clone();
-            for listener in listeners.into_iter().rev() {
+            for listener in listeners {
                 let _ = listener
                     .callback
                     .call::<()>(listener.userdata.unwrap_or(Value::Nil));
@@ -552,9 +552,9 @@ fn create_scripted_view_model_retained(
     table.set(
         "getViewModel",
         lua.create_function(move |_, (this, name): (Table, String)| {
-            match get_view_model.view_model(&name) {
-                Some(_) => this.get(name),
-                None => Ok(Value::Nil),
+            match get_view_model.property(&name) {
+                Some(ScriptViewModelProperty::ViewModel) => this.get(name),
+                _ => Ok(Value::Nil),
             }
         })?,
     )?;
@@ -633,19 +633,12 @@ fn create_scripted_view_model_retained(
                 &[],
             )?,
             ScriptViewModelProperty::List => unreachable!("lists are installed before wrapping"),
-            ScriptViewModelProperty::ViewModel => {
-                model.view_model(name).ok_or_else(|| {
-                    luaur_rt::Error::runtime(format!(
-                        "view-model property '{name}' has no active instance"
-                    ))
-                })?;
-                create_property_userdata(
-                    lua,
-                    ScriptedPropertyViewModel::new(model.clone(), name.clone()),
-                    true,
-                    &[],
-                )?
-            }
+            ScriptViewModelProperty::ViewModel => create_property_userdata(
+                lua,
+                ScriptedPropertyViewModel::new(model.clone(), name.clone()),
+                true,
+                &[],
+            )?,
             ScriptViewModelProperty::SymbolListIndex => unreachable!(
                 "symbol-list indices are exposed as scalar values before property wrapping"
             ),
@@ -770,7 +763,7 @@ fn notify_property_listeners(watch: &ScriptedPropertyWatch) {
 
 fn call_property_listeners(listeners: &RefCell<Vec<ScriptedListener>>) {
     let listeners = listeners.borrow().clone();
-    for listener in listeners.into_iter().rev() {
+    for listener in listeners {
         let _ = listener
             .callback
             .call::<()>(listener.userdata.unwrap_or(Value::Nil));
@@ -813,12 +806,9 @@ impl UserData for ScriptedPropertyViewModel {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
                 return Ok(Value::Table(cached.clone()));
             }
-            let model = this.parent.view_model(&this.name).ok_or_else(|| {
-                luaur_rt::Error::runtime(format!(
-                    "view-model property '{}' has no active instance",
-                    this.name
-                ))
-            })?;
+            let Some(model) = this.parent.active_view_model(&this.name) else {
+                return Ok(Value::Nil);
+            };
             let value = create_scripted_view_model(lua, model)?;
             *this.cached_value.borrow_mut() = Some(value.clone());
             Ok(Value::Table(value))

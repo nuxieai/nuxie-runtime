@@ -3,9 +3,9 @@ use std::{cell::RefCell, rc::Rc};
 use crate::mechanical_port::source::{
     animation::{
         focus_listener_group::RuntimeFocusListenerGroupWeakHandle,
+        gamepad_listener_group::RuntimeGamepadListenerGroupWeakHandle,
         keyboard_listener_group::RuntimeKeyboardListenerGroupWeakHandle,
         listener_invocation::ListenerInvocation,
-        state_machine_instance::{RuntimeObjectHandle, RuntimeStateMachineInstanceWeakHandle},
     },
     artboard::Artboard,
     component::Component,
@@ -100,21 +100,20 @@ impl RuntimeKeyboardListenerHandle {
 
 #[derive(Clone)]
 pub struct RuntimeGamepadListenerHandle {
-    machine: RuntimeStateMachineInstanceWeakHandle,
-    group: RuntimeObjectHandle,
+    group: RuntimeGamepadListenerGroupWeakHandle,
 }
 
 impl RuntimeGamepadListenerHandle {
-    pub fn new(machine: RuntimeStateMachineInstanceWeakHandle, group: RuntimeObjectHandle) -> Self {
-        Self { machine, group }
+    pub fn new(group: RuntimeGamepadListenerGroupWeakHandle) -> Self {
+        Self { group }
     }
 
     fn is_alive(&self) -> bool {
-        self.machine.upgrade().is_some()
+        self.group.upgrade().is_some()
     }
 
     fn ptr_eq(&self, other: &Self) -> bool {
-        self.group == other.group && self.machine.ptr_eq(&other.machine)
+        self.group.ptr_eq(&other.group)
     }
 
     fn dispatch(
@@ -122,13 +121,12 @@ impl RuntimeGamepadListenerHandle {
         invocation: &ListenerInvocation,
         out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
     ) -> bool {
-        self.machine
-            .with_instance_mut(|machine| {
-                machine.dispatch_gamepad_listener_group(
-                    self.group,
-                    invocation,
-                    out_dispatched_scripted_drawable,
-                )
+        self.group
+            .upgrade()
+            .map(|group| {
+                group.with_group_mut(|group| {
+                    group.gamepad_dispatch(invocation, out_dispatched_scripted_drawable)
+                })
             })
             .unwrap_or(false)
     }

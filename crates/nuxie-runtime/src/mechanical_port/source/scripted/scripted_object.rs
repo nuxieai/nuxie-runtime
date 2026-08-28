@@ -1,6 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::mechanical_port::source::{
+    animation::listener_invocation::ListenerInvocation,
     assets::file_asset_referencer::FileAssetReferencer, core::CoreHandle,
     data_bind::data_context::RuntimeDataContextHandle, importers::import_stack::ImportStack,
     status_code::StatusCode,
@@ -73,6 +74,14 @@ pub trait ScriptRuntime {
         _value: &str,
     ) -> Option<bool> {
         None
+    }
+    fn call_gamepad(
+        &mut self,
+        _self_ref: i32,
+        _method: &str,
+        _invocation: &ListenerInvocation,
+    ) -> bool {
+        false
     }
     fn call_pointer(&mut self, _self_ref: i32, _method: &str, _x: f32, _y: f32) -> Option<u8> {
         None
@@ -569,6 +578,11 @@ impl ScriptedObject {
         self.runtime
             .as_mut()?
             .call_boolean_with_string(self.self_ref, method, value)
+    }
+    pub fn call_gamepad(&mut self, method: &str, invocation: &ListenerInvocation) -> bool {
+        self.runtime
+            .as_mut()
+            .is_some_and(|runtime| runtime.call_gamepad(self.self_ref, method, invocation))
     }
     pub fn call_pointer(&mut self, method: &str, x: f32, y: f32) -> Option<u8> {
         self.runtime

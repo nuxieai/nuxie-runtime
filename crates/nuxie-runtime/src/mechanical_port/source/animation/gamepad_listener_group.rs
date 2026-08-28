@@ -1,42 +1,78 @@
 use crate::mechanical_port::source::{
     animation::{
         listener_invocation::ListenerInvocation,
-        state_machine_instance::{
-            RuntimeObjectHandle, RuntimeServicesHandle, RuntimeStateMachineInstanceWeakHandle,
-        },
+        listener_types::listener_input_type_gamepad::ListenerInputTypeGamepad,
+        state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
+        state_machine_listener::StateMachineListener,
     },
     core::CoreHandle,
+    focus_data::{FocusData, RuntimeGamepadListenerHandle},
+};
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
 };
 
-pub struct GamepadListenerGroup {
-    runtime: RuntimeServicesHandle,
-    focus_data: CoreHandle,
-    listener: Option<CoreHandle>,
-    state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
-    group: RuntimeObjectHandle,
-}
+#[derive(Clone)]
+pub struct RuntimeGamepadListenerGroupHandle(Rc<RefCell<GamepadListenerGroup>>);
 
-impl GamepadListenerGroup {
+#[derive(Clone, Default)]
+pub struct RuntimeGamepadListenerGroupWeakHandle(Weak<RefCell<GamepadListenerGroup>>);
+
+impl RuntimeGamepadListenerGroupHandle {
     pub fn new(
-        runtime: RuntimeServicesHandle,
         focus_data: CoreHandle,
         listener: Option<CoreHandle>,
         state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Box<Self> {
-        let group = runtime.borrow_mut().focus_data_add_gamepad_listener(
-            &focus_data,
-            listener.as_ref(),
-            state_machine_instance.clone(),
-        );
-        Box::new(Self {
-            runtime,
+    ) -> Self {
+        let handle = Self(Rc::new(RefCell::new(GamepadListenerGroup {
+            occurrence: RuntimeGamepadListenerGroupWeakHandle::default(),
             focus_data,
             listener,
             state_machine_instance,
-            group,
-        })
+        })));
+        let occurrence = handle.downgrade();
+        handle.0.borrow_mut().occurrence = occurrence.clone();
+        let focus_data = handle.0.borrow().focus_data.clone();
+        focus_data.with_downcast_mut::<FocusData, _>(|focus_data| {
+            focus_data.add_gamepad_listener(RuntimeGamepadListenerHandle::new(occurrence));
+        });
+        handle
     }
 
+    pub fn downgrade(&self) -> RuntimeGamepadListenerGroupWeakHandle {
+        RuntimeGamepadListenerGroupWeakHandle(Rc::downgrade(&self.0))
+    }
+
+    pub fn with_group_mut<R>(&self, use_group: impl FnOnce(&mut GamepadListenerGroup) -> R) -> R {
+        use_group(&mut self.0.borrow_mut())
+    }
+}
+
+impl RuntimeGamepadListenerGroupWeakHandle {
+    pub fn upgrade(&self) -> Option<RuntimeGamepadListenerGroupHandle> {
+        self.0.upgrade().map(RuntimeGamepadListenerGroupHandle)
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
+}
+
+fn focus_parent(focus_data: &CoreHandle) -> Option<CoreHandle> {
+    focus_data
+        .with(|focus_data| focus_data.as_component()?.parent_handle())
+        .flatten()
+}
+
+pub struct GamepadListenerGroup {
+    occurrence: RuntimeGamepadListenerGroupWeakHandle,
+    focus_data: CoreHandle,
+    listener: Option<CoreHandle>,
+    state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
+}
+
+impl GamepadListenerGroup {
     pub fn listener(&self) -> Option<CoreHandle> {
         self.listener.clone()
     }
@@ -48,26 +84,33 @@ impl GamepadListenerGroup {
     pub fn gamepad_dispatch(
         &mut self,
         invocation: &ListenerInvocation,
-        out_scripted_drawable: Option<&mut CoreHandle>,
+        out_scripted_drawable: Option<&mut Option<CoreHandle>>,
     ) -> bool {
-        if let Some((drawable, handled)) = self
-            .runtime
-            .borrow_mut()
-            .focus_data_dispatch_scripted_gamepad(&self.focus_data, invocation)
-        {
-            if let Some(output) = out_scripted_drawable {
-                *output = drawable;
+        if let Some(parent) = focus_parent(&self.focus_data) {
+            let scripted_result = parent.with_mut(|parent| {
+                parent
+                    .as_scripted_drawable_mut()
+                    .map(|scripted| scripted.gamepad_dispatch(invocation))
+            });
+            if let Some(Some(handled)) = scripted_result {
+                if let Some(output) = out_scripted_drawable {
+                    *output = Some(parent);
+                }
+                return handled;
             }
-            return handled;
         }
         let Some(listener) = self.listener.as_ref() else {
             return false;
         };
-        if !self
-            .runtime
-            .borrow()
-            .listener_gamepad_constraints_met(listener, invocation)
-        {
+        let constraints_met = listener
+            .with_downcast::<StateMachineListener, _>(|listener| {
+                ListenerInputTypeGamepad::gamepad_listener_constraints_met(
+                    Some(listener),
+                    invocation,
+                )
+            })
+            .unwrap_or(false);
+        if !constraints_met {
             return false;
         }
         self.state_machine_instance.with_instance_mut(|machine| {
@@ -80,8 +123,11 @@ impl GamepadListenerGroup {
 
 impl Drop for GamepadListenerGroup {
     fn drop(&mut self) {
-        self.runtime
-            .borrow_mut()
-            .focus_data_remove_gamepad_listener(&self.focus_data, self.group);
+        self.focus_data
+            .with_downcast_mut::<FocusData, _>(|focus_data| {
+                focus_data.remove_gamepad_listener(RuntimeGamepadListenerHandle::new(
+                    self.occurrence.clone(),
+                ));
+            });
     }
 }

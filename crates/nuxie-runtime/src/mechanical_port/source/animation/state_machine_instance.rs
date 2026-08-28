@@ -4,14 +4,17 @@ use crate::mechanical_port::source::{
         animation_reset_factory::AnimationResetFactory,
         animation_state::AnimationState,
         focus_listener_group::RuntimeFocusListenerGroupHandle,
+        gamepad_listener_group::RuntimeGamepadListenerGroupHandle,
         keyboard_listener_group::RuntimeKeyboardListenerGroupHandle,
         linear_animation_instance::LinearAnimationInstance,
         listener_invocation::ListenerInvocation,
+        listener_types::listener_input_type_semantic::ListenerInputTypeSemantic,
         semantic_listener_group::{RuntimeSemanticListenerGroupHandle, SemanticActionType},
         state_instance::RuntimeStateInstanceHandle,
         state_machine_input_instance::{
             InputInstanceNotifier, SMIBool, SMIInput, SMINumber, SMITrigger,
         },
+        state_machine_listener::StateMachineListener,
     },
     artboard::RuntimeArtboardInstanceWeakHandle,
     core::CoreHandle,
@@ -418,12 +421,6 @@ pub trait StateMachineInstanceRuntime {
         text_input: &CoreHandle,
         machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> RuntimeListenerGroupHandle;
-    fn make_gamepad_listener_group(
-        &mut self,
-        focus_data: &CoreHandle,
-        listener: &CoreHandle,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Object;
     fn resolve_focus_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
     fn resolve_semantic_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
     fn provided_hit_components(
@@ -452,12 +449,6 @@ pub trait StateMachineInstanceRuntime {
         &mut self,
         view_model: RuntimeListenerViewModelWeakHandle,
     ) -> ListenerInvocation;
-    fn listener_semantic_constraints_met(&self, listener: &CoreHandle, action: u8) -> bool;
-    fn listener_gamepad_constraints_met(
-        &self,
-        listener: &CoreHandle,
-        invocation: &ListenerInvocation,
-    ) -> bool;
     fn focus_data_add_focus_listener(
         &mut self,
         focus_data: &CoreHandle,
@@ -465,18 +456,6 @@ pub trait StateMachineInstanceRuntime {
         machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> Object;
     fn focus_data_remove_focus_listener(&mut self, focus_data: &CoreHandle, group: Object);
-    fn focus_data_add_gamepad_listener(
-        &mut self,
-        focus_data: &CoreHandle,
-        listener: Option<&CoreHandle>,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Object;
-    fn focus_data_remove_gamepad_listener(&mut self, focus_data: &CoreHandle, group: Object);
-    fn focus_data_dispatch_scripted_gamepad(
-        &mut self,
-        focus_data: &CoreHandle,
-        invocation: &ListenerInvocation,
-    ) -> Option<(CoreHandle, bool)>;
     fn retain_view_model_instance(&mut self, instance: CoreHandle) -> Object;
     fn retain_data_context(&mut self, context: RuntimeDataContextHandle) -> Object;
     fn data_context_advanced(&mut self, context: Object);
@@ -1993,7 +1972,7 @@ pub struct StateMachineInstance {
     external_focus_manager: Option<RuntimeFocusManagerHandle>,
     focus_listener_groups: Vec<RuntimeFocusListenerGroupHandle>,
     keyboard_listener_groups: Vec<RuntimeKeyboardListenerGroupHandle>,
-    gamepad_listener_groups: Vec<Object>,
+    gamepad_listener_groups: Vec<RuntimeGamepadListenerGroupHandle>,
     gamepad_scripted_drawables: Vec<CoreHandle>,
     embedder_gamepads: HashMap<i32, Object>,
     semantic_manager: Option<RuntimeSemanticManagerHandle>,
@@ -2153,11 +2132,13 @@ impl StateMachineInstance {
     pub fn semantic_constraints_met(
         &self,
         listener: &CoreHandle,
-        action: crate::mechanical_port::source::animation::semantic_listener_group::SemanticActionType,
+        action: SemanticActionType,
     ) -> bool {
-        self.runtime
-            .borrow()
-            .listener_semantic_constraints_met(listener, action as u8)
+        listener
+            .with_downcast::<StateMachineListener, _>(|listener| {
+                ListenerInputTypeSemantic::semantic_listener_constraints_met(Some(listener), action)
+            })
+            .unwrap_or(false)
     }
 
     fn initialize_data_binds(&mut self) {
@@ -2351,9 +2332,9 @@ impl StateMachineInstance {
                     .as_ref()
                     .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
                 {
-                    let group = self.runtime.borrow_mut().make_gamepad_listener_group(
-                        &focus_data,
-                        &listener,
+                    let group = RuntimeGamepadListenerGroupHandle::new(
+                        focus_data,
+                        Some(listener.clone()),
                         machine.clone(),
                     );
                     self.gamepad_listener_groups.push(group);

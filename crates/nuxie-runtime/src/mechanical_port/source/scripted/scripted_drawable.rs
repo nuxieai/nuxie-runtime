@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    animation::listener_invocation::{ListenerInvocation, ListenerInvocationKind},
     core::CoreHandle,
     generated::scripted::scripted_drawable_base::ScriptedDrawableBase,
     input::focusable::{Key, KeyModifiers},
@@ -148,6 +149,19 @@ impl ScriptedDrawable {
             self.wake_advance();
         }
         handled.unwrap_or(false)
+    }
+    pub fn gamepad_dispatch(&mut self, invocation: &ListenerInvocation) -> bool {
+        let method = match invocation.kind() {
+            ListenerInvocationKind::GamepadConnected => "gamepadConnected",
+            ListenerInvocationKind::GamepadEvent => "gamepadEvent",
+            ListenerInvocationKind::GamepadDisconnected => "gamepadDisconnected",
+            _ => return false,
+        };
+        if !self.scripted.call_gamepad(method, invocation) {
+            return false;
+        }
+        self.wake_advance();
+        true
     }
     pub fn wake_advance(&mut self) {
         self.is_advance_active = true;

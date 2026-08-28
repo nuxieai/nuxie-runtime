@@ -1,22 +1,23 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
 use crate::mechanical_port::source::{
-    status_code::StatusCode,
-    viewmodel::{viewmodel::ViewModel, viewmodel_property::ViewModelProperty},
+    core::CoreHandle, status_code::StatusCode, viewmodel::viewmodel::ViewModel,
 };
 
 use super::import_stack::ImportStackObject;
 
 pub struct ViewModelImporter {
-    view_model: NonNull<ViewModel>,
+    view_model: CoreHandle,
 }
 
 impl ViewModelImporter {
-    pub fn new(view_model: NonNull<ViewModel>) -> Self {
+    pub fn new(view_model: CoreHandle) -> Self {
         Self { view_model }
     }
-    pub fn add_property(&mut self, property: NonNull<ViewModelProperty>) {
-        unsafe { self.view_model.as_mut().add_property(property) };
+    pub fn add_property(&mut self, property: CoreHandle) {
+        self.view_model
+            .with_downcast_mut::<ViewModel, _>(|view_model| view_model.add_property(property))
+            .expect("ViewModelImporter retains a ViewModel");
     }
 }
 

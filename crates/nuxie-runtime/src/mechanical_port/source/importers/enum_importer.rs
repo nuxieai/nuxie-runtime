@@ -1,27 +1,31 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::{
-    status_code::StatusCode,
-    viewmodel::{data_enum::DataEnum, data_enum_value::DataEnumValue},
-};
+use crate::mechanical_port::source::{core::CoreHandle, status_code::StatusCode};
 
 use super::import_stack::ImportStackObject;
 
 pub struct EnumImporter {
-    data_enum: NonNull<DataEnum>,
+    data_enum: CoreHandle,
 }
 
 impl EnumImporter {
-    pub fn new(data_enum: NonNull<DataEnum>) -> Self {
+    pub fn new(data_enum: CoreHandle) -> Self {
         Self { data_enum }
     }
 
-    pub fn add_value(&mut self, value: NonNull<DataEnumValue>) {
-        unsafe { self.data_enum.as_mut().add_value(value) };
+    pub fn add_value(&mut self, value: CoreHandle) {
+        self.data_enum
+            .with_mut(|data_enum| {
+                data_enum
+                    .as_data_enum_mut()
+                    .expect("imported enum derives from DataEnum")
+                    .add_value(value)
+            })
+            .expect("EnumImporter retains a live enum");
     }
 
-    pub fn data_enum(&self) -> NonNull<DataEnum> {
-        self.data_enum
+    pub fn data_enum(&self) -> CoreHandle {
+        self.data_enum.clone()
     }
 }
 

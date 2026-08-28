@@ -1,26 +1,28 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::animation::{
-    keyed_object::KeyedObject, linear_animation::LinearAnimation,
+use crate::mechanical_port::source::{
+    animation::linear_animation::LinearAnimation, core::CoreHandle,
 };
 
 use super::import_stack::ImportStackObject;
 
 pub struct LinearAnimationImporter {
-    animation: NonNull<LinearAnimation>,
+    animation: CoreHandle,
 }
 
 impl LinearAnimationImporter {
-    pub fn new(animation: NonNull<LinearAnimation>) -> Self {
+    pub fn new(animation: CoreHandle) -> Self {
         Self { animation }
     }
 
-    pub fn animation(&self) -> NonNull<LinearAnimation> {
-        self.animation
+    pub fn animation(&self) -> CoreHandle {
+        self.animation.clone()
     }
 
-    pub fn add_keyed_object(&mut self, object: Box<KeyedObject>) {
-        unsafe { self.animation.as_mut().add_keyed_object(object) };
+    pub fn add_keyed_object(&mut self, object: CoreHandle) {
+        self.animation
+            .with_downcast_mut::<LinearAnimation, _>(|animation| animation.add_keyed_object(object))
+            .expect("LinearAnimationImporter retains a LinearAnimation");
     }
 }
 

@@ -1,31 +1,37 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
 use crate::mechanical_port::source::animation::{
-    keyed_property::KeyedProperty, keyframe::KeyFrame, linear_animation::LinearAnimation,
+    keyed_property::KeyedProperty, linear_animation::LinearAnimation,
 };
+use crate::mechanical_port::source::core::CoreHandle;
 
 use super::import_stack::ImportStackObject;
 
 pub struct KeyedPropertyImporter {
-    animation: NonNull<LinearAnimation>,
-    keyed_property: NonNull<KeyedProperty>,
+    animation: CoreHandle,
+    keyed_property: CoreHandle,
 }
 
 impl KeyedPropertyImporter {
-    pub fn new(
-        animation: NonNull<LinearAnimation>,
-        keyed_property: NonNull<KeyedProperty>,
-    ) -> Self {
+    pub fn new(animation: CoreHandle, keyed_property: CoreHandle) -> Self {
         Self {
             animation,
             keyed_property,
         }
     }
 
-    pub fn add_key_frame(&mut self, mut key_frame: Box<KeyFrame>) {
-        let fps = unsafe { self.animation.as_ref().fps() };
-        key_frame.compute_seconds(fps);
-        unsafe { self.keyed_property.as_mut().add_key_frame(key_frame) };
+    pub fn add_key_frame(&mut self, key_frame: CoreHandle) {
+        let fps = self
+            .animation
+            .with_downcast::<LinearAnimation, _>(|animation| animation.base.fps())
+            .expect("KeyedPropertyImporter retains a LinearAnimation");
+        key_frame
+            .with_mut(|key_frame| key_frame.keyframe_compute_seconds(fps))
+            .filter(|computed| *computed)
+            .expect("imported key frame derives from KeyFrame");
+        self.keyed_property
+            .with_downcast_mut::<KeyedProperty, _>(|property| property.add_key_frame(key_frame))
+            .expect("KeyedPropertyImporter retains a KeyedProperty");
     }
 }
 

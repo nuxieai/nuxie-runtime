@@ -2,6 +2,15 @@ use std::{any::Any, collections::HashMap};
 
 use crate::mechanical_port::source::status_code::StatusCode;
 
+use super::text_asset_importer::TextAssetImporter;
+use super::{
+    backboard_importer::BackboardImporter,
+    file_asset_importer::{FileAssetImporter, FileAssetImporterBehavior},
+};
+use crate::mechanical_port::source::generated::{
+    assets::file_asset_base::FileAssetBase, backboard_base::BackboardBase,
+};
+
 pub trait ImportStackObject: Any {
     fn resolve(&mut self) -> StatusCode {
         StatusCode::Ok
@@ -40,6 +49,24 @@ impl ImportStack {
             .get_mut(&core_type)?
             .as_any_mut()
             .downcast_mut::<T>()
+    }
+
+    pub fn latest_backboard_importer(&mut self) -> Option<&mut BackboardImporter> {
+        self.latest::<BackboardImporter>(BackboardBase::TYPE_KEY)
+    }
+
+    pub fn latest_file_asset_importer(&mut self) -> Option<&mut dyn FileAssetImporterBehavior> {
+        let object = self.latests.get_mut(&FileAssetBase::TYPE_KEY)?;
+        if object.as_any_mut().is::<FileAssetImporter>() {
+            return object
+                .as_any_mut()
+                .downcast_mut::<FileAssetImporter>()
+                .map(|importer| importer as &mut dyn FileAssetImporterBehavior);
+        }
+        if let Some(importer) = object.as_any_mut().downcast_mut::<TextAssetImporter>() {
+            return Some(importer);
+        }
+        None
     }
 
     pub fn make_latest(

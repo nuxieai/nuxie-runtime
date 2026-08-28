@@ -1,26 +1,24 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
 use crate::mechanical_port::source::{
-    refcnt::RiveRc,
-    status_code::StatusCode,
-    viewmodel::{
-        viewmodel_instance_list::ViewModelInstanceList,
-        viewmodel_instance_list_item::ViewModelInstanceListItem,
-    },
+    core::CoreHandle, status_code::StatusCode,
+    viewmodel::viewmodel_instance_list::ViewModelInstanceList,
 };
 
 use super::import_stack::ImportStackObject;
 
 pub struct ViewModelInstanceListImporter {
-    list: NonNull<ViewModelInstanceList>,
+    list: CoreHandle,
 }
 
 impl ViewModelInstanceListImporter {
-    pub fn new(list: NonNull<ViewModelInstanceList>) -> Self {
+    pub fn new(list: CoreHandle) -> Self {
         Self { list }
     }
-    pub fn add_item(&mut self, item: RiveRc<ViewModelInstanceListItem>) {
-        unsafe { self.list.as_mut().internal_add_item(item) };
+    pub fn add_item(&mut self, item: CoreHandle) {
+        self.list
+            .with_downcast_mut::<ViewModelInstanceList, _>(|list| list.internal_add_item(item))
+            .expect("ViewModelInstanceListImporter retains a ViewModelInstanceList");
     }
 }
 

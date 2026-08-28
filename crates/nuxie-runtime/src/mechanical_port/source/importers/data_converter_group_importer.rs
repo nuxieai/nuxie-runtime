@@ -1,20 +1,20 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::data_bind::converters::data_converter_group::DataConverterGroup;
+use crate::mechanical_port::source::core::CoreHandle;
 
 use super::import_stack::ImportStackObject;
 
 pub struct DataConverterGroupImporter {
-    group: NonNull<DataConverterGroup>,
+    group: CoreHandle,
 }
 
 impl DataConverterGroupImporter {
-    pub fn new(group: NonNull<DataConverterGroup>) -> Self {
+    pub fn new(group: CoreHandle) -> Self {
         Self { group }
     }
 
-    pub fn group(&self) -> NonNull<DataConverterGroup> {
-        self.group
+    pub fn group(&self) -> CoreHandle {
+        self.group.clone()
     }
 }
 

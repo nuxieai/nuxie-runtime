@@ -1,25 +1,22 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::{
-    animation::listener_types::listener_input_type_semantic::ListenerInputTypeSemantic,
-    status_code::StatusCode,
-};
+use crate::mechanical_port::source::{core::CoreHandle, status_code::StatusCode};
 
 use super::import_stack::ImportStackObject;
 
 pub struct ListenerInputTypeSemanticImporter {
-    listener_input_type_semantic: NonNull<ListenerInputTypeSemantic>,
+    listener_input_type_semantic: CoreHandle,
 }
 
 impl ListenerInputTypeSemanticImporter {
-    pub fn new(listener: NonNull<ListenerInputTypeSemantic>) -> Self {
+    pub fn new(listener: CoreHandle) -> Self {
         Self {
             listener_input_type_semantic: listener,
         }
     }
 
-    pub fn listener_input_type_semantic(&self) -> NonNull<ListenerInputTypeSemantic> {
-        self.listener_input_type_semantic
+    pub fn listener_input_type_semantic(&self) -> CoreHandle {
+        self.listener_input_type_semantic.clone()
     }
 }
 

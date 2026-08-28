@@ -1,25 +1,22 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::{
-    animation::listener_types::listener_input_type_keyboard::ListenerInputTypeKeyboard,
-    status_code::StatusCode,
-};
+use crate::mechanical_port::source::{core::CoreHandle, status_code::StatusCode};
 
 use super::import_stack::ImportStackObject;
 
 pub struct ListenerInputTypeKeyboardImporter {
-    listener_input_type_keyboard: NonNull<ListenerInputTypeKeyboard>,
+    listener_input_type_keyboard: CoreHandle,
 }
 
 impl ListenerInputTypeKeyboardImporter {
-    pub fn new(listener: NonNull<ListenerInputTypeKeyboard>) -> Self {
+    pub fn new(listener: CoreHandle) -> Self {
         Self {
             listener_input_type_keyboard: listener,
         }
     }
 
-    pub fn listener_input_type_keyboard(&self) -> NonNull<ListenerInputTypeKeyboard> {
-        self.listener_input_type_keyboard
+    pub fn listener_input_type_keyboard(&self) -> CoreHandle {
+        self.listener_input_type_keyboard.clone()
     }
 }
 

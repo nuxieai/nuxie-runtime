@@ -1,31 +1,33 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::{
-    animation::{
-        listener_action::ListenerAction, listener_types::listener_input_type::ListenerInputType,
-        state_machine_listener::StateMachineListener,
-    },
-    status_code::StatusCode,
-};
+use crate::mechanical_port::source::{core::CoreHandle, status_code::StatusCode};
 
 use super::import_stack::ImportStackObject;
 
 pub struct StateMachineListenerImporter {
-    listener: NonNull<StateMachineListener>,
+    listener: CoreHandle,
 }
 
 impl StateMachineListenerImporter {
-    pub fn new(listener: NonNull<StateMachineListener>) -> Self {
+    pub fn new(listener: CoreHandle) -> Self {
         Self { listener }
     }
-    pub fn state_machine_listener(&self) -> NonNull<StateMachineListener> {
+    pub fn state_machine_listener(&self) -> CoreHandle {
+        self.listener.clone()
+    }
+    pub fn add_action(&mut self, action: CoreHandle) {
         self.listener
+            .with_mut(|listener| listener.state_machine_listener_add_action(action))
+            .filter(|added| *added)
+            .expect("imported listener derives from StateMachineListener");
     }
-    pub fn add_action(&mut self, action: Box<ListenerAction>) {
-        unsafe { self.listener.as_mut().add_action(action) };
-    }
-    pub fn add_listener_input_type(&mut self, input_type: Box<ListenerInputType>) {
-        unsafe { self.listener.as_mut().add_listener_input_type(input_type) };
+    pub fn add_listener_input_type(&mut self, input_type: CoreHandle) {
+        self.listener
+            .with_mut(|listener| {
+                listener.state_machine_listener_add_listener_input_type(input_type)
+            })
+            .filter(|added| *added)
+            .expect("imported listener derives from StateMachineListener");
     }
 }
 

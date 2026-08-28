@@ -1,23 +1,23 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::{
-    animation::{state_transition::StateTransition, transition_condition::TransitionCondition},
-    status_code::StatusCode,
-};
+use crate::mechanical_port::source::{core::CoreHandle, status_code::StatusCode};
 
 use super::import_stack::ImportStackObject;
 
 pub struct StateTransitionImporter {
-    transition: NonNull<StateTransition>,
+    transition: CoreHandle,
 }
 
 impl StateTransitionImporter {
-    pub fn new(transition: NonNull<StateTransition>) -> Self {
+    pub fn new(transition: CoreHandle) -> Self {
         Self { transition }
     }
 
-    pub fn add_condition(&mut self, condition: NonNull<TransitionCondition>) {
-        unsafe { self.transition.as_mut().add_condition(condition) };
+    pub fn add_condition(&mut self, condition: CoreHandle) {
+        self.transition
+            .with_mut(|transition| transition.state_transition_add_condition(condition))
+            .filter(|added| *added)
+            .expect("imported transition derives from StateTransition");
     }
 }
 

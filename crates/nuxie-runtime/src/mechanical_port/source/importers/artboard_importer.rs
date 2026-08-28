@@ -1,52 +1,55 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
 use crate::mechanical_port::source::{
-    animation::{linear_animation::LinearAnimation, state_machine::StateMachine},
-    artboard::Artboard,
-    core::Core,
-    data_bind::data_bind::DataBind,
-    status_code::StatusCode,
+    artboard::Artboard, core::CoreHandle, status_code::StatusCode,
 };
 
 use super::import_stack::ImportStackObject;
 
 pub struct ArtboardImporter {
-    artboard: NonNull<Artboard>,
+    artboard: CoreHandle,
 }
 
 impl ArtboardImporter {
-    pub fn new(artboard: NonNull<Artboard>) -> Self {
+    pub fn new(artboard: CoreHandle) -> Self {
         Self { artboard }
     }
 
-    pub fn add_component(&mut self, object: Option<NonNull<Core>>) {
-        unsafe { self.artboard.as_mut().add_object(object) };
+    pub fn add_component(&mut self, object: Option<CoreHandle>) {
+        self.with_artboard(|artboard| artboard.add_object(object));
     }
 
-    pub fn add_animation(&mut self, animation: NonNull<LinearAnimation>) {
-        unsafe { self.artboard.as_mut().add_animation(animation) };
+    pub fn add_animation(&mut self, animation: CoreHandle) {
+        self.with_artboard(|artboard| artboard.add_animation(animation));
     }
 
-    pub fn add_state_machine(&mut self, state_machine: NonNull<StateMachine>) {
-        unsafe { self.artboard.as_mut().add_state_machine(state_machine) };
+    pub fn add_state_machine(&mut self, state_machine: CoreHandle) {
+        self.with_artboard(|artboard| artboard.add_state_machine(state_machine));
     }
 
-    pub fn add_data_bind(&mut self, data_bind: NonNull<DataBind>) {
-        unsafe { self.artboard.as_mut().add_data_bind(data_bind) };
+    pub fn add_data_bind(&mut self, data_bind: CoreHandle) {
+        self.with_artboard(|artboard| artboard.add_data_bind(data_bind));
     }
 
-    pub fn artboard(&self) -> NonNull<Artboard> {
+    pub fn artboard(&self) -> CoreHandle {
+        self.artboard.clone()
+    }
+
+    fn with_artboard<R>(&self, f: impl FnOnce(&mut Artboard) -> R) -> R {
         self.artboard
+            .with_downcast_mut::<Artboard, _>(f)
+            .expect("ArtboardImporter retains an Artboard")
     }
 }
 
 impl ImportStackObject for ArtboardImporter {
     fn resolve(&mut self) -> StatusCode {
-        let artboard = unsafe { self.artboard.as_mut() };
-        if !artboard.validate_objects() {
-            return StatusCode::InvalidObject;
-        }
-        artboard.initialize()
+        self.with_artboard(|artboard| {
+            if !artboard.validate_objects() {
+                return StatusCode::InvalidObject;
+            }
+            artboard.initialize()
+        })
     }
 
     fn read_null_object(&mut self) -> bool {

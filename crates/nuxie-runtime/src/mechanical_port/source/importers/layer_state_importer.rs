@@ -1,51 +1,69 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::{
-    animation::{
-        blend_animation::BlendAnimation, layer_state::LayerState, state_transition::StateTransition,
-    },
-    status_code::StatusCode,
-};
+use crate::mechanical_port::source::{core::CoreHandle, status_code::StatusCode};
 
 use super::import_stack::ImportStackObject;
 
 pub struct LayerStateImporter {
-    state: NonNull<LayerState>,
+    state: CoreHandle,
 }
 
 impl LayerStateImporter {
-    pub fn new(state: NonNull<LayerState>) -> Self {
+    pub fn new(state: CoreHandle) -> Self {
         Self { state }
     }
 
-    pub fn add_transition(&mut self, transition: NonNull<StateTransition>) {
-        unsafe { self.state.as_mut().add_transition(transition) };
+    pub fn add_transition(&mut self, transition: CoreHandle) {
+        let added = self
+            .state
+            .with_mut(|state| state.layer_state_add_transition(transition))
+            .expect("LayerStateImporter retains a live state");
+        assert!(added, "LayerStateImporter requires a LayerState owner");
     }
 
-    pub fn add_blend_animation(&mut self, animation: NonNull<BlendAnimation>) -> bool {
-        let state = unsafe { self.state.as_mut() };
-        let Some(blend_state) = state.as_blend_state_mut() else {
-            return false;
-        };
-        blend_state.add_animation(animation);
-        true
+    pub fn add_blend_animation(&mut self, animation: CoreHandle) -> bool {
+        self.state
+            .with_mut(|state| state.blend_state_add_animation(animation))
+            .expect("LayerStateImporter retains a live state")
     }
 }
 
 impl ImportStackObject for LayerStateImporter {
     fn resolve(&mut self) -> StatusCode {
-        let state = unsafe { self.state.as_mut() };
-        if let Some(blend_state) = state.as_blend_state_mut() {
-            let transitions = blend_state.transitions().to_vec();
-            for transition in transitions {
-                let transition = unsafe { transition.as_mut() };
-                let Some(blend_transition) = transition.as_blend_state_transition_mut() else {
-                    continue;
-                };
-                let exit_id = blend_transition.exit_blend_animation_id() as usize;
-                if let Some(animation) = blend_state.animations().get(exit_id).copied() {
-                    blend_transition.set_exit_blend_animation(animation);
-                }
+        let Some(animations) = self
+            .state
+            .with(|state| state.blend_state_animations())
+            .expect("LayerStateImporter retains a live state")
+        else {
+            return StatusCode::Ok;
+        };
+        let transition_count = self
+            .state
+            .with(|state| state.layer_state_transition_count())
+            .expect("LayerStateImporter retains a live state")
+            .expect("a BlendState remains LayerState-derived");
+        for index in 0..transition_count {
+            let transition = self
+                .state
+                .with(|state| state.layer_state_transition(index))
+                .expect("LayerStateImporter retains a live state")
+                .expect("LayerState transition indices remain valid");
+            let Some(exit_id) = transition
+                .with(|transition| transition.blend_state_transition_exit_id())
+                .expect("LayerState retains live transitions")
+            else {
+                continue;
+            };
+            if let Some(animation) = animations.get(exit_id as usize) {
+                let assigned = transition
+                    .with_mut(|transition| {
+                        transition.blend_state_transition_set_exit_animation(animation.clone())
+                    })
+                    .expect("LayerState retains live transitions");
+                assert!(
+                    assigned,
+                    "a transition exposing a blend exit id must accept its exit animation"
+                );
             }
         }
         StatusCode::Ok

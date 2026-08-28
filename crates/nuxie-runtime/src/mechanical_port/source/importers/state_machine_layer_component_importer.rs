@@ -1,30 +1,38 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::animation::{
-    listener_action::ListenerAction, state_machine_fire_action::StateMachineFireAction,
-    state_machine_layer_component::StateMachineLayerComponent,
+use crate::mechanical_port::source::{
+    animation::state_machine_layer_component::StateMachineLayerComponent, core::CoreHandle,
 };
 
 use super::import_stack::ImportStackObject;
 
 pub fn destroy_state_machine_layer_component(component: &mut StateMachineLayerComponent) {
-    // Vec<Box<_>> performs the source destructor's ordered deletion.
+    // The arena owns each event occurrence; clearing the ordered handle list
+    // performs the source destructor's relationship teardown.
     component.events_mut().clear();
 }
 
 pub struct StateMachineLayerComponentImporter {
-    component: NonNull<StateMachineLayerComponent>,
+    component: CoreHandle,
 }
 
 impl StateMachineLayerComponentImporter {
-    pub fn new(component: NonNull<StateMachineLayerComponent>) -> Self {
+    pub fn new(component: CoreHandle) -> Self {
         Self { component }
     }
-    pub fn add_fire_event(&mut self, fire_event: Box<StateMachineFireAction>) {
-        unsafe { self.component.as_mut().events_mut().push(fire_event) };
+    pub fn add_fire_event(&mut self, fire_event: CoreHandle) {
+        self.component
+            .with_mut(|component| component.state_machine_layer_component_add_event(fire_event))
+            .filter(|added| *added)
+            .expect("imported component derives from StateMachineLayerComponent");
     }
-    pub fn add_listener_action(&mut self, action: Box<ListenerAction>) {
-        unsafe { self.component.as_mut().listener_actions_mut().push(action) };
+    pub fn add_listener_action(&mut self, action: CoreHandle) {
+        self.component
+            .with_mut(|component| {
+                component.state_machine_layer_component_add_listener_action(action)
+            })
+            .filter(|added| *added)
+            .expect("imported component derives from StateMachineLayerComponent");
     }
 }
 

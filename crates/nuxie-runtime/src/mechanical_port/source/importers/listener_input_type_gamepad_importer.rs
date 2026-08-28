@@ -1,25 +1,22 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::{
-    animation::listener_types::listener_input_type_gamepad::ListenerInputTypeGamepad,
-    status_code::StatusCode,
-};
+use crate::mechanical_port::source::{core::CoreHandle, status_code::StatusCode};
 
 use super::import_stack::ImportStackObject;
 
 pub struct ListenerInputTypeGamepadImporter {
-    listener_input_type_gamepad: NonNull<ListenerInputTypeGamepad>,
+    listener_input_type_gamepad: CoreHandle,
 }
 
 impl ListenerInputTypeGamepadImporter {
-    pub fn new(listener: NonNull<ListenerInputTypeGamepad>) -> Self {
+    pub fn new(listener: CoreHandle) -> Self {
         Self {
             listener_input_type_gamepad: listener,
         }
     }
 
-    pub fn listener_input_type_gamepad(&self) -> NonNull<ListenerInputTypeGamepad> {
-        self.listener_input_type_gamepad
+    pub fn listener_input_type_gamepad(&self) -> CoreHandle {
+        self.listener_input_type_gamepad.clone()
     }
 }
 

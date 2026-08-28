@@ -1,22 +1,24 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::animation::{
-    keyed_object::KeyedObject, keyed_property::KeyedProperty,
-};
+use crate::mechanical_port::source::{animation::keyed_object::KeyedObject, core::CoreHandle};
 
 use super::import_stack::ImportStackObject;
 
 pub struct KeyedObjectImporter {
-    keyed_object: NonNull<KeyedObject>,
+    keyed_object: CoreHandle,
 }
 
 impl KeyedObjectImporter {
-    pub fn new(keyed_object: NonNull<KeyedObject>) -> Self {
+    pub fn new(keyed_object: CoreHandle) -> Self {
         Self { keyed_object }
     }
 
-    pub fn add_keyed_property(&mut self, property: Box<KeyedProperty>) {
-        unsafe { self.keyed_object.as_mut().add_keyed_property(property) };
+    pub fn add_keyed_property(&mut self, property: CoreHandle) {
+        self.keyed_object
+            .with_downcast_mut::<KeyedObject, _>(|keyed_object| {
+                keyed_object.add_keyed_property(property)
+            })
+            .expect("KeyedObjectImporter retains a KeyedObject");
     }
 }
 

@@ -1,21 +1,21 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::data_bind::data_bind_path::DataBindPath;
+use crate::mechanical_port::source::core::CoreHandle;
 
 use super::import_stack::ImportStackObject;
 
 pub struct DataBindPathImporter {
-    data_bind_path: Option<NonNull<DataBindPath>>,
+    data_bind_path: Option<CoreHandle>,
 }
 
 impl DataBindPathImporter {
-    pub fn new(path: NonNull<DataBindPath>) -> Self {
+    pub fn new(path: CoreHandle) -> Self {
         Self {
             data_bind_path: Some(path),
         }
     }
 
-    pub fn claim(&mut self) -> Option<NonNull<DataBindPath>> {
+    pub fn claim(&mut self) -> Option<CoreHandle> {
         self.data_bind_path.take()
     }
 }

@@ -1,21 +1,21 @@
-use std::{any::Any, ptr::NonNull};
+use std::any::Any;
 
-use crate::mechanical_port::source::data_bind::bindable_property::BindableProperty;
+use crate::mechanical_port::source::core::CoreHandle;
 
 use super::import_stack::ImportStackObject;
 
 pub struct BindablePropertyImporter {
-    bindable_property: Option<NonNull<BindableProperty>>,
+    bindable_property: Option<CoreHandle>,
 }
 
 impl BindablePropertyImporter {
-    pub fn new(bindable_property: NonNull<BindableProperty>) -> Self {
+    pub fn new(bindable_property: CoreHandle) -> Self {
         Self {
             bindable_property: Some(bindable_property),
         }
     }
 
-    pub fn bindable_property(&mut self) -> Option<NonNull<BindableProperty>> {
+    pub fn bindable_property(&mut self) -> Option<CoreHandle> {
         self.bindable_property.take()
     }
 }

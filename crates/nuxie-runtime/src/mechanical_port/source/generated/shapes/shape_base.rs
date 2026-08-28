@@ -37,6 +37,17 @@ impl ShapeBase {
         cloned.base.copy(self, callbacks);
         cloned
     }
+    pub fn copy(&mut self, object: &Self, callbacks: &mut impl ShapeBaseCallbacks) {
+        self.base.copy(&object.base, callbacks);
+    }
+    pub fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut BinaryReader<'_>,
+        callbacks: &mut impl ShapeBaseCallbacks,
+    ) -> bool {
+        self.base.deserialize(property_key, reader, callbacks)
+    }
 }
 
 impl std::ops::Deref for ShapeBase {

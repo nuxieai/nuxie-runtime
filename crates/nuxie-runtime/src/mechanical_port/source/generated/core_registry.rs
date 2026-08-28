@@ -4,6 +4,17 @@ use crate::mechanical_port::source::core::{
     CoreHandle, field_types::core_callback_type::CallbackData,
 };
 
+pub fn data_bind_update_view_model_handle(target: &CoreHandle, value: Option<CoreHandle>) -> bool {
+    if target
+        .with(|target| target.as_view_model_instance_view_model().is_some())
+        .unwrap_or(false)
+    {
+        crate::mechanical_port::source::viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel::update_view_model_occurrence(target, value)
+    } else {
+        false
+    }
+}
+
 pub fn drawable_draw_handle(
     handle: &CoreHandle,
     renderer: &mut crate::mechanical_port::source::renderer::Renderer,
@@ -1275,6 +1286,16 @@ pub trait DataConverterCapability {
 }
 
 pub trait CoreCapabilities: Any {
+    fn data_bind_update_list(&mut self, _list: &[CoreHandle]) -> bool {
+        false
+    }
+    fn artboard_referencer_update_artboard(&mut self, value: Option<CoreHandle>) -> bool {
+        let Some(nested) = self.as_nested_artboard_mut() else {
+            return false;
+        };
+        nested.update_artboard(value);
+        true
+    }
     fn as_intrinsically_sizeable_mut(
         &mut self,
     ) -> Option<
@@ -49699,6 +49720,10 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_i
 impl CoreCapabilities
     for crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList
 {
+    fn data_bind_update_list(&mut self, list: &[CoreHandle]) -> bool {
+        self.update_list(Some(list));
+        true
+    }
     fn as_view_model_instance_list(
         &self,
     ) -> Option<
@@ -51220,6 +51245,10 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
 impl CoreCapabilities
     for crate::mechanical_port::source::artboard_component_list::ArtboardComponentList
 {
+    fn data_bind_update_list(&mut self, list: &[CoreHandle]) -> bool {
+        self.update_list(list);
+        true
+    }
     fn component_collapse_post(&mut self, value: bool) -> bool {
         self.component_container_collapse_post(value);
         self.component_transform_collapse_post();
@@ -52398,6 +52427,10 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_number::S
 impl CoreCapabilities
     for crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout
 {
+    fn artboard_referencer_update_artboard(&mut self, value: Option<CoreHandle>) -> bool {
+        self.update_artboard(value);
+        true
+    }
     fn as_nested_artboard(
         &self,
     ) -> Option<&crate::mechanical_port::source::nested_artboard::NestedArtboard> {
@@ -58246,6 +58279,10 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellip
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::list_path::ListPath {
+    fn data_bind_update_list(&mut self, list: &[CoreHandle]) -> bool {
+        self.update_list(list);
+        true
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::path::Path::build_dependencies(
             &mut self.base.base.base.base,
@@ -63041,6 +63078,10 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
+    fn data_bind_update_list(&mut self, list: &[CoreHandle]) -> bool {
+        self.update_list(Some(list));
+        true
+    }
     fn drawable_hit_test(
         &mut self,
         info: &mut crate::mechanical_port::source::hit_info::HitInfo,
@@ -63726,6 +63767,10 @@ impl CoreCapabilities for crate::mechanical_port::source::inputs::semantic_input
 impl CoreCapabilities
     for crate::mechanical_port::source::script_input_artboard::ScriptInputArtboard
 {
+    fn artboard_referencer_update_artboard(&mut self, value: Option<CoreHandle>) -> bool {
+        self.update_artboard(value);
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,

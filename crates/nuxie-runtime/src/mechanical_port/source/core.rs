@@ -67,6 +67,11 @@ pub trait CoreObject: CoreRegistryObject + Any {
 
     fn set_core_handle(&mut self, handle: CoreHandle) {
         self.core_mut().set_handle(handle.clone());
+        if let Some(artboard) = self.as_artboard_mut() {
+            artboard.data_bind_container.set_owner(handle.clone());
+        } else if let Some(converter) = self.as_data_converter_mut() {
+            converter.data_binds.set_owner(handle.clone());
+        }
         if let Some(referencer) = self.as_file_asset_referencer_mut() {
             referencer.attach(handle);
         }

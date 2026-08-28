@@ -787,7 +787,7 @@ impl File {
         artboard: Option<CoreHandle>,
     ) -> Option<RuntimeArtboardInstanceHandle> {
         let source = artboard?;
-        let instance = source.with_downcast::<Artboard, _>(Artboard::instance)??;
+        let instance = Artboard::instance_from_handle(&source)?;
         instance.with_artboard_mut(|instance| {
             instance.set_scripting_vm(self.scripting_vm.clone());
             instance.set_file(Some(self.self_handle.clone()));

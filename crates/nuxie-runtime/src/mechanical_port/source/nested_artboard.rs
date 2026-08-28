@@ -206,9 +206,7 @@ impl NestedArtboard {
     fn nest(&mut self, artboard: CoreHandle) {
         self.artboard_referencer
             .set_referenced_artboard(Some(artboard.clone()));
-        let instance = artboard
-            .with_downcast::<Artboard, _>(Artboard::instance_handle)
-            .flatten();
+        let instance = Artboard::instance_from_handle(&artboard);
         let Some(instance) = instance else {
             return;
         };
@@ -259,10 +257,8 @@ impl NestedArtboard {
         };
         let primary = self.active_view_model_instance.clone();
         let list = build_vmi_list(primary, &self.global_view_model_instances);
-        let nested_data_context = instance.with_artboard_mut(|instance| {
-            instance.bind_view_model_instances(list, self.data_context.clone());
-            instance.data_context()
-        });
+        instance.bind_view_model_instances(list, self.data_context.clone());
+        let nested_data_context = instance.data_context();
         for animation in &self.nested_animations {
             animation.with_downcast_mut::<NestedStateMachine, _>(|state_machine| {
                 if let Some(context) = nested_data_context.clone() {
@@ -349,9 +345,7 @@ impl NestedArtboard {
         }
 
         if let Some(artboard) = artboard {
-            let artboard_instance = artboard
-                .with_downcast::<Artboard, _>(Artboard::instance_handle)
-                .flatten();
+            let artboard_instance = Artboard::instance_from_handle(&artboard);
             let state_machine_count = artboard
                 .with_downcast::<Artboard, _>(Artboard::state_machine_count)
                 .unwrap_or_default();
@@ -825,19 +819,17 @@ impl NestedArtboard {
         }
         if !self.global_view_model_instances.is_empty() {
             let list = build_vmi_list(None, &self.global_view_model_instances);
-            let nested_context = instance.with_artboard_mut(|instance| {
-                instance.bind_view_model_instances(list, value);
-                instance.data_context()
-            });
+            instance.bind_view_model_instances(list, value);
+            let nested_context = instance.data_context();
             self.set_nested_state_machine_context(nested_context);
             return;
         }
 
         match value.clone() {
             Some(context) => {
-                instance.with_artboard_mut(|instance| instance.internal_data_context(context));
+                instance.internal_data_context(context);
             }
-            None => instance.with_artboard_mut(ArtboardInstance::clear_data_context),
+            None => instance.clear_data_context(),
         }
         self.set_nested_state_machine_context(value);
     }
@@ -862,22 +854,20 @@ impl NestedArtboard {
             return;
         };
         let parent = self.data_context.clone();
-        instance.with_artboard_mut(|instance| {
-            instance.bind_view_model_instance_with_parent(Some(view_model_instance), parent)
-        });
+        instance.bind_view_model_instance_with_parent(Some(view_model_instance), parent);
     }
 
     pub fn clear_data_context(&mut self) {
         let Some(instance) = self.instance.as_ref() else {
             return;
         };
-        instance.with_artboard_mut(ArtboardInstance::clear_data_context);
+        instance.clear_data_context();
         self.set_nested_state_machine_context(None);
     }
 
     pub fn unbind(&mut self) {
         if let Some(instance) = self.instance.as_ref() {
-            instance.with_artboard_mut(ArtboardInstance::unbind);
+            instance.unbind();
         }
     }
 
@@ -903,29 +893,25 @@ impl NestedArtboard {
         if let Some(active) = self.active_view_model_instance.clone() {
             let primary = Some(active);
             let list = build_vmi_list(primary, &self.global_view_model_instances);
-            let nested_context = instance.with_artboard_mut(|instance| {
-                instance.bind_view_model_instances(list, parent);
-                instance.data_context()
-            });
+            instance.bind_view_model_instances(list, parent);
+            let nested_context = instance.data_context();
             self.set_nested_state_machine_context(nested_context);
             return;
         }
 
         if view_model_instance.is_some() || !self.global_view_model_instances.is_empty() {
             let list = build_vmi_list(view_model_instance, &self.global_view_model_instances);
-            let nested_context = instance.with_artboard_mut(|instance| {
-                instance.bind_view_model_instances(list, parent);
-                instance.data_context()
-            });
+            instance.bind_view_model_instances(list, parent);
+            let nested_context = instance.data_context();
             self.set_nested_state_machine_context(nested_context);
             return;
         }
 
         match parent.clone() {
             Some(context) => {
-                instance.with_artboard_mut(|instance| instance.internal_data_context(context));
+                instance.internal_data_context(context);
             }
-            None => instance.with_artboard_mut(ArtboardInstance::clear_data_context),
+            None => instance.clear_data_context(),
         }
         self.set_nested_state_machine_context(parent);
     }

@@ -183,11 +183,11 @@ impl LinearAnimationInstance {
         self.direction = 1.0
     }
     pub fn apply(&self, mix: f32) {
-        let _ = self.artboard.with_artboard_mut(|artboard| {
+        if let Some(artboard) = self.artboard.upgrade() {
             self.with_animation_mut(|animation| {
-                animation.apply(artboard, self.time, mix, Some(self))
-            })
-        });
+                artboard.apply_linear_animation(animation, self.time, mix, Some(self));
+            });
+        }
     }
     pub fn did_loop(&self) -> bool {
         self.did_loop
@@ -568,9 +568,12 @@ impl KeyFrameValueContext for LinearAnimationInstance {
 impl KeyedCallbackReporter for LinearAnimationInstance {
     fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32) {
         let artboard = self.artboard.clone();
-        let _ = artboard.with_artboard_mut(|artboard| {
-            artboard.report_keyed_callback(object_id, property_key, elapsed_seconds, self)
-        });
+        if let Some(target) = artboard
+            .with_artboard(|artboard| artboard.base.resolve_handle(object_id))
+            .flatten()
+        {
+            crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_callback_handle(&target, property_key as i32, crate::mechanical_port::source::core::field_types::core_callback_type::CallbackData::new(Some(self), elapsed_seconds));
+        }
     }
 }
 impl Clone for LinearAnimationInstance {

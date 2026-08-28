@@ -422,9 +422,7 @@ impl ArtboardComponentList {
     }
 
     fn create_artboard(&mut self, list_item: CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
-        self.find_artboard(&list_item)?
-            .with_downcast::<Artboard, _>(Artboard::instance_handle)
-            .flatten()
+        Artboard::instance_from_handle(&self.find_artboard(&list_item)?)
     }
 
     fn create_state_machine_instance(
@@ -1275,14 +1273,10 @@ impl ArtboardComponentList {
 
     pub fn internal_data_context(&mut self, value: RuntimeDataContextHandle) {
         for artboard in self.artboard_instances_map.values() {
-            artboard.with_artboard_mut(|artboard| {
-                if let Some(data_context) = artboard.base.data_context() {
-                    data_context.with_context_mut(|context| {
-                        context.set_parent(Some(value.clone()));
-                    });
-                    artboard.internal_data_context(data_context);
-                }
-            });
+            if let Some(data_context) = artboard.data_context() {
+                data_context.with_context_mut(|context| context.set_parent(Some(value.clone())));
+                artboard.internal_data_context(data_context);
+            }
         }
         for state_machine in self.state_machines_map.values() {
             state_machine.with_instance_mut(|state_machine| {
@@ -1447,11 +1441,9 @@ impl ArtboardComponentList {
             .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
             .flatten();
         if let Some(view_model_instance) = view_model_instance {
-            artboard_instance.with_artboard_mut(|artboard_instance| {
-                artboard_instance
-                    .bind_view_model_instance_handle_with_parent(view_model_instance, data_context);
-                artboard_instance.update_data_binds_default();
-            });
+            artboard_instance
+                .bind_view_model_instance_with_parent(Some(view_model_instance), data_context);
+            artboard_instance.update_data_binds(true);
             self.invalidate_ordered_list_indices_cache();
         }
     }

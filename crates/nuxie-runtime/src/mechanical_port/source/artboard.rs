@@ -1291,6 +1291,13 @@ impl Artboard {
         }
     }
 
+    pub fn advance_scripted_view_models_handle(root: &CoreHandle) -> bool {
+        let vm = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.scripting_vm.clone())
+            .flatten();
+        vm.is_some_and(|vm| vm.with_vm_mut(|vm| vm.advance_detached_view_models()))
+    }
+
     pub fn internal_draw_canvases_handle(root: &CoreHandle) {
         let (objects, hosts, factory) = root
             .with_downcast::<Artboard, _>(|artboard| {
@@ -1777,6 +1784,15 @@ impl Artboard {
             resettable.with_mut(|resettable| {
                 resettable.resetting_component_reset();
             });
+        }
+    }
+
+    pub fn reset_handle(root: &CoreHandle) {
+        let resettables = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.resettables.clone())
+            .expect("live Artboard reset");
+        for resettable in resettables {
+            resettable.with_mut(|resettable| resettable.resetting_component_reset());
         }
     }
 

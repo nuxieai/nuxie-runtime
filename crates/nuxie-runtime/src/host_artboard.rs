@@ -274,6 +274,14 @@ impl ArtboardInstance {
         );
         Ok(machine.advance_and_apply(seconds))
     }
+    pub fn advance_state_machine_instances(
+        &mut self,
+        machines: &mut [StateMachineInstance],
+        seconds: f32,
+        advance_view_models: bool,
+    ) -> Result<crate::host_state_machine::RuntimeStateMachineAdvanceResult> {
+        StateMachineInstance::advance_and_apply_batch(self, machines, seconds, advance_view_models)
+    }
     pub fn draw(&self, renderer: &mut dyn Renderer) {
         self.native.draw(renderer);
     }

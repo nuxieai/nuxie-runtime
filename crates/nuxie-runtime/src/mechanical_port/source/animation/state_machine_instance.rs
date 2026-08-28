@@ -3608,6 +3608,14 @@ impl StateMachineInstance {
         self.events_applied_during_loop.len() + self.reported_events.len()
     }
 
+    pub fn has_pending_listener_view_model_reports(&self) -> bool {
+        !self.reported_listener_view_models.is_empty()
+    }
+
+    pub fn has_pending_event_reports(&self) -> bool {
+        !self.reported_events.is_empty()
+    }
+
     pub fn reported_event_at(&self, mut index: usize) -> EventReport {
         if index < self.events_applied_during_loop.len() {
             return self.events_applied_during_loop[index].clone();

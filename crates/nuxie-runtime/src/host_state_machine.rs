@@ -1,14 +1,16 @@
 //! Host projections over the translated state-machine occurrence.
 
 use crate::mechanical_port::source::{
+    advance_flags::AdvanceFlags,
     animation::{
         state_machine::StateMachine,
         state_machine_instance::{EventReport, RuntimeStateMachineInstanceHandle},
     },
-    artboard::RuntimeArtboardInstanceHandle,
+    artboard::{Artboard, RuntimeArtboardInstanceHandle},
     core::CoreHandle,
     file::RuntimeFileHandle,
     generated::{component_base::ComponentBase, core_registry::CoreRegistry},
+    input::focus_manager::FocusManager,
     math::vec2d::Vec2D,
     open_url_event::OpenUrlEvent,
 };
@@ -268,7 +270,70 @@ fn event_properties(event: &CoreHandle) -> Vec<RuntimeEventProperty> {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RuntimeStateMachineAdvanceResult {
+    pub changed: bool,
     pub keep_going: bool,
+}
+
+/// The public multi-machine adaptation of StateMachineInstance::advanceAndApply.
+/// Machine callbacks run with neither the Artboard nor another machine borrowed.
+fn advance_native_state_machines(
+    artboard: &RuntimeArtboardInstanceHandle,
+    machines: &[RuntimeStateMachineInstanceHandle],
+    seconds: f32,
+    advance_view_models: bool,
+) -> RuntimeStateMachineAdvanceResult {
+    let root = artboard.core_handle();
+    let frame_flags = AdvanceFlags(
+        AdvanceFlags::IS_ROOT.0
+            | AdvanceFlags::ANIMATE.0
+            | AdvanceFlags::ADVANCE_NESTED.0
+            | AdvanceFlags::NEW_FRAME.0,
+    );
+    let settle_flags = AdvanceFlags(
+        AdvanceFlags::IS_ROOT.0 | AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0,
+    );
+    let mut changed = false;
+    for machine in machines {
+        changed |= machine.with_instance_mut(|machine| machine.advance(seconds, true));
+        let focus = machine.with_instance(|machine| machine.focus_manager());
+        focus.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
+    }
+    changed |= artboard.advance_internal(seconds, frame_flags);
+    for _ in 0..5 {
+        changed |= artboard.update_pass(true);
+        for machine in machines {
+            let transitioned = machine.with_instance_mut(|machine| machine.try_change_state());
+            if transitioned {
+                machine.with_instance_mut(|machine| machine.advance(0.0, false));
+                changed = true;
+            }
+        }
+        changed |= artboard.advance_internal(0.0, settle_flags);
+        if advance_view_models {
+            for machine in machines {
+                machine.with_instance_mut(|machine| machine.advanced_data_context());
+            }
+        }
+        Artboard::reset_handle(&root);
+        if !artboard.with_artboard(|artboard| artboard.base.has_component_dirt()) {
+            break;
+        }
+    }
+    // Upstream ignores the detached-VM bool in its continuation result. Keep
+    // the host's separate mutation report without adding a continuation term.
+    let mut keep_going = changed || seconds == 0.0;
+    if advance_view_models {
+        changed |= Artboard::advance_scripted_view_models_handle(&root);
+    }
+    keep_going |= machines.iter().any(|machine| {
+        machine.with_instance(|machine| {
+            machine.has_pending_event_reports() || machine.has_pending_listener_view_model_reports()
+        })
+    });
+    RuntimeStateMachineAdvanceResult {
+        changed,
+        keep_going,
+    }
 }
 
 pub struct StateMachineInstance {
@@ -410,17 +475,56 @@ impl StateMachineInstance {
             .with_instance_mut(|machine| machine.advance(seconds, new_frame))
     }
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
-        self.native
-            .with_instance_mut(|machine| machine.advance_and_apply(seconds))
+        self.advance_and_apply_view_models(seconds, true)
     }
     pub fn advance_and_apply_view_models(
         &mut self,
         seconds: f32,
         advance_view_models: bool,
     ) -> bool {
-        self.native.with_instance_mut(|machine| {
-            machine.advance_and_apply_view_models(seconds, advance_view_models)
-        })
+        advance_native_state_machines(
+            &self.artboard,
+            std::slice::from_ref(&self.native),
+            seconds,
+            advance_view_models,
+        )
+        .keep_going
+    }
+
+    pub fn advance_and_apply_batch(
+        artboard: &mut crate::host_artboard::ArtboardInstance,
+        machines: &mut [Self],
+        seconds: f32,
+        advance_view_models: bool,
+    ) -> anyhow::Result<RuntimeStateMachineAdvanceResult> {
+        anyhow::ensure!(
+            !machines.is_empty(),
+            "state-machine advance requires at least one machine"
+        );
+        let root = artboard.native_handle();
+        let root_identity = root.core_handle();
+        let mut native = Vec::with_capacity(machines.len());
+        for machine in machines {
+            anyhow::ensure!(
+                machine.artboard.core_handle() == root_identity,
+                "state machine belongs to another Artboard"
+            );
+            anyhow::ensure!(
+                !native
+                    .iter()
+                    .any(|previous: &RuntimeStateMachineInstanceHandle| previous
+                        .downgrade()
+                        .ptr_eq(&machine.native.downgrade())),
+                "a state-machine occurrence cannot appear twice in one batch"
+            );
+            native.push(machine.native.clone());
+        }
+        Ok(advance_native_state_machines(
+            &root,
+            &native,
+            seconds,
+            advance_view_models,
+        ))
     }
     pub fn needs_advance(&self) -> bool {
         self.native.with_instance(|machine| machine.needs_advance())

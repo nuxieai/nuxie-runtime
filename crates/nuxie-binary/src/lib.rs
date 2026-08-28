@@ -2,6 +2,9 @@ use anyhow::{Context, Result, bail};
 mod artboard_list_map_rule;
 mod binary_data_reader;
 mod binary_writer;
+mod runtime_file_writer;
+
+pub use runtime_file_writer::encode_runtime_file;
 
 #[cfg(feature = "test-support")]
 mod legacy_test_support;

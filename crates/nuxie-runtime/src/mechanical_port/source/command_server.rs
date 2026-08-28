@@ -8,13 +8,12 @@ use std::{
 
 use crate::mechanical_port::source::{
     animation::state_machine_instance::StateMachineInstance,
-    artboard::ArtboardInstance,
     assets::{
         audio_asset::AudioAsset, font_asset::FontAsset, image_asset::ImageAsset,
         script_asset::ScriptAsset,
     },
     audio::audio_source::{AudioSource, AudioSourceRef},
-    bindable_artboard::BindableArtboard,
+    bindable_artboard::RuntimeBindableArtboardHandle,
     command_queue::{
         ArtboardHandle, AudioSourceHandle, BlobAssetHandle, Command, CommandQueue,
         CommandServerCallback, CommandServerDrawCallback, DataType, DrawKey, FileHandle,
@@ -23,7 +22,7 @@ use crate::mechanical_port::source::{
     },
     core::CoreHandle,
     factory::RuntimeFactoryHandle,
-    file::File,
+    file::{File, RuntimeFileHandle},
     file_asset_loader::{FileAssetLoader, FileAssetLoaderRef},
     generated::core_registry::CoreCapabilities,
     hit_result::HitResult,
@@ -33,7 +32,9 @@ use crate::mechanical_port::source::{
     semantic::semantic_snapshot::{SemanticsBoundsUpdate, SemanticsDiff, SemanticsDiffNode},
     text::font_hb::HbFont,
     text_engine::FontRef,
-    viewmodel::runtime::viewmodel_instance_runtime::ViewModelInstanceRuntime,
+    viewmodel::runtime::viewmodel_instance_runtime::{
+        RuntimeViewModelInstanceHandle, ViewModelInstanceRuntime,
+    },
 };
 use crate::RuntimeBlobAsset;
 
@@ -200,11 +201,11 @@ pub struct CommandServer {
     property_subscriptions: Vec<Subscription>,
     file_dependencies: HashMap<FileHandle, Vec<ArtboardHandle>>,
     artboard_dependencies: HashMap<ArtboardHandle, Vec<StateMachineHandle>>,
-    files: HashMap<FileHandle, Rc<File>>,
+    files: HashMap<FileHandle, RuntimeFileHandle>,
     assets: Rc<std::cell::RefCell<CommandAssetRegistry>>,
     blobs: HashMap<BlobAssetHandle, Arc<RuntimeBlobAsset>>,
-    artboards: HashMap<ArtboardHandle, Rc<BindableArtboard>>,
-    view_models: HashMap<ViewModelInstanceHandle, Rc<ViewModelInstanceRuntime>>,
+    artboards: HashMap<ArtboardHandle, RuntimeBindableArtboardHandle>,
+    view_models: HashMap<ViewModelInstanceHandle, RuntimeViewModelInstanceHandle>,
     state_machines: Mutex<HashMap<StateMachineHandle, Arc<SynchronizedStateMachine>>>,
     unique_draws: HashMap<DrawKey, CommandServerDrawCallback>,
 }
@@ -244,9 +245,9 @@ impl CommandServer {
         assert_eq!(thread::current().id(), self.thread_id);
     }
 
-    pub fn get_file(&self, handle: FileHandle) -> Option<&File> {
+    pub fn get_file(&self, handle: FileHandle) -> Option<RuntimeFileHandle> {
         self.assert_thread();
-        self.files.get(&handle).map(Rc::as_ref)
+        self.files.get(&handle).cloned()
     }
 
     pub fn get_image(&self, handle: RenderImageHandle) -> Option<RenderImageRef> {
@@ -269,14 +270,32 @@ impl CommandServer {
         self.blobs.get(&handle).cloned()
     }
 
-    pub fn get_artboard_instance(&self, handle: ArtboardHandle) -> Option<&mut ArtboardInstance> {
+    pub fn with_artboard_instance<R>(
+        &self,
+        handle: ArtboardHandle,
+        use_artboard: impl FnOnce(&crate::mechanical_port::source::artboard::ArtboardInstance) -> R,
+    ) -> Option<R> {
         self.assert_thread();
         self.artboards
             .get(&handle)
-            .and_then(|value| value.artboard())
+            .map(|value| value.with_artboard(use_artboard))
     }
 
-    pub fn get_bindable_artboard(&self, handle: ArtboardHandle) -> Option<Rc<BindableArtboard>> {
+    pub fn with_artboard_instance_mut<R>(
+        &self,
+        handle: ArtboardHandle,
+        use_artboard: impl FnOnce(&mut crate::mechanical_port::source::artboard::ArtboardInstance) -> R,
+    ) -> Option<R> {
+        self.assert_thread();
+        self.artboards
+            .get(&handle)
+            .map(|value| value.with_artboard_mut(use_artboard))
+    }
+
+    pub fn get_bindable_artboard(
+        &self,
+        handle: ArtboardHandle,
+    ) -> Option<RuntimeBindableArtboardHandle> {
         self.assert_thread();
         self.artboards.get(&handle).cloned()
     }
@@ -305,9 +324,9 @@ impl CommandServer {
     pub fn get_view_model_instance(
         &self,
         handle: ViewModelInstanceHandle,
-    ) -> Option<&ViewModelInstanceRuntime> {
+    ) -> Option<RuntimeViewModelInstanceHandle> {
         self.assert_thread();
-        self.view_models.get(&handle).map(Rc::as_ref)
+        self.view_models.get(&handle).cloned()
     }
 
     pub fn get_handle_for_instance(
@@ -481,21 +500,36 @@ impl CommandServer {
                 DataType::AssetImage | DataType::AssetBlob | DataType::Trigger | DataType::List => {
                     ViewModelInstanceValue::None
                 }
-                DataType::Boolean => {
-                    ViewModelInstanceValue::Bool(property.as_boolean().unwrap().value())
-                }
-                DataType::Color => {
-                    ViewModelInstanceValue::Color(property.as_color().unwrap().value())
-                }
-                DataType::Number => {
-                    ViewModelInstanceValue::Number(property.as_number().unwrap().value())
-                }
-                DataType::Enum => {
-                    ViewModelInstanceValue::String(property.as_enum().unwrap().value().to_owned())
-                }
-                DataType::String => {
-                    ViewModelInstanceValue::String(property.as_string().unwrap().value().to_owned())
-                }
+                DataType::Boolean => ViewModelInstanceValue::Bool(
+                    view_model
+                        .property_boolean(&data.meta_data.name)
+                        .expect("a subscribed Boolean property keeps its authored type")
+                        .value(),
+                ),
+                DataType::Color => ViewModelInstanceValue::Color(
+                    view_model
+                        .property_color(&data.meta_data.name)
+                        .expect("a subscribed Color property keeps its authored type")
+                        .value(),
+                ),
+                DataType::Number => ViewModelInstanceValue::Number(
+                    view_model
+                        .property_number(&data.meta_data.name)
+                        .expect("a subscribed Number property keeps its authored type")
+                        .value(),
+                ),
+                DataType::Enum => ViewModelInstanceValue::String(
+                    view_model
+                        .property_enum(&data.meta_data.name)
+                        .expect("a subscribed Enum property keeps its authored type")
+                        .value(),
+                ),
+                DataType::String => ViewModelInstanceValue::String(
+                    view_model
+                        .property_string(&data.meta_data.name)
+                        .expect("a subscribed String property keeps its authored type")
+                        .value(),
+                ),
                 other => {
                     self.error(
                         handle,
@@ -561,29 +595,12 @@ impl CommandServer {
                     let bytes = self.command_queue.pop_bytes();
                     let scripting_factory = self.command_queue.pop_scripting_context_factory();
                     lock.unlock();
-                    let file = {
-                        let mut context = scripting_factory
-                            .and_then(|factory_fn| factory_fn(self.factory()))
-                            .unwrap_or_else(|| {
-                                Box::new(crate::mechanical_port::source::lua::CPPRuntimeScriptingContext::new(
-                                    self.factory(),
-                                ))
-                            });
-                        context.set_render_context(self.factory());
-                        let vm =
-                            crate::mechanical_port::source::lua::scripting_vm::ScriptingVM::new(
-                                context,
-                            );
-                        File::import_with_vm(
-                            &bytes,
-                            self.factory(),
-                            self.file_asset_loader.as_mut(),
-                            &vm,
-                        )
-                    };
-                    #[cfg(any())]
-                    let file =
-                        File::import(&bytes, self.factory(), self.file_asset_loader.as_mut());
+                    let loader = FileAssetLoaderRef::new(Box::new(CommandFileAssetLoader {
+                        assets: self.assets.clone(),
+                        internal_loader: self.internal_loader.clone(),
+                    }));
+                    let vm = scripting_factory.and_then(|make_vm| make_vm(self.factory()));
+                    let file = File::import_with_loader(&bytes, self.factory(), None, loader, vm);
                     if let Some(file) = file {
                         self.file_dependencies.insert(handle, Vec::new());
                         self.files.insert(handle, file);
@@ -849,11 +866,13 @@ impl CommandServer {
                     let name = self.command_queue.pop_name();
                     lock.unlock();
                     if let Some(file) = self.get_file(file_handle) {
-                        let artboard = if name.is_empty() {
-                            file.bindable_artboard_default()
-                        } else {
-                            file.bindable_artboard_named(&name)
-                        };
+                        let artboard = file.with_file(|file| {
+                            if name.is_empty() {
+                                file.bindable_artboard_default()
+                            } else {
+                                file.bindable_artboard_named(&name)
+                            }
+                        });
                         if let Some(artboard) = artboard {
                             self.artboard_dependencies.insert(handle, Vec::new());
                             self.artboards.insert(handle, artboard);
@@ -885,10 +904,13 @@ impl CommandServer {
                     let height = self.command_queue.read();
                     let request_id = self.command_queue.read();
                     lock.unlock();
-                    if let Some(artboard) = self.get_artboard_instance(handle) {
-                        artboard.set_width(width);
-                        artboard.set_height(height);
-                    } else {
+                    if self
+                        .with_artboard_instance_mut(handle, |artboard| {
+                            artboard.set_width(width);
+                            artboard.set_height(height);
+                        })
+                        .is_none()
+                    {
                         self.error(
                             handle,
                             request_id,
@@ -901,9 +923,10 @@ impl CommandServer {
                     let handle = self.command_queue.read();
                     let request_id = self.command_queue.read();
                     lock.unlock();
-                    if let Some(artboard) = self.get_artboard_instance(handle) {
-                        artboard.reset_size();
-                    } else {
+                    if self
+                        .with_artboard_instance_mut(handle, |artboard| artboard.reset_size())
+                        .is_none()
+                    {
                         self.error(
                             handle,
                             request_id,
@@ -919,9 +942,10 @@ impl CommandServer {
                     let volume = self.command_queue.read();
                     let request_id = self.command_queue.read();
                     lock.unlock();
-                    if let Some(artboard) = self.get_artboard_instance(handle) {
-                        artboard.set_volume(volume);
-                    } else {
+                    if self
+                        .with_artboard_instance_mut(handle, |artboard| artboard.set_volume(volume))
+                        .is_none()
+                    {
                         self.error(
                             handle,
                             request_id,
@@ -936,12 +960,14 @@ impl CommandServer {
                     let handle = self.command_queue.read();
                     let request_id = self.command_queue.read();
                     lock.unlock();
-                    if let Some(artboard) = self.get_artboard_instance(handle) {
+                    if let Some(volume) =
+                        self.with_artboard_instance(handle, |artboard| artboard.volume())
+                    {
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::ArtboardVolumeReceived);
                         messages.write(handle);
                         messages.write(request_id);
-                        messages.write(artboard.volume());
+                        messages.write(volume);
                     } else {
                         self.error(
                             handle,
@@ -999,14 +1025,17 @@ impl CommandServer {
                         continue;
                     };
                     let view_model = if let Some(artboard_handle) = artboard_handle {
-                        if let Some(artboard) = self.get_artboard_instance(artboard_handle) {
-                            file.default_artboard_view_model(artboard)
+                        if let Some(source) = self
+                            .get_bindable_artboard(artboard_handle)
+                            .and_then(|artboard| artboard.source_artboard_handle())
+                        {
+                            file.with_file(|file| file.default_artboard_view_model(Some(source)))
                         } else {
                             self.error(file_handle, request_id, Message::FileError, format!("ArtboardInstance {artboard_handle} Not found when trying to create default view model{}", if uses_instance_name { " with view model instance" } else { " with blank view model instance" }));
                             None
                         }
                     } else {
-                        file.view_model_by_name(&view_model_name)
+                        file.with_file(|file| file.view_model_by_name(&view_model_name))
                     };
                     let Some(view_model) = view_model else {
                         self.error(
@@ -1018,9 +1047,9 @@ impl CommandServer {
                         continue;
                     };
                     let instance = match instance_name {
-                        Some(name) if name.is_empty() => view_model.create_default_instance(),
+                        Some(name) if name.is_empty() => Some(view_model.create_default_instance()),
                         Some(name) => view_model.create_instance_from_name(&name),
-                        None => view_model.create_instance(),
+                        None => Some(view_model.create_instance()),
                     };
                     if let Some(instance) = instance {
                         self.view_models.insert(view_handle, instance);
@@ -1079,7 +1108,7 @@ impl CommandServer {
                             } else if let Some(view_model) =
                                 self.get_view_model_instance(view_handle)
                             {
-                                property.remove_instance(view_model);
+                                property.remove_instance(&view_model);
                             }
                         } else {
                             self.error(root_handle, request_id, Message::ViewModelError, format!("failed to find list on view model isntance for remove at path {path}"));
@@ -1234,12 +1263,14 @@ impl CommandServer {
                     let request_id = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    if let Some(artboard) = self.get_artboard_instance(artboard_handle) {
-                        let instance = if name.is_empty() {
-                            artboard.default_state_machine()
-                        } else {
-                            artboard.state_machine_named(&name)
-                        };
+                    if let Some(artboard) = self.get_bindable_artboard(artboard_handle) {
+                        let instance = artboard.with_artboard_mut(|artboard| {
+                            if name.is_empty() {
+                                artboard.default_state_machine()
+                            } else {
+                                artboard.state_machine_named(&name)
+                            }
+                        });
                         if let Some(instance) = instance {
                             self.state_machines
                                 .lock()
@@ -1531,14 +1562,18 @@ impl CommandServer {
                     let request_id = self.command_queue.read();
                     lock.unlock();
                     if let Some(file) = self.get_file(handle) {
-                        let values = file.artboards();
+                        let values = file.with_file(|file| {
+                            (0..file.artboard_count())
+                                .map(|index| file.artboard_name_at(index))
+                                .collect::<Vec<_>>()
+                        });
                         let mut m = self.command_queue.message_lock();
                         m.write(Message::ArtboardsListed);
                         m.write(handle);
                         m.write(request_id);
                         m.write(values.len());
                         for value in values {
-                            m.write_name(value.name().to_owned());
+                            m.write_name(value);
                         }
                     } else {
                         self.error(
@@ -1554,19 +1589,38 @@ impl CommandServer {
                     let request_id = self.command_queue.read();
                     lock.unlock();
                     if let Some(file) = self.get_file(handle) {
-                        let values = file.assets();
+                        let values = file.with_file(|file| {
+                            file.assets()
+                                .iter()
+                                .filter_map(|value| {
+                                    let core_type = value.core_type()?;
+                                    value.with(|value| {
+                                        let asset = CoreCapabilities::as_file_asset(value)?;
+                                        Some((
+                                            asset.file_asset_base().asset_id(),
+                                            core_type,
+                                            asset.file_asset_base().name().to_owned(),
+                                            asset.file_asset_base().cdn_uuid_str(),
+                                            asset.file_asset_base().cdn_base_url().to_owned(),
+                                            asset.file_extension().to_owned(),
+                                        ))
+                                    })?
+                                })
+                                .collect::<Vec<_>>()
+                        });
                         let mut m = self.command_queue.message_lock();
                         m.write(Message::FileAssetsListed);
                         m.write(handle);
                         m.write(request_id);
                         m.write(values.len());
-                        for value in values {
-                            m.write(value.asset_id());
-                            m.write(value.core_type());
-                            m.write_name(value.name().into());
-                            m.write_name(value.cdn_uuid_str());
-                            m.write_name(value.cdn_base_url());
-                            m.write_name(value.file_extension());
+                        for (asset_id, core_type, name, cdn_uuid, cdn_base_url, extension) in values
+                        {
+                            m.write(asset_id);
+                            m.write(core_type);
+                            m.write_name(name);
+                            m.write_name(cdn_uuid);
+                            m.write_name(cdn_base_url);
+                            m.write_name(extension);
                         }
                     } else {
                         self.error(
@@ -1614,18 +1668,39 @@ impl CommandServer {
                     let request_id = self.command_queue.read();
                     lock.unlock();
                     if let Some(file) = self.get_file(handle) {
-                        let values = file.enums();
+                        let values = file.with_file(|file| {
+                            file.enums()
+                                .iter()
+                                .filter_map(|value| {
+                                    value.with_downcast::<
+                                        crate::mechanical_port::source::viewmodel::data_enum::DataEnum,
+                                        _,
+                                    >(|value| {
+                                        let enumerants = value
+                                            .values()
+                                            .iter()
+                                            .filter_map(|enumerant| {
+                                                enumerant.with_downcast::<
+                                                    crate::mechanical_port::source::viewmodel::data_enum_value::DataEnumValue,
+                                                    _,
+                                                >(|enumerant| enumerant.base.key().to_owned())
+                                            })
+                                            .collect::<Vec<_>>();
+                                        (value.enum_name().to_owned(), enumerants)
+                                    })
+                                })
+                                .collect::<Vec<_>>()
+                        });
                         let mut m = self.command_queue.message_lock();
                         m.write(Message::ViewModelEnumsListed);
                         m.write(handle);
                         m.write(request_id);
                         m.write(values.len());
-                        for value in values {
-                            m.write_name(value.enum_name().into());
-                            let enumerants = value.values();
+                        for (name, enumerants) in values {
+                            m.write_name(name);
                             m.write(enumerants.len());
                             for enumerant in enumerants {
-                                m.write_name(enumerant.key().into());
+                                m.write_name(enumerant);
                             }
                         }
                     } else {
@@ -1641,15 +1716,18 @@ impl CommandServer {
                     let handle = self.command_queue.read();
                     let request_id = self.command_queue.read();
                     lock.unlock();
-                    if let Some(artboard) = self.get_artboard_instance(handle) {
-                        let count = artboard.state_machine_count();
+                    if let Some(names) = self.with_artboard_instance(handle, |artboard| {
+                        (0..artboard.state_machine_count())
+                            .map(|index| artboard.state_machine_name_at(index))
+                            .collect::<Vec<_>>()
+                    }) {
                         let mut m = self.command_queue.message_lock();
                         m.write(Message::StateMachinesListed);
                         m.write(handle);
                         m.write(request_id);
-                        m.write(count);
-                        for index in 0..count {
-                            m.write_name(artboard.state_machine_name_at(index));
+                        m.write(names.len());
+                        for name in names {
+                            m.write_name(name);
                         }
                     } else {
                         self.error(handle, request_id, Message::ArtboardError, format!("Invalid artboard handle {handle} when getting list of state machines"));
@@ -1659,13 +1737,15 @@ impl CommandServer {
                     let handle = self.command_queue.read();
                     let request_id = self.command_queue.read();
                     lock.unlock();
-                    if let Some(artboard) = self.get_artboard_instance(handle) {
+                    if let Some((width, height)) = self.with_artboard_instance(handle, |artboard| {
+                        (artboard.width(), artboard.height())
+                    }) {
                         let mut m = self.command_queue.message_lock();
                         m.write(Message::ArtboardSizeReceived);
                         m.write(handle);
                         m.write(request_id);
-                        m.write(artboard.width());
-                        m.write(artboard.height());
+                        m.write(width);
+                        m.write(height);
                     } else {
                         self.error(
                             handle,
@@ -1680,19 +1760,21 @@ impl CommandServer {
                     let artboard_handle = self.command_queue.read();
                     let request_id = self.command_queue.read();
                     lock.unlock();
-                    if let Some(artboard) = self.get_artboard_instance(artboard_handle) {
+                    if let Some(source) = self
+                        .get_bindable_artboard(artboard_handle)
+                        .and_then(|artboard| artboard.source_artboard_handle())
+                    {
                         if let Some(file) = self.get_file(file_handle) {
-                            if let Some(model) = file.default_artboard_view_model(artboard) {
-                                if let Some(instance) = model.create_default_instance() {
-                                    let mut m = self.command_queue.message_lock();
-                                    m.write(Message::DefaultViewModelReceived);
-                                    m.write(artboard_handle);
-                                    m.write(request_id);
-                                    m.write_name(model.name().into());
-                                    m.write_name(instance.name().into());
-                                } else {
-                                    self.error(artboard_handle, request_id, Message::ArtboardError, "Could not find default view model instance for artboard when getting default view model info".into());
-                                }
+                            if let Some(model) = file
+                                .with_file(|file| file.default_artboard_view_model(Some(source)))
+                            {
+                                let instance = model.create_default_instance();
+                                let mut m = self.command_queue.message_lock();
+                                m.write(Message::DefaultViewModelReceived);
+                                m.write(artboard_handle);
+                                m.write(request_id);
+                                m.write_name(model.name());
+                                m.write_name(instance.name());
                             } else {
                                 self.error(artboard_handle, request_id, Message::ArtboardError, "Could not find default view model for artboard when getting default view model info".into());
                             }
@@ -1708,14 +1790,19 @@ impl CommandServer {
                     let request_id = self.command_queue.read();
                     lock.unlock();
                     if let Some(file) = self.get_file(handle) {
-                        let count = file.view_model_count();
+                        let names = file.with_file(|file| {
+                            (0..file.view_model_count())
+                                .filter_map(|index| file.view_model_by_index(index))
+                                .map(|model| model.name())
+                                .collect::<Vec<_>>()
+                        });
                         let mut m = self.command_queue.message_lock();
                         m.write(Message::ViewModelsListed);
                         m.write(handle);
                         m.write(request_id);
-                        m.write(count);
-                        for index in 0..count {
-                            m.write_name(file.view_model_by_index(index).unwrap().name().into());
+                        m.write(names.len());
+                        for name in names {
+                            m.write_name(name);
                         }
                     } else {
                         self.error(
@@ -1733,7 +1820,7 @@ impl CommandServer {
                     let request_id = self.command_queue.read();
                     lock.unlock();
                     if let Some(file) = self.get_file(handle) {
-                        let names = file.global_view_model_names();
+                        let names = file.with_file(File::global_view_model_names);
                         let mut m = self.command_queue.message_lock();
                         m.write(Message::GlobalViewModelNamesListed);
                         m.write(handle);
@@ -1752,7 +1839,9 @@ impl CommandServer {
                     let model_name = self.command_queue.pop_name();
                     lock.unlock();
                     if let Some(file) = self.get_file(handle) {
-                        if let Some(model) = file.view_model_by_name(&model_name) {
+                        if let Some(model) =
+                            file.with_file(|file| file.view_model_by_name(&model_name))
+                        {
                             let names = model.instance_names();
                             let mut m = self.command_queue.message_lock();
                             m.write(Message::ViewModelInstanceNamesListed);
@@ -1776,8 +1865,10 @@ impl CommandServer {
                     let model_name = self.command_queue.pop_name();
                     lock.unlock();
                     if let Some(file) = self.get_file(handle) {
-                        if let Some(model) = file.view_model_by_name(&model_name) {
-                            let instance = model.create_default_instance().unwrap();
+                        if let Some(model) =
+                            file.with_file(|file| file.view_model_by_name(&model_name))
+                        {
+                            let instance = model.create_default_instance();
                             let properties = model.properties();
                             let mut m = self.command_queue.message_lock();
                             m.write(Message::ViewModelPropertiesListed);
@@ -1799,11 +1890,10 @@ impl CommandServer {
                                 }
                                 if property.data_type == DataType::ViewModel {
                                     m.write_name(
-                                        instance
-                                            .property_view_model(&property.name)
-                                            .map_or("Unkown".into(), |value| {
-                                                value.instance().view_model().name().into()
-                                            }),
+                                        instance.property_view_model(&property.name).map_or_else(
+                                            || "Unkown".into(),
+                                            |value| value.view_model_name(),
+                                        ),
                                     );
                                 }
                             }

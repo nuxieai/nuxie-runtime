@@ -12,9 +12,16 @@ use crate::{
 pub struct DecodedRuntimeMetadata {
     pub header: RuntimeHeader,
     pub objects: Vec<Option<RuntimeObject>>,
+    decoded_property_count: usize,
 }
 
 impl DecodedRuntimeMetadata {
+    /// Includes header entries and every decoded wire property, even when a
+    /// duplicate, skipped, or unknown record did not retain that property.
+    pub fn decoded_property_count(&self) -> usize {
+        self.decoded_property_count
+    }
+
     /// Attach outcomes observed from the real source importer. The metadata
     /// parser does not decide which objects or assets the runtime accepts.
     pub fn into_runtime_descriptor(
@@ -70,5 +77,32 @@ pub fn read_runtime_metadata(
                 .with_context(|| format!("reading object {id}"))?,
         );
     }
-    Ok(DecodedRuntimeMetadata { header, objects })
+    Ok(DecodedRuntimeMetadata {
+        header,
+        objects,
+        decoded_property_count: budget.consumed,
+    })
+}
+
+/// Continue the same host allocation budget when the actual source importer
+/// identifies a ManifestAsset payload. This does not infer asset ownership or
+/// run the superseded binary import lifecycle. The host calls it before the
+/// native manifest decoder allocates entries; malformed payloads remain soft
+/// failures, while a configured allocation-limit violation is an error.
+pub fn validate_manifest_payload_budget(
+    bytes: &[u8],
+    maximum: Option<usize>,
+    consumed: &mut usize,
+) -> Result<()> {
+    if maximum.is_none() {
+        return Ok(());
+    }
+    let mut budget = RuntimePropertyBudget {
+        maximum,
+        consumed: *consumed,
+    };
+    let result =
+        crate::assets::manifest_asset::validate_cpp_manifest_asset_with_budget(bytes, &mut budget);
+    *consumed = budget.consumed;
+    result
 }

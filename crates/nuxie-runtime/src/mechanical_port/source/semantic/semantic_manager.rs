@@ -12,6 +12,30 @@ use std::{
     rc::Rc,
 };
 
+#[derive(Clone)]
+pub struct RuntimeSemanticManagerHandle(Rc<RefCell<SemanticManager>>);
+
+impl RuntimeSemanticManagerHandle {
+    pub fn new(manager: SemanticManager) -> Self {
+        Self(Rc::new(RefCell::new(manager)))
+    }
+
+    pub fn with_semantic_manager<R>(&self, use_manager: impl FnOnce(&SemanticManager) -> R) -> R {
+        use_manager(&self.0.borrow())
+    }
+
+    pub fn with_semantic_manager_mut<R>(
+        &self,
+        use_manager: impl FnOnce(&mut SemanticManager) -> R,
+    ) -> R {
+        use_manager(&mut self.0.borrow_mut())
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 pub struct SemanticManager {
     dirt: SemanticDirt,
     last_diff: SemanticsDiff,

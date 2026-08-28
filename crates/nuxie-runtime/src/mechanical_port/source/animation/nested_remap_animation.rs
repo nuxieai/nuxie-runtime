@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    animation::nested_animation::NestedAnimationBehavior,
     artboard::RuntimeArtboardInstanceWeakHandle,
     generated::animation::nested_remap_animation_base::NestedRemapAnimationBase,
 };
@@ -6,6 +7,20 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub struct NestedRemapAnimation {
     pub base: NestedRemapAnimationBase,
+}
+
+impl NestedAnimationBehavior for NestedRemapAnimation {
+    fn advance(&mut self, elapsed_seconds: f32, new_frame: bool) -> bool {
+        Self::advance(self, elapsed_seconds, new_frame)
+    }
+
+    fn initialize_animation(&mut self, artboard: RuntimeArtboardInstanceWeakHandle) {
+        Self::initialize_animation(self, artboard);
+    }
+
+    fn release_dependencies(&mut self) {
+        self.base.base.release_dependencies();
+    }
 }
 
 impl NestedRemapAnimation {

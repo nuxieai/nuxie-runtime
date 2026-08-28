@@ -1,27 +1,30 @@
-use std::{ptr::NonNull, rc::Rc};
+use std::rc::Rc;
 
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::AdvancingComponent,
     animation::{
-        listener_invocation::ListenerInvocation, nested_animation::NestedAnimation,
-        nested_state_machine::NestedStateMachine,
+        listener_invocation::ListenerInvocation, nested_state_machine::NestedStateMachine,
     },
-    artboard::{Artboard, ArtboardInstance},
+    artboard::{
+        Artboard, ArtboardInstance, RuntimeArtboardInstanceHandle,
+        RuntimeArtboardInstanceWeakHandle,
+    },
+    artboard_host::ArtboardHost,
     artboard_referencer::{ArtboardReferencer, ArtboardReferencerBehavior, CoreArtboardReferencer},
-    component::Component,
     component_dirt::ComponentDirt,
     component_origin::ComponentOrigin,
-    core::Core,
+    core::{Core, CoreHandle},
+    core_context::CoreContext,
     data_bind::{data_bind::DataBind, data_context::DataContext},
     data_bind_path_referencer::DataBindPathReferencer,
-    file::File,
+    file::RuntimeFileWeakHandle,
     focus_data::FocusData,
     generated::nested_artboard_base::{NestedArtboardBase, NestedArtboardBaseCallbacks},
     hit_info::HitInfo,
     importers::{backboard_importer::BackboardImporter, import_stack::ImportStack},
     input::{
-        focus_manager::FocusManager,
+        focus_manager::RuntimeFocusManagerHandle,
         focus_node::{FocusNode, FocusNodeRef},
         focusable::{Focusable, Key, KeyModifiers},
     },
@@ -31,21 +34,12 @@ use crate::mechanical_port::source::{
     },
     math::{mat2d::Mat2D, vec2d::Vec2D},
     nested_artboard_host_flags::NestedArtboardHostFlags,
-    refcnt::{Rcp, ref_rcp},
     renderer::Renderer,
-    scripted::scripted_drawable::ScriptedDrawable,
     status_code::StatusCode,
     view_model_type::ViewModelType,
-    viewmodel::{
-        viewmodel_instance::ViewModelInstance,
-        viewmodel_instance_artboard::ViewModelInstanceArtboard,
-    },
 };
 
-fn build_vmi_list(
-    primary: Option<Rcp<ViewModelInstance>>,
-    globals: &[Rcp<ViewModelInstance>],
-) -> Vec<Rcp<ViewModelInstance>> {
+fn build_vmi_list(primary: Option<CoreHandle>, globals: &[CoreHandle]) -> Vec<CoreHandle> {
     let mut list = Vec::with_capacity(usize::from(primary.is_some()) + globals.len());
     if let Some(primary) = primary {
         list.push(primary);
@@ -60,15 +54,16 @@ pub struct NestedArtboard {
     pub base: NestedArtboardBase,
     pub artboard_referencer: ArtboardReferencer,
     pub data_bind_path_referencer: DataBindPathReferencer,
-    instance: Option<Box<ArtboardInstance>>,
-    bound_nested_state_machine: Option<Box<NestedStateMachine>>,
-    nested_animations: Vec<NonNull<NestedAnimation>>,
-    file: Option<NonNull<File>>,
-    view_model_instance: Option<Rcp<ViewModelInstance>>,
+    instance: Option<RuntimeArtboardInstanceHandle>,
+    bound_nested_state_machine: Option<CoreHandle>,
+    nested_animations: Vec<CoreHandle>,
+    file: RuntimeFileWeakHandle,
+    view_model_instance: Option<CoreHandle>,
     data_context: Option<Rc<DataContext>>,
-    active_view_model_instance: Option<NonNull<ViewModelInstance>>,
-    global_view_model_instances: Vec<Rcp<ViewModelInstance>>,
+    active_view_model_instance: Option<CoreHandle>,
+    global_view_model_instances: Vec<CoreHandle>,
     focus_scope: Option<FocusNodeRef>,
+    focus_scope_manager: Option<RuntimeFocusManagerHandle>,
     cumulated_seconds: f32,
     owns_active_vmi: bool,
     host_flags: NestedArtboardHostFlags,
@@ -83,12 +78,13 @@ impl Default for NestedArtboard {
             instance: None,
             bound_nested_state_machine: None,
             nested_animations: Vec::new(),
-            file: None,
+            file: RuntimeFileWeakHandle::default(),
             view_model_instance: None,
             data_context: None,
             active_view_model_instance: None,
             global_view_model_instances: Vec::new(),
             focus_scope: None,
+            focus_scope_manager: None,
             cumulated_seconds: 0.0,
             owns_active_vmi: false,
             host_flags: NestedArtboardHostFlags::NONE,
@@ -100,35 +96,41 @@ impl Drop for NestedArtboard {
     fn drop(&mut self) {
         // Release dependencies before the mounted instance is destroyed. The
         // nested animations' state-machine instances refer to that instance.
-        for animation in &mut self.nested_animations {
-            unsafe { animation.as_mut() }.release_dependencies();
+        for animation in &self.nested_animations {
+            animation.with_mut(|animation| {
+                animation.nested_animation_release_dependencies();
+            });
         }
-        if let Some(state_machine) = &mut self.bound_nested_state_machine {
-            state_machine.release_dependencies();
+        if let Some(state_machine) = &self.bound_nested_state_machine {
+            state_machine.with_mut(|state_machine| {
+                state_machine.nested_animation_release_dependencies();
+            });
         }
 
         self.view_model_instance = None;
-        // The active stateful child is borrowed. A dynamically created bound
-        // instance is owned here and must release its explicit reference.
-        if self.owns_active_vmi {
-            if let Some(mut instance) = self.active_view_model_instance {
-                unsafe { instance.as_mut() }.base.unref();
-            }
-        }
         self.active_view_model_instance = None;
         self.owns_active_vmi = false;
         self.global_view_model_instances.clear();
 
         // The structural scope persists across swaps, but not host teardown.
         if let Some(scope) = self.focus_scope.take() {
-            if let Some(manager) = scope.borrow().manager() {
-                manager.borrow_mut().remove_child(scope.clone());
+            if let Some(manager) = self.focus_scope_manager.take() {
+                manager.with_focus_manager_mut(|manager| manager.remove_child(&scope));
             }
         }
     }
 }
 
 impl NestedArtboard {
+    pub(crate) fn take_artboard_instance(&mut self) -> Option<RuntimeArtboardInstanceHandle> {
+        self.instance.take()
+    }
+
+    pub(crate) fn restore_artboard_instance(&mut self, instance: RuntimeArtboardInstanceHandle) {
+        debug_assert!(self.instance.is_none());
+        self.instance = Some(instance);
+    }
+
     pub const TYPE_KEY: u16 = NestedArtboardBase::TYPE_KEY;
 
     pub fn new() -> Self {
@@ -145,28 +147,39 @@ impl NestedArtboard {
         place_scope: bool,
         force_rebuild: bool,
     ) {
-        let Some(mut parent_artboard) = self.artboard() else {
+        let Some(parent_artboard) = self.parent_artboard_handle() else {
             return;
         };
-        let Some(parent_focus_manager) = (unsafe { parent_artboard.as_mut() }).focus_manager()
+        let Some(parent_focus_manager) = parent_artboard
+            .with_downcast::<Artboard, _>(Artboard::focus_manager_handle)
+            .flatten()
         else {
             return;
         };
 
-        self.register_focus_scope(parent_focus_manager, fallback_parent.clone(), place_scope);
+        self.register_focus_scope(
+            parent_focus_manager.clone(),
+            fallback_parent.clone(),
+            place_scope,
+        );
 
-        let Some(nested_instance) = self.artboard_instance_ptr(0) else {
+        let Some(nested_instance) = self.artboard_instance_handle(0) else {
             return;
         };
-        let already_shared =
-            unsafe { nested_instance.as_ref() }.focus_manager() == Some(parent_focus_manager);
+        let already_shared = nested_instance.with_artboard(|instance| {
+            instance
+                .focus_manager_handle()
+                .is_some_and(|manager| manager.ptr_eq(&parent_focus_manager))
+        });
         if !force_rebuild && already_shared {
             return;
         }
 
-        unsafe { nested_instance.as_mut() }.cleanup_focus_tree();
+        nested_instance.with_artboard_mut(|instance| instance.cleanup_focus_tree());
         let parent = self.focus_scope.clone().or(fallback_parent);
-        unsafe { nested_instance.as_mut() }.build_focus_tree(parent_focus_manager, parent);
+        nested_instance.with_artboard_mut(|instance| {
+            instance.build_focus_tree(Some(parent_focus_manager), parent)
+        });
     }
 
     pub fn sync_nested_focus_tree_default(&mut self, fallback_parent: Option<FocusNodeRef>) {
@@ -175,55 +188,61 @@ impl NestedArtboard {
 
     pub fn clone_core(&self) -> Box<NestedArtboard> {
         let mut nested_artboard = Box::new(NestedArtboard::default());
+        nested_artboard
+            .data_bind_path_referencer
+            .copy_data_bind_path(&self.data_bind_path_referencer);
         // NestedArtboardBase::clone copies the generated base before this
         // owner restores its host-specific state.
         nested_artboard.base.copy_from_source(&self.base);
-        nested_artboard.file = self.file;
+        nested_artboard.file = self.file.clone();
         if self.is_artboard_data_bound() {
             nested_artboard.set_host_flag(NestedArtboardHostFlags::ARTBOARD_DATA_BOUND);
         }
         let Some(referenced) = self.artboard_referencer.referenced_artboard() else {
             return nested_artboard;
         };
-        let instance = unsafe { referenced.as_ref() }.instance();
-        nested_artboard.referenced_artboard(instance.map(NonNull::from));
+        nested_artboard.referenced_artboard(Some(referenced));
         nested_artboard
     }
 
-    fn nest(&mut self, artboard: NonNull<Artboard>) {
+    fn nest(&mut self, artboard: CoreHandle) {
         self.artboard_referencer
-            .set_referenced_artboard(Some(artboard));
-        if !unsafe { artboard.as_ref() }.is_instance() {
-            // Import only marks the source artboard; it is instanced later.
+            .set_referenced_artboard(Some(artboard.clone()));
+        let instance = artboard
+            .with_downcast::<Artboard, _>(Artboard::instance_handle)
+            .flatten();
+        let Some(instance) = instance else {
             return;
-        }
-
-        unsafe { artboard.as_mut() }.set_frame_origin(false);
-        unsafe { artboard.as_mut() }.set_host_opacity(self.render_opacity());
-        let volume = unsafe { artboard.as_ref() }.volume();
-        unsafe { artboard.as_mut() }.set_volume(volume);
-        self.instance = None;
-        if unsafe { artboard.as_ref() }.is_instance() {
-            self.instance = Some(unsafe { Box::from_raw(artboard.as_ptr().cast()) });
-        }
-        unsafe { artboard.as_mut() }.set_host(Some(NonNull::from(&mut *self)));
+        };
+        let host = crate::mechanical_port::source::core::CoreObject::core(self).handle();
+        let opacity = self.render_opacity();
+        instance.with_artboard_mut(|instance| {
+            instance.set_frame_origin(false);
+            instance.set_host_opacity(opacity);
+            let volume = instance.volume();
+            instance.set_volume(volume);
+            instance.set_host_handle(host);
+        });
+        self.instance = Some(instance);
         self.apply_origin_override();
     }
 
     pub fn apply_origin_override(&mut self) {
-        let Some(mut referenced) = self.artboard_referencer.referenced_artboard() else {
+        let Some(instance) = self.instance.clone() else {
             return;
         };
-        if !unsafe { referenced.as_ref() }.is_instance() {
-            return;
-        }
         for child in self.children() {
-            let Some(origin) = unsafe { child.as_ref() }.as_component_origin() else {
-                continue;
-            };
-            unsafe { referenced.as_mut() }.set_origin_x(unsafe { origin.as_ref() }.base.origin_x());
-            unsafe { referenced.as_mut() }.set_origin_y(unsafe { origin.as_ref() }.base.origin_y());
-            return;
+            if let Some((origin_x, origin_y)) =
+                child.with_downcast::<ComponentOrigin, _>(|origin| {
+                    (origin.base.origin_x(), origin.base.origin_y())
+                })
+            {
+                instance.with_artboard_mut(|instance| {
+                    instance.set_origin_x(origin_x);
+                    instance.set_origin_y(origin_y);
+                });
+                return;
+            }
         }
     }
 
@@ -237,86 +256,93 @@ impl NestedArtboard {
 
     fn bind_stateful(&mut self) {
         self.clear_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING);
-        let Some(instance) = self.instance.as_deref_mut() else {
+        let Some(instance) = self.instance.clone() else {
             return;
         };
-        let primary = self
-            .active_view_model_instance
-            .map(|instance| unsafe { ref_rcp(instance.as_ptr()) });
+        let primary = self.active_view_model_instance.clone();
         let list = build_vmi_list(primary, &self.global_view_model_instances);
-        instance.bind_view_model_instances(list, self.data_context.clone());
-        let nested_data_context = instance.data_context();
-        for animation in &mut self.nested_animations {
-            if let Some(state_machine) = unsafe { animation.as_mut() }.as_nested_state_machine_mut()
-            {
-                state_machine.set_data_context(nested_data_context.clone());
-            }
+        let nested_data_context = instance.with_artboard_mut(|instance| {
+            instance.bind_view_model_instances(list, self.data_context.clone());
+            instance.data_context()
+        });
+        for animation in &self.nested_animations {
+            animation.with_downcast_mut::<NestedStateMachine, _>(|state_machine| {
+                if let Some(context) = nested_data_context.clone() {
+                    state_machine.data_context(context);
+                }
+            });
         }
     }
 
-    fn find_stateful_child_vmi(&self) -> Option<NonNull<ViewModelInstance>> {
+    fn find_stateful_child_vmi(&self) -> Option<CoreHandle> {
         for child in self.children() {
-            if let Some(instance) = unsafe { child.as_ref() }.as_view_model_instance() {
-                return Some(instance);
+            if child
+                .with(|child| child.as_view_model_instance().is_some())
+                .unwrap_or(false)
+            {
+                return Some(child.clone());
             }
         }
         None
     }
 
-    fn set_active_view_model_instance(
-        &mut self,
-        instance: Option<NonNull<ViewModelInstance>>,
-        owns: bool,
-    ) {
+    fn set_active_view_model_instance(&mut self, instance: Option<CoreHandle>, owns: bool) {
         if self.active_view_model_instance == instance {
             return;
-        }
-        if self.owns_active_vmi {
-            if let Some(mut current) = self.active_view_model_instance {
-                unsafe { current.as_mut() }.base.unref();
-            }
         }
         self.active_view_model_instance = instance;
         self.owns_active_vmi = owns;
     }
 
     fn clear_nested_animations(&mut self) {
-        for animation in &mut self.nested_animations {
-            unsafe { animation.as_mut() }.release_dependencies();
+        for animation in &self.nested_animations {
+            animation.with_mut(|animation| {
+                animation.nested_animation_release_dependencies();
+            });
         }
         self.nested_animations.clear();
     }
 
-    pub fn update_artboard(
-        &mut self,
-        view_model_instance_artboard: Option<NonNull<ViewModelInstanceArtboard>>,
-    ) {
+    pub fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>) {
         self.set_host_flag(NestedArtboardHostFlags::ARTBOARD_DATA_BOUND);
 
-        let explicit_null = view_model_instance_artboard.is_some_and(|property| unsafe {
-            property.as_ref().asset().is_none() && property.as_ref().base.property_value() == -1
-        });
-        let parent = self.artboard();
+        let explicit_null = view_model_instance_artboard
+            .as_ref()
+            .is_some_and(|property| {
+                property
+                    .with(|property| {
+                        property
+                            .as_view_model_instance_artboard()
+                            .is_some_and(|property| {
+                                property.asset().is_none() && property.base.property_value() == -1
+                            })
+                    })
+                    .unwrap_or(false)
+            });
+        let parent = self.parent_artboard_handle();
         let artboard = if explicit_null {
             None
         } else {
-            ArtboardReferencer::find_artboard(view_model_instance_artboard, parent, self.file)
+            ArtboardReferencer::find_artboard(
+                view_model_instance_artboard.clone(),
+                parent,
+                Some(self.file.clone()),
+            )
         };
         if !explicit_null && artboard.is_none() {
             return;
         }
 
-        if let Some(instance) = self.artboard_instance_ptr(0) {
-            unsafe { instance.as_mut() }.cleanup_focus_tree();
+        if let Some(instance) = self.artboard_instance_handle(0) {
+            instance.with_artboard_mut(|instance| instance.cleanup_focus_tree());
         }
         self.clear_data_context();
         self.clear_nested_animations();
         self.bound_nested_state_machine = None;
 
         if explicit_null {
-            if self.artboard_referencer.referenced_artboard().is_some() && self.instance.is_none() {
-                let mut referenced = self.artboard_referencer.referenced_artboard().unwrap();
-                unsafe { referenced.as_mut() }.set_host(None);
+            if let Some(instance) = self.instance.as_ref() {
+                instance.with_artboard_mut(|instance| instance.set_host_handle(None));
             }
             self.artboard_referencer.set_referenced_artboard(None);
             self.instance = None;
@@ -324,64 +350,86 @@ impl NestedArtboard {
             return;
         }
 
-        if let Some(mut artboard) = artboard {
-            let mut artboard_instance = unsafe { artboard.as_mut() }.instance();
-            if unsafe { artboard.as_ref() }.state_machine_count() > 0 {
-                let mut nested_state_machine = Box::<NestedStateMachine>::default();
-                nested_state_machine.base.set_animation_id(0);
-                nested_state_machine
-                    .initialize_animation(artboard_instance.as_deref_mut().map(NonNull::from));
-                let pointer = NonNull::from(nested_state_machine.as_mut()).cast();
-                self.add_nested_animation(pointer);
+        if let Some(artboard) = artboard {
+            let artboard_instance = artboard
+                .with_downcast::<Artboard, _>(Artboard::instance_handle)
+                .flatten();
+            let state_machine_count = artboard
+                .with_downcast::<Artboard, _>(Artboard::state_machine_count)
+                .unwrap_or_default();
+            if state_machine_count > 0
+                && let Some(owner) =
+                    crate::mechanical_port::source::core::CoreObject::core(self).handle()
+                && let Some(nested_state_machine) =
+                    owner.insert_sibling(NestedStateMachine::default())
+            {
+                nested_state_machine.with_downcast_mut::<NestedStateMachine, _>(|machine| {
+                    machine.base.set_animation_id(0)
+                });
+                if let Some(instance) = artboard_instance.as_ref() {
+                    nested_state_machine.with_mut(|machine| {
+                        machine.nested_animation_initialize(instance.downgrade());
+                    });
+                }
+                self.add_nested_animation_handle(nested_state_machine.clone());
                 self.bound_nested_state_machine = Some(nested_state_machine);
             }
-            let instance_pointer = artboard_instance
-                .take()
-                .map(Box::into_raw)
-                .and_then(NonNull::new)
-                .map(NonNull::cast);
-            self.referenced_artboard(instance_pointer);
+            self.instance = artboard_instance;
+            self.artboard_referencer
+                .set_referenced_artboard(Some(artboard.clone()));
 
             if self.base.is_stateful() {
                 let stateful_child = self.find_stateful_child_vmi();
-                if stateful_child.is_some_and(|child| unsafe {
-                    child.as_ref().base.view_model_id() == artboard.as_ref().base.view_model_id()
-                }) {
+                let artboard_view_model_id = artboard
+                    .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id())
+                    .unwrap_or_default();
+                let same_view_model = |instance: &CoreHandle| {
+                    instance
+                        .with(|instance| {
+                            instance.as_view_model_instance().is_some_and(|instance| {
+                                instance.base.view_model_id() == artboard_view_model_id
+                            })
+                        })
+                        .unwrap_or(false)
+                };
+                if stateful_child.as_ref().is_some_and(&same_view_model) {
                     self.set_active_view_model_instance(stateful_child, false);
                 } else if self.owns_active_vmi
                     && self
                         .active_view_model_instance
-                        .is_some_and(|active| unsafe {
-                            active.as_ref().base.view_model_id()
-                                == artboard.as_ref().base.view_model_id()
-                        })
+                        .as_ref()
+                        .is_some_and(&same_view_model)
                 {
                     // Reuse the already-owned binding for the same ViewModel.
                 } else {
-                    let view_model = self.file.and_then(|file| unsafe {
-                        file.as_ref()
-                            .view_model(artboard.as_ref().base.view_model_id())
-                    });
-                    let bound = match (self.file, view_model) {
-                        (Some(mut file), Some(view_model)) => unsafe {
-                            file.as_mut().create_default_view_model_instance(view_model)
-                        },
-                        _ => None,
-                    };
-                    let raw = bound
-                        .map(|mut instance| NonNull::new(instance.release()))
+                    let bound = self
+                        .file
+                        .with_file(|file| {
+                            file.default_artboard_view_model(Some(artboard.clone()))
+                                .map(|model| model.create_default_instance().instance())
+                        })
+                        .flatten()
                         .flatten();
-                    self.set_active_view_model_instance(raw, raw.is_some());
-                    if let (Some(mut file), Some(raw)) = (self.file, raw) {
-                        unsafe { file.as_mut() }.complete_view_model_properties(raw);
+                    self.set_active_view_model_instance(bound.clone(), bound.is_some());
+                    if let Some(bound) = bound {
+                        self.file
+                            .with_file(|file| file.complete_view_model_properties(&bound));
                     }
                 }
             } else {
                 self.set_active_view_model_instance(None, false);
             }
 
-            let property = view_model_instance_artboard.unwrap();
-            if let Some(bound) = unsafe { property.as_ref() }.bound_view_model_instance() {
+            let bound = view_model_instance_artboard.as_ref().and_then(|property| {
+                property
+                    .with(|property| {
+                        property
+                            .as_view_model_instance_artboard()
+                            .and_then(|property| property.bound_view_model_instance())
+                    })
+                    .flatten()
+            });
+            if let Some(bound) = bound {
                 self.bind_view_model_instance(Some(bound), self.data_context.clone());
             } else if self.try_schedule_bind_stateful() {
                 self.bind_stateful();
@@ -396,21 +444,26 @@ impl NestedArtboard {
             // Upstream marks the host fully dirty after a runtime swap.
             self.add_dirt(ComponentDirt::FILTHY);
 
-            let parent_focus_manager = self
-                .artboard()
-                .and_then(|parent| unsafe { parent.as_ref() }.focus_manager());
+            let parent_focus_manager = self.parent_artboard_handle().and_then(|parent| {
+                parent
+                    .with_downcast::<Artboard, _>(Artboard::focus_manager_handle)
+                    .flatten()
+            });
             if let (Some(parent_focus_manager), Some(state_machine)) = (
                 parent_focus_manager,
-                self.bound_nested_state_machine.as_deref_mut(),
+                self.bound_nested_state_machine.as_ref(),
             ) {
-                if let Some(instance) = state_machine.state_machine_instance() {
-                    if unsafe { instance.as_ref() }.focus_manager() != Some(parent_focus_manager) {
-                        unsafe { instance.as_mut() }
-                            .set_external_focus_manager(parent_focus_manager);
+                state_machine.with_downcast_mut::<NestedStateMachine, _>(|state_machine| {
+                    if let Some(instance) = state_machine.state_machine_instance() {
+                        instance.with_instance_mut(|instance| {
+                            instance.set_external_focus_manager_handle(parent_focus_manager)
+                        });
                     }
-                }
+                });
             }
-            let fallback = FocusData::find_closest_focus_node(NonNull::from(&mut *self).cast());
+            let fallback = crate::mechanical_port::source::core::CoreObject::core(self)
+                .handle()
+                .and_then(FocusData::find_closest_focus_node_handle);
             self.sync_nested_focus_tree(fallback, false, true);
         }
     }
@@ -419,14 +472,25 @@ impl NestedArtboard {
         if self.is_artboard_data_bound() {
             return;
         }
-        let Some(parent) = self.artboard() else {
+        let Some(parent) = self.parent_artboard_handle() else {
             return;
         };
-        for data_bind in unsafe { parent.as_ref() }.data_binds() {
-            let data_bind = unsafe { data_bind.as_ref() };
-            if data_bind.target() == Some(NonNull::from(&mut *self).cast())
-                && data_bind.base.property_key() == NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY
-            {
+        let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return;
+        };
+        let data_binds = parent
+            .with_downcast::<Artboard, _>(Artboard::data_bind_handles)
+            .unwrap_or_default();
+        for data_bind in data_binds {
+            let matches = data_bind
+                .with_downcast::<DataBind, _>(|data_bind| {
+                    data_bind.target().as_ref() == Some(&owner)
+                        && data_bind.base.property_key()
+                            == NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY as u32
+                })
+                .unwrap_or(false);
+            if matches {
                 self.set_host_flag(NestedArtboardHostFlags::ARTBOARD_DATA_BOUND);
                 return;
             }
@@ -435,7 +499,7 @@ impl NestedArtboard {
 
     fn register_focus_scope(
         &mut self,
-        focus_manager: NonNull<FocusManager>,
+        focus_manager: RuntimeFocusManagerHandle,
         parent_node: Option<FocusNodeRef>,
         place: bool,
     ) {
@@ -446,10 +510,18 @@ impl NestedArtboard {
             self.focus_scope = Some(FocusNode::make_structural_scope());
         }
         let scope = self.focus_scope.as_ref().unwrap().clone();
-        if !place && scope.borrow().manager() == Some(focus_manager) {
+        if !place
+            && self
+                .focus_scope_manager
+                .as_ref()
+                .is_some_and(|current| current.ptr_eq(&focus_manager))
+        {
             return;
         }
-        unsafe { focus_manager.as_mut() }.add_child(parent_node, scope);
+        if let Some(previous) = self.focus_scope_manager.replace(focus_manager.clone()) {
+            previous.with_focus_manager_mut(|manager| manager.remove_child(&scope));
+        }
+        focus_manager.with_focus_manager_mut(|manager| manager.add_child(parent_node, scope));
     }
 
     pub fn draw(&mut self, renderer: &mut dyn Renderer) {
@@ -457,8 +529,9 @@ impl NestedArtboard {
             renderer.save();
         }
         renderer.transform(&self.world_transform());
-        let referenced = self.artboard_referencer.referenced_artboard().unwrap();
-        unsafe { referenced.as_mut() }.draw_internal(renderer);
+        if let Some(instance) = &self.instance {
+            instance.with_artboard_mut(|instance| instance.draw_internal(renderer));
+        }
         if self.needs_save_operation() {
             renderer.restore();
         }
@@ -468,13 +541,16 @@ impl NestedArtboard {
         self.base.base.will_draw() && self.artboard_referencer.referenced_artboard().is_some()
     }
 
-    pub fn hit_test(&mut self, hit_info: &mut HitInfo, transform: &Mat2D) -> Option<NonNull<Core>> {
-        let referenced = self.artboard_referencer.referenced_artboard()?;
-        hit_info.mounts.push(NonNull::from(&mut *self).cast());
-        let mounted_translation = make_translate(unsafe { referenced.as_ref() });
+    pub fn hit_test(&mut self, hit_info: &mut HitInfo, transform: &Mat2D) -> Option<CoreHandle> {
+        let instance = self.instance.clone()?;
+        let mounted = crate::mechanical_port::source::core::CoreObject::core(self)
+            .handle()
+            .expect("arena-owned NestedArtboard");
+        hit_info.mounts.push(mounted);
+        let mounted_translation = instance.with_artboard(make_translate);
         let mounted_transform = *transform * self.world_transform() * mounted_translation;
-        if let Some(component) =
-            unsafe { referenced.as_mut() }.hit_test(hit_info, &mounted_transform)
+        if let Some(component) = instance
+            .with_artboard_mut(|instance| instance.hit_test_handle(hit_info, &mounted_transform))
         {
             return Some(component);
         }
@@ -486,28 +562,36 @@ impl NestedArtboard {
         &mut self,
         position: &Vec2D,
         skip_on_unclipped: bool,
-        _artboard: Option<NonNull<ArtboardInstance>>,
+        _artboard: RuntimeArtboardInstanceWeakHandle,
     ) -> bool {
         let mounted_position = self.world_transform() * *position;
         self.parent().is_some_and(|parent| {
-            unsafe { parent.as_ref() }.hit_test_point(mounted_position, skip_on_unclipped, false)
+            parent
+                .with(|parent| {
+                    parent.as_container_component().is_some_and(|parent| {
+                        parent.hit_test_point(&mounted_position, skip_on_unclipped, false)
+                    })
+                })
+                .unwrap_or(false)
         })
     }
 
     pub fn host_transform_point(
         &self,
         point: &Vec2D,
-        _artboard_instance: Option<NonNull<ArtboardInstance>>,
+        _artboard_instance: RuntimeArtboardInstanceWeakHandle,
     ) -> Vec2D {
         let local = Vec2D::transform_mat2d(*point, self.world_transform());
-        self.artboard().map_or(local, |artboard| {
-            unsafe { artboard.as_ref() }.root_transform(local)
-        })
+        self.parent_artboard_handle()
+            .and_then(|artboard| {
+                artboard.with_downcast::<Artboard, _>(|artboard| artboard.root_transform(local))
+            })
+            .unwrap_or(local)
     }
 
     pub fn world_transform_for_artboard(
         &self,
-        _artboard_instance: Option<NonNull<ArtboardInstance>>,
+        _artboard_instance: RuntimeArtboardInstanceWeakHandle,
     ) -> Mat2D {
         self.world_transform()
     }
@@ -520,51 +604,56 @@ impl NestedArtboard {
         else {
             return StatusCode::MissingObject;
         };
-        backboard_importer.add_artboard_referencer(NonNull::from(&mut *self).cast());
+        let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return StatusCode::MissingObject;
+        };
+        backboard_importer.add_artboard_referencer(this);
         self.base.base.import(import_stack)
     }
 
-    pub fn add_nested_animation(&mut self, nested_animation: NonNull<NestedAnimation>) {
+    pub fn add_nested_animation_handle(&mut self, nested_animation: CoreHandle) {
         self.nested_animations.push(nested_animation);
     }
 
-    pub fn on_added_clean(&mut self, context: NonNull<Core>) -> StatusCode {
-        debug_assert!(
-            self.artboard_referencer.referenced_artboard().is_none()
-                || self.artboard_referencer.referenced_artboard()
-                    == self
-                        .instance
-                        .as_deref_mut()
-                        .map(NonNull::from)
-                        .map(NonNull::cast)
-        );
-
-        if let Some(instance) = self.instance.as_deref_mut() {
-            let instance_pointer = NonNull::from(&mut *instance);
-            for animation in &mut self.nested_animations {
-                unsafe { animation.as_mut() }.initialize_animation(Some(instance_pointer));
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        if let Some(instance) = self.instance.clone() {
+            let weak = instance.downgrade();
+            for animation in &self.nested_animations {
+                animation.with_mut(|animation| {
+                    animation.nested_animation_initialize(weak.clone());
+                });
             }
-            unsafe { instance_pointer.cast::<Artboard>().as_mut() }
-                .set_host(Some(NonNull::from(&mut *self)));
+            let host = crate::mechanical_port::source::core::CoreObject::core(self).handle();
+            instance.with_artboard_mut(|instance| instance.set_host_handle(host));
             self.apply_origin_override();
         }
 
         for child in self.children() {
-            let Some(mut instance) = unsafe { child.as_ref() }.as_view_model_instance() else {
+            let Some(view_model) = child
+                .with(|child| {
+                    child
+                        .as_view_model_instance()
+                        .and_then(|instance| instance.get_view_model())
+                })
+                .flatten()
+            else {
                 continue;
             };
-            let view_model = unsafe { instance.as_ref() }.get_view_model();
             let view_model_type = view_model
-                .and_then(|view_model| {
-                    ViewModelType::from_u32(unsafe { view_model.as_ref().base.view_model_type() })
+                .with(|view_model| {
+                    view_model.as_view_model().and_then(|view_model| {
+                        ViewModelType::from_u32(view_model.base.view_model_type())
+                    })
                 })
+                .flatten()
                 .unwrap_or(ViewModelType::Standard);
-            unsafe { self.file.unwrap().as_mut() }.complete_view_model_properties(instance);
+            self.file
+                .with_file(|file| file.complete_view_model_properties(&child));
             if view_model_type == ViewModelType::Global {
-                self.global_view_model_instances
-                    .push(unsafe { ref_rcp(instance.as_ptr()) });
+                self.global_view_model_instances.push(child);
             } else if self.active_view_model_instance.is_none() {
-                self.active_view_model_instance = Some(instance);
+                self.active_view_model_instance = Some(child);
                 self.owns_active_vmi = false;
             }
         }
@@ -576,22 +665,21 @@ impl NestedArtboard {
 
     pub fn update(&mut self, value: ComponentDirt) {
         self.base.base.update(value);
-        let Some(mut referenced) = self.artboard_referencer.referenced_artboard() else {
+        let Some(instance) = self.instance.clone() else {
             return;
         };
         if value.contains(ComponentDirt::WORLD_TRANSFORM) {
-            if let Some(instance) = self.instance.as_deref_mut() {
-                instance.mark_semantic_boundary_transform_dirty();
-            }
+            instance.with_artboard_mut(ArtboardInstance::mark_semantic_boundary_transform_dirty);
         }
         if value.contains(ComponentDirt::RENDER_OPACITY) {
-            unsafe { referenced.as_mut() }.set_host_opacity(self.render_opacity());
+            let opacity = self.render_opacity();
+            instance.with_artboard_mut(|instance| instance.set_host_opacity(opacity));
         }
-        if value.contains(ComponentDirt::COMPONENTS)
+        let needs_update = value.contains(ComponentDirt::COMPONENTS)
             || (self.base.is_paused()
-                && unsafe { referenced.as_ref() }.has_dirt(ComponentDirt::COMPONENTS))
-        {
-            unsafe { referenced.as_mut() }.update_pass(false);
+                && instance.with_artboard(|instance| instance.has_dirt(ComponentDirt::COMPONENTS)));
+        if needs_update {
+            instance.with_artboard_mut(|instance| instance.update_pass(false));
         }
     }
 
@@ -599,64 +687,79 @@ impl NestedArtboard {
         if !self.base.base.collapse(value) {
             return false;
         }
-        let Some(instance) = self.instance.as_deref_mut() else {
+        let Some(instance) = self.instance.as_ref() else {
             return true;
         };
-        instance.collapse_semantic_boundary(value);
+        instance.with_artboard_mut(|instance| instance.collapse_semantic_boundary(value));
         true
     }
 
     pub fn has_nested_state_machines(&self) -> bool {
-        self.nested_animations
-            .iter()
-            .any(|animation| unsafe { animation.as_ref().as_nested_state_machine().is_some() })
+        self.nested_animations.iter().any(|animation| {
+            animation
+                .with_downcast::<NestedStateMachine, _>(|_| ())
+                .is_some()
+        })
     }
 
-    pub fn nested_animations(&mut self) -> &mut [NonNull<NestedAnimation>] {
-        &mut self.nested_animations
+    pub fn nested_animations(&self) -> &[CoreHandle] {
+        &self.nested_animations
     }
 
-    pub fn nested_artboard(&mut self, name: &str) -> Option<NonNull<NestedArtboard>> {
-        self.instance.as_deref_mut()?.nested_artboard(name)
+    pub fn nested_artboard(&self, name: &str) -> Option<CoreHandle> {
+        self.instance.as_ref()?.with_artboard(|instance| {
+            instance.nested_artboards().into_iter().find(|nested| {
+                nested
+                    .with_downcast::<NestedArtboard, _>(|nested| nested.base.base.name() == name)
+                    .unwrap_or(false)
+            })
+        })
     }
 
-    pub fn state_machine(&mut self, name: &str) -> Option<NonNull<NestedStateMachine>> {
-        for animation in &mut self.nested_animations {
-            let Some(state_machine) = unsafe { animation.as_mut() }.as_nested_state_machine_mut()
-            else {
-                continue;
-            };
-            if state_machine.base.base.name() == name {
-                return Some(NonNull::from(state_machine));
-            }
-        }
-        None
+    pub fn state_machine(&self, name: &str) -> Option<CoreHandle> {
+        self.nested_animations.iter().find_map(|animation| {
+            animation
+                .with_downcast::<NestedStateMachine, _>(|state_machine| {
+                    state_machine.base.base.name() == name
+                })
+                .unwrap_or(false)
+                .then(|| animation.clone())
+        })
     }
 
-    pub fn input(&mut self, name: &str) -> Option<NonNull<Core>> {
+    pub fn input(&self, name: &str) -> Option<CoreHandle> {
         self.input_for_state_machine(name, "")
     }
 
     pub fn input_for_state_machine(
-        &mut self,
+        &self,
         name: &str,
         state_machine_name: &str,
-    ) -> Option<NonNull<Core>> {
+    ) -> Option<CoreHandle> {
         if !state_machine_name.is_empty() {
-            return self
-                .state_machine(state_machine_name)
-                .and_then(|machine| unsafe { machine.as_mut() }.input(name));
+            return self.state_machine(state_machine_name).and_then(|machine| {
+                machine
+                    .with_downcast::<NestedStateMachine, _>(|machine| {
+                        (0..machine.input_count()).find_map(|index| {
+                            (machine.input_name(index as u32).as_deref() == Some(name))
+                                .then(|| machine.input(index))
+                                .flatten()
+                        })
+                    })
+                    .flatten()
+            });
         }
-        for animation in &mut self.nested_animations {
-            let Some(state_machine) = unsafe { animation.as_mut() }.as_nested_state_machine_mut()
-            else {
-                continue;
-            };
-            if let Some(input) = state_machine.input(name) {
-                return Some(input);
-            }
-        }
-        None
+        self.nested_animations.iter().find_map(|animation| {
+            animation
+                .with_downcast::<NestedStateMachine, _>(|machine| {
+                    (0..machine.input_count()).find_map(|index| {
+                        (machine.input_name(index as u32).as_deref() == Some(name))
+                            .then(|| machine.input(index))
+                            .flatten()
+                    })
+                })
+                .flatten()
+        })
     }
 
     pub fn world_to_local(&self, world: Vec2D, local: &mut Vec2D) -> bool {
@@ -688,16 +791,12 @@ impl NestedArtboard {
             height
         };
         Vec2D::new(
-            maximum_width.min(
-                self.instance
-                    .as_deref()
-                    .map_or(0.0, ArtboardInstance::width),
-            ),
-            maximum_height.min(
-                self.instance
-                    .as_deref()
-                    .map_or(0.0, ArtboardInstance::height),
-            ),
+            maximum_width.min(self.instance.as_ref().map_or(0.0, |instance| {
+                instance.with_artboard(ArtboardInstance::width)
+            })),
+            maximum_height.min(self.instance.as_ref().map_or(0.0, |instance| {
+                instance.with_artboard(ArtboardInstance::height)
+            })),
         )
     }
 
@@ -714,20 +813,10 @@ impl NestedArtboard {
         self.data_bind_path_referencer.decode_data_bind_path(value);
     }
 
-    pub fn copy_data_bind_path_ids(&mut self, object: &NestedArtboardBase) {
-        if let Some(nested) = object.base.as_nested_artboard() {
-            self.data_bind_path_referencer.copy_data_bind_path(
-                unsafe { nested.as_ref() }
-                    .data_bind_path_referencer
-                    .data_bind_path(),
-            );
-        }
-    }
-
     pub fn internal_data_context(&mut self, value: Option<Rc<DataContext>>) {
         self.data_context = value.clone();
         self.view_model_instance = None;
-        let Some(instance) = self.instance.as_deref_mut() else {
+        let Some(instance) = self.instance.clone() else {
             return;
         };
         if self.try_schedule_bind_stateful() {
@@ -735,120 +824,109 @@ impl NestedArtboard {
         }
         if !self.global_view_model_instances.is_empty() {
             let list = build_vmi_list(None, &self.global_view_model_instances);
-            instance.bind_view_model_instances(list, value);
-            let nested_context = instance.data_context();
-            for animation in &mut self.nested_animations {
-                if let Some(state_machine) =
-                    unsafe { animation.as_mut() }.as_nested_state_machine_mut()
-                {
-                    state_machine.set_data_context(nested_context.clone());
-                }
-            }
+            let nested_context = instance.with_artboard_mut(|instance| {
+                instance.bind_view_model_instances(list, value);
+                instance.data_context()
+            });
+            self.set_nested_state_machine_context(nested_context);
             return;
         }
 
-        instance.internal_data_context(value.clone());
-        for animation in &mut self.nested_animations {
-            if let Some(state_machine) = unsafe { animation.as_mut() }.as_nested_state_machine_mut()
-            {
-                state_machine.set_data_context(value.clone());
+        match value.clone() {
+            Some(context) => {
+                instance.with_artboard_mut(|instance| instance.internal_data_context(context));
             }
+            None => instance.with_artboard_mut(ArtboardInstance::clear_data_context),
+        }
+        self.set_nested_state_machine_context(value);
+    }
+
+    fn set_nested_state_machine_context(&mut self, value: Option<Rc<DataContext>>) {
+        for animation in &self.nested_animations {
+            animation.with_downcast_mut::<NestedStateMachine, _>(|state_machine| {
+                match value.clone() {
+                    Some(context) => state_machine.data_context(context),
+                    None => state_machine.clear_data_context(),
+                }
+            });
         }
     }
 
-    pub fn relink_data_context(&mut self, view_model_instance: Rcp<ViewModelInstance>) {
+    pub fn relink_data_context(&mut self, view_model_instance: CoreHandle) {
         self.view_model_instance = Some(view_model_instance.clone());
         if self.base.is_stateful() {
             return;
         }
-        let Some(instance) = self.instance.as_deref_mut() else {
+        let Some(instance) = self.instance.as_ref() else {
             return;
         };
-        if let Some(data_context) = instance.data_context() {
-            if !data_context
-                .main_view_model_instance()
-                .is_some_and(|current| current.get() == view_model_instance.get())
-            {
-                data_context.set_view_model_instance(view_model_instance);
-            }
-        }
-        instance.relink_data_context();
+        let parent = self.data_context.clone();
+        instance.with_artboard_mut(|instance| {
+            instance.bind_view_model_instance_with_parent(Some(view_model_instance), parent)
+        });
     }
 
     pub fn clear_data_context(&mut self) {
-        let Some(instance) = self.instance.as_deref_mut() else {
+        let Some(instance) = self.instance.as_ref() else {
             return;
         };
-        instance.clear_data_context();
-        for animation in &mut self.nested_animations {
-            if let Some(state_machine) = unsafe { animation.as_mut() }.as_nested_state_machine_mut()
-            {
-                state_machine.clear_data_context();
-            }
-        }
+        instance.with_artboard_mut(ArtboardInstance::clear_data_context);
+        self.set_nested_state_machine_context(None);
     }
 
     pub fn unbind(&mut self) {
-        if let Some(instance) = self.instance.as_deref_mut() {
-            instance.unbind();
+        if let Some(instance) = self.instance.as_ref() {
+            instance.with_artboard_mut(ArtboardInstance::unbind);
         }
     }
 
     pub fn update_data_binds(&mut self) {
         if !self.base.is_paused() {
-            if let Some(instance) = self.instance.as_deref_mut() {
-                instance.update_data_binds();
+            if let Some(instance) = self.instance.as_ref() {
+                instance.with_artboard_mut(ArtboardInstance::update_data_binds_default);
             }
         }
     }
 
     pub fn bind_view_model_instance(
         &mut self,
-        view_model_instance: Option<Rcp<ViewModelInstance>>,
+        view_model_instance: Option<CoreHandle>,
         parent: Option<Rc<DataContext>>,
     ) {
         self.data_context = parent.clone();
         self.view_model_instance = view_model_instance.clone();
-        let Some(instance) = self.instance.as_deref_mut() else {
+        let Some(instance) = self.instance.clone() else {
             return;
         };
 
-        if let Some(active) = self.active_view_model_instance {
-            let primary = Some(unsafe { ref_rcp(active.as_ptr()) });
+        if let Some(active) = self.active_view_model_instance.clone() {
+            let primary = Some(active);
             let list = build_vmi_list(primary, &self.global_view_model_instances);
-            instance.bind_view_model_instances(list, parent);
-            let nested_context = instance.data_context();
-            for animation in &mut self.nested_animations {
-                if let Some(state_machine) =
-                    unsafe { animation.as_mut() }.as_nested_state_machine_mut()
-                {
-                    state_machine.set_data_context(nested_context.clone());
-                }
-            }
+            let nested_context = instance.with_artboard_mut(|instance| {
+                instance.bind_view_model_instances(list, parent);
+                instance.data_context()
+            });
+            self.set_nested_state_machine_context(nested_context);
             return;
         }
 
         if view_model_instance.is_some() || !self.global_view_model_instances.is_empty() {
             let list = build_vmi_list(view_model_instance, &self.global_view_model_instances);
-            instance.bind_view_model_instances(list, parent);
-            let nested_context = instance.data_context();
-            for animation in &mut self.nested_animations {
-                if let Some(state_machine) =
-                    unsafe { animation.as_mut() }.as_nested_state_machine_mut()
-                {
-                    state_machine.set_data_context(nested_context.clone());
-                }
-            }
+            let nested_context = instance.with_artboard_mut(|instance| {
+                instance.bind_view_model_instances(list, parent);
+                instance.data_context()
+            });
+            self.set_nested_state_machine_context(nested_context);
             return;
         }
 
-        instance.internal_data_context(parent.clone());
-        for animation in &mut self.nested_animations {
-            if let Some(state_machine) = unsafe { animation.as_mut() }.as_nested_state_machine_mut()
-            {
-                state_machine.set_data_context(parent.clone());
+        match parent.clone() {
+            Some(context) => {
+                instance.with_artboard_mut(|instance| instance.internal_data_context(context));
             }
+            None => instance.with_artboard_mut(ArtboardInstance::clear_data_context),
         }
+        self.set_nested_state_machine_context(parent);
     }
 
     pub fn calculate_local_elapsed_seconds(&mut self, elapsed_seconds: f32) -> f32 {
@@ -891,47 +969,69 @@ impl NestedArtboard {
             return true;
         }
         if advance_nested {
-            for animation in &mut self.nested_animations {
-                let animation = unsafe { animation.as_mut() };
+            for animation in &self.nested_animations {
                 if !new_frame {
-                    if let Some(state_machine) = animation.as_nested_state_machine_mut() {
-                        if state_machine.try_change_state()
-                            && animation.advance(local_elapsed_seconds, new_frame)
-                        {
-                            keep_going = true;
-                        }
+                    let changed = animation
+                        .with_downcast_mut::<NestedStateMachine, _>(
+                            NestedStateMachine::try_change_state,
+                        )
+                        .unwrap_or(false);
+                    if changed
+                        && animation
+                            .with_mut(|animation| {
+                                animation
+                                    .nested_animation_advance(local_elapsed_seconds, new_frame)
+                                    .unwrap_or(false)
+                            })
+                            .unwrap_or(false)
+                    {
+                        keep_going = true;
                     }
-                } else if animation.advance(local_elapsed_seconds, new_frame) {
+                } else if animation
+                    .with_mut(|animation| {
+                        animation
+                            .nested_animation_advance(local_elapsed_seconds, new_frame)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+                {
                     keep_going = true;
                 }
             }
         }
 
         let advancing_flags = AdvanceFlags(flags.0 & !AdvanceFlags::IS_ROOT.0);
-        let mut referenced = self.artboard_referencer.referenced_artboard().unwrap();
-        if unsafe { referenced.as_mut() }.advance_internal(local_elapsed_seconds, advancing_flags) {
-            keep_going = true;
-        }
-        if unsafe { referenced.as_ref() }.has_dirt(ComponentDirt::COMPONENTS) {
-            self.add_dirt(ComponentDirt::COMPONENTS);
+        if let Some(instance) = self.instance.as_ref() {
+            if instance.with_artboard_mut(|instance| {
+                instance.advance_internal(local_elapsed_seconds, advancing_flags)
+            }) {
+                keep_going = true;
+            }
+            if instance.with_artboard(|instance| instance.has_dirt(ComponentDirt::COMPONENTS)) {
+                self.add_dirt(ComponentDirt::COMPONENTS);
+            }
         }
         keep_going
     }
 
     pub fn reset_impl(&mut self) {
-        if let Some(mut referenced) = self.artboard_referencer.referenced_artboard() {
-            unsafe { referenced.as_mut() }.reset();
+        if let Some(instance) = self.instance.as_ref() {
+            instance.with_artboard_mut(ArtboardInstance::reset);
         }
-        if let Some(mut active) = self.active_view_model_instance {
-            unsafe { active.as_mut() }.advanced();
+        if let Some(active) = self.active_view_model_instance.as_ref() {
+            active.with_mut(|active| {
+                if let Some(active) = active.as_view_model_instance_mut() {
+                    active.advanced();
+                }
+            });
         }
     }
 
-    pub fn file(&self) -> Option<NonNull<File>> {
-        self.file
+    pub fn file(&self) -> RuntimeFileWeakHandle {
+        self.file.clone()
     }
 
-    pub fn set_file(&mut self, value: Option<NonNull<File>>) {
+    pub fn set_file(&mut self, value: RuntimeFileWeakHandle) {
         self.file = value;
     }
 
@@ -939,10 +1039,8 @@ impl NestedArtboard {
         self.base.artboard_id() as i32
     }
 
-    pub fn referenced_artboard(&mut self, artboard: Option<NonNull<Artboard>>) {
+    pub fn referenced_artboard(&mut self, artboard: Option<CoreHandle>) {
         let artboard = artboard.expect("NestedArtboard requires a referenced artboard");
-        self.artboard_referencer
-            .set_referenced_artboard(Some(artboard));
         self.nest(artboard);
         self.try_schedule_bind_stateful();
     }
@@ -955,12 +1053,12 @@ impl NestedArtboard {
         self.base.core_type() as i32
     }
 
-    pub fn artboard_instance_ptr(&mut self, _index: i32) -> Option<NonNull<ArtboardInstance>> {
-        self.instance.as_deref_mut().map(NonNull::from)
+    pub fn artboard_instance_handle(&self, _index: i32) -> Option<RuntimeArtboardInstanceHandle> {
+        self.instance.clone()
     }
 
-    pub fn artboard_instance_default(&mut self) -> Option<NonNull<ArtboardInstance>> {
-        self.artboard_instance_ptr(0)
+    pub fn artboard_instance_default(&self) -> Option<RuntimeArtboardInstanceHandle> {
+        self.artboard_instance_handle(0)
     }
 
     pub fn advance_component_default(&mut self, elapsed_seconds: f32) -> bool {
@@ -970,20 +1068,20 @@ impl NestedArtboard {
         )
     }
 
-    pub fn source_artboard(&self) -> Option<NonNull<Artboard>> {
+    pub fn source_artboard(&self) -> Option<CoreHandle> {
         self.artboard_referencer.referenced_artboard()
     }
 
-    pub fn parent_artboard(&self) -> Option<NonNull<Artboard>> {
-        self.artboard()
+    pub fn parent_artboard_handle(&self) -> Option<CoreHandle> {
+        self.base.base.as_component().artboard_handle()
     }
 
     pub fn mark_host_transform_dirty(&mut self) {
         self.mark_transform_dirty();
     }
 
-    pub fn host_component(&mut self) -> NonNull<Component> {
-        NonNull::from(&mut *self).cast()
+    pub fn host_component(&mut self) -> Option<CoreHandle> {
+        crate::mechanical_port::source::core::CoreObject::core(self).handle()
     }
 
     pub fn key_input(
@@ -1000,11 +1098,7 @@ impl NestedArtboard {
         false
     }
 
-    pub fn gamepad_dispatch(
-        &mut self,
-        _invocation: &ListenerInvocation,
-        _scripted_drawable: Option<&mut Option<NonNull<ScriptedDrawable>>>,
-    ) -> bool {
+    pub fn gamepad_dispatch(&mut self, _invocation: &ListenerInvocation) -> bool {
         false
     }
 
@@ -1012,8 +1106,8 @@ impl NestedArtboard {
 
     pub fn blurred(&mut self) {}
 
-    pub fn focusable_artboard(&self) -> Option<NonNull<Artboard>> {
-        self.artboard()
+    pub fn focusable_artboard(&self) -> Option<CoreHandle> {
+        self.parent_artboard_handle()
     }
 
     fn set_host_flag(&mut self, flag: NestedArtboardHostFlags) {
@@ -1028,15 +1122,11 @@ impl NestedArtboard {
         self.host_flags.0 & flag.0 == flag.0
     }
 
-    fn artboard(&self) -> Option<NonNull<Artboard>> {
-        self.base.base.base.artboard()
+    fn parent(&self) -> Option<CoreHandle> {
+        self.base.base.as_component().parent_handle()
     }
 
-    fn parent(&self) -> Option<NonNull<Component>> {
-        self.base.base.base.parent()
-    }
-
-    fn children(&self) -> Vec<NonNull<Core>> {
+    fn children(&self) -> Vec<CoreHandle> {
         self.base.base.base.children().to_vec()
     }
 
@@ -1077,6 +1167,95 @@ impl crate::mechanical_port::source::resetting_component::ResettingComponent for
     }
 }
 
+impl ArtboardHost for NestedArtboard {
+    fn artboard_count(&self) -> usize {
+        NestedArtboard::artboard_count(self)
+    }
+
+    fn artboard_instance(&self, index: i32) -> Option<RuntimeArtboardInstanceHandle> {
+        self.artboard_instance_handle(index)
+    }
+
+    fn internal_data_context(&mut self, data_context: Rc<DataContext>) {
+        NestedArtboard::internal_data_context(self, Some(data_context));
+    }
+
+    fn bind_view_model_instance(
+        &mut self,
+        view_model_instance: CoreHandle,
+        parent: Rc<DataContext>,
+    ) {
+        NestedArtboard::bind_view_model_instance(self, Some(view_model_instance), Some(parent));
+    }
+
+    fn clear_data_context(&mut self) {
+        NestedArtboard::clear_data_context(self);
+    }
+
+    fn unbind(&mut self) {
+        NestedArtboard::unbind(self);
+    }
+
+    fn update_data_binds(&mut self) {
+        NestedArtboard::update_data_binds(self);
+    }
+
+    fn mark_hosting_layout_dirty(&mut self, _artboard: RuntimeArtboardInstanceWeakHandle) {
+        // The base NestedArtboard is not a layout provider. The pinned virtual
+        // is intentionally empty here; NestedArtboardLayout supplies the
+        // concrete layout-host behavior.
+    }
+
+    fn parent_artboard(&self) -> Option<CoreHandle> {
+        self.parent_artboard_handle()
+    }
+
+    fn hit_test_host(
+        &mut self,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        artboard: RuntimeArtboardInstanceWeakHandle,
+    ) -> bool {
+        NestedArtboard::hit_test_host(self, position, skip_on_unclipped, artboard)
+    }
+
+    fn host_transform_point(
+        &self,
+        position: &Vec2D,
+        artboard: RuntimeArtboardInstanceWeakHandle,
+    ) -> Vec2D {
+        NestedArtboard::host_transform_point(self, position, artboard)
+    }
+
+    fn world_transform_for_artboard(&self, artboard: RuntimeArtboardInstanceWeakHandle) -> Mat2D {
+        NestedArtboard::world_transform_for_artboard(self, artboard)
+    }
+
+    fn mark_host_transform_dirty(&mut self) {
+        NestedArtboard::mark_host_transform_dirty(self);
+    }
+
+    fn set_file(&mut self, value: Option<RuntimeFileWeakHandle>) {
+        NestedArtboard::set_file(self, value.unwrap_or_default());
+    }
+
+    fn file(&self) -> Option<RuntimeFileWeakHandle> {
+        self.file.upgrade().map(|_| self.file.clone())
+    }
+
+    fn host_component(&self) -> Option<CoreHandle> {
+        crate::mechanical_port::source::core::CoreObject::core(self).handle()
+    }
+
+    fn relink_data_context(&mut self, view_model_instance: CoreHandle) {
+        NestedArtboard::relink_data_context(self, view_model_instance);
+    }
+
+    fn type_(&self) -> i32 {
+        NestedArtboard::type_(self)
+    }
+}
+
 impl ArtboardReferencerBehavior for NestedArtboard {
     fn artboard_referencer(&self) -> &ArtboardReferencer {
         &self.artboard_referencer
@@ -1086,10 +1265,7 @@ impl ArtboardReferencerBehavior for NestedArtboard {
         &mut self.artboard_referencer
     }
 
-    fn update_artboard(
-        &mut self,
-        view_model_instance_artboard: Option<NonNull<ViewModelInstanceArtboard>>,
-    ) {
+    fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>) {
         NestedArtboard::update_artboard(self, view_model_instance_artboard);
     }
 
@@ -1144,10 +1320,6 @@ impl NestedArtboardBaseCallbacks for NestedArtboard {
     fn decode_data_bind_path_ids(&mut self, value: &[u8]) {
         NestedArtboard::decode_data_bind_path_ids(self, value);
     }
-
-    fn copy_data_bind_path_ids(&mut self, object: &NestedArtboardBase) {
-        NestedArtboard::copy_data_bind_path_ids(self, object);
-    }
 }
 
 fn make_translate(artboard: &Artboard) -> Mat2D {
@@ -1155,4 +1327,18 @@ fn make_translate(artboard: &Artboard) -> Mat2D {
         -artboard.base.origin_x() * artboard.base.width(),
         -artboard.base.origin_y() * artboard.base.height(),
     ))
+}
+
+impl std::ops::Deref for NestedArtboard {
+    type Target = NestedArtboardBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedArtboard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
 }

@@ -6,7 +6,29 @@ use crate::mechanical_port::source::semantic::semantic_snapshot::Bounds;
 use crate::mechanical_port::source::{
     animation::listener_invocation::ListenerInvocation, core::CoreHandle,
 };
+use std::cell::RefCell;
 use std::rc::Rc;
+
+#[derive(Clone)]
+pub struct RuntimeFocusManagerHandle(Rc<RefCell<FocusManager>>);
+
+impl RuntimeFocusManagerHandle {
+    pub fn new(manager: FocusManager) -> Self {
+        Self(Rc::new(RefCell::new(manager)))
+    }
+
+    pub fn with_focus_manager<R>(&self, use_manager: impl FnOnce(&FocusManager) -> R) -> R {
+        use_manager(&self.0.borrow())
+    }
+
+    pub fn with_focus_manager_mut<R>(&self, use_manager: impl FnOnce(&mut FocusManager) -> R) -> R {
+        use_manager(&mut self.0.borrow_mut())
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {

@@ -8,6 +8,7 @@ use crate::mechanical_port::source::{
     },
     artboard::RuntimeArtboardInstanceWeakHandle,
     core::CoreHandle,
+    data_bind::data_context::DataContext,
     generated::{
         animation::{
             keyframe_bool_base::KeyFrameBoolBase, keyframe_color_base::KeyFrameColorBase,
@@ -22,9 +23,11 @@ use crate::mechanical_port::source::{
         },
     },
     hit_result::HitResult,
+    input::focus_manager::RuntimeFocusManagerHandle,
     listener_type::ListenerType,
     math::{random::RandomProvider, vec2d::Vec2D},
     process_event_result::ProcessEventResult,
+    semantic::semantic_manager::RuntimeSemanticManagerHandle,
 };
 use std::{
     cell::{Cell, RefCell, RefMut},
@@ -590,6 +593,11 @@ pub trait StateMachineInstanceRuntime {
     fn focus_manager_previous(&mut self, manager: Object) -> bool;
     fn semantic_manager_new(&mut self) -> Object;
     fn semantic_fire_action(&mut self, manager: Object, node: u32, action: u8);
+    fn retain_focus_manager(&mut self, manager: RuntimeFocusManagerHandle) -> Object;
+    fn retain_semantic_manager(&mut self, manager: RuntimeSemanticManagerHandle) -> Object;
+    fn retain_semantic_node(&mut self, node: Option<CoreHandle>) -> Object;
+    fn retain_view_model_instance(&mut self, instance: CoreHandle) -> Object;
+    fn retain_data_context(&mut self, context: Rc<DataContext>) -> Object;
     fn data_context_advanced(&mut self, context: Object);
     fn data_context_add_container(
         &mut self,
@@ -2884,6 +2892,11 @@ impl StateMachineInstance {
         }
     }
 
+    pub fn set_external_focus_manager_handle(&mut self, manager: RuntimeFocusManagerHandle) {
+        let retained = self.runtime.borrow_mut().retain_focus_manager(manager);
+        self.set_external_focus_manager(retained);
+    }
+
     pub fn focus_manager(&self) -> Object {
         if self.external_focus_manager != 0 {
             self.external_focus_manager
@@ -2947,6 +2960,16 @@ impl StateMachineInstance {
                 parent_node,
             );
         }
+    }
+
+    pub fn set_external_semantic_manager_handle(
+        &mut self,
+        manager: RuntimeSemanticManagerHandle,
+        parent_node: Option<CoreHandle>,
+    ) {
+        let manager = self.runtime.borrow_mut().retain_semantic_manager(manager);
+        let parent_node = self.runtime.borrow_mut().retain_semantic_node(parent_node);
+        self.set_external_semantic_manager(manager, parent_node);
     }
 
     pub fn queue_focus_event(&mut self, group: Object, is_focus: bool) {
@@ -3397,6 +3420,12 @@ impl StateMachineInstance {
         runtime.borrow_mut().artboard_update_data_binds(self, false);
     }
 
+    pub fn notify_nested(&mut self, events: &[EventReport], context: Option<CoreHandle>) {
+        self.notify_event_listeners(events, context);
+        let runtime = Rc::clone(&self.runtime);
+        runtime.borrow_mut().artboard_update_data_binds(self, false);
+    }
+
     fn notify_listener_view_models(&mut self, events: &[RuntimeListenerViewModelWeakHandle]) {
         for view_model in events {
             let Some(listener) = view_model.with_listener(|view_model| view_model.listener.clone())
@@ -3749,6 +3778,14 @@ impl StateMachineInstance {
         self.bind();
     }
 
+    pub fn bind_view_model_instance_handle(&mut self, view_model_instance: CoreHandle) {
+        let retained = self
+            .runtime
+            .borrow_mut()
+            .retain_view_model_instance(view_model_instance);
+        self.bind_view_model_instance(retained);
+    }
+
     pub fn global_view_model_instance(&self, name: &str) -> Object {
         if self.data_context == 0 {
             return RuntimeObjectHandle::NONE;
@@ -3785,6 +3822,11 @@ impl StateMachineInstance {
         self.internal_data_context(data_context);
     }
 
+    pub fn bind_data_context_handle(&mut self, data_context: Rc<DataContext>) {
+        let retained = self.runtime.borrow_mut().retain_data_context(data_context);
+        self.bind_data_context(retained);
+    }
+
     pub fn inherit_data_context(&mut self, data_context: Object) {
         if data_context == 0 {
             return;
@@ -3795,9 +3837,19 @@ impl StateMachineInstance {
         self.internal_data_context(data_context);
     }
 
+    pub fn inherit_data_context_handle(&mut self, data_context: Rc<DataContext>) {
+        let retained = self.runtime.borrow_mut().retain_data_context(data_context);
+        self.inherit_data_context(retained);
+    }
+
     pub fn set_data_context(&mut self, data_context: Object) {
         self.clear_data_context();
         self.internal_data_context(data_context);
+    }
+
+    pub fn set_data_context_handle(&mut self, data_context: Rc<DataContext>) {
+        let retained = self.runtime.borrow_mut().retain_data_context(data_context);
+        self.set_data_context(retained);
     }
 
     pub fn data_context(&self) -> Object {

@@ -1,28 +1,25 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
-    ptr::NonNull,
+    rc::{Rc, Weak},
 };
 
 use crate::mechanical_port::source::{
-    animation::keyframe_interpolator::KeyFrameInterpolator,
-    artboard::{Artboard, ArtboardInstance},
-    assets::{file_asset::FileAsset, manifest_asset::ManifestAsset},
+    artboard::{Artboard, RuntimeArtboardInstanceHandle},
+    assets::{manifest_asset::ManifestAsset, script_asset::ScriptAsset},
     backboard::Backboard,
-    bindable_artboard::BindableArtboard,
-    constraints::scrolling::scroll_physics::ScrollPhysics,
+    bindable_artboard::RuntimeBindableArtboardHandle,
     core::{
-        Core,
+        Core, CoreArena, CoreHandle,
         binary_reader::BinaryReader,
         field_types::{
             core_color_type::CoreColorType, core_double_type::CoreDoubleType,
             core_string_type::CoreStringType, core_uint_type::CoreUintType,
         },
     },
-    data_bind::converters::data_converter::DataConverter,
     data_resolver::DataResolver,
-    factory::Factory,
-    file_asset_loader::FileAssetLoader,
+    factory::RuntimeFactoryHandle,
+    file_asset_loader::FileAssetLoaderRef,
     generated::core_registry::CoreRegistry,
     importers::{
         ImportStackObject, artboard_importer::ArtboardImporter,
@@ -49,16 +46,16 @@ use crate::mechanical_port::source::{
         viewmodel_instance_importer::ViewModelInstanceImporter,
         viewmodel_instance_list_importer::ViewModelInstanceListImporter,
     },
-    refcnt::{Rcp, RefCnt, RefCounted, make_rcp, ref_rcp},
+    lua::scripting_vm::RuntimeScriptingVmHandle,
     runtime_header::RuntimeHeader,
     status_code::StatusCode,
     view_model_type::ViewModelType,
     viewmodel::{
-        data_enum::DataEnum, runtime::viewmodel_runtime::ViewModelRuntime, viewmodel::ViewModel,
+        runtime::viewmodel_runtime::RuntimeViewModelHandle, viewmodel::ViewModel,
         viewmodel_instance::ViewModelInstance,
-        viewmodel_instance_list_item::ViewModelInstanceListItem,
     },
 };
+use crate::scripting::ScriptModule;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ImportResult {
@@ -68,26 +65,85 @@ pub enum ImportResult {
     Malformed,
 }
 
+/// Shared identity for the one non-Core File occurrence that owns an imported
+/// runtime graph. Consumers may only borrow it for the duration of a closure.
+#[derive(Clone)]
+pub struct RuntimeFileHandle(Rc<RefCell<File>>);
+
+#[derive(Clone, Default)]
+pub struct RuntimeFileWeakHandle(Weak<RefCell<File>>);
+
+impl RuntimeFileHandle {
+    pub fn new(file: File) -> Self {
+        let handle = Self(Rc::new(RefCell::new(file)));
+        handle.0.borrow_mut().self_handle = handle.downgrade();
+        handle
+    }
+
+    pub fn downgrade(&self) -> RuntimeFileWeakHandle {
+        RuntimeFileWeakHandle(Rc::downgrade(&self.0))
+    }
+
+    pub fn with_file<R>(&self, f: impl FnOnce(&File) -> R) -> R {
+        f(&self.0.borrow())
+    }
+
+    pub fn with_file_mut<R>(&self, f: impl FnOnce(&mut File) -> R) -> R {
+        f(&mut self.0.borrow_mut())
+    }
+}
+
+impl RuntimeFileWeakHandle {
+    pub fn upgrade(&self) -> Option<RuntimeFileHandle> {
+        self.0.upgrade().map(RuntimeFileHandle)
+    }
+
+    pub fn with_file<R>(&self, f: impl FnOnce(&File) -> R) -> Option<R> {
+        self.upgrade().map(|file| file.with_file(f))
+    }
+
+    pub fn with_file_mut<R>(&self, f: impl FnOnce(&mut File) -> R) -> Option<R> {
+        self.upgrade().map(|file| file.with_file_mut(f))
+    }
+}
+
 pub static DETERMINISTIC_MODE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 #[cfg(debug_assertions)]
 pub static DEBUG_TOTAL_FILE_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-#[cfg(feature = "rive_tools")]
+#[cfg(feature = "tools")]
 pub trait ViewModelInstanceRegistrar {
-    fn register_instance(
-        &mut self,
-        pointer: NonNull<ViewModelInstance>,
-        reference: Rcp<ViewModelInstance>,
-    );
-    fn contains(&self, pointer: NonNull<ViewModelInstance>) -> bool;
+    fn register_instance(&mut self, instance: CoreHandle);
+    fn contains(&self, instance: &CoreHandle) -> bool;
     fn clear(&mut self);
 }
 
-fn read_runtime_object(reader: &mut BinaryReader<'_>, header: &RuntimeHeader) -> Option<Box<Core>> {
+#[cfg(feature = "tools")]
+#[derive(Clone)]
+pub struct ViewModelInstanceRegistrarHandle(Rc<RefCell<Box<dyn ViewModelInstanceRegistrar>>>);
+
+#[cfg(feature = "tools")]
+impl ViewModelInstanceRegistrarHandle {
+    pub fn new(registrar: Box<dyn ViewModelInstanceRegistrar>) -> Self {
+        Self(Rc::new(RefCell::new(registrar)))
+    }
+
+    fn with_mut<R>(
+        &self,
+        use_registrar: impl FnOnce(&mut dyn ViewModelInstanceRegistrar) -> R,
+    ) -> R {
+        use_registrar(self.0.borrow_mut().as_mut())
+    }
+}
+
+fn read_runtime_object(
+    reader: &mut BinaryReader<'_>,
+    header: &RuntimeHeader,
+) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
     let core_object_key = reader.read_var_uint_as::<i32>();
-    let mut object = CoreRegistry::make_core_instance(core_object_key);
+    let mut object = CoreRegistry::make_core_box(core_object_key);
     loop {
         let property_key = reader.read_var_uint_as::<u16>();
         if property_key == 0 {
@@ -133,69 +189,43 @@ fn read_runtime_object(reader: &mut BinaryReader<'_>, header: &RuntimeHeader) ->
 }
 
 pub struct File {
-    ref_count: RefCnt,
-    backboard: Option<NonNull<Backboard>>,
-    file_assets: Vec<Rcp<FileAsset>>,
-    data_converters: Vec<NonNull<DataConverter>>,
-    keyframe_interpolators: Vec<NonNull<KeyFrameInterpolator>>,
-    scripted_interpolators: Vec<
-        NonNull<
-            crate::mechanical_port::source::scripted::scripted_interpolator::ScriptedInterpolator,
-        >,
-    >,
-    scroll_physics: Vec<NonNull<ScrollPhysics>>,
-    artboards: Vec<NonNull<Artboard>>,
-    view_models: Vec<NonNull<ViewModel>>,
-    view_model_instances: Vec<Rcp<ViewModelInstance>>,
-    view_model_runtimes: RefCell<Vec<Rcp<ViewModelRuntime>>>,
-    enums: Vec<NonNull<DataEnum>>,
-    factory: NonNull<Factory>,
-    asset_loader: Rcp<FileAssetLoader>,
-    #[cfg(feature = "rive_scripting")]
-    scripting_vm: Option<Rcp<crate::mechanical_port::source::lua::scripting_vm::ScriptingVm>>,
-    #[cfg(feature = "rive_tools")]
-    view_model_instance_registrar: Option<NonNull<dyn ViewModelInstanceRegistrar>>,
-    manifest: Option<Rcp<FileAsset>>,
+    self_handle: RuntimeFileWeakHandle,
+    core_arena: CoreArena,
+    backboard: Option<CoreHandle>,
+    file_assets: Vec<CoreHandle>,
+    data_converters: Vec<CoreHandle>,
+    keyframe_interpolators: Vec<CoreHandle>,
+    scripted_interpolators: Vec<CoreHandle>,
+    scroll_physics: Vec<CoreHandle>,
+    artboards: Vec<CoreHandle>,
+    view_models: Vec<CoreHandle>,
+    view_model_instances: Vec<CoreHandle>,
+    enums: Vec<CoreHandle>,
+    factory: RuntimeFactoryHandle,
+    asset_loader: Option<FileAssetLoaderRef>,
+    scripting_vm: Option<RuntimeScriptingVmHandle>,
+    #[cfg(feature = "tools")]
+    view_model_instance_registrar: Option<ViewModelInstanceRegistrarHandle>,
+    manifest: Option<CoreHandle>,
     has_audio: bool,
-}
-
-unsafe impl RefCounted for File {
-    fn ref_count(&self) -> &RefCnt {
-        &self.ref_count
-    }
 }
 
 impl Drop for File {
     fn drop(&mut self) {
         #[cfg(debug_assertions)]
         DEBUG_TOTAL_FILE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-        #[cfg(feature = "rive_scripting")]
         self.cleanup_scripting_vm();
-        for artboard in self.artboards.drain(..) {
-            unsafe { drop(Box::from_raw(artboard.as_ptr())) };
-        }
-        for mut view_model in self.view_models.drain(..) {
-            unsafe { view_model.as_mut() }.base.unref();
-        }
-        #[cfg(feature = "rive_tools")]
+        self.artboards.clear();
+        self.view_models.clear();
+        #[cfg(feature = "tools")]
         {
             self.view_model_instance_registrar = None;
         }
-        for mut data_enum in self.enums.drain(..) {
-            unsafe { data_enum.as_mut() }.base.unref();
-        }
-        for converter in self.data_converters.drain(..) {
-            unsafe { drop(Box::from_raw(converter.as_ptr())) };
-        }
-        for interpolator in self.keyframe_interpolators.drain(..) {
-            unsafe { drop(Box::from_raw(interpolator.as_ptr())) };
-        }
-        for physics in self.scroll_physics.drain(..) {
-            unsafe { drop(Box::from_raw(physics.as_ptr())) };
-        }
-        if let Some(backboard) = self.backboard.take() {
-            unsafe { drop(Box::from_raw(backboard.as_ptr())) };
-        }
+        self.enums.clear();
+        self.data_converters.clear();
+        self.keyframe_interpolators.clear();
+        self.scroll_physics.clear();
+        self.backboard = None;
     }
 }
 
@@ -203,11 +233,21 @@ impl File {
     pub const MAJOR_VERSION: i32 = 7;
     pub const MINOR_VERSION: i32 = 2;
 
-    pub fn new(factory: NonNull<Factory>, asset_loader: Rcp<FileAssetLoader>) -> Self {
+    pub fn set_deterministic_mode(value: bool) {
+        DETERMINISTIC_MODE.store(value, std::sync::atomic::Ordering::Relaxed);
+        crate::mechanical_port::source::math::random::set_runtime_deterministic_mode(value);
+    }
+
+    pub fn deterministic_mode() -> bool {
+        DETERMINISTIC_MODE.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn new(factory: RuntimeFactoryHandle, asset_loader: Option<FileAssetLoaderRef>) -> Self {
         #[cfg(debug_assertions)]
         DEBUG_TOTAL_FILE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Self {
-            ref_count: RefCnt::new(),
+            self_handle: RuntimeFileWeakHandle::default(),
+            core_arena: CoreArena::default(),
             backboard: None,
             file_assets: Vec::new(),
             data_converters: Vec::new(),
@@ -217,13 +257,11 @@ impl File {
             artboards: Vec::new(),
             view_models: Vec::new(),
             view_model_instances: Vec::new(),
-            view_model_runtimes: RefCell::new(Vec::new()),
             enums: Vec::new(),
             factory,
             asset_loader,
-            #[cfg(feature = "rive_scripting")]
             scripting_vm: None,
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             view_model_instance_registrar: None,
             manifest: None,
             has_audio: false,
@@ -232,33 +270,31 @@ impl File {
 
     pub fn import(
         bytes: &[u8],
-        factory: NonNull<Factory>,
+        factory: RuntimeFactoryHandle,
         mut result: Option<&mut ImportResult>,
-        asset_loader: Option<NonNull<FileAssetLoader>>,
-        #[cfg(feature = "rive_scripting")] scripting_vm: Option<
-            NonNull<crate::mechanical_port::source::lua::scripting_vm::ScriptingVm>,
-        >,
-    ) -> Option<Rcp<File>> {
-        let loader = unsafe { ref_rcp(asset_loader.map_or(std::ptr::null_mut(), NonNull::as_ptr)) };
-        Self::import_with_loader(
-            bytes,
-            factory,
-            result,
-            loader,
-            #[cfg(feature = "rive_scripting")]
-            scripting_vm,
-        )
+        asset_loader: Option<FileAssetLoaderRef>,
+        scripting_vm: Option<RuntimeScriptingVmHandle>,
+    ) -> Option<RuntimeFileHandle> {
+        Self::import_internal(bytes, factory, result, asset_loader, scripting_vm)
     }
 
     pub fn import_with_loader(
         bytes: &[u8],
-        factory: NonNull<Factory>,
+        factory: RuntimeFactoryHandle,
+        result: Option<&mut ImportResult>,
+        asset_loader: FileAssetLoaderRef,
+        scripting_vm: Option<RuntimeScriptingVmHandle>,
+    ) -> Option<RuntimeFileHandle> {
+        Self::import_internal(bytes, factory, result, Some(asset_loader), scripting_vm)
+    }
+
+    fn import_internal(
+        bytes: &[u8],
+        factory: RuntimeFactoryHandle,
         mut result: Option<&mut ImportResult>,
-        asset_loader: Rcp<FileAssetLoader>,
-        #[cfg(feature = "rive_scripting")] scripting_vm: Option<
-            NonNull<crate::mechanical_port::source::lua::scripting_vm::ScriptingVm>,
-        >,
-    ) -> Option<Rcp<File>> {
+        asset_loader: Option<FileAssetLoaderRef>,
+        scripting_vm: Option<RuntimeScriptingVmHandle>,
+    ) -> Option<RuntimeFileHandle> {
         let mut reader = BinaryReader::new(bytes);
         let mut header = RuntimeHeader::default();
         if !RuntimeHeader::read(&mut reader, &mut header) {
@@ -282,17 +318,15 @@ impl File {
             return None;
         }
 
-        let mut file = make_rcp(File::new(factory, asset_loader));
-        #[cfg(feature = "rive_scripting")]
-        if let Some(vm) = scripting_vm {
-            file.set_scripting_vm(unsafe { ref_rcp(vm.as_ptr()) });
-        }
-        let read_result = file.read(&mut reader, &header);
+        let file = RuntimeFileHandle::new(File::new(factory, asset_loader));
+        let read_result = file.with_file_mut(|file| {
+            file.set_scripting_vm(scripting_vm);
+            file.read(&mut reader, &header)
+        });
         if let Some(result) = result.as_deref_mut() {
             *result = read_result;
         }
         if read_result != ImportResult::Success {
-            file.reset(None);
             return None;
         }
         Some(file)
@@ -301,33 +335,47 @@ impl File {
     fn read(&mut self, reader: &mut BinaryReader<'_>, header: &RuntimeHeader) -> ImportResult {
         let mut import_stack = ImportStack::default();
         import_stack.set_version(header.major_version(), header.minor_version());
-        #[cfg(feature = "rive_scripting")]
-        let mut in_band_content = Vec::new();
+        let in_band_content = Rc::new(RefCell::new(Vec::new()));
         // Core has no type key, so the most recent non-bind object remains the
         // target for an immediately following DataBind.
-        let mut last_bindable_object: Option<NonNull<Core>> = None;
+        let mut last_bindable_object: Option<CoreHandle> = None;
 
         while !reader.reached_end() {
-            let Some(mut object) = read_runtime_object(reader, header) else {
+            let Some(object) = read_runtime_object(reader, header) else {
                 import_stack.read_null_object();
                 continue;
             };
-            let object_pointer = NonNull::from(object.as_mut());
-            if !object.is_data_bind() {
-                last_bindable_object = Some(object_pointer);
-            } else if let Some(target) = last_bindable_object {
-                object.as_data_bind_mut().unwrap().set_target(Some(target));
+            let object = self.core_arena.insert_boxed(object);
+            let object_type = object.core_type().unwrap_or_default();
+            if !object.is_type_of(
+                crate::mechanical_port::source::generated::data_bind::data_bind_base::DataBindBase::TYPE_KEY,
+            ) {
+                last_bindable_object = Some(object.clone());
+            } else if let Some(target) = last_bindable_object.as_ref() {
+                object.with_mut(|object| {
+                    if let Some(bind) = object.as_data_bind_mut() {
+                        bind.set_target(Some(target.clone()));
+                    }
+                });
             }
 
-            if object.import(&mut import_stack) == StatusCode::Ok {
-                match object.core_type() {
+            let import_result = object
+                .with_mut(|object| object.import(&mut import_stack))
+                .unwrap_or(StatusCode::MissingObject);
+            if import_result == StatusCode::Ok {
+                match object_type {
                     Backboard::TYPE_KEY => {
-                        self.backboard = object.as_backboard_mut().map(NonNull::from);
+                        self.backboard = Some(object.clone());
                     }
                     Artboard::TYPE_KEY => {
-                        let mut artboard = object.as_artboard_mut().unwrap();
-                        unsafe { artboard.as_mut() }.set_factory(self.factory);
-                        self.artboards.push(artboard);
+                        let factory = self.factory.clone();
+                        object.with_downcast_mut::<Artboard, _>(|artboard| {
+                            artboard.set_core_arena(self.core_arena.clone());
+                            artboard.set_factory(factory);
+                            artboard.set_file(self.self_handle.clone());
+                            artboard.set_scripting_vm(self.scripting_vm.clone());
+                        });
+                        self.artboards.push(object.clone());
                     }
                     crate::mechanical_port::source::assets::image_asset::ImageAsset::TYPE_KEY
                     | crate::mechanical_port::source::assets::font_asset::FontAsset::TYPE_KEY
@@ -335,72 +383,68 @@ impl File {
                     | crate::mechanical_port::source::assets::blob_asset::BlobAsset::TYPE_KEY
                     | crate::mechanical_port::source::assets::script_asset::ScriptAsset::TYPE_KEY
                     | crate::mechanical_port::source::assets::shader_asset::ShaderAsset::TYPE_KEY => {
-                        let asset = object.as_file_asset_mut().unwrap();
-                        self.file_assets.push(unsafe { Rcp::from_raw(asset.as_ptr()) });
-                        if object.core_type()
+                        self.file_assets.push(object.clone());
+                        if object_type
                             == crate::mechanical_port::source::assets::audio_asset::AudioAsset::TYPE_KEY
                         {
                             self.has_audio = true;
                         }
                     }
                     crate::mechanical_port::source::generated::viewmodel::viewmodel_base::ViewModelBase::TYPE_KEY => {
-                        self.view_models.push(object.as_view_model_mut().unwrap());
+                        self.view_models.push(object.clone());
                     }
                     crate::mechanical_port::source::generated::viewmodel::data_enum_base::DataEnumBase::TYPE_KEY
                     | crate::mechanical_port::source::generated::viewmodel::data_enum_custom_base::DataEnumCustomBase::TYPE_KEY => {
-                        self.enums.push(object.as_data_enum_mut().unwrap());
+                        self.enums.push(object.clone());
                     }
                     crate::mechanical_port::source::generated::viewmodel::viewmodel_property_enum_custom_base::ViewModelPropertyEnumCustomBase::TYPE_KEY => {
-                        let value = object.as_view_model_property_enum_custom_mut().unwrap();
-                        let enum_id = unsafe { value.as_ref() }.base.enum_id() as usize;
-                        if enum_id < self.enums.len() {
-                            unsafe { value.as_mut() }.set_data_enum(Some(self.enums[enum_id]));
-                        }
+                        // The enum relationship is resolved through the retained
+                        // CoreHandle graph after the importer stack closes.
                     }
                     _ => {}
                 }
             } else {
-                if last_bindable_object == Some(object_pointer) {
+                if last_bindable_object.as_ref() == Some(&object) {
                     last_bindable_object = None;
                 }
-                eprintln!("Failed to import object of type {}", object.core_type());
+                eprintln!("Failed to import object of type {}", object_type);
                 continue;
             }
 
             let mut stack_object: Option<Box<dyn ImportStackObject>> = None;
-            let mut stack_type = object.core_type();
+            let mut stack_type = object_type;
             match stack_type {
                 Backboard::TYPE_KEY => {
-                    let mut importer = Box::new(BackboardImporter::new(object.as_backboard_mut().unwrap()));
-                    importer.set_file(NonNull::from(&mut *self));
+                    let mut importer = Box::new(BackboardImporter::new(object.clone()));
+                    importer.set_file(Some(self.self_handle.clone()));
                     stack_object = Some(importer);
                 }
                 Artboard::TYPE_KEY => {
-                    stack_object = Some(Box::new(ArtboardImporter::new(object.as_artboard_mut().unwrap())));
+                    stack_object = Some(Box::new(ArtboardImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::viewmodel::data_enum_custom_base::DataEnumCustomBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(EnumImporter::new(object.as_data_enum_custom_mut().unwrap())));
+                    stack_object = Some(Box::new(EnumImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::animation::linear_animation_base::LinearAnimationBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(LinearAnimationImporter::new(object.as_linear_animation_mut().unwrap())));
+                    stack_object = Some(Box::new(LinearAnimationImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::animation::keyed_object_base::KeyedObjectBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(KeyedObjectImporter::new(object.as_keyed_object_mut().unwrap())));
+                    stack_object = Some(Box::new(KeyedObjectImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::animation::keyed_property_base::KeyedPropertyBase::TYPE_KEY => {
                     let Some(importer) = import_stack.latest::<LinearAnimationImporter>(
                         crate::mechanical_port::source::generated::animation::linear_animation_base::LinearAnimationBase::TYPE_KEY,
                     ) else { return ImportResult::Malformed; };
-                    stack_object = Some(Box::new(KeyedPropertyImporter::new(importer.animation(), object.as_keyed_property_mut().unwrap())));
+                    stack_object = Some(Box::new(KeyedPropertyImporter::new(importer.animation(), object.clone())));
                 }
                 crate::mechanical_port::source::generated::animation::state_machine_base::StateMachineBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(StateMachineImporter::new(object.as_state_machine_mut().unwrap())));
+                    stack_object = Some(Box::new(StateMachineImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::animation::state_machine_layer_base::StateMachineLayerBase::TYPE_KEY => {
                     let Some(importer) = import_stack.latest::<ArtboardImporter>(
                         crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
                     ) else { return ImportResult::Malformed; };
-                    stack_object = Some(Box::new(StateMachineLayerImporter::new(object.as_state_machine_layer_mut().unwrap(), importer.artboard())));
+                    stack_object = Some(Box::new(StateMachineLayerImporter::new(object.clone(), importer.artboard())));
                 }
                 crate::mechanical_port::source::generated::animation::entry_state_base::EntryStateBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::exit_state_base::ExitStateBase::TYPE_KEY
@@ -409,17 +453,17 @@ impl File {
                 | crate::mechanical_port::source::generated::animation::blend_state_1d_viewmodel_base::BlendState1DViewModelBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::blend_state_1d_input_base::BlendState1DInputBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::blend_state_direct_base::BlendStateDirectBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(LayerStateImporter::new(object.as_layer_state_mut().unwrap())));
+                    stack_object = Some(Box::new(LayerStateImporter::new(object.clone())));
                     stack_type = crate::mechanical_port::source::generated::animation::layer_state_base::LayerStateBase::TYPE_KEY;
                 }
                 crate::mechanical_port::source::generated::animation::state_transition_base::StateTransitionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::blend_state_transition_base::BlendStateTransitionBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(StateTransitionImporter::new(object.as_state_transition_mut().unwrap())));
+                    stack_object = Some(Box::new(StateTransitionImporter::new(object.clone())));
                     stack_type = crate::mechanical_port::source::generated::animation::state_transition_base::StateTransitionBase::TYPE_KEY;
                 }
                 crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::state_machine_listener_single_base::StateMachineListenerSingleBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(StateMachineListenerImporter::new(object.as_state_machine_listener_mut().unwrap())));
+                    stack_object = Some(Box::new(StateMachineListenerImporter::new(object.clone())));
                     stack_type = crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::TYPE_KEY;
                 }
                 crate::mechanical_port::source::assets::image_asset::ImageAsset::TYPE_KEY
@@ -427,59 +471,72 @@ impl File {
                 | crate::mechanical_port::source::assets::audio_asset::AudioAsset::TYPE_KEY
                 | crate::mechanical_port::source::assets::blob_asset::BlobAsset::TYPE_KEY => {
                     stack_object = Some(Box::new(FileAssetImporter::new(
-                        object.as_file_asset_mut().unwrap(),
+                        object.clone(),
                         self.asset_loader.clone(),
-                        self.factory,
+                        self.factory.clone(),
                     )));
                     stack_type = crate::mechanical_port::source::assets::file_asset::FileAsset::TYPE_KEY;
                 }
                 crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_keyboard_base::ListenerInputTypeKeyboardBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(ListenerInputTypeKeyboardImporter::new(object.as_listener_input_type_keyboard_mut().unwrap())));
+                    stack_object = Some(Box::new(ListenerInputTypeKeyboardImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_gamepad_base::ListenerInputTypeGamepadBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(ListenerInputTypeGamepadImporter::new(object.as_listener_input_type_gamepad_mut().unwrap())));
+                    stack_object = Some(Box::new(ListenerInputTypeGamepadImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_semantic_base::ListenerInputTypeSemanticBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(ListenerInputTypeSemanticImporter::new(object.as_listener_input_type_semantic_mut().unwrap())));
+                    stack_object = Some(Box::new(ListenerInputTypeSemanticImporter::new(object.clone())));
                 }
-                #[cfg(feature = "rive_scripting")]
                 crate::mechanical_port::source::assets::script_asset::ScriptAsset::TYPE_KEY => {
-                    let script = object.as_script_asset_mut().unwrap();
-                    stack_object = Some(Box::new(crate::mechanical_port::source::importers::text_asset_importer::TextAssetImporter::new(
-                        script.cast(), self.asset_loader.clone(), self.factory, &mut in_band_content,
-                    )));
-                    stack_type = FileAsset::TYPE_KEY;
-                    unsafe { script.as_mut() }.set_file(Some(NonNull::from(&mut *self)));
+                    object.with_downcast_mut::<ScriptAsset, _>(|script| {
+                        script.set_file(Some(self.self_handle.clone()));
+                        script.set_scripting_vm(self.scripting_vm.clone());
+                    });
+                    stack_object = Some(Box::new(
+                        crate::mechanical_port::source::importers::text_asset_importer::TextAssetImporter::new(
+                            object.clone(),
+                            self.asset_loader.clone(),
+                            self.factory.clone(),
+                            in_band_content.clone(),
+                        ),
+                    ));
+                    stack_type = crate::mechanical_port::source::assets::file_asset::FileAsset::TYPE_KEY;
                 }
-                #[cfg(feature = "rive_scripting")]
                 crate::mechanical_port::source::assets::shader_asset::ShaderAsset::TYPE_KEY => {
-                    stack_object = Some(Box::new(crate::mechanical_port::source::importers::text_asset_importer::TextAssetImporter::new(
-                        object.as_shader_asset_mut().unwrap().cast(), self.asset_loader.clone(), self.factory, &mut in_band_content,
-                    )));
-                    stack_type = FileAsset::TYPE_KEY;
+                    stack_object = Some(Box::new(
+                        crate::mechanical_port::source::importers::text_asset_importer::TextAssetImporter::new(
+                            object.clone(),
+                            self.asset_loader.clone(),
+                            self.factory.clone(),
+                            in_band_content.clone(),
+                        ),
+                    ));
+                    stack_type = crate::mechanical_port::source::assets::file_asset::FileAsset::TYPE_KEY;
                 }
                 crate::mechanical_port::source::assets::manifest_asset::ManifestAsset::TYPE_KEY => {
-                    let asset = object.as_file_asset_mut().unwrap();
-                    stack_object = Some(Box::new(FileAssetImporter::new(asset, self.asset_loader.clone(), self.factory)));
+                    stack_object = Some(Box::new(FileAssetImporter::new(
+                        object.clone(),
+                        self.asset_loader.clone(),
+                        self.factory.clone(),
+                    )));
                     stack_type = FileAsset::TYPE_KEY;
-                    self.manifest = Some(unsafe { Rcp::from_raw(asset.as_ptr()) });
+                    self.manifest = Some(object.clone());
                 }
                 crate::mechanical_port::source::generated::viewmodel::viewmodel_base::ViewModelBase::TYPE_KEY => {
-                    let mut view_model = object.as_view_model_mut().unwrap();
-                    stack_object = Some(Box::new(ViewModelImporter::new(view_model)));
+                    stack_object = Some(Box::new(ViewModelImporter::new(object.clone())));
                     stack_type = crate::mechanical_port::source::generated::viewmodel::viewmodel_base::ViewModelBase::TYPE_KEY;
-                    unsafe { view_model.as_mut() }.set_file(Some(NonNull::from(&mut *self)));
+                    let file = self.self_handle.clone();
+                    object.with_downcast_mut::<ViewModel, _>(|view_model| view_model.set_file(file));
                 }
                 crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(ViewModelInstanceImporter::new(object.as_view_model_instance_mut().unwrap())));
+                    stack_object = Some(Box::new(ViewModelInstanceImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_list_base::ViewModelInstanceListBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(ViewModelInstanceListImporter::new(object.as_view_model_instance_list_mut().unwrap())));
+                    stack_object = Some(Box::new(ViewModelInstanceListImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::animation::transition_viewmodel_condition_base::TransitionViewModelConditionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::transition_artboard_condition_base::TransitionArtboardConditionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::transition_focus_condition_base::TransitionFocusConditionBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(TransitionViewModelConditionImporter::new(object.as_transition_viewmodel_condition_mut().unwrap())));
+                    stack_object = Some(Box::new(TransitionViewModelConditionImporter::new(object.clone())));
                     stack_type = crate::mechanical_port::source::generated::animation::transition_viewmodel_condition_base::TransitionViewModelConditionBase::TYPE_KEY;
                 }
                 crate::mechanical_port::source::generated::data_bind::bindable_property_number_base::BindablePropertyNumberBase::TYPE_KEY
@@ -493,28 +550,34 @@ impl File {
                 | crate::mechanical_port::source::generated::data_bind::bindable_property_trigger_base::BindablePropertyTriggerBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::data_bind::bindable_property_integer_base::BindablePropertyIntegerBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::data_bind::bindable_property_list_base::BindablePropertyListBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(BindablePropertyImporter::new(object.as_bindable_property_mut().unwrap())));
+                    stack_object = Some(Box::new(BindablePropertyImporter::new(object.clone())));
                     stack_type = crate::mechanical_port::source::generated::data_bind::bindable_property_base::BindablePropertyBase::TYPE_KEY;
                 }
                 crate::mechanical_port::source::generated::data_bind::converters::data_converter_group_base::DataConverterGroupBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(DataConverterGroupImporter::new(object.as_data_converter_group_mut().unwrap())));
+                    stack_object = Some(Box::new(DataConverterGroupImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::data_bind::converters::data_converter_formula_base::DataConverterFormulaBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(DataConverterFormulaImporter::new(object.as_data_converter_formula_mut().unwrap())));
+                    stack_object = Some(Box::new(DataConverterFormulaImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::data_bind::converters::data_converter_number_to_list_base::DataConverterNumberToListBase::TYPE_KEY => {
-                    object.as_data_converter_number_to_list_mut().unwrap().set_file(Some(NonNull::from(&mut *self)));
+                    let file = self.self_handle.clone();
+                    object.with_downcast_mut::<crate::mechanical_port::source::data_bind::converters::data_converter_number_to_list::DataConverterNumberToList, _>(|converter| converter.set_file(Some(file)));
                 }
                 crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY => {
-                    object.as_artboard_component_list_mut().unwrap().set_file(Some(NonNull::from(&mut *self)));
+                    object.with_mut(|object| {
+                        if let Some(list) = object.as_artboard_component_list_mut() {
+                            list.set_file(Some(self.self_handle.clone()));
+                        }
+                    });
                 }
                 crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::TYPE_KEY => {
-                    object
-                        .as_nested_artboard_mut()
-                        .unwrap()
-                        .set_file(Some(NonNull::from(&mut *self)));
+                    object.with_mut(|object| {
+                        if let Some(nested) = object.as_nested_artboard_mut() {
+                            nested.set_file(Some(self.self_handle.clone()));
+                        }
+                    });
                 }
                 crate::mechanical_port::source::generated::scripted::scripted_data_converter_base::ScriptedDataConverterBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY
@@ -523,16 +586,18 @@ impl File {
                 | crate::mechanical_port::source::generated::animation::scripted_listener_action_base::ScriptedListenerActionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::scripted_transition_condition_base::ScriptedTransitionConditionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY => {
-                    if let Some(scripted) = object.as_scripted_object_mut() {
-                        stack_object = Some(Box::new(ScriptedObjectImporter::new(scripted)));
-                        stack_type = crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY;
-                    }
+                    stack_object = Some(Box::new(ScriptedObjectImporter::new(object.clone())));
+                    stack_type = crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY;
                 }
                 crate::mechanical_port::source::generated::data_bind::data_bind_path_base::DataBindPathBase::TYPE_KEY => {
-                    stack_object = Some(Box::new(DataBindPathImporter::new(object.as_data_bind_path_mut().unwrap())));
+                    stack_object = Some(Box::new(DataBindPathImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::script_input_artboard_base::ScriptInputArtboardBase::TYPE_KEY => {
-                    object.as_script_input_artboard_mut().unwrap().set_file(Some(NonNull::from(&mut *self)));
+                    object.with_mut(|object| {
+                        if let Some(input) = object.as_script_input_artboard_mut() {
+                            input.set_file(Some(self.self_handle.clone()));
+                        }
+                    });
                 }
                 _ => {}
             }
@@ -540,540 +605,645 @@ impl File {
             if import_stack.make_latest(stack_type, stack_object) != StatusCode::Ok {
                 return ImportResult::Malformed;
             }
-            if let Some(component) = object.as_state_machine_layer_component_mut() {
+            if object.is_type_of(crate::mechanical_port::source::generated::animation::state_machine_layer_component_base::StateMachineLayerComponentBase::TYPE_KEY) {
                 if import_stack.make_latest(
                     crate::mechanical_port::source::generated::animation::state_machine_layer_component_base::StateMachineLayerComponentBase::TYPE_KEY,
-                    Some(Box::new(StateMachineLayerComponentImporter::new(component))),
+                    Some(Box::new(StateMachineLayerComponentImporter::new(object.clone()))),
                 ) != StatusCode::Ok
                 {
                     return ImportResult::Malformed;
                 }
             }
-            if let Some(converter) = object.as_data_converter_mut() {
-                self.data_converters.push(converter);
-            } else if let Some(interpolator) = object.as_keyframe_interpolator_mut() {
+            if object.is_type_of(crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBase::TYPE_KEY) {
+                self.data_converters.push(object.clone());
+            } else if object.is_type_of(crate::mechanical_port::source::generated::animation::keyframe_interpolator_base::KeyFrameInterpolatorBase::TYPE_KEY) {
                 let artboard_importer = import_stack.latest::<ArtboardImporter>(
                     crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
                 );
                 if artboard_importer.is_none() {
-                    self.keyframe_interpolators.push(interpolator);
+                    self.keyframe_interpolators.push(object.clone());
                 }
-                if let Some(scripted) = object.as_scripted_interpolator_mut() {
-                    self.scripted_interpolators.push(scripted);
+                if object.is_type_of(crate::mechanical_port::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY) {
+                    self.scripted_interpolators.push(object.clone());
                 }
-            } else if let Some(physics) = object.as_scroll_physics_mut() {
-                self.scroll_physics.push(physics);
+            } else if object.is_type_of(crate::mechanical_port::source::generated::constraints::scrolling::scroll_physics_base::ScrollPhysicsBase::TYPE_KEY) {
+                self.scroll_physics.push(object.clone());
             }
-            Box::leak(object);
         }
 
         let resolved = import_stack.resolve();
-        #[cfg(feature = "rive_scripting")]
-        self.register_scripts();
-        if !reader.has_error() && resolved == StatusCode::Ok {
+        let scripts_registered = self.register_scripts();
+        if !reader.has_error() && resolved == StatusCode::Ok && scripts_registered {
             ImportResult::Success
         } else {
             ImportResult::Malformed
         }
     }
 
-    pub fn add_file_view_model_instance(&mut self, instance: NonNull<ViewModelInstance>) {
-        self.view_model_instances
-            .push(unsafe { Rcp::from_raw(instance.as_ptr()) });
+    pub fn add_file_view_model_instance(&mut self, instance: CoreHandle) {
+        if !self.view_model_instances.contains(&instance) {
+            self.view_model_instances.push(instance);
+        }
     }
 
-    #[cfg(feature = "rive_scripting")]
-    fn register_scripts(&mut self) {
+    fn register_scripts(&mut self) -> bool {
         let scripts: Vec<_> = self
             .file_assets
             .iter()
-            .filter_map(|asset| asset.as_script_asset())
+            .filter(|asset| {
+                asset
+                    .with_downcast::<ScriptAsset, _>(|_| true)
+                    .unwrap_or(false)
+            })
+            .cloned()
             .collect();
         if scripts.is_empty() {
-            return;
+            return true;
         }
-        if self.scripting_vm.is_none() {
-            self.make_scripting_vm();
-        }
-        if let Some(vm) = self.scripting_vm.as_deref_mut() {
-            if !vm.context().initializes_data_global_externally() {
-                crate::mechanical_port::source::lua::rive_lua_libs::initialize_lua_data(
-                    vm.state(),
-                    &self.view_models,
-                );
-            }
-            for script in scripts {
-                #[cfg(feature = "rive_tools")]
-                vm.add_module(script);
-                #[cfg(not(feature = "rive_tools"))]
-                if unsafe { script.as_ref() }.base.verified() {
-                    vm.add_module(script);
-                }
-            }
-            vm.perform_registration();
-        }
-        for interpolator in &mut self.scripted_interpolators {
-            if let Some(mut script) = unsafe { interpolator.as_ref() }.script_asset() {
-                unsafe { script.as_mut() }.init_scripted_object(interpolator.cast());
-            }
-        }
-    }
+        let Some(vm) = self.scripting_vm.clone() else {
+            return false;
+        };
 
-    #[cfg(feature = "rive_scripting")]
-    fn make_scripting_vm(&mut self) {
-        self.cleanup_scripting_vm();
-        let context = Box::new(
-            crate::mechanical_port::source::lua::rive_lua_libs::CppRuntimeScriptingContext::new(
-                self.factory,
-            ),
-        );
-        self.scripting_vm = Some(make_rcp(
-            crate::mechanical_port::source::lua::scripting_vm::ScriptingVm::new(context),
-        ));
-    }
-
-    #[cfg(feature = "rive_scripting")]
-    pub fn scripting_state(
-        &mut self,
-    ) -> Option<NonNull<crate::mechanical_port::source::lua::lua_state::LuaState>> {
-        self.scripting_vm.as_deref_mut().map(|vm| vm.state())
-    }
-
-    #[cfg(feature = "rive_scripting")]
-    pub fn set_scripting_vm(
-        &mut self,
-        vm: Rcp<crate::mechanical_port::source::lua::scripting_vm::ScriptingVm>,
-    ) {
-        #[cfg(feature = "rive_tools")]
-        if let Some(current) = self.scripting_vm.as_deref_mut() {
-            if let Some(context) = current.context_mut() {
-                context.dispose_orphan_scripted_properties();
+        let owned_modules: Vec<(String, Vec<u8>, CoreHandle, bool)> = scripts
+            .iter()
+            .filter_map(|script| {
+                script
+                    .with_downcast::<ScriptAsset, _>(|script_asset| {
+                        #[cfg(not(feature = "tools"))]
+                        if !script_asset.verified() {
+                            return None;
+                        }
+                        Some((
+                            script_asset.module_name(),
+                            script_asset.module_bytecode().to_vec(),
+                            script.clone(),
+                            script_asset.is_module(),
+                        ))
+                    })
+                    .flatten()
+            })
+            .collect();
+        let modules: Vec<_> = owned_modules
+            .iter()
+            .map(|(name, bytes, _, _)| ScriptModule::new(name, bytes))
+            .collect();
+        let failures = vm.with_vm_mut(|vm| vm.perform_registration(&modules));
+        if !failures.is_empty() {
+            return false;
+        }
+        for (_, _, script, is_module) in &owned_modules {
+            if *is_module {
+                script
+                    .with_downcast_mut::<ScriptAsset, _>(|script| script.registration_complete(0));
             }
         }
-        self.scripting_vm = Some(vm);
+
+        for interpolator in self.scripted_interpolators.clone() {
+            let script = interpolator
+                .with(|interpolator| {
+                    interpolator
+                        .as_scripted_object()
+                        .and_then(|interpolator| interpolator.script_asset())
+                })
+                .flatten();
+            if let Some(script) = script {
+                script.with_downcast_mut::<ScriptAsset, _>(|script| {
+                    interpolator.with_mut(|interpolator| {
+                        interpolator
+                            .as_scripted_object_mut()
+                            .is_some_and(|interpolator| script.init_scripted_object(interpolator))
+                    })
+                });
+            }
+        }
+        true
     }
 
-    #[cfg(feature = "rive_scripting")]
+    pub fn set_scripting_vm(&mut self, vm: Option<RuntimeScriptingVmHandle>) {
+        self.scripting_vm = vm;
+    }
+
     fn cleanup_scripting_vm(&mut self) {
-        #[cfg(feature = "rive_tools")]
-        if let Some(current) = self.scripting_vm.as_deref_mut() {
-            if let Some(context) = current.context_mut() {
-                context.dispose_orphan_scripted_properties();
-            }
-        }
         self.scripting_vm = None;
     }
 
-    #[cfg(feature = "rive_scripting")]
-    pub fn scripting_vm(
-        &mut self,
-    ) -> Option<NonNull<crate::mechanical_port::source::lua::scripting_vm::ScriptingVm>> {
-        self.scripting_vm.as_deref_mut().map(NonNull::from)
+    pub fn scripting_vm(&self) -> Option<RuntimeScriptingVmHandle> {
+        self.scripting_vm.clone()
     }
 
-    #[cfg(all(feature = "rive_scripting", feature = "rive_tools"))]
+    #[cfg(feature = "tools")]
     pub fn clear_scripting_vm(&mut self) {
         self.cleanup_scripting_vm();
     }
 
-    #[cfg(all(feature = "rive_scripting", feature = "rive_tools"))]
+    #[cfg(feature = "tools")]
     pub fn has_vm(&self) -> bool {
         self.scripting_vm.is_some()
     }
 
-    pub fn artboard_named_source(&self, name: &str) -> Option<NonNull<Artboard>> {
+    pub fn artboard_named_source(&self, name: &str) -> Option<CoreHandle> {
         self.artboards
             .iter()
-            .copied()
-            .find(|artboard| unsafe { artboard.as_ref().base.name() == name })
+            .find(|artboard| {
+                artboard
+                    .with_downcast::<Artboard, _>(|artboard| artboard.base.name() == name)
+                    .unwrap_or(false)
+            })
+            .cloned()
     }
 
-    pub fn artboard(&self) -> Option<NonNull<Artboard>> {
-        self.artboards.first().copied()
+    pub fn artboard(&self) -> Option<CoreHandle> {
+        self.artboards.first().cloned()
     }
 
-    pub fn artboard_at_source(&self, index: usize) -> Option<NonNull<Artboard>> {
-        self.artboards.get(index).copied()
+    pub fn artboard_handle(&self, index: usize) -> Option<CoreHandle> {
+        self.artboards.get(index).cloned()
+    }
+
+    pub fn artboard_at_source(&self, index: usize) -> Option<CoreHandle> {
+        self.artboard_handle(index)
     }
 
     pub fn artboard_name_at(&self, index: usize) -> String {
         self.artboard_at_source(index)
-            .map(|artboard| unsafe { artboard.as_ref() }.base.name().to_owned())
+            .and_then(|artboard| {
+                artboard.with_downcast::<Artboard, _>(|artboard| artboard.base.name().to_owned())
+            })
             .unwrap_or_default()
     }
 
     fn instance_artboard(
         &self,
-        artboard: Option<NonNull<Artboard>>,
-    ) -> Option<Box<ArtboardInstance>> {
-        let artboard = artboard?;
-        let mut instance = unsafe { artboard.as_ref() }.instance()?;
-        #[cfg(feature = "rive_scripting")]
+        artboard: Option<CoreHandle>,
+    ) -> Option<RuntimeArtboardInstanceHandle> {
+        let source = artboard?;
+        let mut instance = source.with_downcast::<Artboard, _>(Artboard::instance)??;
         instance.set_scripting_vm(self.scripting_vm.clone());
-        instance.set_file(Some(unsafe { ref_rcp(self as *const Self as *mut Self) }));
-        Some(instance)
+        instance.set_file(Some(self.self_handle.clone()));
+        Some(RuntimeArtboardInstanceHandle::new(*instance))
     }
 
-    pub fn artboard_default(&self) -> Option<Box<ArtboardInstance>> {
+    pub fn artboard_default(&self) -> Option<RuntimeArtboardInstanceHandle> {
         self.instance_artboard(self.artboard())
     }
 
-    pub fn artboard_at(&self, index: usize) -> Option<Box<ArtboardInstance>> {
+    pub fn artboard_at(&self, index: usize) -> Option<RuntimeArtboardInstanceHandle> {
         self.instance_artboard(self.artboard_at_source(index))
     }
 
-    pub fn artboard_named(&self, name: &str) -> Option<Box<ArtboardInstance>> {
+    pub fn artboard_named(&self, name: &str) -> Option<RuntimeArtboardInstanceHandle> {
         self.instance_artboard(self.artboard_named_source(name))
     }
 
-    pub fn bindable_artboard_named(&self, name: &str) -> Option<Rcp<BindableArtboard>> {
-        let artboard = self.artboard_named(name)?;
-        Some(make_rcp(BindableArtboard::new(
-            Some(unsafe { ref_rcp(self as *const Self as *mut Self) }),
+    pub fn bindable_artboard_named(&self, name: &str) -> Option<RuntimeBindableArtboardHandle> {
+        let source = self.artboard_named_source(name)?;
+        let artboard = self.instance_artboard(Some(source.clone()))?;
+        Some(RuntimeBindableArtboardHandle::new(
+            Some(self.self_handle.clone()),
             artboard,
-        )))
+            Some(source),
+        ))
     }
 
-    pub fn bindable_artboard_default(&self) -> Option<Rcp<BindableArtboard>> {
-        let artboard = self.artboard_default()?;
-        Some(make_rcp(BindableArtboard::new(
-            Some(unsafe { ref_rcp(self as *const Self as *mut Self) }),
+    pub fn bindable_artboard_default(&self) -> Option<RuntimeBindableArtboardHandle> {
+        let source = self.artboard()?;
+        let artboard = self.instance_artboard(Some(source.clone()))?;
+        Some(RuntimeBindableArtboardHandle::new(
+            Some(self.self_handle.clone()),
             artboard,
-        )))
+            Some(source),
+        ))
     }
 
     pub fn internal_bindable_artboard_from_artboard(
         &self,
-        artboard: Option<NonNull<Artboard>>,
-    ) -> Option<Rcp<BindableArtboard>> {
-        let artboard = unsafe { artboard?.as_ref() }.instance()?;
-        Some(make_rcp(BindableArtboard::new(None, artboard)))
+        source: Option<CoreHandle>,
+    ) -> Option<RuntimeBindableArtboardHandle> {
+        let source = source?;
+        let artboard = self.instance_artboard(Some(source.clone()))?;
+        Some(RuntimeBindableArtboardHandle::new(
+            None,
+            artboard,
+            Some(source),
+        ))
     }
 
-    pub fn complete_view_model_instance(&self, instance: Rcp<ViewModelInstance>) {
-        let mut instances = HashMap::new();
-        self.complete_view_model_instance_with_map(instance, &mut instances);
+    pub fn complete_view_model_instance(&self, instance: &CoreHandle) {
+        self.complete_view_model_instance_with_map(instance, &mut HashMap::new());
     }
 
-    pub fn complete_view_model_instance_with_map(
+    fn complete_view_model_instance_with_map(
         &self,
-        instance: Rcp<ViewModelInstance>,
-        instances: &mut HashMap<NonNull<ViewModelInstance>, Rcp<ViewModelInstance>>,
+        instance: &CoreHandle,
+        instances: &mut HashMap<CoreHandle, CoreHandle>,
     ) {
-        let view_model = self.view_models[instance.base.view_model_id() as usize];
-        for value in instance.property_values() {
-            if let Some(mut nested) = value.base.as_view_model_instance_viewmodel() {
-                let property =
-                    unsafe { view_model.as_ref() }.property(value.base.view_model_property_id());
-                if let Some(property) = property.and_then(|property| unsafe {
-                    property.as_ref().base.as_view_model_property_viewmodel()
-                }) {
-                    let referenced_model = self.view_models
-                        [unsafe { property.as_ref() }.base.view_model_reference_id() as usize];
-                    let source = unsafe { referenced_model.as_ref() }
-                        .instance(unsafe { nested.as_ref() }.base.property_value());
-                    unsafe { nested.as_mut() }
-                        .set_parent_view_model_instance(Some(NonNull::from(&*instance)));
-                    if let Some(source) = source {
-                        let copied = if let Some(existing) = instances.get(&source) {
-                            existing.clone()
-                        } else {
-                            let copied = self.copy_view_model_instance(source, instances);
-                            instances.insert(source, copied.clone());
-                            copied
-                        };
-                        unsafe { nested.as_mut() }.set_reference_view_model_instance(Some(copied));
+        let Some((view_model_id, values)) = instance
+            .with(|instance| {
+                let instance = instance.as_view_model_instance()?;
+                Some((
+                    instance.base.view_model_id() as usize,
+                    instance.property_values().to_vec(),
+                ))
+            })
+            .flatten()
+        else {
+            return;
+        };
+        let Some(view_model) = self.view_models.get(view_model_id).cloned() else {
+            return;
+        };
+
+        for value in values {
+            let property_id = value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_value()
+                        .map(|value| value.base.view_model_property_id())
+                })
+                .flatten();
+            let Some(property_id) = property_id else {
+                continue;
+            };
+            let property = view_model
+                .with(|view_model| {
+                    view_model
+                        .as_view_model()
+                        .and_then(|view_model| view_model.property_at(property_id as usize))
+                })
+                .flatten();
+            let Some(property) = property else {
+                continue;
+            };
+            value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.set_view_model_property(property.clone());
+                }
+            });
+
+            let nested_index = value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_view_model()
+                        .map(|nested| nested.base.property_value())
+                })
+                .flatten();
+            if let Some(nested_index) = nested_index {
+                value.with_mut(|value| {
+                    if let Some(nested) = value.as_view_model_instance_view_model_mut() {
+                        nested.set_parent_view_model_instance(Some(instance.clone()));
+                    }
+                });
+                let reference_id = property
+                    .with(|property| {
+                        property
+                            .as_view_model_property()
+                            .and_then(|property| property.base.as_view_model_reference_id())
+                    })
+                    .flatten();
+                let source = reference_id
+                    .and_then(|id| self.view_models.get(id as usize))
+                    .and_then(|model| {
+                        model
+                            .with(|model| {
+                                model
+                                    .as_view_model()
+                                    .and_then(|model| model.instance_at(nested_index as usize))
+                            })
+                            .flatten()
+                    });
+                if let Some(source) = source {
+                    let copied = instances
+                        .get(&source)
+                        .cloned()
+                        .or_else(|| self.copy_view_model_instance(&source, instances));
+                    if let Some(copied) = copied {
+                        value.with_mut(|value| {
+                            if let Some(nested) = value.as_view_model_instance_view_model_mut() {
+                                nested.set_reference_view_model_instance(Some(copied));
+                            }
+                        });
                     }
                 }
-            } else if let Some(mut list) = value.base.as_view_model_instance_list() {
-                unsafe { list.as_mut() }
-                    .set_parent_view_model_instance(Some(NonNull::from(&*instance)));
-                for item in unsafe { list.as_mut() }.list_items_mut() {
-                    let model = self.view_models[item.base.view_model_id() as usize];
-                    let source =
-                        unsafe { model.as_ref() }.instance(item.base.view_model_instance_id());
-                    if let Some(source) = source {
-                        let copied = if let Some(existing) = instances.get(&source) {
-                            existing.clone()
-                        } else {
-                            let copied = self.copy_view_model_instance(source, instances);
-                            instances.insert(source, copied.clone());
-                            copied
-                        };
-                        item.set_view_model_instance(Some(copied));
-                    }
+                continue;
+            }
+
+            let items = value
+                .with_mut(|value| {
+                    let list = value.as_view_model_instance_list_mut()?;
+                    list.set_parent_view_model_instance(Some(instance.clone()));
+                    Some(list.list_items().to_vec())
+                })
+                .flatten();
+            for item in items.into_iter().flatten() {
+                let ids = item
+                    .with(|item| {
+                        let item = item.as_view_model_instance_list_item()?;
+                        Some((
+                            item.base.view_model_id() as usize,
+                            item.base.view_model_instance_id() as usize,
+                        ))
+                    })
+                    .flatten();
+                let Some((model_id, source_id)) = ids else {
+                    continue;
+                };
+                let source = self.view_models.get(model_id).and_then(|model| {
+                    model
+                        .with(|model| {
+                            model
+                                .as_view_model()
+                                .and_then(|model| model.instance_at(source_id))
+                        })
+                        .flatten()
+                });
+                let Some(source) = source else {
+                    continue;
+                };
+                let copied = instances
+                    .get(&source)
+                    .cloned()
+                    .or_else(|| self.copy_view_model_instance(&source, instances));
+                if let Some(copied) = copied {
+                    item.with_mut(|item| {
+                        if let Some(item) = item.as_view_model_instance_list_item_mut() {
+                            item.set_view_model_instance(Some(copied));
+                        }
+                    });
                 }
             }
-            value.set_view_model_property(
-                unsafe { view_model.as_ref() }.property(value.base.view_model_property_id()),
-            );
         }
     }
 
-    pub fn complete_view_model_properties(&self, instance: NonNull<ViewModelInstance>) {
-        let view_model =
-            self.view_models[unsafe { instance.as_ref() }.base.view_model_id() as usize];
-        for value in unsafe { instance.as_ref() }.property_values() {
-            if let Some(nested) = value.base.as_view_model_instance_viewmodel() {
-                let property =
-                    unsafe { view_model.as_ref() }.property(value.base.view_model_property_id());
-                if let Some(property) = property.and_then(|property| unsafe {
-                    property.as_ref().base.as_view_model_property_viewmodel()
-                }) {
-                    let referenced_model = self.view_models
-                        [unsafe { property.as_ref() }.base.view_model_reference_id() as usize];
-                    if let Some(source) = unsafe { referenced_model.as_ref() }
-                        .instance(unsafe { nested.as_ref() }.base.property_value())
-                    {
-                        self.complete_view_model_properties(source);
-                    }
-                }
-            } else if let Some(mut list) = value.base.as_view_model_instance_list() {
-                for item in unsafe { list.as_mut() }.list_items_mut() {
-                    let model = self.view_models[item.base.view_model_id() as usize];
-                    if let Some(source) =
-                        unsafe { model.as_ref() }.instance(item.base.view_model_instance_id())
-                    {
-                        self.complete_view_model_properties(source);
-                    }
-                }
-            }
-            value.set_view_model_property(
-                unsafe { view_model.as_ref() }.property(value.base.view_model_property_id()),
-            );
-        }
+    pub fn complete_view_model_properties(&self, instance: &CoreHandle) {
+        self.complete_view_model_instance(instance);
     }
 
     fn copy_view_model_instance(
         &self,
-        instance: NonNull<ViewModelInstance>,
-        instances: &mut HashMap<NonNull<ViewModelInstance>, Rcp<ViewModelInstance>>,
-    ) -> Rcp<ViewModelInstance> {
-        let cloned = unsafe { instance.as_ref() }.clone_core();
-        let copied = unsafe { Rcp::from_raw(Box::into_raw(cloned)) };
-        self.complete_view_model_instance_with_map(copied.clone(), instances);
-        #[cfg(feature = "rive_tools")]
-        self.register_view_model_instance(NonNull::from(&*copied), copied.clone());
-        copied
+        instance: &CoreHandle,
+        instances: &mut HashMap<CoreHandle, CoreHandle>,
+    ) -> Option<CoreHandle> {
+        let copied = instance
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()
+                    .and_then(ViewModelInstance::clone_instance)
+            })
+            .flatten()?;
+        instances.insert(instance.clone(), copied.clone());
+        self.complete_view_model_instance_with_map(&copied, instances);
+        #[cfg(feature = "tools")]
+        self.register_view_model_instance(copied.clone());
+        Some(copied)
     }
 
-    pub fn create_view_model_instance_named(&self, name: &str) -> Option<Rcp<ViewModelInstance>> {
-        self.view_models.iter().find_map(|model| {
-            (unsafe { model.as_ref() }.base.name() == name)
-                .then(|| self.create_view_model_instance_for_model(*model))
-                .flatten()
-        })
-    }
-
-    pub fn create_view_model_instance_by_instance_name(
+    pub fn create_view_model_instance_named(
         &self,
         model_name: &str,
         instance_name: &str,
-    ) -> Option<Rcp<ViewModelInstance>> {
-        for model in &self.view_models {
-            if unsafe { model.as_ref() }.base.name() == model_name {
-                if let Some(instance) = unsafe { model.as_ref() }.instance_named(instance_name) {
-                    return Some(self.copy_view_model_instance(instance, &mut HashMap::new()));
-                }
-            }
-        }
-        None
+    ) -> Option<CoreHandle> {
+        let model = self.view_model_named(model_name)?;
+        let source = model
+            .with(|model| {
+                model
+                    .as_view_model()
+                    .and_then(|model| model.instance_named(instance_name))
+            })
+            .flatten()?;
+        self.copy_view_model_instance(&source, &mut HashMap::new())
     }
 
     pub fn create_view_model_instance_at(
         &self,
         model_index: usize,
         instance_index: usize,
-    ) -> Option<Rcp<ViewModelInstance>> {
-        let model = *self.view_models.get(model_index)?;
-        let instance = unsafe { model.as_ref() }.instance(instance_index as u32)?;
-        Some(self.copy_view_model_instance(instance, &mut HashMap::new()))
+    ) -> Option<CoreHandle> {
+        let model = self.view_models.get(model_index)?;
+        let source = model
+            .with(|model| {
+                model
+                    .as_view_model()
+                    .and_then(|model| model.instance_at(instance_index))
+            })
+            .flatten()?;
+        self.copy_view_model_instance(&source, &mut HashMap::new())
     }
 
-    fn find_view_model_id(&self, search: NonNull<ViewModel>) -> u32 {
+    fn find_view_model_id(&self, search: &CoreHandle) -> u32 {
         self.view_models
             .iter()
-            .position(|model| *model == search)
+            .position(|model| model == search)
             .unwrap_or(self.view_models.len()) as u32
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn set_view_model_instance_registrar(
         &mut self,
-        registrar: Option<NonNull<dyn ViewModelInstanceRegistrar>>,
+        registrar: Option<ViewModelInstanceRegistrarHandle>,
     ) {
         self.view_model_instance_registrar = registrar;
     }
 
-    #[cfg(feature = "rive_tools")]
-    pub fn register_view_model_instance(
-        &self,
-        pointer: NonNull<ViewModelInstance>,
-        reference: Rcp<ViewModelInstance>,
-    ) {
-        if let Some(mut registrar) = self.view_model_instance_registrar {
-            unsafe { registrar.as_mut() }.register_instance(pointer, reference);
+    #[cfg(feature = "tools")]
+    pub fn register_view_model_instance(&self, instance: CoreHandle) {
+        if let Some(registrar) = &self.view_model_instance_registrar {
+            registrar.with_mut(|registrar| registrar.register_instance(instance));
         }
     }
 
-    #[cfg(feature = "rive_tools")]
-    pub fn contains_view_model_instance(&self, pointer: NonNull<ViewModelInstance>) -> bool {
+    #[cfg(feature = "tools")]
+    pub fn contains_view_model_instance(&self, instance: &CoreHandle) -> bool {
         self.view_model_instance_registrar
-            .is_some_and(|registrar| unsafe { registrar.as_ref() }.contains(pointer))
+            .as_ref()
+            .is_some_and(|registrar| registrar.with_mut(|registrar| registrar.contains(instance)))
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn clear_runtime_view_model_instances(&mut self) {
-        if let Some(mut registrar) = self.view_model_instance_registrar {
-            unsafe { registrar.as_mut() }.clear();
+        if let Some(registrar) = &self.view_model_instance_registrar {
+            registrar.with_mut(ViewModelInstanceRegistrar::clear);
         }
     }
 
-    pub fn create_view_model_instance_for_model(
-        &self,
-        view_model: NonNull<ViewModel>,
-    ) -> Option<Rcp<ViewModelInstance>> {
-        let mut instance = Box::<ViewModelInstance>::default();
-        instance
-            .base
-            .set_view_model_id(self.find_view_model_id(view_model));
-        instance.set_view_model(view_model);
-        for (property_id, property) in unsafe { view_model.as_ref() }
-            .properties()
-            .iter()
-            .copied()
-            .enumerate()
-        {
-            let property_type = unsafe { property.as_ref() }.core_type();
-            let value: Option<NonNull<crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue>> =
+    pub fn create_view_model_instance(&mut self, view_model: CoreHandle) -> Option<CoreHandle> {
+        let instance = self.core_arena.insert(ViewModelInstance::default());
+        let view_model_id = self.find_view_model_id(&view_model);
+        instance.with_downcast_mut::<ViewModelInstance, _>(|instance| {
+            instance.base.set_view_model_id(view_model_id);
+            instance.view_model(view_model.clone());
+        });
+        let properties = view_model.with_downcast::<ViewModel, _>(ViewModel::properties)?;
+        for (property_id, property) in properties.into_iter().enumerate() {
+            let property_type = property.core_type()?;
+            let value_type =
                 match property_type {
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_string_base::ViewModelPropertyStringBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_string::ViewModelInstanceString::default()))).cast()),
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_number_base::ViewModelPropertyNumberBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber::default()))).cast()),
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_boolean_base::ViewModelPropertyBooleanBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_boolean::ViewModelInstanceBoolean::default()))).cast()),
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_color_base::ViewModelPropertyColorBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_color::ViewModelInstanceColor::default()))).cast()),
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_list_base::ViewModelPropertyListBase::TYPE_KEY => {
-                        let mut list = Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList::default());
-                        list.set_parent_view_model_instance(Some(NonNull::from(instance.as_mut())));
-                        Some(NonNull::from(Box::leak(list)).cast())
-                    }
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_string_base::ViewModelPropertyStringBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_string_base::ViewModelInstanceStringBase::TYPE_KEY,
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_number_base::ViewModelPropertyNumberBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase::TYPE_KEY,
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_boolean_base::ViewModelPropertyBooleanBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_boolean_base::ViewModelInstanceBooleanBase::TYPE_KEY,
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_color_base::ViewModelPropertyColorBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_color_base::ViewModelInstanceColorBase::TYPE_KEY,
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_list_base::ViewModelPropertyListBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_list_base::ViewModelInstanceListBase::TYPE_KEY,
                     crate::mechanical_port::source::generated::viewmodel::viewmodel_property_enum_system_base::ViewModelPropertyEnumSystemBase::TYPE_KEY
                     | crate::mechanical_port::source::generated::viewmodel::viewmodel_property_enum_custom_base::ViewModelPropertyEnumCustomBase::TYPE_KEY
-                    | crate::mechanical_port::source::generated::viewmodel::viewmodel_property_enum_base::ViewModelPropertyEnumBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_enum::ViewModelInstanceEnum::default()))).cast()),
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_trigger_base::ViewModelPropertyTriggerBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger::default()))).cast()),
+                    | crate::mechanical_port::source::generated::viewmodel::viewmodel_property_enum_base::ViewModelPropertyEnumBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_enum_base::ViewModelInstanceEnumBase::TYPE_KEY,
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_trigger_base::ViewModelPropertyTriggerBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY,
                     crate::mechanical_port::source::generated::viewmodel::viewmodel_property_viewmodel_base::ViewModelPropertyViewModelBase::TYPE_KEY => {
-                        let mut nested = Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel::default());
-                        let nested_property = unsafe { property.as_ref() }.base.as_view_model_property_viewmodel().unwrap();
-                        let referenced_model = self.view_models[unsafe { nested_property.as_ref() }.base.view_model_reference_id() as usize];
-                        if let Some(referenced_instance) = self.create_view_model_instance_for_model(referenced_model) {
-                            nested.set_parent_view_model_instance(Some(NonNull::from(instance.as_mut())));
-                            nested.set_reference_view_model_instance(Some(referenced_instance));
-                        }
-                        Some(NonNull::from(Box::leak(nested)).cast())
+                        crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_viewmodel_base::ViewModelInstanceViewModelBase::TYPE_KEY
                     }
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_asset_image_base::ViewModelPropertyAssetImageBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_image::ViewModelInstanceAssetImage::default()))).cast()),
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_asset_font_base::ViewModelPropertyAssetFontBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_font::ViewModelInstanceAssetFont::default()))).cast()),
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_asset_blob_base::ViewModelPropertyAssetBlobBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob::default()))).cast()),
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_symbol_list_index_base::ViewModelPropertySymbolListIndexBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex::default()))).cast()),
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_artboard_base::ViewModelPropertyArtboardBase::TYPE_KEY => Some(NonNull::from(Box::leak(Box::new(crate::mechanical_port::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard::default()))).cast()),
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_asset_image_base::ViewModelPropertyAssetImageBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_image_base::ViewModelInstanceAssetImageBase::TYPE_KEY,
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_asset_font_base::ViewModelPropertyAssetFontBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_font_base::ViewModelInstanceAssetFontBase::TYPE_KEY,
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_asset_blob_base::ViewModelPropertyAssetBlobBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_blob_base::ViewModelInstanceAssetBlobBase::TYPE_KEY,
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_symbol_list_index_base::ViewModelPropertySymbolListIndexBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_symbol_list_index_base::ViewModelInstanceSymbolListIndexBase::TYPE_KEY,
+                    crate::mechanical_port::source::generated::viewmodel::viewmodel_property_artboard_base::ViewModelPropertyArtboardBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_artboard_base::ViewModelInstanceArtboardBase::TYPE_KEY,
                     _ => {
                         eprintln!("Missing view model property type");
-                        None
+                        return None;
                     }
                 };
-            if let Some(mut value) = value {
-                unsafe { value.as_mut() }.set_view_model_property(Some(property));
-                unsafe { value.as_mut() }
-                    .base
-                    .set_view_model_property_id(property_id as u32);
+            let value = self
+                .core_arena
+                .insert_boxed(CoreRegistry::make_core_box(value_type as i32)?);
+            value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.base.set_view_model_property_id(property_id as u32);
+                    value.set_view_model_property(property.clone());
+                }
+                if let Some(list) = value.as_view_model_instance_list_mut() {
+                    list.set_parent_view_model_instance(Some(instance.clone()));
+                }
+            });
+            if value
+                .with(|value| value.as_view_model_instance_view_model().is_some())
+                .unwrap_or(false)
+            {
+                let reference_id = property
+                    .with(|property| {
+                        property
+                            .as_view_model_property()
+                            .and_then(|property| property.base.as_view_model_reference_id())
+                    })
+                    .flatten();
+                let nested = reference_id
+                    .and_then(|id| self.view_models.get(id as usize).cloned())
+                    .and_then(|model| self.create_view_model_instance(model));
+                value.with_mut(|value| {
+                    if let Some(value) = value.as_view_model_instance_view_model_mut() {
+                        value.set_parent_view_model_instance(Some(instance.clone()));
+                        value.set_reference_view_model_instance(nested);
+                    }
+                });
             }
-            instance.add_value(value);
+            instance
+                .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.add_value(value));
         }
-        let instance = unsafe { Rcp::from_raw(Box::into_raw(instance)) };
-        #[cfg(feature = "rive_tools")]
-        self.register_view_model_instance(NonNull::from(&*instance), instance.clone());
+        #[cfg(feature = "tools")]
+        self.register_view_model_instance(instance.clone());
         Some(instance)
     }
 
     pub fn create_view_model_instance_for_artboard(
-        &self,
-        artboard: NonNull<Artboard>,
-    ) -> Option<Rcp<ViewModelInstance>> {
-        let id = unsafe { artboard.as_ref() }.base.view_model_id() as usize;
-        let model = *self.view_models.get(id)?;
-        self.create_view_model_instance_for_model(model)
+        &mut self,
+        artboard: CoreHandle,
+    ) -> Option<CoreHandle> {
+        let id = artboard
+            .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id() as usize)?;
+        self.create_view_model_instance(self.view_models.get(id)?.clone())
     }
 
     pub fn create_default_view_model_instance_for_artboard(
-        &self,
-        artboard: NonNull<Artboard>,
-    ) -> Option<Rcp<ViewModelInstance>> {
-        let id = unsafe { artboard.as_ref() }.base.view_model_id() as usize;
-        self.create_default_view_model_instance(*self.view_models.get(id)?)
+        &mut self,
+        artboard: CoreHandle,
+    ) -> Option<CoreHandle> {
+        let id = artboard
+            .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id() as usize)?;
+        self.create_default_view_model_instance(self.view_models.get(id)?.clone())
     }
 
     pub fn create_default_view_model_instance(
-        &self,
-        view_model: NonNull<ViewModel>,
-    ) -> Option<Rcp<ViewModelInstance>> {
-        if let Some(instance) = unsafe { view_model.as_ref() }.instance(0) {
-            let copy =
-                unsafe { Rcp::from_raw(Box::into_raw(unsafe { instance.as_ref() }.clone_core())) };
-            self.complete_view_model_instance(copy.clone());
-            #[cfg(feature = "rive_tools")]
-            self.register_view_model_instance(NonNull::from(&*copy), copy.clone());
-            return Some(copy);
+        &mut self,
+        view_model: CoreHandle,
+    ) -> Option<CoreHandle> {
+        let source = view_model.with_downcast::<ViewModel, _>(ViewModel::default_instance)?;
+        if let Some(source) = source {
+            return self.copy_view_model_instance(&source, &mut HashMap::new());
         }
-        self.create_view_model_instance_for_model(view_model)
+        self.create_view_model_instance(view_model)
     }
 
-    pub fn view_model_instance_list_item(
-        &mut self,
-        instance: Rcp<ViewModelInstance>,
-    ) -> Option<Box<ViewModelInstanceListItem>> {
-        for artboard in &self.artboards {
-            if unsafe { artboard.as_ref() }.base.view_model_id() == instance.base.view_model_id() {
-                return Some(self.view_model_instance_list_item_for_artboard(instance, *artboard));
-            }
-        }
-        None
+    pub fn view_model_instance_list_item(&mut self, instance: CoreHandle) -> Option<CoreHandle> {
+        let view_model_id = instance
+            .with_downcast::<ViewModelInstance, _>(|instance| instance.base.view_model_id())?;
+        let artboard = self
+            .artboards
+            .iter()
+            .find(|artboard| {
+                artboard
+                    .with_downcast::<Artboard, _>(|artboard| {
+                        artboard.base.view_model_id() == view_model_id
+                    })
+                    .unwrap_or(false)
+            })?
+            .clone();
+        Some(self.view_model_instance_list_item_for_artboard(instance, artboard))
     }
 
     pub fn view_model_instance_list_item_for_artboard(
-        &self,
-        instance: Rcp<ViewModelInstance>,
-        artboard: NonNull<Artboard>,
-    ) -> Box<ViewModelInstanceListItem> {
-        let mut item = Box::<ViewModelInstanceListItem>::default();
-        item.set_view_model_instance(Some(instance));
-        item.set_artboard(Some(artboard));
+        &mut self,
+        instance: CoreHandle,
+        artboard: CoreHandle,
+    ) -> CoreHandle {
+        let item = self.core_arena.insert(
+            crate::mechanical_port::source::viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem::default(),
+        );
+        item.with_mut(|item| {
+            if let Some(item) = item.as_view_model_instance_list_item_mut() {
+                item.set_view_model_instance(Some(instance));
+                item.set_artboard(Some(artboard));
+            }
+        });
         item
     }
 
-    pub fn view_model_named(&self, name: &str) -> Option<NonNull<ViewModel>> {
+    pub fn view_model_named(&self, name: &str) -> Option<CoreHandle> {
         self.view_models
             .iter()
-            .copied()
-            .find(|model| unsafe { model.as_ref().base.name() == name })
+            .find(|model| {
+                model
+                    .with_downcast::<ViewModel, _>(|model| model.base.name() == name)
+                    .unwrap_or(false)
+            })
+            .cloned()
     }
 
-    pub fn view_model(&self, index: usize) -> Option<NonNull<ViewModel>> {
-        self.view_models.get(index).copied()
+    pub fn view_model_handle(&self, index: usize) -> Option<CoreHandle> {
+        self.view_models.get(index).cloned()
+    }
+
+    pub fn view_model(&self, index: usize) -> Option<CoreHandle> {
+        self.view_model_handle(index)
     }
 
     pub fn view_model_id(&self, name: &str) -> u32 {
         self.view_models
             .iter()
-            .position(|model| unsafe { model.as_ref().base.name() == name })
+            .position(|model| {
+                model
+                    .with_downcast::<ViewModel, _>(|model| model.base.name() == name)
+                    .unwrap_or(false)
+            })
             .unwrap_or(self.view_models.len()) as u32
     }
 
-    pub fn global_view_models(&self) -> Vec<NonNull<ViewModel>> {
+    pub fn global_view_models(&self) -> Vec<CoreHandle> {
         self.view_models
             .iter()
-            .copied()
+            .cloned()
             .filter(|model| {
-                ViewModelType::from_u32(unsafe { model.as_ref() }.base.view_model_type())
-                    == Some(ViewModelType::Global)
+                model
+                    .with_downcast::<ViewModel, _>(|model| {
+                        ViewModelType::from_u32(model.base.view_model_type())
+                            == Some(ViewModelType::Global)
+                    })
+                    .unwrap_or(false)
             })
             .collect()
     }
@@ -1081,13 +1251,15 @@ impl File {
     pub fn global_view_model_names(&self) -> Vec<String> {
         self.global_view_models()
             .iter()
-            .map(|model| unsafe { model.as_ref() }.base.name().to_owned())
+            .filter_map(|model| {
+                model.with_downcast::<ViewModel, _>(|model| model.base.name().to_owned())
+            })
             .collect()
     }
 
-    pub fn view_model_by_index(&self, index: usize) -> Option<NonNull<ViewModelRuntime>> {
-        if let Some(model) = self.view_models.get(index) {
-            return Some(NonNull::from(&*self.create_view_model_runtime(*model)));
+    pub fn view_model_by_index(&self, index: usize) -> Option<RuntimeViewModelHandle> {
+        if let Some(model) = self.view_models.get(index).cloned() {
+            return self.create_view_model_runtime(model);
         }
         eprintln!(
             "Could not find View Model. Index {} is out of range.",
@@ -1096,10 +1268,13 @@ impl File {
         None
     }
 
-    pub fn view_model_by_name(&self, name: &str) -> Option<NonNull<ViewModelRuntime>> {
+    pub fn view_model_by_name(&self, name: &str) -> Option<RuntimeViewModelHandle> {
         for model in &self.view_models {
-            if unsafe { model.as_ref() }.base.name() == name {
-                return Some(NonNull::from(&*self.create_view_model_runtime(*model)));
+            let matches = model
+                .with_downcast::<ViewModel, _>(|model| model.base.name() == name)
+                .unwrap_or(false);
+            if matches {
+                return self.create_view_model_runtime(model.clone());
             }
         }
         eprintln!("Could not find View Model named {}.", name);
@@ -1108,35 +1283,38 @@ impl File {
 
     pub fn default_artboard_view_model(
         &self,
-        artboard: Option<NonNull<Artboard>>,
-    ) -> Option<NonNull<ViewModelRuntime>> {
+        artboard: Option<CoreHandle>,
+    ) -> Option<RuntimeViewModelHandle> {
         let artboard = artboard?;
-        let id = unsafe { artboard.as_ref() }.base.view_model_id() as usize;
-        if let Some(model) = self.view_models.get(id) {
-            return Some(NonNull::from(&*self.create_view_model_runtime(*model)));
+        let (id, artboard_name) = artboard.with_downcast::<Artboard, _>(|artboard| {
+            (
+                artboard.base.view_model_id() as usize,
+                artboard.base.name().to_owned(),
+            )
+        })?;
+        if let Some(model) = self.view_models.get(id).cloned() {
+            return self.create_view_model_runtime(model);
         }
         eprintln!(
             "Could not find a View Model linked to Artboard {}.",
-            unsafe { artboard.as_ref() }.base.name()
+            artboard_name
         );
         None
     }
 
-    fn create_view_model_runtime(&self, model: NonNull<ViewModel>) -> Rcp<ViewModelRuntime> {
-        let runtime = make_rcp(ViewModelRuntime::new(model, NonNull::from(self)));
-        self.view_model_runtimes.borrow_mut().push(runtime.clone());
-        runtime
+    fn create_view_model_runtime(&self, model: CoreHandle) -> Option<RuntimeViewModelHandle> {
+        RuntimeViewModelHandle::new(model, self.self_handle.clone())
     }
 
-    pub fn assets(&self) -> &[Rcp<FileAsset>] {
+    pub fn assets(&self) -> &[CoreHandle] {
         &self.file_assets
     }
 
-    pub fn enums(&self) -> &[NonNull<DataEnum>] {
+    pub fn enums(&self) -> &[CoreHandle] {
         &self.enums
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn strip_assets(
         bytes: &[u8],
         type_keys: &HashSet<u16>,
@@ -1187,12 +1365,16 @@ impl File {
         stripped
     }
 
-    pub fn asset(&self, index: usize) -> Option<Rcp<FileAsset>> {
+    pub fn core_arena(&self) -> &CoreArena {
+        &self.core_arena
+    }
+
+    pub fn asset(&self, index: usize) -> Option<CoreHandle> {
         self.file_assets.get(index).cloned()
     }
 
-    pub fn backboard(&self) -> Option<NonNull<Backboard>> {
-        self.backboard
+    pub fn backboard(&self) -> Option<CoreHandle> {
+        self.backboard.clone()
     }
 
     pub fn artboard_count(&self) -> usize {
@@ -1203,7 +1385,7 @@ impl File {
         self.view_models.len()
     }
 
-    pub fn artboards(&self) -> Vec<NonNull<Artboard>> {
+    pub fn artboards(&self) -> Vec<CoreHandle> {
         self.artboards.clone()
     }
 
@@ -1211,17 +1393,15 @@ impl File {
         self.has_audio
     }
 
-    pub fn data_resolver(&mut self) -> Option<NonNull<dyn DataResolver>> {
-        self.manifest
-            .as_deref_mut()
-            .and_then(|asset| asset.as_manifest_asset_mut())
-            .map(|manifest: &mut ManifestAsset| {
-                NonNull::from(manifest) as NonNull<dyn DataResolver>
-            })
+    pub fn manifest(&self) -> Option<CoreHandle> {
+        self.manifest.clone()
     }
 
-    #[cfg(test)]
-    pub fn testing_get_asset_loader(&mut self) -> Option<NonNull<FileAssetLoader>> {
-        NonNull::new(self.asset_loader.get())
+    pub fn factory(&self) -> RuntimeFactoryHandle {
+        self.factory.clone()
+    }
+
+    pub fn asset_loader(&self) -> Option<FileAssetLoaderRef> {
+        self.asset_loader.clone()
     }
 }

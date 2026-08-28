@@ -1,3 +1,11 @@
+use std::{
+    any::Any,
+    cell::{Cell, RefCell},
+    hash::{Hash, Hasher},
+    rc::{Rc, Weak},
+};
+
+use crate::mechanical_port::source::generated::core_registry::CoreRegistryObject;
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt, core::binary_reader::BinaryReader, core_context::CoreContext,
     data_bind::data_bind::DataBind, importers::import_stack::ImportStack, status_code::StatusCode,
@@ -12,14 +20,295 @@ pub mod type_conversions;
 pub mod vector_binary_stream;
 pub mod vector_binary_writer;
 
+pub type CoreTypeKey = u16;
+
+/// Dynamic behavior retained by one arena-owned Rive object occurrence.
+///
+/// Concrete owners implement this together with `CoreRegistryObject`. The
+/// arena is the owner; cross-object references retain only `CoreHandle`, so a
+/// graph cycle cannot keep an artboard occurrence alive.
+pub trait CoreObject: CoreRegistryObject + Any {
+    fn core(&self) -> &Core;
+    fn core_mut(&mut self) -> &mut Core;
+    fn core_type(&self) -> CoreTypeKey;
+    fn is_type_of(&self, type_key: CoreTypeKey) -> bool;
+    fn deserialize(&mut self, property_key: u16, reader: &mut BinaryReader<'_>) -> bool;
+    fn clone_boxed(&self) -> Option<Box<dyn CoreObject>> {
+        None
+    }
+    fn validate(&mut self, context: &mut dyn CoreContext) -> bool {
+        crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_validate(
+            self,
+            context,
+        )
+        .unwrap_or_else(|| self.core_mut().validate(context))
+    }
+    fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_on_added_dirty(
+            self,
+            context,
+        )
+        .unwrap_or_else(|| self.core_mut().on_added_dirty(context))
+    }
+    fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_on_added_clean(
+            self,
+            context,
+        )
+        .unwrap_or_else(|| self.core_mut().on_added_clean(context))
+    }
+    fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
+        crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_import(
+            self,
+            import_stack,
+        )
+        .unwrap_or_else(|| self.core_mut().import(import_stack))
+    }
+
+    fn set_core_handle(&mut self, handle: CoreHandle) {
+        self.core_mut().set_handle(handle.clone());
+        if let Some(referencer) = self.as_file_asset_referencer_mut() {
+            referencer.attach(handle);
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self.as_registry_any()
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self.as_registry_any_mut()
+    }
+}
+
+struct CoreArenaSlot {
+    generation: Cell<u64>,
+    object: RefCell<Option<Box<dyn CoreObject>>>,
+}
+
+impl CoreArenaSlot {
+    fn vacant() -> Self {
+        Self {
+            generation: Cell::new(0),
+            object: RefCell::new(None),
+        }
+    }
+}
+
+#[derive(Default)]
+struct CoreArenaInner {
+    slots: Vec<Rc<CoreArenaSlot>>,
+    free: Vec<usize>,
+}
+
+/// Single-threaded owner for one imported Rive object graph.
+///
+/// This deliberately follows the existing Rust runtime's occurrence-arena
+/// boundary. Each slot has its own `RefCell`, rather than borrowing the whole
+/// arena, because pinned callbacks may resolve and mutate another occurrence
+/// while the current occurrence is borrowed.
+#[derive(Clone, Default)]
+pub struct CoreArena {
+    inner: Rc<RefCell<CoreArenaInner>>,
+}
+
+impl CoreArena {
+    pub fn insert<T: CoreObject>(&self, value: T) -> CoreHandle {
+        self.insert_boxed(Box::new(value))
+    }
+
+    pub fn insert_boxed(&self, mut value: Box<dyn CoreObject>) -> CoreHandle {
+        let (index, slot) = {
+            let mut inner = self.inner.borrow_mut();
+            if let Some(index) = inner.free.pop() {
+                (index, Rc::clone(&inner.slots[index]))
+            } else {
+                let index = inner.slots.len();
+                let slot = Rc::new(CoreArenaSlot::vacant());
+                inner.slots.push(Rc::clone(&slot));
+                (index, slot)
+            }
+        };
+        let generation = slot.generation.get();
+        let handle = CoreHandle {
+            arena: Rc::downgrade(&self.inner),
+            index,
+            generation,
+        };
+        value.set_core_handle(handle.clone());
+        let previous = slot.object.replace(Some(value));
+        debug_assert!(previous.is_none(), "CoreArena reused an occupied slot");
+        handle
+    }
+
+    pub fn contains(&self, handle: &CoreHandle) -> bool {
+        handle.belongs_to(self) && handle.is_alive()
+    }
+
+    pub fn remove(&self, handle: &CoreHandle) -> Option<Box<dyn CoreObject>> {
+        if !handle.belongs_to(self) {
+            return None;
+        }
+        let slot = {
+            let inner = self.inner.borrow();
+            Rc::clone(inner.slots.get(handle.index)?)
+        };
+        if slot.generation.get() != handle.generation {
+            return None;
+        }
+        let value = slot.object.borrow_mut().take()?;
+        slot.generation.set(slot.generation.get().wrapping_add(1));
+        self.inner.borrow_mut().free.push(handle.index);
+        Some(value)
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner
+            .borrow()
+            .slots
+            .iter()
+            .filter(|slot| slot.object.borrow().is_some())
+            .count()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Opaque stable identity for one occurrence in a `CoreArena`.
+///
+/// The weak arena reference prevents object graphs from owning themselves.
+/// Generation checks make a handle to a removed occurrence permanently stale,
+/// even if its slot is later reused.
+#[derive(Clone)]
+pub struct CoreHandle {
+    arena: Weak<RefCell<CoreArenaInner>>,
+    index: usize,
+    generation: u64,
+}
+
+impl CoreHandle {
+    fn belongs_to(&self, arena: &CoreArena) -> bool {
+        Weak::ptr_eq(&self.arena, &Rc::downgrade(&arena.inner))
+    }
+
+    fn slot(&self) -> Option<Rc<CoreArenaSlot>> {
+        let arena = self.arena.upgrade()?;
+        let inner = arena.borrow();
+        let slot = Rc::clone(inner.slots.get(self.index)?);
+        (slot.generation.get() == self.generation).then_some(slot)
+    }
+
+    pub fn is_alive(&self) -> bool {
+        self.slot()
+            .is_some_and(|slot| slot.object.borrow().is_some())
+    }
+
+    pub fn is_type_of(&self, type_key: CoreTypeKey) -> bool {
+        self.with(|object| object.is_type_of(type_key))
+            .unwrap_or(false)
+    }
+
+    pub fn core_type(&self) -> Option<CoreTypeKey> {
+        self.with(CoreObject::core_type)
+    }
+
+    pub fn with<R>(&self, f: impl FnOnce(&dyn CoreObject) -> R) -> Option<R> {
+        let slot = self.slot()?;
+        let object = slot.object.try_borrow().ok()?;
+        let object = object.as_deref()?;
+        Some(f(object))
+    }
+
+    pub fn with_mut<R>(&self, f: impl FnOnce(&mut dyn CoreObject) -> R) -> Option<R> {
+        let slot = self.slot()?;
+        let mut object = slot.object.try_borrow_mut().ok()?;
+        let object = object.as_deref_mut()?;
+        Some(f(object))
+    }
+
+    pub fn with_downcast<T: Any, R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
+        self.with(|object| object.as_any().downcast_ref::<T>().map(f))?
+    }
+
+    pub fn with_downcast_mut<T: Any, R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R> {
+        self.with_mut(|object| object.as_any_mut().downcast_mut::<T>().map(f))?
+    }
+
+    pub fn clone_occurrence(&self) -> Option<CoreHandle> {
+        let clone = self.with(CoreObject::clone_boxed)??;
+        let arena = CoreArena {
+            inner: self.arena.upgrade()?,
+        };
+        Some(arena.insert_boxed(clone))
+    }
+
+    /// Insert a newly constructed occurrence into the same graph arena.
+    ///
+    /// Importers use this for pinned synthetic owners such as the generic
+    /// LayerState inserted for an unknown serialized state type. The returned
+    /// handle has the same ownership and generation guarantees as an object
+    /// deserialized directly by the registry.
+    pub fn insert_sibling<T: CoreObject>(&self, value: T) -> Option<CoreHandle> {
+        let arena = CoreArena {
+            inner: self.arena.upgrade()?,
+        };
+        Some(arena.insert(value))
+    }
+
+    /// Remove this occurrence from its owning graph arena.
+    ///
+    /// The generation is advanced before the removed owner is dropped, so all
+    /// cloned handles become stale and a later sibling cannot reuse this
+    /// identity accidentally.
+    pub fn remove_occurrence(&self) -> bool {
+        let Some(inner) = self.arena.upgrade() else {
+            return false;
+        };
+        CoreArena { inner }.remove(self).is_some()
+    }
+}
+
+impl PartialEq for CoreHandle {
+    fn eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.arena, &other.arena)
+            && self.index == other.index
+            && self.generation == other.generation
+    }
+}
+
+impl Eq for CoreHandle {}
+
+impl Hash for CoreHandle {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.arena.as_ptr().hash(state);
+        self.index.hash(state);
+        self.generation.hash(state);
+    }
+}
+
+impl std::fmt::Debug for CoreHandle {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("CoreHandle")
+            .field("arena", &self.arena.as_ptr())
+            .field("index", &self.index)
+            .field("generation", &self.generation)
+            .finish()
+    }
+}
+
 pub struct Core {
-    first_observer: Option<*mut DataBind>,
+    handle: Option<CoreHandle>,
+    observers: Vec<CoreHandle>,
 }
 
 impl Default for Core {
     fn default() -> Self {
         Self {
-            first_observer: None,
+            handle: None,
+            observers: Vec::new(),
         }
     }
 }
@@ -33,6 +322,14 @@ impl Clone for Core {
 impl Core {
     pub const EMPTY_ID: u32 = u32::MAX;
     pub const INVALID_PROPERTY_KEY: i32 = 0;
+
+    pub fn handle(&self) -> Option<CoreHandle> {
+        self.handle.clone()
+    }
+
+    pub fn set_handle(&mut self, handle: CoreHandle) {
+        self.handle = Some(handle);
+    }
 
     pub fn core_type(&self) -> u16 {
         panic!("abstract Core::core_type");
@@ -67,49 +364,42 @@ impl Core {
     }
 
     pub fn notify_property_changed(&mut self, property_key: u16) {
-        let mut observer = self.first_observer;
-        while let Some(observer_ptr) = observer {
-            let observer_ref = unsafe { &mut *observer_ptr };
-            observer = observer_ref.next_observer();
-            if observer_ref.property_key() == u32::from(property_key) {
-                observer_ref.add_dirt(u32::from(ComponentDirt::BINDINGS_TARGET.0), false);
-            }
-        }
-    }
-
-    pub fn add_property_observer(&mut self, observer: *mut DataBind) {
-        let mut current = self.first_observer;
-        while let Some(current_ptr) = current {
-            assert_ne!(current_ptr, observer, "DataBind already subscribed");
-            current = unsafe { &*current_ptr }.next_observer();
-        }
-        unsafe { &mut *observer }.set_next_observer(self.first_observer);
-        self.first_observer = Some(observer);
-    }
-
-    pub fn remove_property_observer(&mut self, observer: *mut DataBind) {
-        let mut link = &mut self.first_observer as *mut Option<*mut DataBind>;
-        unsafe {
-            while let Some(current) = *link {
-                if current == observer {
-                    *link = (&*observer).next_observer();
-                    (&mut *observer).set_next_observer(None);
-                    return;
+        // Clone the weak occurrence identities so a callback may detach itself
+        // without invalidating traversal. New observers are inserted at the
+        // front, matching the pinned linked-list callback order.
+        let observers = self.observers.clone();
+        for observer in observers {
+            observer.with_downcast_mut::<DataBind, _>(|observer| {
+                if observer.property_key() == u32::from(property_key) {
+                    observer.add_dirt(u32::from(ComponentDirt::BINDINGS_TARGET.0), false);
                 }
-                link = (&mut *current).next_observer_ref();
-            }
+            });
+        }
+    }
+
+    pub fn add_property_observer(&mut self, observer: CoreHandle) {
+        assert!(
+            !self.observers.contains(&observer),
+            "DataBind already subscribed"
+        );
+        self.observers.insert(0, observer);
+    }
+
+    pub fn remove_property_observer(&mut self, observer: &CoreHandle) {
+        if let Some(index) = self
+            .observers
+            .iter()
+            .position(|candidate| candidate == observer)
+        {
+            self.observers.remove(index);
         }
     }
 }
 
 impl Drop for Core {
     fn drop(&mut self) {
-        let mut observer = self.first_observer;
-        while let Some(observer_ptr) = observer {
-            let observer_ref = unsafe { &mut *observer_ptr };
-            observer = observer_ref.next_observer();
-            observer_ref.on_target_destroyed();
+        for observer in std::mem::take(&mut self.observers) {
+            observer.with_downcast_mut::<DataBind, _>(DataBind::on_target_destroyed);
         }
-        self.first_observer = None;
     }
 }

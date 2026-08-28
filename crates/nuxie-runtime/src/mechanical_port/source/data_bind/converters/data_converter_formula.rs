@@ -1,4 +1,12 @@
-use super::data_converter_operation::ArithmeticOperation;
+use super::formula::{
+    formula_token_argument_separator::FormulaTokenArgumentSeparator,
+    formula_token_function::FormulaTokenFunction, formula_token_input::FormulaTokenInput,
+    formula_token_operation::FormulaTokenOperation,
+    formula_token_parenthesis::FormulaTokenParenthesis,
+    formula_token_parenthesis_close::FormulaTokenParenthesisClose,
+    formula_token_parenthesis_open::FormulaTokenParenthesisOpen,
+    formula_token_value::FormulaTokenValue,
+};
 use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::{
@@ -8,13 +16,11 @@ use crate::mechanical_port::source::{
             data_value_symbol_list_index::DataValueSymbolListIndex,
         },
     },
-    generated::data_bind::converters::data_converter_formula_base::{
-        DataConverterFormulaBase, DataConverterFormulaBaseCallbacks,
-    },
+    generated::data_bind::converters::data_converter_formula_base::DataConverterFormulaBase,
     math::random::RandomProvider,
     viewmodel::viewmodel_instance_value::{ValueDependentHandle, ViewModelInstanceValue},
 };
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RandomMode {
@@ -44,40 +50,30 @@ pub enum FunctionType {
     Other,
 }
 #[derive(Clone, Debug)]
-pub enum FormulaTokenKind {
+enum FormulaTokenKind {
     Value(f32),
     Input,
-    Operation(ArithmeticOperation),
+    Operation(u32),
     Function(FunctionType),
     Parenthesis,
     Open,
     Close,
     ArgumentSeparator,
-}
-#[derive(Clone, Debug)]
-pub struct FormulaToken {
-    pub id: usize,
-    pub kind: FormulaTokenKind,
+    Other,
 }
 pub trait FormulaSource {
     fn add_dependent(&mut self, dependent: CoreHandle);
     fn remove_dependent(&mut self, dependent: &CoreHandle);
 }
-pub trait FormulaDataBind {
-    fn target_token_id(&self) -> Option<usize>;
-    fn set_target_token_id(&mut self, id: usize);
-}
 pub struct DataConverterFormula {
     pub base: DataConverterFormulaBase,
-    tokens: Vec<Rc<FormulaToken>>,
-    core_tokens: Vec<CoreHandle>,
-    output_queue: Vec<Rc<FormulaToken>>,
+    tokens: Vec<CoreHandle>,
+    output_queue: Vec<CoreHandle>,
     randoms: Vec<f32>,
-    argument_counts: HashMap<usize, i32>,
+    argument_counts: HashMap<(usize, usize, u64), i32>,
     is_instance: bool,
     source: Option<CoreHandle>,
     output: DataValueNumber,
-    data_binds: Vec<CoreHandle>,
 }
 
 impl Default for DataConverterFormula {
@@ -85,14 +81,12 @@ impl Default for DataConverterFormula {
         Self {
             base: DataConverterFormulaBase::default(),
             tokens: Vec::new(),
-            core_tokens: Vec::new(),
             output_queue: Vec::new(),
             randoms: Vec::new(),
             argument_counts: HashMap::new(),
             is_instance: false,
             source: None,
             output: DataValueNumber::default(),
-            data_binds: Vec::new(),
         }
     }
 }
@@ -100,37 +94,82 @@ impl Default for DataConverterFormula {
 impl DataConverterFormula {
     pub fn new(random_mode: RandomMode) -> Self {
         let mut formula = Self::default();
-        formula.base.set_random_mode_value(
-            random_mode as u32,
-            &mut DataConverterFormulaInitializationCallbacks,
-        );
+        formula.base.set_random_mode_value_value(random_mode as u32);
         formula
     }
     pub fn output_type(&self) -> DataType {
         DataType::Number
     }
-    fn precedence(token: &FormulaToken) -> i32 {
-        match token.kind {
-            FormulaTokenKind::Parenthesis | FormulaTokenKind::Function(_) => 1,
-            FormulaTokenKind::Operation(
-                ArithmeticOperation::Add | ArithmeticOperation::Subtract,
-            ) => 2,
-            FormulaTokenKind::Operation(
-                ArithmeticOperation::Multiply | ArithmeticOperation::Divide,
-            ) => 3,
+    // Read the actual imported token on every evaluation: data bindings can
+    // mutate its authored value between conversions.
+    fn token_kind(token: &CoreHandle) -> FormulaTokenKind {
+        token
+            .with(|token| {
+                if let Some(value) = token.as_any().downcast_ref::<FormulaTokenValue>() {
+                    FormulaTokenKind::Value(value.base.operation_value())
+                } else if token.as_any().is::<FormulaTokenInput>() {
+                    FormulaTokenKind::Input
+                } else if let Some(operation) =
+                    token.as_any().downcast_ref::<FormulaTokenOperation>()
+                {
+                    FormulaTokenKind::Operation(operation.base.operation_type())
+                } else if let Some(function) = token.as_any().downcast_ref::<FormulaTokenFunction>()
+                {
+                    FormulaTokenKind::Function(match function.base.function_type() {
+                        0 => FunctionType::Min,
+                        1 => FunctionType::Max,
+                        2 => FunctionType::Round,
+                        3 => FunctionType::Ceil,
+                        4 => FunctionType::Floor,
+                        5 => FunctionType::Sqrt,
+                        6 => FunctionType::Pow,
+                        7 => FunctionType::Exp,
+                        8 => FunctionType::Log,
+                        9 => FunctionType::Cosine,
+                        10 => FunctionType::Sine,
+                        11 => FunctionType::Tangent,
+                        12 => FunctionType::Acosine,
+                        13 => FunctionType::Asine,
+                        14 => FunctionType::Atangent,
+                        15 => FunctionType::Atangent2,
+                        16 => FunctionType::Random,
+                        _ => FunctionType::Other,
+                    })
+                } else if token.as_any().is::<FormulaTokenParenthesisOpen>() {
+                    FormulaTokenKind::Open
+                } else if token.as_any().is::<FormulaTokenParenthesisClose>() {
+                    FormulaTokenKind::Close
+                } else if token.as_any().is::<FormulaTokenParenthesis>() {
+                    FormulaTokenKind::Parenthesis
+                } else if token.as_any().is::<FormulaTokenArgumentSeparator>() {
+                    FormulaTokenKind::ArgumentSeparator
+                } else {
+                    FormulaTokenKind::Other
+                }
+            })
+            .expect("a formula retains its authored token")
+    }
+    fn precedence(token: &CoreHandle) -> i32 {
+        match Self::token_kind(token) {
+            FormulaTokenKind::Parenthesis
+            | FormulaTokenKind::Open
+            | FormulaTokenKind::Close
+            | FormulaTokenKind::Function(_) => 1,
+            FormulaTokenKind::Operation(0 | 1) => 2,
+            FormulaTokenKind::Operation(2 | 3) => 3,
             _ => 0,
         }
     }
     pub fn calculate_formula(&mut self) {
-        let mut operations: Vec<Rc<FormulaToken>> = Vec::new();
+        let mut operations: Vec<CoreHandle> = Vec::new();
         for (index, token) in self.tokens.iter().enumerate() {
-            match token.kind {
+            match Self::token_kind(token) {
                 FormulaTokenKind::Value(_) | FormulaTokenKind::Input => {
                     self.output_queue.push(token.clone())
                 }
                 FormulaTokenKind::Operation(_) => {
                     while operations.last().is_some_and(|top| {
-                        !matches!(top.kind, FormulaTokenKind::Open)
+                        !matches!(Self::token_kind(top), FormulaTokenKind::Open)
                             && Self::precedence(top) >= Self::precedence(token)
                     }) {
                         self.output_queue.push(operations.pop().unwrap());
@@ -140,8 +179,10 @@ impl DataConverterFormula {
                 FormulaTokenKind::Open | FormulaTokenKind::Function(_) => {
                     let next = self.tokens.get(index + 1);
                     self.argument_counts.insert(
-                        token.id,
-                        if next.is_some_and(|next| matches!(next.kind, FormulaTokenKind::Close)) {
+                        token.identity_key(),
+                        if next.is_some_and(|next| {
+                            matches!(Self::token_kind(next), FormulaTokenKind::Close)
+                        }) {
                             0
                         } else {
                             1
@@ -152,28 +193,29 @@ impl DataConverterFormula {
                 FormulaTokenKind::Close => {
                     while operations.last().is_some_and(|top| {
                         !matches!(
-                            top.kind,
+                            Self::token_kind(top),
                             FormulaTokenKind::Open | FormulaTokenKind::Function(_)
                         )
                     }) {
                         self.output_queue.push(operations.pop().unwrap());
                     }
                     if let Some(open) = operations.pop() {
-                        if matches!(open.kind, FormulaTokenKind::Function(_)) {
+                        if matches!(Self::token_kind(&open), FormulaTokenKind::Function(_)) {
                             self.output_queue.push(open);
                         }
                     }
                 }
                 FormulaTokenKind::ArgumentSeparator if !operations.is_empty() => {
                     for candidate in operations.iter().rev() {
-                        if let Some(count) = self.argument_counts.get_mut(&candidate.id) {
+                        if let Some(count) = self.argument_counts.get_mut(&candidate.identity_key())
+                        {
                             *count += 1;
                             break;
                         }
                     }
                     while operations.last().is_some_and(|top| {
                         !matches!(
-                            top.kind,
+                            Self::token_kind(top),
                             FormulaTokenKind::Open | FormulaTokenKind::Function(_)
                         )
                     }) {
@@ -184,7 +226,7 @@ impl DataConverterFormula {
             }
         }
         while let Some(operation) = operations.pop() {
-            if !matches!(operation.kind, FormulaTokenKind::Open) {
+            if !matches!(Self::token_kind(&operation), FormulaTokenKind::Open) {
                 self.output_queue.push(operation);
             }
         }
@@ -197,13 +239,13 @@ impl DataConverterFormula {
         }
         value
     }
-    fn apply_operation(left: f32, right: f32, operation: ArithmeticOperation) -> f32 {
+    fn apply_operation(left: f32, right: f32, operation: u32) -> f32 {
         match operation {
-            ArithmeticOperation::Add => left + right,
-            ArithmeticOperation::Subtract => left - right,
-            ArithmeticOperation::Multiply => left * right,
-            ArithmeticOperation::Divide => left / right,
-            ArithmeticOperation::Modulo => Self::positive_mod(left, right),
+            0 => left + right,
+            1 => left - right,
+            2 => left * right,
+            3 => left / right,
+            4 => Self::positive_mod(left, right),
             _ => 0.0,
         }
     }
@@ -285,14 +327,18 @@ impl DataConverterFormula {
         let mut stack = Vec::new();
         let queue = self.output_queue.clone();
         for token in queue {
-            match token.kind {
+            match Self::token_kind(&token) {
                 FormulaTokenKind::Operation(operation) if stack.len() > 1 => {
                     let right = stack.pop().unwrap();
                     let left = stack.pop().unwrap();
                     stack.push(Self::apply_operation(left, right, operation));
                 }
                 FormulaTokenKind::Function(function) => {
-                    let count = self.argument_counts.get(&token.id).copied().unwrap_or(0);
+                    let count = self
+                        .argument_counts
+                        .get(&token.identity_key())
+                        .copied()
+                        .unwrap_or(0);
                     let value = self.apply_function(&mut stack, function, count);
                     stack.push(value);
                 }
@@ -310,42 +356,72 @@ impl DataConverterFormula {
     pub fn reverse_convert<'a>(&'a mut self, value: &dyn DataValue) -> &'a dyn DataValue {
         self.convert(value)
     }
-    pub fn add_token(&mut self, token: Rc<FormulaToken>) {
+    pub fn add_token(&mut self, token: CoreHandle) {
         self.tokens.push(token)
     }
-    pub fn add_output_token(&mut self, token: Rc<FormulaToken>, arguments: i32) {
-        self.argument_counts.insert(token.id, arguments);
+    pub fn add_output_token(&mut self, token: CoreHandle, arguments: i32) {
+        self.argument_counts.insert(token.identity_key(), arguments);
         self.output_queue.push(token)
     }
-    pub fn clone_formula(&self) -> Self {
-        let mut clone = Self::new(match self.base.random_mode_value() {
-            1 => RandomMode::Always,
-            2 => RandomMode::SourceChange,
-            _ => RandomMode::Once,
-        });
-        clone.is_instance = true;
-        for token in &self.output_queue {
-            let cloned = Rc::new((**token).clone());
-            let count = self.argument_counts.get(&token.id).copied().unwrap_or(0);
-            clone.add_output_token(cloned.clone(), count);
-            for (index, bind) in self.data_binds.iter().enumerate() {
-                let targets_token = bind
-                    .with(|bind| {
-                        bind.as_formula_data_bind()
-                            .and_then(FormulaDataBind::target_token_id)
-                    })
-                    .flatten()
-                    == Some(token.id);
-                if targets_token && let Some(cloned_bind) = clone.data_binds.get(index) {
-                    cloned_bind.with_mut(|bind| {
-                        if let Some(bind) = bind.as_formula_data_bind_mut() {
-                            bind.set_target_token_id(cloned.id);
-                        }
+    pub fn clone_definition(&self) -> Self {
+        let mut cloned = Self::default();
+        cloned
+            .base
+            .set_random_mode_value_value(self.base.random_mode_value());
+        cloned
+            .base
+            .base
+            .base
+            .set_name_value(self.base.base.base.name().to_owned());
+        cloned
+    }
+    pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
+        if !super::data_converter::DataConverter::complete_clone(source, cloned) {
+            return false;
+        }
+        let Some(tokens) = source.with_downcast::<Self, _>(|source| {
+            source
+                .output_queue
+                .iter()
+                .map(|token| {
+                    (
+                        token.clone(),
+                        source
+                            .argument_counts
+                            .get(&token.identity_key())
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+                .collect::<Vec<_>>()
+        }) else {
+            return false;
+        };
+        let source_binds = source.data_bind_container().unwrap().data_binds();
+        let cloned_binds = cloned.data_bind_container().unwrap().data_binds();
+        for (token, count) in tokens {
+            let Some(cloned_token) = token.clone_occurrence() else {
+                return false;
+            };
+            cloned.with_downcast_mut::<Self, _>(|cloned| {
+                cloned.add_output_token(cloned_token.clone(), count)
+            });
+            for (index, bind) in source_binds.iter().enumerate() {
+                let target = bind
+                    .with(|bind| bind.as_data_bind().unwrap().target())
+                    .flatten();
+                if target.as_ref() == Some(&token) {
+                    cloned_binds[index].with_mut(|bind| {
+                        bind.as_data_bind_mut()
+                            .unwrap()
+                            .set_target(Some(cloned_token.clone()));
                     });
                 }
             }
         }
-        clone
+        cloned
+            .with_downcast_mut::<Self, _>(|cloned| cloned.is_instance = true)
+            .is_some()
     }
     pub fn bind_from_context(
         &mut self,
@@ -396,19 +472,11 @@ impl DataConverterFormula {
     }
 }
 
-struct DataConverterFormulaInitializationCallbacks;
-
-impl DataConverterFormulaBaseCallbacks for DataConverterFormulaInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
-}
 impl Drop for DataConverterFormula {
     fn drop(&mut self) {
         self.unbind();
-        if self.is_instance {
-            self.tokens.clear();
-        } else {
-            self.output_queue.clear();
-        }
+        self.output_queue.clear();
+        self.tokens.clear();
     }
 }
 
@@ -429,7 +497,7 @@ impl crate::mechanical_port::source::data_bind::converters::formula::formula_tok
     for DataConverterFormula
 {
     fn add_token(&mut self, token: CoreHandle) {
-        self.core_tokens.push(token);
+        self.add_token(token);
     }
 
     fn add_data_bind(&mut self, data_bind: CoreHandle) {

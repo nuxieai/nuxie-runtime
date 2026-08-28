@@ -191,6 +191,36 @@ impl Default for DataConverter {
 }
 
 impl DataConverter {
+    /// Complete the inherited owned bindings only after the clone has an
+    /// occurrence identity, so every cloned binding targets the actual clone.
+    pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
+        let (Some(source_container), Some(cloned_container)) =
+            (source.data_bind_container(), cloned.data_bind_container())
+        else {
+            return false;
+        };
+        for source_bind in source_container.data_binds() {
+            let Some(file) = source_bind
+                .with(|bind| bind.as_data_bind().map(|bind| bind.file()))
+                .flatten()
+            else {
+                return false;
+            };
+            let Some(cloned_bind) = source_bind.clone_occurrence() else {
+                return false;
+            };
+            cloned_bind.with_mut(|bind| {
+                let bind = bind
+                    .as_data_bind_mut()
+                    .expect("a binding clone remains a binding");
+                bind.set_target(Some(cloned.clone()));
+                bind.set_file(file);
+            });
+            cloned_container.add_data_bind(cloned_bind);
+        }
+        true
+    }
+
     pub fn convert_handle(
         owner: &CoreHandle,
         input: &dyn DataValue,

@@ -83,21 +83,37 @@ impl DataConverterGroup {
     pub fn items(&self) -> &[CoreHandle] {
         &self.items
     }
-    pub fn clone_group(&self) -> Self {
+    pub fn clone_definition(&self) -> Self {
         let mut cloned = Self::default();
-        cloned.base.base.copy(&self.base.base);
-        for item in &self.items {
+        cloned
+            .base
+            .base
+            .base
+            .set_name_value(self.base.base.base.name().to_owned());
+        cloned
+    }
+    pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
+        if !super::data_converter::DataConverter::complete_clone(source, cloned) {
+            return false;
+        }
+        let Some(items) = source.with_downcast::<Self, _>(|source| source.items.clone()) else {
+            return false;
+        };
+        for item in items {
             let has_converter = item
                 .with(|item| {
                     item.as_data_converter_group_item()
                         .is_some_and(|item| item.converter().is_some())
                 })
                 .unwrap_or(false);
-            if has_converter && let Some(item) = item.clone_occurrence() {
-                cloned.add_item(item);
+            if has_converter {
+                let Some(item) = item.clone_occurrence() else {
+                    return false;
+                };
+                cloned.with_downcast_mut::<Self, _>(|cloned| cloned.add_item(item));
             }
         }
-        cloned
+        true
     }
     pub fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
         self.base

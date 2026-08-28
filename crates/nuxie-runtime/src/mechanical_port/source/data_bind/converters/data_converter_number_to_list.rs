@@ -31,10 +31,7 @@ impl Default for DataConverterNumberToList {
 impl DataConverterNumberToList {
     pub fn new(view_model_id: u32) -> Self {
         let mut converter = Self::default();
-        converter.base.set_view_model_id(
-            view_model_id,
-            &mut DataConverterNumberToListInitializationCallbacks,
-        );
+        converter.base.set_view_model_id_value(view_model_id);
         converter
     }
     pub fn output_type(&self) -> DataType {
@@ -100,10 +97,18 @@ impl DataConverterNumberToList {
     pub fn file(&self) -> Option<RuntimeFileWeakHandle> {
         self.file.clone()
     }
-    pub fn clone_converter(&self) -> Self {
+    pub fn clone_definition(&self) -> Self {
         let mut cloned = Self::new(self.base.view_model_id());
+        cloned
+            .base
+            .base
+            .base
+            .set_name_value(self.base.base.base.name().to_owned());
         cloned.file = self.file.clone();
         cloned
+    }
+    pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
+        super::data_converter::DataConverter::complete_clone(source, cloned)
     }
 }
 
@@ -119,12 +124,6 @@ impl DataConverterNumberToListBaseCallbacks for DataConverterNumberToList {
     fn view_model_id_changed(&mut self) {
         Self::view_model_id_changed(self);
     }
-}
-
-struct DataConverterNumberToListInitializationCallbacks;
-
-impl DataConverterNumberToListBaseCallbacks for DataConverterNumberToListInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }
 
 impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability

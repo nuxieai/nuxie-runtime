@@ -54,15 +54,26 @@ impl DataConverterGroupItem {
     pub fn set_owns_converter(&mut self, value: bool) {
         self.owns_converter = value
     }
-    pub fn clone_item(&self) -> Self {
-        if let Some(converter) = self.data_converter.as_ref() {
-            Self {
-                base: DataConverterGroupItemBase::default(),
-                data_converter: converter.clone_occurrence(),
-                owns_converter: true,
-            }
-        } else {
-            Self::default()
+    pub fn clone_definition(&self) -> Self {
+        let mut cloned = Self::default();
+        cloned.base.set_converter_id_value(self.base.converter_id());
+        cloned
+    }
+    pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
+        let Some(converter) = source.with_downcast::<Self, _>(Self::converter) else {
+            return false;
+        };
+        if let Some(converter) = converter {
+            let Some(converter) = converter.clone_occurrence() else {
+                return false;
+            };
+            return cloned
+                .with_downcast_mut::<Self, _>(|cloned| {
+                    cloned.data_converter = Some(converter);
+                    cloned.owns_converter = true;
+                })
+                .is_some();
         }
+        true
     }
 }

@@ -202,11 +202,7 @@ impl ImportStackObject for BackboardImporter {
             if index >= self.file_assets.len() {
                 continue;
             }
-            let assigned = referencer
-                .with_mut(|referencer| {
-                    referencer.file_asset_referencer_set_asset(self.file_assets[index].clone())
-                })
-                .expect("BackboardImporter retains live FileAssetReferencers");
+            let assigned = crate::mechanical_port::source::generated::core_registry::file_asset_referencer_set_asset_handle(referencer, self.file_assets[index].clone());
             assert!(
                 assigned,
                 "a FileAssetReferencer exposing an asset id must accept its resolved FileAsset"

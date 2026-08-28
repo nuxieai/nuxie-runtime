@@ -128,12 +128,38 @@ struct CoreArenaInner {
 /// boundary. Each slot has its own `RefCell`, rather than borrowing the whole
 /// arena, because pinned callbacks may resolve and mutate another occurrence
 /// while the current occurrence is borrowed.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct CoreArena {
-    inner: Rc<RefCell<CoreArenaInner>>,
+    inner: Weak<RefCell<CoreArenaInner>>,
+    owner: Option<Rc<RefCell<CoreArenaInner>>>,
+}
+
+impl Default for CoreArena {
+    fn default() -> Self {
+        Self::from_inner(Rc::new(RefCell::new(CoreArenaInner::default())))
+    }
 }
 
 impl CoreArena {
+    fn from_inner(owner: Rc<RefCell<CoreArenaInner>>) -> Self {
+        Self {
+            inner: Rc::downgrade(&owner),
+            owner: Some(owner),
+        }
+    }
+    /// A source Artboard resolves the File's objects but does not own the File
+    /// arena that owns that same Artboard.
+    pub fn weak_handle(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            owner: None,
+        }
+    }
+    /// Runtime instances retain their definitions and cloned occurrences even
+    /// when the importing File handle is released.
+    pub fn strong_handle(&self) -> Self {
+        Self::from_inner(self.inner.upgrade().expect("live Core graph owner"))
+    }
     /// An instance's root is the same typed Artboard owned by its runtime
     /// handle. The arena retains only a weak link, while that Artboard retains
     /// the graph arena; registering its root therefore creates no owner cycle.
@@ -141,7 +167,8 @@ impl CoreArena {
         &self,
         artboard: Weak<RefCell<crate::mechanical_port::source::artboard::ArtboardInstance>>,
     ) -> CoreHandle {
-        let mut inner = self.inner.borrow_mut();
+        let arena = self.inner.upgrade().expect("live runtime Artboard arena");
+        let mut inner = arena.borrow_mut();
         let index = inner.slots.len();
         let slot = Rc::new(CoreArenaSlot::vacant());
         slot.core_type
@@ -155,7 +182,7 @@ impl CoreArena {
         *slot.runtime_artboard.borrow_mut() = Some(artboard);
         inner.slots.push(slot);
         CoreHandle {
-            arena: Rc::downgrade(&self.inner),
+            arena: self.inner.clone(),
             index,
             generation: 0,
         }
@@ -165,8 +192,9 @@ impl CoreArena {
     }
 
     pub fn insert_boxed(&self, mut value: Box<dyn CoreObject>) -> CoreHandle {
+        let arena = self.inner.upgrade().expect("live Core graph insertion");
         let (index, slot) = {
-            let mut inner = self.inner.borrow_mut();
+            let mut inner = arena.borrow_mut();
             if let Some(index) = inner.free.pop() {
                 (index, Rc::clone(&inner.slots[index]))
             } else {
@@ -178,7 +206,7 @@ impl CoreArena {
         };
         let generation = slot.generation.get();
         let handle = CoreHandle {
-            arena: Rc::downgrade(&self.inner),
+            arena: self.inner.clone(),
             index,
             generation,
         };
@@ -205,8 +233,9 @@ impl CoreArena {
         if !handle.belongs_to(self) {
             return None;
         }
+        let arena = self.inner.upgrade()?;
         let slot = {
-            let inner = self.inner.borrow();
+            let inner = arena.borrow();
             Rc::clone(inner.slots.get(handle.index)?)
         };
         if slot.generation.get() != handle.generation {
@@ -218,12 +247,36 @@ impl CoreArena {
         slot.component_graph_order.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
-        self.inner.borrow_mut().free.push(handle.index);
+        arena.borrow_mut().free.push(handle.index);
         Some(value)
     }
 
+    pub(crate) fn retire_runtime_artboard(&self, handle: &CoreHandle) {
+        if !handle.belongs_to(self) {
+            return;
+        }
+        let Some(arena) = self.inner.upgrade() else {
+            return;
+        };
+        let Some(slot) = handle.slot() else {
+            return;
+        };
+        if slot.runtime_artboard.borrow_mut().take().is_none() {
+            return;
+        }
+        slot.data_bind_container.borrow_mut().take();
+        slot.artboard_dirty.borrow_mut().take();
+        slot.component_graph_order.set(None);
+        slot.occupied.set(false);
+        slot.generation.set(slot.generation.get().wrapping_add(1));
+        arena.borrow_mut().free.push(handle.index);
+    }
+
     pub fn len(&self) -> usize {
-        self.inner
+        let Some(arena) = self.inner.upgrade() else {
+            return 0;
+        };
+        arena
             .borrow()
             .slots
             .iter()
@@ -280,7 +333,7 @@ impl CoreHandle {
         self.slot()?.artboard_dirty.borrow().clone()
     }
     fn belongs_to(&self, arena: &CoreArena) -> bool {
-        Weak::ptr_eq(&self.arena, &Rc::downgrade(&arena.inner))
+        Weak::ptr_eq(&self.arena, &arena.inner)
     }
 
     fn slot(&self) -> Option<Rc<CoreArenaSlot>> {
@@ -342,12 +395,17 @@ impl CoreHandle {
     }
 
     pub fn clone_occurrence(&self) -> Option<CoreHandle> {
+        self.clone_occurrence_into(&self.retain_arena()?)
+    }
+
+    pub fn retain_arena(&self) -> Option<CoreArena> {
+        self.arena.upgrade().map(CoreArena::from_inner)
+    }
+
+    pub fn clone_occurrence_into(&self, arena: &CoreArena) -> Option<CoreHandle> {
         let (clone, complete) =
             self.with(|source| (source.clone_boxed(), source.clone_completion_handler()))?;
         let clone = clone?;
-        let arena = CoreArena {
-            inner: self.arena.upgrade()?,
-        };
         let clone = arena.insert_boxed(clone);
         if let Some(complete) = complete {
             if !complete(self, &clone) {
@@ -365,9 +423,7 @@ impl CoreHandle {
     /// handle has the same ownership and generation guarantees as an object
     /// deserialized directly by the registry.
     pub fn insert_sibling<T: CoreObject>(&self, value: T) -> Option<CoreHandle> {
-        let arena = CoreArena {
-            inner: self.arena.upgrade()?,
-        };
+        let arena = CoreArena::from_inner(self.arena.upgrade()?);
         Some(arena.insert(value))
     }
 
@@ -380,7 +436,7 @@ impl CoreHandle {
         let Some(inner) = self.arena.upgrade() else {
             return false;
         };
-        CoreArena { inner }.remove(self).is_some()
+        CoreArena::from_inner(inner).remove(self).is_some()
     }
 }
 

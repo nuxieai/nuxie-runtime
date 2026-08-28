@@ -107,6 +107,7 @@ impl RuntimeArtboardDirtyHandle {
 pub struct Artboard {
     pub base: ArtboardBase,
     core_arena: CoreArena,
+    definition_owner: Option<CoreArena>,
     objects: Vec<Option<CoreHandle>>,
     invalid_objects: Vec<Option<CoreHandle>>,
     animations: Vec<CoreHandle>,
@@ -178,6 +179,7 @@ impl Default for Artboard {
         Self {
             base,
             core_arena: CoreArena::default(),
+            definition_owner: None,
             objects: Vec::new(),
             invalid_objects: Vec::new(),
             animations: Vec::new(),
@@ -377,7 +379,7 @@ impl Artboard {
     }
 
     pub fn set_core_arena(&mut self, arena: CoreArena) {
-        self.core_arena = arena;
+        self.core_arena = arena.weak_handle();
     }
 
     pub fn objects(&self) -> &[Option<CoreHandle>] {
@@ -1529,22 +1531,6 @@ impl Artboard {
         self.data_bind_container.add_dirty_data_bind(data_bind);
     }
 
-    pub fn update_data_binds(&mut self, apply_target_to_source: bool) {
-        for host in self.artboard_hosts.clone() {
-            host.with_mut(|host| {
-                if let Some(host) = host.as_artboard_host_mut() {
-                    host.update_data_binds();
-                }
-            });
-        }
-        self.data_bind_container
-            .update_data_binds(apply_target_to_source);
-    }
-
-    pub fn update_data_binds_default(&mut self) {
-        self.update_data_binds(true);
-    }
-
     pub fn update_data_binds_handle(root: &CoreHandle, apply_target_to_source: bool) {
         let hosts = root
             .with_downcast::<Artboard, _>(|artboard| artboard.artboard_hosts.clone())
@@ -2020,6 +2006,22 @@ impl Artboard {
 
     pub fn add_to_raw_path(&mut self, path: &mut RawPath, transform: Option<&Mat2D>) {
         let mut drawable = self.first_drawable.clone();
+        while let Some(current) = drawable {
+            drawable = current.with(Drawable::prev_drawable).flatten();
+            if current.is_hidden() {
+                continue;
+            }
+            current.add_to_raw_path(path, transform);
+        }
+    }
+    pub fn add_to_raw_path_handle(
+        root: &CoreHandle,
+        path: &mut RawPath,
+        transform: Option<&Mat2D>,
+    ) {
+        let mut drawable = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.first_drawable.clone())
+            .flatten();
         while let Some(current) = drawable {
             drawable = current.with(Drawable::prev_drawable).flatten();
             if current.is_hidden() {
@@ -3036,62 +3038,8 @@ impl Artboard {
         }
     }
 
-    pub fn internal_data_context(&mut self, value: RuntimeDataContextHandle) {
-        self.data_context = Some(value.clone());
-        for host in self.artboard_hosts.clone() {
-            host.with_mut(|host| {
-                if let Some(host) = host.as_artboard_host_mut() {
-                    host.internal_data_context(value.clone());
-                }
-            });
-        }
-        self.data_bind_container
-            .bind_data_binds_from_context(value.clone());
-        self.data_bind_container.sort_data_binds();
-        for scripted_object in self.scripted_objects.clone() {
-            scripted_object.with_mut(|scripted_object| {
-                if let Some(scripted_object) = scripted_object.as_scripted_object_mut() {
-                    scripted_object.set_data_context(Some(value.clone()));
-                }
-            });
-        }
-        self.init_scripted_objects();
-    }
-
-    pub fn set_data_context(&mut self, value: RuntimeDataContextHandle) {
-        self.internal_data_context(value);
-    }
-
-    pub fn rebind(&mut self) {
-        if let Some(context) = self.data_context.clone() {
-            self.internal_data_context(context);
-        }
-    }
-
-    pub fn relink_data_context(&mut self) {
-        let Some(context) = self.data_context.clone() else {
-            return;
-        };
-        for host in self.artboard_hosts.clone() {
-            let value = context.with_context(DataContext::main_view_model_instance);
-            if let Some(value) = value {
-                host.with_mut(|host| {
-                    if let Some(host) = host.as_artboard_host_mut() {
-                        host.relink_data_context(value);
-                    }
-                });
-            }
-        }
-    }
-
-    pub fn rebuild_data_bind(&mut self, data_bind: &mut DataBind) {
-        if let Some(context_bind) = data_bind.as_data_bind_context_mut() {
-            context_bind.bind_from_context(self.data_context.clone());
-        }
-    }
-
-    pub fn unbind(&mut self) {
-        self.clear_data_context();
+    fn unbind_for_drop(&mut self) {
+        self.clear_data_context_for_drop();
         self.data_bind_container.unbind_data_binds();
         for host in self.artboard_hosts.clone() {
             host.with_mut(|host| {
@@ -3102,7 +3050,7 @@ impl Artboard {
         }
     }
 
-    pub fn clear_data_context(&mut self) {
+    fn clear_data_context_for_drop(&mut self) {
         if let Some(context) = self.data_context.take()
             && let Some(owner) =
                 crate::mechanical_port::source::core::CoreObject::core(self).handle()
@@ -3124,82 +3072,6 @@ impl Artboard {
                     scripted_object.set_data_context(None);
                 }
             });
-        }
-    }
-
-    pub fn bind_view_model_instance(&mut self, view_model_instance: Option<CoreHandle>) {
-        self.bind_view_model_instance_with_parent(view_model_instance, None);
-    }
-
-    pub fn bind_view_model_instance_with_parent(
-        &mut self,
-        view_model_instance: Option<CoreHandle>,
-        parent: Option<RuntimeDataContextHandle>,
-    ) {
-        let Some(instance) = view_model_instance else {
-            self.unbind();
-            return;
-        };
-        self.set_view_model_instance(Some(instance));
-        if let (Some(parent), Some(context)) = (parent, self.data_context.as_ref()) {
-            context.with_context_mut(|context| context.set_parent(Some(parent)));
-        }
-        self.bind();
-    }
-
-    pub fn bind_view_model_instance_handle_with_parent(
-        &mut self,
-        view_model_instance: CoreHandle,
-        parent: Option<RuntimeDataContextHandle>,
-    ) {
-        self.bind_view_model_instance_with_parent(Some(view_model_instance), parent);
-    }
-
-    pub fn set_view_model_instance(&mut self, view_model_instance: Option<CoreHandle>) {
-        let Some(instance) = view_model_instance else {
-            return;
-        };
-        if self.data_context.is_none() {
-            let context = RuntimeDataContextHandle::new(DataContext::new(Some(instance)));
-            if let Some(owner) =
-                crate::mechanical_port::source::core::CoreObject::core(self).handle()
-            {
-                context.with_context_mut(|context| context.add_dependent_container(owner));
-            }
-            self.data_context = Some(context);
-            return;
-        }
-        self.data_context
-            .as_ref()
-            .unwrap()
-            .with_context_mut(|context| context.set_main_view_model_instance(Some(instance)));
-    }
-
-    pub fn bind_view_model_instances(
-        &mut self,
-        instances: Vec<CoreHandle>,
-        parent: Option<RuntimeDataContextHandle>,
-    ) {
-        if instances.is_empty() {
-            self.unbind();
-            return;
-        }
-        self.clear_data_context();
-        let context = RuntimeDataContextHandle::new(DataContext::from_instances(instances));
-        context.with_context_mut(|context| {
-            if let Some(owner) =
-                crate::mechanical_port::source::core::CoreObject::core(self).handle()
-            {
-                context.add_dependent_container(owner);
-            }
-            context.set_parent(parent);
-        });
-        self.internal_data_context(context);
-    }
-
-    pub fn bind(&mut self) {
-        if let Some(context) = self.data_context.clone() {
-            self.internal_data_context(context);
         }
     }
 
@@ -3326,7 +3198,13 @@ impl Artboard {
         clone.base.is_instance = true;
         clone.base.original_width = self.original_width;
         clone.base.original_height = self.original_height;
-        clone.base.core_arena = self.core_arena.clone();
+        clone.base.definition_owner = Some(if let Some(source) = self.artboard_source.as_ref() {
+            source
+                .retain_arena()
+                .expect("live Artboard source definition")
+        } else {
+            self.core_arena.strong_handle()
+        });
         #[cfg(feature = "tools")]
         {
             clone.base.artboard_id = self.artboard_id;
@@ -3338,10 +3216,11 @@ impl Artboard {
         };
         clone.base.objects.push(None);
         for object in self.objects.iter().skip(1) {
-            clone
-                .base
-                .objects
-                .push(object.as_ref().and_then(CoreHandle::clone_occurrence));
+            clone.base.objects.push(
+                object
+                    .as_ref()
+                    .and_then(|object| object.clone_occurrence_into(&clone.base.core_arena)),
+            );
         }
         clone
             .base
@@ -3355,13 +3234,24 @@ impl Artboard {
         clone
     }
 
-    pub fn instance(&self) -> Option<RuntimeArtboardInstanceHandle> {
-        let instance = RuntimeArtboardInstanceHandle::new(*self.clone_instance_definition());
-        (Artboard::initialize_handle(&instance.core_handle()) == StatusCode::Ok).then_some(instance)
+    pub fn instance_from_handle(source: &CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
+        let definition =
+            source.with_downcast::<Artboard, _>(Artboard::clone_instance_definition)?;
+        let instance = RuntimeArtboardInstanceHandle::new(*definition);
+        (Self::initialize_handle(&instance.core_handle()) == StatusCode::Ok).then_some(instance)
     }
 
-    pub fn instance_handle(&self) -> Option<RuntimeArtboardInstanceHandle> {
-        self.instance()
+    /// An embedded instance's source definitions are owned by its containing
+    /// File/Artboard. Retaining that same arena from the child would create a
+    /// parent -> NestedArtboard -> child -> parent ownership cycle.
+    pub fn nested_instance_from_handle(
+        source: &CoreHandle,
+    ) -> Option<RuntimeArtboardInstanceHandle> {
+        let mut definition =
+            source.with_downcast::<Artboard, _>(Artboard::clone_instance_definition)?;
+        definition.base.definition_owner = None;
+        let instance = RuntimeArtboardInstanceHandle::new(*definition);
+        (Self::initialize_handle(&instance.core_handle()) == StatusCode::Ok).then_some(instance)
     }
 
     fn artboard_file(&self) -> Option<RuntimeFileWeakHandle> {
@@ -3548,14 +3438,74 @@ impl Drop for Artboard {
         ) {
             engine.stop_artboard(identity);
         }
-        self.unbind();
+        self.unbind_for_drop();
 
         self.data_bind_container.delete_data_binds();
+        if self.is_instance {
+            for object in self
+                .objects
+                .iter()
+                .skip(1)
+                .chain(self.invalid_objects.iter())
+                .flatten()
+            {
+                self.core_arena.remove(object);
+            }
+            if let Some(root) =
+                crate::mechanical_port::source::core::CoreObject::core(self).handle()
+            {
+                self.core_arena.retire_runtime_artboard(&root);
+            }
+        }
         self.objects.clear();
         self.invalid_objects.clear();
         self.animations.clear();
         self.state_machines.clear();
         self.dirty_layout.clear();
+    }
+}
+
+impl RuntimeArtboardInstanceHandle {
+    pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
+        self.with_artboard(|instance| instance.base.data_context())
+    }
+    pub fn internal_data_context(&self, context: RuntimeDataContextHandle) {
+        Artboard::internal_data_context_handle(&self.core_handle(), context);
+    }
+    pub fn set_data_context(&self, context: RuntimeDataContextHandle) {
+        self.internal_data_context(context);
+    }
+    pub fn clear_data_context(&self) {
+        Artboard::clear_data_context_handle(&self.core_handle());
+    }
+    pub fn unbind(&self) {
+        Artboard::unbind_handle(&self.core_handle());
+    }
+    pub fn rebind(&self) {
+        Artboard::rebind_handle(&self.core_handle());
+    }
+    pub fn relink_data_context(&self) {
+        Artboard::relink_data_context_handle(&self.core_handle());
+    }
+    pub fn bind_view_model_instance(&self, instance: Option<CoreHandle>) {
+        self.bind_view_model_instance_with_parent(instance, None);
+    }
+    pub fn bind_view_model_instance_with_parent(
+        &self,
+        instance: Option<CoreHandle>,
+        parent: Option<RuntimeDataContextHandle>,
+    ) {
+        Artboard::bind_view_model_instance_handle(&self.core_handle(), instance, parent);
+    }
+    pub fn bind_view_model_instances(
+        &self,
+        instances: Vec<CoreHandle>,
+        parent: Option<RuntimeDataContextHandle>,
+    ) {
+        Artboard::bind_view_model_instances_handle(&self.core_handle(), instances, parent);
+    }
+    pub fn update_data_binds(&self, apply_target_to_source: bool) {
+        Artboard::update_data_binds_handle(&self.core_handle(), apply_target_to_source);
     }
 }
 
@@ -3604,9 +3554,65 @@ impl RuntimeArtboardInstanceHandle {
                 .expect("runtime Artboard root registered before use")
         })
     }
+    pub fn instance(&self) -> Option<Self> {
+        Artboard::instance_from_handle(&self.core_handle())
+    }
 
     pub fn advance_internal(&self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
         Artboard::advance_internal_handle(&self.core_handle(), elapsed_seconds, flags)
+    }
+    pub fn apply_linear_animation(
+        &self,
+        animation: &mut LinearAnimation,
+        time: f32,
+        mix: f32,
+        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+    ) {
+        let mut target = self.with_artboard(|artboard| ArtboardObjectContext {
+            arena: artboard.base.core_arena.clone(),
+            objects: artboard.base.objects.clone(),
+        });
+        animation.apply(&mut target, time, mix, context);
+    }
+    pub fn state_machine_instance_handle(
+        &self,
+        index: usize,
+    ) -> Option<RuntimeStateMachineInstanceHandle> {
+        let (machine, context) = self.with_artboard(|artboard| {
+            (
+                artboard.base.state_machine_handle_at(index),
+                artboard.base.data_context(),
+            )
+        });
+        let instance = StateMachineInstance::new(machine?, self.downgrade());
+        if let Some(context) = context {
+            instance.with_instance_mut(|instance| instance.inherit_data_context_handle(context));
+        }
+        Some(instance)
+    }
+    pub fn default_state_machine_handle(&self) -> Option<RuntimeStateMachineInstanceHandle> {
+        let index = self.with_artboard(|artboard| artboard.base.default_state_machine_index());
+        if index < 0 {
+            None
+        } else {
+            self.state_machine_instance_handle(index as usize)
+        }
+    }
+    pub fn animation_at(&self, index: usize) -> Option<Box<LinearAnimationInstance>> {
+        let animation = self.with_artboard(|artboard| artboard.base.animation_handle_at(index))?;
+        Some(Box::new(LinearAnimationInstance::new(
+            animation,
+            self.downgrade(),
+            1.0,
+        )))
+    }
+    pub fn animation_named(&self, name: &str) -> Option<Box<LinearAnimationInstance>> {
+        let animation = self.with_artboard(|artboard| artboard.base.animation_named(name))?;
+        Some(Box::new(LinearAnimationInstance::new(
+            animation,
+            self.downgrade(),
+            1.0,
+        )))
     }
     pub fn update_pass(&self, is_root: bool) -> bool {
         Artboard::update_pass_handle(&self.core_handle(), is_root)

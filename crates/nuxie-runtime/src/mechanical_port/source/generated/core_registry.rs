@@ -19,6 +19,12 @@ pub fn drawable_draw_handle(
     handle: &CoreHandle,
     renderer: &mut crate::mechanical_port::source::renderer::Renderer,
 ) -> bool {
+    if handle.core_type()
+        == Some(crate::mechanical_port::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+    {
+        crate::mechanical_port::source::shapes::image::Image::draw_occurrence(handle, renderer);
+        return true;
+    }
     if handle
         .with(|owner| owner.as_scripted_drawable().is_some())
         .unwrap_or(false)
@@ -34,6 +40,22 @@ pub fn drawable_draw_handle(
     } else {
         handle
             .with_mut(|owner| owner.drawable_draw(renderer))
+            .unwrap_or(false)
+    }
+}
+
+pub fn file_asset_referencer_set_asset_handle(owner: &CoreHandle, asset: CoreHandle) -> bool {
+    if owner.core_type()
+        == Some(crate::mechanical_port::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+    {
+        crate::mechanical_port::source::shapes::image::Image::set_asset_occurrence(
+            owner,
+            Some(asset),
+        );
+        true
+    } else {
+        owner
+            .with_mut(|owner| owner.file_asset_referencer_set_asset(asset))
             .unwrap_or(false)
     }
 }
@@ -1286,6 +1308,27 @@ pub trait DataConverterCapability {
 }
 
 pub trait CoreCapabilities: Any {
+    fn mesh_drawable_type(
+        &self,
+    ) -> Option<crate::mechanical_port::source::shapes::mesh_drawable::MeshType> {
+        None
+    }
+    fn mesh_drawable_on_asset_loaded(
+        &mut self,
+        _image: &dyn nuxie_render_api::RenderImage,
+    ) -> bool {
+        false
+    }
+    fn mesh_drawable_draw(
+        &mut self,
+        _renderer: &mut dyn nuxie_render_api::Renderer,
+        _image: &dyn nuxie_render_api::RenderImage,
+        _sampler: nuxie_render_api::ImageSampler,
+        _blend: nuxie_render_api::BlendMode,
+        _opacity: f32,
+    ) -> bool {
+        false
+    }
     fn data_bind_update_list(&mut self, _list: &[CoreHandle]) -> bool {
         false
     }
@@ -53063,6 +53106,26 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::axis_x::AxisX 
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSlicer {
+    fn mesh_drawable_type(
+        &self,
+    ) -> Option<crate::mechanical_port::source::shapes::mesh_drawable::MeshType> {
+        Some(crate::mechanical_port::source::shapes::mesh_drawable::MeshType::NSlice)
+    }
+    fn mesh_drawable_on_asset_loaded(&mut self, image: &dyn nuxie_render_api::RenderImage) -> bool {
+        self.slice_mesh().on_asset_loaded(Some(image));
+        true
+    }
+    fn mesh_drawable_draw(
+        &mut self,
+        renderer: &mut dyn nuxie_render_api::Renderer,
+        image: &dyn nuxie_render_api::RenderImage,
+        sampler: nuxie_render_api::ImageSampler,
+        blend: nuxie_render_api::BlendMode,
+        opacity: f32,
+    ) -> bool {
+        self.draw_mesh(renderer, image, sampler, blend, opacity);
+        true
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::layout::n_slicer::NSlicer::build_dependencies(&mut self);
         true
@@ -57271,6 +57334,26 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
+    fn mesh_drawable_type(
+        &self,
+    ) -> Option<crate::mechanical_port::source::shapes::mesh_drawable::MeshType> {
+        Some(crate::mechanical_port::source::shapes::mesh_drawable::MeshType::Vertex)
+    }
+    fn mesh_drawable_on_asset_loaded(&mut self, image: &dyn nuxie_render_api::RenderImage) -> bool {
+        self.on_asset_loaded(Some(image));
+        true
+    }
+    fn mesh_drawable_draw(
+        &mut self,
+        renderer: &mut dyn nuxie_render_api::Renderer,
+        image: &dyn nuxie_render_api::RenderImage,
+        sampler: nuxie_render_api::ImageSampler,
+        blend: nuxie_render_api::BlendMode,
+        opacity: f32,
+    ) -> bool {
+        self.draw(renderer, image, sampler, blend, opacity);
+        true
+    }
     fn as_skinnable_behavior(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::bones::skinnable::SkinnableBehavior> {
@@ -58983,6 +59066,13 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
+    fn file_asset_referencer_asset_id(&self) -> Option<u32> {
+        Some(self.asset_id())
+    }
+    fn file_asset_referencer_set_asset(&mut self, asset: CoreHandle) -> bool {
+        self.set_asset(Some(asset));
+        true
+    }
     fn as_intrinsically_sizeable_mut(
         &mut self,
     ) -> Option<

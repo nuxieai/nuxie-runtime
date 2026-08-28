@@ -30,6 +30,18 @@ impl NSlicer {
     pub fn slice_mesh(&mut self) -> &mut SliceMesh {
         &mut self.slice_mesh
     }
+    pub fn draw_mesh(
+        &mut self,
+        renderer: &mut dyn nuxie_render_api::Renderer,
+        image: &dyn nuxie_render_api::RenderImage,
+        sampler: nuxie_render_api::ImageSampler,
+        blend: nuxie_render_api::BlendMode,
+        opacity: f32,
+    ) {
+        let mesh = std::mem::take(&mut self.slice_mesh);
+        mesh.draw(self, renderer, image, sampler, blend, opacity);
+        self.slice_mesh = mesh;
+    }
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {

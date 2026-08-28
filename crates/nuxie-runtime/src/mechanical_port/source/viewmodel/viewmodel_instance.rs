@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::mechanical_port::source::{
+    animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
     core::CoreHandle,
     generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase,
     importers::{
@@ -15,12 +16,43 @@ use crate::mechanical_port::source::{
 
 use super::symbol_type::SymbolType;
 
+#[derive(Clone)]
+pub enum DataBindContainerDependent {
+    Authored(CoreHandle),
+    StateMachine(RuntimeStateMachineInstanceWeakHandle),
+}
+
+impl DataBindContainerDependent {
+    pub(crate) fn same_identity(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Authored(left), Self::Authored(right)) => left == right,
+            (Self::StateMachine(left), Self::StateMachine(right)) => left.ptr_eq(right),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn relink_data_context(&self) {
+        match self {
+            Self::Authored(dependent) => {
+                dependent.with_mut(|dependent| {
+                    if let Some(dependent) = dependent.as_bind_container_mut() {
+                        dependent.relink_data_context();
+                    }
+                });
+            }
+            Self::StateMachine(dependent) => {
+                dependent.with_instance_mut(|dependent| dependent.relink_data_context());
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct ViewModelInstance {
     pub base: ViewModelInstanceBase,
     property_values: Vec<CoreHandle>,
     parents: Vec<CoreHandle>,
-    dependents: Vec<CoreHandle>,
+    dependents: Vec<DataBindContainerDependent>,
     property_symbols: HashMap<SymbolType, CoreHandle>,
     view_model: Option<CoreHandle>,
 }
@@ -354,18 +386,53 @@ impl ViewModelInstance {
     }
 
     pub fn add_dependent(&mut self, dependent: CoreHandle) {
-        if !self.dependents.contains(&dependent) {
+        self.add_dependent_occurrence(DataBindContainerDependent::Authored(dependent));
+    }
+
+    pub fn remove_dependent(&mut self, dependent: &CoreHandle) {
+        self.remove_dependent_occurrence(&DataBindContainerDependent::Authored(dependent.clone()));
+    }
+
+    pub fn add_state_machine_dependent(
+        &mut self,
+        dependent: RuntimeStateMachineInstanceWeakHandle,
+    ) {
+        self.add_dependent_occurrence(DataBindContainerDependent::StateMachine(dependent));
+    }
+
+    pub fn remove_state_machine_dependent(
+        &mut self,
+        dependent: &RuntimeStateMachineInstanceWeakHandle,
+    ) {
+        self.remove_dependent_occurrence(&DataBindContainerDependent::StateMachine(
+            dependent.clone(),
+        ));
+    }
+
+    fn add_dependent_occurrence(&mut self, dependent: DataBindContainerDependent) {
+        if !self
+            .dependents
+            .iter()
+            .any(|candidate| candidate.same_identity(&dependent))
+        {
             self.dependents.push(dependent);
         }
     }
 
-    pub fn remove_dependent(&mut self, dependent: &CoreHandle) {
-        self.dependents.retain(|candidate| candidate != dependent);
+    fn remove_dependent_occurrence(&mut self, dependent: &DataBindContainerDependent) {
+        self.dependents
+            .retain(|candidate| !candidate.same_identity(dependent));
     }
 
     #[cfg(any(test, feature = "tools"))]
     pub fn dependents(&self) -> Vec<CoreHandle> {
-        self.dependents.clone()
+        self.dependents
+            .iter()
+            .filter_map(|dependent| match dependent {
+                DataBindContainerDependent::Authored(dependent) => Some(dependent.clone()),
+                DataBindContainerDependent::StateMachine(_) => None,
+            })
+            .collect()
     }
 
     #[cfg(any(test, feature = "tools"))]
@@ -399,11 +466,7 @@ impl ViewModelInstance {
 
     fn rebind_dependents(&mut self) {
         for dependent in &self.dependents {
-            dependent.with_mut(|dependent| {
-                if let Some(dependent) = dependent.as_bind_container_mut() {
-                    dependent.relink_data_context();
-                }
-            });
+            dependent.relink_data_context();
         }
         for parent in self.parents.clone() {
             parent.with_mut(|parent| {

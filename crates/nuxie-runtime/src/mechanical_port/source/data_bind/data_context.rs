@@ -1,8 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
+    animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
     assets::manifest_asset::ManifestAsset, core::CoreHandle,
     data_bind::data_bind_path::DataBindPath, data_resolver::DataResolver,
+    viewmodel::viewmodel_instance::DataBindContainerDependent,
 };
 
 const NO_SLOT: u32 = u32::MAX;
@@ -15,7 +17,7 @@ struct GlobalSlots {
 pub struct DataContext {
     parent: Option<RuntimeDataContextHandle>,
     instances: Vec<CoreHandle>,
-    dependent_containers: Vec<CoreHandle>,
+    dependent_containers: Vec<DataBindContainerDependent>,
     global_slots: Option<GlobalSlots>,
 }
 
@@ -73,7 +75,14 @@ impl DataContext {
         for container in &self.dependent_containers {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
-                    instance.add_dependent(container.clone());
+                    match container {
+                        DataBindContainerDependent::Authored(container) => {
+                            instance.add_dependent(container.clone());
+                        }
+                        DataBindContainerDependent::StateMachine(container) => {
+                            instance.add_state_machine_dependent(container.clone());
+                        }
+                    }
                 }
             });
         }
@@ -83,35 +92,89 @@ impl DataContext {
         for container in &self.dependent_containers {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
-                    instance.remove_dependent(container);
+                    match container {
+                        DataBindContainerDependent::Authored(container) => {
+                            instance.remove_dependent(container);
+                        }
+                        DataBindContainerDependent::StateMachine(container) => {
+                            instance.remove_state_machine_dependent(container);
+                        }
+                    }
                 }
             });
         }
     }
 
     pub fn add_dependent_container(&mut self, container: CoreHandle) {
-        if self.dependent_containers.contains(&container) {
+        self.add_dependent_container_occurrence(DataBindContainerDependent::Authored(container));
+    }
+
+    pub fn remove_dependent_container(&mut self, container: &CoreHandle) {
+        self.remove_dependent_container_occurrence(&DataBindContainerDependent::Authored(
+            container.clone(),
+        ));
+    }
+
+    pub fn add_state_machine_dependent_container(
+        &mut self,
+        container: RuntimeStateMachineInstanceWeakHandle,
+    ) {
+        self.add_dependent_container_occurrence(DataBindContainerDependent::StateMachine(
+            container,
+        ));
+    }
+
+    pub fn remove_state_machine_dependent_container(
+        &mut self,
+        container: &RuntimeStateMachineInstanceWeakHandle,
+    ) {
+        self.remove_dependent_container_occurrence(&DataBindContainerDependent::StateMachine(
+            container.clone(),
+        ));
+    }
+
+    fn add_dependent_container_occurrence(&mut self, container: DataBindContainerDependent) {
+        if self
+            .dependent_containers
+            .iter()
+            .any(|candidate| candidate.same_identity(&container))
+        {
             return;
         }
         self.dependent_containers.push(container.clone());
         for instance in &self.instances {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
-                    instance.add_dependent(container.clone());
+                    match &container {
+                        DataBindContainerDependent::Authored(container) => {
+                            instance.add_dependent(container.clone());
+                        }
+                        DataBindContainerDependent::StateMachine(container) => {
+                            instance.add_state_machine_dependent(container.clone());
+                        }
+                    }
                 }
             });
         }
     }
 
-    pub fn remove_dependent_container(&mut self, container: &CoreHandle) {
+    fn remove_dependent_container_occurrence(&mut self, container: &DataBindContainerDependent) {
         for instance in &self.instances {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
-                    instance.remove_dependent(container);
+                    match container {
+                        DataBindContainerDependent::Authored(container) => {
+                            instance.remove_dependent(container);
+                        }
+                        DataBindContainerDependent::StateMachine(container) => {
+                            instance.remove_state_machine_dependent(container);
+                        }
+                    }
                 }
             });
         }
-        self.dependent_containers.retain(|item| item != container);
+        self.dependent_containers
+            .retain(|candidate| !candidate.same_identity(container));
     }
 
     fn ensure_global_slots(&mut self) {

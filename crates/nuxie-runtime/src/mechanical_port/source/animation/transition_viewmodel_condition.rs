@@ -379,7 +379,7 @@ impl TransitionViewModelCondition {
         let (Some(left), Some(right)) = (&self.left_comparator, &self.right_comparator) else {
             return false;
         };
-        machine.data_context() != 0
+        machine.data_context().is_some()
             || (!Self::is_viewmodel_property(left) && !Self::is_viewmodel_property(right))
     }
 

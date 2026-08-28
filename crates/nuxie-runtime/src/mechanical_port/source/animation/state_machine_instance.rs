@@ -9,16 +9,20 @@ use crate::mechanical_port::source::{
         linear_animation_instance::LinearAnimationInstance,
         listener_invocation::ListenerInvocation,
         listener_types::listener_input_type_semantic::ListenerInputTypeSemantic,
+        listener_types::listener_input_type_viewmodel::ListenerInputTypeViewModel,
         semantic_listener_group::{RuntimeSemanticListenerGroupHandle, SemanticActionType},
         state_instance::RuntimeStateInstanceHandle,
         state_machine_input_instance::{
             InputInstanceNotifier, SMIBool, SMIInput, SMINumber, SMITrigger,
         },
         state_machine_listener::StateMachineListener,
+        state_machine_listener_single::StateMachineListenerSingle,
     },
     artboard::RuntimeArtboardInstanceWeakHandle,
+    component_dirt::ComponentDirt,
     core::CoreHandle,
-    data_bind::data_context::RuntimeDataContextHandle,
+    data_bind::data_context::{DataContext, RuntimeDataContextHandle},
+    dirtyable::Dirtyable,
     focus_data::FocusData,
     generated::{
         animation::{
@@ -45,6 +49,13 @@ use crate::mechanical_port::source::{
     semantic::{
         semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
         semantic_node::SemanticNodeRef,
+    },
+    view_model_type::ViewModelType,
+    viewmodel::{
+        viewmodel::ViewModel,
+        viewmodel_instance_trigger::ViewModelInstanceTrigger,
+        viewmodel_instance_value::{ValueDependentHandle, ViewModelInstanceValue},
+        viewmodel_value_dependent::ViewModelValueDependent,
     },
 };
 use std::{
@@ -95,7 +106,7 @@ pub enum RuntimeComparisonValue {
     String(String),
     Color(i32),
     Uint(u32),
-    ViewModel(Object),
+    ViewModel(CoreHandle),
 }
 
 const POINTER_HIT_LISTENER_TYPES: [ListenerType; 9] = [
@@ -449,54 +460,6 @@ pub trait StateMachineInstanceRuntime {
         &mut self,
         view_model: RuntimeListenerViewModelWeakHandle,
     ) -> ListenerInvocation;
-    fn retain_view_model_instance(&mut self, instance: CoreHandle) -> Object;
-    fn retain_data_context(&mut self, context: RuntimeDataContextHandle) -> Object;
-    fn data_context_advanced(&mut self, context: Object);
-    fn data_context_add_container(
-        &mut self,
-        context: Object,
-        container: RuntimeStateMachineInstanceWeakHandle,
-    );
-    fn data_context_remove_container(
-        &mut self,
-        context: Object,
-        container: RuntimeStateMachineInstanceWeakHandle,
-    );
-    fn data_context_main(&self, context: Object) -> Object;
-    fn data_context_set_main(&mut self, context: Object, instance: Object);
-    fn data_context_slot(&self, context: Object, slot: u32) -> Object;
-    fn data_context_set_slot(&mut self, context: Object, slot: u32, instance: Object);
-    fn data_context_new(&mut self, main: Object) -> Object;
-    fn data_context_property(&self, context: Object, path_owner: CoreHandle) -> Object;
-    fn listener_is_single(&self, listener: &CoreHandle) -> bool;
-    fn listener_view_model_inputs(&self, listener: &CoreHandle) -> Vec<CoreHandle>;
-    fn view_model_value_is_trigger(&self, value: Object) -> bool;
-    fn view_model_trigger_value(&self, value: Object) -> u32;
-    fn view_model_add_dependent(
-        &mut self,
-        value: Object,
-        dependent: RuntimeListenerViewModelPropertyBindingWeakHandle,
-    );
-    fn view_model_remove_dependent(
-        &mut self,
-        value: Object,
-        dependent: RuntimeListenerViewModelPropertyBindingWeakHandle,
-    );
-    fn complete_default_main(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Object;
-    fn global_view_models(&self, file: Object) -> Vec<Object>;
-    fn view_model_name(&self, view_model: Object) -> String;
-    fn view_model_slot(&self, file: Object, name: &str) -> Option<u32>;
-    fn view_model_is_global(&self, file: Object, slot: u32) -> bool;
-    fn create_default_view_model(&mut self, file: Object, view_model: Object) -> Object;
-    fn artboard_set_data_context(
-        &mut self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        context: Object,
-    );
-    fn artboard_clear_data_context(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
-    fn artboard_relink_data_context(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
-    fn bind_data_binds_from_context(&mut self, machine: &mut StateMachineInstance, context: Object);
-    fn unbind_data_binds(&mut self, machine: &mut StateMachineInstance);
     fn clone_data_bind(&mut self, bind: &CoreHandle) -> CoreHandle;
     fn data_bind_file(&self, bind: &CoreHandle) -> Object;
     fn data_bind_set_file(&mut self, bind: &CoreHandle, file: Object);
@@ -538,7 +501,6 @@ pub trait StateMachineInstanceRuntime {
         source: &CoreHandle,
         machine: &mut StateMachineInstance,
     ) -> CoreHandle;
-    fn scripted_set_data_context(&mut self, object: &CoreHandle, context: Object);
     fn scripted_initialize(&mut self, object: &CoreHandle);
     fn scripted_hydrate_inputs(&mut self, object: &CoreHandle);
     fn scripted_delete(&mut self, object: CoreHandle);
@@ -1657,11 +1619,44 @@ impl HitComponent for HitComponentList {
     }
 }
 
+fn data_context_property(
+    context: &RuntimeDataContextHandle,
+    path_owner: &CoreHandle,
+) -> Option<CoreHandle> {
+    if let Some(value) = path_owner
+        .with_downcast_mut::<StateMachineListenerSingle, _>(|owner| {
+            owner
+                .data_bind_path_referencer
+                .with_data_bind_path_mut(|path| {
+                    context.with_context(|context| context.get_property_from_path(path))
+                })
+                .flatten()
+        })
+        .flatten()
+    {
+        return Some(value);
+    }
+    path_owner
+        .with_downcast_mut::<ListenerInputTypeViewModel, _>(|owner| {
+            owner
+                .data_bind_path_referencer
+                .with_data_bind_path_mut(|path| {
+                    context.with_context(|context| context.get_property_from_path(path))
+                })
+                .flatten()
+        })
+        .flatten()
+}
+
+fn trigger_value(value: &CoreHandle) -> Option<u32> {
+    value.with_downcast::<ViewModelInstanceTrigger, _>(|trigger| trigger.base.property_value())
+}
+
 struct ListenerViewModelPropertyBinding {
-    occurrence: RuntimeListenerViewModelPropertyBindingWeakHandle,
     parent: RuntimeListenerViewModelWeakHandle,
-    view_model_instance_value: Object,
+    view_model_instance_value: Option<CoreHandle>,
     path_owner: CoreHandle,
+    dependent_identity: Option<ValueDependentHandle>,
 }
 
 #[derive(Clone)]
@@ -1669,20 +1664,26 @@ pub struct RuntimeListenerViewModelPropertyBindingHandle(
     Rc<RefCell<ListenerViewModelPropertyBinding>>,
 );
 
-#[derive(Clone, Default)]
-pub struct RuntimeListenerViewModelPropertyBindingWeakHandle(
-    Weak<RefCell<ListenerViewModelPropertyBinding>>,
-);
-
 impl RuntimeListenerViewModelPropertyBindingHandle {
-    fn new(binding: ListenerViewModelPropertyBinding) -> Self {
-        let handle = Self(Rc::new(RefCell::new(binding)));
-        handle.0.borrow_mut().occurrence = handle.downgrade();
+    fn new(
+        parent: RuntimeListenerViewModelWeakHandle,
+        value: CoreHandle,
+        path_owner: CoreHandle,
+    ) -> Self {
+        let binding = Rc::new(RefCell::new(ListenerViewModelPropertyBinding {
+            parent,
+            view_model_instance_value: Some(value.clone()),
+            path_owner,
+            dependent_identity: None,
+        }));
+        let erased: Rc<RefCell<dyn ViewModelValueDependent>> = binding.clone();
+        let identity = ValueDependentHandle::runtime(&erased);
+        binding.borrow_mut().dependent_identity = Some(identity.clone());
+        value.with_downcast_mut::<ViewModelInstanceValue, _>(|value| {
+            value.add_dependent(identity);
+        });
+        let handle = Self(binding);
         handle
-    }
-
-    fn downgrade(&self) -> RuntimeListenerViewModelPropertyBindingWeakHandle {
-        RuntimeListenerViewModelPropertyBindingWeakHandle(Rc::downgrade(&self.0))
     }
 
     fn with_binding<R>(&self, f: impl FnOnce(&ListenerViewModelPropertyBinding) -> R) -> R {
@@ -1694,65 +1695,63 @@ impl RuntimeListenerViewModelPropertyBindingHandle {
     }
 }
 
-impl RuntimeListenerViewModelPropertyBindingWeakHandle {
-    pub fn with_binding_mut<R>(
-        &self,
-        f: impl FnOnce(&mut ListenerViewModelPropertyBinding) -> R,
-    ) -> Option<R> {
-        self.0.upgrade().map(|binding| f(&mut binding.borrow_mut()))
-    }
-}
-
 impl ListenerViewModelPropertyBinding {
-    fn new(
-        parent: RuntimeListenerViewModelWeakHandle,
-        value: Object,
-        path_owner: CoreHandle,
-        runtime: &mut dyn StateMachineInstanceRuntime,
-    ) -> RuntimeListenerViewModelPropertyBindingHandle {
-        let binding = RuntimeListenerViewModelPropertyBindingHandle::new(Self {
-            occurrence: RuntimeListenerViewModelPropertyBindingWeakHandle::default(),
-            parent,
-            view_model_instance_value: value,
-            path_owner,
-        });
-        runtime.view_model_add_dependent(value, binding.downgrade());
-        binding
-    }
-
-    fn clear_data_context(&mut self, runtime: &mut dyn StateMachineInstanceRuntime) {
-        if self.view_model_instance_value != 0 {
-            runtime.view_model_remove_dependent(
-                self.view_model_instance_value,
-                self.occurrence.clone(),
-            );
-            self.view_model_instance_value = RuntimeObjectHandle::NONE;
+    fn clear_data_context(&mut self) {
+        if let (Some(value), Some(identity)) = (
+            self.view_model_instance_value.take(),
+            self.dependent_identity.as_ref(),
+        ) {
+            value.with_downcast_mut::<ViewModelInstanceValue, _>(|value| {
+                value.remove_dependent(identity);
+            });
         }
     }
 
-    fn relink_data_bind(&mut self, runtime: &mut dyn StateMachineInstanceRuntime) {
-        let Some(context) = self.parent.with_listener(|parent| parent.data_context) else {
+    fn relink_data_bind(&mut self) {
+        let Some(context) = self
+            .parent
+            .with_listener(|parent| parent.data_context.clone())
+            .flatten()
+        else {
             return;
         };
-        if context == 0 {
-            return;
-        }
-        let value = runtime.data_context_property(context, self.path_owner.clone());
+        let value = data_context_property(&context, &self.path_owner);
         if value != self.view_model_instance_value {
-            self.clear_data_context(runtime);
-            if value != 0 {
-                self.view_model_instance_value = value;
-                runtime.view_model_add_dependent(value, self.occurrence.clone());
+            self.clear_data_context();
+            if let Some(value) = value {
+                if let Some(identity) = self.dependent_identity.clone() {
+                    value.with_downcast_mut::<ViewModelInstanceValue, _>(|value| {
+                        value.add_dependent(identity);
+                    });
+                }
+                self.view_model_instance_value = Some(value);
             }
         }
     }
 
     fn add_dirt(&mut self) {
-        if self.view_model_instance_value != 0 {
-            self.parent.with_listener_mut(|parent| {
-                parent.report_to_state_machine(self.view_model_instance_value)
-            });
+        if let Some(value) = self.view_model_instance_value.clone() {
+            self.parent
+                .with_listener_mut(|parent| parent.report_to_state_machine(value));
         }
+    }
+}
+
+impl Drop for ListenerViewModelPropertyBinding {
+    fn drop(&mut self) {
+        self.clear_data_context();
+    }
+}
+
+impl Dirtyable for ListenerViewModelPropertyBinding {
+    fn add_dirt(&mut self, _value: ComponentDirt, _recurse: bool) {
+        ListenerViewModelPropertyBinding::add_dirt(self);
+    }
+}
+
+impl ViewModelValueDependent for ListenerViewModelPropertyBinding {
+    fn relink_data_bind(&mut self) {
+        ListenerViewModelPropertyBinding::relink_data_bind(self);
     }
 }
 
@@ -1760,7 +1759,7 @@ struct ListenerViewModel {
     occurrence: RuntimeListenerViewModelWeakHandle,
     state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     listener: CoreHandle,
-    data_context: Object,
+    data_context: Option<RuntimeDataContextHandle>,
     property_bindings: Vec<RuntimeListenerViewModelPropertyBindingHandle>,
 }
 
@@ -1811,76 +1810,78 @@ impl ListenerViewModel {
             occurrence: RuntimeListenerViewModelWeakHandle::default(),
             state_machine_instance: machine,
             listener,
-            data_context: RuntimeObjectHandle::NONE,
+            data_context: None,
             property_bindings: Vec::new(),
         })
     }
 
     fn clear_data_context(&mut self) {
-        self.state_machine_instance.with_instance_mut(|machine| {
-            let mut runtime = machine.runtime_mut();
-            for binding in &self.property_bindings {
-                binding.with_binding_mut(|binding| binding.clear_data_context(&mut *runtime));
-            }
-        });
+        for binding in &self.property_bindings {
+            binding.with_binding_mut(ListenerViewModelPropertyBinding::clear_data_context);
+        }
         self.property_bindings.clear();
+        self.data_context = None;
     }
 
-    fn bind_from_context(&mut self, context: Object) {
-        self.data_context = context;
+    fn bind_from_context(&mut self, context: RuntimeDataContextHandle) {
         self.clear_data_context();
-        let Some(machine) = self.state_machine_instance.upgrade() else {
-            return;
-        };
-        let runtime_services = machine.with_instance(|machine| Rc::clone(&machine.runtime));
-        let mut runtime = runtime_services.borrow_mut();
-        if runtime.listener_is_single(&self.listener) {
-            let value = runtime.data_context_property(context, self.listener.clone());
-            if value != 0 {
+        self.data_context = Some(context.clone());
+        if self
+            .listener
+            .with_downcast::<StateMachineListenerSingle, _>(|_| ())
+            .is_some()
+        {
+            if let Some(value) = data_context_property(&context, &self.listener) {
                 self.property_bindings
-                    .push(ListenerViewModelPropertyBinding::new(
+                    .push(RuntimeListenerViewModelPropertyBindingHandle::new(
                         self.occurrence.clone(),
                         value,
                         self.listener.clone(),
-                        runtime.as_mut(),
                     ));
             }
         } else {
-            for input in runtime.listener_view_model_inputs(&self.listener) {
-                let value = runtime.data_context_property(context, input.clone());
-                if value != 0 {
-                    self.property_bindings
-                        .push(ListenerViewModelPropertyBinding::new(
+            let inputs = self
+                .listener
+                .with_downcast::<StateMachineListener, _>(|listener| {
+                    (0..listener.listener_input_type_count())
+                        .filter_map(|index| listener.listener_input_type(index))
+                        .filter(|input| {
+                            input
+                                .with_downcast::<ListenerInputTypeViewModel, _>(|_| ())
+                                .is_some()
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            for input in inputs {
+                if let Some(value) = data_context_property(&context, &input) {
+                    self.property_bindings.push(
+                        RuntimeListenerViewModelPropertyBindingHandle::new(
                             self.occurrence.clone(),
                             value,
                             input,
-                            runtime.as_mut(),
-                        ));
+                        ),
+                    );
                 }
             }
         }
-        let pending: Vec<Object> = self
+        let pending: Vec<CoreHandle> = self
             .property_bindings
             .iter()
-            .map(|binding| binding.with_binding(|binding| binding.view_model_instance_value))
-            .filter(|&value| {
-                runtime.view_model_value_is_trigger(value)
-                    && runtime.view_model_trigger_value(value) != 0
+            .filter_map(|binding| {
+                binding.with_binding(|binding| binding.view_model_instance_value.clone())
             })
+            .filter(|value| trigger_value(value).is_some_and(|value| value != 0))
             .collect();
         for value in pending {
             self.report_to_state_machine(value);
         }
     }
 
-    fn report_to_state_machine(&mut self, value: Object) {
+    fn report_to_state_machine(&mut self, value: CoreHandle) {
         let occurrence = self.occurrence.clone();
         self.state_machine_instance.with_instance_mut(|machine| {
-            let should_report = {
-                let runtime = machine.runtime_mut();
-                !runtime.view_model_value_is_trigger(value)
-                    || runtime.view_model_trigger_value(value) != 0
-            };
+            let should_report = trigger_value(&value).is_none_or(|value| value != 0);
             if should_report {
                 machine.report_listener_view_model(occurrence);
             }
@@ -1948,7 +1949,6 @@ pub struct StateMachineInstance {
     listener_groups: Vec<RuntimeListenerGroupHandle>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
-    data_context: Object,
     data_context_handle: Option<RuntimeDataContextHandle>,
     data_binds: Vec<CoreHandle>,
     listener_view_models: Vec<RuntimeListenerViewModelHandle>,
@@ -2000,7 +2000,6 @@ impl StateMachineInstance {
             listener_groups: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
-            data_context: RuntimeObjectHandle::NONE,
             data_context_handle: None,
             data_binds: Vec::new(),
             listener_view_models: Vec::new(),
@@ -2465,9 +2464,11 @@ impl StateMachineInstance {
             self.scripted_objects_map.insert(source, clone);
         }
         for object in self.scripted_objects_map.values() {
-            self.runtime
-                .borrow_mut()
-                .scripted_set_data_context(object, self.data_context);
+            object.with_mut(|object| {
+                if let Some(object) = object.as_scripted_object_mut() {
+                    object.set_data_context(self.data_context_handle.clone());
+                }
+            });
         }
         self.init_scripted_objects();
         for object in self
@@ -3000,10 +3001,8 @@ impl StateMachineInstance {
     }
 
     pub fn advanced_data_context(&mut self) {
-        if self.data_context != 0 {
-            self.runtime
-                .borrow_mut()
-                .data_context_advanced(self.data_context);
+        if let Some(data_context) = self.data_context_handle.as_ref() {
+            data_context.with_context(DataContext::advanced);
         }
     }
 
@@ -3542,223 +3541,217 @@ impl StateMachineInstance {
         true
     }
 
-    pub fn set_view_model_instance(&mut self, view_model_instance: Object) {
-        if view_model_instance == 0 {
+    pub fn set_view_model_instance(&mut self, view_model_instance: CoreHandle) {
+        if self.data_context_handle.is_none() {
+            let data_context =
+                RuntimeDataContextHandle::new(DataContext::new(Some(view_model_instance)));
+            data_context.with_context_mut(|context| {
+                context.add_state_machine_dependent_container(self.occurrence.clone());
+            });
+            self.data_context_handle = Some(data_context);
             return;
         }
-        if self.data_context == 0 {
-            self.data_context = self
-                .runtime
-                .borrow_mut()
-                .data_context_new(view_model_instance);
-            self.runtime
-                .borrow_mut()
-                .data_context_add_container(self.data_context, self.occurrence.clone());
-            return;
-        }
-        self.runtime
-            .borrow_mut()
-            .data_context_set_main(self.data_context, view_model_instance);
+        self.data_context_handle
+            .as_ref()
+            .unwrap()
+            .with_context_mut(|context| {
+                context.set_main_view_model_instance(Some(view_model_instance));
+            });
     }
 
     pub fn set_global_view_model_instance(
         &mut self,
         name: &str,
-        view_model_instance: Object,
+        view_model_instance: impl Into<Option<CoreHandle>>,
     ) -> bool {
-        let file = self
-            .runtime
-            .borrow_mut()
-            .artboard_file(&self.artboard_instance);
-        if file == 0 {
-            return false;
-        }
-        let Some(slot) = self.runtime.borrow_mut().view_model_slot(file, name) else {
+        let view_model_instance = view_model_instance.into();
+        let Some(file) = self
+            .artboard_instance
+            .with_artboard(|artboard| artboard.base.file())
+        else {
             return false;
         };
-        if !self.runtime.borrow_mut().view_model_is_global(file, slot) {
+        let Some((slot_key, count, slot_view_model)) = file.with_file(|file| {
+            let slot_key = file.view_model_id(name);
+            (
+                slot_key,
+                file.view_model_count(),
+                file.view_model(slot_key as usize),
+            )
+        }) else {
+            return false;
+        };
+        if slot_key >= count as u32 {
             return false;
         }
-        if self.data_context == 0 {
-            if view_model_instance == 0 {
+        let Some(slot_view_model) = slot_view_model else {
+            return false;
+        };
+        if slot_view_model
+            .with_downcast::<ViewModel, _>(|view_model| {
+                ViewModelType::from_u32(view_model.base.view_model_type())
+            })
+            .flatten()
+            != Some(ViewModelType::Global)
+        {
+            return false;
+        }
+        if self.data_context_handle.is_none() {
+            if view_model_instance.is_none() {
                 return true;
             }
-            self.data_context = self.runtime.borrow_mut().data_context_new(0);
-            self.runtime
-                .borrow_mut()
-                .data_context_add_container(self.data_context, self.occurrence.clone());
+            let data_context = RuntimeDataContextHandle::new(DataContext::new(None));
+            data_context.with_context_mut(|context| {
+                context.add_state_machine_dependent_container(self.occurrence.clone());
+            });
+            self.data_context_handle = Some(data_context);
         }
-        self.runtime.borrow_mut().data_context_set_slot(
-            self.data_context,
-            slot,
-            view_model_instance,
-        );
+        self.data_context_handle
+            .as_ref()
+            .unwrap()
+            .with_context_mut(|context| {
+                context.set_view_model_instance_for_slot(slot_key, view_model_instance);
+            });
         true
     }
 
     pub fn bind(&mut self) {
-        if self.data_context == 0 {
-            self.data_context = self.runtime.borrow_mut().data_context_new(0);
-            self.runtime
-                .borrow_mut()
-                .data_context_add_container(self.data_context, self.occurrence.clone());
+        if self.data_context_handle.is_none() {
+            let data_context = RuntimeDataContextHandle::new(DataContext::new(None));
+            data_context.with_context_mut(|context| {
+                context.add_state_machine_dependent_container(self.occurrence.clone());
+            });
+            self.data_context_handle = Some(data_context);
         }
         self.complete_view_model_instances();
-        self.runtime
-            .borrow_mut()
-            .artboard_set_data_context(&self.artboard_instance, self.data_context);
-        self.internal_data_context(self.data_context);
+        let data_context = self.data_context_handle.as_ref().unwrap().clone();
+        self.artboard_instance.with_artboard_mut(|artboard| {
+            artboard.base.internal_data_context(data_context.clone());
+        });
+        self.internal_data_context(data_context);
     }
 
     fn complete_view_model_instances(&mut self) {
-        let file = self
-            .runtime
-            .borrow_mut()
-            .artboard_file(&self.artboard_instance);
-        if file == 0 {
+        let Some(file) = self
+            .artboard_instance
+            .with_artboard(|artboard| artboard.base.file())
+        else {
             return;
-        }
-        if self
-            .runtime
-            .borrow_mut()
-            .data_context_main(self.data_context)
-            == 0
+        };
+        let data_context = self.data_context_handle.as_ref().unwrap().clone();
+        if data_context
+            .with_context(DataContext::main_view_model_instance)
+            .is_none()
         {
-            let main = self
-                .runtime
-                .borrow_mut()
-                .complete_default_main(&self.artboard_instance);
-            if main != 0 {
-                self.runtime
-                    .borrow_mut()
-                    .data_context_set_main(self.data_context, main);
+            let artboard_source = self
+                .artboard_instance
+                .with_artboard(|artboard| artboard.base.artboard_source_handle())
+                .flatten();
+            let main = artboard_source
+                .and_then(|artboard| {
+                    file.with_file_mut(|file| {
+                        file.create_default_view_model_instance_for_artboard(artboard)
+                    })
+                })
+                .flatten();
+            if let Some(main) = main {
+                data_context.with_context_mut(|context| {
+                    context.set_main_view_model_instance(Some(main));
+                });
             }
         }
-        for view_model in self.runtime.borrow_mut().global_view_models(file) {
-            let name = self.runtime.borrow_mut().view_model_name(view_model);
-            let Some(slot) = self.runtime.borrow_mut().view_model_slot(file, &name) else {
+        let global_view_models = file
+            .with_file(|file| file.global_view_models())
+            .unwrap_or_default();
+        for view_model in global_view_models {
+            let Some(name) = view_model
+                .with_downcast::<ViewModel, _>(|view_model| view_model.base.name().to_owned())
+            else {
                 continue;
             };
-            if self
-                .runtime
-                .borrow_mut()
-                .data_context_slot(self.data_context, slot)
-                != 0
+            let Some(slot_key) = file.with_file(|file| file.view_model_id(&name)) else {
+                continue;
+            };
+            if data_context
+                .with_context(|context| context.instance_for_slot(slot_key))
+                .is_some()
             {
                 continue;
             }
-            let instance = self
-                .runtime
-                .borrow_mut()
-                .create_default_view_model(file, view_model);
-            if instance != 0 {
-                self.runtime
-                    .borrow_mut()
-                    .data_context_set_slot(self.data_context, slot, instance);
+            let instance = file
+                .with_file_mut(|file| file.create_default_view_model_instance(view_model))
+                .flatten();
+            if let Some(instance) = instance {
+                data_context.with_context_mut(|context| {
+                    context.set_view_model_instance_for_slot(slot_key, Some(instance));
+                });
             }
         }
     }
 
-    pub fn bind_view_model_instance(&mut self, view_model_instance: Object) {
-        if view_model_instance == 0 {
+    pub fn bind_view_model_instance(&mut self, view_model_instance: impl Into<Option<CoreHandle>>) {
+        let Some(view_model_instance) = view_model_instance.into() else {
             self.clear_data_context();
-            self.runtime
-                .borrow_mut()
-                .artboard_clear_data_context(&self.artboard_instance);
+            self.artboard_instance.with_artboard_mut(|artboard| {
+                artboard.base.unbind();
+            });
             return;
-        }
+        };
         self.set_view_model_instance(view_model_instance);
         self.bind();
     }
 
     pub fn bind_view_model_instance_handle(&mut self, view_model_instance: CoreHandle) {
-        let retained = self
-            .runtime
-            .borrow_mut()
-            .retain_view_model_instance(view_model_instance);
-        self.bind_view_model_instance(retained);
+        self.bind_view_model_instance(view_model_instance);
     }
 
-    pub fn global_view_model_instance(&self, name: &str) -> Object {
-        if self.data_context == 0 {
-            return RuntimeObjectHandle::NONE;
-        }
+    pub fn global_view_model_instance(&self, name: &str) -> Option<CoreHandle> {
+        let data_context = self.data_context_handle.as_ref()?;
         let file = self
-            .runtime
-            .borrow_mut()
-            .artboard_file(&self.artboard_instance);
-        if file == 0 {
-            return RuntimeObjectHandle::NONE;
-        }
-        self.runtime
-            .borrow_mut()
-            .view_model_slot(file, name)
-            .map(|slot| {
-                self.runtime
-                    .borrow_mut()
-                    .data_context_slot(self.data_context, slot)
-            })
-            .unwrap_or(0)
+            .artboard_instance
+            .with_artboard(|artboard| artboard.base.file())?;
+        let slot = file.with_file(|file| file.view_model_id(name))?;
+        data_context.with_context(|context| context.instance_for_slot(slot))
     }
 
-    pub fn bind_data_context(&mut self, data_context: Object) {
+    pub fn bind_data_context(&mut self, data_context: RuntimeDataContextHandle) {
         self.clear_data_context();
-        self.runtime
-            .borrow_mut()
-            .data_context_add_container(data_context, self.occurrence.clone());
-        self.runtime
-            .borrow_mut()
-            .artboard_clear_data_context(&self.artboard_instance);
-        self.runtime
-            .borrow_mut()
-            .artboard_set_data_context(&self.artboard_instance, data_context);
+        data_context.with_context_mut(|context| {
+            context.add_state_machine_dependent_container(self.occurrence.clone());
+        });
+        self.artboard_instance.with_artboard_mut(|artboard| {
+            artboard.base.clear_data_context();
+            artboard.base.internal_data_context(data_context.clone());
+        });
         self.internal_data_context(data_context);
     }
 
     pub fn bind_data_context_handle(&mut self, data_context: RuntimeDataContextHandle) {
-        let retained = self
-            .runtime
-            .borrow_mut()
-            .retain_data_context(data_context.clone());
-        self.bind_data_context(retained);
-        self.data_context_handle = Some(data_context);
+        self.bind_data_context(data_context);
     }
 
-    pub fn inherit_data_context(&mut self, data_context: Object) {
-        if data_context == 0 {
-            return;
-        }
-        self.runtime
-            .borrow_mut()
-            .data_context_add_container(data_context, self.occurrence.clone());
+    pub fn inherit_data_context(&mut self, data_context: RuntimeDataContextHandle) {
+        data_context.with_context_mut(|context| {
+            context.add_state_machine_dependent_container(self.occurrence.clone());
+        });
         self.internal_data_context(data_context);
     }
 
     pub fn inherit_data_context_handle(&mut self, data_context: RuntimeDataContextHandle) {
-        let retained = self
-            .runtime
-            .borrow_mut()
-            .retain_data_context(data_context.clone());
-        self.inherit_data_context(retained);
-        self.data_context_handle = Some(data_context);
+        self.inherit_data_context(data_context);
     }
 
-    pub fn set_data_context(&mut self, data_context: Object) {
+    pub fn set_data_context(&mut self, data_context: RuntimeDataContextHandle) {
         self.clear_data_context();
         self.internal_data_context(data_context);
     }
 
     pub fn set_data_context_handle(&mut self, data_context: RuntimeDataContextHandle) {
-        let retained = self
-            .runtime
-            .borrow_mut()
-            .retain_data_context(data_context.clone());
-        self.set_data_context(retained);
-        self.data_context_handle = Some(data_context);
+        self.set_data_context(data_context);
     }
 
-    pub fn data_context(&self) -> Object {
-        self.data_context
+    pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
+        self.data_context_handle.clone()
     }
 
     pub fn data_context_handle(&self) -> Option<RuntimeDataContextHandle> {
@@ -3770,17 +3763,11 @@ impl StateMachineInstance {
             .data_context_handle
             .as_ref()
             .is_some_and(|current| current.ptr_eq(&data_context))
-            && self.data_context != RuntimeObjectHandle::NONE
         {
-            self.internal_data_context(self.data_context);
+            self.internal_data_context(data_context);
             return;
         }
-        let retained = self
-            .runtime
-            .borrow_mut()
-            .retain_data_context(data_context.clone());
-        self.internal_data_context(retained);
-        self.data_context_handle = Some(data_context);
+        self.internal_data_context(data_context);
     }
 
     fn init_scripted_objects(&mut self) {
@@ -3790,74 +3777,74 @@ impl StateMachineInstance {
         }
     }
 
-    fn internal_data_context(&mut self, data_context: Object) {
-        self.data_context = data_context;
-        let runtime = Rc::clone(&self.runtime);
-        runtime
-            .borrow_mut()
-            .bind_data_binds_from_context(self, data_context);
-        for listener in &self.listener_view_models {
-            listener.with_listener_mut(|listener| listener.bind_from_context(data_context));
+    fn internal_data_context(&mut self, data_context: RuntimeDataContextHandle) {
+        self.data_context_handle = Some(data_context.clone());
+        for data_bind in &self.data_binds {
+            data_bind.with_mut(|data_bind| {
+                if let Some(data_bind) = data_bind.as_data_bind_context_mut() {
+                    data_bind.bind_from_context(Some(data_context.clone()));
+                }
+            });
         }
-        for &object in self.scripted_objects_map.values() {
-            self.runtime
-                .borrow_mut()
-                .scripted_set_data_context(object, data_context);
+        for listener in &self.listener_view_models {
+            listener.with_listener_mut(|listener| listener.bind_from_context(data_context.clone()));
+        }
+        for object in self.scripted_objects_map.values() {
+            object.with_mut(|object| {
+                if let Some(object) = object.as_scripted_object_mut() {
+                    object.set_data_context(Some(data_context.clone()));
+                }
+            });
         }
         self.init_scripted_objects();
     }
 
     pub fn rebind(&mut self) {
-        self.runtime
-            .borrow_mut()
-            .artboard_clear_data_context(&self.artboard_instance);
-        self.runtime
-            .borrow_mut()
-            .artboard_set_data_context(&self.artboard_instance, self.data_context);
-        self.internal_data_context(self.data_context);
+        let Some(data_context) = self.data_context_handle.clone() else {
+            return;
+        };
+        self.artboard_instance.with_artboard_mut(|artboard| {
+            artboard.base.clear_data_context();
+            artboard.base.internal_data_context(data_context.clone());
+        });
+        self.internal_data_context(data_context);
     }
 
     pub fn clear_data_context(&mut self) {
-        if self.data_context != 0 {
-            self.runtime
-                .borrow_mut()
-                .data_context_remove_container(self.data_context, self.occurrence.clone());
-            self.data_context = RuntimeObjectHandle::NONE;
+        if let Some(data_context) = self.data_context_handle.take() {
+            data_context.with_context_mut(|context| {
+                context.remove_state_machine_dependent_container(&self.occurrence);
+            });
         }
-        self.data_context_handle = None;
         for listener in &self.listener_view_models {
             listener.with_listener_mut(ListenerViewModel::clear_data_context);
         }
     }
 
     pub fn relink_data_context(&mut self) {
-        self.runtime
-            .borrow_mut()
-            .artboard_relink_data_context(&self.artboard_instance);
-        for listener in &self.listener_view_models {
-            listener.with_listener_mut(|listener| {
-                for binding in &listener.property_bindings {
-                    binding.with_binding_mut(|binding| {
-                        binding.relink_data_bind(self.runtime.borrow_mut().as_mut())
-                    });
+        self.artboard_instance
+            .with_artboard_mut(|artboard| artboard.base.relink_data_context());
+    }
+
+    pub fn rebuild_data_bind(&mut self, data_bind: CoreHandle) {
+        if let Some(data_context) = self.data_context_handle.clone() {
+            data_bind.with_mut(|data_bind| {
+                if let Some(data_bind) = data_bind.as_data_bind_context_mut() {
+                    data_bind.bind_from_context(Some(data_context));
                 }
             });
         }
     }
 
-    pub fn rebuild_data_bind(&mut self, data_bind: Object) {
-        if data_bind != 0 && self.data_context != 0 {
-            let runtime = Rc::clone(&self.runtime);
-            runtime
-                .borrow_mut()
-                .bind_data_binds_from_context(self, self.data_context);
-        }
-    }
-
     fn unbind(&mut self) {
         self.clear_data_context();
-        let runtime = Rc::clone(&self.runtime);
-        runtime.borrow_mut().unbind_data_binds(self);
+        for data_bind in &self.data_binds {
+            data_bind.with_mut(|data_bind| {
+                if let Some(data_bind) = data_bind.as_data_bind_mut() {
+                    data_bind.unbind();
+                }
+            });
+        }
     }
 
     fn add_data_bind(&mut self, data_bind: CoreHandle) {

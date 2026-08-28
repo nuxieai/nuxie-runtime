@@ -443,6 +443,12 @@ impl DataBind {
         }
     }
 
+    pub fn configure_target(&mut self, target: CoreHandle, property_key: u32) {
+        self.set_target(Some(target));
+        let mut callbacks = DataBindInitializationCallbacks;
+        self.base.set_property_key(property_key, &mut callbacks);
+    }
+
     pub fn on_target_destroyed(&mut self) {
         self.next_observer = None;
         self.target = None;

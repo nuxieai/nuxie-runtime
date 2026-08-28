@@ -27,6 +27,8 @@ use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
     core::CoreHandle,
     data_bind::{
+        bindable_property_number::BindablePropertyNumber,
+        data_bind::DataBind,
         data_bind_container::DataBindContainer,
         data_context::{DataContext, RuntimeDataContextHandle},
     },
@@ -39,6 +41,7 @@ use crate::mechanical_port::source::{
             state_transition_base::StateTransitionBase,
         },
         data_bind::{
+            bindable_property_base::BindablePropertyBase,
             bindable_property_boolean_base::BindablePropertyBooleanBase,
             bindable_property_color_base::BindablePropertyColorBase,
             bindable_property_number_base::BindablePropertyNumberBase,
@@ -71,41 +74,6 @@ use std::{
     collections::HashMap,
     rc::{Rc, Weak},
 };
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct RuntimeObjectHandle {
-    slot: u32,
-    generation: u32,
-}
-
-impl Default for RuntimeObjectHandle {
-    fn default() -> Self {
-        Self::NONE
-    }
-}
-
-impl RuntimeObjectHandle {
-    pub const NONE: Self = Self {
-        slot: u32::MAX,
-        generation: 0,
-    };
-
-    pub const fn new(slot: u32, generation: u32) -> Self {
-        Self { slot, generation }
-    }
-
-    pub const fn parts(self) -> (u32, u32) {
-        (self.slot, self.generation)
-    }
-}
-
-impl PartialEq<i32> for RuntimeObjectHandle {
-    fn eq(&self, other: &i32) -> bool {
-        *other == 0 && *self == Self::NONE
-    }
-}
-
-type Object = RuntimeObjectHandle;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeComparisonValue {
@@ -339,14 +307,12 @@ pub trait StateMachineInstanceRuntime {
         artboard: &RuntimeArtboardInstanceWeakHandle,
         components: &[CoreHandle],
     ) -> Vec<usize>;
-    fn artboard_has_component_dirt(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> bool;
     fn artboard_resolve(
         &self,
         artboard: &RuntimeArtboardInstanceWeakHandle,
         id: u32,
     ) -> Option<CoreHandle>;
     fn object_is_event(&self, object: &CoreHandle) -> bool;
-    fn artboard_file(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Object;
     fn artboard_nested_artboards(
         &self,
         artboard: &RuntimeArtboardInstanceWeakHandle,
@@ -448,27 +414,7 @@ pub trait StateMachineInstanceRuntime {
         &mut self,
         view_model: RuntimeListenerViewModelWeakHandle,
     ) -> ListenerInvocation;
-    fn clone_data_bind(&mut self, bind: &CoreHandle) -> CoreHandle;
-    fn data_bind_file(&self, bind: &CoreHandle) -> Object;
-    fn data_bind_set_file(&mut self, bind: &CoreHandle, file: Object);
-    fn data_bind_converter(&self, bind: &CoreHandle) -> Option<CoreHandle>;
-    fn clone_data_converter(&mut self, converter: &CoreHandle) -> CoreHandle;
-    fn data_bind_set_converter(&mut self, bind: &CoreHandle, converter: CoreHandle);
-    fn data_bind_initialize(&mut self, bind: &CoreHandle);
-    fn data_bind_target(&self, bind: &CoreHandle) -> Option<CoreHandle>;
-    fn data_bind_flags(&self, bind: &CoreHandle) -> u32;
-    fn data_bind_property_key(&self, bind: &CoreHandle) -> u32;
-    fn data_bind_is_transition_target(&self, bind: &CoreHandle) -> bool;
     fn data_bind_is_keyframe_target(&self, bind: &CoreHandle) -> bool;
-    fn data_bind_bindable_target(&self, bind: &CoreHandle) -> bool;
-    fn clone_bindable_property(&mut self, property: &CoreHandle) -> CoreHandle;
-    fn make_transition_property(&mut self) -> CoreHandle;
-    fn configure_data_bind_target(
-        &mut self,
-        bind: &CoreHandle,
-        target: CoreHandle,
-        property_key: u32,
-    );
     fn delete_owned_object(&mut self, object: CoreHandle);
     fn keyframe_type(&self, keyframe: &CoreHandle) -> u16;
     fn animation_keyframes(&self, animation_instance: &LinearAnimationInstance) -> Vec<CoreHandle>;
@@ -493,7 +439,6 @@ pub trait StateMachineInstanceRuntime {
         &self,
         machine: &StateMachineInstance,
     ) -> Vec<RuntimeStateMachineInstanceWeakHandle>;
-    fn nested_artboard_context(&self, machine: &StateMachineInstance) -> Object;
     fn gamepad_submit_buffer(&mut self, machine: &mut StateMachineInstance, data: &[u8]) -> bool;
     fn gamepad_broadcast(
         &mut self,
@@ -1950,7 +1895,6 @@ pub struct StateMachineInstance {
     keyboard_listener_groups: Vec<RuntimeKeyboardListenerGroupHandle>,
     gamepad_listener_groups: Vec<RuntimeGamepadListenerGroupHandle>,
     gamepad_scripted_drawables: Vec<CoreHandle>,
-    embedder_gamepads: HashMap<i32, Object>,
     semantic_manager: Option<RuntimeSemanticManagerHandle>,
     external_semantic_manager: Option<RuntimeSemanticManagerHandle>,
     queued_focus_events: Vec<QueuedFocusEvent>,
@@ -2001,7 +1945,6 @@ impl StateMachineInstance {
             keyboard_listener_groups: Vec::new(),
             gamepad_listener_groups: Vec::new(),
             gamepad_scripted_drawables: Vec::new(),
-            embedder_gamepads: HashMap::new(),
             semantic_manager: None,
             external_semantic_manager: None,
             queued_focus_events: Vec::new(),
@@ -2142,58 +2085,93 @@ impl StateMachineInstance {
             else {
                 continue;
             };
-            let Some(original_target) = self.runtime.borrow_mut().data_bind_target(&source) else {
+            let Some(original_target) = source
+                .with(|source| source.as_data_bind().and_then(DataBind::target))
+                .flatten()
+            else {
                 continue;
             };
-            let clone = self.runtime.borrow_mut().clone_data_bind(&source);
-            let file = self.runtime.borrow_mut().data_bind_file(&source);
-            self.runtime.borrow_mut().data_bind_set_file(&clone, file);
-            if let Some(converter) = self.runtime.borrow_mut().data_bind_converter(&source) {
-                let converter_clone = self.runtime.borrow_mut().clone_data_converter(&converter);
-                self.runtime
-                    .borrow_mut()
-                    .data_bind_set_converter(&clone, converter_clone);
-            }
+            let clone = source
+                .clone_occurrence()
+                .expect("a state-machine DataBind must be cloneable in its authored arena");
+            let (file, converter) = source
+                .with(|source| {
+                    let source = source.as_data_bind()?;
+                    Some((source.file(), source.converter()))
+                })
+                .flatten()
+                .unwrap_or_default();
+            let converter = converter.and_then(|converter| converter.clone_occurrence());
+            clone.with_mut(|clone| {
+                if let Some(clone) = clone.as_data_bind_mut() {
+                    clone.set_file(file);
+                    clone.set_converter(converter);
+                }
+            });
             self.add_data_bind(clone.clone());
-            if self.runtime.borrow_mut().data_bind_bindable_target(&source) {
-                let property = self
+            if original_target.is_type_of(BindablePropertyBase::TYPE_KEY) {
+                let property = if let Some(property) = self
                     .bindable_property_instances
-                    .entry(original_target.clone())
-                    .or_insert_with(|| {
-                        self.runtime
-                            .borrow_mut()
-                            .clone_bindable_property(&original_target)
+                    .get(&original_target)
+                    .cloned()
+                {
+                    property
+                } else {
+                    let property = original_target.clone_occurrence().expect(
+                        "a state-machine BindableProperty must be cloneable in its authored arena",
+                    );
+                    self.bindable_property_instances
+                        .insert(original_target.clone(), property.clone());
+                    property
+                };
+                clone.with_mut(|clone| {
+                    if let Some(clone) = clone.as_data_bind_mut() {
+                        clone.set_target(Some(property.clone()));
+                    }
+                });
+                let to_source = clone
+                    .with(|clone| {
+                        clone
+                            .as_data_bind()
+                            .is_some_and(|clone| clone.base.flags() & 1 != 0)
                     })
-                    .clone();
-                let property_key = self.runtime.borrow_mut().data_bind_property_key(&clone);
-                self.runtime.borrow_mut().configure_data_bind_target(
-                    &clone,
-                    property.clone(),
-                    property_key,
-                );
-                if self.runtime.borrow_mut().data_bind_flags(&clone) & 1 != 0 {
+                    .unwrap_or(false);
+                if to_source {
                     self.bindable_data_binds_to_source.insert(property, clone);
                 } else {
                     self.bindable_data_binds_to_target.insert(property, clone);
                 }
-            } else if self
-                .runtime
-                .borrow_mut()
-                .data_bind_is_transition_target(&source)
-            {
-                let property = self.runtime.borrow_mut().make_transition_property();
-                self.transition_property_instances
-                    .entry(original_target)
-                    .or_default()
-                    .insert(
-                        self.runtime.borrow_mut().data_bind_property_key(&source),
-                        property.clone(),
-                    );
-                self.runtime.borrow_mut().configure_data_bind_target(
-                    &clone,
-                    property,
-                    BindablePropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY as u32,
-                );
+            } else {
+                clone.with_mut(|clone| {
+                    if let Some(clone) = clone.as_data_bind_mut() {
+                        clone.set_target(Some(original_target.clone()));
+                    }
+                });
+                if original_target.is_type_of(StateTransitionBase::TYPE_KEY) {
+                    let property = original_target
+                        .insert_sibling(BindablePropertyNumber::default())
+                        .expect("a transition data bind must retain its authored arena");
+                    let property_key = source
+                        .with(|source| {
+                            source
+                                .as_data_bind()
+                                .map(|source| source.base.property_key())
+                        })
+                        .flatten()
+                        .unwrap_or_default();
+                    self.transition_property_instances
+                        .entry(original_target)
+                        .or_default()
+                        .insert(property_key, property.clone());
+                    clone.with_mut(|clone| {
+                        if let Some(clone) = clone.as_data_bind_mut() {
+                            clone.configure_target(
+                                property,
+                                BindablePropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY as u32,
+                            );
+                        }
+                    });
+                }
             }
         }
     }
@@ -3024,9 +3002,9 @@ impl StateMachineInstance {
                     .with_artboard_mut(|artboard| artboard.base.reset());
             }
             if !self
-                .runtime
-                .borrow_mut()
-                .artboard_has_component_dirt(&self.artboard_instance)
+                .artboard_instance
+                .with_artboard(|artboard| artboard.base.has_component_dirt())
+                .unwrap_or(false)
             {
                 break;
             }
@@ -4012,7 +3990,6 @@ impl Drop for StateMachineInstance {
                 .artboard_instance
                 .with_artboard_mut(|artboard| artboard.cleanup_semantic_tree());
         }
-        self.embedder_gamepads.clear();
         self.unbind();
         self.input_instances.clear();
         self.listener_groups.clear();

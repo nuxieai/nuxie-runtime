@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
     core::CoreHandle,
+    data_bind::data_bind_container::DataBindContainerOwner,
     data_bind::data_values::data_type::DataType,
     file::RuntimeFileWeakHandle,
     generated::{
@@ -151,7 +152,7 @@ pub struct DataBind {
     source: Option<CoreHandle>,
     context_value: Option<Box<dyn BindContextValue>>,
     converter: Option<CoreHandle>,
-    container: Option<CoreHandle>,
+    container: Option<DataBindContainerOwner>,
     file: RuntimeFileWeakHandle,
     changed_callback: Option<fn()>,
 }
@@ -609,11 +610,7 @@ impl DataBind {
             && let Some(container) = self.container.as_ref()
             && let Some(bind) = self.handle()
         {
-            container.with_mut(|container| {
-                if let Some(container) = container.as_bind_container_mut() {
-                    container.add_dirty_data_bind(bind);
-                }
-            });
+            container.add_dirty_data_bind(bind);
         }
     }
 
@@ -621,11 +618,7 @@ impl DataBind {
         if let Some(container) = self.container.as_ref()
             && let Some(bind) = self.handle()
         {
-            container.with_mut(|container| {
-                if let Some(container) = container.as_bind_container_mut() {
-                    container.rebuild_data_bind(bind);
-                }
-            });
+            container.rebuild_data_bind(bind);
         }
     }
 
@@ -675,11 +668,7 @@ impl DataBind {
             && let Some(container) = self.container.as_ref()
             && let Some(bind) = self.handle()
         {
-            container.with_mut(|container| {
-                if let Some(container) = container.as_bind_container_mut() {
-                    container.add_dirty_data_bind(bind);
-                }
-            });
+            container.add_dirty_data_bind(bind);
         }
     }
 
@@ -745,8 +734,13 @@ impl DataBind {
         self.set_flag(IN_PERSISTING, value);
     }
 
-    pub fn set_container(&mut self, value: Option<CoreHandle>) {
+    pub fn set_container(&mut self, value: Option<DataBindContainerOwner>) {
         self.container = value;
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn set_changed_callback(&mut self, callback: fn()) {
+        self.changed_callback = Some(callback);
     }
 
     pub fn set_converter(&mut self, value: Option<CoreHandle>) {

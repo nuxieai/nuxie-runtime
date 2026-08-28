@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    advance_flags::AdvanceFlags,
     animation::{
         animation_reset::AnimationReset,
         animation_reset_factory::AnimationResetFactory,
@@ -25,7 +26,10 @@ use crate::mechanical_port::source::{
     artboard::RuntimeArtboardInstanceWeakHandle,
     component_dirt::ComponentDirt,
     core::CoreHandle,
-    data_bind::data_context::{DataContext, RuntimeDataContextHandle},
+    data_bind::{
+        data_bind_container::DataBindContainer,
+        data_context::{DataContext, RuntimeDataContextHandle},
+    },
     dirtyable::Dirtyable,
     focus_data::FocusData,
     generated::{
@@ -335,29 +339,7 @@ pub trait StateMachineInstanceRuntime {
         artboard: &RuntimeArtboardInstanceWeakHandle,
         components: &[CoreHandle],
     ) -> Vec<usize>;
-    fn artboard_update_data_binds(&mut self, machine: &mut StateMachineInstance, force: bool);
-    fn artboard_advance_data_binds(
-        &mut self,
-        machine: &mut StateMachineInstance,
-        seconds: f32,
-    ) -> bool;
-    fn artboard_advance_internal(
-        &mut self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        seconds: f32,
-        flags: u32,
-    ) -> bool;
-    fn artboard_update_pass(
-        &mut self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        is_root: bool,
-    ) -> bool;
     fn artboard_has_component_dirt(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> bool;
-    fn artboard_reset(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
-    fn artboard_advance_scripted_view_models(
-        &mut self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-    );
     fn artboard_resolve(
         &self,
         artboard: &RuntimeArtboardInstanceWeakHandle,
@@ -487,11 +469,6 @@ pub trait StateMachineInstanceRuntime {
         target: CoreHandle,
         property_key: u32,
     );
-    fn add_data_bind(&mut self, machine: &mut StateMachineInstance, bind: CoreHandle);
-    fn remove_data_bind(&mut self, machine: &mut StateMachineInstance, bind: &CoreHandle);
-    fn delete_data_bind(&mut self, bind: CoreHandle);
-    fn delete_all_data_binds(&mut self, machine: &mut StateMachineInstance);
-    fn data_bind_on_changed(&mut self, bind: &CoreHandle, callback: fn());
     fn delete_owned_object(&mut self, object: CoreHandle);
     fn keyframe_type(&self, keyframe: &CoreHandle) -> u16;
     fn animation_keyframes(&self, animation_instance: &LinearAnimationInstance) -> Vec<CoreHandle>;
@@ -1956,7 +1933,7 @@ pub struct StateMachineInstance {
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
     data_context_handle: Option<RuntimeDataContextHandle>,
-    data_binds: Vec<CoreHandle>,
+    data_bind_container: DataBindContainer,
     listener_view_models: Vec<RuntimeListenerViewModelHandle>,
     reported_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
     reporting_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
@@ -2007,7 +1984,7 @@ impl StateMachineInstance {
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
             data_context_handle: None,
-            data_binds: Vec::new(),
+            data_bind_container: DataBindContainer::default(),
             listener_view_models: Vec::new(),
             reported_listener_view_models: Vec::new(),
             reporting_listener_view_models: Vec::new(),
@@ -2038,6 +2015,9 @@ impl StateMachineInstance {
         let handle = RuntimeStateMachineInstanceHandle::new(instance);
         handle.with_instance_mut(|instance| {
             instance.occurrence = handle.downgrade();
+            instance
+                .data_bind_container
+                .set_state_machine_owner(handle.downgrade());
             let mut input_notifier = InputInstanceNotifier::new(Rc::clone(&instance.needs_advance));
             #[cfg(feature = "tools")]
             input_notifier.set_machine(handle.downgrade());
@@ -2708,8 +2688,7 @@ impl StateMachineInstance {
     }
 
     pub fn try_change_state(&mut self) -> bool {
-        let runtime = Rc::clone(&self.runtime);
-        runtime.borrow_mut().artboard_update_data_binds(self, false);
+        self.data_bind_container.update_data_binds(false);
         let mut changed = false;
         let layers = self.layers.clone();
         for layer in layers {
@@ -2725,8 +2704,7 @@ impl StateMachineInstance {
             && iteration < 100
         {
             iteration += 1;
-            let runtime = Rc::clone(&self.runtime);
-            runtime.borrow_mut().artboard_update_data_binds(self, false);
+            self.data_bind_container.update_data_binds(false);
             self.reporting_events = std::mem::take(&mut self.reported_events);
             self.reporting_listener_view_models =
                 std::mem::take(&mut self.reported_listener_view_models);
@@ -2958,18 +2936,14 @@ impl StateMachineInstance {
             self.apply_events();
             self.needs_advance.set(false);
         }
-        let runtime = Rc::clone(&self.runtime);
-        runtime.borrow_mut().artboard_update_data_binds(self, false);
+        self.data_bind_container.update_data_binds(false);
         let layers = self.layers.clone();
         for layer in layers {
             if layer.with_layer_mut(|layer| layer.advance(self, seconds, new_frame)) {
                 self.needs_advance.set(true);
             }
         }
-        if runtime
-            .borrow_mut()
-            .artboard_advance_data_binds(self, seconds)
-        {
+        if self.data_bind_container.advance_data_binds(seconds) {
             self.needs_advance.set(true);
         }
         for input in self.input_instances.iter_mut().flatten() {
@@ -2992,9 +2966,8 @@ impl StateMachineInstance {
 
     pub fn reset(&mut self) {
         self.advanced_data_context();
-        self.runtime
-            .borrow_mut()
-            .artboard_reset(&self.artboard_instance);
+        self.artboard_instance
+            .with_artboard_mut(|artboard| artboard.base.reset());
     }
 
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
@@ -3006,25 +2979,30 @@ impl StateMachineInstance {
         seconds: f32,
         advance_view_models: bool,
     ) -> bool {
-        const IS_ROOT: u32 = 1;
-        const ANIMATE: u32 = 2;
-        const ADVANCE_NESTED: u32 = 4;
-        const NEW_FRAME: u32 = 8;
+        let root_flags = AdvanceFlags(
+            AdvanceFlags::IS_ROOT.0
+                | AdvanceFlags::ANIMATE.0
+                | AdvanceFlags::ADVANCE_NESTED.0
+                | AdvanceFlags::NEW_FRAME.0,
+        );
+        let loop_flags = AdvanceFlags(
+            AdvanceFlags::IS_ROOT.0 | AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0,
+        );
         let mut keep_going = self.advance(seconds, true) || seconds == 0.0;
         let manager = self.focus_manager();
         manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
-        if self.runtime.borrow_mut().artboard_advance_internal(
-            &self.artboard_instance,
-            seconds,
-            IS_ROOT | ANIMATE | ADVANCE_NESTED | NEW_FRAME,
-        ) {
+        if self
+            .artboard_instance
+            .with_artboard_mut(|artboard| artboard.base.advance_internal(seconds, root_flags))
+            .unwrap_or(false)
+        {
             keep_going = true;
         }
         for _ in 0..5 {
             if self
-                .runtime
-                .borrow_mut()
-                .artboard_update_pass(&self.artboard_instance, true)
+                .artboard_instance
+                .with_artboard_mut(|artboard| artboard.base.update_pass(true))
+                .unwrap_or(false)
             {
                 keep_going = true;
             }
@@ -3032,19 +3010,18 @@ impl StateMachineInstance {
                 self.advance(0.0, false);
                 keep_going = true;
             }
-            if self.runtime.borrow_mut().artboard_advance_internal(
-                &self.artboard_instance,
-                0.0,
-                IS_ROOT | ANIMATE | ADVANCE_NESTED,
-            ) {
+            if self
+                .artboard_instance
+                .with_artboard_mut(|artboard| artboard.base.advance_internal(0.0, loop_flags))
+                .unwrap_or(false)
+            {
                 keep_going = true;
             }
             if advance_view_models {
                 self.reset();
             } else {
-                self.runtime
-                    .borrow_mut()
-                    .artboard_reset(&self.artboard_instance);
+                self.artboard_instance
+                    .with_artboard_mut(|artboard| artboard.base.reset());
             }
             if !self
                 .runtime
@@ -3055,9 +3032,8 @@ impl StateMachineInstance {
             }
         }
         if advance_view_models {
-            self.runtime
-                .borrow_mut()
-                .artboard_advance_scripted_view_models(&self.artboard_instance);
+            self.artboard_instance
+                .with_artboard_mut(|artboard| artboard.base.advance_scripted_view_models());
         }
         keep_going
             || !self.reported_events.is_empty()
@@ -3292,14 +3268,12 @@ impl StateMachineInstance {
 
     pub fn notify(&mut self, events: &[EventReport], context: CoreHandle) {
         self.notify_event_listeners(events, Some(context));
-        let runtime = Rc::clone(&self.runtime);
-        runtime.borrow_mut().artboard_update_data_binds(self, false);
+        self.data_bind_container.update_data_binds(false);
     }
 
     pub fn notify_nested(&mut self, events: &[EventReport], context: Option<CoreHandle>) {
         self.notify_event_listeners(events, context);
-        let runtime = Rc::clone(&self.runtime);
-        runtime.borrow_mut().artboard_update_data_binds(self, false);
+        self.data_bind_container.update_data_binds(false);
     }
 
     fn notify_listener_view_models(&mut self, events: &[RuntimeListenerViewModelWeakHandle]) {
@@ -3761,13 +3735,8 @@ impl StateMachineInstance {
 
     fn internal_data_context(&mut self, data_context: RuntimeDataContextHandle) {
         self.data_context_handle = Some(data_context.clone());
-        for data_bind in &self.data_binds {
-            data_bind.with_mut(|data_bind| {
-                if let Some(data_bind) = data_bind.as_data_bind_context_mut() {
-                    data_bind.bind_from_context(Some(data_context.clone()));
-                }
-            });
-        }
+        self.data_bind_container
+            .bind_data_binds_from_context(data_context.clone());
         for listener in &self.listener_view_models {
             listener.with_listener_mut(|listener| listener.bind_from_context(data_context.clone()));
         }
@@ -3820,19 +3789,15 @@ impl StateMachineInstance {
 
     fn unbind(&mut self) {
         self.clear_data_context();
-        for data_bind in &self.data_binds {
-            data_bind.with_mut(|data_bind| {
-                if let Some(data_bind) = data_bind.as_data_bind_mut() {
-                    data_bind.unbind();
-                }
-            });
-        }
+        self.data_bind_container.unbind_data_binds();
     }
 
     fn add_data_bind(&mut self, data_bind: CoreHandle) {
-        let runtime = Rc::clone(&self.runtime);
-        runtime.borrow_mut().add_data_bind(self, data_bind.clone());
-        self.data_binds.push(data_bind);
+        self.data_bind_container.add_data_bind(data_bind);
+    }
+
+    pub fn add_dirty_data_bind(&mut self, data_bind: CoreHandle) {
+        self.data_bind_container.add_dirty_data_bind(data_bind);
     }
 
     pub fn bindable_property_instance(&self, property: &CoreHandle) -> Option<CoreHandle> {
@@ -3923,8 +3888,7 @@ impl StateMachineInstance {
                         let converter_clone = runtime.clone_data_converter(&converter);
                         runtime.data_bind_set_converter(&clone, converter_clone);
                     }
-                    runtime.add_data_bind(machine, clone.clone());
-                    machine.data_binds.push(clone.clone());
+                    machine.add_data_bind(clone.clone());
                     machine
                         .state_keyframe_data_binds
                         .entry(state_instance.clone())
@@ -3940,10 +3904,8 @@ impl StateMachineInstance {
             return;
         };
         for data_bind in data_binds {
-            let runtime = Rc::clone(&self.runtime);
-            runtime.borrow_mut().remove_data_bind(self, &data_bind);
-            self.data_binds.retain(|candidate| candidate != &data_bind);
-            self.runtime.borrow_mut().delete_data_bind(data_bind);
+            self.data_bind_container.remove_data_bind(data_bind.clone());
+            data_bind.remove_occurrence();
         }
     }
 
@@ -4021,10 +3983,10 @@ impl StateMachineInstance {
 
     #[cfg(feature = "tools")]
     pub fn on_data_bind_changed(&mut self, callback: fn()) {
-        for data_bind in &self.data_binds {
-            self.runtime
-                .borrow_mut()
-                .data_bind_on_changed(data_bind, callback);
+        for data_bind in self.data_bind_container.data_binds() {
+            data_bind.with_downcast_mut::<crate::mechanical_port::source::data_bind::data_bind::DataBind, _>(|data_bind| {
+                data_bind.set_changed_callback(callback);
+            });
         }
     }
 }
@@ -4054,9 +4016,11 @@ impl Drop for StateMachineInstance {
         self.unbind();
         self.input_instances.clear();
         self.listener_groups.clear();
-        let runtime = Rc::clone(&self.runtime);
-        runtime.borrow_mut().delete_all_data_binds(self);
-        self.data_binds.clear();
+        let data_binds = self.data_bind_container.data_binds();
+        self.data_bind_container.delete_data_binds();
+        for data_bind in data_binds {
+            data_bind.remove_occurrence();
+        }
         self.state_keyframe_data_binds.clear();
         self.layers.clear();
         for (_, property) in self.bindable_property_instances.drain() {

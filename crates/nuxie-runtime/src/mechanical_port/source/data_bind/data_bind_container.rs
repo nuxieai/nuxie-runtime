@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
-    core::CoreHandle, data_bind::data_context::RuntimeDataContextHandle,
+    animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle, core::CoreHandle,
+    data_bind::data_context::RuntimeDataContextHandle,
 };
 
 pub const NONE: u32 = 0;
@@ -7,9 +8,47 @@ pub const DEPENDENTS: u32 = 1;
 pub const BINDINGS: u32 = 2;
 pub const BINDINGS_TARGET: u32 = 4;
 
+#[derive(Clone)]
+pub enum DataBindContainerOwner {
+    Authored(CoreHandle),
+    StateMachine(RuntimeStateMachineInstanceWeakHandle),
+}
+
+impl DataBindContainerOwner {
+    pub fn add_dirty_data_bind(&self, bind: CoreHandle) {
+        match self {
+            Self::Authored(container) => {
+                container.with_mut(|container| {
+                    if let Some(container) = container.as_bind_container_mut() {
+                        container.add_dirty_data_bind(bind);
+                    }
+                });
+            }
+            Self::StateMachine(container) => {
+                container.with_instance_mut(|container| container.add_dirty_data_bind(bind));
+            }
+        }
+    }
+
+    pub fn rebuild_data_bind(&self, bind: CoreHandle) {
+        match self {
+            Self::Authored(container) => {
+                container.with_mut(|container| {
+                    if let Some(container) = container.as_bind_container_mut() {
+                        container.rebuild_data_bind(bind);
+                    }
+                });
+            }
+            Self::StateMachine(container) => {
+                container.with_instance_mut(|container| container.rebuild_data_bind(bind));
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct DataBindContainer {
-    owner: Option<CoreHandle>,
+    owner: Option<DataBindContainerOwner>,
     data_binds: Vec<CoreHandle>,
     persisting: Vec<CoreHandle>,
     dirty_to_source: Vec<CoreHandle>,
@@ -24,7 +63,11 @@ pub struct DataBindContainer {
 
 impl DataBindContainer {
     pub fn set_owner(&mut self, owner: CoreHandle) {
-        self.owner = Some(owner);
+        self.owner = Some(DataBindContainerOwner::Authored(owner));
+    }
+
+    pub fn set_state_machine_owner(&mut self, owner: RuntimeStateMachineInstanceWeakHandle) {
+        self.owner = Some(DataBindContainerOwner::StateMachine(owner));
     }
 
     pub fn delete_data_binds(&mut self) {

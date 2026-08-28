@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::animation::keyframe_callback::KeyFrameCallback;
 
-use crate::mechanical_port::source::{core::binary_reader::BinaryReader, key_frame::KeyFrame};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, animation::keyframe::KeyFrame};
 
 pub struct KeyFrameCallbackBase {
     pub base: KeyFrame,

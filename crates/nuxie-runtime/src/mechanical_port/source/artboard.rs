@@ -40,7 +40,7 @@ use crate::mechanical_port::source::{
     importers::{backboard_importer::BackboardImporter, import_stack::ImportStack},
     input::{focus_manager::RuntimeFocusManagerHandle, focus_node::FocusNodeRef},
     joystick::Joystick,
-    layout::layout_component::LayoutComponent,
+    layout_component::LayoutComponent,
     lua::scripting_vm::RuntimeScriptingVmHandle,
     math::{aabb::Aabb, mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D},
     nested_artboard::NestedArtboard,

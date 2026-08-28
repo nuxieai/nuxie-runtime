@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::{
     animation::transition_focus_condition::TransitionFocusCondition,
     core::binary_reader::BinaryReader,
-    transition_view_model_condition::TransitionViewModelCondition,
+    animation::transition_viewmodel_condition::TransitionViewModelCondition,
 };
 
 pub struct TransitionFocusConditionBase {

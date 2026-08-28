@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::{core::binary_reader::BinaryReader, key_frame::KeyFrame};
+use crate::mechanical_port::source::{core::binary_reader::BinaryReader, animation::keyframe::KeyFrame};
 
 pub trait InterpolatingKeyFrameBaseCallbacks:
     crate::mechanical_port::source::generated::animation::keyframe_base::KeyFrameBaseCallbacks

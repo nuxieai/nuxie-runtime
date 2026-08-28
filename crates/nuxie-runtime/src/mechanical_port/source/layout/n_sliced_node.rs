@@ -10,8 +10,8 @@ use crate::mechanical_port::source::{
         n_slicer_details::{NSlicerDetails, NSlicerDetailsState},
     },
     layout_component::LayoutComponent,
+    math::raw_path::RawPath,
     math::{aabb::Aabb, mat2d::Mat2D, n_slicer_helpers::NSlicerHelpers, vec2d::Vec2D},
-    renderer::raw_path::RawPath,
 };
 
 pub struct NSlicedNode {

@@ -1,7 +1,7 @@
 use super::fully_shaped_text::FullyShapedText;
 use crate::mechanical_port::source::{
     math::{aabb::Aabb, vec2d::Vec2D},
-    shapes::shape_paint_path::ShapePaintPath,
+    shapes::paint::shape_paint_path::ShapePaintPath,
     text_engine::TextDirection,
 };
 #[derive(Clone, Copy)]

@@ -1,12 +1,14 @@
 use crate::mechanical_port::source::{
-    animation::{keyed_callback_reporter::KeyedCallbackReporter, loop_::Loop},
+    animation::state_machine_input_instance::{
+        SMIBool as SmiBool, SMIInput as SmiInput, SMINumber as SmiNumber, SMITrigger as SmiTrigger,
+    },
+    animation::{keyed_callback_reporter::KeyedCallbackReporter, r#loop::Loop},
     artboard::RuntimeArtboardInstanceWeakHandle,
     core::field_types::core_callback_type::{CallbackContext, CallbackData},
     generated::core_registry::CoreRegistry,
     hit_result::HitResult,
     math::{aabb::Aabb, vec2d::Vec2D},
     renderer::Renderer,
-    state_machine::{SmiBool, SmiInput, SmiNumber, SmiTrigger},
     viewmodel::runtime::viewmodel_instance_runtime::RuntimeViewModelInstanceHandle,
 };
 

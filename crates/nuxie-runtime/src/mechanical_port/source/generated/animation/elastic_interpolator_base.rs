@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     animation::elastic_interpolator::ElasticInterpolator, core::binary_reader::BinaryReader,
-    key_frame_interpolator::KeyFrameInterpolator,
+    animation::keyframe_interpolator::KeyFrameInterpolator,
 };
 
 pub trait ElasticInterpolatorBaseCallbacks {

@@ -2,11 +2,11 @@ use super::text::Text;
 use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
-    color::ColorInt,
     factory::RuntimeFactoryHandle,
-    math::raw_path::PathDirection,
+    math::path_types::PathDirection,
     math::{aabb::Aabb, mat2d::Mat2D},
-    shapes::shape_paint_path::ShapePaintPath,
+    shapes::paint::color::ColorInt,
+    shapes::paint::shape_paint_path::ShapePaintPath,
     text_engine::{
         FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, StyledText, TextAlign, TextOrigin,
         TextOverflow, TextSizing, TextWrap,
@@ -54,6 +54,40 @@ pub struct RawText {
     draw_commands: Vec<DrawCommand>,
 }
 impl RawText {
+    #[doc(hidden)]
+    pub fn debug_dirty(&self) -> bool {
+        self.dirty
+    }
+    #[doc(hidden)]
+    pub fn debug_style_count(&self) -> usize {
+        self.styles.len()
+    }
+    #[doc(hidden)]
+    pub fn debug_style_foreground(&self, index: usize) -> Option<u32> {
+        self.styles.get(index).map(|style| style.foreground_color)
+    }
+    #[doc(hidden)]
+    pub fn debug_command_kinds(&self) -> Vec<&'static str> {
+        self.draw_commands
+            .iter()
+            .map(|command| match command {
+                DrawCommand::Style(_) => "style",
+                DrawCommand::Color { .. } => "color",
+            })
+            .collect()
+    }
+    #[doc(hidden)]
+    pub fn debug_has_clip(&self) -> bool {
+        self.clip_render_path.is_some()
+    }
+    #[doc(hidden)]
+    pub fn debug_style_path_bounds(&self) -> Vec<Aabb> {
+        self.styles
+            .iter()
+            .filter(|style| !style.is_empty)
+            .map(|style| style.path.raw_path().bounds())
+            .collect()
+    }
     pub fn new(factory: RuntimeFactoryHandle) -> Self {
         Self {
             shape: Vec::new(),

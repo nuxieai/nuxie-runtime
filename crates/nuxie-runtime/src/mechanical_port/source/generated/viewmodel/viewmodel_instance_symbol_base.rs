@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, view_model_instance_value::ViewModelInstanceValue,
+    core::binary_reader::BinaryReader, viewmodel::viewmodel_instance_value::ViewModelInstanceValue,
 };
 
 pub struct ViewModelInstanceSymbolBase {

@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     component::{ComponentDirt, has_dirt},
     core_context::{CoreContext, StatusCode},
     generated::shapes::paint::{feather_base::FeatherBase, fill_base::FillBase},
-    math::{mat2d::Mat2D, raw_path::PathDirection, vec2d::Vec2D},
+    math::{mat2d::Mat2D, path_types::PathDirection, vec2d::Vec2D},
     shapes::paint::shape_paint_path::ShapePaintPath,
     transform_space::TransformSpace,
 };

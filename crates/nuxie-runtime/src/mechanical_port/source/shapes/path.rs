@@ -2,13 +2,15 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
     component::{ComponentDirt, has_dirt},
-    core::{CoreContext, CoreHandle, StatusCode},
+    core::CoreHandle,
+    core_context::CoreContext,
     math::{aabb::Aabb, mat2d::Mat2D, math_types::PI, raw_path::RawPath, vec2d::Vec2D},
     shapes::{
         cubic_detached_vertex::CubicDetachedVertex, cubic_vertex::CubicVertexBehavior,
         path_flags::PathFlags, path_vertex::PathVertex, shape::Shape,
         straight_vertex::StraightVertex, vertex::VertexBehavior,
     },
+    status_code::StatusCode,
 };
 
 #[derive(Clone)]

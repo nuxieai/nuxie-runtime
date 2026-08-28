@@ -13,20 +13,19 @@ use crate::mechanical_port::source::{
     generated::text::text_base::TextBase,
     hit_info::HitInfo,
     layout::{
-        LayoutDirection, LayoutMeasureMode, LayoutScaleType, layout_participant::LayoutParticipant,
+        layout_enums::{LayoutDirection, LayoutScaleType},
+        layout_measure_mode::LayoutMeasureMode,
+        layout_participant::LayoutParticipant,
     },
     math::{
-        aabb::Aabb,
-        mat2d::Mat2D,
-        raw_path::{PathDirection, RawPath},
-        transform_components::TransformComponents,
-        vec2d::Vec2D,
+        aabb::Aabb, mat2d::Mat2D, path_types::PathDirection, raw_path::RawPath,
+        transform_components::TransformComponents, vec2d::Vec2D,
     },
     renderer::{BlendMode, ImageSampler, RenderPaintStyle, Renderer, to_render_raw_path},
     semantic::{semantic_provider::ResolvedSemanticData, semantic_role::SemanticRole},
     shapes::{
         paint::color::{ColorInt, color_modulate_opacity},
-        shape_paint_path::ShapePaintPath,
+        paint::shape_paint_path::ShapePaintPath,
     },
     text_engine::{
         FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin, TextOverflow,

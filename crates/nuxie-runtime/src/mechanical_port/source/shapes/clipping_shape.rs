@@ -2,10 +2,12 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
     component::{ComponentDirt, has_dirt},
-    core::{CoreContext, CoreHandle, StatusCode},
+    core::CoreHandle,
+    core_context::CoreContext,
     drawable::{DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
     math::mat2d::Mat2D,
-    shapes::{path_flags::PathFlags, shape_paint_path::ShapePaintPath},
+    shapes::{paint::shape_paint_path::ShapePaintPath, path_flags::PathFlags},
+    status_code::StatusCode,
 };
 use nuxie_render_api::Renderer;
 

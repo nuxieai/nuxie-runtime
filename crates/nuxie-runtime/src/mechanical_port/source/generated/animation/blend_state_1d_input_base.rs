@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::animation::blend_state_1d_input::BlendState1DInput;
 
 use crate::mechanical_port::source::{
-    blend_state1_d::BlendState1D, core::binary_reader::BinaryReader,
+    animation::blend_state_1d::BlendState1D, core::binary_reader::BinaryReader,
 };
 
 pub trait BlendState1DInputBaseCallbacks:

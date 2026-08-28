@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::animation::keyframe_double::KeyFrameDouble;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, interpolating_key_frame::InterpolatingKeyFrame,
+    core::binary_reader::BinaryReader, animation::interpolating_keyframe::InterpolatingKeyFrame,
 };
 
 pub trait KeyFrameDoubleBaseCallbacks: crate::mechanical_port::source::generated::animation::interpolating_keyframe_base::InterpolatingKeyFrameBaseCallbacks {

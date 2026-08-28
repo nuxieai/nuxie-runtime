@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_font::ViewModelInstanceAssetFont;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, view_model_instance_asset::ViewModelInstanceAsset,
+    core::binary_reader::BinaryReader, viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset,
 };
 
 pub struct ViewModelInstanceAssetFontBase {

@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::viewmodel::viewmodel::ViewModel;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, view_model_component::ViewModelComponent,
+    core::binary_reader::BinaryReader, viewmodel::viewmodel_component::ViewModelComponent,
 };
 
 pub trait ViewModelBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_component_base::ViewModelComponentBaseCallbacks {

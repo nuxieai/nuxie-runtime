@@ -3,9 +3,10 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::AdvancingComponent,
+    animation::property_recorder::PropertyRecorder,
     animation::{
-        keyframe_interpolator::KeyFrameInterpolator, state_machine::StateMachineInstance,
-        state_machine_instance::RuntimeStateMachineInstanceHandle,
+        keyframe_interpolator::KeyFrameInterpolator,
+        state_machine_instance::{RuntimeStateMachineInstanceHandle, StateMachineInstance},
     },
     artboard::{
         Artboard, ArtboardInstance, RuntimeArtboardInstanceHandle,
@@ -39,7 +40,6 @@ use crate::mechanical_port::source::{
     },
     layout_component::LayoutComponent,
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
-    property_recorder::PropertyRecorder,
     renderer::Renderer,
     resetting_component::ResettingComponent,
     semantic::semantic_data::SemanticData,

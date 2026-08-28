@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_property_enum_custom::ViewModelPropertyEnumCustom;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, view_model_property_enum::ViewModelPropertyEnum,
+    core::binary_reader::BinaryReader, viewmodel::viewmodel_property_enum::ViewModelPropertyEnum,
 };
 
 pub trait ViewModelPropertyEnumCustomBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks {

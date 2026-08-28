@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     animation::nested_state_machine::NestedStateMachine, core::binary_reader::BinaryReader,
-    nested_animation::NestedAnimation,
+    animation::nested_animation::NestedAnimation,
 };
 
 pub struct NestedStateMachineBase {

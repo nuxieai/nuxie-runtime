@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, nested_animation::NestedAnimation,
+    core::binary_reader::BinaryReader, animation::nested_animation::NestedAnimation,
 };
 
 pub trait NestedLinearAnimationBaseCallbacks:

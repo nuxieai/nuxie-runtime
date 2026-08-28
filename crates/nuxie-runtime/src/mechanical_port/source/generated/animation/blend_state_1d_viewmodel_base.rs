@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::animation::blend_state_1d_viewmodel::BlendState1DViewModel;
 
 use crate::mechanical_port::source::{
-    blend_state1_d::BlendState1D, core::binary_reader::BinaryReader,
+    animation::blend_state_1d::BlendState1D, core::binary_reader::BinaryReader,
 };
 
 pub struct BlendState1DViewModelBase {

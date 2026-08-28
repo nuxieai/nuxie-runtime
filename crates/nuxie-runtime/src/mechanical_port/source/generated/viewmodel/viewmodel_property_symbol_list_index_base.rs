@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_property_symbol_list_index::ViewModelPropertySymbolListIndex;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, view_model_property_symbol::ViewModelPropertySymbol,
+    core::binary_reader::BinaryReader, viewmodel::viewmodel_property_symbol::ViewModelPropertySymbol,
 };
 
 pub struct ViewModelPropertySymbolListIndexBase {

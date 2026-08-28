@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     animation::state_machine_instance::StateMachineInstance,
     component::Component,
     core::CoreHandle,
+    drawable::RuntimeDrawableOccurrence,
     file::DETERMINISTIC_MODE,
     focus_data::FocusData,
     gesture_click_phase::GestureClickPhase,
@@ -79,7 +80,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
 
     fn process_event(
         &mut self,
-        _component: &mut Component,
+        _component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
         event: ListenerType,

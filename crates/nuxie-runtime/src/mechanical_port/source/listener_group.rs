@@ -6,6 +6,7 @@ use crate::mechanical_port::source::{
     },
     component::Component,
     core::{Core, CoreHandle},
+    drawable::RuntimeDrawableOccurrence,
     gesture_click_phase::GestureClickPhase,
     listener_type::ListenerType,
     math::vec2d::Vec2D,
@@ -143,7 +144,7 @@ impl ListenerGroup {
     #[allow(clippy::too_many_arguments)]
     pub fn process_event(
         &mut self,
-        _component: &mut Component,
+        _component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
         hit_event: ListenerType,
@@ -286,7 +287,7 @@ pub trait ListenerGroupBehavior {
     #[allow(clippy::too_many_arguments)]
     fn process_event(
         &mut self,
-        component: &mut Component,
+        component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
         hit_event: ListenerType,
@@ -350,7 +351,7 @@ impl ListenerGroupBehavior for ListenerGroup {
     }
     fn process_event(
         &mut self,
-        component: &mut Component,
+        component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
         hit_event: ListenerType,
@@ -403,7 +404,7 @@ impl ListenerGroupBehavior
     }
     fn process_event(
         &mut self,
-        component: &mut Component,
+        component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
         hit_event: ListenerType,

@@ -7,6 +7,7 @@ use crate::mechanical_port::source::{
     },
     component::Component,
     core::{Core, CoreHandle},
+    drawable::RuntimeDrawableOccurrence,
     generated::{
         component_base::ComponentBaseCallbacks,
         constraints::{
@@ -194,7 +195,7 @@ impl DraggableConstraintListenerGroup {
     #[allow(clippy::too_many_arguments)]
     pub fn process_event(
         &mut self,
-        component: &mut Component,
+        component: &RuntimeDrawableOccurrence,
         position: Vec2D,
         pointer_id: i32,
         hit_event: ListenerType,

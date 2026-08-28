@@ -1336,16 +1336,19 @@ impl HitComponent for HitDrawable {
             if listener.with_group(|listener| listener.is_consumed()) {
                 continue;
             }
-            let result = self
-                .component
-                .with_component_mut(|component| {
-                    listener.with_group_mut(|listener| {
-                        listener.process_event(
-                            component, position, pointer_id, hit_type, can_hit, timestamp, machine,
-                        )
-                    })
-                })
-                .expect("a hit target remains in its CoreArena");
+            // Listener callbacks may mutate the target (notably TextInput)
+            // or invoke scripted actions. Retain identity, not its Core borrow.
+            let result = listener.with_group_mut(|listener| {
+                listener.process_event(
+                    &self.component,
+                    position,
+                    pointer_id,
+                    hit_type,
+                    can_hit,
+                    timestamp,
+                    machine,
+                )
+            });
             if result == ProcessEventResult::Scroll {
                 blocking = true;
             }

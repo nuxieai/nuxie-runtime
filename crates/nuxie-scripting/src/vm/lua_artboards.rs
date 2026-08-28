@@ -196,12 +196,13 @@ impl UserData for ScriptedArtboard {
                 })?;
             let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
             scripted_renderer.bindings.with_factory(|factory| {
-                let mut renderer_ref = scripted_renderer.renderer_mut()?;
-                this.owner
-                    .artboard
-                    .borrow_mut()
-                    .draw(factory, unsafe { renderer_ref.as_mut() })
-                    .map_err(|error| Error::runtime(error.to_string()))
+                scripted_renderer.with_renderer_mut(|renderer| {
+                    this.owner
+                        .artboard
+                        .borrow_mut()
+                        .draw(factory, renderer)
+                        .map_err(|error| Error::runtime(error.to_string()))
+                })
             })
         });
         methods.add_method_mut("drawCanvas", |_, this, ()| {

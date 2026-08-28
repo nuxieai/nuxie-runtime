@@ -1,10 +1,6 @@
 use crate::mechanical_port::source::{
-    component::Component,
-    core::CoreHandle,
-    math::mat2d::Mat2D,
-    shapes::{
-        paint::shape_paint::ShapePaint, path_flags::PathFlags, shape_paint_path::ShapePaintPath,
-    },
+    core::{CoreHandle, CoreObject},
+    shapes::path_flags::PathFlags,
 };
 
 pub struct ShapePaintContainer {
@@ -26,34 +22,12 @@ impl ShapePaintContainer {
         self.path_flags |= flags;
     }
 
-    pub fn from_component(component: &Component) -> Option<&Self> {
-        match component.core_type() {
-            TYPE_ARTBOARD
-            | TYPE_LAYOUT_COMPONENT
-            | TYPE_SHAPE
-            | TYPE_TEXT_STYLE_PAINT
-            | TYPE_FOREGROUND_LAYOUT_DRAWABLE
-            | TYPE_TEXT_INPUT_CURSOR
-            | TYPE_TEXT_INPUT_SELECTION
-            | TYPE_TEXT_INPUT_TEXT
-            | TYPE_TEXT_INPUT_SELECTED_TEXT => component.as_shape_paint_container(),
-            _ => None,
-        }
+    pub fn from_component(component: &dyn CoreObject) -> Option<&Self> {
+        component.as_shape_paint_container()
     }
 
-    pub fn from_component_mut(component: &mut Component) -> Option<&mut Self> {
-        match component.core_type() {
-            TYPE_ARTBOARD
-            | TYPE_LAYOUT_COMPONENT
-            | TYPE_SHAPE
-            | TYPE_TEXT_STYLE_PAINT
-            | TYPE_FOREGROUND_LAYOUT_DRAWABLE
-            | TYPE_TEXT_INPUT_CURSOR
-            | TYPE_TEXT_INPUT_SELECTION
-            | TYPE_TEXT_INPUT_TEXT
-            | TYPE_TEXT_INPUT_SELECTED_TEXT => component.as_shape_paint_container_mut(),
-            _ => None,
-        }
+    pub fn from_component_mut(component: &mut dyn CoreObject) -> Option<&mut Self> {
+        component.as_shape_paint_container_mut()
     }
 
     pub fn add_paint(&mut self, paint: CoreHandle) {
@@ -66,7 +40,11 @@ impl ShapePaintContainer {
             .fold(self.path_flags, |flags, paint| {
                 flags
                     | paint
-                        .with(|paint| paint.as_shape_paint().map(ShapePaint::path_flags))
+                        .with(|paint| {
+                            paint
+                                .as_shape_paint_behavior()
+                                .map(|paint| paint.path_flags())
+                        })
                         .flatten()
                         .unwrap_or(PathFlags::NONE)
             })
@@ -94,21 +72,5 @@ impl ShapePaintContainer {
 
     pub fn shape_paints(&self) -> &[CoreHandle] {
         &self.shape_paints
-    }
-
-    pub fn world_path(&mut self) -> Option<&mut ShapePaintPath> {
-        None
-    }
-
-    pub fn local_path(&mut self) -> Option<&mut ShapePaintPath> {
-        None
-    }
-
-    pub fn local_clockwise_path(&mut self) -> Option<&mut ShapePaintPath> {
-        None
-    }
-
-    pub fn shape_world_transform(&self) -> Mat2D {
-        Mat2D::identity()
     }
 }

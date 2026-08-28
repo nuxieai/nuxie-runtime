@@ -103,12 +103,15 @@ impl GamepadListenerGroup {
             return false;
         };
         let constraints_met = listener
-            .with_downcast::<StateMachineListener, _>(|listener| {
-                ListenerInputTypeGamepad::gamepad_listener_constraints_met(
-                    Some(listener),
-                    invocation,
-                )
+            .with(|listener| {
+                listener.as_state_machine_listener().map(|listener| {
+                    ListenerInputTypeGamepad::gamepad_listener_constraints_met(
+                        Some(listener),
+                        invocation,
+                    )
+                })
             })
+            .flatten()
             .unwrap_or(false);
         if !constraints_met {
             return false;

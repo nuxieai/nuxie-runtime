@@ -152,15 +152,18 @@ impl KeyboardListenerGroup {
             return false;
         };
         let constraints_met = listener
-            .with_downcast::<StateMachineListener, _>(|listener| {
-                ListenerInputTypeKeyboard::keyboard_listener_constraints_met(
-                    Some(listener),
-                    key.raw(),
-                    modifiers.bits(),
-                    pressed,
-                    repeat,
-                )
+            .with(|listener| {
+                listener.as_state_machine_listener().map(|listener| {
+                    ListenerInputTypeKeyboard::keyboard_listener_constraints_met(
+                        Some(listener),
+                        key.raw(),
+                        modifiers.bits(),
+                        pressed,
+                        repeat,
+                    )
+                })
             })
+            .flatten()
             .unwrap_or(false);
         if constraints_met {
             self.machine.with_instance_mut(|machine| {

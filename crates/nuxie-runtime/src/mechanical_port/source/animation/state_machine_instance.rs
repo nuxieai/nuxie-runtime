@@ -634,7 +634,7 @@ impl StateMachineLayerInstance {
                         )
                     })
                     .flatten()
-                    .unwrap_or(AllowTransition::No);
+                    .expect("an authored transition exposes allowed behavior");
                 if allowed == AllowTransition::Yes {
                     let weight = transition
                         .with(|transition| transition.state_transition_random_weight())
@@ -725,7 +725,7 @@ impl StateMachineLayerInstance {
                     )
                 })
                 .flatten()
-                .unwrap_or(AllowTransition::No);
+                .expect("an authored transition exposes allowed behavior");
             if allowed == AllowTransition::Yes {
                 let weight = transition
                     .with(|transition| transition.state_transition_random_weight())
@@ -825,7 +825,11 @@ impl StateMachineLayerInstance {
                 .with_downcast::<AnimationState, _>(AnimationState::animation)
                 .flatten();
             let use_exit = transition
-                .with(|transition| transition.state_transition_enable_exit_time())
+                .with(|transition| {
+                    transition
+                        .as_state_transition()
+                        .map(|transition| transition.enable_exit_time())
+                })
                 .flatten()
                 .expect("an authored StateTransition must expose exit-time enablement")
                 && hold_animation.is_some();
@@ -835,11 +839,19 @@ impl StateMachineLayerInstance {
                 .expect("an authored StateTransition must expose pause-on-exit");
             let applied = if pause_on_exit && use_exit {
                 let flags = transition
-                    .with(|transition| transition.state_transition_flags())
+                    .with(|transition| {
+                        transition
+                            .as_state_transition()
+                            .map(|transition| transition.base.flags())
+                    })
                     .flatten()
                     .expect("an authored StateTransition must expose flags");
                 let authored_exit_time = transition
-                    .with(|transition| transition.state_transition_exit_time())
+                    .with(|transition| {
+                        transition
+                            .as_state_transition()
+                            .map(|transition| transition.base.exit_time())
+                    })
                     .flatten()
                     .expect("an authored StateTransition must expose exit time");
                 let exit_time = out_state
@@ -2145,9 +2157,15 @@ impl StateMachineInstance {
         action: SemanticActionType,
     ) -> bool {
         listener
-            .with_downcast::<StateMachineListener, _>(|listener| {
-                ListenerInputTypeSemantic::semantic_listener_constraints_met(Some(listener), action)
+            .with(|listener| {
+                listener.as_state_machine_listener().map(|listener| {
+                    ListenerInputTypeSemantic::semantic_listener_constraints_met(
+                        Some(listener),
+                        action,
+                    )
+                })
             })
+            .flatten()
             .unwrap_or(false)
     }
 

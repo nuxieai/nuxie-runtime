@@ -449,13 +449,6 @@ pub trait StateMachineInstanceRuntime {
         &mut self,
         view_model: RuntimeListenerViewModelWeakHandle,
     ) -> ListenerInvocation;
-    fn focus_data_add_focus_listener(
-        &mut self,
-        focus_data: &CoreHandle,
-        listener: &CoreHandle,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> Object;
-    fn focus_data_remove_focus_listener(&mut self, focus_data: &CoreHandle, group: Object);
     fn retain_view_model_instance(&mut self, instance: CoreHandle) -> Object;
     fn retain_data_context(&mut self, context: RuntimeDataContextHandle) -> Object;
     fn data_context_advanced(&mut self, context: Object);
@@ -2707,7 +2700,7 @@ impl StateMachineInstance {
     }
 
     fn sort_hit_components(&mut self) {
-        let components: Vec<Object> = self
+        let components: Vec<CoreHandle> = self
             .hit_components
             .iter()
             .map(|component| component.component())

@@ -1,7 +1,7 @@
 use super::aabb::Aabb;
 use super::bezier_utils::EvalCubic;
 use super::mat2d::Mat2D;
-use super::path_types::{PathDirection, PathVerb, path_verb_to_point_count};
+use super::path_types::{path_verb_to_point_count, PathDirection, PathVerb};
 use super::vec2d::Vec2D;
 
 pub trait CommandPath {
@@ -48,6 +48,9 @@ impl RawPath {
         &mut self.verbs
     }
     pub fn verbs_u8(&self) -> &[u8] {
+        // SAFETY: PathVerb is `repr(u8)`, so each initialized enum occupies
+        // exactly one byte with byte alignment. The returned slice shares the
+        // source slice's lifetime and cannot mutate its discriminants.
         unsafe { core::slice::from_raw_parts(self.verbs.as_ptr().cast(), self.verbs.len()) }
     }
 

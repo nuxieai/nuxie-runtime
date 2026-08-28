@@ -11,6 +11,9 @@ use crate::mechanical_port::source::{
         listener_invocation::ListenerInvocation,
         listener_types::listener_input_type_semantic::ListenerInputTypeSemantic,
         listener_types::listener_input_type_viewmodel::ListenerInputTypeViewModel,
+        nested_bool::NestedBool,
+        nested_number::NestedNumber,
+        nested_trigger::NestedTrigger,
         semantic_listener_group::{RuntimeSemanticListenerGroupHandle, SemanticActionType},
         state_instance::RuntimeStateInstanceHandle,
         state_machine::StateMachine,
@@ -51,6 +54,7 @@ use crate::mechanical_port::source::{
             bindable_property_number_base::BindablePropertyNumberBase,
             bindable_property_string_base::BindablePropertyStringBase,
         },
+        event_base::EventBase,
     },
     hit_result::HitResult,
     input::{
@@ -3043,6 +3047,99 @@ impl StateMachineInstance {
             .get(index)
             .and_then(Option::as_ref)
             .map(InputInstance::base)
+    }
+
+    pub fn bool_input(&self, index: u32) -> Option<&SMIBool> {
+        let InputInstance::Bool(value) = self.input_instances.get(index as usize)?.as_ref()? else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn number_input(&self, index: u32) -> Option<&SMINumber> {
+        let InputInstance::Number(value) = self.input_instances.get(index as usize)?.as_ref()?
+        else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn trigger_input(&self, index: u32) -> Option<&SMITrigger> {
+        let InputInstance::Trigger(value) = self.input_instances.get(index as usize)?.as_ref()?
+        else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn bool_input_mut(&mut self, index: u32) -> Option<&mut SMIBool> {
+        let InputInstance::Bool(value) = self.input_instances.get_mut(index as usize)?.as_mut()?
+        else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn number_input_mut(&mut self, index: u32) -> Option<&mut SMINumber> {
+        let InputInstance::Number(value) =
+            self.input_instances.get_mut(index as usize)?.as_mut()?
+        else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn trigger_input_mut(&mut self, index: u32) -> Option<&mut SMITrigger> {
+        let InputInstance::Trigger(value) =
+            self.input_instances.get_mut(index as usize)?.as_mut()?
+        else {
+            return None;
+        };
+        Some(value)
+    }
+
+    pub fn resolve_artboard_object(&self, id: u32) -> Option<CoreHandle> {
+        self.artboard_instance
+            .with_artboard(|artboard| artboard.base.resolve_handle(id))
+            .flatten()
+    }
+
+    pub fn resolve_event(&self, id: u32) -> Option<CoreHandle> {
+        self.resolve_artboard_object(id)
+            .filter(|event| event.is_type_of(EventBase::TYPE_KEY))
+    }
+
+    pub fn view_model_property(&self, path: &[u32]) -> Option<CoreHandle> {
+        self.data_context_handle
+            .as_ref()?
+            .with_context(|context| context.get_view_model_property(path))
+    }
+
+    pub fn nested_bool(&self, id: u32) -> Option<bool> {
+        self.resolve_artboard_object(id)
+            .and_then(|input| input.with_downcast::<NestedBool, _>(NestedBool::nested_value))
+    }
+
+    pub fn set_nested_bool(&mut self, id: u32, value: bool) {
+        if let Some(input) = self.resolve_artboard_object(id) {
+            input.with_downcast_mut::<NestedBool, _>(|input| input.set_nested_value(value));
+        }
+    }
+
+    pub fn set_nested_number(&mut self, id: u32, value: f32) -> bool {
+        self.resolve_artboard_object(id)
+            .and_then(|input| {
+                input.with_downcast_mut::<NestedNumber, _>(|input| input.set_nested_value(value))
+            })
+            .is_some()
+    }
+
+    pub fn fire_nested_trigger(&mut self, id: u32) -> bool {
+        self.resolve_artboard_object(id)
+            .and_then(|input| {
+                input.with_downcast_mut::<NestedTrigger, _>(NestedTrigger::apply_value)
+            })
+            .is_some()
     }
 
     pub fn number_input_value(&self, index: u32) -> Option<f32> {

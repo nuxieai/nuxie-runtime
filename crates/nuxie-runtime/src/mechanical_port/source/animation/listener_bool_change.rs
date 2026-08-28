@@ -1,13 +1,10 @@
 use crate::mechanical_port::source::{
-    animation::listener_invocation::ListenerInvocation, core::Core,
+    animation::{
+        listener_invocation::ListenerInvocation, state_machine_instance::StateMachineInstance,
+    },
+    core::Core,
     generated::animation::listener_bool_change_base::ListenerBoolChangeBase,
 };
-pub trait BoolChangeStateMachine {
-    fn nested_bool(&self, id: u32) -> Option<bool>;
-    fn set_nested_bool(&mut self, id: u32, value: bool);
-    fn bool_input(&self, id: u32) -> Option<bool>;
-    fn set_bool_input(&mut self, id: u32, value: bool);
-}
 pub trait BoolChangeInputKind {
     fn is_bool(&self) -> bool;
     fn is_nested_bool(&self) -> bool;
@@ -30,11 +27,7 @@ impl ListenerBoolChange {
             _ => !current,
         }
     }
-    pub fn perform(
-        &self,
-        machine: &mut dyn BoolChangeStateMachine,
-        _invocation: &ListenerInvocation,
-    ) {
+    pub fn perform(&self, machine: &mut StateMachineInstance, _invocation: &ListenerInvocation) {
         if self.base.base.nested_input_id() != Core::EMPTY_ID {
             let id = self.base.base.nested_input_id();
             if let Some(current) = machine.nested_bool(id) {
@@ -42,8 +35,10 @@ impl ListenerBoolChange {
             }
         } else {
             let id = self.base.base.input_id();
-            if let Some(current) = machine.bool_input(id) {
-                machine.set_bool_input(id, self.changed_value(current));
+            if let Some(current) = machine.bool_input(id).map(|input| input.value()) {
+                if let Some(input) = machine.bool_input_mut(id) {
+                    input.set_value(self.changed_value(current));
+                }
             }
         }
     }

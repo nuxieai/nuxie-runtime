@@ -1,7 +1,8 @@
 use crate::mechanical_port::source::{
     animation::{
-        state_machine_input_instance::SMIBool,
-        state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+        state_machine_instance::{
+            RuntimeStateMachineLayerInstanceWeakHandle, StateMachineInstance,
+        },
         transition_condition_op::TransitionConditionOp,
     },
     generated::animation::state_machine_bool_base::StateMachineBoolBase,
@@ -12,10 +13,6 @@ use crate::mechanical_port::source::{
 
 pub trait StateMachineInputKind {
     fn is_state_machine_bool(&self) -> bool;
-}
-
-pub trait BoolConditionStateMachine {
-    fn bool_input(&self, input_id: u32) -> Option<&SMIBool>;
 }
 
 #[derive(Default)]
@@ -38,7 +35,7 @@ impl TransitionBoolCondition {
 
     pub fn evaluate(
         &self,
-        state_machine_instance: &dyn BoolConditionStateMachine,
+        state_machine_instance: &StateMachineInstance,
         _layer_instance: &RuntimeStateMachineLayerInstanceWeakHandle,
     ) -> bool {
         let Some(bool_input) = state_machine_instance.bool_input(self.base.base.base.input_id())

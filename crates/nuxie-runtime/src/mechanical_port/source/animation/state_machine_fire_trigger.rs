@@ -1,22 +1,10 @@
 use crate::mechanical_port::source::{
-    core::CoreHandle, data_bind_path_referencer::DataBindPathReferencer,
+    animation::state_machine_instance::StateMachineInstance,
+    data_bind_path_referencer::DataBindPathReferencer,
     generated::animation::state_machine_fire_trigger_base::StateMachineFireTriggerBase,
     importers::import_stack::ImportStack, status_code::StatusCode,
     viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger,
 };
-
-pub enum FireTriggerViewModelProperty {
-    Trigger(CoreHandle),
-    Other,
-}
-
-pub trait FireTriggerDataContext {
-    fn get_view_model_property(&mut self, path: &[u32]) -> Option<FireTriggerViewModelProperty>;
-}
-
-pub trait FireTriggerStateMachine {
-    fn data_context(&mut self) -> Option<&mut dyn FireTriggerDataContext>;
-}
 
 #[derive(Default)]
 pub struct StateMachineFireTrigger {
@@ -25,19 +13,14 @@ pub struct StateMachineFireTrigger {
 }
 
 impl StateMachineFireTrigger {
-    pub fn perform(&self, state_machine_instance: &mut dyn FireTriggerStateMachine) {
-        let Some(data_context) = state_machine_instance.data_context() else {
-            return;
-        };
+    pub fn perform(&self, state_machine_instance: &mut StateMachineInstance) {
         let Some(path) = self
             .data_bind_path_referencer
             .with_data_bind_path(|path| path.path().clone())
         else {
             return;
         };
-        let Some(FireTriggerViewModelProperty::Trigger(trigger)) =
-            data_context.get_view_model_property(&path)
-        else {
+        let Some(trigger) = state_machine_instance.view_model_property(&path) else {
             return;
         };
         let _ =

@@ -1,7 +1,8 @@
 use crate::mechanical_port::source::{
     animation::{
-        state_machine_input_instance::SMINumber,
-        state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+        state_machine_instance::{
+            RuntimeStateMachineLayerInstanceWeakHandle, StateMachineInstance,
+        },
         transition_condition_op::TransitionConditionOp,
     },
     generated::animation::state_machine_number_base::StateMachineNumberBase,
@@ -10,9 +11,6 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 
-pub trait NumberConditionStateMachine {
-    fn number_input(&self, id: u32) -> Option<&SMINumber>;
-}
 pub trait NumberInputKind {
     fn is_state_machine_number(&self) -> bool;
 }
@@ -34,7 +32,7 @@ impl TransitionNumberCondition {
     }
     pub fn evaluate(
         &self,
-        machine: &dyn NumberConditionStateMachine,
+        machine: &StateMachineInstance,
         _layer: &RuntimeStateMachineLayerInstanceWeakHandle,
     ) -> bool {
         let Some(input) = machine.number_input(self.base.base.base.input_id()) else {

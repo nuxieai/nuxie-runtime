@@ -1,4 +1,6 @@
-use crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle;
+use crate::mechanical_port::source::animation::state_machine_instance::{
+    RuntimeStateMachineLayerInstanceWeakHandle, StateMachineInstance,
+};
 use crate::mechanical_port::source::{
     generated::animation::{
         state_machine_trigger_base::StateMachineTriggerBase,
@@ -7,14 +9,6 @@ use crate::mechanical_port::source::{
     importers::import_stack::ImportStack,
     status_code::StatusCode,
 };
-pub trait TriggerConditionStateMachine {
-    fn trigger_fired_and_unused_in_layer(
-        &self,
-        id: u32,
-        layer: &RuntimeStateMachineLayerInstanceWeakHandle,
-    ) -> Option<bool>;
-    fn use_trigger_in_layer(&mut self, id: u32, layer: RuntimeStateMachineLayerInstanceWeakHandle);
-}
 pub trait TriggerInputKind {
     fn is_state_machine_trigger(&self) -> bool;
 }
@@ -34,21 +28,21 @@ impl TransitionTriggerCondition {
     }
     pub fn evaluate(
         &self,
-        machine: &dyn TriggerConditionStateMachine,
+        machine: &StateMachineInstance,
         layer: &RuntimeStateMachineLayerInstanceWeakHandle,
     ) -> bool {
-        let Some(fired_and_unused) =
-            machine.trigger_fired_and_unused_in_layer(self.base.base.input_id(), layer)
-        else {
+        let Some(trigger) = machine.trigger_input(self.base.base.input_id()) else {
             return true;
         };
-        fired_and_unused
+        trigger.fired() && !trigger.triggerable.is_used_in_layer(layer)
     }
     pub fn use_in_layer(
         &self,
-        machine: &mut dyn TriggerConditionStateMachine,
+        machine: &mut StateMachineInstance,
         layer: RuntimeStateMachineLayerInstanceWeakHandle,
     ) {
-        machine.use_trigger_in_layer(self.base.base.input_id(), layer);
+        if let Some(trigger) = machine.trigger_input_mut(self.base.base.input_id()) {
+            trigger.triggerable.use_in_layer(layer);
+        }
     }
 }

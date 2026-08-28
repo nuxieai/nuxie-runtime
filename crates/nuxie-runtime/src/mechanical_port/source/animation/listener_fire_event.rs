@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     animation::{
-        listener_invocation::ListenerInvocation, state_machine_fire_event::FireEventStateMachine,
+        listener_invocation::ListenerInvocation, state_machine_instance::StateMachineInstance,
     },
     generated::animation::listener_fire_event_base::ListenerFireEventBase,
 };
@@ -13,15 +13,12 @@ pub struct ListenerFireEvent {
 impl ListenerFireEvent {
     pub fn perform(
         &self,
-        state_machine_instance: &mut dyn FireEventStateMachine,
+        state_machine_instance: &mut StateMachineInstance,
         _invocation: &ListenerInvocation,
     ) {
-        let Some(
-            crate::mechanical_port::source::animation::state_machine_fire_event::ResolvedFireEvent::Event(event),
-        ) = state_machine_instance.resolve_core_event(self.base.event_id())
-        else {
+        let Some(event) = state_machine_instance.resolve_event(self.base.event_id()) else {
             return;
         };
-        state_machine_instance.report_event(event);
+        state_machine_instance.report_event(event, 0.0);
     }
 }

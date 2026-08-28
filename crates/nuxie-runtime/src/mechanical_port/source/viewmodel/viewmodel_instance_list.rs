@@ -185,19 +185,36 @@ impl ViewModelInstanceList {
         self.property_value_changed();
     }
 
-    pub fn clone_value(&self) -> Option<CoreHandle> {
-        let cloned = self.handle()?.clone_occurrence()?;
-        for item in &self.list_items {
+    pub fn clone_definition(&self) -> Self {
+        let mut clone = Self::default();
+        let mut base = std::mem::take(&mut clone.base);
+        base.copy(&self.base, &mut clone);
+        clone.base = base;
+        clone
+    }
+
+    pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
+        let Some(items) = source.with_downcast::<Self, _>(|source| source.list_items.clone())
+        else {
+            return false;
+        };
+        for item in items {
             let Some(item) = item.clone_occurrence() else {
-                continue;
+                return false;
             };
-            cloned.with_mut(|cloned| {
-                if let Some(cloned) = cloned.as_view_model_instance_list_mut() {
-                    cloned.internal_add_item(item);
-                }
-            });
+            if cloned
+                .with_downcast_mut::<Self, _>(|cloned| cloned.internal_add_item(item))
+                .is_none()
+            {
+                return false;
+            }
         }
-        Some(cloned)
+        true
+    }
+
+    pub fn clone_value(source: &CoreHandle) -> Option<CoreHandle> {
+        source.with_downcast::<Self, _>(|_| ())?;
+        source.clone_occurrence()
     }
 
     pub fn advanced(&mut self) {

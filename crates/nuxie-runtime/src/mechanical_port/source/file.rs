@@ -992,13 +992,7 @@ impl File {
         instance: &CoreHandle,
         instances: &mut HashMap<CoreHandle, CoreHandle>,
     ) -> Option<CoreHandle> {
-        let copied = instance
-            .with(|instance| {
-                instance
-                    .as_view_model_instance()
-                    .and_then(ViewModelInstance::clone_instance)
-            })
-            .flatten()?;
+        let copied = ViewModelInstance::clone_instance(instance)?;
         instances.insert(instance.clone(), copied.clone());
         self.complete_view_model_instance_with_map(&copied, instances);
         #[cfg(feature = "tools")]

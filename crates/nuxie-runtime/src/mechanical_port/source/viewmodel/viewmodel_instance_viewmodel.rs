@@ -174,26 +174,42 @@ impl ViewModelInstanceViewModel {
         }
     }
 
-    pub fn clone_value(&self) -> Option<CoreHandle> {
-        let cloned = self.base.base.base.base.base.handle()?.clone_occurrence()?;
-        if let Some(instance) = &self.reference_view_model_instance {
-            let cloned_instance = instance
-                .with(|instance| {
-                    instance
-                        .as_view_model_instance()
-                        .and_then(ViewModelInstance::clone_instance)
+    pub fn clone_definition(&self) -> Self {
+        let mut clone = Self::default();
+        let mut base = std::mem::take(&mut clone.base);
+        base.copy(&self.base, &mut clone);
+        clone.base = base;
+        clone
+    }
+
+    pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
+        let Some((reference, owner)) = source.with_downcast::<Self, _>(|source| {
+            (
+                source.reference_view_model_instance.clone(),
+                source.base.view_model_instance(),
+            )
+        }) else {
+            return false;
+        };
+        if let Some(instance) = reference {
+            let Some(cloned_instance) = ViewModelInstance::clone_instance(&instance) else {
+                return false;
+            };
+            return cloned
+                .with_downcast_mut::<Self, _>(|cloned| {
+                    cloned.set_reference_view_model_instance(Some(cloned_instance));
+                    if let Some(owner) = owner {
+                        cloned.base.set_view_model_instance(owner);
+                    }
                 })
-                .flatten();
-            cloned.with_mut(|cloned| {
-                if let Some(cloned) = cloned.as_view_model_instance_view_model_mut() {
-                    cloned.set_reference_view_model_instance(cloned_instance);
-                    cloned
-                        .base
-                        .set_view_model_instance(self.base.view_model_instance());
-                }
-            });
+                .is_some();
         }
-        Some(cloned)
+        true
+    }
+
+    pub fn clone_value(source: &CoreHandle) -> Option<CoreHandle> {
+        source.with_downcast::<Self, _>(|_| ())?;
+        source.clone_occurrence()
     }
 
     #[cfg(feature = "tools")]

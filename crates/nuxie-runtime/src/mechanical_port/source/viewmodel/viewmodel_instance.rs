@@ -312,29 +312,52 @@ impl ViewModelInstance {
         }
     }
 
-    pub fn clone_instance(&self) -> Option<CoreHandle> {
-        let cloned = self.handle()?.clone_occurrence()?;
-        let copy_values = self.base.base.base.base.artboard().is_none();
+    pub fn clone_definition(&self) -> Self {
+        let mut clone = Self::default();
+        let mut base = std::mem::take(&mut clone.base);
+        base.copy(&self.base, &mut clone);
+        clone.base = base;
+        clone
+    }
+
+    pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
+        let Some((copy_values, properties, view_model)) =
+            source.with_downcast::<Self, _>(|source| {
+                (
+                    source.base.base.base.base.artboard().is_none(),
+                    source.property_values.clone(),
+                    source.view_model.clone(),
+                )
+            })
+        else {
+            return false;
+        };
+        // Artboard-owned values are cloned by the artboard's object traversal.
         if copy_values {
-            for property in &self.property_values {
+            for property in properties {
                 let Some(property) = property.clone_occurrence() else {
-                    continue;
+                    return false;
                 };
-                cloned.with_mut(|cloned| {
-                    if let Some(cloned) = cloned.as_view_model_instance_mut() {
-                        cloned.add_value(property);
-                    }
-                });
+                if cloned
+                    .with_downcast_mut::<Self, _>(|cloned| cloned.add_value(property))
+                    .is_none()
+                {
+                    return false;
+                }
             }
         }
-        if let Some(view_model) = self.view_model.clone() {
-            cloned.with_mut(|cloned| {
-                if let Some(cloned) = cloned.as_view_model_instance_mut() {
+        cloned
+            .with_downcast_mut::<Self, _>(|cloned| {
+                if let Some(view_model) = view_model {
                     cloned.view_model(view_model);
                 }
-            });
-        }
-        Some(cloned)
+            })
+            .is_some()
+    }
+
+    pub fn clone_instance(source: &CoreHandle) -> Option<CoreHandle> {
+        source.with_downcast::<Self, _>(|_| ())?;
+        source.clone_occurrence()
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {

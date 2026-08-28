@@ -1,10 +1,9 @@
-#[cfg(feature = "rive-layout")]
-use crate::mechanical_port::source::yoga::{
+use crate::mechanical_port::source::layout::layout_style_applier::{
     YGAlign, YGDirection, YGDisplay, YGEdge, YGFlexDirection, YGFloatOptional, YGGutter, YGJustify,
     YGOverflow, YGPositionType, YGStyle, YGUnit, YGValue, YGWrap,
 };
 use crate::mechanical_port::source::{
-    animation::keyframe_interpolator::KeyFrameInterpolator,
+    core::CoreHandle,
     core_context::{CoreContext, StatusCode},
     generated::layout::layout_component_style_base::LayoutComponentStyleBase,
     layout::{
@@ -12,19 +11,38 @@ use crate::mechanical_port::source::{
         layout_enums::{
             LayoutAlignmentType, LayoutAnimationStyle, LayoutScaleType, LayoutStyleInterpolation,
         },
-        layout_style_applier::LayoutSyncContext,
+        layout_style_applier::{LayoutStyleApplier, LayoutSyncContext},
     },
     layout_component::LayoutComponent,
 };
 
+#[derive(Default)]
 pub struct LayoutComponentStyle {
     pub base: LayoutComponentStyleBase,
-    #[cfg(feature = "rive-layout")]
-    interpolator: Option<*mut KeyFrameInterpolator>,
+    interpolator: Option<CoreHandle>,
+}
+
+impl LayoutStyleApplier for LayoutComponentStyle {
+    fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+        self.base.apply_sizing_base_style(style, context);
+    }
+
+    fn apply_container_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+        LayoutComponentStyle::apply_container_style(self, style, context);
+    }
+
+    fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+        LayoutComponentStyle::apply_item_style(self, style, context);
+    }
 }
 
 impl LayoutComponentStyle {
-    #[cfg(feature = "rive-layout")]
+    fn with_layout_mut<R>(&mut self, f: impl FnOnce(&mut LayoutComponent) -> R) -> Option<R> {
+        self.base
+            .parent_handle()?
+            .with_mut(|parent| parent.as_layout_component_mut().map(f))
+            .flatten()
+    }
     fn apply_stack_alignment(style: &mut YGStyle, alignment: LayoutAlignmentType) {
         style.set_justify_items(match alignment {
             LayoutAlignmentType::TopLeft
@@ -56,7 +74,6 @@ impl LayoutComponentStyle {
         });
     }
 
-    #[cfg(feature = "rive-layout")]
     pub fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
         self.base.apply_sizing_item_style(style, context);
         style.set_position_type(self.position_type());
@@ -106,7 +123,6 @@ impl LayoutComponentStyle {
             YGValue::new(self.base.position_bottom(), self.position_bottom_units());
     }
 
-    #[cfg(feature = "rive-layout")]
     pub fn apply_container_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
         let start = if context.is_ltr {
             YGEdge::Left
@@ -230,9 +246,8 @@ impl LayoutComponentStyle {
         }
     }
 
-    #[cfg(feature = "rive-layout")]
-    pub fn interpolator(&mut self) -> Option<&mut KeyFrameInterpolator> {
-        self.interpolator.map(|pointer| unsafe { &mut *pointer })
+    pub fn interpolator(&self) -> Option<CoreHandle> {
+        self.interpolator.clone()
     }
     pub fn interpolation(&self) -> LayoutStyleInterpolation {
         LayoutStyleInterpolation::from(self.base.interpolation_type())
@@ -256,7 +271,6 @@ impl LayoutComponentStyle {
         self.base.layout_type_value() != 0
     }
 
-    #[cfg(feature = "rive-layout")]
     pub fn display(&self) -> YGDisplay {
         if YGDisplay::from(self.base.display_value()) == YGDisplay::None {
             YGDisplay::None
@@ -266,23 +280,18 @@ impl LayoutComponentStyle {
             YGDisplay::Grid
         }
     }
-    #[cfg(feature = "rive-layout")]
     pub fn position_type(&self) -> YGPositionType {
         YGPositionType::from(self.base.position_type_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn flex_direction(&self) -> YGFlexDirection {
         YGFlexDirection::from(self.base.flex_direction_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn direction(&self) -> YGDirection {
         YGDirection::from(self.base.direction_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn flex_wrap(&self) -> YGWrap {
         YGWrap::from(self.base.flex_wrap_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn overflow(&self) -> YGOverflow {
         YGOverflow::from(self.base.overflow_value())
     }
@@ -290,145 +299,103 @@ impl LayoutComponentStyle {
         self.base.intrinsically_sized_value() == 1
     }
 
-    #[cfg(feature = "rive-layout")]
     pub fn width_units(&self) -> YGUnit {
         YGUnit::from(self.base.width_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn height_units(&self) -> YGUnit {
         YGUnit::from(self.base.height_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn border_left_units(&self) -> YGUnit {
         YGUnit::from(self.base.border_left_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn border_right_units(&self) -> YGUnit {
         YGUnit::from(self.base.border_right_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn border_top_units(&self) -> YGUnit {
         YGUnit::from(self.base.border_top_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn border_bottom_units(&self) -> YGUnit {
         YGUnit::from(self.base.border_bottom_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn margin_left_units(&self) -> YGUnit {
         YGUnit::from(self.base.margin_left_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn margin_right_units(&self) -> YGUnit {
         YGUnit::from(self.base.margin_right_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn margin_top_units(&self) -> YGUnit {
         YGUnit::from(self.base.margin_top_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn margin_bottom_units(&self) -> YGUnit {
         YGUnit::from(self.base.margin_bottom_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn padding_left_units(&self) -> YGUnit {
         YGUnit::from(self.base.padding_left_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn padding_right_units(&self) -> YGUnit {
         YGUnit::from(self.base.padding_right_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn padding_top_units(&self) -> YGUnit {
         YGUnit::from(self.base.padding_top_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn padding_bottom_units(&self) -> YGUnit {
         YGUnit::from(self.base.padding_bottom_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn position_left_units(&self) -> YGUnit {
         YGUnit::from(self.base.position_left_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn position_right_units(&self) -> YGUnit {
         YGUnit::from(self.base.position_right_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn position_top_units(&self) -> YGUnit {
         YGUnit::from(self.base.position_top_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn position_bottom_units(&self) -> YGUnit {
         YGUnit::from(self.base.position_bottom_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn gap_horizontal_units(&self) -> YGUnit {
         YGUnit::from(self.base.gap_horizontal_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn gap_vertical_units(&self) -> YGUnit {
         YGUnit::from(self.base.gap_vertical_units_value())
     }
-    #[cfg(feature = "rive-layout")]
     pub fn flex_basis_units(&self) -> YGUnit {
         YGUnit::from(self.base.flex_basis_units_value())
     }
 
     pub fn mark_layout_node_dirty(&mut self) {
-        #[cfg(feature = "rive-layout")]
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.mark_layout_node_dirty(false);
-        }
+        self.with_layout_mut(|layout| layout.mark_layout_node_dirty(false));
     }
     pub fn mark_layout_style_dirty(&mut self) {
-        #[cfg(feature = "rive-layout")]
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.mark_layout_style_dirty();
-        }
+        self.with_layout_mut(LayoutComponent::mark_layout_style_dirty);
     }
     pub fn scale_type_changed(&mut self) {
-        #[cfg(feature = "rive-layout")]
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.scale_type_changed();
-        }
+        self.with_layout_mut(LayoutComponent::scale_type_changed);
     }
     pub fn display_changed(&mut self) {
-        #[cfg(feature = "rive-layout")]
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.display_changed();
-        }
+        self.with_layout_mut(LayoutComponent::display_changed);
     }
     pub fn position_type_value_changed(&mut self) {
-        #[cfg(feature = "rive-layout")]
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.position_type_changed();
-        }
+        self.with_layout_mut(LayoutComponent::position_type_changed);
     }
     pub fn flex_direction_value_changed(&mut self) {
-        #[cfg(feature = "rive-layout")]
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.flex_direction_changed();
-        }
+        self.with_layout_mut(LayoutComponent::flex_direction_changed);
     }
     pub fn direction_value_changed(&mut self) {
-        #[cfg(feature = "rive-layout")]
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.direction_changed();
-        }
+        self.with_layout_mut(LayoutComponent::direction_changed);
     }
-    #[cfg(feature = "rive-layout")]
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
-        if let Some(interpolator) = context
-            .resolve_mut(self.base.interpolator_id())
-            .and_then(|object| object.as_mut::<KeyFrameInterpolator>())
-        {
-            self.interpolator = Some(interpolator);
-        }
+        self.interpolator = context
+            .resolve(self.base.interpolator_id())
+            .filter(|object| {
+                object.is_type_of(
+                    crate::mechanical_port::source::generated::animation::keyframe_interpolator_base::KeyFrameInterpolatorBase::TYPE_KEY,
+                )
+            });
         StatusCode::Ok
     }
 
@@ -448,10 +415,7 @@ impl LayoutComponentStyle {
         self.display_changed();
     }
     pub fn layout_type_value_changed(&mut self) {
-        #[cfg(feature = "rive-layout")]
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.layout_type_changed();
-        }
+        self.with_layout_mut(LayoutComponent::layout_type_changed);
     }
     pub fn justify_items_value_changed(&mut self) {
         self.mark_layout_node_dirty();
@@ -529,18 +493,14 @@ impl LayoutComponentStyle {
         self.mark_layout_node_dirty();
     }
     pub fn position_left_changed(&mut self) {
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.mark_position_left_changed();
-        }
+        self.with_layout_mut(LayoutComponent::mark_position_left_changed);
         self.mark_layout_node_dirty();
     }
     pub fn position_right_changed(&mut self) {
         self.mark_layout_node_dirty();
     }
     pub fn position_top_changed(&mut self) {
-        if let Some(layout) = self.base.parent_mut().as_mut::<LayoutComponent>() {
-            layout.mark_position_top_changed();
-        }
+        self.with_layout_mut(LayoutComponent::mark_position_top_changed);
         self.mark_layout_node_dirty();
     }
     pub fn position_bottom_changed(&mut self) {

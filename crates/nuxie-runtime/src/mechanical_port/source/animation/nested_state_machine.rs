@@ -1,8 +1,12 @@
 use crate::mechanical_port::source::{
-    animation::nested_input::NestedInput,
-    generated::animation::nested_state_machine_base::NestedStateMachineBase, math::vec2d::Vec2D,
+    animation::{
+        nested_bool::NestedBool, nested_number::NestedNumber, nested_trigger::NestedTrigger,
+    },
+    core::CoreHandle,
+    core_context::CoreContext,
+    generated::animation::nested_state_machine_base::NestedStateMachineBase,
+    math::vec2d::Vec2D,
 };
-use std::ptr::NonNull;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum HitResult {
     #[default]
@@ -21,10 +25,16 @@ pub trait NestedStateMachineInstance {
         primary: bool,
     ) -> HitResult;
     fn try_change_state(&mut self) -> bool;
-    fn bind_view_model(&mut self, value: *mut ());
-    fn set_data_context(&mut self, value: *mut ());
+    fn bind_view_model(&mut self, value: CoreHandle);
+    fn set_data_context(&mut self, value: CoreHandle);
     fn clear_data_context(&mut self);
     fn share_parent_focus_manager(&mut self);
+    fn input_name(&self, index: u32) -> Option<&str>;
+    fn bool_input_value(&self, index: u32) -> Option<bool>;
+    fn number_input_value(&self, index: u32) -> Option<f32>;
+    fn set_bool_input(&mut self, index: u32, value: bool);
+    fn set_number_input(&mut self, index: u32, value: f32);
+    fn fire_trigger_input(&mut self, index: u32);
 }
 pub trait NestedStateMachineArtboard {
     fn state_machine_at(&mut self, id: u32) -> Option<Box<dyn NestedStateMachineInstance>>;
@@ -33,7 +43,7 @@ pub trait NestedStateMachineArtboard {
 pub struct NestedStateMachine {
     pub base: NestedStateMachineBase,
     instance: Option<Box<dyn NestedStateMachineInstance>>,
-    nested_inputs: Vec<NonNull<NestedInput>>,
+    nested_inputs: Vec<CoreHandle>,
 }
 impl NestedStateMachine {
     pub fn advance(&mut self, elapsed: f32, new_frame: bool) -> bool {
@@ -46,11 +56,20 @@ impl NestedStateMachine {
         if let Some(instance) = &mut self.instance {
             instance.share_parent_focus_manager();
         }
-        for mut input in self.nested_inputs.iter().copied() {
-            unsafe {
-                if input.as_ref().is_bool_or_number() {
-                    input.as_mut().apply_value();
-                }
+        let Some(instance) = self.instance.as_mut() else {
+            return;
+        };
+        for input in self.nested_inputs.iter().cloned() {
+            if let Some((input_id, value)) = input.with_downcast::<NestedBool, _>(|input| {
+                (input.base.base.base.input_id(), input.base.nested_value())
+            }) {
+                instance.set_bool_input(input_id, value);
+            } else if let Some((input_id, value)) =
+                input.with_downcast::<NestedNumber, _>(|input| {
+                    (input.base.base.base.input_id(), input.base.nested_value())
+                })
+            {
+                instance.set_number_input(input_id, value);
             }
         }
     }
@@ -86,29 +105,63 @@ impl NestedStateMachine {
             .map(|v| v.pointer(k, p, t, id, primary))
             .unwrap_or(HitResult::None)
     }
-    pub fn add_nested_input(&mut self, input: &mut NestedInput) {
-        self.nested_inputs.push(NonNull::from(input));
+    pub fn add_nested_input(&mut self, input: CoreHandle) {
+        self.nested_inputs.push(input);
     }
     pub fn input_count(&self) -> usize {
         self.nested_inputs.len()
     }
-    pub fn input(&mut self, index: usize) -> Option<&mut NestedInput> {
-        self.nested_inputs
-            .get_mut(index)
-            .map(|v| unsafe { v.as_mut() })
+    pub fn input(&self, index: usize) -> Option<CoreHandle> {
+        self.nested_inputs.get(index).cloned()
     }
-    pub fn input_named(&mut self, name: &str) -> Option<&mut NestedInput> {
-        self.nested_inputs.iter_mut().find_map(|v| {
-            let i = unsafe { v.as_mut() };
-            (i.name() == name).then_some(i)
+    pub fn input_named(&self, name: &str, context: &dyn CoreContext) -> Option<CoreHandle> {
+        self.nested_inputs.iter().find_map(|input| {
+            let matches = input
+                .with_downcast::<NestedBool, _>(|input| input.base.base.name(context) == name)
+                .or_else(|| {
+                    input.with_downcast::<NestedNumber, _>(|input| {
+                        input.base.base.name(context) == name
+                    })
+                })
+                .or_else(|| {
+                    input.with_downcast::<NestedTrigger, _>(|input| {
+                        input.base.base.name(context) == name
+                    })
+                })
+                .unwrap_or(false);
+            matches.then(|| input.clone())
         })
     }
-    pub fn bind_view_model_instance(&mut self, v: *mut ()) {
+    pub fn input_name(&self, index: u32) -> Option<String> {
+        self.instance.as_ref()?.input_name(index).map(str::to_owned)
+    }
+    pub fn bool_input_value(&self, index: u32) -> Option<bool> {
+        self.instance.as_ref()?.bool_input_value(index)
+    }
+    pub fn number_input_value(&self, index: u32) -> Option<f32> {
+        self.instance.as_ref()?.number_input_value(index)
+    }
+    pub fn set_bool_input(&mut self, index: u32, value: bool) {
+        if let Some(instance) = &mut self.instance {
+            instance.set_bool_input(index, value);
+        }
+    }
+    pub fn set_number_input(&mut self, index: u32, value: f32) {
+        if let Some(instance) = &mut self.instance {
+            instance.set_number_input(index, value);
+        }
+    }
+    pub fn fire_trigger_input(&mut self, index: u32) {
+        if let Some(instance) = &mut self.instance {
+            instance.fire_trigger_input(index);
+        }
+    }
+    pub fn bind_view_model_instance(&mut self, v: CoreHandle) {
         if let Some(i) = &mut self.instance {
             i.bind_view_model(v)
         }
     }
-    pub fn data_context(&mut self, v: *mut ()) {
+    pub fn data_context(&mut self, v: CoreHandle) {
         if let Some(i) = &mut self.instance {
             i.set_data_context(v)
         }

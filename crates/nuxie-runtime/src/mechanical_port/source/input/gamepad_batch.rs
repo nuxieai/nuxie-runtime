@@ -189,8 +189,8 @@ impl GamepadBatchState {
     }
 }
 fn button(v: u8) -> Option<StandardGamepadButton> {
-    unsafe { Some(core::mem::transmute(v)) }
+    StandardGamepadButton::from_raw(v)
 }
 fn axis(v: u8) -> Option<StandardGamepadAxis> {
-    unsafe { Some(core::mem::transmute(v)) }
+    StandardGamepadAxis::from_raw(v)
 }

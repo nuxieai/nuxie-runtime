@@ -1,19 +1,29 @@
 use crate::mechanical_port::source::{
-    component::{ComponentDirt, ComponentHandle},
+    component::{Component, ComponentDirt},
+    core::CoreHandle,
     core_context::CoreContext,
-    generated::bones::skin_base::SkinBase,
+    generated::{
+        bones::skin_base::{SkinBase, SkinBaseCallbacks},
+        component_base::ComponentBaseCallbacks,
+    },
     math::mat2d::Mat2D,
     status_code::StatusCode,
 };
 
-use super::skinnable;
+struct SilentSkinCallbacks;
+impl ComponentBaseCallbacks for SilentSkinCallbacks {
+    fn notify_property_changed(&mut self, _property_key: u16) {}
+}
+impl SkinBaseCallbacks for SilentSkinCallbacks {
+    fn notify_property_changed(&mut self, _property_key: u16) {}
+}
 
 pub struct Skin {
     pub base: SkinBase,
     world_transform: Mat2D,
-    tendons: Vec<ComponentHandle>,
+    tendons: Vec<CoreHandle>,
     bone_transforms: Option<Vec<f32>>,
-    skinnable: Option<ComponentHandle>,
+    skinnable: Option<CoreHandle>,
 }
 
 impl Default for Skin {
@@ -29,16 +39,109 @@ impl Default for Skin {
 }
 
 impl Skin {
-    pub(crate) fn add_tendon(&mut self, tendon: ComponentHandle) {
+    fn component(&self) -> &Component {
+        &self.base.base.base
+    }
+
+    fn component_mut(&mut self) -> &mut Component {
+        &mut self.base.base.base
+    }
+
+    fn set_matrix_component(
+        &mut self,
+        value: f32,
+        property_key: u16,
+        current: impl FnOnce(&SkinBase) -> f32,
+        set: impl FnOnce(&mut SkinBase, f32, &mut SilentSkinCallbacks),
+    ) {
+        if current(&self.base) == value {
+            return;
+        }
+        let mut callbacks = SilentSkinCallbacks;
+        set(&mut self.base, value, &mut callbacks);
+        self.component_mut()
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
+
+    pub fn xx(&self) -> f32 {
+        self.base.xx()
+    }
+    pub fn set_xx(&mut self, value: f32) {
+        self.set_matrix_component(
+            value,
+            SkinBase::XX_PROPERTY_KEY,
+            SkinBase::xx,
+            SkinBase::set_xx,
+        )
+    }
+    pub fn yx(&self) -> f32 {
+        self.base.yx()
+    }
+    pub fn set_yx(&mut self, value: f32) {
+        self.set_matrix_component(
+            value,
+            SkinBase::YX_PROPERTY_KEY,
+            SkinBase::yx,
+            SkinBase::set_yx,
+        )
+    }
+    pub fn xy(&self) -> f32 {
+        self.base.xy()
+    }
+    pub fn set_xy(&mut self, value: f32) {
+        self.set_matrix_component(
+            value,
+            SkinBase::XY_PROPERTY_KEY,
+            SkinBase::xy,
+            SkinBase::set_xy,
+        )
+    }
+    pub fn yy(&self) -> f32 {
+        self.base.yy()
+    }
+    pub fn set_yy(&mut self, value: f32) {
+        self.set_matrix_component(
+            value,
+            SkinBase::YY_PROPERTY_KEY,
+            SkinBase::yy,
+            SkinBase::set_yy,
+        )
+    }
+    pub fn tx(&self) -> f32 {
+        self.base.tx()
+    }
+    pub fn set_tx(&mut self, value: f32) {
+        self.set_matrix_component(
+            value,
+            SkinBase::TX_PROPERTY_KEY,
+            SkinBase::tx,
+            SkinBase::set_tx,
+        )
+    }
+    pub fn ty(&self) -> f32 {
+        self.base.ty()
+    }
+    pub fn set_ty(&mut self, value: f32) {
+        self.set_matrix_component(
+            value,
+            SkinBase::TY_PROPERTY_KEY,
+            SkinBase::ty,
+            SkinBase::set_ty,
+        )
+    }
+
+    pub(crate) fn add_tendon(&mut self, tendon: CoreHandle) {
         self.tendons.push(tendon);
     }
 
     pub fn on_added_dirty(
         &mut self,
-        this: ComponentHandle,
-        context: &mut CoreContext,
+        this: CoreHandle,
+        context: &mut dyn CoreContext,
     ) -> StatusCode {
-        let code = self.base.on_added_dirty(context);
+        let code = self.component_mut().on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
@@ -51,37 +154,50 @@ impl Skin {
             self.base.ty(),
         );
 
-        let Some(parent) = self.base.parent() else {
+        let Some(parent) = context.resolve(self.component().base.parent_id()) else {
             return StatusCode::MissingObject;
         };
-        let Some(skinnable) = skinnable::from(parent, context) else {
+        let installed = parent
+            .with_mut(|parent| {
+                parent.as_skinnable_behavior_mut().map(|skinnable| {
+                    skinnable.set_skin(this.clone());
+                })
+            })
+            .flatten()
+            .is_some();
+        if !installed {
             return StatusCode::MissingObject;
-        };
-        context
-            .skinnable_mut(skinnable)
-            .expect("Skinnable::from accepted only concrete skinnable types")
-            .set_skin(this);
-        self.skinnable = Some(skinnable);
+        }
+        self.skinnable = Some(parent);
         StatusCode::Ok
     }
 
-    pub fn update(&mut self, _value: ComponentDirt, context: &CoreContext) {
+    pub fn update(&mut self, _value: ComponentDirt, _context: &dyn CoreContext) {
         let bone_transforms = self
             .bone_transforms
             .as_mut()
             .expect("buildDependencies initializes the bone transform buffer");
         let mut transform_index = 6;
-        for tendon_handle in self.tendons.iter().copied() {
-            let tendon = context
-                .tendon(tendon_handle)
-                .expect("a retained Tendon must remain a Tendon");
-            let bone_handle = tendon
-                .bone()
+        for tendon_handle in self.tendons.iter().cloned() {
+            let bone_handle = tendon_handle
+                .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
+                    |tendon| tendon.bone(),
+                )
+                .flatten()
                 .expect("Tendon::onAddedDirty resolves its Bone before update");
-            let bone = context
-                .bone(bone_handle)
-                .expect("a Tendon Bone handle must remain a Bone");
-            let world = bone.base.world_transform().multiply(tendon.inverse_bind());
+            let (bone_world, inverse_bind) = (
+                bone_handle
+                    .with_downcast::<crate::mechanical_port::source::bones::bone::Bone, _>(|bone| {
+                        *bone.base.world_transform()
+                    })
+                    .expect("a Tendon Bone handle must remain a Bone"),
+                tendon_handle
+                    .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
+                        |tendon| *tendon.inverse_bind(),
+                    )
+                    .expect("a retained Tendon must remain a Tendon"),
+            );
+            let world = bone_world.multiply(&inverse_bind);
             for coefficient in world.values() {
                 bone_transforms[transform_index] = *coefficient;
                 transform_index += 1;
@@ -89,33 +205,44 @@ impl Skin {
         }
     }
 
-    pub fn build_dependencies(&mut self, this: ComponentHandle, context: &mut CoreContext) {
-        for tendon_handle in self.tendons.iter().copied() {
-            let tendon = context
-                .tendon(tendon_handle)
-                .expect("a retained Tendon must remain a Tendon");
-            let bone_handle = tendon
-                .bone()
+    pub fn build_dependencies(&mut self, this: CoreHandle, _context: &mut dyn CoreContext) {
+        for tendon_handle in self.tendons.iter().cloned() {
+            let bone_handle = tendon_handle
+                .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
+                    |tendon| tendon.bone(),
+                )
+                .flatten()
                 .expect("Tendon::onAddedDirty resolves its Bone before dependency building");
-            let peer_constraints = context
-                .bone(bone_handle)
-                .expect("a Tendon Bone handle must remain a Bone")
-                .peer_constraints()
-                .to_vec();
-            context
-                .component_mut(bone_handle)
-                .expect("a Tendon Bone handle must remain a Component")
-                .add_dependent(this);
+            let peer_constraints = bone_handle
+                .with_downcast::<crate::mechanical_port::source::bones::bone::Bone, _>(|bone| {
+                    bone.peer_constraints().to_vec()
+                })
+                .expect("a Tendon Bone handle must remain a Bone");
+            bone_handle
+                .with_mut(|bone| {
+                    bone.as_component_mut()
+                        .expect("a Tendon Bone handle must remain a Component")
+                        .add_dependent(this.clone());
+                })
+                .expect("a Tendon Bone handle must remain live");
             for constraint_handle in peer_constraints {
-                let constraint_parent = context
-                    .component(constraint_handle)
-                    .expect("a retained Constraint must remain a Component")
-                    .parent()
+                let constraint_parent = constraint_handle
+                    .with(|constraint| {
+                        constraint
+                            .as_component()
+                            .expect("a retained Constraint must remain a Component")
+                            .parent()
+                    })
+                    .flatten()
                     .expect("a peer Constraint must have a parent");
-                context
-                    .component_mut(constraint_parent)
-                    .expect("a Constraint parent must remain a Component")
-                    .add_dependent(this);
+                constraint_parent
+                    .with_mut(|parent| {
+                        parent
+                            .as_component_mut()
+                            .expect("a Constraint parent must remain a Component")
+                            .add_dependent(this.clone());
+                    })
+                    .expect("a Constraint parent must remain live");
             }
         }
 
@@ -130,30 +257,38 @@ impl Skin {
         self.bone_transforms = Some(bone_transforms);
     }
 
-    pub fn deform(&self, vertices: &[ComponentHandle], context: &mut CoreContext) {
+    pub fn deform(&self, vertices: &[CoreHandle]) {
         let bone_transforms = self
             .bone_transforms
             .as_deref()
             .expect("buildDependencies initializes the bone transform buffer");
-        for vertex_handle in vertices.iter().copied() {
-            context
-                .vertex_mut(vertex_handle)
-                .expect("a retained Vertex must remain a Vertex")
-                .deform(&self.world_transform, bone_transforms);
+        for vertex_handle in vertices.iter().cloned() {
+            vertex_handle
+                .with_mut(|vertex| {
+                    vertex
+                        .as_vertex_mut()
+                        .expect("a retained Vertex must remain a Vertex")
+                        .deform(&self.world_transform, bone_transforms);
+                })
+                .expect("a retained Vertex must remain live");
         }
     }
 
-    pub fn on_dirty(&mut self, _dirt: ComponentDirt, context: &mut CoreContext) {
-        if let Some(skinnable) = self.skinnable {
-            context
-                .skinnable_mut(skinnable)
-                .expect("the retained Skinnable must remain live")
-                .mark_skin_dirty();
+    pub fn on_dirty(&mut self, _dirt: ComponentDirt, _context: &mut dyn CoreContext) {
+        if let Some(skinnable) = self.skinnable.clone() {
+            skinnable
+                .with_mut(|skinnable| {
+                    skinnable
+                        .as_skinnable_behavior_mut()
+                        .expect("the retained Skinnable must retain its capability")
+                        .mark_skin_dirty();
+                })
+                .expect("the retained Skinnable must remain live");
         }
     }
 
-    #[cfg(feature = "testing")]
-    pub fn tendons_mut(&mut self) -> &mut Vec<ComponentHandle> {
+    #[cfg(test)]
+    pub fn tendons_mut(&mut self) -> &mut Vec<CoreHandle> {
         &mut self.tendons
     }
 }

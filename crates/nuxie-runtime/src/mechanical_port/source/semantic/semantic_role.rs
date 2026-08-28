@@ -22,20 +22,50 @@ pub enum SemanticRole {
     RadioButton = 17,
 }
 
+impl SemanticRole {
+    pub const fn from_raw(value: u32) -> Option<Self> {
+        Some(match value {
+            0 => Self::None,
+            1 => Self::Button,
+            2 => Self::Link,
+            3 => Self::Checkbox,
+            4 => Self::SwitchControl,
+            5 => Self::Slider,
+            6 => Self::TextField,
+            7 => Self::Text,
+            8 => Self::Image,
+            9 => Self::Group,
+            10 => Self::List,
+            11 => Self::ListItem,
+            12 => Self::Tab,
+            13 => Self::TabList,
+            14 => Self::Dialog,
+            15 => Self::AlertDialog,
+            16 => Self::RadioGroup,
+            17 => Self::RadioButton,
+            _ => return None,
+        })
+    }
+
+    pub const fn is_interactive(self) -> bool {
+        matches!(
+            self,
+            Self::Button
+                | Self::Link
+                | Self::Checkbox
+                | Self::SwitchControl
+                | Self::Slider
+                | Self::ListItem
+                | Self::Tab
+                | Self::RadioButton
+        )
+    }
+}
+
 pub fn is_interactive_role(role: SemanticRole) -> bool {
-    matches!(
-        role,
-        SemanticRole::Button
-            | SemanticRole::Link
-            | SemanticRole::Checkbox
-            | SemanticRole::SwitchControl
-            | SemanticRole::Slider
-            | SemanticRole::Tab
-            | SemanticRole::ListItem
-            | SemanticRole::RadioButton
-    )
+    role.is_interactive()
 }
 
 pub fn is_interactive_role_value(value: u32) -> bool {
-    matches!(value, 1 | 2 | 3 | 4 | 5 | 12 | 11 | 17)
+    SemanticRole::from_raw(value).is_some_and(SemanticRole::is_interactive)
 }

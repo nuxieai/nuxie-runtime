@@ -34,6 +34,12 @@ impl core::ops::BitAnd for SemanticState {
     }
 }
 
+impl core::ops::BitOrAssign for SemanticState {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
 pub fn has_semantic_state(flags: u32, flag: SemanticState) -> bool {
     flags & flag.0 != 0
 }

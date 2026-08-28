@@ -1,61 +1,102 @@
-use std::ptr::NonNull;
-
 use crate::mechanical_port::source::{
     animation::{
         animation_reset::{AnimationReset, AnimationResetTarget},
-        animation_reset_factory::{AnimationResetFactory, ResetArtboard, ResetLinearAnimation},
+        animation_reset_factory::{AnimationResetFactory, ResetArtboard},
         blend_state_instance::{
             BlendAnimationDefinition, BlendStateDefinition, BlendStateInstance,
         },
         layer_state_flags::LayerStateFlags,
+        linear_animation_instance::LinearAnimationInstance,
+        state_instance::StateInstanceBehavior,
         state_machine_instance::StateMachineInstance,
     },
-    data_bind::bindable_property::BindableProperty,
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    core::CoreHandle,
 };
 
 pub trait BlendAnimation1DDefinition: BlendAnimationDefinition {
     fn value(&self) -> f32;
 }
 
-#[derive(Clone, Copy)]
+impl<K, T> StateInstanceBehavior for BlendState1DInstance<K, T>
+where
+    K: BlendState1DDefinition<T> + std::any::Any,
+    T: BlendAnimation1DDefinition + std::any::Any,
+{
+    fn advance(&mut self, seconds: f32, machine: &mut StateMachineInstance) {
+        Self::advance(self, seconds, machine);
+    }
+
+    fn apply(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle, mix: f32) {
+        let _ = artboard.with_artboard_mut(|artboard| {
+            BlendState1DInstance::apply(self, artboard, mix);
+        });
+    }
+
+    fn keep_going(&self) -> bool {
+        self.base.keep_going()
+    }
+
+    fn clear_spilled_time(&mut self) {
+        self.base.clear_spilled_time();
+    }
+
+    fn for_each_animation_instance(
+        &mut self,
+        callback: &mut dyn FnMut(&mut LinearAnimationInstance),
+    ) {
+        self.base.for_each_animation_instance(callback);
+    }
+}
+
+#[derive(Clone)]
 pub enum BlendState1DValueSource {
     Default,
     Input(u32),
-    ViewModel(NonNull<BindableProperty>),
+    ViewModel(CoreHandle),
 }
 
 pub trait BlendState1DDefinition<T>: BlendStateDefinition<T> {
     fn value_source(&self) -> BlendState1DValueSource;
 }
 
-pub struct BlendState1DInstance<'a, K, T>
+pub struct BlendState1DInstance<K, T>
 where
     K: BlendState1DDefinition<T>,
     T: BlendAnimation1DDefinition,
 {
-    pub base: BlendStateInstance<'a, K, T>,
+    pub base: BlendStateInstance<K, T>,
     from: Option<usize>,
     to: Option<usize>,
     animation_reset: Option<AnimationReset>,
 }
 
-impl<'a, K, T> BlendState1DInstance<'a, K, T>
+impl<K, T> BlendState1DInstance<K, T>
 where
-    K: BlendState1DDefinition<T>,
-    T: BlendAnimation1DDefinition,
-    T::Animation: ResetLinearAnimation,
+    K: BlendState1DDefinition<T> + std::any::Any,
+    T: BlendAnimation1DDefinition + std::any::Any,
 {
-    pub fn new<R>(state: &'a K, instance: &mut R) -> Self
+    pub fn new<R>(
+        state: CoreHandle,
+        instance: &mut R,
+        artboard: RuntimeArtboardInstanceWeakHandle,
+    ) -> Self
     where
         R: ResetArtboard,
     {
-        let animation_reset = if state.flags() & LayerStateFlags::RESET.0 != 0 {
-            let animations: Vec<&dyn ResetLinearAnimation> = state
-                .animations()
-                .into_iter()
-                .map(|blend_animation| blend_animation.animation() as &dyn ResetLinearAnimation)
+        let (flags, blend_animations) = state
+            .with_downcast::<K, _>(|state| (state.flags(), state.animations()))
+            .expect("BlendState1DInstance retains its typed BlendState");
+        let animation_reset = if flags & LayerStateFlags::RESET.0 != 0 {
+            let animations: Vec<CoreHandle> = blend_animations
+                .iter()
+                .filter_map(|blend_animation| {
+                    blend_animation
+                        .with_downcast::<T, _>(BlendAnimationDefinition::animation)
+                        .flatten()
+                })
                 .collect();
-            Some(AnimationResetFactory::from_animations(
+            Some(AnimationResetFactory::from_animation_handles(
                 &animations,
                 instance,
                 true,
@@ -65,7 +106,7 @@ where
         };
 
         Self {
-            base: BlendStateInstance::new(state, instance as *mut R as *mut ()),
+            base: BlendStateInstance::new(state, artboard),
             from: None,
             to: None,
             animation_reset,
@@ -79,8 +120,7 @@ where
         while start <= end {
             let middle = (start + end) >> 1;
             let closest_value = self.base.animation_instances[middle as usize]
-                .blend_animation()
-                .value();
+                .with_blend_animation(BlendAnimation1DDefinition::value);
             if closest_value < value {
                 start = middle + 1;
             } else if closest_value > value {
@@ -97,14 +137,17 @@ where
     pub fn advance(&mut self, seconds: f32, machine: &mut StateMachineInstance) {
         self.base.advance(seconds, machine);
 
-        let value = match self.base.blend_state().value_source() {
+        let value_source = self
+            .base
+            .with_blend_state(BlendState1DDefinition::value_source);
+        let value = match value_source {
             BlendState1DValueSource::Default => 0.0,
             BlendState1DValueSource::Input(input_id) if input_id != u32::MAX => machine
                 .number_input_value(input_id)
                 .expect("validated one-dimensional blend input remains numeric"),
             BlendState1DValueSource::Input(_) => 0.0,
             BlendState1DValueSource::ViewModel(property) => machine
-                .bindable_property_number_value(property)
+                .bindable_property_number_value(&property)
                 .unwrap_or(0.0),
         };
 
@@ -118,16 +161,14 @@ where
             .to
             .map(|slot| {
                 self.base.animation_instances[slot]
-                    .blend_animation()
-                    .value()
+                    .with_blend_animation(BlendAnimation1DDefinition::value)
             })
             .unwrap_or(0.0);
         let from_value = self
             .from
             .map(|slot| {
                 self.base.animation_instances[slot]
-                    .blend_animation()
-                    .value()
+                    .with_blend_animation(BlendAnimation1DDefinition::value)
             })
             .unwrap_or(0.0);
         let (to_mix, from_mix) =
@@ -139,7 +180,7 @@ where
             };
 
         for animation in &mut self.base.animation_instances {
-            let animation_value = animation.blend_animation().value();
+            let animation_value = animation.with_blend_animation(BlendAnimation1DDefinition::value);
             if self.to.is_some() && animation_value == to_value {
                 animation.mix(to_mix);
             } else if self.from.is_some() && animation_value == from_value {
@@ -158,10 +199,10 @@ where
     }
 }
 
-impl<K, T> Drop for BlendState1DInstance<'_, K, T>
+impl<K, T> Drop for BlendState1DInstance<K, T>
 where
-    K: BlendState1DDefinition<T>,
-    T: BlendAnimation1DDefinition,
+    K: BlendState1DDefinition<T> + std::any::Any,
+    T: BlendAnimation1DDefinition + std::any::Any,
 {
     fn drop(&mut self) {
         if let Some(animation_reset) = self.animation_reset.take() {

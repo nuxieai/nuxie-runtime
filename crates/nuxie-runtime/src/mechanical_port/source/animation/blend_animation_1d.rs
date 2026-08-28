@@ -1,8 +1,9 @@
 use crate::mechanical_port::source::{
     animation::{
         blend_state_1d_instance::BlendAnimation1DDefinition,
-        blend_state_instance::BlendAnimationDefinition, linear_animation::LinearAnimation,
+        blend_state_instance::BlendAnimationDefinition,
     },
+    core::CoreHandle,
     core_context::CoreContext,
     generated::animation::blend_animation_1d_base::BlendAnimation1DBase,
     status_code::StatusCode,
@@ -14,9 +15,7 @@ pub struct BlendAnimation1D {
 }
 
 impl BlendAnimationDefinition for BlendAnimation1D {
-    type Animation = LinearAnimation;
-
-    fn animation(&self) -> &Self::Animation {
+    fn animation(&self) -> Option<CoreHandle> {
         self.base.base.animation()
     }
 }
@@ -28,10 +27,10 @@ impl BlendAnimation1DDefinition for BlendAnimation1D {
 }
 
 impl BlendAnimation1D {
-    pub fn on_added_dirty(&mut self, _context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
         StatusCode::Ok
     }
-    pub fn on_added_clean(&mut self, _context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
         StatusCode::Ok
     }
 }

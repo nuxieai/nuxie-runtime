@@ -1,5 +1,3 @@
-use std::mem::MaybeUninit;
-
 use crate::mechanical_port::source::{
     animation::keyed_property::KeyedProperty,
     generated::animation::keyframe_base::KeyFrameBase,
@@ -9,35 +7,54 @@ use crate::mechanical_port::source::{
 
 pub struct KeyFrame {
     pub base: KeyFrameBase,
-    seconds: MaybeUninit<f32>,
+    seconds: f32,
 }
 
 impl Default for KeyFrame {
     fn default() -> Self {
         Self {
             base: KeyFrameBase::default(),
-            seconds: MaybeUninit::uninit(),
+            seconds: 0.0,
         }
     }
 }
 
 impl KeyFrame {
     pub fn seconds(&self) -> f32 {
-        unsafe { self.seconds.assume_init() }
+        self.seconds
     }
 
     pub fn compute_seconds(&mut self, fps: i32) {
-        self.seconds.write(self.base.frame() as f32 / fps as f32);
+        self.seconds = self.base.frame() as f32 / fps as f32;
     }
 
-    pub fn import(self: Box<Self>, import_stack: &mut ImportStack) -> StatusCode {
-        let object = Box::into_raw(self);
+    pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let Some(importer) = import_stack.latest::<KeyedPropertyImporter>(KeyedProperty::TYPE_KEY)
         else {
-            unsafe { drop(Box::from_raw(object)) };
             return StatusCode::MissingObject;
         };
-        importer.add_key_frame(unsafe { Box::from_raw(object) });
-        unsafe { (*object).base.base.import(import_stack) }
+        let Some(this) = self.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        importer.add_key_frame(this);
+        self.base.base.import(import_stack)
+    }
+}
+impl std::ops::Deref for KeyFrame {
+    type Target = KeyFrameBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for KeyFrame {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+impl crate::mechanical_port::source::generated::animation::keyframe_base::KeyFrameBaseCallbacks
+    for KeyFrame
+{
+    fn notify_property_changed(&mut self, key: u16) {
+        self.base.notify_property_changed(key);
     }
 }

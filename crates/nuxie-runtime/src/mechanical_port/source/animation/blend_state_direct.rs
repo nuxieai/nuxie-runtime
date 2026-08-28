@@ -4,6 +4,8 @@ use crate::mechanical_port::source::{
         blend_state_direct_instance::BlendStateDirectInstance,
         blend_state_instance::BlendStateDefinition,
     },
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    core::CoreHandle,
     generated::animation::blend_state_direct_base::BlendStateDirectBase,
 };
 
@@ -15,20 +17,23 @@ pub struct BlendStateDirect {
 impl BlendStateDirect {
     pub fn make_instance(
         &self,
-        instance: *mut (),
-    ) -> BlendStateDirectInstance<'_, Self, BlendAnimationDirect> {
-        BlendStateDirectInstance::new(self, instance)
+        instance: RuntimeArtboardInstanceWeakHandle,
+    ) -> BlendStateDirectInstance<Self, BlendAnimationDirect> {
+        let state = self
+            .base
+            .base
+            .base
+            .base
+            .base
+            .handle()
+            .expect("an imported BlendStateDirect has arena identity before instancing");
+        BlendStateDirectInstance::new(state, instance)
     }
 }
 
 impl BlendStateDefinition<BlendAnimationDirect> for BlendStateDirect {
-    fn animations(&self) -> Vec<&BlendAnimationDirect> {
-        self.base
-            .base
-            .animations()
-            .iter()
-            .map(|animation| unsafe { &*animation.as_ptr().cast::<BlendAnimationDirect>() })
-            .collect()
+    fn animations(&self) -> Vec<CoreHandle> {
+        self.base.base.animations().to_vec()
     }
 
     fn flags(&self) -> u8 {

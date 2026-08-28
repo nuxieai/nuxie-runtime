@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::{keyframe::KeyFrame, linear_animation_instance::LinearAnimationInstance},
+    animation::{interpolating_keyframe::KeyFrameValueContext, keyframe::KeyFrame},
     generated::{
         animation::keyframe_id_base::KeyFrameIdBase,
         core_registry::{CoreRegistry, CoreRegistryObject},
@@ -17,7 +17,7 @@ impl KeyFrameId {
         object: &mut dyn CoreRegistryObject,
         property_key: i32,
         _mix: f32,
-        _context: Option<&LinearAnimationInstance>,
+        _context: Option<&dyn KeyFrameValueContext>,
     ) {
         CoreRegistry::set_uint(object, property_key, self.base.value());
     }
@@ -29,7 +29,7 @@ impl KeyFrameId {
         _current_time: f32,
         _next_frame: &KeyFrame,
         _mix: f32,
-        _context: Option<&LinearAnimationInstance>,
+        _context: Option<&dyn KeyFrameValueContext>,
     ) {
         CoreRegistry::set_uint(object, property_key, self.base.value());
     }

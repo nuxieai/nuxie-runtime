@@ -8,21 +8,12 @@ pub trait InferenceComponent {
 }
 
 pub fn supports_inferred_semantics(component: Option<&dyn InferenceComponent>) -> bool {
-    #[cfg(feature = "rive_text")]
-    {
-        component.is_some_and(InferenceComponent::is_text)
-    }
-    #[cfg(not(feature = "rive_text"))]
-    {
-        let _ = component;
-        false
-    }
+    { component.is_some_and(InferenceComponent::is_text) }
 }
 pub fn resolve_inferred_semantics(
     component: Option<&dyn InferenceComponent>,
     out: &mut ResolvedSemanticData,
 ) -> bool {
-    #[cfg(feature = "rive_text")]
     {
         let Some(component) = component else {
             return false;
@@ -42,10 +33,5 @@ pub fn resolve_inferred_semantics(
         out.role = SemanticRole::Text as u32;
         out.label = label;
         true
-    }
-    #[cfg(not(feature = "rive_text"))]
-    {
-        let _ = (component, out);
-        false
     }
 }

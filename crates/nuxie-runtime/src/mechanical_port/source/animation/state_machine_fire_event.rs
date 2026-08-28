@@ -1,18 +1,17 @@
-use std::ptr::NonNull;
-
 use crate::mechanical_port::source::{
-    event::Event, generated::animation::state_machine_fire_event_base::StateMachineFireEventBase,
+    core::CoreHandle,
+    generated::animation::state_machine_fire_event_base::StateMachineFireEventBase,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum ResolvedFireEvent {
-    Event(NonNull<Event>),
+    Event(CoreHandle),
     Other,
 }
 
 pub trait FireEventStateMachine {
     fn resolve_core_event(&mut self, event_id: u32) -> Option<ResolvedFireEvent>;
-    fn report_event(&mut self, event: NonNull<Event>);
+    fn report_event(&mut self, event: CoreHandle);
 }
 
 #[derive(Default)]

@@ -1,13 +1,18 @@
-use crate::mechanical_port::source::animation::{
-    layer_state::LayerState, linear_animation_instance::LinearAnimationInstance,
+use crate::mechanical_port::source::{
+    animation::{
+        linear_animation_instance::LinearAnimationInstance,
+        state_machine_instance::StateMachineInstance,
+    },
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    core::CoreHandle,
 };
 
 pub struct StateInstance {
-    layer_state: *const LayerState,
+    layer_state: CoreHandle,
 }
 
 impl StateInstance {
-    pub fn new(layer_state: &LayerState) -> Self {
+    pub fn new(layer_state: CoreHandle) -> Self {
         Self { layer_state }
     }
 
@@ -19,8 +24,8 @@ impl StateInstance {
     ) {
     }
 
-    pub fn state(&self) -> &LayerState {
-        unsafe { &*self.layer_state }
+    pub fn state(&self) -> CoreHandle {
+        self.layer_state.clone()
     }
 }
 
@@ -29,8 +34,8 @@ impl Drop for StateInstance {
 }
 
 pub trait StateInstanceBehavior {
-    fn advance(&mut self, seconds: f32, state_machine_instance: *mut ());
-    fn apply(&mut self, artboard_instance: *mut (), mix: f32);
+    fn advance(&mut self, seconds: f32, state_machine_instance: &mut StateMachineInstance);
+    fn apply(&mut self, artboard_instance: &RuntimeArtboardInstanceWeakHandle, mix: f32);
     fn keep_going(&self) -> bool;
     fn clear_spilled_time(&mut self) {}
     fn for_each_animation_instance(

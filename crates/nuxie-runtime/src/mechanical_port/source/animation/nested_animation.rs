@@ -1,68 +1,78 @@
-use std::ptr::NonNull;
-
 use crate::mechanical_port::source::{
-    event::Event, event_report::EventReport, generated::nested_animation_base::NestedAnimationBase,
+    animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle, core::CoreHandle,
+    event_report::EventReport, generated::nested_animation_base::NestedAnimationBase,
     status_code::StatusCode,
 };
 
-pub trait NestedEventListener<A> {
-    fn notify(&mut self, events: &[EventReport], context: *mut A);
+#[derive(Clone)]
+pub struct NestedEventNotifier {
+    nested_artboard: Option<CoreHandle>,
+    nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
 }
 
-pub struct NestedEventNotifier<A> {
-    nested_artboard: *mut A,
-    nested_event_listeners: Vec<NonNull<dyn NestedEventListener<A>>>,
-}
-
-impl<A> Default for NestedEventNotifier<A> {
+impl Default for NestedEventNotifier {
     fn default() -> Self {
         Self {
-            nested_artboard: std::ptr::null_mut(),
+            nested_artboard: None,
             nested_event_listeners: Vec::new(),
         }
     }
 }
 
-impl<A> NestedEventNotifier<A> {
-    pub fn add_nested_event_listener(&mut self, listener: NonNull<dyn NestedEventListener<A>>) {
+impl NestedEventNotifier {
+    pub fn add_nested_event_listener(&mut self, listener: RuntimeStateMachineInstanceWeakHandle) {
+        if self
+            .nested_event_listeners
+            .iter()
+            .any(|candidate| candidate.ptr_eq(&listener))
+        {
+            return;
+        }
         self.nested_event_listeners.push(listener);
     }
 
-    pub fn remove_nested_event_listener(&mut self, listener: NonNull<dyn NestedEventListener<A>>) {
+    pub fn remove_nested_event_listener(
+        &mut self,
+        listener: RuntimeStateMachineInstanceWeakHandle,
+    ) {
         self.nested_event_listeners
-            .retain(|item| !std::ptr::addr_eq(item.as_ptr(), listener.as_ptr()));
+            .retain(|candidate| !candidate.ptr_eq(&listener));
     }
 
-    pub fn nested_event_listeners(&self) -> Vec<NonNull<dyn NestedEventListener<A>>> {
+    pub fn nested_event_listeners(&self) -> Vec<RuntimeStateMachineInstanceWeakHandle> {
         self.nested_event_listeners.clone()
     }
 
-    pub fn set_nested_artboard(&mut self, artboard: *mut A) {
-        self.nested_artboard = artboard;
+    pub fn set_nested_artboard(&mut self, artboard: CoreHandle) {
+        self.nested_artboard = Some(artboard);
     }
 
-    pub fn nested_artboard(&self) -> *mut A {
-        self.nested_artboard
+    pub fn nested_artboard(&self) -> Option<CoreHandle> {
+        self.nested_artboard.clone()
     }
 
-    pub fn notify_listeners(&mut self, events: &[NonNull<Event>]) {
+    pub fn notify_listeners(&mut self, events: &[CoreHandle]) {
+        let Some(nested_artboard) = self.nested_artboard.clone() else {
+            return;
+        };
         let event_reports: Vec<_> = events
             .iter()
-            .map(|event| EventReport::new(event.as_ptr(), 0.0))
+            .cloned()
+            .map(|event| EventReport::new(event, 0.0))
             .collect();
-        for mut listener in self.nested_event_listeners.iter().copied() {
-            unsafe {
-                listener
-                    .as_mut()
-                    .notify(&event_reports, self.nested_artboard)
-            };
+        self.nested_event_listeners
+            .retain(|listener| listener.upgrade().is_some());
+        for listener in &self.nested_event_listeners {
+            listener.with_instance_mut(|listener| {
+                listener.notify(&event_reports, nested_artboard.clone())
+            });
         }
     }
 }
 
-impl<A> Drop for NestedEventNotifier<A> {
+impl Drop for NestedEventNotifier {
     fn drop(&mut self) {
-        self.nested_artboard = std::ptr::null_mut();
+        self.nested_artboard = None;
         self.nested_event_listeners.clear();
     }
 }
@@ -74,7 +84,7 @@ pub struct NestedAnimation {
 
 pub trait NestedAnimationBehavior {
     fn advance(&mut self, elapsed_seconds: f32, new_frame: bool) -> bool;
-    fn initialize_animation(&mut self, artboard_instance: *mut ());
+    fn initialize_animation(&mut self, artboard_instance: RuntimeArtboardInstanceWeakHandle);
     fn release_dependencies(&mut self);
 }
 
@@ -99,5 +109,23 @@ impl NestedAnimation {
             context.add_nested_animation(self);
         }
         code
+    }
+}
+impl std::ops::Deref for NestedAnimation {
+    type Target = NestedAnimationBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for NestedAnimation {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+impl crate::mechanical_port::source::generated::nested_animation_base::NestedAnimationBaseCallbacks
+    for NestedAnimation
+{
+    fn notify_property_changed(&mut self, key: u16) {
+        self.base.notify_property_changed(key);
     }
 }

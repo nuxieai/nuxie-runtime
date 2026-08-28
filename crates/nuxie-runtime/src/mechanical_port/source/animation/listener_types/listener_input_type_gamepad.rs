@@ -1,33 +1,29 @@
 use crate::mechanical_port::source::{
     animation::listener_invocation::ListenerInvocation,
+    core::CoreHandle,
     generated::animation::listener_types::listener_input_type_gamepad_base::ListenerInputTypeGamepadBase,
     input::gamepad_snapshot::GamepadInputChangeKind,
     inputs::{
         gamepad_button_phase::GamepadButtonPhaseMask,
-        gamepad_input::GamepadInput,
         gamepad_input_kind::{GamepadInputKind, GamepadInputMapping},
     },
 };
-use std::ptr::NonNull;
 pub trait GamepadConstraintListener {
-    fn gamepad_input_types(&self) -> Vec<&ListenerInputTypeGamepad>;
+    fn gamepad_input_types(&self) -> Vec<CoreHandle>;
 }
 #[derive(Default)]
 pub struct ListenerInputTypeGamepad {
     pub base: ListenerInputTypeGamepadBase,
-    gamepad_inputs: Vec<NonNull<GamepadInput>>,
+    gamepad_inputs: Vec<CoreHandle>,
 }
 impl ListenerInputTypeGamepad {
     pub fn gamepad_input_count(&self) -> usize {
         self.gamepad_inputs.len()
     }
-    pub fn gamepad_input(&self, index: usize) -> Option<&GamepadInput> {
-        self.gamepad_inputs
-            .get(index)
-            .map(|v| unsafe { v.as_ref() })
+    pub fn gamepad_input(&self, index: usize) -> Option<CoreHandle> {
+        self.gamepad_inputs.get(index).cloned()
     }
-    pub fn add_gamepad_input(&mut self, input: &mut GamepadInput) {
-        let input = NonNull::from(input);
+    pub fn add_gamepad_input(&mut self, input: CoreHandle) {
         if !self.gamepad_inputs.contains(&input) {
             self.gamepad_inputs.push(input);
         }
@@ -41,8 +37,9 @@ impl ListenerInputTypeGamepad {
                 mask & GamepadButtonPhaseMask::UP != 0
             }
     }
-    pub fn gamepad_input_matches(input: &GamepadInput, invocation: &ListenerInvocation) -> bool {
-        match input.base.kind() {
+    pub fn gamepad_input_matches(input: &CoreHandle, invocation: &ListenerInvocation) -> bool {
+        input
+            .with_downcast::<crate::mechanical_port::source::inputs::gamepad_input::GamepadInput, _>(|input| match input.kind() {
             value if value == GamepadInputKind::Connected as u32 => {
                 invocation.as_gamepad_connected().is_some()
             }
@@ -65,24 +62,24 @@ impl ListenerInputTypeGamepad {
                 if event.change.kind != expected {
                     return false;
                 }
-                if input.base.mapping() == GamepadInputMapping::Standard as u32 {
+                if input.mapping() == GamepadInputMapping::Standard as u32 {
                     if wants_button {
-                        if !event.has_standard_button_intent
-                            || event.standard_button as u32 != input.base.input_index()
+                        if event.standard_button.map(|button| button as u32)
+                            != Some(input.input_index())
                         {
                             return false;
                         }
-                    } else if !event.has_standard_axis_intent
-                        || event.standard_axis as u32 != input.base.input_index()
+                    } else if event.standard_axis.map(|axis| axis as u32)
+                        != Some(input.input_index())
                     {
                         return false;
                     }
-                } else if event.change.index as u32 != input.base.input_index() {
+                } else if event.change.index as u32 != input.input_index() {
                     return false;
                 }
                 if wants_button {
                     Self::gamepad_button_phase_matches(
-                        input.base.button_phase(),
+                        input.button_phase(),
                         event.change.value >= 0.5,
                     )
                 } else {
@@ -90,7 +87,7 @@ impl ListenerInputTypeGamepad {
                 }
             }
             _ => false,
-        }
+        }).unwrap_or(false)
     }
     pub fn gamepad_listener_constraints_met(
         listener: Option<&dyn GamepadConstraintListener>,
@@ -100,14 +97,17 @@ impl ListenerInputTypeGamepad {
             return false;
         };
         for kind in listener.gamepad_input_types() {
-            if kind.gamepad_input_count() == 0 {
-                return true;
-            }
-            if kind
-                .gamepad_inputs
-                .iter()
-                .any(|input| Self::gamepad_input_matches(unsafe { input.as_ref() }, invocation))
-            {
+            let Some(matched) = kind.with_downcast::<ListenerInputTypeGamepad, _>(|kind| {
+                if kind.gamepad_input_count() == 0 {
+                    return true;
+                }
+                kind.gamepad_inputs
+                    .iter()
+                    .any(|input| Self::gamepad_input_matches(input, invocation))
+            }) else {
+                continue;
+            };
+            if matched {
                 return true;
             }
         }

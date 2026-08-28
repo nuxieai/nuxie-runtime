@@ -1,15 +1,12 @@
-use std::ptr::NonNull;
-
 use crate::mechanical_port::source::{
-    animation::{
-        animation_state_instance::AnimationStateInstance, linear_animation::LinearAnimation,
-    },
+    animation::animation_state_instance::AnimationStateInstance,
+    artboard::RuntimeArtboardInstanceWeakHandle, core::CoreHandle,
     generated::animation::animation_state_base::AnimationStateBase,
 };
 
 pub struct AnimationState {
     pub base: AnimationStateBase,
-    animation: Option<NonNull<LinearAnimation>>,
+    animation: Option<CoreHandle>,
 }
 
 impl Default for AnimationState {
@@ -22,25 +19,34 @@ impl Default for AnimationState {
 }
 
 impl AnimationState {
-    pub fn animation(&self) -> Option<&LinearAnimation> {
-        self.animation
-            .map(|animation| unsafe { animation.as_ref() })
+    pub fn animation(&self) -> Option<CoreHandle> {
+        self.animation.clone()
     }
 
-    pub(crate) fn set_animation(&mut self, animation: Option<NonNull<LinearAnimation>>) {
+    pub(crate) fn set_animation(&mut self, animation: Option<CoreHandle>) {
         self.animation = animation;
     }
 
-    #[cfg(feature = "testing")]
-    pub fn animation_for_testing(&mut self, animation: &mut LinearAnimation) {
-        self.animation = Some(NonNull::from(animation));
+    #[cfg(test)]
+    pub fn animation_for_testing(&mut self, animation: CoreHandle) {
+        self.animation = Some(animation);
     }
 
     pub fn speed(&self) -> f32 {
         self.base.base.base.speed()
     }
 
-    pub fn make_instance(&self, instance: *mut ()) -> AnimationStateInstance {
-        AnimationStateInstance::new(self, instance)
+    pub fn make_instance(
+        &self,
+        instance: RuntimeArtboardInstanceWeakHandle,
+    ) -> AnimationStateInstance {
+        let state = self
+            .base
+            .base
+            .base
+            .base
+            .handle()
+            .expect("an imported AnimationState has arena identity before instancing");
+        AnimationStateInstance::new(state, instance)
     }
 }

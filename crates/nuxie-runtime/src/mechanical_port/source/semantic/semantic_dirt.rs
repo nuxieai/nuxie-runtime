@@ -10,7 +10,7 @@ impl SemanticDirt {
     pub const ALL: Self = Self(Self::STRUCTURE.0 | Self::CONTENT.0 | Self::BOUNDS.0);
 
     pub fn contains(self, other: Self) -> bool {
-        self.0 & other.0 != 0
+        self.0 & other.0 == other.0
     }
 }
 
@@ -24,5 +24,12 @@ impl core::ops::BitOr for SemanticDirt {
 impl core::ops::BitOrAssign for SemanticDirt {
     fn bitor_assign(&mut self, rhs: Self) {
         self.0 |= rhs.0;
+    }
+}
+
+impl core::ops::BitAnd for SemanticDirt {
+    type Output = Self;
+    fn bitand(self, rhs: Self) -> Self {
+        Self(self.0 & rhs.0)
     }
 }

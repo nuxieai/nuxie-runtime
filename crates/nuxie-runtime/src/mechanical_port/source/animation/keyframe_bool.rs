@@ -12,7 +12,11 @@ pub struct KeyFrameBool {
 impl KeyFrameBool {
     pub fn effective_value(&self, context: Option<&dyn KeyFrameValueContext>) -> bool {
         context
-            .and_then(|c| c.bool_value(self as *const Self as *const ()))
+            .and_then(|c| {
+                self.base
+                    .handle()
+                    .and_then(|keyframe| c.bool_value(&keyframe))
+            })
             .unwrap_or_else(|| self.base.value())
     }
     pub fn apply(

@@ -1,5 +1,4 @@
-#[cfg(feature = "rive-layout")]
-use crate::mechanical_port::source::yoga::YGStyle;
+use crate::mechanical_port::source::layout::layout_style_applier::YGStyle;
 use crate::mechanical_port::source::{
     component::{ComponentDirt, ContainerComponent},
     core_context::{CoreContext, StatusCode},
@@ -11,37 +10,45 @@ use crate::mechanical_port::source::{
     },
 };
 
+#[derive(Default)]
 pub struct GridItemPlacement {
     pub base: GridItemPlacementBase,
 }
 impl GridItemPlacement {
-    pub fn from(owner: Option<&ContainerComponent>) -> Option<&GridItemPlacement> {
-        for child in owner?.children() {
-            if let Some(placement) = child.as_ref::<GridItemPlacement>() {
-                return Some(placement);
-            }
-        }
-        None
+    pub fn from(
+        owner: Option<&ContainerComponent>,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        owner?
+            .children()
+            .iter()
+            .find(|child| {
+                child
+                    .with_downcast::<GridItemPlacement, _>(|_| ())
+                    .is_some()
+            })
+            .cloned()
     }
-    pub fn on_added_clean(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
         }
-        #[cfg(feature = "rive-layout")]
-        if let Some(provider) = layout_node_provider::from(self.base.parent_mut()) {
-            provider.add_layout_style_applier(self);
+        if let Some(this) = self.base.handle()
+            && let Some(parent) = self.base.parent_handle()
+        {
+            layout_node_provider::with_mut(&parent, |provider| {
+                provider.add_layout_style_applier(this)
+            });
         }
         StatusCode::Ok
     }
     pub fn update(&mut self, _value: ComponentDirt) {}
     pub fn build_dependencies(&mut self) {
         self.base.build_dependencies();
-        if let Some(parent) = self.base.parent_mut() {
-            parent.add_dependent(self.base.as_component_mut_ptr());
+        if let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) {
+            parent.with_mut(|parent| parent.component_add_dependent(this));
         }
     }
-    #[cfg(feature = "rive-layout")]
     pub fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
         if context.parent_is_stack || !context.parent_is_grid {
             return;
@@ -55,8 +62,10 @@ impl GridItemPlacement {
         );
     }
     fn mark_owner_dirty(&mut self) {
-        if let Some(provider) = layout_node_provider::from(self.base.parent_mut()) {
-            provider.mark_layout_node_dirty(false);
+        if let Some(parent) = self.base.parent_handle() {
+            layout_node_provider::with_mut(&parent, |provider| {
+                provider.mark_layout_node_dirty(false)
+            });
         }
     }
     pub fn grid_column_changed(&mut self) {
@@ -70,5 +79,11 @@ impl GridItemPlacement {
     }
     pub fn grid_row_span_changed(&mut self) {
         self.mark_owner_dirty();
+    }
+}
+
+impl LayoutStyleApplier for GridItemPlacement {
+    fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+        GridItemPlacement::apply_item_style(self, style, context);
     }
 }

@@ -12,7 +12,11 @@ pub struct KeyFrameDouble {
 impl KeyFrameDouble {
     pub fn effective_value(&self, context: Option<&dyn KeyFrameValueContext>) -> f32 {
         context
-            .and_then(|c| c.number_value(self as *const Self as *const ()))
+            .and_then(|c| {
+                self.base
+                    .handle()
+                    .and_then(|keyframe| c.number_value(&keyframe))
+            })
             .unwrap_or_else(|| self.base.value())
     }
     fn apply_value(object: &mut dyn CoreRegistryObject, key: i32, mix: f32, value: f32) {
@@ -45,11 +49,11 @@ impl KeyFrameDouble {
         let to = next.effective_value(context);
         let factor = (current_time - self.base.base.base.seconds())
             / (next.base.base.base.seconds() - self.base.base.base.seconds());
-        let value = if let Some(mut interpolator) = self.base.base.effective_interpolator(context) {
-            unsafe { interpolator.as_mut().transform_value(from, to, factor) }
-        } else {
-            from + (to - from) * factor
-        };
+        let value = self
+            .base
+            .base
+            .transform_value(context, from, to, factor)
+            .unwrap_or_else(|| from + (to - from) * factor);
         Self::apply_value(object, key, mix, value);
     }
 }

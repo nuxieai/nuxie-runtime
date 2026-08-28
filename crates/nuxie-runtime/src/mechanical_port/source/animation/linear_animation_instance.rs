@@ -1,48 +1,39 @@
-use crate::mechanical_port::source::animation::{
-    keyed_callback_reporter::KeyedCallbackReporter, r#loop::Loop,
+use crate::mechanical_port::source::{
+    animation::{
+        interpolating_keyframe::KeyFrameValueContext,
+        keyed_callback_reporter::KeyedCallbackReporter, linear_animation::LinearAnimation,
+        r#loop::Loop, nested_animation::NestedEventNotifier,
+    },
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    core::{CoreHandle, field_types::core_callback_type::CallbackContext},
+    data_bind::{
+        bindable_property_boolean::BindablePropertyBoolean,
+        bindable_property_color::BindablePropertyColor,
+        bindable_property_number::BindablePropertyNumber,
+        bindable_property_string::BindablePropertyString,
+    },
+    scripted::scripted_interpolator::ScriptedInterpolator,
 };
-use std::collections::HashMap;
-pub trait LinearAnimationInstanceDefinition {
-    fn speed(&self) -> f32;
-    fn fps(&self) -> u32;
-    fn duration(&self) -> u32;
-    fn duration_seconds(&self) -> f32;
-    fn start_seconds(&self) -> f32;
-    fn end_seconds(&self) -> f32;
-    fn start_time(&self) -> f32;
-    fn end_time(&self) -> f32;
-    fn enable_work_area(&self) -> bool;
-    fn work_start(&self) -> u32;
-    fn work_end(&self) -> u32;
-    fn loop_value(&self) -> i32;
-    fn name(&self) -> &str;
-    fn apply(&self, artboard: *mut (), time: f32, mix: f32, context: &LinearAnimationInstance);
-    fn report_keyed_callbacks(
-        &self,
-        reporter: &mut dyn KeyedCallbackReporter,
-        from: f32,
-        to: f32,
-        speed_direction: f32,
-        from_pong: bool,
-    );
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+#[derive(Clone)]
+enum LinearAnimationOwner {
+    Authored(CoreHandle),
+    Runtime(Rc<RefCell<LinearAnimation>>),
 }
-pub trait LinearAnimationInstanceArtboard {
-    fn advance(&mut self, seconds: f32) -> bool;
-    fn is_translucent(&self, instance: &LinearAnimationInstance) -> bool;
-    fn remove_and_delete_data_bind(&mut self, bind: *mut ());
-    fn notify_event(&mut self, event: *mut ());
-    fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32);
-    fn clone_scripted_interpolator(&mut self, shared: *const ()) -> Option<Box<dyn std::any::Any>>;
-    fn scripted_interpolator_set_data_context(&mut self, clone: &mut dyn std::any::Any);
-    fn scripted_interpolator_data_binds(&self, clone: &dyn std::any::Any) -> Vec<*mut ()>;
-    fn scripted_interpolator_has_script_asset(&self, clone: &dyn std::any::Any) -> bool;
-    fn scripted_interpolator_user_init_done(&self, clone: &dyn std::any::Any) -> bool;
-    fn scripted_interpolator_init(&mut self, clone: &mut dyn std::any::Any);
-    fn scripted_interpolator_hydrate_inputs(&mut self, clone: &mut dyn std::any::Any);
+
+#[derive(Default)]
+struct PendingKeyedCallbacks(Vec<(u32, u32, f32)>);
+
+impl KeyedCallbackReporter for PendingKeyedCallbacks {
+    fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32) {
+        self.0.push((object_id, property_key, elapsed_seconds));
+    }
 }
 pub struct LinearAnimationInstance {
-    animation: *const dyn LinearAnimationInstanceDefinition,
-    artboard: *mut dyn LinearAnimationInstanceArtboard,
+    animation: LinearAnimationOwner,
+    artboard: RuntimeArtboardInstanceWeakHandle,
+    nested_event_notifier: NestedEventNotifier,
     time: f32,
     speed_direction: f32,
     total_time: f32,
@@ -51,24 +42,64 @@ pub struct LinearAnimationInstance {
     direction: f32,
     did_loop: bool,
     loop_value: i32,
-    scripted_interpolators: Option<HashMap<usize, Box<dyn std::any::Any>>>,
-    cloned_artboard_data_binds: Vec<*mut ()>,
-    keyframe_value_holders: Option<HashMap<usize, Box<dyn std::any::Any>>>,
+    scripted_interpolators: RefCell<Option<HashMap<CoreHandle, CoreHandle>>>,
+    cloned_artboard_data_binds: RefCell<Vec<CoreHandle>>,
+    keyframe_value_holders: Option<HashMap<CoreHandle, CoreHandle>>,
 }
 impl LinearAnimationInstance {
     pub fn new(
-        animation: &dyn LinearAnimationInstanceDefinition,
-        artboard: &mut dyn LinearAnimationInstanceArtboard,
+        animation: CoreHandle,
+        artboard: RuntimeArtboardInstanceWeakHandle,
         speed_multiplier: f32,
     ) -> Self {
+        Self::from_owner(
+            LinearAnimationOwner::Authored(animation),
+            artboard,
+            speed_multiplier,
+        )
+    }
+
+    pub fn new_runtime(
+        animation: Rc<RefCell<LinearAnimation>>,
+        artboard: RuntimeArtboardInstanceWeakHandle,
+        speed_multiplier: f32,
+    ) -> Self {
+        Self::from_owner(
+            LinearAnimationOwner::Runtime(animation),
+            artboard,
+            speed_multiplier,
+        )
+    }
+
+    fn from_owner(
+        animation: LinearAnimationOwner,
+        artboard: RuntimeArtboardInstanceWeakHandle,
+        speed_multiplier: f32,
+    ) -> Self {
+        let time = match &animation {
+            LinearAnimationOwner::Authored(animation) => animation
+                .with_downcast::<LinearAnimation, _>(|animation| {
+                    if speed_multiplier >= 0.0 {
+                        animation.start_time()
+                    } else {
+                        animation.end_time()
+                    }
+                })
+                .expect("LinearAnimationInstance retains a LinearAnimation"),
+            LinearAnimationOwner::Runtime(animation) => {
+                let animation = animation.borrow();
+                if speed_multiplier >= 0.0 {
+                    animation.start_time()
+                } else {
+                    animation.end_time()
+                }
+            }
+        };
         Self {
             animation,
             artboard,
-            time: if speed_multiplier >= 0.0 {
-                animation.start_time()
-            } else {
-                animation.end_time()
-            },
+            nested_event_notifier: NestedEventNotifier::default(),
+            time,
             speed_direction: if speed_multiplier >= 0.0 { 1.0 } else { -1.0 },
             total_time: 0.0,
             last_total_time: 0.0,
@@ -76,13 +107,48 @@ impl LinearAnimationInstance {
             direction: 1.0,
             did_loop: false,
             loop_value: -1,
-            scripted_interpolators: None,
-            cloned_artboard_data_binds: Vec::new(),
+            scripted_interpolators: RefCell::new(None),
+            cloned_artboard_data_binds: RefCell::new(Vec::new()),
             keyframe_value_holders: None,
         }
     }
-    fn animation(&self) -> &dyn LinearAnimationInstanceDefinition {
-        unsafe { &*self.animation }
+
+    pub fn set_nested_artboard(&mut self, artboard: CoreHandle) {
+        self.nested_event_notifier.set_nested_artboard(artboard);
+    }
+
+    pub fn add_nested_event_listener(
+        &mut self,
+        listener: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
+    ) {
+        self.nested_event_notifier
+            .add_nested_event_listener(listener);
+    }
+
+    pub fn remove_nested_event_listener(
+        &mut self,
+        listener: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
+    ) {
+        self.nested_event_notifier
+            .remove_nested_event_listener(listener);
+    }
+
+    fn with_animation<R>(&self, f: impl FnOnce(&LinearAnimation) -> R) -> R {
+        match &self.animation {
+            LinearAnimationOwner::Authored(animation) => animation
+                .with_downcast::<LinearAnimation, _>(f)
+                .expect("LinearAnimationInstance retains a LinearAnimation"),
+            LinearAnimationOwner::Runtime(animation) => f(&animation.borrow()),
+        }
+    }
+
+    fn with_animation_mut<R>(&self, f: impl FnOnce(&mut LinearAnimation) -> R) -> R {
+        match &self.animation {
+            LinearAnimationOwner::Authored(animation) => animation
+                .with_downcast_mut::<LinearAnimation, _>(f)
+                .expect("LinearAnimationInstance retains a LinearAnimation"),
+            LinearAnimationOwner::Runtime(animation) => f(&mut animation.borrow_mut()),
+        }
     }
     pub fn clear_spilled_time(&mut self) {
         self.spilled_time = 0.0
@@ -105,18 +171,23 @@ impl LinearAnimationInstance {
         }
         self.time = value;
         let difference = self.total_time - self.last_total_time;
-        let start = (if self.animation().enable_work_area() {
-            self.animation().work_start() as f32
-        } else {
-            0.0
-        }) * self.animation().fps() as f32;
+        let start = self.with_animation(|animation| {
+            (if animation.base.enable_work_area() {
+                animation.base.work_start() as f32
+            } else {
+                0.0
+            }) * animation.base.fps() as f32
+        });
         self.total_time = value - start;
         self.last_total_time = self.total_time - difference;
         self.direction = 1.0
     }
     pub fn apply(&self, mix: f32) {
-        self.animation()
-            .apply(self.artboard.cast(), self.time, mix, self)
+        let _ = self.artboard.with_artboard_mut(|artboard| {
+            self.with_animation_mut(|animation| {
+                animation.apply(artboard, self.time, mix, Some(self))
+            })
+        });
     }
     pub fn did_loop(&self) -> bool {
         self.did_loop
@@ -126,8 +197,10 @@ impl LinearAnimationInstance {
     }
     pub fn keep_going_with_multiplier(&self, m: f32) -> bool {
         self.loop_value() != Loop::OneShot as i32
-            || (self.directed_speed() * m > 0.0 && self.time < self.animation().end_seconds())
-            || (self.directed_speed() * m < 0.0 && self.time > self.animation().start_seconds())
+            || (self.directed_speed() * m > 0.0
+                && self.time < self.with_animation(LinearAnimation::end_seconds))
+            || (self.directed_speed() * m < 0.0
+                && self.time > self.with_animation(LinearAnimation::start_seconds))
     }
     pub fn total_time(&self) -> f32 {
         self.total_time
@@ -139,105 +212,112 @@ impl LinearAnimationInstance {
         self.spilled_time
     }
     pub fn duration_seconds(&self) -> f32 {
-        self.animation().duration_seconds()
+        self.with_animation(LinearAnimation::duration_seconds)
     }
     pub fn fps(&self) -> u32 {
-        self.animation().fps()
+        self.with_animation(|animation| animation.base.fps())
     }
     pub fn duration(&self) -> u32 {
-        self.animation().duration()
+        self.with_animation(|animation| animation.base.duration())
     }
     pub fn speed(&self) -> f32 {
-        self.animation().speed()
+        self.with_animation(|animation| animation.base.speed())
     }
     pub fn start_time(&self) -> f32 {
-        self.animation().start_time()
+        self.with_animation(LinearAnimation::start_time)
     }
     pub fn name(&self) -> String {
-        self.animation().name().to_owned()
+        self.with_animation(|animation| animation.base.base.name().to_owned())
     }
     pub fn loop_value(&self) -> i32 {
         if self.loop_value != -1 {
             self.loop_value
         } else {
-            self.animation().loop_value()
+            self.with_animation(|animation| animation.base.loop_value() as i32)
         }
     }
     pub fn set_loop_value(&mut self, value: i32) {
         if self.loop_value == value
-            || (self.loop_value == -1 && self.animation().loop_value() == value)
+            || (self.loop_value == -1
+                && self.with_animation(|animation| animation.base.loop_value() as i32) == value)
         {
             return;
         }
         self.loop_value = value
     }
     pub fn reset(&mut self, m: f32) {
-        self.time = if m >= 0.0 {
-            self.animation().start_time()
-        } else {
-            self.animation().end_time()
-        }
+        self.time = self.with_animation(|animation| {
+            if m >= 0.0 {
+                animation.start_time()
+            } else {
+                animation.end_time()
+            }
+        })
     }
-    pub fn add_keyframe_value_holder(&mut self, key: *const (), holder: Box<dyn std::any::Any>) {
+    pub fn add_keyframe_value_holder(&mut self, key: CoreHandle, holder: CoreHandle) {
         self.keyframe_value_holders
             .get_or_insert_with(HashMap::new)
-            .insert(key as usize, holder);
+            .insert(key, holder);
     }
-    pub fn keyframe_value_holder(&self, key: *const ()) -> Option<&dyn std::any::Any> {
-        self.keyframe_value_holders
-            .as_ref()?
-            .get(&(key as usize))
-            .map(Box::as_ref)
+    pub fn keyframe_value_holder(&self, key: &CoreHandle) -> Option<CoreHandle> {
+        self.keyframe_value_holders.as_ref()?.get(key).cloned()
     }
     pub fn cache_scripted_interpolator(
         &mut self,
-        key: *const (),
-        value: Box<dyn std::any::Any>,
-        binds: Vec<*mut ()>,
+        key: CoreHandle,
+        value: CoreHandle,
+        binds: Vec<CoreHandle>,
     ) {
         self.scripted_interpolators
+            .borrow_mut()
             .get_or_insert_with(HashMap::new)
-            .insert(key as usize, value);
-        self.cloned_artboard_data_binds.extend(binds)
+            .insert(key, value);
+        self.cloned_artboard_data_binds.borrow_mut().extend(binds)
     }
     pub fn stateful_interpolator(
-        &mut self,
-        keyframe: *const (),
-        shared: *const (),
-    ) -> Option<*mut ()> {
-        if shared.is_null() || keyframe.is_null() {
-            return None;
-        }
-        let key = keyframe as usize;
+        &self,
+        keyframe: CoreHandle,
+        shared: CoreHandle,
+    ) -> Option<CoreHandle> {
         if let Some(cached) = self
             .scripted_interpolators
-            .as_mut()
-            .and_then(|instances| instances.get_mut(&key))
+            .borrow()
+            .as_ref()
+            .and_then(|instances| instances.get(&keyframe))
         {
-            return Some(cached.as_mut() as *mut dyn std::any::Any as *mut ());
+            return Some(cached.clone());
         }
-        let artboard = unsafe { &mut *self.artboard };
-        let mut clone = artboard.clone_scripted_interpolator(shared)?;
-        artboard.scripted_interpolator_set_data_context(clone.as_mut());
-        self.cloned_artboard_data_binds
-            .extend(artboard.scripted_interpolator_data_binds(clone.as_ref()));
-        if artboard.scripted_interpolator_has_script_asset(clone.as_ref())
-            && !artboard.scripted_interpolator_user_init_done(clone.as_ref())
-        {
-            artboard.scripted_interpolator_init(clone.as_mut());
-            artboard.scripted_interpolator_hydrate_inputs(clone.as_mut());
-        }
-        let raw = clone.as_mut() as *mut dyn std::any::Any as *mut ();
+        let cloned = shared
+            .with_downcast_mut::<ScriptedInterpolator, _>(|shared| shared.clone_scripted_object())
+            .flatten()?;
+        let owner = cloned.owner;
+        let data_binds = cloned.data_binds;
+        self.artboard.with_artboard_mut(|artboard| {
+            for bind in data_binds.iter().cloned() {
+                artboard.add_data_bind(bind);
+            }
+        })?;
         self.scripted_interpolators
+            .borrow_mut()
             .get_or_insert_with(HashMap::new)
-            .insert(key, clone);
-        Some(raw)
+            .insert(keyframe, owner.clone());
+        self.cloned_artboard_data_binds
+            .borrow_mut()
+            .extend(data_binds);
+        Some(owner)
     }
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
-        let self_pointer = self as *mut Self;
-        let mut more = self.advance(seconds, Some(unsafe { &mut *self_pointer }));
+        let mut reporter = PendingKeyedCallbacks::default();
+        let mut more = self.advance(seconds, Some(&mut reporter));
+        for (object_id, property_key, elapsed_seconds) in reporter.0 {
+            self.report_keyed_callback(object_id, property_key, elapsed_seconds);
+        }
         self.apply(1.0);
-        if unsafe { (&mut *self.artboard).advance(seconds) } {
+        if self
+            .artboard
+            .with_artboard_mut(|artboard| artboard.base.advance_default(seconds))
+            .unwrap_or(false)
+        {
             more = true
         }
         more || self.keep_going()
@@ -247,8 +327,20 @@ impl LinearAnimationInstance {
         elapsed: f32,
         mut reporter: Option<&mut dyn KeyedCallbackReporter>,
     ) -> bool {
-        let speed = self.animation().speed();
-        let fps = self.animation().fps() as f32;
+        let (speed, fps, start, end) = self.with_animation(|animation| {
+            let fps = animation.base.fps() as f32;
+            let start = if animation.base.enable_work_area() {
+                animation.base.work_start() as f32
+            } else {
+                0.0
+            };
+            let end = if animation.base.enable_work_area() {
+                animation.base.work_end() as f32
+            } else {
+                animation.base.duration() as f32
+            };
+            (animation.base.speed(), fps, start, end)
+        });
         let delta = elapsed * speed * self.direction;
         self.spilled_time = 0.0;
         if delta == 0.0 {
@@ -261,20 +353,11 @@ impl LinearAnimationInstance {
         let mut last = self.time;
         self.time += delta;
         if let Some(r) = reporter.as_deref_mut() {
-            self.animation()
-                .report_keyed_callbacks(r, last, self.time, self.speed_direction, false)
+            self.with_animation(|animation| {
+                animation.report_keyed_callbacks(r, last, self.time, self.speed_direction, false)
+            })
         }
         let mut frames = self.time * fps;
-        let start = if self.animation().enable_work_area() {
-            self.animation().work_start() as f32
-        } else {
-            0.0
-        };
-        let end = if self.animation().enable_work_area() {
-            self.animation().work_end() as f32
-        } else {
-            self.animation().duration() as f32
-        };
         let range = end - start;
         let mut looped = false;
         let mut direction = if delta < 0.0 { -1 } else { 1 };
@@ -300,13 +383,15 @@ impl LinearAnimationInstance {
                     self.time = frames / fps;
                     looped = true;
                     if let Some(r) = reporter.as_deref_mut() {
-                        self.animation().report_keyed_callbacks(
-                            r,
-                            0.0,
-                            self.time,
-                            self.speed_direction,
-                            false,
-                        )
+                        self.with_animation(|animation| {
+                            animation.report_keyed_callbacks(
+                                r,
+                                0.0,
+                                self.time,
+                                self.speed_direction,
+                                false,
+                            )
+                        })
                     }
                 } else if direction == -1 && frames <= start {
                     let remainder = ((start - frames) % range).abs();
@@ -315,13 +400,15 @@ impl LinearAnimationInstance {
                     self.time = frames / fps;
                     looped = true;
                     if let Some(r) = reporter.as_deref_mut() {
-                        self.animation().report_keyed_callbacks(
-                            r,
-                            end / fps,
-                            self.time,
-                            self.speed_direction,
-                            false,
-                        )
+                        self.with_animation(|animation| {
+                            animation.report_keyed_callbacks(
+                                r,
+                                end / fps,
+                                self.time,
+                                self.speed_direction,
+                                false,
+                            )
+                        })
                     }
                 }
             }
@@ -344,13 +431,15 @@ impl LinearAnimationInstance {
                     direction *= -1;
                     looped = true;
                     if let Some(r) = reporter.as_deref_mut() {
-                        self.animation().report_keyed_callbacks(
-                            r,
-                            last,
-                            self.time,
-                            self.speed_direction,
-                            from_pong,
-                        )
+                        self.with_animation(|animation| {
+                            animation.report_keyed_callbacks(
+                                r,
+                                last,
+                                self.time,
+                                self.speed_direction,
+                                from_pong,
+                            )
+                        })
                     }
                     from_pong = !from_pong
                 }
@@ -363,24 +452,78 @@ impl LinearAnimationInstance {
         self.keep_going_with_multiplier(elapsed)
     }
     pub fn is_translucent(&self) -> bool {
-        unsafe { (&*self.artboard).is_translucent(self) }
+        self.artboard
+            .with_artboard(|artboard| artboard.base.is_translucent())
+            .unwrap_or(false)
     }
-    pub fn report_event(&mut self, event: *mut (), _delay: f32) {
-        unsafe { (&mut *self.artboard).notify_event(event) }
+    pub fn report_event(&mut self, event: CoreHandle, _delay: f32) {
+        self.nested_event_notifier.notify_listeners(&[event]);
+    }
+}
+impl CallbackContext for LinearAnimationInstance {}
+impl KeyFrameValueContext for LinearAnimationInstance {
+    fn bool_value(&self, keyframe: &CoreHandle) -> Option<bool> {
+        self.keyframe_value_holder(keyframe)?
+            .with_downcast::<BindablePropertyBoolean, _>(|holder| holder.base.property_value())
+    }
+
+    fn string_value(&self, keyframe: &CoreHandle) -> Option<String> {
+        self.keyframe_value_holder(keyframe)?
+            .with_downcast::<BindablePropertyString, _>(|holder| {
+                holder.base.property_value().to_owned()
+            })
+    }
+
+    fn color_value(&self, keyframe: &CoreHandle) -> Option<i32> {
+        self.keyframe_value_holder(keyframe)?
+            .with_downcast::<BindablePropertyColor, _>(|holder| holder.base.property_value())
+    }
+
+    fn number_value(&self, keyframe: &CoreHandle) -> Option<f32> {
+        self.keyframe_value_holder(keyframe)?
+            .with_downcast::<BindablePropertyNumber, _>(|holder| holder.base.property_value())
+    }
+
+    fn stateful_interpolator_transform_value(
+        &self,
+        keyframe: &CoreHandle,
+        shared: &CoreHandle,
+        from: f32,
+        to: f32,
+        factor: f32,
+    ) -> Option<f32> {
+        self.stateful_interpolator(keyframe.clone(), shared.clone())?
+            .with_downcast_mut::<ScriptedInterpolator, _>(|interpolator| {
+                interpolator.transform_value(from, to, factor)
+            })
+    }
+
+    fn stateful_interpolator_transform(
+        &self,
+        keyframe: &CoreHandle,
+        shared: &CoreHandle,
+        factor: f32,
+    ) -> Option<f32> {
+        self.stateful_interpolator(keyframe.clone(), shared.clone())?
+            .with_downcast_mut::<ScriptedInterpolator, _>(|interpolator| {
+                interpolator.transform(factor)
+            })
     }
 }
 impl KeyedCallbackReporter for LinearAnimationInstance {
     fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32) {
-        unsafe {
-            (&mut *self.artboard).report_keyed_callback(object_id, property_key, elapsed_seconds)
-        }
+        let artboard = self.artboard.clone();
+        let _ = artboard.with_artboard_mut(|artboard| {
+            artboard.report_keyed_callback(object_id, property_key, elapsed_seconds, self)
+        });
     }
 }
 impl Clone for LinearAnimationInstance {
     fn clone(&self) -> Self {
         Self {
-            animation: self.animation,
-            artboard: self.artboard,
+            animation: self.animation.clone(),
+            artboard: self.artboard.clone(),
+            nested_event_notifier: self.nested_event_notifier.clone(),
             time: self.time,
             speed_direction: self.speed_direction,
             total_time: self.total_time,
@@ -389,18 +532,26 @@ impl Clone for LinearAnimationInstance {
             direction: self.direction,
             did_loop: self.did_loop,
             loop_value: self.loop_value,
-            scripted_interpolators: None,
-            cloned_artboard_data_binds: Vec::new(),
+            scripted_interpolators: RefCell::new(None),
+            cloned_artboard_data_binds: RefCell::new(Vec::new()),
             keyframe_value_holders: None,
         }
     }
 }
 impl Drop for LinearAnimationInstance {
     fn drop(&mut self) {
-        for bind in self.cloned_artboard_data_binds.drain(..) {
-            unsafe { (&mut *self.artboard).remove_and_delete_data_bind(bind) }
+        for bind in self.cloned_artboard_data_binds.get_mut().drain(..) {
+            let _ = self
+                .artboard
+                .with_artboard_mut(|artboard| artboard.remove_data_bind(bind));
         }
-        self.scripted_interpolators.take();
+        if let Some(scripted_interpolators) = self.scripted_interpolators.get_mut().take() {
+            let _ = self.artboard.with_artboard_mut(|artboard| {
+                for interpolator in scripted_interpolators.into_values() {
+                    artboard.remove_runtime_object(interpolator);
+                }
+            });
+        }
         self.keyframe_value_holders.take();
     }
 }

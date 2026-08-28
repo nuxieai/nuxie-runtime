@@ -51,3 +51,22 @@ impl NestedLinearAnimation {
         self.animation_instance.as_deref_mut()
     }
 }
+impl std::ops::Deref for NestedLinearAnimation {
+    type Target = NestedLinearAnimationBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for NestedLinearAnimation {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+impl crate::mechanical_port::source::generated::nested_animation_base::NestedAnimationBaseCallbacks
+    for NestedLinearAnimation
+{
+    fn notify_property_changed(&mut self, key: u16) {
+        self.base.notify_property_changed(key);
+    }
+}
+impl crate::mechanical_port::source::generated::animation::nested_linear_animation_base::NestedLinearAnimationBaseCallbacks for NestedLinearAnimation { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }

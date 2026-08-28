@@ -1,12 +1,11 @@
-#[cfg(feature = "rive-layout")]
-use crate::mechanical_port::source::yoga::{
-    YGAlign, YGDimension, YGDisplay, YGFloatOptional, YGJustify, YGMeasureMode, YGNode, YGSize,
-    YGStyle, YGUnit, YGValue,
+use crate::mechanical_port::source::layout::layout_style_applier::{
+    YGAlign, YGDimension, YGDisplay, YGFloatOptional, YGJustify, YGStyle, YGUnit, YGValue,
 };
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     animation::keyframe_interpolator::KeyFrameInterpolator,
-    component::{Component, ComponentDirt},
+    component::ComponentDirt,
+    core::{CoreHandle, CoreObject},
     core_context::{CoreContext, StatusCode},
     generated::layout::layout_participant_base::LayoutParticipantBase,
     intrinsically_sizeable::IntrinsicallySizeable,
@@ -19,8 +18,6 @@ use crate::mechanical_port::source::{
     },
     layout_component::{Layout, LayoutAnimationData, LayoutComponent},
     math::{aabb::Aabb, vec2d::Vec2D},
-    solo::Solo,
-    transform_component::TransformComponent,
 };
 
 struct ParticipantAnimation {
@@ -29,7 +26,7 @@ struct ParticipantAnimation {
     b: LayoutAnimationData,
     is_smoothing: bool,
     interpolation: LayoutStyleInterpolation,
-    interpolator: Option<*mut KeyFrameInterpolator>,
+    interpolator: Option<CoreHandle>,
     interpolation_time: f32,
 }
 
@@ -56,107 +53,84 @@ pub struct LayoutParticipant {
     host_scale_y: f32,
     has_solved_layout: bool,
     host_bounds_valid: bool,
-    #[cfg(feature = "rive-layout")]
-    layout_data: Option<*mut LayoutData>,
+    layout_data: Option<Box<LayoutData>>,
+}
+
+impl Default for LayoutParticipant {
+    fn default() -> Self {
+        Self {
+            base: LayoutParticipantBase::default(),
+            provider: LayoutNodeProviderState::default(),
+            animation: None,
+            host_bounds: Aabb::default(),
+            host_scale_x: 1.0,
+            host_scale_y: 1.0,
+            has_solved_layout: false,
+            host_bounds_valid: false,
+            layout_data: None,
+        }
+    }
 }
 
 impl Drop for LayoutParticipant {
     fn drop(&mut self) {
         self.animation = None;
-        #[cfg(feature = "rive-layout")]
         self.release_layout_data();
     }
 }
 
 impl LayoutParticipant {
-    #[cfg(feature = "rive-layout")]
-    pub fn add_layout_style_applier(&mut self, applier: *mut dyn LayoutStyleApplier) {
-        if let Some(data) = self.layout_data {
-            unsafe { (*data).add_applier(applier) };
+    pub fn add_layout_style_applier(&mut self, applier: CoreHandle) {
+        if let Some(data) = self.layout_data.as_deref_mut() {
+            data.add_applier(applier);
         }
     }
 
-    #[cfg(feature = "rive-layout")]
-    fn participant_measure(
-        node: &mut YGNode,
-        width: f32,
-        width_mode: YGMeasureMode,
-        height: f32,
-        height_mode: YGMeasureMode,
-    ) -> YGSize {
-        let component = node.context_mut::<Component>();
-        let size = IntrinsicallySizeable::from(component).map_or(Vec2D::default(), |sizeable| {
-            sizeable.measure_layout(
-                width,
-                LayoutMeasureMode::from(width_mode),
-                height,
-                LayoutMeasureMode::from(height_mode),
-            )
-        });
-        YGSize {
-            width: size.x,
-            height: size.y,
-        }
+    fn owner_handle(&self) -> Option<CoreHandle> {
+        self.base.parent_handle()
     }
 
-    pub fn transform_component_mut(&mut self) -> Option<&mut TransformComponent> {
-        self.base
-            .parent_mut()
-            .and_then(|parent| parent.as_mut::<TransformComponent>())
+    fn with_host_mut<R>(&self, f: impl FnOnce(&mut dyn CoreObject) -> R) -> Option<R> {
+        self.owner_handle()?.with_mut(f)
     }
-    pub fn transform_component(&self) -> Option<&TransformComponent> {
-        self.base
-            .parent()
-            .and_then(|parent| parent.as_ref::<TransformComponent>())
-    }
-    fn owning_layout(&mut self) -> Option<&mut LayoutComponent> {
-        let mut component = self.base.parent_mut().map(|value| value as *mut Component);
-        while let Some(pointer) = component {
-            unsafe {
-                if let Some(layout) = (*pointer).as_mut::<LayoutComponent>() {
-                    return Some(layout);
-                }
-                component = (*pointer).parent_mut().map(|value| value as *mut Component);
+
+    fn owning_layout_handle(&self) -> Option<CoreHandle> {
+        let mut current = self.owner_handle();
+        while let Some(owner) = current {
+            if owner
+                .with(|owner| owner.as_layout_component().is_some())
+                .unwrap_or(false)
+            {
+                return Some(owner);
             }
+            current = owner
+                .with(|owner| owner.component_parent_handle())
+                .flatten();
         }
         None
     }
-    pub fn is_participating_in_layout(&self) -> bool {
-        #[cfg(feature = "rive-layout")]
-        {
-            self.layout_data.is_some()
-        }
-        #[cfg(not(feature = "rive-layout"))]
-        {
-            false
-        }
+
+    fn with_owning_layout_mut<R>(&self, f: impl FnOnce(&mut LayoutComponent) -> R) -> Option<R> {
+        self.owning_layout_handle()?
+            .with_mut(|owner| owner.as_layout_component_mut().map(f))
+            .flatten()
     }
-    pub fn on_added_clean(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn is_participating_in_layout(&self) -> bool {
+        self.layout_data.is_some()
+    }
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
         }
-        #[cfg(feature = "rive-layout")]
         self.resync();
         StatusCode::Ok
     }
 
-    #[cfg(feature = "rive-layout")]
     fn release_layout_data(&mut self) {
-        let Some(pointer) = self.layout_data.take() else {
-            return;
-        };
-        #[cfg(feature = "rive-tools")]
-        unsafe {
-            (*pointer).unref();
-        }
-        #[cfg(not(feature = "rive-tools"))]
-        unsafe {
-            drop(Box::from_raw(pointer));
-        }
+        self.layout_data.take();
     }
 
-    #[cfg(feature = "rive-layout")]
     pub fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
         self.base.apply_sizing_base_style(style, context);
         let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
@@ -224,55 +198,30 @@ impl LayoutParticipant {
         }
     }
 
-    #[cfg(feature = "rive-layout")]
     pub fn resync(&mut self) {
-        let Some(host) = self
-            .transform_component_mut()
-            .map(|value| value as *mut TransformComponent)
-        else {
+        if self.owner_handle().is_none() {
             return;
-        };
+        }
         if self.layout_data.is_none() {
-            let mut data = Box::new(LayoutData::default());
-            data.node.config_mut().set_point_scale_factor(0.0);
-            data.node.set_context(unsafe { &mut *host });
-            data.node.set_measure_func(Some(Self::participant_measure));
-            self.layout_data = Some(Box::into_raw(data));
-            self.add_layout_style_applier(self as *mut Self as *mut dyn LayoutStyleApplier);
+            self.layout_data = Some(Box::new(LayoutData::default()));
+            if let Some(this) = self.base.handle() {
+                self.add_layout_style_applier(this);
+            }
         }
         self.sync_style_changes();
-        if let Some(layout) = self.owning_layout() {
-            layout.sync_layout_children();
-        }
-        unsafe {
-            (*host).add_dirt_recursive(ComponentDirt::WORLD_TRANSFORM);
-        }
+        self.with_owning_layout_mut(LayoutComponent::sync_layout_children);
+        self.with_host_mut(|host| {
+            if let Some(host) = host.as_transform_component_mut() {
+                host.add_dirt_recursive(ComponentDirt::WORLD_TRANSFORM);
+            }
+        });
         self.mark_layout_node_dirty(true);
     }
-    #[cfg(feature = "rive-layout")]
-    pub fn layout_node(&mut self, _index: i32) -> *mut core::ffi::c_void {
+    fn solved_layout(&self) -> Layout {
         self.layout_data
-            .map_or(std::ptr::null_mut(), |data| unsafe {
-                &mut (*data).node as *mut _ as *mut _
-            })
-    }
-    #[cfg(feature = "rive-layout")]
-    fn solved_layout(&self) -> Layout {
-        let Some(data) = self.layout_data else {
-            return Layout::default();
-        };
-        let layout = unsafe { (*data).node.layout() };
-        let defined = |value: f32| if value.is_nan() { 0.0 } else { value };
-        Layout::new(
-            defined(layout.left()),
-            defined(layout.top()),
-            defined(layout.width()),
-            defined(layout.height()),
-        )
-    }
-    #[cfg(not(feature = "rive-layout"))]
-    fn solved_layout(&self) -> Layout {
-        Layout::default()
+            .as_deref()
+            .map(|data| data.solved_layout)
+            .unwrap_or_default()
     }
     pub fn resolved_left(&self) -> f32 {
         self.animation
@@ -297,149 +246,167 @@ impl LayoutParticipant {
         )
     }
 
-    #[cfg(feature = "rive-layout")]
     fn apply_resolved_layout_size(&mut self) {
-        let Some(sizeable) = self
-            .transform_component_mut()
-            .and_then(IntrinsicallySizeable::from)
-        else {
-            return;
-        };
         let direction = self
-            .owning_layout()
-            .map_or(LayoutDirection::Inherit, |layout| layout.actual_direction());
+            .owning_layout_handle()
+            .and_then(|layout| {
+                layout.with(|layout| {
+                    layout
+                        .as_layout_component()
+                        .map(LayoutComponent::actual_direction)
+                })
+            })
+            .flatten()
+            .unwrap_or(LayoutDirection::Inherit);
         let resolved = self
             .animation
             .as_ref()
             .map_or_else(|| self.solved_layout(), |a| a.animated_layout);
-        sizeable.control_size(
-            Vec2D::new(resolved.width(), resolved.height()),
-            LayoutScaleType::from(self.base.layout_width_scale_type()),
-            LayoutScaleType::from(self.base.layout_height_scale_type()),
-            direction,
-        );
+        let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
+        let height_scale = LayoutScaleType::from(self.base.layout_height_scale_type());
+        self.with_host_mut(|host| {
+            if let Some(component) = host.as_component_mut()
+                && let Some(sizeable) = IntrinsicallySizeable::from(component)
+            {
+                sizeable.control_size(
+                    Vec2D::new(resolved.width(), resolved.height()),
+                    width_scale,
+                    height_scale,
+                    direction,
+                );
+            }
+        });
     }
 
     pub fn num_layout_nodes(&self) -> usize {
-        #[cfg(feature = "rive-layout")]
-        {
-            usize::from(self.layout_data.is_some())
-        }
-        #[cfg(not(feature = "rive-layout"))]
-        {
-            0
-        }
+        usize::from(self.layout_data.is_some())
     }
     pub fn layout_bounds(&self) -> Aabb {
-        #[cfg(feature = "rive-layout")]
-        {
-            let resolved = self
-                .animation
-                .as_ref()
-                .map_or_else(|| self.solved_layout(), |a| a.animated_layout);
-            Aabb::from_ltwh(
-                resolved.left(),
-                resolved.top(),
-                resolved.width(),
-                resolved.height(),
-            )
-        }
-        #[cfg(not(feature = "rive-layout"))]
-        {
-            Aabb::from_ltwh(0.0, 0.0, 0.0, 0.0)
-        }
+        let resolved = self
+            .animation
+            .as_ref()
+            .map_or_else(|| self.solved_layout(), |a| a.animated_layout);
+        Aabb::from_ltwh(
+            resolved.left(),
+            resolved.top(),
+            resolved.width(),
+            resolved.height(),
+        )
     }
     pub fn layout_bounds_for_node(&self, _index: i32) -> Aabb {
         self.layout_bounds()
     }
 
     pub fn sync_style_changes(&mut self) -> bool {
-        #[cfg(not(feature = "rive-layout"))]
-        {
-            return false;
-        }
-        #[cfg(feature = "rive-layout")]
-        {
-            let Some(data_pointer) = self.layout_data else {
-                return false;
-            };
-            let data = unsafe { &mut *data_pointer };
-            let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
-            let height_scale = LayoutScaleType::from(self.base.layout_height_scale_type());
-            let layout = self
-                .owning_layout()
-                .map(|value| value as *mut LayoutComponent);
-            let parent_is_row =
-                layout.map_or(true, |pointer| unsafe { (*pointer).main_axis_is_row() });
-            let parent_is_grid = layout.is_some_and(|pointer| unsafe {
-                (*pointer).style().is_some_and(|style| style.is_grid())
-            });
-            let needs_measure =
-                width_scale == LayoutScaleType::Hug || height_scale == LayoutScaleType::Hug;
-            if needs_measure {
-                data.node
-                    .set_context(self.transform_component_mut().unwrap());
-                data.node.set_measure_func(Some(Self::participant_measure));
-            } else {
-                data.node.set_measure_func(None);
-            }
-            let parent_is_stack = layout.is_some_and(|pointer| unsafe {
-                (*pointer).style().is_some_and(|style| style.is_stack())
-            });
-            let justify = layout
-                .and_then(|pointer| unsafe {
-                    (*pointer)
-                        .style()
-                        .map(|style| style.base.justify_items_value())
+        let width_scale = LayoutScaleType::from(self.base.layout_width_scale_type());
+        let layout = self.owning_layout_handle();
+        let (parent_is_row, parent_is_grid, parent_is_stack, justify, direction_ltr) = layout
+            .as_ref()
+            .and_then(|layout| {
+                layout.with(|layout| {
+                    let layout = layout.as_layout_component()?;
+                    let style = layout.style_handle();
+                    Some((
+                        layout.main_axis_is_row(),
+                        style
+                            .as_ref()
+                            .and_then(|style| {
+                                style.with_downcast::<
+                                    crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle,
+                                    _,
+                                >(|style| style.is_grid())
+                            })
+                            .unwrap_or(false),
+                        style
+                            .as_ref()
+                            .and_then(|style| {
+                                style.with_downcast::<
+                                    crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle,
+                                    _,
+                                >(|style| style.is_stack())
+                            })
+                            .unwrap_or(false),
+                        style
+                            .as_ref()
+                            .and_then(|style| {
+                                style.with_downcast::<
+                                    crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle,
+                                    _,
+                                >(|style| style.base.justify_items_value())
+                            })
+                            .unwrap_or(YGJustify::Stretch as u32),
+                        layout.actual_direction() != LayoutDirection::Rtl,
+                    ))
                 })
-                .unwrap_or(YGJustify::Stretch as u32);
-            let direction_ltr = layout.is_none_or(|pointer| unsafe {
-                (*pointer).actual_direction() != LayoutDirection::Rtl
-            });
-            let context = LayoutSyncContext {
-                parent_is_grid,
-                parent_is_stack,
-                container_justify_items: justify,
-                inline_hugs: width_scale == LayoutScaleType::Hug,
-                parent_is_row,
-                is_ltr: direction_ltr,
-                has_layout_parent: layout.is_some(),
-            };
-            data.apply_layout_styles(&mut data.style, &context);
-            data.node.set_style(data.style.clone());
-            data.node.mark_dirty_and_propagate();
-            if let Some(host) = self.transform_component_mut() {
-                let parent = host.parent_mut();
-                let mut parent_hides_host =
-                    parent.as_ref().is_some_and(|parent| parent.is_collapsed());
-                if let Some(solo) = parent.and_then(|parent| parent.as_mut::<Solo>()) {
-                    let active = solo
-                        .artboard_mut()
-                        .and_then(|artboard| artboard.resolve_mut(solo.active_component_id()));
-                    if active.is_none_or(|active| !std::ptr::eq(active, host.as_component())) {
-                        parent_hides_host = true;
-                    }
+            })
+            .flatten()
+            .unwrap_or((true, false, false, YGJustify::Stretch as u32, true));
+        let context = LayoutSyncContext {
+            parent_is_grid,
+            parent_is_stack,
+            container_justify_items: justify,
+            inline_hugs: width_scale == LayoutScaleType::Hug,
+            parent_is_row,
+            is_ltr: direction_ltr,
+            has_layout_parent: layout.is_some(),
+        };
+        let Some(data) = self.layout_data.as_deref_mut() else {
+            return false;
+        };
+        let mut style = std::mem::take(&mut data.style);
+        data.apply_layout_styles(&mut style, &context);
+        data.style = style;
+        data.dirty = true;
+
+        let owner = self.owner_handle();
+        let mut parent_hides_host = owner
+            .as_ref()
+            .and_then(|owner| owner.with(|owner| owner.component_parent_handle()))
+            .flatten()
+            .and_then(|parent| {
+                parent.with(|parent| parent.as_component().map(|p| p.is_collapsed()))
+            })
+            .flatten()
+            .unwrap_or(false);
+        if let Some(owner) = owner {
+            let parent = owner
+                .with(|owner| owner.component_parent_handle())
+                .flatten();
+            if let Some(parent) = parent {
+                let solo_active = parent
+                    .with_downcast::<crate::mechanical_port::source::solo::Solo, _>(|solo| {
+                        solo.base.active_component_id()
+                    });
+                if let Some(active_id) = solo_active {
+                    let owner_id = parent
+                        .with(|parent| parent.component_artboard_handle())
+                        .flatten()
+                        .and_then(|artboard| artboard.with_downcast::<crate::mechanical_port::source::artboard::Artboard, _>(|artboard| artboard.id_of(&owner)));
+                    parent_hides_host |= owner_id != Some(active_id);
                 }
-                host.collapse(
-                    parent_hides_host
-                        || YGDisplay::from(self.base.display_value()) == YGDisplay::None,
-                );
             }
-            true
+            owner.with_mut(|host| {
+                if let Some(host) = host.as_transform_component_mut() {
+                    host.collapse(
+                        parent_hides_host
+                            || YGDisplay::from(self.base.display_value()) == YGDisplay::None,
+                    );
+                }
+            });
         }
+        true
     }
 
     pub fn update_layout_bounds(&mut self, animate: bool) {
-        #[cfg(feature = "rive-layout")]
         {
-            let Some(data) = self.layout_data.map(|pointer| unsafe { &mut *pointer }) else {
+            let Some(data) = self.layout_data.as_deref_mut() else {
                 return;
             };
-            if !data.node.has_new_layout() {
+            if !data.has_new_layout {
                 return;
             }
-            data.node.set_has_new_layout(false);
-            let new_layout = self.solved_layout();
+            data.has_new_layout = false;
+            let new_layout = data.solved_layout;
             if self.animation.is_some() && animate && self.has_solved_layout {
                 let animation = self.animation.as_mut().unwrap();
                 let data = if animation.is_smoothing {
@@ -471,25 +438,23 @@ impl LayoutParticipant {
             }
             self.has_solved_layout = true;
             self.apply_resolved_layout_size();
-            if let Some(host) = self.transform_component_mut() {
-                host.add_dirt_recursive(ComponentDirt::WORLD_TRANSFORM);
-            }
+            self.with_host_mut(|host| {
+                if let Some(host) = host.as_transform_component_mut() {
+                    host.add_dirt_recursive(ComponentDirt::WORLD_TRANSFORM);
+                }
+            });
         }
     }
 
     pub fn mark_layout_node_dirty(&mut self, force: bool) {
-        #[cfg(feature = "rive-layout")]
         {
-            if let Some(data) = self.layout_data {
-                unsafe { (*data).node.mark_dirty_and_propagate() };
+            if let Some(data) = self.layout_data.as_deref_mut() {
+                data.dirty = true;
             }
-            if let Some(layout) = self.owning_layout() {
-                layout.mark_layout_node_dirty(force);
-            }
+            self.with_owning_layout_mut(|layout| layout.mark_layout_node_dirty(force));
         }
     }
     fn on_sizing_changed(&mut self) {
-        #[cfg(feature = "rive-layout")]
         {
             self.sync_style_changes();
             self.mark_layout_node_dirty(false);
@@ -571,36 +536,26 @@ impl LayoutParticipant {
             .as_ref()
             .map_or(0.0, |value| value.interpolation_time)
     }
-    pub fn interpolator(&self) -> Option<&KeyFrameInterpolator> {
+    pub fn interpolator(&self) -> Option<CoreHandle> {
         self.animation
             .as_ref()
-            .and_then(|value| value.interpolator)
-            .map(|pointer| unsafe { &*pointer })
+            .and_then(|value| value.interpolator.clone())
     }
 
     pub fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
-        #[cfg(feature = "rive-layout")]
-        {
-            if self.animation.is_none() || !flags.contains(AdvanceFlags::NEW_FRAME) {
-                return false;
-            }
-            return self.apply_interpolation(
-                elapsed_seconds,
-                flags.contains(AdvanceFlags::ANIMATE)
-                    || flags.contains(AdvanceFlags::ADVANCE_NESTED),
-            );
+        if self.animation.is_none() || !flags.contains(AdvanceFlags::NEW_FRAME) {
+            return false;
         }
-        #[cfg(not(feature = "rive-layout"))]
-        {
-            false
-        }
+        self.apply_interpolation(
+            elapsed_seconds,
+            flags.contains(AdvanceFlags::ANIMATE) || flags.contains(AdvanceFlags::ADVANCE_NESTED),
+        )
     }
 
-    #[cfg(feature = "rive-layout")]
     pub fn cascade_layout_style(
         &mut self,
         inherited: LayoutStyleInterpolation,
-        interpolator: Option<&mut KeyFrameInterpolator>,
+        interpolator: Option<CoreHandle>,
         time: f32,
         _direction: LayoutDirection,
     ) -> bool {
@@ -616,7 +571,7 @@ impl LayoutParticipant {
             }
             let animation = self.animation.as_mut().unwrap();
             animation.interpolation = inherited;
-            animation.interpolator = interpolator.map(|value| value as *mut _);
+            animation.interpolator = interpolator;
             animation.interpolation_time = time;
         } else if self.animation.is_some() {
             self.animation = None;
@@ -624,7 +579,6 @@ impl LayoutParticipant {
         will_animate
     }
 
-    #[cfg(feature = "rive-layout")]
     fn apply_interpolation(&mut self, elapsed_seconds: f32, animate: bool) -> bool {
         let Some(animation) = &self.animation else {
             return false;
@@ -646,8 +600,11 @@ impl LayoutParticipant {
             })
             .min(1.0);
             if animation.interpolation != LayoutStyleInterpolation::Linear {
-                if let Some(interpolator) = animation.interpolator {
-                    fraction = unsafe { (*interpolator).transform(fraction) };
+                if let Some(interpolator) = animation.interpolator.as_ref() {
+                    fraction = interpolator
+                        .with(|interpolator| interpolator.keyframe_interpolator_transform(fraction))
+                        .flatten()
+                        .unwrap_or(fraction);
                 }
             }
             animation.b.from = animation.a.interpolate(fraction);
@@ -672,25 +629,32 @@ impl LayoutParticipant {
                 animation.a.elapsed_seconds = 0.0;
             }
             self.apply_resolved_layout_size();
-            if let Some(host) = self.transform_component_mut() {
-                host.add_dirt_recursive(ComponentDirt::WORLD_TRANSFORM);
-            }
+            self.with_host_mut(|host| {
+                if let Some(host) = host.as_transform_component_mut() {
+                    host.add_dirt_recursive(ComponentDirt::WORLD_TRANSFORM);
+                }
+            });
             return false;
         }
         let elapsed = self.current_animation_data().elapsed_seconds;
         let mut fraction = (if time > 0.0 { elapsed / time } else { 1.0 }).min(1.0);
         if self.interpolation() != LayoutStyleInterpolation::Linear {
             if let Some(interpolator) = self.interpolator() {
-                fraction = interpolator.transform(fraction);
+                fraction = interpolator
+                    .with(|interpolator| interpolator.keyframe_interpolator_transform(fraction))
+                    .flatten()
+                    .unwrap_or(fraction);
             }
         }
         let current = self.current_animation_data().interpolate(fraction);
         if self.animation.as_ref().unwrap().animated_layout != current {
             self.animation.as_mut().unwrap().animated_layout = current;
             self.apply_resolved_layout_size();
-            if let Some(host) = self.transform_component_mut() {
-                host.add_dirt_recursive(ComponentDirt::WORLD_TRANSFORM);
-            }
+            self.with_host_mut(|host| {
+                if let Some(host) = host.as_transform_component_mut() {
+                    host.add_dirt_recursive(ComponentDirt::WORLD_TRANSFORM);
+                }
+            });
         }
         self.current_animation_data().elapsed_seconds += elapsed_seconds;
         fraction != 1.0
@@ -722,7 +686,6 @@ impl LayoutParticipant {
 }
 
 impl LayoutStyleApplier for LayoutParticipant {
-    #[cfg(feature = "rive-layout")]
     fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
         LayoutParticipant::apply_base_style(self, style, context);
     }
@@ -732,15 +695,11 @@ impl LayoutNodeProvider for LayoutParticipant {
     fn provider_state(&mut self) -> &mut LayoutNodeProviderState {
         &mut self.provider
     }
-    #[cfg(feature = "rive-layout")]
-    fn layout_node(&mut self, index: i32) -> *mut core::ffi::c_void {
-        LayoutParticipant::layout_node(self, index)
+    fn provider_handle(&self) -> Option<CoreHandle> {
+        self.base.base.base.base.base.base.handle()
     }
-    fn transform_component_mut(&mut self) -> Option<&mut TransformComponent> {
-        LayoutParticipant::transform_component_mut(self)
-    }
-    fn transform_component(&self) -> Option<&TransformComponent> {
-        LayoutParticipant::transform_component(self)
+    fn owner_handle(&self) -> Option<CoreHandle> {
+        LayoutParticipant::owner_handle(self)
     }
     fn layout_bounds(&self) -> Aabb {
         LayoutParticipant::layout_bounds(self)
@@ -757,18 +716,16 @@ impl LayoutNodeProvider for LayoutParticipant {
     fn mark_layout_node_dirty(&mut self, force: bool) {
         LayoutParticipant::mark_layout_node_dirty(self, force);
     }
-    #[cfg(feature = "rive-layout")]
-    fn add_layout_style_applier(&mut self, applier: &mut dyn LayoutStyleApplier) {
+    fn add_layout_style_applier(&mut self, applier: CoreHandle) {
         LayoutParticipant::add_layout_style_applier(self, applier);
     }
     fn num_layout_nodes(&self) -> usize {
         LayoutParticipant::num_layout_nodes(self)
     }
-    #[cfg(feature = "rive-layout")]
     fn cascade_layout_style(
         &mut self,
         interpolation: LayoutStyleInterpolation,
-        interpolator: Option<&mut KeyFrameInterpolator>,
+        interpolator: Option<CoreHandle>,
         time: f32,
         direction: LayoutDirection,
     ) -> bool {

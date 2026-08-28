@@ -1,12 +1,12 @@
 use crate::mechanical_port::source::{
-    data_bind_path_referencer::DataBindPathReferencer,
+    core::CoreHandle, data_bind_path_referencer::DataBindPathReferencer,
     generated::animation::state_machine_fire_trigger_base::StateMachineFireTriggerBase,
     importers::import_stack::ImportStack, status_code::StatusCode,
     viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger,
 };
 
 pub enum FireTriggerViewModelProperty {
-    Trigger(std::ptr::NonNull<ViewModelInstanceTrigger>),
+    Trigger(CoreHandle),
     Other,
 }
 
@@ -29,16 +29,19 @@ impl StateMachineFireTrigger {
         let Some(data_context) = state_machine_instance.data_context() else {
             return;
         };
-        let Some(path) = self.data_bind_path_referencer.data_bind_path() else {
-            return;
-        };
-        let mut path = path.clone();
-        let Some(FireTriggerViewModelProperty::Trigger(mut trigger)) =
-            data_context.get_view_model_property(path.path())
+        let Some(path) = self
+            .data_bind_path_referencer
+            .with_data_bind_path(|path| path.path().clone())
         else {
             return;
         };
-        unsafe { trigger.as_mut().trigger() };
+        let Some(FireTriggerViewModelProperty::Trigger(trigger)) =
+            data_context.get_view_model_property(&path)
+        else {
+            return;
+        };
+        let _ =
+            trigger.with_downcast_mut::<ViewModelInstanceTrigger, _>(|trigger| trigger.trigger());
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
@@ -53,6 +56,6 @@ impl StateMachineFireTrigger {
 
     pub fn copy_view_model_path_ids(&mut self, object: &Self) {
         self.data_bind_path_referencer
-            .copy_data_bind_path(object.data_bind_path_referencer.data_bind_path());
+            .copy_data_bind_path(&object.data_bind_path_referencer);
     }
 }

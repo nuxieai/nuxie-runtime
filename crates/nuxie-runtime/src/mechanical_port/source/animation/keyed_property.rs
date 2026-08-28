@@ -1,5 +1,9 @@
 use crate::mechanical_port::source::{
-    animation::{keyed_callback_reporter::KeyedCallbackReporter, keyframe::KeyFrame},
+    animation::{
+        interpolating_keyframe::KeyFrameValueContext,
+        keyed_callback_reporter::KeyedCallbackReporter, keyed_object::KeyedObjectContext,
+    },
+    core::CoreHandle,
     generated::animation::{
         keyed_object_base::KeyedObjectBase, keyed_property_base::KeyedPropertyBase,
     },
@@ -7,40 +11,30 @@ use crate::mechanical_port::source::{
     importers::{import_stack::ImportStack, keyed_object_importer::KeyedObjectImporter},
     status_code::StatusCode,
 };
-pub trait KeyFrameBehavior {
-    fn seconds(&self) -> f32;
-    fn on_added_dirty(&mut self, context: *mut ()) -> StatusCode;
-    fn on_added_clean(&mut self, context: *mut ()) -> StatusCode;
-    fn interpolation_type(&self) -> u32;
-    fn apply(&self, object: *mut (), key: i32, mix: f32, context: *const ());
-    fn interpolate(
-        &self,
-        object: *mut (),
-        key: i32,
-        time: f32,
-        next: &dyn KeyFrameBehavior,
-        mix: f32,
-        context: *const (),
-    );
-}
 #[derive(Default)]
 pub struct KeyedProperty {
     pub base: KeyedPropertyBase,
-    keyframes: Vec<Box<dyn KeyFrameBehavior>>,
+    keyframes: Vec<CoreHandle>,
 }
 impl KeyedProperty {
-    pub fn add_key_frame<T: KeyFrameBehavior + 'static>(&mut self, value: Box<T>) {
+    pub fn add_key_frame(&mut self, value: CoreHandle) {
         self.keyframes.push(value)
+    }
+    fn keyframe_seconds(&self, index: usize) -> f32 {
+        self.keyframes[index]
+            .with(|keyframe| keyframe.keyframe_seconds())
+            .flatten()
+            .expect("KeyedProperty retains only KeyFrame-derived occurrences")
     }
     fn closest_frame_index(&self, seconds: f32, offset: i32) -> i32 {
         let mut start = 0;
         let mut end = self.keyframes.len() as i32 - 1;
-        if seconds > self.keyframes[end as usize].seconds() {
+        if seconds > self.keyframe_seconds(end as usize) {
             return end + 1;
         }
         while start <= end {
             let mid = (start + end) >> 1;
-            let value = self.keyframes[mid as usize].seconds();
+            let value = self.keyframe_seconds(mid as usize);
             if value < seconds {
                 start = mid + 1
             } else if value > seconds {
@@ -74,85 +68,102 @@ impl KeyedProperty {
             std::mem::swap(&mut index, &mut end)
         }
         while end > index {
-            let frame = &self.keyframes[index as usize];
-            reporter.report_keyed_callback(object, self.base.property_key(), to - frame.seconds());
+            let frame_seconds = self.keyframe_seconds(index as usize);
+            reporter.report_keyed_callback(object, self.base.property_key(), to - frame_seconds);
             index += 1;
         }
     }
     pub fn apply(
         &self,
-        object: *mut (),
+        object: CoreHandle,
         seconds: f32,
         mix: f32,
-        context: *const (),
+        context: Option<&dyn KeyFrameValueContext>,
         override_mix: bool,
     ) {
         assert!(!self.keyframes.is_empty());
         let mix = if override_mix { 1.0 } else { mix };
         let index = self.closest_frame_index(seconds, 0);
         if index == 0 {
-            self.keyframes[0].apply(object, self.base.property_key() as i32, mix, context)
+            self.keyframes[0].with(|keyframe| {
+                keyframe.keyframe_apply(object, self.base.property_key() as i32, mix, context)
+            });
         } else if index < self.keyframes.len() as i32 {
             let from = &self.keyframes[index as usize - 1];
             let to = &self.keyframes[index as usize];
-            if seconds == to.seconds() {
-                to.apply(object, self.base.property_key() as i32, mix, context)
-            } else if from.interpolation_type() == 0 {
-                from.apply(object, self.base.property_key() as i32, mix, context)
+            if seconds == self.keyframe_seconds(index as usize) {
+                to.with(|keyframe| {
+                    keyframe.keyframe_apply(object, self.base.property_key() as i32, mix, context)
+                });
+            } else if from
+                .with(|keyframe| keyframe.keyframe_interpolation_type())
+                .flatten()
+                .unwrap_or(0)
+                == 0
+            {
+                from.with(|keyframe| {
+                    keyframe.keyframe_apply(object, self.base.property_key() as i32, mix, context)
+                });
             } else {
-                from.interpolate(
-                    object,
-                    self.base.property_key() as i32,
-                    seconds,
-                    to.as_ref(),
-                    mix,
-                    context,
-                )
+                from.with(|keyframe| {
+                    keyframe.keyframe_interpolate(
+                        object,
+                        self.base.property_key() as i32,
+                        seconds,
+                        to.clone(),
+                        mix,
+                        context,
+                    )
+                });
             }
         } else {
-            self.keyframes[index as usize - 1].apply(
-                object,
-                self.base.property_key() as i32,
-                mix,
-                context,
-            )
+            self.keyframes[index as usize - 1].with(|keyframe| {
+                keyframe.keyframe_apply(object, self.base.property_key() as i32, mix, context)
+            });
         }
     }
-    pub fn on_added_dirty(&mut self, c: *mut ()) -> StatusCode {
-        for f in &mut self.keyframes {
-            let s = f.on_added_dirty(c);
+    pub fn on_added_dirty(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
+        for frame in &self.keyframes {
+            let s = frame
+                .with_mut(|frame| frame.keyframe_on_added_dirty(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
             if s != StatusCode::Ok {
                 return s;
             }
         }
         StatusCode::Ok
     }
-    pub fn on_added_clean(&mut self, c: *mut ()) -> StatusCode {
-        for f in &mut self.keyframes {
-            let s = f.on_added_clean(c);
+    pub fn on_added_clean(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
+        for frame in &self.keyframes {
+            let s = frame
+                .with_mut(|frame| frame.keyframe_on_added_clean(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
             if s != StatusCode::Ok {
                 return s;
             }
         }
         StatusCode::Ok
     }
-    pub fn import(self: Box<Self>, stack: &mut ImportStack) -> StatusCode {
-        let raw = Box::into_raw(self);
+    pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
         let Some(i) = stack.latest::<KeyedObjectImporter>(KeyedObjectBase::TYPE_KEY) else {
-            unsafe { drop(Box::from_raw(raw)) };
             return StatusCode::MissingObject;
         };
-        i.add_keyed_property(unsafe { Box::from_raw(raw) });
-        unsafe { (*raw).base.base.import(stack) }
+        let Some(this) = self.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        i.add_keyed_property(this);
+        self.base.base.import(stack)
     }
-    pub fn first(&self) -> Option<&dyn KeyFrameBehavior> {
-        self.keyframes.first().map(Box::as_ref)
+    pub fn first(&self) -> Option<CoreHandle> {
+        self.keyframes.first().cloned()
     }
     pub fn num_key_frames(&self) -> usize {
         self.keyframes.len()
     }
-    pub fn get_key_frame(&self, i: usize) -> Option<&dyn KeyFrameBehavior> {
-        self.keyframes.get(i).map(Box::as_ref)
+    pub fn get_key_frame(&self, i: usize) -> Option<CoreHandle> {
+        self.keyframes.get(i).cloned()
     }
     pub fn is_callback(&self) -> bool {
         CoreRegistry::is_callback(self.base.property_key())

@@ -1,89 +1,83 @@
-use crate::mechanical_port::source::listener_type::ListenerType;
-use std::ptr::NonNull;
-pub trait FocusListenerGroupHost {
-    fn listener_has(&self, listener: *const (), listener_type: ListenerType) -> bool;
-    fn add_focus_listener(&mut self, listener: NonNull<FocusListenerGroup>);
-    fn remove_focus_listener(&mut self, listener: NonNull<FocusListenerGroup>);
-    fn queue_focus_event(
-        &mut self,
-        machine: *mut (),
-        group: NonNull<FocusListenerGroup>,
-        focused: bool,
-    );
-}
+use crate::mechanical_port::source::{
+    animation::state_machine_instance::{
+        RuntimeObjectHandle, RuntimeServicesHandle, RuntimeStateMachineInstanceWeakHandle,
+    },
+    core::CoreHandle,
+    listener_type::ListenerType,
+};
+
 pub struct FocusListenerGroup {
-    focus_data: NonNull<dyn FocusListenerGroupHost>,
-    listener: *const (),
-    state_machine_instance: *mut (),
+    runtime: RuntimeServicesHandle,
+    focus_data: CoreHandle,
+    listener: CoreHandle,
+    state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
+    group: RuntimeObjectHandle,
     is_focus_listener: bool,
     is_blur_listener: bool,
 }
+
 impl FocusListenerGroup {
     pub fn new(
-        mut focus_data: NonNull<dyn FocusListenerGroupHost>,
-        listener: *const (),
-        state_machine_instance: *mut (),
+        runtime: RuntimeServicesHandle,
+        focus_data: CoreHandle,
+        listener: CoreHandle,
+        state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     ) -> Box<Self> {
-        let is_focus = unsafe {
-            focus_data
-                .as_ref()
-                .listener_has(listener, ListenerType::Focus)
-        };
-        let is_blur = unsafe {
-            focus_data
-                .as_ref()
-                .listener_has(listener, ListenerType::Blur)
-        };
-        let mut value = Box::new(Self {
+        let is_focus_listener = runtime
+            .borrow()
+            .listener_has(&listener, ListenerType::Focus);
+        let is_blur_listener = runtime.borrow().listener_has(&listener, ListenerType::Blur);
+        let group = runtime.borrow_mut().focus_data_add_focus_listener(
+            &focus_data,
+            &listener,
+            state_machine_instance.clone(),
+        );
+        Box::new(Self {
+            runtime,
             focus_data,
             listener,
             state_machine_instance,
-            is_focus_listener: is_focus,
-            is_blur_listener: is_blur,
-        });
-        unsafe {
-            focus_data
-                .as_mut()
-                .add_focus_listener(NonNull::from(value.as_mut()))
-        };
-        value
+            group,
+            is_focus_listener,
+            is_blur_listener,
+        })
     }
-    pub fn listener(&self) -> *const () {
-        self.listener
+
+    pub fn listener(&self) -> CoreHandle {
+        self.listener.clone()
     }
-    pub fn focus_data(&self) -> NonNull<dyn FocusListenerGroupHost> {
-        self.focus_data
+
+    pub fn focus_data(&self) -> CoreHandle {
+        self.focus_data.clone()
     }
+
     pub fn is_focus_listener(&self) -> bool {
         self.is_focus_listener
     }
+
     pub fn is_blur_listener(&self) -> bool {
         self.is_blur_listener
     }
+
     pub fn on_focused(&mut self) {
         if self.is_focus_listener {
-            let this = NonNull::from(&mut *self);
-            unsafe {
-                self.focus_data
-                    .as_mut()
-                    .queue_focus_event(self.state_machine_instance, this, true)
-            };
+            self.state_machine_instance
+                .with_instance_mut(|machine| machine.queue_focus_event(self.group, true));
         }
     }
+
     pub fn on_blurred(&mut self) {
         if self.is_blur_listener {
-            let this = NonNull::from(&mut *self);
-            unsafe {
-                self.focus_data
-                    .as_mut()
-                    .queue_focus_event(self.state_machine_instance, this, false)
-            };
+            self.state_machine_instance
+                .with_instance_mut(|machine| machine.queue_focus_event(self.group, false));
         }
     }
 }
+
 impl Drop for FocusListenerGroup {
     fn drop(&mut self) {
-        let this = NonNull::from(&mut *self);
-        unsafe { self.focus_data.as_mut().remove_focus_listener(this) };
+        self.runtime
+            .borrow_mut()
+            .focus_data_remove_focus_listener(&self.focus_data, self.group);
     }
 }

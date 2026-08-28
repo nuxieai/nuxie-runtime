@@ -1,7 +1,10 @@
 use crate::mechanical_port::source::{
-    component::{Component, ComponentDirt, ContainerComponent, has_dirt},
+    component::{Component, ComponentDirt, has_dirt},
+    core::CoreHandle,
     generated::layout::n_sliced_node_base::NSlicedNodeBase,
     layout::{
+        axis_x::AxisX,
+        axis_y::AxisY,
         layout_enums::{LayoutDirection, LayoutScaleType},
         layout_measure_mode::LayoutMeasureMode,
         n_slicer_details::{NSlicerDetails, NSlicerDetailsState},
@@ -28,22 +31,25 @@ impl NSlicedNode {
     }
     fn mark_path_dirty_recursive(&mut self, send_to_layout: bool) {
         self.base.add_dirt_recursive(ComponentDirt::N_SLICER);
-        #[cfg(feature = "rive-layout")]
         if send_to_layout {
-            let mut parent = self
-                .base
-                .parent_mut()
-                .map(|value| value as *mut ContainerComponent);
-            while let Some(pointer) = parent {
-                unsafe {
-                    if let Some(layout) = (*pointer).as_mut::<LayoutComponent>() {
-                        layout.mark_layout_node_dirty(false);
-                        break;
-                    }
-                    parent = (*pointer)
-                        .parent_mut()
-                        .map(|value| value as *mut ContainerComponent);
+            let mut parent = self.base.parent_handle();
+            while let Some(owner) = parent {
+                let mut next = None;
+                let found = owner
+                    .with_mut(|component| {
+                        if let Some(layout) = component.as_layout_component_mut() {
+                            layout.mark_layout_node_dirty(false);
+                            true
+                        } else {
+                            next = component.component_parent_handle();
+                            false
+                        }
+                    })
+                    .unwrap_or(false);
+                if found {
+                    break;
                 }
+                parent = next;
             }
         }
     }
@@ -82,36 +88,29 @@ impl NSlicedNode {
         }
         let size = Vec2D::new(self.base.initial_width(), self.base.initial_height());
         let scale = self.scale_for_n_slicer();
-        let x_px_stops = NSlicerHelpers::px_stops(&self.details.xs, size.x);
-        let y_px_stops = NSlicerHelpers::px_stops(&self.details.ys, size.y);
-        let x_uv_stops = NSlicerHelpers::uv_stops(&self.details.xs, size.x);
-        let y_uv_stops = NSlicerHelpers::uv_stops(&self.details.ys, size.y);
+        let x_px_stops = axis_stops(&self.details.xs, size.x, false);
+        let y_px_stops = axis_stops(&self.details.ys, size.y, false);
+        let x_uv_stops = axis_stops(&self.details.xs, size.x, true);
+        let y_uv_stops = axis_stops(&self.details.ys, size.y, true);
         let x_scale_info = NSlicerHelpers::analyze_uv_stops(&x_uv_stops, size.x, scale.x.abs());
         // Preserve the pinned size.x argument for the Y-axis analysis.
         let y_scale_info = NSlicerHelpers::analyze_uv_stops(&y_uv_stops, size.x, scale.y.abs());
-        let this = self as *const NSlicedNode;
-        self.map_world_point = Box::new(move |world_point| unsafe {
+        let resolved_width = self.base.width().abs();
+        let resolved_height = self.base.height().abs();
+        self.map_world_point = Box::new(move |world_point| {
             let local = inverse_world * *world_point;
             let sliced = Vec2D::new(
                 if scale.x == 0.0 {
                     0.0
                 } else {
-                    NSlicerHelpers::map_value(
-                        &x_px_stops,
-                        &x_scale_info,
-                        (*this).base.width().abs(),
-                        local.x,
-                    ) * 1.0_f32.copysign(scale.x)
+                    NSlicerHelpers::map_value(&x_px_stops, &x_scale_info, resolved_width, local.x)
+                        * 1.0_f32.copysign(scale.x)
                 },
                 if scale.y == 0.0 {
                     0.0
                 } else {
-                    NSlicerHelpers::map_value(
-                        &y_px_stops,
-                        &y_scale_info,
-                        (*this).base.height().abs(),
-                        local.y,
-                    ) * 1.0_f32.copysign(scale.y)
+                    NSlicerHelpers::map_value(&y_px_stops, &y_scale_info, resolved_height, local.y)
+                        * 1.0_f32.copysign(scale.y)
                 },
             );
             *world_point = world * sliced;
@@ -184,8 +183,43 @@ impl NSlicedNode {
     }
 }
 
+impl Default for NSlicedNode {
+    fn default() -> Self {
+        Self::new(NSlicedNodeBase::default())
+    }
+}
+
 fn cpp_min(a: f32, b: f32) -> f32 {
     if b < a { b } else { a }
+}
+
+fn axis_stops(axes: &[CoreHandle], size: f32, normalized_output: bool) -> Vec<f32> {
+    let mut stops = vec![0.0];
+    for axis in axes {
+        let values = axis
+            .with_downcast::<AxisX, _>(|axis| (axis.base.offset(), axis.base.normalized()))
+            .or_else(|| {
+                axis.with_downcast::<AxisY, _>(|axis| (axis.base.offset(), axis.base.normalized()))
+            });
+        let Some((offset, normalized)) = values else {
+            continue;
+        };
+        let value = if normalized_output {
+            if normalized {
+                offset.clamp(0.0, 1.0)
+            } else {
+                (offset / size).clamp(0.0, 1.0)
+            }
+        } else if normalized {
+            offset.clamp(0.0, 1.0) * size
+        } else {
+            offset.clamp(0.0, size)
+        };
+        stops.push(value);
+    }
+    stops.push(if normalized_output { 1.0 } else { size });
+    stops.sort_by(f32::total_cmp);
+    stops
 }
 
 impl NSlicerDetails for NSlicedNode {

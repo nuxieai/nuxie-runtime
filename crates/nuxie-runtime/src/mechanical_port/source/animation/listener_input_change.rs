@@ -35,22 +35,54 @@ impl ListenerInputChange {
         ) else {
             return StatusCode::MissingObject;
         };
-        let nested = unsafe {
-            artboard_importer
-                .artboard()
-                .as_ref()
-                .resolve_nested_input(self.base.nested_input_id())
-        };
-        if let Some(nested) = nested {
-            if !validation.validate_nested_input_type(Some(nested)) {
+        let nested = artboard_importer
+            .artboard()
+            .with_downcast::<crate::mechanical_port::source::artboard::Artboard, _>(|artboard| {
+                artboard.resolve_handle(self.base.nested_input_id())
+            })
+            .flatten();
+        if let Some(nested) =
+            nested.filter(|nested| nested.with_downcast::<NestedInput, _>(|_| ()).is_some())
+        {
+            let valid = nested
+                .with_downcast::<NestedInput, _>(|nested| {
+                    validation.validate_nested_input_type(Some(nested))
+                })
+                .unwrap_or(false);
+            if !valid {
                 return StatusCode::InvalidObject;
             }
         } else {
-            let input = unsafe { machine.as_ref().input(self.base.input_id() as usize) };
-            if !validation.validate_input_type(input) {
+            let input = machine
+                .with_downcast::<crate::mechanical_port::source::animation::state_machine::StateMachine, _>(|machine| {
+                    machine.input(self.base.input_id() as usize)
+                })
+                .flatten();
+            let valid = input
+                .as_ref()
+                .and_then(|input| {
+                    input.with_downcast::<StateMachineInput, _>(|input| {
+                        validation.validate_input_type(Some(input))
+                    })
+                })
+                .unwrap_or_else(|| validation.validate_input_type(None));
+            if !valid {
                 return StatusCode::InvalidObject;
             }
         }
         self.base.base.import(stack)
     }
 }
+impl std::ops::Deref for ListenerInputChange {
+    type Target = ListenerInputChangeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ListenerInputChange {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+impl crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks for ListenerInputChange { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }
+impl crate::mechanical_port::source::generated::animation::listener_input_change_base::ListenerInputChangeBaseCallbacks for ListenerInputChange { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }

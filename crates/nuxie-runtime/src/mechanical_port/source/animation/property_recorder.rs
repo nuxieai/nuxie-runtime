@@ -46,46 +46,68 @@ impl CoreObjectData {
 }
 
 pub trait PropertyRecorderRuntime {
-    fn artboard_state_machine(&self, artboard: *const (), index: usize) -> *const ();
-    fn artboard_data_binds(&self, artboard: *const ()) -> Vec<*const ()>;
-    fn data_bind_target(&self, data_bind: *const ()) -> *mut ();
-    fn data_bind_property_key(&self, data_bind: *const ()) -> u16;
-    fn artboard_object_index(&self, artboard: *const (), object: *mut ()) -> i32;
-    fn artboard_resolve(&mut self, artboard: *mut (), object_id: u32) -> *mut ();
+    fn artboard_state_machine(&self, artboard: &CoreHandle, index: usize) -> Option<CoreHandle>;
+    fn artboard_data_binds(&self, artboard: &CoreHandle) -> Vec<CoreHandle>;
+    fn data_bind_target(&self, data_bind: &CoreHandle) -> Option<CoreHandle>;
+    fn data_bind_property_key(&self, data_bind: &CoreHandle) -> u16;
+    fn artboard_object_index(&self, artboard: &CoreHandle, object: &CoreHandle) -> i32;
+    fn artboard_resolve(&mut self, artboard: &CoreHandle, object_id: u32) -> Option<CoreHandle>;
+    fn artboard_instance_resolve(
+        &mut self,
+        artboard: &RuntimeArtboardInstanceHandle,
+        object_id: u32,
+    ) -> Option<CoreHandle>;
     fn property_field_type(&self, property_key: u16) -> PropertyFieldType;
-    fn get_double(&self, object: *const (), property_key: u16) -> f32;
-    fn get_color(&self, object: *const (), property_key: u16) -> u32;
-    fn get_uint(&self, object: *const (), property_key: u16) -> u32;
-    fn get_string(&self, object: *const (), property_key: u16) -> String;
-    fn get_bool(&self, object: *const (), property_key: u16) -> bool;
-    fn set_double(&mut self, object: *mut (), property_key: u16, value: f32);
-    fn set_color(&mut self, object: *mut (), property_key: u16, value: u32);
-    fn set_uint(&mut self, object: *mut (), property_key: u16, value: u32);
-    fn set_string(&mut self, object: *mut (), property_key: u16, value: String);
-    fn set_bool(&mut self, object: *mut (), property_key: u16, value: bool);
-    fn state_machine_layer_count(&self, machine: *const ()) -> usize;
-    fn state_machine_layer(&self, machine: *const (), index: usize) -> *const ();
-    fn state_machine_input_count(&self, machine: *const ()) -> usize;
-    fn state_machine_input(&self, machine: *const (), index: usize) -> *const ();
-    fn state_machine_input_type(&self, input: *const ()) -> StateMachineInputType;
-    fn state_machine_number_value(&self, input: *const ()) -> f32;
-    fn state_machine_bool_value(&self, input: *const ()) -> bool;
-    fn state_machine_layer_state_count(&self, layer: *const ()) -> usize;
-    fn state_machine_layer_state(&self, layer: *const (), index: usize) -> *const ();
-    fn layer_state_type(&self, state: *const ()) -> LayerStateType;
-    fn animation_state_animation(&self, state: *const ()) -> *const ();
-    fn blend_state_animations(&self, state: *const ()) -> Vec<*const ()>;
-    fn blend_animation_animation(&self, animation: *const ()) -> *const ();
-    fn linear_animation_keyed_object_count(&self, animation: *const ()) -> usize;
-    fn linear_animation_keyed_object(&self, animation: *const (), index: usize) -> *const ();
-    fn keyed_object_id(&self, keyed_object: *const ()) -> u32;
-    fn keyed_object_property_count(&self, keyed_object: *const ()) -> usize;
-    fn keyed_object_property(&self, keyed_object: *const (), index: usize) -> *const ();
-    fn keyed_property_key(&self, keyed_property: *const ()) -> u16;
-    fn state_machine_instance_input(&self, instance: *mut (), index: usize) -> *mut ();
-    fn state_machine_instance_input_name(&self, input: *const ()) -> String;
-    fn state_machine_instance_set_number(&mut self, instance: *mut (), name: &str, value: f32);
-    fn state_machine_instance_set_bool(&mut self, instance: *mut (), name: &str, value: bool);
+    fn get_double(&self, object: &CoreHandle, property_key: u16) -> f32;
+    fn get_color(&self, object: &CoreHandle, property_key: u16) -> u32;
+    fn get_uint(&self, object: &CoreHandle, property_key: u16) -> u32;
+    fn get_string(&self, object: &CoreHandle, property_key: u16) -> String;
+    fn get_bool(&self, object: &CoreHandle, property_key: u16) -> bool;
+    fn set_double(&mut self, object: &CoreHandle, property_key: u16, value: f32);
+    fn set_color(&mut self, object: &CoreHandle, property_key: u16, value: u32);
+    fn set_uint(&mut self, object: &CoreHandle, property_key: u16, value: u32);
+    fn set_string(&mut self, object: &CoreHandle, property_key: u16, value: String);
+    fn set_bool(&mut self, object: &CoreHandle, property_key: u16, value: bool);
+    fn state_machine_layer_count(&self, machine: &CoreHandle) -> usize;
+    fn state_machine_layer(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
+    fn state_machine_input_count(&self, machine: &CoreHandle) -> usize;
+    fn state_machine_input(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
+    fn state_machine_input_type(&self, input: &CoreHandle) -> StateMachineInputType;
+    fn state_machine_number_value(&self, input: &CoreHandle) -> f32;
+    fn state_machine_bool_value(&self, input: &CoreHandle) -> bool;
+    fn state_machine_layer_state_count(&self, layer: &CoreHandle) -> usize;
+    fn state_machine_layer_state(&self, layer: &CoreHandle, index: usize) -> Option<CoreHandle>;
+    fn layer_state_type(&self, state: &CoreHandle) -> LayerStateType;
+    fn animation_state_animation(&self, state: &CoreHandle) -> Option<CoreHandle>;
+    fn blend_state_animations(&self, state: &CoreHandle) -> Vec<CoreHandle>;
+    fn blend_animation_animation(&self, animation: &CoreHandle) -> Option<CoreHandle>;
+    fn linear_animation_keyed_object_count(&self, animation: &CoreHandle) -> usize;
+    fn linear_animation_keyed_object(
+        &self,
+        animation: &CoreHandle,
+        index: usize,
+    ) -> Option<CoreHandle>;
+    fn keyed_object_id(&self, keyed_object: &CoreHandle) -> u32;
+    fn keyed_object_property_count(&self, keyed_object: &CoreHandle) -> usize;
+    fn keyed_object_property(&self, keyed_object: &CoreHandle, index: usize) -> Option<CoreHandle>;
+    fn keyed_property_key(&self, keyed_property: &CoreHandle) -> u16;
+    fn state_machine_instance_input_name(
+        &self,
+        instance: &RuntimeStateMachineInstanceHandle,
+        index: usize,
+    ) -> Option<String>;
+    fn state_machine_instance_set_number(
+        &mut self,
+        instance: &RuntimeStateMachineInstanceHandle,
+        name: &str,
+        value: f32,
+    );
+    fn state_machine_instance_set_bool(
+        &mut self,
+        instance: &RuntimeStateMachineInstanceHandle,
+        name: &str,
+        value: bool,
+    );
 }
 
 pub struct PropertyRecorder {
@@ -214,21 +236,24 @@ impl PropertyRecorder {
 
     pub fn record_artboard(
         &mut self,
-        artboard: *const (),
+        artboard: &CoreHandle,
         runtime: &mut dyn PropertyRecorderRuntime,
     ) {
         let machine = runtime.artboard_state_machine(artboard, 0);
-        self.record_state_machine_inputs(machine, runtime);
-        self.record_state_machine(machine, runtime);
+        self.record_state_machine_inputs(machine.as_ref(), runtime);
+        self.record_state_machine(machine.as_ref(), runtime);
         self.record_data_binds(artboard, runtime);
         self.write_properties(artboard, runtime);
         self.complete_main();
     }
-    fn record_data_binds(&mut self, artboard: *const (), runtime: &dyn PropertyRecorderRuntime) {
+    fn record_data_binds(&mut self, artboard: &CoreHandle, runtime: &dyn PropertyRecorderRuntime) {
         for bind in runtime.artboard_data_binds(artboard) {
-            let index = self.get_object_id(artboard, runtime.data_bind_target(bind), runtime);
+            let Some(target) = runtime.data_bind_target(&bind) else {
+                continue;
+            };
+            let index = self.get_object_id(artboard, &target, runtime);
             if index >= 0 {
-                self.add_property_key(index as u32, runtime.data_bind_property_key(bind), runtime);
+                self.add_property_key(index as u32, runtime.data_bind_property_key(&bind), runtime);
             }
         }
     }
@@ -249,34 +274,39 @@ impl PropertyRecorder {
             self.get_core_object_data(object_id).add_property_key(key);
         }
     }
-    fn record_state_machine(&mut self, machine: *const (), runtime: &dyn PropertyRecorderRuntime) {
-        if machine.is_null() {
+    fn record_state_machine(
+        &mut self,
+        machine: Option<&CoreHandle>,
+        runtime: &dyn PropertyRecorderRuntime,
+    ) {
+        let Some(machine) = machine else {
             return;
-        }
+        };
         for i in 0..runtime.state_machine_layer_count(machine) {
-            self.record_state_machine_layer(runtime.state_machine_layer(machine, i), runtime);
+            if let Some(layer) = runtime.state_machine_layer(machine, i) {
+                self.record_state_machine_layer(&layer, runtime);
+            }
         }
     }
     pub fn record_state_machine_inputs(
         &mut self,
-        machine: *const (),
+        machine: Option<&CoreHandle>,
         runtime: &dyn PropertyRecorderRuntime,
     ) {
-        if !machine.is_null() {
+        if let Some(machine) = machine {
             for i in 0..runtime.state_machine_input_count(machine) {
-                self.record_state_machine_input(runtime.state_machine_input(machine, i), runtime);
+                if let Some(input) = runtime.state_machine_input(machine, i) {
+                    self.record_state_machine_input(&input, runtime);
+                }
             }
         }
         self.complete_state_machine();
     }
     fn record_state_machine_input(
         &mut self,
-        input: *const (),
+        input: &CoreHandle,
         runtime: &dyn PropertyRecorderRuntime,
     ) {
-        if input.is_null() {
-            return;
-        }
         match runtime.state_machine_input_type(input) {
             StateMachineInputType::Number => {
                 self.write_property_int_sm(0);
@@ -292,28 +322,31 @@ impl PropertyRecorder {
     }
     fn record_state_machine_layer(
         &mut self,
-        layer: *const (),
+        layer: &CoreHandle,
         runtime: &dyn PropertyRecorderRuntime,
     ) {
         for i in 0..runtime.state_machine_layer_state_count(layer) {
-            self.record_state_machine_layer_state(
-                runtime.state_machine_layer_state(layer, i),
-                runtime,
-            );
+            if let Some(state) = runtime.state_machine_layer_state(layer, i) {
+                self.record_state_machine_layer_state(&state, runtime);
+            }
         }
     }
     fn record_state_machine_layer_state(
         &mut self,
-        state: *const (),
+        state: &CoreHandle,
         runtime: &dyn PropertyRecorderRuntime,
     ) {
         match runtime.layer_state_type(state) {
-            LayerStateType::Animation => {
-                self.record_linear_animation(runtime.animation_state_animation(state), runtime)
-            }
+            LayerStateType::Animation => self.record_linear_animation(
+                runtime.animation_state_animation(state).as_ref(),
+                runtime,
+            ),
             LayerStateType::Blend => {
                 for blend in runtime.blend_state_animations(state) {
-                    self.record_linear_animation(runtime.blend_animation_animation(blend), runtime);
+                    self.record_linear_animation(
+                        runtime.blend_animation_animation(&blend).as_ref(),
+                        runtime,
+                    );
                 }
             }
             LayerStateType::Other => {}
@@ -321,25 +354,25 @@ impl PropertyRecorder {
     }
     fn record_linear_animation(
         &mut self,
-        animation: *const (),
+        animation: Option<&CoreHandle>,
         runtime: &dyn PropertyRecorderRuntime,
     ) {
-        if animation.is_null() {
+        let Some(animation) = animation else {
             return;
-        }
+        };
         for i in 0..runtime.linear_animation_keyed_object_count(animation) {
-            self.record_keyed_object(runtime.linear_animation_keyed_object(animation, i), runtime);
+            if let Some(object) = runtime.linear_animation_keyed_object(animation, i) {
+                self.record_keyed_object(&object, runtime);
+            }
         }
     }
-    fn record_keyed_object(&mut self, object: *const (), runtime: &dyn PropertyRecorderRuntime) {
-        if object.is_null() {
-            return;
-        }
+    fn record_keyed_object(&mut self, object: &CoreHandle, runtime: &dyn PropertyRecorderRuntime) {
         let id = runtime.keyed_object_id(object);
         self.get_core_object_data(id);
         for i in 0..runtime.keyed_object_property_count(object) {
-            let property = runtime.keyed_object_property(object, i);
-            self.add_property_key(id, runtime.keyed_property_key(property), runtime);
+            if let Some(property) = runtime.keyed_object_property(object, i) {
+                self.add_property_key(id, runtime.keyed_property_key(&property), runtime);
+            }
         }
     }
     fn get_core_object_data(&mut self, id: u32) -> &mut CoreObjectData {
@@ -354,37 +387,43 @@ impl PropertyRecorder {
             .push(Box::new(CoreObjectData::new(id)));
         self.core_objects_data.last_mut().unwrap()
     }
-    fn write_properties(&mut self, artboard: *const (), runtime: &mut dyn PropertyRecorderRuntime) {
+    fn write_properties(
+        &mut self,
+        artboard: &CoreHandle,
+        runtime: &mut dyn PropertyRecorderRuntime,
+    ) {
         for i in 0..self.core_objects_data.len() {
             let id = self.core_objects_data[i].object_id;
             let keys = self.core_objects_data[i].property_keys.clone();
             if keys.is_empty() {
                 continue;
             }
-            let object = runtime.artboard_resolve(artboard as *mut (), id);
+            let Some(object) = runtime.artboard_resolve(artboard, id) else {
+                continue;
+            };
             self.write_object_id(id);
             self.write_total_properties(keys.len() as u32);
             for key in keys {
                 match runtime.property_field_type(key) {
                     PropertyFieldType::Double => {
                         self.write_property_key(key as u32);
-                        self.write_property_float(runtime.get_double(object, key));
+                        self.write_property_float(runtime.get_double(&object, key));
                     }
                     PropertyFieldType::Color => {
                         self.write_property_key(key as u32);
-                        self.write_property_uint(runtime.get_color(object, key));
+                        self.write_property_uint(runtime.get_color(&object, key));
                     }
                     PropertyFieldType::Uint => {
                         self.write_property_key(key as u32);
-                        self.write_property_uint(runtime.get_uint(object, key));
+                        self.write_property_uint(runtime.get_uint(&object, key));
                     }
                     PropertyFieldType::String => {
                         self.write_property_key(key as u32);
-                        self.write_property_string(runtime.get_string(object, key));
+                        self.write_property_string(runtime.get_string(&object, key));
                     }
                     PropertyFieldType::Bool => {
                         self.write_property_key(key as u32);
-                        self.write_property_bool(runtime.get_bool(object, key));
+                        self.write_property_bool(runtime.get_bool(&object, key));
                     }
                     PropertyFieldType::Other => {}
                 }
@@ -393,8 +432,8 @@ impl PropertyRecorder {
     }
     fn get_object_id(
         &self,
-        artboard: *const (),
-        object: *mut (),
+        artboard: &CoreHandle,
+        object: &CoreHandle,
         runtime: &dyn PropertyRecorderRuntime,
     ) -> i32 {
         runtime.artboard_object_index(artboard, object)
@@ -436,7 +475,7 @@ impl PropertyRecorder {
     }
     pub fn apply_state_machine(
         &mut self,
-        instance: *mut (),
+        instance: &RuntimeStateMachineInstanceHandle,
         runtime: &mut dyn PropertyRecorderRuntime,
     ) {
         let mut index = 0;
@@ -447,8 +486,9 @@ impl PropertyRecorder {
                 &mut self.reader_position_sm,
                 self.reader_end_sm,
             );
-            let input = runtime.state_machine_instance_input(instance, index);
-            let name = runtime.state_machine_instance_input_name(input);
+            let Some(name) = runtime.state_machine_instance_input_name(instance, index) else {
+                break;
+            };
             if kind == 0 {
                 let value = Self::read_float(
                     &self.write_buffer_sm,
@@ -467,7 +507,11 @@ impl PropertyRecorder {
             index += 1;
         }
     }
-    pub fn apply_artboard(&mut self, artboard: *mut (), runtime: &mut dyn PropertyRecorderRuntime) {
+    pub fn apply_artboard(
+        &mut self,
+        artboard: &RuntimeArtboardInstanceHandle,
+        runtime: &mut dyn PropertyRecorderRuntime,
+    ) {
         self.reader_position = 0;
         while self.reader_position < self.reader_end {
             let id = Self::read_var_uint(
@@ -475,7 +519,9 @@ impl PropertyRecorder {
                 &mut self.reader_position,
                 self.reader_end,
             );
-            let object = runtime.artboard_resolve(artboard, id);
+            let Some(object) = runtime.artboard_instance_resolve(artboard, id) else {
+                break;
+            };
             let total = Self::read_var_uint(
                 &self.write_buffer,
                 &mut self.reader_position,
@@ -494,7 +540,7 @@ impl PropertyRecorder {
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_double(object, key, v);
+                        runtime.set_double(&object, key, v);
                     }
                     PropertyFieldType::Color => {
                         let v = Self::read_var_uint(
@@ -502,7 +548,7 @@ impl PropertyRecorder {
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_color(object, key, v);
+                        runtime.set_color(&object, key, v);
                     }
                     PropertyFieldType::Uint => {
                         let v = Self::read_var_uint(
@@ -510,7 +556,7 @@ impl PropertyRecorder {
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_uint(object, key, v);
+                        runtime.set_uint(&object, key, v);
                     }
                     PropertyFieldType::String => {
                         let v = Self::read_string(
@@ -518,7 +564,7 @@ impl PropertyRecorder {
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_string(object, key, v);
+                        runtime.set_string(&object, key, v);
                     }
                     PropertyFieldType::Bool => {
                         let v = Self::read_byte(
@@ -526,7 +572,7 @@ impl PropertyRecorder {
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_bool(object, key, v != 0);
+                        runtime.set_bool(&object, key, v != 0);
                     }
                     PropertyFieldType::Other => {}
                 }
@@ -534,3 +580,7 @@ impl PropertyRecorder {
         }
     }
 }
+use crate::mechanical_port::source::{
+    animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
+    artboard::RuntimeArtboardInstanceHandle, core::CoreHandle,
+};

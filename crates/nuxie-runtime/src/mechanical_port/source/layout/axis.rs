@@ -1,6 +1,9 @@
 use crate::mechanical_port::source::{
     core_context::{CoreContext, StatusCode},
-    generated::layout::axis_base::AxisBase,
+    generated::{
+        component_base::ComponentBaseCallbacks,
+        layout::axis_base::{AxisBase, AxisBaseCallbacks},
+    },
     layout::n_slicer_details,
 };
 
@@ -10,24 +13,43 @@ pub enum AxisType {
     Y = 1,
 }
 
+impl AxisBaseCallbacks for Axis {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base.base.notify_property_changed(property_key);
+    }
+
+    fn offset_changed(&mut self) {
+        Axis::offset_changed(self);
+    }
+}
+
+impl ComponentBaseCallbacks for Axis {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base.base.notify_property_changed(property_key);
+    }
+}
+
 pub struct Axis {
     pub base: AxisBase,
 }
 
 impl Axis {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
-        if n_slicer_details::from(self.base.parent_mut()).is_none() {
+        let Some(parent) = self.base.parent_handle() else {
+            return StatusCode::MissingObject;
+        };
+        if !n_slicer_details::is_details(&parent) {
             return StatusCode::MissingObject;
         }
         StatusCode::Ok
     }
     pub fn offset_changed(&mut self) {
-        if let Some(details) = n_slicer_details::from(self.base.parent_mut()) {
-            details.axis_changed();
+        if let Some(parent) = self.base.parent_handle() {
+            n_slicer_details::axis_changed(&parent);
         }
     }
 }

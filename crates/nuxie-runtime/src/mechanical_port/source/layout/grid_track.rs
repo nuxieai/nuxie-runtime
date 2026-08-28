@@ -1,10 +1,8 @@
-#[cfg(feature = "rive-layout")]
-use crate::mechanical_port::source::yoga::{
+use crate::mechanical_port::source::layout::layout_style_applier::{
     GridTrackList, YGGridLine, YGGridTrackSize, YGJustify, YGStyle, YGStyleSizeLength,
 };
 use crate::mechanical_port::source::{
     component::ContainerComponent, generated::layout::grid_track_base::GridTrackBase,
-    layout_component::LayoutComponent,
 };
 
 #[repr(u8)]
@@ -23,6 +21,7 @@ pub enum GridTrackSizeType {
     Fr,
 }
 
+#[derive(Default)]
 pub struct GridTrack {
     pub base: GridTrackBase,
 }
@@ -31,18 +30,12 @@ impl GridTrack {
         GridTrackCollection::from(self.base.collection())
     }
     fn mark_layout_dirty(&mut self) {
-        #[cfg(feature = "rive-layout")]
-        if self
-            .base
-            .parent()
-            .is_some_and(|p| p.is::<LayoutComponent>())
-        {
-            self.base
-                .parent_mut()
-                .unwrap()
-                .as_mut::<LayoutComponent>()
-                .unwrap()
-                .mark_layout_node_dirty(false);
+        if let Some(parent) = self.base.parent_handle() {
+            parent.with_mut(|parent| {
+                if let Some(layout) = parent.as_layout_component_mut() {
+                    layout.mark_layout_node_dirty(false);
+                }
+            });
         }
     }
     pub fn collection_changed(&mut self) {
@@ -61,7 +54,6 @@ impl GridTrack {
         self.mark_layout_dirty();
     }
 
-    #[cfg(feature = "rive-layout")]
     fn grid_size_length(kind: GridTrackSizeType, value: f32) -> YGStyleSizeLength {
         match kind {
             GridTrackSizeType::Points => YGStyleSizeLength::points(value),
@@ -70,7 +62,6 @@ impl GridTrack {
             GridTrackSizeType::AutoSize => YGStyleSizeLength::auto(),
         }
     }
-    #[cfg(feature = "rive-layout")]
     fn grid_track_size(track: &GridTrack) -> YGGridTrackSize {
         let kind = GridTrackSizeType::from(track.base.track_type());
         if track.base.track_max_type() != 0 {
@@ -89,7 +80,6 @@ impl GridTrack {
             GridTrackSizeType::AutoSize => YGGridTrackSize::auto(),
         }
     }
-    #[cfg(feature = "rive-layout")]
     fn grid_line(cell: i32) -> YGGridLine {
         if cell == 0 {
             YGGridLine::auto()
@@ -97,7 +87,6 @@ impl GridTrack {
             YGGridLine::from_integer(if cell < 0 { cell - 1 } else { cell })
         }
     }
-    #[cfg(feature = "rive-layout")]
     fn grid_span(span: u32) -> YGGridLine {
         if span > 1 {
             YGGridLine::span(span as i32)
@@ -106,7 +95,6 @@ impl GridTrack {
         }
     }
 
-    #[cfg(feature = "rive-layout")]
     pub fn sync_container_style(
         style: &mut YGStyle,
         owner: &ContainerComponent,
@@ -114,13 +102,15 @@ impl GridTrack {
     ) {
         let mut lists: [GridTrackList; 4] = Default::default();
         for child in owner.children() {
-            let Some(track) = child.as_ref::<GridTrack>() else {
+            let Some((collection, track_size)) = child.with_downcast::<GridTrack, _>(|track| {
+                (track.base.collection(), Self::grid_track_size(track))
+            }) else {
                 continue;
             };
-            if track.base.collection() > 3 {
+            if collection > 3 {
                 continue;
             }
-            lists[track.base.collection() as usize].push(Self::grid_track_size(track));
+            lists[collection as usize].push(track_size);
         }
         style.set_grid_template_columns(std::mem::take(&mut lists[0]));
         style.set_grid_template_rows(std::mem::take(&mut lists[1]));
@@ -128,7 +118,6 @@ impl GridTrack {
         style.set_grid_auto_rows(std::mem::take(&mut lists[3]));
         style.set_justify_items(YGJustify::from(justify_items));
     }
-    #[cfg(feature = "rive-layout")]
     pub fn sync_stack_container_style(style: &mut YGStyle, justify_items: u32) {
         style.set_grid_template_columns(vec![YGGridTrackSize::fr(1.0)]);
         style.set_grid_template_rows(vec![YGGridTrackSize::fr(1.0)]);
@@ -136,7 +125,6 @@ impl GridTrack {
         style.set_grid_auto_rows(Vec::new());
         style.set_justify_items(YGJustify::from(justify_items));
     }
-    #[cfg(feature = "rive-layout")]
     fn resolve_item_justify_self(value: u32, inline_hugs: bool, container: u32) -> YGJustify {
         if !inline_hugs {
             return YGJustify::from(value);
@@ -152,7 +140,6 @@ impl GridTrack {
             YGJustify::from(value)
         }
     }
-    #[cfg(feature = "rive-layout")]
     pub fn sync_item_lines(
         style: &mut YGStyle,
         column: i32,
@@ -165,14 +152,12 @@ impl GridTrack {
         style.set_grid_row_start(Self::grid_line(row));
         style.set_grid_row_end(Self::grid_span(row_span));
     }
-    #[cfg(feature = "rive-layout")]
     pub fn sync_stack_item_cell(style: &mut YGStyle) {
         style.set_grid_column_start(YGGridLine::from_integer(1));
         style.set_grid_column_end(YGGridLine::auto());
         style.set_grid_row_start(YGGridLine::from_integer(1));
         style.set_grid_row_end(YGGridLine::auto());
     }
-    #[cfg(feature = "rive-layout")]
     pub fn sync_item_justify_self(
         style: &mut YGStyle,
         value: u32,

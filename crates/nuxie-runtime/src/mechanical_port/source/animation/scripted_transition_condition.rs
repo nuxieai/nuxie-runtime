@@ -1,28 +1,36 @@
 use crate::mechanical_port::source::{
+    animation::state_machine_instance::{
+        RuntimeStateMachineLayerInstanceWeakHandle, StateMachineInstance,
+    },
+    artboard::RuntimeArtboardInstanceHandle,
+    core::CoreHandle,
     generated::animation::scripted_transition_condition_base::ScriptedTransitionConditionBase,
-    importers::import_stack::ImportStack, status_code::StatusCode,
+    importers::import_stack::ImportStack,
+    status_code::StatusCode,
 };
 pub trait ScriptedConditionRuntime {
     fn dispose_script_inputs(&mut self);
-    #[cfg(feature = "rive_scripting")]
     fn evaluate(&mut self) -> bool;
-    fn stateful_condition(
+    fn evaluate_stateful(
         &mut self,
-        stateless: *const (),
-    ) -> Option<&mut dyn ScriptedConditionRuntime>;
+        stateful: &CoreHandle,
+        machine: &StateMachineInstance,
+        layer: &RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> bool;
+    fn stateful_condition(&mut self, stateless: &CoreHandle) -> Option<CoreHandle>;
     fn register_referencer(&mut self, stack: &mut ImportStack) -> StatusCode;
-    fn add_scripted_object(&mut self, stack: &mut ImportStack, object: *mut ()) -> StatusCode;
+    fn add_scripted_object(&mut self, stack: &mut ImportStack, object: CoreHandle) -> StatusCode;
     fn clone_base(&self, base: &ScriptedTransitionConditionBase)
     -> ScriptedTransitionConditionBase;
     fn clone_runtime(&self) -> Box<dyn ScriptedConditionRuntime>;
     fn clone_properties_to(
         &self,
         target: &mut dyn ScriptedConditionRuntime,
-        data_bind_container: *mut (),
+        data_bind_container: &RuntimeArtboardInstanceHandle,
     );
     fn reinit(&mut self);
-    fn set_script_input_owner(&mut self, property: *mut (), owner: *mut ());
-    fn add_property(&mut self, property: *mut ());
+    fn set_script_input_owner(&mut self, property: &CoreHandle, owner: CoreHandle);
+    fn add_property(&mut self, property: CoreHandle);
 }
 #[derive(Default)]
 pub struct ScriptedTransitionCondition {
@@ -40,18 +48,29 @@ impl ScriptedTransitionCondition {
             runtime.dispose_script_inputs();
         }
     }
-    pub fn evaluate_stateful(&mut self, _machine: *const (), _layer: *mut ()) -> bool {
-        #[cfg(feature = "rive_scripting")]
-        if let Some(runtime) = &mut self.runtime {
-            return runtime.evaluate();
-        }
-        false
+    pub fn evaluate_stateful(
+        &mut self,
+        machine: &StateMachineInstance,
+        layer: &RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> bool {
+        let Some(this) = self.base.base.base.handle() else {
+            return false;
+        };
+        self.runtime
+            .as_mut()
+            .is_some_and(|runtime| runtime.evaluate_stateful(&this, machine, layer))
     }
-    pub fn evaluate(&mut self, _machine: *const (), _layer: *mut ()) -> bool {
-        #[cfg(feature = "rive_scripting")]
+    pub fn evaluate(
+        &mut self,
+        machine: &StateMachineInstance,
+        layer: &RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> bool {
+        let Some(this) = self.base.base.base.handle() else {
+            return false;
+        };
         if let Some(runtime) = &mut self.runtime {
-            if let Some(stateful) = runtime.stateful_condition(self as *const Self as *const ()) {
-                return stateful.evaluate();
+            if let Some(stateful) = runtime.stateful_condition(&this) {
+                return runtime.evaluate_stateful(&stateful, machine, layer);
             }
         }
         false
@@ -62,7 +81,7 @@ impl ScriptedTransitionCondition {
     pub fn add_scripted_dirt(&mut self, _value: u32, _recurse: bool) -> bool {
         false
     }
-    pub fn component(&self) -> Option<*mut ()> {
+    pub fn component(&self) -> Option<CoreHandle> {
         None
     }
     pub fn script_protocol(&self) -> u8 {
@@ -76,15 +95,21 @@ impl ScriptedTransitionCondition {
         if code != StatusCode::Ok {
             return code;
         }
-        let code = runtime.add_scripted_object(stack, self as *mut Self as *mut ());
+        let Some(this) = self.base.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        let code = runtime.add_scripted_object(stack, this);
         if code != StatusCode::Ok {
             return code;
         }
         self.base.base.import(stack)
     }
-    pub fn add_property(&mut self, property: *mut ()) {
+    pub fn add_property(&mut self, property: CoreHandle) {
+        let Some(this) = self.base.base.base.handle() else {
+            return;
+        };
         if let Some(runtime) = &mut self.runtime {
-            runtime.set_script_input_owner(property, self as *mut Self as *mut ());
+            runtime.set_script_input_owner(&property, this);
             runtime.add_property(property);
         }
     }
@@ -97,7 +122,10 @@ impl ScriptedTransitionCondition {
             .unwrap_or_default();
         Self { base, runtime }
     }
-    pub fn clone_scripted_object(&self, data_bind_container: *mut ()) -> Self {
+    pub fn clone_scripted_object(
+        &self,
+        data_bind_container: &RuntimeArtboardInstanceHandle,
+    ) -> Self {
         let mut clone = self.clone_definition();
         if let (Some(source), Some(target)) = (&self.runtime, &mut clone.runtime) {
             source.clone_properties_to(target.as_mut(), data_bind_container);

@@ -11,29 +11,17 @@ pub trait StyleOverrideProvider {
     fn mark_hosting_layout_dirty(&mut self, artboard: &mut ArtboardInstance);
 }
 
-pub struct StyleOverrider<T: StyleOverrideProvider> {
-    style_provider: Option<*mut T>,
-}
+pub struct StyleOverrider<T: StyleOverrideProvider>(std::marker::PhantomData<fn() -> T>);
 impl<T: StyleOverrideProvider> StyleOverrider<T> {
-    pub fn new(provider: &mut T) -> Self {
-        Self {
-            style_provider: Some(provider),
-        }
+    pub fn new(_provider: &mut T) -> Self {
+        Self::detached()
     }
     pub fn detached() -> Self {
-        Self {
-            style_provider: None,
-        }
+        Self(std::marker::PhantomData)
     }
-    pub fn attach(&mut self, provider: &mut T) {
-        self.style_provider = Some(provider);
-    }
-    fn provider(&mut self) -> &mut T {
-        unsafe { &mut *self.style_provider.unwrap() }
-    }
+    pub fn attach(&mut self, _provider: &mut T) {}
 
-    pub fn update_height_override(&mut self, artboard: &mut ArtboardInstance) {
-        let provider = self.provider();
+    pub fn update_height_override(provider: &mut T, artboard: &mut ArtboardInstance) {
         let is_row = provider.is_row();
         if provider.instance_height_scale_type() == 0 {
             artboard.set_height_intrinsically_size_override(false);
@@ -55,8 +43,7 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
         }
         provider.mark_hosting_layout_dirty(artboard);
     }
-    pub fn update_width_override(&mut self, artboard: &mut ArtboardInstance) {
-        let provider = self.provider();
+    pub fn update_width_override(provider: &mut T, artboard: &mut ArtboardInstance) {
         let is_row = provider.is_row();
         if provider.instance_width_scale_type() == 0 {
             artboard.set_width_intrinsically_size_override(false);
@@ -91,10 +78,10 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
             provider.instance_height()
         }
     }
-    pub fn actual_instance_width(&mut self, artboard: &ArtboardInstance) -> f32 {
-        Self::actual_instance_width_for(self.provider(), artboard)
+    pub fn actual_instance_width(provider: &T, artboard: &ArtboardInstance) -> f32 {
+        Self::actual_instance_width_for(provider, artboard)
     }
-    pub fn actual_instance_height(&mut self, artboard: &ArtboardInstance) -> f32 {
-        Self::actual_instance_height_for(self.provider(), artboard)
+    pub fn actual_instance_height(provider: &T, artboard: &ArtboardInstance) -> f32 {
+        Self::actual_instance_height_for(provider, artboard)
     }
 }

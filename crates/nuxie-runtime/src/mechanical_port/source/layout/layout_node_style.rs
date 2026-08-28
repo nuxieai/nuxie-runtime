@@ -2,13 +2,16 @@ use crate::mechanical_port::source::{
     generated::layout::layout_node_style_base::LayoutNodeStyleBase, layout::layout_node_provider,
 };
 
+#[derive(Default)]
 pub struct LayoutNodeStyle {
     pub base: LayoutNodeStyleBase,
 }
 impl LayoutNodeStyle {
     pub fn mark_layout_node_dirty(&mut self) {
-        if let Some(provider) = layout_node_provider::from(self.base.parent_mut()) {
-            provider.mark_layout_node_dirty(false);
+        if let Some(parent) = self.base.parent_handle() {
+            layout_node_provider::with_mut(&parent, |provider| {
+                provider.mark_layout_node_dirty(false)
+            });
         }
     }
     pub fn width_changed(&mut self) {

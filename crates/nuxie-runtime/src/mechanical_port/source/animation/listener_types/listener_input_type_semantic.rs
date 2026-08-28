@@ -1,28 +1,23 @@
 use crate::mechanical_port::source::{
-    animation::semantic_listener_group::SemanticActionType,
+    animation::semantic_listener_group::SemanticActionType, core::CoreHandle,
     generated::animation::listener_types::listener_input_type_semantic_base::ListenerInputTypeSemanticBase,
-    inputs::semantic_input::SemanticInput,
 };
-use std::ptr::NonNull;
 pub trait SemanticConstraintListener {
-    fn semantic_input_types(&self) -> Vec<&ListenerInputTypeSemantic>;
+    fn semantic_input_types(&self) -> Vec<CoreHandle>;
 }
 #[derive(Default)]
 pub struct ListenerInputTypeSemantic {
     pub base: ListenerInputTypeSemanticBase,
-    semantic_inputs: Vec<NonNull<SemanticInput>>,
+    semantic_inputs: Vec<CoreHandle>,
 }
 impl ListenerInputTypeSemantic {
     pub fn semantic_input_count(&self) -> usize {
         self.semantic_inputs.len()
     }
-    pub fn semantic_input(&self, index: usize) -> Option<&SemanticInput> {
-        self.semantic_inputs
-            .get(index)
-            .map(|value| unsafe { value.as_ref() })
+    pub fn semantic_input(&self, index: usize) -> Option<CoreHandle> {
+        self.semantic_inputs.get(index).cloned()
     }
-    pub fn add_semantic_input(&mut self, input: &mut SemanticInput) {
-        let input = NonNull::from(input);
+    pub fn add_semantic_input(&mut self, input: CoreHandle) {
         if !self.semantic_inputs.contains(&input) {
             self.semantic_inputs.push(input);
         }
@@ -36,16 +31,20 @@ impl ListenerInputTypeSemantic {
         };
         let action = action as u32;
         for input_type in listener.semantic_input_types() {
-            if input_type.semantic_input_count() == 0 {
-                return true;
-            }
-            for index in 0..input_type.semantic_input_count() {
-                if input_type
-                    .semantic_input(index)
-                    .is_some_and(|input| input.base.action_type() == action)
-                {
+            let Some(matched) = input_type.with_downcast::<ListenerInputTypeSemantic, _>(|input_type| {
+                if input_type.semantic_input_count() == 0 {
                     return true;
                 }
+                input_type.semantic_inputs.iter().any(|input| {
+                    input
+                        .with_downcast::<crate::mechanical_port::source::inputs::semantic_input::SemanticInput, _>(|input| input.action_type() == action)
+                        .unwrap_or(false)
+                })
+            }) else {
+                continue;
+            };
+            if matched {
+                return true;
             }
         }
         false

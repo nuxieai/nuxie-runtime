@@ -1,4 +1,7 @@
-use std::collections::HashSet;
+use crate::mechanical_port::source::animation::state_machine_instance::{
+    RuntimeStateMachineInstanceWeakHandle, RuntimeStateMachineLayerInstanceWeakHandle,
+};
+use std::{cell::Cell, rc::Rc};
 pub trait StateMachineInputDefinition {
     fn core_type(&self) -> u16;
     fn name(&self) -> &str;
@@ -9,48 +12,65 @@ pub trait StateMachineInputDefinition {
         0.0
     }
 }
-pub trait InputInstanceMachine {
-    fn mark_needs_advance(&mut self);
-    #[cfg(feature = "rive_tools")]
-    fn input_changed(&mut self, index: u64);
+#[derive(Clone)]
+pub struct InputInstanceNotifier {
+    needs_advance: Rc<Cell<bool>>,
+    #[cfg(feature = "tools")]
+    machine: Option<RuntimeStateMachineInstanceWeakHandle>,
+}
+impl InputInstanceNotifier {
+    pub fn new(needs_advance: Rc<Cell<bool>>) -> Self {
+        Self {
+            needs_advance,
+            #[cfg(feature = "tools")]
+            machine: None,
+        }
+    }
+    #[cfg(feature = "tools")]
+    pub fn set_machine(&mut self, machine: RuntimeStateMachineInstanceWeakHandle) {
+        self.machine = Some(machine);
+    }
+    fn value_changed(&self, index: u64) {
+        self.needs_advance.set(true);
+        #[cfg(feature = "tools")]
+        if let Some(machine) = self.machine.as_ref() {
+            machine.with_instance_mut(|machine| machine.input_changed(index));
+        }
+    }
 }
 pub struct SMIInput {
-    machine: *mut dyn InputInstanceMachine,
-    input: *const dyn StateMachineInputDefinition,
-    #[cfg(feature = "rive_tools")]
+    notifier: InputInstanceNotifier,
+    input_name: String,
+    input_core_type: u16,
+    #[cfg(feature = "tools")]
     index: u64,
 }
 impl SMIInput {
-    pub fn new(
-        input: &dyn StateMachineInputDefinition,
-        machine: &mut dyn InputInstanceMachine,
-    ) -> Self {
+    pub fn new(input: &dyn StateMachineInputDefinition, notifier: InputInstanceNotifier) -> Self {
         Self {
-            machine,
-            input,
-            #[cfg(feature = "rive_tools")]
+            notifier,
+            input_name: input.name().to_owned(),
+            input_core_type: input.core_type(),
+            #[cfg(feature = "tools")]
             index: 0,
         }
     }
-    pub fn input(&self) -> &dyn StateMachineInputDefinition {
-        unsafe { &*self.input }
-    }
     pub fn name(&self) -> &str {
-        self.input().name()
+        &self.input_name
     }
     pub fn input_core_type(&self) -> u16 {
-        self.input().core_type()
+        self.input_core_type
     }
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub(crate) fn set_index(&mut self, index: u64) {
         self.index = index;
     }
     fn value_changed(&mut self) {
-        unsafe {
-            (&mut *self.machine).mark_needs_advance();
-            #[cfg(feature = "rive_tools")]
-            (&mut *self.machine).input_changed(self.index);
-        }
+        #[cfg(not(feature = "tools"))]
+        let index = 0;
+        #[cfg(feature = "tools")]
+        let index = self.index;
+        self.notifier.value_changed(index);
     }
 }
 pub struct SMIBool {
@@ -58,13 +78,10 @@ pub struct SMIBool {
     value: bool,
 }
 impl SMIBool {
-    pub fn new(
-        input: &dyn StateMachineInputDefinition,
-        machine: &mut dyn InputInstanceMachine,
-    ) -> Self {
+    pub fn new(input: &dyn StateMachineInputDefinition, notifier: InputInstanceNotifier) -> Self {
         Self {
             value: input.bool_value(),
-            base: SMIInput::new(input, machine),
+            base: SMIInput::new(input, notifier),
         }
     }
     pub fn value(&self) -> bool {
@@ -82,13 +99,10 @@ pub struct SMINumber {
     value: f32,
 }
 impl SMINumber {
-    pub fn new(
-        input: &dyn StateMachineInputDefinition,
-        machine: &mut dyn InputInstanceMachine,
-    ) -> Self {
+    pub fn new(input: &dyn StateMachineInputDefinition, notifier: InputInstanceNotifier) -> Self {
         Self {
             value: input.number_value(),
-            base: SMIInput::new(input, machine),
+            base: SMIInput::new(input, notifier),
         }
     }
     pub fn value(&self) -> f32 {
@@ -103,14 +117,16 @@ impl SMINumber {
 }
 #[derive(Default)]
 pub struct Triggerable {
-    used_layers: HashSet<usize>,
+    used_layers: Vec<RuntimeStateMachineLayerInstanceWeakHandle>,
 }
 impl Triggerable {
-    pub fn is_used_in_layer(&self, layer: *mut ()) -> bool {
-        self.used_layers.contains(&(layer as usize))
+    pub fn is_used_in_layer(&self, layer: &RuntimeStateMachineLayerInstanceWeakHandle) -> bool {
+        self.used_layers.iter().any(|used| used.ptr_eq(layer))
     }
-    pub fn use_in_layer(&mut self, layer: *mut ()) {
-        self.used_layers.insert(layer as usize);
+    pub fn use_in_layer(&mut self, layer: RuntimeStateMachineLayerInstanceWeakHandle) {
+        if !self.is_used_in_layer(&layer) {
+            self.used_layers.push(layer);
+        }
     }
 }
 pub struct SMITrigger {
@@ -119,12 +135,9 @@ pub struct SMITrigger {
     fired: bool,
 }
 impl SMITrigger {
-    pub fn new(
-        input: &dyn StateMachineInputDefinition,
-        machine: &mut dyn InputInstanceMachine,
-    ) -> Self {
+    pub fn new(input: &dyn StateMachineInputDefinition, notifier: InputInstanceNotifier) -> Self {
         Self {
-            base: SMIInput::new(input, machine),
+            base: SMIInput::new(input, notifier),
             triggerable: Triggerable::default(),
             fired: false,
         }
@@ -142,7 +155,7 @@ impl SMITrigger {
     pub fn fired(&self) -> bool {
         self.fired
     }
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn did_fire(&self) -> bool {
         self.fired
     }

@@ -1,9 +1,8 @@
 pub trait AnimationResetTarget {
-    type Object;
-    fn resolve(&mut self, object_id: u32) -> &mut Self::Object;
+    fn resolves(&self, object_id: u32) -> bool;
     fn property_field_id(property_key: u32) -> u32;
-    fn set_double(object: &mut Self::Object, property_key: u32, value: f32);
-    fn set_color(object: &mut Self::Object, property_key: u32, value: u32);
+    fn set_double(&mut self, object_id: u32, property_key: u32, value: f32) -> bool;
+    fn set_color(&mut self, object_id: u32, property_key: u32, value: u32) -> bool;
 }
 
 #[derive(Default)]
@@ -78,11 +77,13 @@ impl AnimationReset {
                 );
                 position += 4;
                 let field_id = T::property_field_id(property_key);
-                let object = artboard.resolve(object_id);
+                if !artboard.resolves(object_id) {
+                    continue;
+                }
                 if field_id == 2 {
-                    T::set_double(object, property_key, value);
+                    artboard.set_double(object_id, property_key, value);
                 } else if field_id == 3 {
-                    T::set_color(object, property_key, value as u32);
+                    artboard.set_color(object_id, property_key, value as u32);
                 }
             }
         }

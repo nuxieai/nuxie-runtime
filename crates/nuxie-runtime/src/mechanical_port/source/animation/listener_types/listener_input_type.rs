@@ -15,15 +15,32 @@ pub struct ListenerInputType {
 }
 
 impl ListenerInputType {
-    pub fn import(self: Box<Self>, import_stack: &mut ImportStack) -> StatusCode {
-        let object = Box::into_raw(self);
+    pub fn listener_type_value(&self) -> u32 {
+        self.base.listener_type_value()
+    }
+
+    pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let Some(importer) =
             import_stack.latest::<StateMachineListenerImporter>(StateMachineListenerBase::TYPE_KEY)
         else {
-            unsafe { drop(Box::from_raw(object)) };
             return StatusCode::MissingObject;
         };
-        importer.add_listener_input_type(unsafe { Box::from_raw(object) });
-        unsafe { (*object).base.base.import(import_stack) }
+        let Some(this) = self.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        importer.add_listener_input_type(this);
+        self.base.base.import(import_stack)
     }
 }
+impl std::ops::Deref for ListenerInputType {
+    type Target = ListenerInputTypeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ListenerInputType {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+impl crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBaseCallbacks for ListenerInputType { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }

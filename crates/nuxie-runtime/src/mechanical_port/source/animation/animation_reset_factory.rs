@@ -3,7 +3,15 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-use crate::mechanical_port::source::animation::animation_reset::AnimationReset;
+use crate::mechanical_port::source::{
+    animation::{
+        animation_reset::AnimationReset, keyed_object::KeyedObject, keyed_property::KeyedProperty,
+        keyframe_color::KeyFrameColor, keyframe_double::KeyFrameDouble,
+        linear_animation::LinearAnimation,
+    },
+    core::CoreHandle,
+    generated::core_registry::CoreRegistry,
+};
 
 const CORE_DOUBLE_TYPE_ID: i32 = 2;
 const CORE_COLOR_TYPE_ID: i32 = 3;
@@ -208,17 +216,119 @@ impl AnimationResetFactory {
         animation_reset
     }
 
+    pub fn from_animation_handles(
+        animations: &[CoreHandle],
+        artboard: &dyn ResetArtboard,
+        use_first_as_baseline: bool,
+    ) -> AnimationReset {
+        let mut properties: Vec<(u32, CoreHandle, bool)> = Vec::new();
+        let mut seen = HashSet::new();
+        for (animation_index, animation) in animations.iter().enumerate() {
+            let keyed_objects = animation
+                .with_downcast::<LinearAnimation, _>(|animation| {
+                    (0..animation.num_keyed_objects())
+                        .filter_map(|index| animation.get_object(index))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            for keyed_object in keyed_objects {
+                let Some((object_id, keyed_properties)) = keyed_object
+                    .with_downcast::<KeyedObject, _>(|object| {
+                        (
+                            object.base.object_id(),
+                            (0..object.num_keyed_properties())
+                                .filter_map(|index| object.get_property(index))
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                else {
+                    continue;
+                };
+                for property in keyed_properties {
+                    let Some(property_key) = property
+                        .with_downcast::<KeyedProperty, _>(|property| property.base.property_key())
+                    else {
+                        continue;
+                    };
+                    if !seen.insert((object_id, property_key)) {
+                        continue;
+                    }
+                    match CoreRegistry::property_field_id(property_key as i32) {
+                        CORE_DOUBLE_TYPE_ID | CORE_COLOR_TYPE_ID => properties.push((
+                            object_id,
+                            property,
+                            use_first_as_baseline && animation_index == 0,
+                        )),
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        let mut grouped: Vec<(u32, Vec<(CoreHandle, bool)>)> = Vec::new();
+        for (object_id, property, baseline) in properties {
+            if let Some((_, entries)) = grouped.iter_mut().find(|(id, _)| *id == object_id) {
+                entries.push((property, baseline));
+            } else {
+                grouped.push((object_id, vec![(property, baseline)]));
+            }
+        }
+
+        let mut animation_reset = Self::get_instance();
+        for (object_id, entries) in grouped {
+            if !artboard.resolves(object_id) || entries.is_empty() {
+                continue;
+            }
+            animation_reset.write_object_id(object_id);
+            animation_reset.write_total_properties(entries.len() as u32);
+            for (property, baseline) in entries {
+                let Some((property_key, first)) =
+                    property.with_downcast::<KeyedProperty, _>(|property| {
+                        (property.base.property_key(), property.first())
+                    })
+                else {
+                    continue;
+                };
+                animation_reset.write_property_key(property_key);
+                let field_id = CoreRegistry::property_field_id(property_key as i32);
+                let baseline_value = baseline
+                    .then(|| {
+                        first.and_then(|first| {
+                            first
+                                .with_downcast::<KeyFrameDouble, _>(|frame| frame.base.value())
+                                .or_else(|| {
+                                    first.with_downcast::<KeyFrameColor, _>(|frame| {
+                                        frame.base.value() as f32
+                                    })
+                                })
+                        })
+                    })
+                    .flatten();
+                let value = baseline_value.unwrap_or_else(|| {
+                    if field_id == CORE_DOUBLE_TYPE_ID {
+                        artboard.double_value(object_id, property_key)
+                    } else {
+                        artboard.color_value(object_id, property_key) as f32
+                    }
+                });
+                animation_reset.write_property_value(value);
+            }
+        }
+        animation_reset.complete();
+        animation_reset
+    }
+
     pub fn release(mut value: AnimationReset) {
         value.clear();
         resources().lock().unwrap().push(value);
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn resources_count() -> usize {
         resources().lock().unwrap().len()
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn release_resources() {
         resources().lock().unwrap().clear();
     }

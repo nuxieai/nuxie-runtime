@@ -13,7 +13,11 @@ pub struct KeyFrameColor {
 impl KeyFrameColor {
     pub fn effective_value(&self, context: Option<&dyn KeyFrameValueContext>) -> i32 {
         context
-            .and_then(|c| c.color_value(self as *const Self as *const ()))
+            .and_then(|c| {
+                self.base
+                    .handle()
+                    .and_then(|keyframe| c.color_value(&keyframe))
+            })
             .unwrap_or_else(|| self.base.value())
     }
     fn apply_value(object: &mut dyn CoreRegistryObject, key: i32, mix: f32, value: i32) {
@@ -48,12 +52,7 @@ impl KeyFrameColor {
     ) {
         let factor = (current_time - self.base.base.base.seconds())
             / (next.base.base.base.seconds() - self.base.base.base.seconds());
-        let factor = self
-            .base
-            .base
-            .effective_interpolator(context)
-            .map(|interpolator| unsafe { interpolator.as_ref().transform(factor) })
-            .unwrap_or(factor);
+        let factor = self.base.base.transform(context, factor).unwrap_or(factor);
         let value = color_lerp(
             self.effective_value(context) as u32,
             next.effective_value(context) as u32,

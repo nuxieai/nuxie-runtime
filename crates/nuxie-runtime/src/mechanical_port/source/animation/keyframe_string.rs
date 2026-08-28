@@ -10,10 +10,14 @@ pub struct KeyFrameString {
     pub base: KeyFrameStringBase,
 }
 impl KeyFrameString {
-    pub fn effective_value<'a>(&'a self, context: Option<&'a dyn KeyFrameValueContext>) -> &'a str {
+    pub fn effective_value(&self, context: Option<&dyn KeyFrameValueContext>) -> String {
         context
-            .and_then(|c| c.string_value(self as *const Self as *const ()))
-            .unwrap_or_else(|| self.base.value())
+            .and_then(|c| {
+                self.base
+                    .handle()
+                    .and_then(|keyframe| c.string_value(&keyframe))
+            })
+            .unwrap_or_else(|| self.base.value().to_owned())
     }
     pub fn apply(
         &self,
@@ -22,7 +26,7 @@ impl KeyFrameString {
         _mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) {
-        CoreRegistry::set_string(object, key, self.effective_value(context).to_owned());
+        CoreRegistry::set_string(object, key, self.effective_value(context));
     }
     pub fn apply_interpolation(
         &self,
@@ -33,6 +37,6 @@ impl KeyFrameString {
         _mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) {
-        CoreRegistry::set_string(object, key, self.effective_value(context).to_owned());
+        CoreRegistry::set_string(object, key, self.effective_value(context));
     }
 }

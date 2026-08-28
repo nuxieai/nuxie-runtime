@@ -27,6 +27,12 @@ impl core::ops::BitAnd for SemanticTrait {
     }
 }
 
+impl core::ops::BitOrAssign for SemanticTrait {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
 pub fn has_semantic_trait(flags: u32, value: SemanticTrait) -> bool {
     flags & value.0 != 0
 }

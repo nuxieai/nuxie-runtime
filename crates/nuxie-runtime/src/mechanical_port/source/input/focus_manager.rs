@@ -3,7 +3,10 @@ use crate::mechanical_port::source::input::{
     focusable::{Key, KeyModifiers},
 };
 use crate::mechanical_port::source::semantic::semantic_snapshot::Bounds;
-use std::{collections::HashSet, rc::Rc};
+use crate::mechanical_port::source::{
+    animation::listener_invocation::ListenerInvocation, core::CoreHandle,
+};
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
@@ -36,7 +39,7 @@ fn eligible_for_focus(node: &FocusNodeRef) -> bool {
     if !node.can_focus() {
         return false;
     }
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     if node.is_collapsed {
         return false;
     }
@@ -245,6 +248,10 @@ fn score_candidate_point(current: (f32, f32), candidate: (f32, f32), direction: 
 }
 
 impl FocusManager {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn primary_focus(&self) -> Option<FocusNodeRef> {
         self.primary_focus.clone()
     }
@@ -299,16 +306,19 @@ impl FocusManager {
         new_focus: Option<&FocusNodeRef>,
     ) {
         let common_ancestor = if let (Some(old_focus), Some(new_focus)) = (old_focus, new_focus) {
-            let mut old_ancestors = HashSet::new();
+            let mut old_ancestors = Vec::new();
             let mut current = Some(old_focus.clone());
             while let Some(node) = current {
-                old_ancestors.insert(Rc::as_ptr(&node));
+                old_ancestors.push(node.clone());
                 current = node.borrow().parent();
             }
             let mut current = Some(new_focus.clone());
             let mut common = None;
             while let Some(node) = current {
-                if old_ancestors.contains(&Rc::as_ptr(&node)) {
+                if old_ancestors
+                    .iter()
+                    .any(|ancestor| Rc::ptr_eq(ancestor, &node))
+                {
                     common = Some(node);
                     break;
                 }
@@ -660,15 +670,25 @@ impl FocusManager {
         false
     }
 
-    pub fn gamepad_dispatch(&mut self, invocation: &dyn core::any::Any) -> bool {
+    pub fn gamepad_dispatch(
+        &mut self,
+        invocation: &ListenerInvocation,
+        out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
+    ) -> bool {
         self.drop_focus_if_focus_target_hidden();
         let mut node = self.primary_focus.clone();
+        let mut out_dispatched_scripted_drawable = out_dispatched_scripted_drawable;
         while let Some(current) = node {
             if current
                 .borrow()
                 .focusable
                 .as_ref()
-                .is_some_and(|focusable| focusable.borrow_mut().gamepad_dispatch(invocation))
+                .is_some_and(|focusable| {
+                    focusable.borrow_mut().gamepad_dispatch(
+                        invocation,
+                        out_dispatched_scripted_drawable.as_deref_mut(),
+                    )
+                })
             {
                 return true;
             }

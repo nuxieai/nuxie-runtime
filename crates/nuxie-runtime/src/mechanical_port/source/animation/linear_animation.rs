@@ -1,46 +1,51 @@
 use crate::mechanical_port::source::{
     animation::{
-        keyed_callback_reporter::KeyedCallbackReporter, keyed_object::KeyedObject, r#loop::Loop,
+        interpolating_keyframe::KeyFrameValueContext,
+        keyed_callback_reporter::KeyedCallbackReporter,
+        keyed_object::{KeyedObject, KeyedObjectContext},
+        r#loop::Loop,
     },
+    core::CoreHandle,
     generated::{
         animation::linear_animation_base::LinearAnimationBase, artboard_base::ArtboardBase,
     },
     importers::{artboard_importer::ArtboardImporter, import_stack::ImportStack},
     status_code::StatusCode,
 };
-use std::ptr::NonNull;
-#[cfg(feature = "testing")]
+#[cfg(test)]
 use std::sync::atomic::{AtomicI32, Ordering};
 
-#[cfg(feature = "testing")]
+#[cfg(test)]
 static DELETE_COUNT: AtomicI32 = AtomicI32::new(0);
 pub trait LinearAnimationArtboard {
     fn apply_keyed_object(
         &mut self,
-        object: &mut KeyedObject,
+        object: CoreHandle,
         time: f32,
         mix: f32,
-        context: *const (),
+        context: Option<&dyn KeyFrameValueContext>,
     );
 }
 #[derive(Default)]
 pub struct LinearAnimation {
     pub base: LinearAnimationBase,
-    keyed_objects: Vec<Box<KeyedObject>>,
+    keyed_objects: Vec<CoreHandle>,
 }
 impl LinearAnimation {
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn delete_count() -> i32 {
         DELETE_COUNT.load(Ordering::Relaxed)
     }
-    pub fn add_keyed_object(&mut self, v: Box<KeyedObject>) {
+    pub fn add_keyed_object(&mut self, v: CoreHandle) {
         self.keyed_objects.push(v)
     }
-    pub fn on_added_dirty(&mut self, c: *mut ()) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
         let mut status = StatusCode::Ok;
         let mut i = 0;
         while i < self.keyed_objects.len() {
-            let code = self.keyed_objects[i].on_added_dirty_raw(c);
+            let code = self.keyed_objects[i]
+                .with_downcast_mut::<KeyedObject, _>(|object| object.on_added_dirty(context))
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 if status == StatusCode::Ok || status == StatusCode::MissingObject {
                     status = code;
@@ -56,9 +61,11 @@ impl LinearAnimation {
             status
         }
     }
-    pub fn on_added_clean(&mut self, c: *mut ()) -> StatusCode {
-        for o in &mut self.keyed_objects {
-            let code = o.on_added_clean_raw(c);
+    pub fn on_added_clean(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
+        for object in &self.keyed_objects {
+            let code = object
+                .with_downcast_mut::<KeyedObject, _>(|object| object.on_added_clean(context))
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
             }
@@ -70,22 +77,25 @@ impl LinearAnimation {
         artboard: &mut dyn LinearAnimationArtboard,
         mut time: f32,
         mix: f32,
-        context: *const (),
+        context: Option<&dyn KeyFrameValueContext>,
     ) {
         if self.base.quantize() {
             let fps = self.base.fps() as f32;
             time = (time * fps).floor() / fps;
         }
-        for object in &mut self.keyed_objects {
-            artboard.apply_keyed_object(object, time, mix, context)
+        for object in &self.keyed_objects {
+            artboard.apply_keyed_object(object.clone(), time, mix, context)
         }
     }
     pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
         let Some(i) = stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY) else {
             return StatusCode::MissingObject;
         };
-        i.add_animation(NonNull::from(&mut *self));
-        self.base.base.import(stack)
+        let Some(this) = self.base.base.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        i.add_animation(this);
+        self.base.base.base.base.import(stack)
     }
     pub fn loop_kind(&self) -> Loop {
         match self.base.loop_value() {
@@ -148,8 +158,8 @@ impl LinearAnimation {
             }
         }
     }
-    pub fn get_object(&self, i: usize) -> Option<&KeyedObject> {
-        self.keyed_objects.get(i).map(Box::as_ref)
+    pub fn get_object(&self, i: usize) -> Option<CoreHandle> {
+        self.keyed_objects.get(i).cloned()
     }
     pub fn num_keyed_objects(&self) -> usize {
         self.keyed_objects.len()
@@ -165,8 +175,10 @@ impl LinearAnimation {
         let start = self.start_time_with_multiplier(speed_direction);
         let at_start = start == from;
         if !at_start || !from_pong {
-            for o in &self.keyed_objects {
-                o.report_keyed_callbacks(r, from, to, at_start)
+            for object in &self.keyed_objects {
+                object.with_downcast::<KeyedObject, _>(|object| {
+                    object.report_keyed_callbacks(r, from, to, at_start)
+                });
             }
         }
     }
@@ -174,7 +186,7 @@ impl LinearAnimation {
 
 impl Drop for LinearAnimation {
     fn drop(&mut self) {
-        #[cfg(feature = "testing")]
+        #[cfg(test)]
         DELETE_COUNT.fetch_add(1, Ordering::Relaxed);
     }
 }

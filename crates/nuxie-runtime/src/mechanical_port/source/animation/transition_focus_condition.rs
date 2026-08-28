@@ -1,5 +1,8 @@
 use crate::mechanical_port::source::{
-    animation::transition_condition_op::TransitionConditionOp,
+    animation::{
+        state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+        transition_condition_op::TransitionConditionOp,
+    },
     generated::animation::transition_focus_condition_base::TransitionFocusConditionBase,
 };
 pub trait FocusConditionStateMachine {
@@ -15,7 +18,7 @@ impl TransitionFocusCondition {
     pub fn evaluate(
         &self,
         machine: Option<&dyn FocusConditionStateMachine>,
-        _layer: *mut (),
+        _layer: &RuntimeStateMachineLayerInstanceWeakHandle,
     ) -> bool {
         let Some(machine) = machine else { return false };
         let Some(object_id) = machine

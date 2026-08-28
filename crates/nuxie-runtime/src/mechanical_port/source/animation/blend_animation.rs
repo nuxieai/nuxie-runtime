@@ -1,7 +1,5 @@
-use std::{ptr::NonNull, sync::OnceLock};
-
 use crate::mechanical_port::source::{
-    animation::linear_animation::LinearAnimation,
+    core::CoreHandle,
     generated::{
         animation::{blend_animation_base::BlendAnimationBase, layer_state_base::LayerStateBase},
         artboard_base::ArtboardBase,
@@ -13,11 +11,9 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 
-static EMPTY_ANIMATION: OnceLock<LinearAnimation> = OnceLock::new();
-
 pub struct BlendAnimation {
     pub base: BlendAnimationBase,
-    animation: Option<NonNull<LinearAnimation>>,
+    animation: Option<CoreHandle>,
 }
 
 impl Default for BlendAnimation {
@@ -30,10 +26,8 @@ impl Default for BlendAnimation {
 }
 
 impl BlendAnimation {
-    pub fn animation(&self) -> &LinearAnimation {
-        self.animation
-            .map(|animation| unsafe { animation.as_ref() })
-            .unwrap_or_else(|| EMPTY_ANIMATION.get_or_init(LinearAnimation::default))
+    pub fn animation(&self) -> Option<CoreHandle> {
+        self.animation.clone()
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
@@ -41,7 +35,10 @@ impl BlendAnimation {
         else {
             return StatusCode::MissingObject;
         };
-        if !importer.add_blend_animation(NonNull::from(&mut *self)) {
+        let Some(this) = self.base.base.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        if !importer.add_blend_animation(this) {
             return StatusCode::InvalidObject;
         }
 
@@ -52,12 +49,24 @@ impl BlendAnimation {
         };
         let artboard = artboard_importer.artboard();
         let animation_id = self.base.animation_id() as usize;
-        unsafe {
-            if animation_id < artboard.as_ref().animation_count() {
-                self.animation = artboard.as_ref().animation(animation_id);
-            }
-        }
+        self.animation = artboard
+            .with_downcast::<crate::mechanical_port::source::artboard::Artboard, _>(|artboard| {
+                artboard.animation_handle_at(animation_id)
+            })
+            .flatten();
 
         StatusCode::Ok
     }
 }
+impl std::ops::Deref for BlendAnimation {
+    type Target = BlendAnimationBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for BlendAnimation {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+impl crate::mechanical_port::source::generated::animation::blend_animation_base::BlendAnimationBaseCallbacks for BlendAnimation { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }

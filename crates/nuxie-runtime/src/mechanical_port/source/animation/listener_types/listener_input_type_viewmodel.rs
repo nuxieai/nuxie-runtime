@@ -16,15 +16,12 @@ impl ListenerInputTypeViewModel {
 
     pub fn copy_view_model_path_ids(&mut self, object: &Self) {
         self.data_bind_path_referencer
-            .copy_data_bind_path(object.data_bind_path_referencer.data_bind_path());
+            .copy_data_bind_path(&object.data_bind_path_referencer);
     }
 
     pub fn view_model_path_ids_buffer(&self) -> Vec<u32> {
-        let path = self
-            .data_bind_path_referencer
-            .data_bind_path()
-            .expect("listener input type data-bind path must exist");
-        let mut path = path.clone();
-        path.path().clone()
+        self.data_bind_path_referencer
+            .with_data_bind_path(|path| path.path().clone())
+            .expect("listener input type data-bind path must exist")
     }
 }

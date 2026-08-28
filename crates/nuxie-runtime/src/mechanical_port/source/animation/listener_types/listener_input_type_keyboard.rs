@@ -1,27 +1,23 @@
 use crate::mechanical_port::source::{
+    core::CoreHandle,
     generated::animation::listener_types::listener_input_type_keyboard_base::ListenerInputTypeKeyboardBase,
-    inputs::keyboard_input::KeyboardInput,
 };
-use std::ptr::NonNull;
 pub trait KeyboardConstraintListener {
-    fn keyboard_input_types(&self) -> Vec<&ListenerInputTypeKeyboard>;
+    fn keyboard_input_types(&self) -> Vec<CoreHandle>;
 }
 #[derive(Default)]
 pub struct ListenerInputTypeKeyboard {
     pub base: ListenerInputTypeKeyboardBase,
-    keyboard_inputs: Vec<NonNull<KeyboardInput>>,
+    keyboard_inputs: Vec<CoreHandle>,
 }
 impl ListenerInputTypeKeyboard {
     pub fn keyboard_input_count(&self) -> usize {
         self.keyboard_inputs.len()
     }
-    pub fn keyboard_input(&self, index: usize) -> Option<&KeyboardInput> {
-        self.keyboard_inputs
-            .get(index)
-            .map(|v| unsafe { v.as_ref() })
+    pub fn keyboard_input(&self, index: usize) -> Option<CoreHandle> {
+        self.keyboard_inputs.get(index).cloned()
     }
-    pub fn add_keyboard_input(&mut self, input: &mut KeyboardInput) {
-        let input = NonNull::from(input);
+    pub fn add_keyboard_input(&mut self, input: CoreHandle) {
         if !self.keyboard_inputs.contains(&input) {
             self.keyboard_inputs.push(input);
         }
@@ -40,15 +36,19 @@ impl ListenerInputTypeKeyboard {
         }
     }
     pub fn keyboard_input_matches(
-        input: &KeyboardInput,
+        input: &CoreHandle,
         key: u32,
         modifiers: u32,
         pressed: bool,
         repeat: bool,
     ) -> bool {
-        (input.base.key_type() == u32::MAX || input.base.key_type() == key)
-            && input.base.modifiers() == modifiers
-            && Self::key_phase_matches(input.base.key_phase(), pressed, repeat)
+        input
+            .with_downcast::<crate::mechanical_port::source::inputs::keyboard_input::KeyboardInput, _>(|input| {
+                (input.key_type() == u32::MAX || input.key_type() == key)
+                    && input.modifiers() == modifiers
+                    && Self::key_phase_matches(input.key_phase(), pressed, repeat)
+            })
+            .unwrap_or(false)
     }
     pub fn keyboard_listener_constraints_met(
         listener: Option<&dyn KeyboardConstraintListener>,
@@ -61,18 +61,17 @@ impl ListenerInputTypeKeyboard {
             return false;
         };
         for kind in listener.keyboard_input_types() {
-            if kind.keyboard_input_count() == 0 {
-                return true;
-            }
-            if kind.keyboard_inputs.iter().any(|input| {
-                Self::keyboard_input_matches(
-                    unsafe { input.as_ref() },
-                    key,
-                    modifiers,
-                    pressed,
-                    repeat,
-                )
-            }) {
+            let Some(matched) = kind.with_downcast::<ListenerInputTypeKeyboard, _>(|kind| {
+                if kind.keyboard_input_count() == 0 {
+                    return true;
+                }
+                kind.keyboard_inputs.iter().any(|input| {
+                    Self::keyboard_input_matches(input, key, modifiers, pressed, repeat)
+                })
+            }) else {
+                continue;
+            };
+            if matched {
                 return true;
             }
         }

@@ -1,17 +1,17 @@
 use crate::mechanical_port::source::{
-    animation::listener_invocation::ListenerInvocation,
+    animation::listener_invocation::ListenerInvocation, core::CoreHandle,
     generated::animation::focus_action_target_base::FocusActionTargetBase,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum FocusTargetChild {
-    FocusData(*mut ()),
+    FocusData(CoreHandle),
     Other,
 }
 
 pub trait FocusActionStateMachine {
     fn resolved_node_children(&mut self, target_id: u32) -> Option<Vec<FocusTargetChild>>;
-    fn set_focus(&mut self, focus_data: *mut ());
+    fn set_focus(&mut self, focus_data: CoreHandle);
 }
 
 #[derive(Default)]

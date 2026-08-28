@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    component::ComponentHandle,
+    core::CoreHandle,
     core_context::CoreContext,
     generated::bones::weight_base::WeightBase,
     math::{mat2d::Mat2D, vec2d::Vec2D},
@@ -23,14 +23,40 @@ impl Default for Weight {
 }
 
 impl Weight {
+    pub(crate) fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self.base.base.base.base
+    }
+
+    pub fn values(&self) -> u32 {
+        self.base.values()
+    }
+
+    pub fn set_values(&mut self, value: u32) {
+        if self.base.set_values_value(value) {
+            self.core_mut()
+                .notify_property_changed(WeightBase::VALUES_PROPERTY_KEY);
+        }
+    }
+
+    pub fn indices(&self) -> u32 {
+        self.base.indices()
+    }
+
+    pub fn set_indices(&mut self, value: u32) {
+        if self.base.set_indices_value(value) {
+            self.core_mut()
+                .notify_property_changed(WeightBase::INDICES_PROPERTY_KEY);
+        }
+    }
+
     pub fn translation(&mut self) -> &mut Vec2D {
         &mut self.translation
     }
 
     pub fn on_added_dirty(
         &mut self,
-        this: ComponentHandle,
-        context: &mut CoreContext,
+        this: CoreHandle,
+        context: &mut dyn CoreContext,
     ) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
@@ -39,14 +65,15 @@ impl Weight {
         let Some(parent) = self.base.parent() else {
             return StatusCode::MissingObject;
         };
-        if !context.is_vertex(parent) {
-            return StatusCode::MissingObject;
-        }
-        context
-            .vertex_mut(parent)
-            .expect("a component classified as Vertex must resolve as Vertex")
-            .set_weight(this);
-        StatusCode::Ok
+        parent
+            .with_mut(|parent| {
+                let Some(vertex) = parent.as_vertex_mut() else {
+                    return StatusCode::MissingObject;
+                };
+                vertex.set_weight(this);
+                StatusCode::Ok
+            })
+            .unwrap_or(StatusCode::MissingObject)
     }
 
     fn encoded_weight_value(index: u32, data: u32) -> usize {
@@ -84,5 +111,15 @@ impl Weight {
         }
 
         Mat2D::new(xx, xy, yx, yy, tx, ty).transform_point(world.transform_point(in_point))
+    }
+}
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks for Weight {
+    fn notify_property_changed(&mut self, key: u16) {
+        self.base.notify_property_changed(key);
+    }
+}
+impl crate::mechanical_port::source::generated::bones::weight_base::WeightBaseCallbacks for Weight {
+    fn notify_property_changed(&mut self, key: u16) {
+        self.base.notify_property_changed(key);
     }
 }

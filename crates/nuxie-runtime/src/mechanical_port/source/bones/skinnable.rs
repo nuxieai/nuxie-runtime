@@ -1,39 +1,39 @@
-use crate::mechanical_port::source::{component::ComponentHandle, core_context::CoreContext};
+use crate::mechanical_port::source::{core::CoreHandle, core_context::CoreContext};
 
 pub const POINTS_PATH_TYPE_KEY: u16 = 16;
 pub const MESH_TYPE_KEY: u16 = 109;
 
 #[derive(Default)]
-pub struct SkinnableState {
-    skin: Option<ComponentHandle>,
+pub struct Skinnable {
+    skin: Option<CoreHandle>,
 }
 
-impl SkinnableState {
-    pub fn skin(&self) -> Option<ComponentHandle> {
-        self.skin
+impl Skinnable {
+    pub fn skin(&self) -> Option<CoreHandle> {
+        self.skin.clone()
     }
 
-    pub(crate) fn set_skin(&mut self, skin: ComponentHandle) {
+    pub(crate) fn set_skin(&mut self, skin: CoreHandle) {
         self.skin = Some(skin);
     }
 }
 
-pub trait Skinnable {
-    fn skinnable_state(&self) -> &SkinnableState;
-    fn skinnable_state_mut(&mut self) -> &mut SkinnableState;
+pub trait SkinnableBehavior {
+    fn skinnable(&self) -> &Skinnable;
+    fn skinnable_mut(&mut self) -> &mut Skinnable;
     fn mark_skin_dirty(&mut self);
 
-    fn skin(&self) -> Option<ComponentHandle> {
-        self.skinnable_state().skin()
+    fn skin(&self) -> Option<CoreHandle> {
+        self.skinnable().skin()
     }
 
-    fn set_skin(&mut self, skin: ComponentHandle) {
-        self.skinnable_state_mut().set_skin(skin);
+    fn set_skin(&mut self, skin: CoreHandle) {
+        self.skinnable_mut().set_skin(skin);
     }
 }
 
-pub fn from(component: ComponentHandle, context: &CoreContext) -> Option<ComponentHandle> {
-    match context.core_type(component) {
+pub fn from(component: CoreHandle, _context: &dyn CoreContext) -> Option<CoreHandle> {
+    match component.core_type() {
         POINTS_PATH_TYPE_KEY | MESH_TYPE_KEY => Some(component),
         _ => None,
     }

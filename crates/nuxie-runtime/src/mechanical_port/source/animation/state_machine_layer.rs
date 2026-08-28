@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::layer_state::LayerState,
+    core::CoreHandle,
     core_context::CoreContext,
     generated::animation::{
         any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
@@ -12,41 +12,50 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub struct StateMachineLayer {
     pub base: StateMachineLayerBase,
-    states: Vec<Box<LayerState>>,
-    any: Option<*const LayerState>,
-    entry: Option<*const LayerState>,
-    exit: Option<*const LayerState>,
+    states: Vec<CoreHandle>,
+    any: Option<CoreHandle>,
+    entry: Option<CoreHandle>,
+    exit: Option<CoreHandle>,
 }
 impl StateMachineLayer {
-    pub(crate) fn add_state(&mut self, state: Box<LayerState>) {
+    pub fn name(&self) -> &str {
+        self.base.base.base.name()
+    }
+
+    pub(crate) fn add_state(&mut self, state: CoreHandle) {
         self.states.push(state);
     }
-    pub fn any_state(&self) -> Option<&LayerState> {
-        self.any.map(|v| unsafe { &*v })
+    pub fn any_state(&self) -> Option<CoreHandle> {
+        self.any.clone()
     }
-    pub fn entry_state(&self) -> Option<&LayerState> {
-        self.entry.map(|v| unsafe { &*v })
+    pub fn entry_state(&self) -> Option<CoreHandle> {
+        self.entry.clone()
     }
-    pub fn exit_state(&self) -> Option<&LayerState> {
-        self.exit.map(|v| unsafe { &*v })
+    pub fn exit_state(&self) -> Option<CoreHandle> {
+        self.exit.clone()
     }
     pub fn state_count(&self) -> usize {
         self.states.len()
     }
-    pub fn state(&self, index: usize) -> Option<&LayerState> {
-        self.states.get(index).map(Box::as_ref)
+    pub fn state(&self, index: usize) -> Option<CoreHandle> {
+        self.states.get(index).cloned()
+    }
+    pub fn states(&self) -> &[CoreHandle] {
+        &self.states
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        for state in &mut self.states {
-            let code = state.on_added_dirty(context);
+        for state in self.states.iter().cloned() {
+            let code = state
+                .with_mut(|state| state.layer_state_on_added_dirty(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
             }
-            let pointer = state.as_ref() as *const LayerState;
-            match state.base.core_type() {
-                AnyStateBase::TYPE_KEY => self.any = Some(pointer),
-                EntryStateBase::TYPE_KEY => self.entry = Some(pointer),
-                ExitStateBase::TYPE_KEY => self.exit = Some(pointer),
+            match state.core_type() {
+                Some(AnyStateBase::TYPE_KEY) => self.any = Some(state),
+                Some(EntryStateBase::TYPE_KEY) => self.entry = Some(state),
+                Some(ExitStateBase::TYPE_KEY) => self.exit = Some(state),
                 _ => {}
             }
         }
@@ -57,22 +66,26 @@ impl StateMachineLayer {
         }
     }
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        for state in &mut self.states {
-            let code = state.on_added_clean(context);
+        for state in self.states.iter().cloned() {
+            let code = state
+                .with_mut(|state| state.layer_state_on_added_clean(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
             }
         }
         StatusCode::Ok
     }
-    pub fn import(self: Box<Self>, stack: &mut ImportStack) -> StatusCode {
-        let raw = Box::into_raw(self);
+    pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
         let Some(importer) = stack.latest::<StateMachineImporter>(StateMachineBase::TYPE_KEY)
         else {
-            unsafe { drop(Box::from_raw(raw)) };
             return StatusCode::MissingObject;
         };
-        importer.add_layer(unsafe { Box::from_raw(raw) });
-        unsafe { (*raw).base.base.import(stack) }
+        let Some(this) = self.base.base.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        importer.add_layer(this);
+        self.base.base.import(stack)
     }
 }

@@ -1,47 +1,86 @@
-use std::ptr::NonNull;
+use std::{cell::RefCell, rc::Rc};
 
-use crate::mechanical_port::source::animation::{
-    animation_state::AnimationState, linear_animation::LinearAnimation,
-    linear_animation_instance::LinearAnimationInstance, state_instance::StateInstance,
-    state_machine_instance::StateMachineInstance,
+use crate::mechanical_port::source::{
+    animation::{
+        animation_state::AnimationState,
+        linear_animation::LinearAnimation,
+        linear_animation_instance::LinearAnimationInstance,
+        state_instance::{StateInstance, StateInstanceBehavior},
+        state_machine_instance::StateMachineInstance,
+    },
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    core::CoreHandle,
 };
 
 pub struct AnimationStateInstance {
     pub base: StateInstance,
     animation_instance: LinearAnimationInstance,
-    empty_animation: Option<Box<LinearAnimation>>,
+    empty_animation: Option<Rc<RefCell<LinearAnimation>>>,
     keep_going: bool,
-    state: NonNull<AnimationState>,
+    state: CoreHandle,
+}
+
+impl StateInstanceBehavior for AnimationStateInstance {
+    fn advance(&mut self, seconds: f32, machine: &mut StateMachineInstance) {
+        Self::advance(self, seconds, machine);
+    }
+
+    fn apply(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle, mix: f32) {
+        Self::apply(self, artboard, mix);
+    }
+
+    fn keep_going(&self) -> bool {
+        Self::keep_going(self)
+    }
+
+    fn clear_spilled_time(&mut self) {
+        Self::clear_spilled_time(self);
+    }
+
+    fn for_each_animation_instance(
+        &mut self,
+        callback: &mut dyn FnMut(&mut LinearAnimationInstance),
+    ) {
+        callback(&mut self.animation_instance);
+    }
 }
 
 impl AnimationStateInstance {
-    pub fn new(state: &AnimationState, instance: *mut ()) -> Self {
-        let empty_animation = state
-            .animation()
+    pub fn new(state: CoreHandle, instance: RuntimeArtboardInstanceWeakHandle) -> Self {
+        let (animation, speed) = state
+            .with_downcast::<AnimationState, _>(|state| (state.animation(), state.speed()))
+            .expect("AnimationStateInstance retains an AnimationState");
+        let empty_animation = animation
             .is_none()
-            .then(|| Box::new(LinearAnimation::default()));
-        let animation = state
-            .animation()
-            .unwrap_or_else(|| empty_animation.as_deref().unwrap());
-        let animation_instance =
-            LinearAnimationInstance::with_speed(animation, instance, state.speed());
+            .then(|| Rc::new(RefCell::new(LinearAnimation::default())));
+        let animation_instance = match animation {
+            Some(animation) => LinearAnimationInstance::new(animation, instance, speed),
+            None => LinearAnimationInstance::new_runtime(
+                empty_animation.as_ref().unwrap().clone(),
+                instance,
+                speed,
+            ),
+        };
         Self {
-            base: StateInstance::new(state),
+            base: StateInstance::new(state.clone()),
             animation_instance,
             empty_animation,
             keep_going: true,
-            state: NonNull::from(state),
+            state,
         }
     }
 
     pub fn advance(&mut self, seconds: f32, state_machine_instance: &mut StateMachineInstance) {
-        let speed = unsafe { self.state.as_ref().speed() };
+        let speed = self
+            .state
+            .with_downcast::<AnimationState, _>(AnimationState::speed)
+            .expect("AnimationStateInstance retains an AnimationState");
         self.keep_going = self
             .animation_instance
             .advance(seconds * speed, state_machine_instance);
     }
 
-    pub fn apply(&mut self, _instance: *mut (), mix: f32) {
+    pub fn apply(&mut self, _instance: &RuntimeArtboardInstanceWeakHandle, mix: f32) {
         self.animation_instance.apply(mix);
     }
 

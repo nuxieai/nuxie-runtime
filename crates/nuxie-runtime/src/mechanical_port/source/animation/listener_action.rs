@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     animation::{
         listener_invocation::ListenerInvocation,
         state_machine_fire_action::StateMachineFireOccurance,
+        state_machine_instance::StateMachineInstance,
     },
     generated::animation::{
         listener_action_base::ListenerActionBase,
@@ -27,7 +28,11 @@ pub struct ListenerAction {
     pub base: ListenerActionBase,
 }
 pub trait ListenerActionBehavior {
-    fn perform(&self, state_machine_instance: *mut (), invocation: &ListenerInvocation);
+    fn perform(
+        &self,
+        state_machine_instance: &mut StateMachineInstance,
+        invocation: &ListenerInvocation,
+    );
 }
 impl ListenerAction {
     pub fn matches_scheduled_occurrence(&self, occurs: StateMachineFireOccurance) -> bool {
@@ -40,28 +45,40 @@ impl ListenerAction {
             _ => ParentKind::Listener,
         }
     }
-    pub fn import(self: Box<Self>, stack: &mut ImportStack) -> StatusCode {
-        let raw = Box::into_raw(self);
-        match unsafe { (*raw).parent_kind() } {
+    pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
+        let Some(this) = self.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        match self.parent_kind() {
             ParentKind::Listener => {
                 let Some(importer) = stack
                     .latest::<StateMachineListenerImporter>(StateMachineListenerBase::TYPE_KEY)
                 else {
-                    unsafe { drop(Box::from_raw(raw)) };
                     return StatusCode::MissingObject;
                 };
-                importer.add_action(unsafe { Box::from_raw(raw) });
+                importer.add_action(this);
             }
             ParentKind::Transition | ParentKind::State => {
                 let Some(importer) = stack.latest::<StateMachineLayerComponentImporter>(
                     StateMachineLayerComponentBase::TYPE_KEY,
                 ) else {
-                    unsafe { drop(Box::from_raw(raw)) };
                     return StatusCode::MissingObject;
                 };
-                importer.add_listener_action(unsafe { Box::from_raw(raw) });
+                importer.add_listener_action(this);
             }
         }
-        unsafe { (*raw).base.base.import(stack) }
+        self.base.base.import(stack)
     }
 }
+impl std::ops::Deref for ListenerAction {
+    type Target = ListenerActionBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ListenerAction {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+impl crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks for ListenerAction { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }

@@ -22,6 +22,7 @@ pub enum ListenerInvocationKind {
     Semantic = 10,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct PointerInvocation {
     pub position: Vec2D,
     pub previous_position: Vec2D,
@@ -29,46 +30,55 @@ pub struct PointerInvocation {
     pub hit_event: u32,
     pub time_stamp: f32,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct KeyboardInvocation {
     pub key: u32,
     pub modifiers: u32,
     pub is_pressed: bool,
     pub is_repeat: bool,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct TextInputInvocation {
     pub text: String,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct FocusInvocation {
-    pub group: *mut (),
+    pub listener_index: usize,
     pub is_focus: bool,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReportedEventInvocation {
-    pub reported_event: *mut (),
+    pub event_local_index: usize,
     pub delay_seconds: f32,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct ViewModelChangeInvocation {
-    pub source: *mut (),
+    pub listener_index: usize,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct NoneInvocation;
+#[derive(Clone, Debug, PartialEq)]
 pub struct GamepadConnectedInvocation {
     pub snapshot: GamepadSnapshot,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct GamepadEventInvocation {
     pub full_state: GamepadSnapshot,
     pub change: GamepadInputChange,
-    pub has_standard_button_intent: bool,
-    pub standard_button: StandardGamepadButton,
-    pub has_standard_axis_intent: bool,
-    pub standard_axis: StandardGamepadAxis,
+    pub standard_button: Option<StandardGamepadButton>,
+    pub standard_axis: Option<StandardGamepadAxis>,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct GamepadDisconnectedInvocation {
     pub device_id: i32,
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct SemanticInvocation {
-    pub group: *mut (),
+    pub listener_index: usize,
     pub action_type: u8,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum ListenerInvocationStorage {
     Pointer(PointerInvocation),
     Keyboard(KeyboardInvocation),
@@ -82,6 +92,7 @@ pub enum ListenerInvocationStorage {
     GamepadDisconnected(GamepadDisconnectedInvocation),
     Semantic(SemanticInvocation),
 }
+#[derive(Clone, Debug, PartialEq)]
 pub struct ListenerInvocation {
     storage: ListenerInvocationStorage,
 }
@@ -119,26 +130,26 @@ impl ListenerInvocation {
             storage: ListenerInvocationStorage::TextInput(TextInputInvocation { text }),
         }
     }
-    pub fn focus<T>(group: *mut T, is_focus: bool) -> Self {
+    pub fn focus(listener_index: usize, is_focus: bool) -> Self {
         Self {
             storage: ListenerInvocationStorage::Focus(FocusInvocation {
-                group: group.cast(),
+                listener_index,
                 is_focus,
             }),
         }
     }
-    pub fn reported_event<T>(reported_event: *mut T, delay_seconds: f32) -> Self {
+    pub fn reported_event(event_local_index: usize, delay_seconds: f32) -> Self {
         Self {
             storage: ListenerInvocationStorage::ReportedEvent(ReportedEventInvocation {
-                reported_event: reported_event.cast(),
+                event_local_index,
                 delay_seconds,
             }),
         }
     }
-    pub fn view_model_change<T>(source: *mut T) -> Self {
+    pub fn view_model_change(listener_index: usize) -> Self {
         Self {
             storage: ListenerInvocationStorage::ViewModelChange(ViewModelChangeInvocation {
-                source: source.cast(),
+                listener_index,
             }),
         }
     }
@@ -166,10 +177,10 @@ impl ListenerInvocation {
             ),
         }
     }
-    pub fn semantic<T>(group: *mut T, action_type: u8) -> Self {
+    pub fn semantic(listener_index: usize, action_type: u8) -> Self {
         Self {
             storage: ListenerInvocationStorage::Semantic(SemanticInvocation {
-                group: group.cast(),
+                listener_index,
                 action_type,
             }),
         }

@@ -1,21 +1,22 @@
-#[cfg(feature = "rive-layout")]
 use crate::mechanical_port::source::{
-    layout::layout_style_applier::{LayoutStyleApplier, LayoutSyncContext},
-    yoga::{YGNode, YGStyle},
+    core::CoreHandle,
+    layout::layout_style_applier::{LayoutStyleApplier, LayoutSyncContext, YGStyle},
+    layout_component::Layout,
 };
 
-#[cfg(feature = "rive-layout")]
+#[derive(Default)]
 pub struct LayoutData {
-    #[cfg(feature = "rive-tools")]
-    pub children: std::collections::HashSet<*mut LayoutData>,
-    pub node: YGNode,
+    #[cfg(feature = "tools")]
+    pub children: Vec<CoreHandle>,
     pub style: YGStyle,
-    pub appliers: Option<Box<Vec<*mut dyn LayoutStyleApplier>>>,
+    pub solved_layout: Layout,
+    pub has_new_layout: bool,
+    pub dirty: bool,
+    pub appliers: Option<Box<Vec<CoreHandle>>>,
 }
 
-#[cfg(feature = "rive-layout")]
 impl LayoutData {
-    pub fn add_applier(&mut self, applier: *mut dyn LayoutStyleApplier) {
+    pub fn add_applier(&mut self, applier: CoreHandle) {
         let appliers = self.appliers.get_or_insert_with(|| Box::new(Vec::new()));
         if !appliers.contains(&applier) {
             appliers.push(applier);
@@ -28,32 +29,39 @@ impl LayoutData {
         if appliers.is_empty() {
             return;
         }
-        for applier in appliers.iter().copied() {
-            unsafe { (*applier).apply_base_style(style, context) };
+        for applier in appliers {
+            applier.with(|applier| {
+                if let Some(applier) = applier.as_layout_style_applier() {
+                    applier.apply_base_style(style, context);
+                }
+            });
         }
-        for applier in appliers.iter().copied() {
-            unsafe { (*applier).apply_container_style(style, context) };
+        for applier in appliers {
+            applier.with(|applier| {
+                if let Some(applier) = applier.as_layout_style_applier() {
+                    applier.apply_container_style(style, context);
+                }
+            });
         }
-        for applier in appliers.iter().copied() {
-            unsafe { (*applier).apply_item_style(style, context) };
+        for applier in appliers {
+            applier.with(|applier| {
+                if let Some(applier) = applier.as_layout_style_applier() {
+                    applier.apply_item_style(style, context);
+                }
+            });
         }
     }
-    #[cfg(feature = "rive-tools")]
+    #[cfg(feature = "tools")]
     pub fn clear_children(&mut self) {
-        for child in self.children.drain() {
-            unsafe { (*child).unref() };
-        }
+        self.children.clear();
     }
 }
 
-#[cfg(all(feature = "rive-layout", feature = "rive-tools"))]
+#[cfg(feature = "tools")]
 impl Drop for LayoutData {
     fn drop(&mut self) {
         self.clear_children();
     }
 }
 
-#[cfg(feature = "rive-tools")]
-pub type LayoutDataRef = crate::mechanical_port::source::refcnt::Rcp<LayoutData>;
-#[cfg(not(feature = "rive-tools"))]
-pub type LayoutDataRef = *mut LayoutData;
+pub type LayoutDataRef = std::rc::Rc<std::cell::RefCell<LayoutData>>;

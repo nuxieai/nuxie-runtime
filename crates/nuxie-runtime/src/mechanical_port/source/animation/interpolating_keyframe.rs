@@ -1,31 +1,38 @@
 use crate::mechanical_port::source::{
-    animation::keyframe_interpolator::KeyFrameInterpolatorBehavior,
-    generated::animation::interpolating_keyframe_base::InterpolatingKeyFrameBase,
+    core::CoreHandle, generated::animation::interpolating_keyframe_base::InterpolatingKeyFrameBase,
     status_code::StatusCode,
 };
-use std::ptr::NonNull;
 pub trait InterpolatingKeyFrameContext {
-    fn resolve_interpolator(&self, id: u32) -> Option<NonNull<dyn KeyFrameInterpolatorBehavior>>;
+    fn resolve_interpolator(&self, id: u32) -> Option<CoreHandle>;
 }
 pub trait KeyFrameValueContext {
-    fn bool_value(&self, keyframe: *const ()) -> Option<bool>;
-    fn string_value(&self, keyframe: *const ()) -> Option<&str>;
-    fn color_value(&self, keyframe: *const ()) -> Option<i32>;
-    fn number_value(&self, keyframe: *const ()) -> Option<f32>;
-    fn stateful_interpolator(
+    fn bool_value(&self, keyframe: &CoreHandle) -> Option<bool>;
+    fn string_value(&self, keyframe: &CoreHandle) -> Option<String>;
+    fn color_value(&self, keyframe: &CoreHandle) -> Option<i32>;
+    fn number_value(&self, keyframe: &CoreHandle) -> Option<f32>;
+    fn stateful_interpolator_transform_value(
         &self,
-        keyframe: *const (),
-        shared: NonNull<dyn KeyFrameInterpolatorBehavior>,
-    ) -> Option<NonNull<dyn KeyFrameInterpolatorBehavior>>;
+        keyframe: &CoreHandle,
+        shared: &CoreHandle,
+        from: f32,
+        to: f32,
+        factor: f32,
+    ) -> Option<f32>;
+    fn stateful_interpolator_transform(
+        &self,
+        keyframe: &CoreHandle,
+        shared: &CoreHandle,
+        factor: f32,
+    ) -> Option<f32>;
 }
 #[derive(Default)]
 pub struct InterpolatingKeyFrame {
     pub base: InterpolatingKeyFrameBase,
-    interpolator: Option<NonNull<dyn KeyFrameInterpolatorBehavior>>,
+    interpolator: Option<CoreHandle>,
 }
 impl InterpolatingKeyFrame {
-    pub fn interpolator(&self) -> Option<NonNull<dyn KeyFrameInterpolatorBehavior>> {
-        self.interpolator
+    pub fn interpolator(&self) -> Option<CoreHandle> {
+        self.interpolator.clone()
     }
     pub fn on_added_dirty(&mut self, context: &dyn InterpolatingKeyFrameContext) -> StatusCode {
         if self.base.interpolator_id() != u32::MAX {
@@ -36,19 +43,75 @@ impl InterpolatingKeyFrame {
         }
         StatusCode::Ok
     }
-    pub fn effective_interpolator(
+    pub fn transform_value(
         &self,
         context: Option<&dyn KeyFrameValueContext>,
-    ) -> Option<NonNull<dyn KeyFrameInterpolatorBehavior>> {
-        let shared = self.interpolator?;
-        let Some(context) = context else {
-            return Some(shared);
-        };
-        if unsafe { !shared.as_ref().is_scripted() } {
-            return Some(shared);
+        from: f32,
+        to: f32,
+        factor: f32,
+    ) -> Option<f32> {
+        let shared = self.interpolator.as_ref()?;
+        let scripted = shared
+            .with(|interpolator| interpolator.keyframe_interpolator_is_scripted())
+            .flatten()
+            .unwrap_or(false);
+        if scripted {
+            if let Some(value) = self.base.handle().and_then(|keyframe| {
+                context.and_then(|context| {
+                    context
+                        .stateful_interpolator_transform_value(&keyframe, shared, from, to, factor)
+                })
+            }) {
+                return Some(value);
+            }
         }
-        context
-            .stateful_interpolator(self as *const Self as *const (), shared)
-            .or(Some(shared))
+        shared
+            .with_mut(|interpolator| {
+                interpolator.keyframe_interpolator_transform_value(from, to, factor)
+            })
+            .flatten()
+    }
+
+    pub fn transform(
+        &self,
+        context: Option<&dyn KeyFrameValueContext>,
+        factor: f32,
+    ) -> Option<f32> {
+        let shared = self.interpolator.as_ref()?;
+        let scripted = shared
+            .with(|interpolator| interpolator.keyframe_interpolator_is_scripted())
+            .flatten()
+            .unwrap_or(false);
+        if scripted {
+            if let Some(value) = self.base.handle().and_then(|keyframe| {
+                context.and_then(|context| {
+                    context.stateful_interpolator_transform(&keyframe, shared, factor)
+                })
+            }) {
+                return Some(value);
+            }
+        }
+        shared
+            .with_mut(|interpolator| interpolator.keyframe_interpolator_transform(factor))
+            .flatten()
     }
 }
+impl std::ops::Deref for InterpolatingKeyFrame {
+    type Target = InterpolatingKeyFrameBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for InterpolatingKeyFrame {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+impl crate::mechanical_port::source::generated::animation::keyframe_base::KeyFrameBaseCallbacks
+    for InterpolatingKeyFrame
+{
+    fn notify_property_changed(&mut self, key: u16) {
+        self.base.notify_property_changed(key);
+    }
+}
+impl crate::mechanical_port::source::generated::animation::interpolating_keyframe_base::InterpolatingKeyFrameBaseCallbacks for InterpolatingKeyFrame { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }

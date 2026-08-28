@@ -1,5 +1,5 @@
-pub trait SemanticListener {
-    fn on_semantic_tap(&mut self);
-    fn on_semantic_increase(&mut self);
-    fn on_semantic_decrease(&mut self);
+pub trait SemanticListener: core::fmt::Debug {
+    fn on_semantic_tap(&self);
+    fn on_semantic_increase(&self);
+    fn on_semantic_decrease(&self);
 }

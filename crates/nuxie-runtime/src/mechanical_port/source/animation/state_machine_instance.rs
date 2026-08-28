@@ -1,10 +1,13 @@
 use crate::mechanical_port::source::{
     animation::{
         linear_animation_instance::LinearAnimationInstance,
+        listener_invocation::ListenerInvocation,
         state_machine_input_instance::{
-            InputInstanceMachine, SMIBool, SMIInput, SMINumber, SMITrigger,
+            InputInstanceNotifier, SMIBool, SMIInput, SMINumber, SMITrigger,
         },
     },
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    core::CoreHandle,
     generated::{
         animation::{
             keyframe_bool_base::KeyFrameBoolBase, keyframe_color_base::KeyFrameColorBase,
@@ -20,12 +23,59 @@ use crate::mechanical_port::source::{
     },
     hit_result::HitResult,
     listener_type::ListenerType,
-    math::vec2d::Vec2D,
+    math::{random::RandomProvider, vec2d::Vec2D},
     process_event_result::ProcessEventResult,
 };
-use std::collections::HashMap;
+use std::{
+    cell::{Cell, RefCell, RefMut},
+    collections::HashMap,
+    rc::{Rc, Weak},
+};
 
-type Object = usize;
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct RuntimeObjectHandle {
+    slot: u32,
+    generation: u32,
+}
+
+impl Default for RuntimeObjectHandle {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+impl RuntimeObjectHandle {
+    pub const NONE: Self = Self {
+        slot: u32::MAX,
+        generation: 0,
+    };
+
+    pub const fn new(slot: u32, generation: u32) -> Self {
+        Self { slot, generation }
+    }
+
+    pub const fn parts(self) -> (u32, u32) {
+        (self.slot, self.generation)
+    }
+}
+
+impl PartialEq<i32> for RuntimeObjectHandle {
+    fn eq(&self, other: &i32) -> bool {
+        *other == 0 && *self == Self::NONE
+    }
+}
+
+type Object = RuntimeObjectHandle;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RuntimeComparisonValue {
+    Number(f32),
+    Boolean(bool),
+    String(String),
+    Color(i32),
+    Uint(u32),
+    ViewModel(Object),
+}
 
 const POINTER_HIT_LISTENER_TYPES: [ListenerType; 9] = [
     ListenerType::Enter,
@@ -39,9 +89,9 @@ const POINTER_HIT_LISTENER_TYPES: [ListenerType; 9] = [
     ListenerType::Drag,
 ];
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct EventReport {
-    pub event: Object,
+    pub event: Option<CoreHandle>,
     pub seconds_delay: f32,
 }
 
@@ -63,19 +113,26 @@ pub struct QueuedSemanticEvent {
     pub action_type: u8,
 }
 
-#[derive(Clone, Copy, Debug)]
 pub enum InputInstance {
-    Bool(*mut SMIBool),
-    Number(*mut SMINumber),
-    Trigger(*mut SMITrigger),
+    Bool(Box<SMIBool>),
+    Number(Box<SMINumber>),
+    Trigger(Box<SMITrigger>),
 }
 
 impl InputInstance {
-    fn base(self) -> *mut SMIInput {
+    fn base(&self) -> &SMIInput {
         match self {
-            Self::Bool(value) => unsafe { &mut (*value).base },
-            Self::Number(value) => unsafe { &mut (*value).base },
-            Self::Trigger(value) => unsafe { &mut (*value).base },
+            Self::Bool(value) => &value.base,
+            Self::Number(value) => &value.base,
+            Self::Trigger(value) => &value.base,
+        }
+    }
+
+    fn base_mut(&mut self) -> &mut SMIInput {
+        match self {
+            Self::Bool(value) => &mut value.base,
+            Self::Number(value) => &mut value.base,
+            Self::Trigger(value) => &mut value.base,
         }
     }
 }
@@ -84,144 +141,281 @@ impl InputInstance {
 /// keeps all cross-owner object operations explicit while this owner retains
 /// the exact state, ordering, and branches of the pinned implementation.
 pub trait StateMachineInstanceRuntime {
+    fn bindable_property_number_value(&self, property: &CoreHandle) -> Option<f32>;
+    fn bindable_property_comparison_value(
+        &self,
+        property: &CoreHandle,
+    ) -> Option<RuntimeComparisonValue>;
+    fn component_comparison_value(
+        &self,
+        object_id: u32,
+        property_key: u32,
+    ) -> Option<RuntimeComparisonValue>;
+    fn artboard_layout_dimensions(
+        &self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+    ) -> Option<(f32, f32)>;
+    fn bindable_source_changed_in_layer(
+        &self,
+        property: &CoreHandle,
+        layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
+    ) -> bool;
+    fn use_bindable_property_in_layer(
+        &self,
+        property: &CoreHandle,
+        layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
+    );
     fn deterministic_mode(&self) -> bool;
-    fn seed_random(&mut self, seed: u32);
-    fn random_value(&mut self) -> f64;
-    fn machine_name(&self, machine: Object) -> String;
-    fn machine_input_count(&self, machine: Object) -> usize;
-    fn machine_input(&self, machine: Object, index: usize) -> Object;
-    fn machine_layer_count(&self, machine: Object) -> usize;
-    fn machine_layer(&self, machine: Object, index: usize) -> Object;
-    fn machine_listener_count(&self, machine: Object) -> usize;
-    fn machine_listener(&self, machine: Object, index: usize) -> Object;
-    fn machine_data_bind_count(&self, machine: Object) -> usize;
-    fn machine_data_bind(&self, machine: Object, index: usize) -> Object;
-    fn machine_scripted_objects(&self, machine: Object) -> Vec<Object>;
-    fn input_core_type(&self, input: Object) -> u16;
-    fn make_input_instance(&mut self, input: Object, machine: *mut ()) -> Option<InputInstance>;
-    fn input_name(&self, input: Object) -> &str;
-    fn input_advanced(&mut self, input: InputInstance);
-    fn layer_any_state(&self, layer: Object) -> Object;
-    fn layer_entry_state(&self, layer: Object) -> Object;
-    fn make_state_instance(&mut self, state: Object, artboard: Object) -> Object;
+    fn machine_name(&self, machine: &CoreHandle) -> String;
+    fn machine_input_count(&self, machine: &CoreHandle) -> usize;
+    fn machine_input(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
+    fn machine_layer_count(&self, machine: &CoreHandle) -> usize;
+    fn machine_layer(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
+    fn machine_listener_count(&self, machine: &CoreHandle) -> usize;
+    fn machine_listener(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
+    fn machine_data_bind_count(&self, machine: &CoreHandle) -> usize;
+    fn machine_data_bind(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
+    fn machine_scripted_objects(&self, machine: &CoreHandle) -> Vec<CoreHandle>;
+    fn input_core_type(&self, input: &CoreHandle) -> u16;
+    fn make_input_instance(
+        &mut self,
+        input: CoreHandle,
+        notifier: InputInstanceNotifier,
+    ) -> Option<InputInstance>;
+    fn input_name(&self, input: &CoreHandle) -> String;
+    fn input_advanced(&mut self, input: &mut InputInstance);
+    fn layer_any_state(&self, layer: &CoreHandle) -> CoreHandle;
+    fn layer_entry_state(&self, layer: &CoreHandle) -> CoreHandle;
+    fn make_state_instance(
+        &mut self,
+        state: CoreHandle,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+    ) -> Object;
     fn delete_state_instance(&mut self, instance: Object);
-    fn state_definition(&self, instance: Object) -> Object;
-    fn state_advance(&mut self, instance: Object, seconds: f32, machine: *mut ());
-    fn state_apply(&mut self, instance: Object, artboard: Object, mix: f32);
+    fn state_definition(&self, instance: Object) -> CoreHandle;
+    fn state_advance(&mut self, instance: Object, seconds: f32, machine: &mut StateMachineInstance);
+    fn state_apply(
+        &mut self,
+        instance: Object,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        mix: f32,
+    );
     fn state_keep_going(&self, instance: Object) -> bool;
     fn state_clear_spilled_time(&mut self, instance: Object);
     fn state_spilled_time(&self, instance: Object) -> f32;
-    fn state_animation(&self, instance: Object) -> Object;
+    fn state_animation(&self, instance: Object) -> Option<CoreHandle>;
     fn state_animation_instance(&self, instance: Object) -> Object;
     fn state_for_each_animation_instance(
         &mut self,
+        machine: &mut StateMachineInstance,
         state: Object,
-        callback: &mut dyn FnMut(&mut dyn StateMachineInstanceRuntime, Object),
+        callback: &mut dyn FnMut(
+            &mut dyn StateMachineInstanceRuntime,
+            &mut StateMachineInstance,
+            Object,
+        ),
     );
-    fn state_transition_count(&self, state: Object) -> usize;
-    fn state_transition(&self, state: Object, index: usize) -> Object;
-    fn state_flags(&self, state: Object) -> u32;
-    fn state_events(&self, state: Object) -> Vec<Object>;
-    fn state_listener_actions(&self, state: Object) -> Vec<Object>;
-    fn transition_state_to(&self, transition: Object) -> Object;
+    fn state_transition_count(&self, state: &CoreHandle) -> usize;
+    fn state_transition(&self, state: &CoreHandle, index: usize) -> CoreHandle;
+    fn state_flags(&self, state: &CoreHandle) -> u32;
+    fn state_events(&self, state: &CoreHandle) -> Vec<CoreHandle>;
+    fn state_listener_actions(&self, state: &CoreHandle) -> Vec<CoreHandle>;
+    fn transition_state_to(&self, transition: &CoreHandle) -> CoreHandle;
     fn transition_allowed(
         &mut self,
-        transition: Object,
+        transition: &CoreHandle,
         from: Object,
-        machine: *mut (),
-        layer: *mut (),
+        machine: &mut StateMachineInstance,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
     ) -> u8;
-    fn transition_random_weight(&self, transition: Object) -> u32;
-    fn transition_evaluated_weight(&self, transition: Object) -> u32;
-    fn set_transition_evaluated_weight(&mut self, transition: Object, value: u32);
-    fn transition_use_layer(&mut self, transition: Object, machine: *mut (), layer: *mut ());
-    fn transition_duration(&self, transition: Object) -> u32;
-    fn transition_duration_is_percentage(&self, transition: Object) -> bool;
-    fn transition_interpolator(&self, transition: Object) -> Object;
-    fn transition_enable_early_exit(&self, transition: Object) -> bool;
-    fn transition_pause_on_exit(&self, transition: Object) -> bool;
-    fn transition_apply_exit_condition(&mut self, transition: Object, from: Object) -> bool;
-    fn transition_events(&self, transition: Object) -> Vec<Object>;
-    fn transition_listener_actions(&self, transition: Object) -> Vec<Object>;
-    fn transition_property_value(&self, property: Object) -> f32;
+    fn transition_random_weight(&self, transition: &CoreHandle) -> u32;
+    fn transition_evaluated_weight(&self, transition: &CoreHandle) -> u32;
+    fn set_transition_evaluated_weight(&mut self, transition: &CoreHandle, value: u32);
+    fn transition_use_layer(
+        &mut self,
+        transition: &CoreHandle,
+        machine: &mut StateMachineInstance,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
+    );
+    fn transition_duration(&self, transition: &CoreHandle) -> u32;
+    fn transition_duration_is_percentage(&self, transition: &CoreHandle) -> bool;
+    fn transition_interpolator(&self, transition: &CoreHandle) -> Option<CoreHandle>;
+    fn transition_enable_early_exit(&self, transition: &CoreHandle) -> bool;
+    fn transition_pause_on_exit(&self, transition: &CoreHandle) -> bool;
+    fn transition_apply_exit_condition(&mut self, transition: &CoreHandle, from: Object) -> bool;
+    fn transition_events(&self, transition: &CoreHandle) -> Vec<CoreHandle>;
+    fn transition_listener_actions(&self, transition: &CoreHandle) -> Vec<CoreHandle>;
+    fn transition_property_value(&self, property: &CoreHandle) -> f32;
     fn transition_property_instance(
         &self,
         machine: &StateMachineInstance,
-        transition: Object,
+        transition: &CoreHandle,
         property_key: u32,
+    ) -> Option<CoreHandle>;
+    fn fire_action_occurs(&self, action: &CoreHandle) -> u8;
+    fn fire_action_perform(&mut self, action: &CoreHandle, machine: &mut StateMachineInstance);
+    fn listener_action_matches(&self, action: &CoreHandle, occurrence: u8) -> bool;
+    fn listener_action_perform(
+        &mut self,
+        action: &CoreHandle,
+        machine: &mut StateMachineInstance,
+        invocation: &ListenerInvocation,
+    );
+    fn make_animation_reset(
+        &mut self,
+        from: Object,
+        to: Object,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
     ) -> Object;
-    fn fire_action_occurs(&self, action: Object) -> u8;
-    fn fire_action_perform(&mut self, action: Object, machine: *mut ());
-    fn listener_action_matches(&self, action: Object, occurrence: u8) -> bool;
-    fn listener_action_perform(&mut self, action: Object, machine: *mut (), invocation: Object);
-    fn make_animation_reset(&mut self, from: Object, to: Object, artboard: Object) -> Object;
     fn release_animation_reset(&mut self, reset: Object);
-    fn apply_animation_reset(&mut self, reset: Object, artboard: Object);
-    fn animation_apply(&mut self, animation: Object, artboard: Object, time: f32, mix: f32);
-    fn animation_duration_seconds(&self, animation: Object) -> f32;
+    fn apply_animation_reset(
+        &mut self,
+        reset: Object,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+    );
+    fn animation_apply(
+        &mut self,
+        animation: &CoreHandle,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        time: f32,
+        mix: f32,
+    );
+    fn animation_duration_seconds(&self, animation: &CoreHandle) -> f32;
     fn animation_instance_time(&self, instance: Object) -> f32;
-    fn interpolator_transform(&self, interpolator: Object, value: f32) -> f32;
-    fn artboard_frame_origin(&self, artboard: Object) -> bool;
-    fn artboard_origin(&self, artboard: Object) -> Vec2D;
-    fn artboard_layout_size(&self, artboard: Object) -> Vec2D;
-    fn artboard_inverse_self_transform(&self, artboard: Object, point: Vec2D) -> Option<Vec2D>;
-    fn artboard_draw_order_change_counter(&self, artboard: Object) -> u8;
+    fn interpolator_transform(&self, interpolator: &CoreHandle, value: f32) -> f32;
+    fn artboard_frame_origin(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> bool;
+    fn artboard_origin(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Vec2D;
+    fn artboard_layout_size(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Vec2D;
+    fn artboard_inverse_self_transform(
+        &self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        point: Vec2D,
+    ) -> Option<Vec2D>;
+    fn artboard_draw_order_change_counter(
+        &self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+    ) -> u8;
     fn artboard_ordered_hit_components(
         &self,
-        artboard: Object,
-        components: &[Object],
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        components: &[CoreHandle],
     ) -> Vec<usize>;
-    fn artboard_update_data_binds(&mut self, machine: *mut (), force: bool);
-    fn artboard_advance_data_binds(&mut self, machine: *mut (), seconds: f32) -> bool;
-    fn artboard_advance_internal(&mut self, artboard: Object, seconds: f32, flags: u32) -> bool;
-    fn artboard_update_pass(&mut self, artboard: Object, is_root: bool) -> bool;
-    fn artboard_has_component_dirt(&self, artboard: Object) -> bool;
-    fn artboard_reset(&mut self, artboard: Object);
-    fn artboard_advance_scripted_view_models(&mut self, artboard: Object);
-    fn artboard_resolve(&self, artboard: Object, id: u32) -> Object;
-    fn object_is_event(&self, object: Object) -> bool;
-    fn artboard_file(&self, artboard: Object) -> Object;
-    fn artboard_nested_artboards(&self, artboard: Object) -> Vec<Object>;
-    fn artboard_component_lists(&self, artboard: Object) -> Vec<Object>;
-    fn artboard_objects(&self, artboard: Object) -> Vec<Object>;
-    fn artboard_text_inputs(&self, artboard: Object) -> Vec<Object>;
-    fn artboard_source_data_binds(&self, artboard: Object) -> Vec<Object>;
-    fn artboard_name(&self, artboard: Object) -> String;
-    fn artboard_cleanup_focus_tree(&mut self, artboard: Object);
-    fn artboard_build_focus_tree(&mut self, artboard: Object, manager: Object, parent: Object);
-    fn artboard_focus_manager(&self, artboard: Object) -> Object;
-    fn artboard_cleanup_semantic_tree(&mut self, artboard: Object);
-    fn artboard_build_semantic_tree(&mut self, artboard: Object, manager: Object, parent: Object);
-    fn artboard_semantic_manager(&self, artboard: Object) -> Object;
-    fn component_id(&self, component: Object) -> Object;
-    fn component_is_artboard(&self, component: Object) -> bool;
-    fn component_hit_test(&self, component: Object, point: Vec2D, path: bool, clip: bool) -> bool;
-    fn component_is_target_opaque(&self, component: Object) -> bool;
-    fn component_is_shape(&self, component: Object) -> bool;
-    fn component_is_text_run(&self, component: Object) -> bool;
-    fn component_is_container(&self, component: Object) -> bool;
-    fn component_is_layout(&self, component: Object) -> bool;
-    fn component_is_drawable_proxy(&self, component: Object) -> bool;
-    fn component_proxy(&self, component: Object) -> Object;
-    fn component_children(&self, component: Object) -> Vec<Object>;
-    fn component_mark_hit_path(&mut self, component: Object);
-    fn text_run_text_component(&self, component: Object) -> Object;
-    fn component_is_collapsed(&self, component: Object) -> bool;
-    fn component_is_paused(&self, component: Object) -> bool;
+    fn artboard_update_data_binds(&mut self, machine: &mut StateMachineInstance, force: bool);
+    fn artboard_advance_data_binds(
+        &mut self,
+        machine: &mut StateMachineInstance,
+        seconds: f32,
+    ) -> bool;
+    fn artboard_advance_internal(
+        &mut self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        seconds: f32,
+        flags: u32,
+    ) -> bool;
+    fn artboard_update_pass(
+        &mut self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        is_root: bool,
+    ) -> bool;
+    fn artboard_has_component_dirt(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> bool;
+    fn artboard_reset(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
+    fn artboard_advance_scripted_view_models(
+        &mut self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+    );
+    fn artboard_resolve(
+        &self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        id: u32,
+    ) -> Option<CoreHandle>;
+    fn object_is_event(&self, object: &CoreHandle) -> bool;
+    fn artboard_file(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Object;
+    fn artboard_nested_artboards(
+        &self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+    ) -> Vec<CoreHandle>;
+    fn artboard_component_lists(
+        &self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+    ) -> Vec<CoreHandle>;
+    fn artboard_objects(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Vec<CoreHandle>;
+    fn artboard_text_inputs(&self, artboard: &RuntimeArtboardInstanceWeakHandle)
+    -> Vec<CoreHandle>;
+    fn artboard_source_data_binds(
+        &self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+    ) -> Vec<CoreHandle>;
+    fn artboard_name(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> String;
+    fn artboard_cleanup_focus_tree(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
+    fn artboard_build_focus_tree(
+        &mut self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        manager: Object,
+        parent: Object,
+    );
+    fn artboard_focus_manager(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Object;
+    fn artboard_cleanup_semantic_tree(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
+    fn artboard_build_semantic_tree(
+        &mut self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        manager: Object,
+        parent: Object,
+    );
+    fn artboard_semantic_manager(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Object;
+    fn component_id(&self, component: &CoreHandle) -> u32;
+    fn component_is_artboard(&self, component: &CoreHandle) -> bool;
+    fn component_hit_test(
+        &self,
+        component: &CoreHandle,
+        point: Vec2D,
+        path: bool,
+        clip: bool,
+    ) -> bool;
+    fn component_is_target_opaque(&self, component: &CoreHandle) -> bool;
+    fn component_is_shape(&self, component: &CoreHandle) -> bool;
+    fn component_is_text_run(&self, component: &CoreHandle) -> bool;
+    fn component_is_container(&self, component: &CoreHandle) -> bool;
+    fn component_is_layout(&self, component: &CoreHandle) -> bool;
+    fn component_is_drawable_proxy(&self, component: &CoreHandle) -> bool;
+    fn component_proxy(&self, component: &CoreHandle) -> Option<CoreHandle>;
+    fn component_children(&self, component: &CoreHandle) -> Vec<CoreHandle>;
+    fn component_mark_hit_path(&mut self, component: &CoreHandle);
+    fn text_run_text_component(&self, component: &CoreHandle) -> Option<CoreHandle>;
+    fn component_is_collapsed(&self, component: &CoreHandle) -> bool;
+    fn component_is_paused(&self, component: &CoreHandle) -> bool;
     fn component_world_to_local(
         &self,
-        component: Object,
+        component: &CoreHandle,
         point: Vec2D,
         index: Option<i32>,
     ) -> Option<Vec2D>;
-    fn component_ordered_indices(&self, component: Object) -> Vec<i32>;
-    fn component_state_machine(&self, component: Object, index: i32) -> *mut StateMachineInstance;
-    fn nested_animations(&self, nested_artboard: Object) -> Vec<Object>;
-    fn nested_artboard_instance(&self, nested_artboard: Object) -> Object;
-    fn nested_is_state_machine(&self, animation: Object) -> bool;
-    fn nested_state_machine_instance(&self, animation: Object) -> *mut StateMachineInstance;
-    fn nested_add_event_listener(&mut self, animation: Object, listener: *mut ());
-    fn nested_remove_event_listener(&mut self, animation: Object, listener: *mut ());
+    fn component_ordered_indices(&self, component: &CoreHandle) -> Vec<i32>;
+    fn component_state_machine(
+        &self,
+        component: &CoreHandle,
+        index: i32,
+    ) -> Option<RuntimeStateMachineInstanceHandle>;
+    fn nested_animations(&self, nested_artboard: &CoreHandle) -> Vec<CoreHandle>;
+    fn nested_artboard_instance(
+        &self,
+        nested_artboard: &CoreHandle,
+    ) -> RuntimeArtboardInstanceWeakHandle;
+    fn nested_is_state_machine(&self, animation: &CoreHandle) -> bool;
+    fn nested_state_machine_instance(
+        &self,
+        animation: &CoreHandle,
+    ) -> Option<RuntimeStateMachineInstanceHandle>;
+    fn nested_add_event_listener(
+        &mut self,
+        animation: &CoreHandle,
+        nested_artboard: &CoreHandle,
+        listener: RuntimeStateMachineInstanceWeakHandle,
+    );
+    fn nested_remove_event_listener(
+        &mut self,
+        animation: &CoreHandle,
+        listener: RuntimeStateMachineInstanceWeakHandle,
+    );
     fn listener_group_reset(&mut self, group: Object, pointer: i32);
     fn listener_group_release(&mut self, group: Object, pointer: i32);
     fn listener_group_hover(&mut self, group: Object, pointer: i32);
@@ -229,73 +423,163 @@ pub trait StateMachineInstanceRuntime {
     fn listener_group_process(
         &mut self,
         group: Object,
-        component: Object,
+        component: &CoreHandle,
         position: Vec2D,
         pointer: i32,
         kind: ListenerType,
         can_hit: bool,
         timestamp: f32,
-        machine: *mut (),
+        machine: &mut StateMachineInstance,
     ) -> ProcessEventResult;
-    fn listener_group_can_early_out(&self, group: Object, component: Object) -> bool;
-    fn listener_group_needs_down(&self, group: Object, component: Object) -> bool;
-    fn listener_group_needs_up(&self, group: Object, component: Object) -> bool;
+    fn listener_group_can_early_out(&self, group: Object, component: &CoreHandle) -> bool;
+    fn listener_group_needs_down(&self, group: Object, component: &CoreHandle) -> bool;
+    fn listener_group_needs_up(&self, group: Object, component: &CoreHandle) -> bool;
     fn listener_group_enable(&mut self, group: Object, pointer: i32);
     fn listener_group_disable(&mut self, group: Object, pointer: i32);
-    fn make_listener_group(&mut self, listener: Object) -> Object;
-    fn make_text_input_listener_group(&mut self, text_input: Object, machine: *mut ()) -> Object;
+    fn make_listener_group(&mut self, listener: &CoreHandle) -> Object;
+    fn make_text_input_listener_group(
+        &mut self,
+        text_input: &CoreHandle,
+        machine: RuntimeStateMachineInstanceWeakHandle,
+    ) -> Object;
     fn make_focus_listener_group(
         &mut self,
-        focus_data: Object,
-        listener: Object,
-        machine: *mut (),
+        focus_data: &CoreHandle,
+        listener: &CoreHandle,
+        machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> Object;
     fn make_keyboard_listener_group(
         &mut self,
-        focus_data: Object,
-        listener: Object,
-        machine: *mut (),
+        focus_data: &CoreHandle,
+        listener: &CoreHandle,
+        machine: RuntimeStateMachineInstanceWeakHandle,
+    ) -> Object;
+    fn make_keyboard_listener_group_for_scripted(
+        &mut self,
+        focus_data: &CoreHandle,
+        scripted_object: &CoreHandle,
+        machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> Object;
     fn make_gamepad_listener_group(
         &mut self,
-        focus_data: Object,
-        listener: Object,
-        machine: *mut (),
+        focus_data: &CoreHandle,
+        listener: &CoreHandle,
+        machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> Object;
     fn make_semantic_listener_group(
         &mut self,
-        semantic_data: Object,
-        listener: Object,
-        machine: *mut (),
+        semantic_data: &CoreHandle,
+        listener: &CoreHandle,
+        machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> Object;
-    fn resolve_focus_data(&self, target: Object) -> Object;
-    fn resolve_semantic_data(&self, target: Object) -> Object;
+    fn resolve_focus_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
+    fn resolve_semantic_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
     fn listener_groups_from_provider(
         &mut self,
-        provider: Object,
-    ) -> Vec<(Object, Vec<(Object, bool)>)>;
+        provider: &CoreHandle,
+    ) -> Vec<(CoreHandle, Vec<(CoreHandle, bool)>)>;
     fn provided_hit_components(
         &mut self,
-        provider: Object,
-        machine: *mut (),
+        provider: &CoreHandle,
+        machine: &mut StateMachineInstance,
     ) -> Vec<Box<dyn HitComponent>>;
-    fn object_listener_provider(&self, object: Object) -> Object;
-    fn object_scripted(&self, object: Object) -> Object;
-    fn scripted_wants_keyboard(&self, object: Object) -> bool;
-    fn scripted_wants_text(&self, object: Object) -> bool;
-    fn scripted_wants_gamepad(&self, object: Object) -> bool;
-    fn listener_has(&self, listener: Object, kind: ListenerType) -> bool;
-    fn listener_has_any(&self, listener: Object, kinds: &[ListenerType]) -> bool;
-    fn listener_target_id(&self, listener: Object) -> u32;
-    fn listener_event_ids(&self, listener: Object) -> Vec<u32>;
-    fn listener_perform_changes(&mut self, listener: Object, machine: *mut (), invocation: Object);
-    fn listener_invocation_none(&mut self) -> Object;
-    fn listener_invocation_focus(&mut self, group: Object, focused: bool) -> Object;
-    fn listener_invocation_semantic(&mut self, group: Object, action: u8) -> Object;
-    fn listener_invocation_event(&mut self, event: Object, delay: f32) -> Object;
-    fn listener_invocation_view_model(&mut self, view_model: Object) -> Object;
-    fn listener_for_focus_group(&self, group: Object) -> Object;
-    fn listener_for_semantic_group(&self, group: Object) -> Object;
+    fn object_listener_provider(&self, object: &CoreHandle) -> Option<CoreHandle>;
+    fn object_scripted(&self, object: &CoreHandle) -> Option<CoreHandle>;
+    fn scripted_wants_keyboard(&self, object: &CoreHandle) -> bool;
+    fn scripted_wants_text(&self, object: &CoreHandle) -> bool;
+    fn scripted_wants_gamepad(&self, object: &CoreHandle) -> bool;
+    fn listener_has(&self, listener: &CoreHandle, kind: ListenerType) -> bool;
+    fn listener_has_any(&self, listener: &CoreHandle, kinds: &[ListenerType]) -> bool;
+    fn listener_target_id(&self, listener: &CoreHandle) -> u32;
+    fn listener_event_ids(&self, listener: &CoreHandle) -> Vec<u32>;
+    fn listener_perform_changes(
+        &mut self,
+        listener: &CoreHandle,
+        machine: &mut StateMachineInstance,
+        invocation: &ListenerInvocation,
+    );
+    fn listener_invocation_none(&mut self) -> ListenerInvocation;
+    fn listener_invocation_focus(&mut self, group: Object, focused: bool) -> ListenerInvocation;
+    fn listener_invocation_semantic(&mut self, group: Object, action: u8) -> ListenerInvocation;
+    fn listener_invocation_event(&mut self, event: &CoreHandle, delay: f32) -> ListenerInvocation;
+    fn listener_invocation_view_model(
+        &mut self,
+        view_model: RuntimeListenerViewModelWeakHandle,
+    ) -> ListenerInvocation;
+    fn listener_semantic_constraints_met(&self, listener: &CoreHandle, action: u8) -> bool;
+    fn listener_gamepad_constraints_met(
+        &self,
+        listener: &CoreHandle,
+        invocation: &ListenerInvocation,
+    ) -> bool;
+    fn listener_keyboard_constraints_met(
+        &self,
+        listener: &CoreHandle,
+        key: u32,
+        modifiers: u32,
+        pressed: bool,
+        repeat: bool,
+    ) -> bool;
+    fn focus_data_add_focus_listener(
+        &mut self,
+        focus_data: &CoreHandle,
+        listener: &CoreHandle,
+        machine: RuntimeStateMachineInstanceWeakHandle,
+    ) -> Object;
+    fn focus_data_remove_focus_listener(&mut self, focus_data: &CoreHandle, group: Object);
+    fn focus_data_add_gamepad_listener(
+        &mut self,
+        focus_data: &CoreHandle,
+        listener: Option<&CoreHandle>,
+        machine: RuntimeStateMachineInstanceWeakHandle,
+    ) -> Object;
+    fn focus_data_remove_gamepad_listener(&mut self, focus_data: &CoreHandle, group: Object);
+    fn focus_data_dispatch_scripted_gamepad(
+        &mut self,
+        focus_data: &CoreHandle,
+        invocation: &ListenerInvocation,
+    ) -> Option<(CoreHandle, bool)>;
+    fn focus_data_add_keyboard_listener(
+        &mut self,
+        focus_data: &CoreHandle,
+        listener: Option<&CoreHandle>,
+        machine: RuntimeStateMachineInstanceWeakHandle,
+    ) -> Option<Object>;
+    fn focus_data_remove_keyboard_listener(&mut self, focus_data: &CoreHandle, group: Object);
+    fn focus_data_add_text_listener(
+        &mut self,
+        focus_data: &CoreHandle,
+        listener: Option<&CoreHandle>,
+        machine: RuntimeStateMachineInstanceWeakHandle,
+    ) -> Option<Object>;
+    fn focus_data_remove_text_listener(&mut self, focus_data: &CoreHandle, group: Object);
+    fn focus_data_text_input_key(
+        &mut self,
+        focus_data: &CoreHandle,
+        key: u32,
+        modifiers: u32,
+        pressed: bool,
+        repeat: bool,
+    ) -> Option<bool>;
+    fn focus_data_text_input_text(&mut self, focus_data: &CoreHandle, text: &str) -> Option<bool>;
+    fn focus_data_scripted_key(
+        &mut self,
+        focus_data: &CoreHandle,
+        key: u32,
+        modifiers: u32,
+        pressed: bool,
+        repeat: bool,
+    ) -> Option<bool>;
+    fn focus_data_scripted_text(&mut self, focus_data: &CoreHandle, text: &str) -> Option<bool>;
+    fn semantic_data_add_listener(
+        &mut self,
+        semantic_data: &CoreHandle,
+        listener: &CoreHandle,
+        machine: RuntimeStateMachineInstanceWeakHandle,
+    ) -> Object;
+    fn semantic_data_remove_listener(&mut self, semantic_data: &CoreHandle, group: Object);
+    fn listener_for_focus_group(&self, group: Object) -> Option<CoreHandle>;
+    fn listener_for_semantic_group(&self, group: Object) -> Option<CoreHandle>;
     fn focus_manager_new(&mut self) -> Object;
     fn focus_manager_set_focus(&mut self, manager: Object, focus_data: Object);
     fn focus_manager_clear(&mut self, manager: Object);
@@ -307,84 +591,124 @@ pub trait StateMachineInstanceRuntime {
     fn semantic_manager_new(&mut self) -> Object;
     fn semantic_fire_action(&mut self, manager: Object, node: u32, action: u8);
     fn data_context_advanced(&mut self, context: Object);
-    fn data_context_add_container(&mut self, context: Object, container: *mut ());
-    fn data_context_remove_container(&mut self, context: Object, container: *mut ());
+    fn data_context_add_container(
+        &mut self,
+        context: Object,
+        container: RuntimeStateMachineInstanceWeakHandle,
+    );
+    fn data_context_remove_container(
+        &mut self,
+        context: Object,
+        container: RuntimeStateMachineInstanceWeakHandle,
+    );
     fn data_context_main(&self, context: Object) -> Object;
     fn data_context_set_main(&mut self, context: Object, instance: Object);
     fn data_context_slot(&self, context: Object, slot: u32) -> Object;
     fn data_context_set_slot(&mut self, context: Object, slot: u32, instance: Object);
     fn data_context_new(&mut self, main: Object) -> Object;
-    fn data_context_property(&self, context: Object, path_owner: Object) -> Object;
-    fn listener_is_single(&self, listener: Object) -> bool;
-    fn listener_view_model_inputs(&self, listener: Object) -> Vec<Object>;
+    fn data_context_property(&self, context: Object, path_owner: CoreHandle) -> Object;
+    fn listener_is_single(&self, listener: &CoreHandle) -> bool;
+    fn listener_view_model_inputs(&self, listener: &CoreHandle) -> Vec<CoreHandle>;
     fn view_model_value_is_trigger(&self, value: Object) -> bool;
     fn view_model_trigger_value(&self, value: Object) -> u32;
-    fn view_model_add_dependent(&mut self, value: Object, dependent: Object);
-    fn view_model_remove_dependent(&mut self, value: Object, dependent: Object);
-    fn complete_default_main(&mut self, artboard: Object) -> Object;
+    fn view_model_add_dependent(
+        &mut self,
+        value: Object,
+        dependent: RuntimeListenerViewModelPropertyBindingWeakHandle,
+    );
+    fn view_model_remove_dependent(
+        &mut self,
+        value: Object,
+        dependent: RuntimeListenerViewModelPropertyBindingWeakHandle,
+    );
+    fn complete_default_main(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Object;
     fn global_view_models(&self, file: Object) -> Vec<Object>;
     fn view_model_name(&self, view_model: Object) -> String;
     fn view_model_slot(&self, file: Object, name: &str) -> Option<u32>;
     fn view_model_is_global(&self, file: Object, slot: u32) -> bool;
     fn create_default_view_model(&mut self, file: Object, view_model: Object) -> Object;
-    fn artboard_set_data_context(&mut self, artboard: Object, context: Object);
-    fn artboard_clear_data_context(&mut self, artboard: Object);
-    fn artboard_relink_data_context(&mut self, artboard: Object);
-    fn bind_data_binds_from_context(&mut self, machine: *mut (), context: Object);
-    fn unbind_data_binds(&mut self, machine: *mut ());
-    fn clone_data_bind(&mut self, bind: Object) -> Object;
-    fn data_bind_file(&self, bind: Object) -> Object;
-    fn data_bind_set_file(&mut self, bind: Object, file: Object);
-    fn data_bind_converter(&self, bind: Object) -> Object;
-    fn clone_data_converter(&mut self, converter: Object) -> Object;
-    fn data_bind_set_converter(&mut self, bind: Object, converter: Object);
-    fn data_bind_initialize(&mut self, bind: Object);
-    fn data_bind_target(&self, bind: Object) -> Object;
-    fn data_bind_flags(&self, bind: Object) -> u32;
-    fn data_bind_property_key(&self, bind: Object) -> u32;
-    fn data_bind_is_transition_target(&self, bind: Object) -> bool;
-    fn data_bind_is_keyframe_target(&self, bind: Object) -> bool;
-    fn data_bind_bindable_target(&self, bind: Object) -> bool;
-    fn clone_bindable_property(&mut self, property: Object) -> Object;
-    fn make_transition_property(&mut self) -> Object;
-    fn configure_data_bind_target(&mut self, bind: Object, target: Object, property_key: u32);
-    fn add_data_bind(&mut self, machine: *mut (), bind: Object);
-    fn remove_data_bind(&mut self, machine: *mut (), bind: Object);
-    fn delete_data_bind(&mut self, bind: Object);
-    fn delete_all_data_binds(&mut self, machine: *mut ());
-    fn data_bind_on_changed(&mut self, bind: Object, callback: fn());
-    fn delete_owned_object(&mut self, object: Object);
-    fn keyframe_type(&self, keyframe: Object) -> u16;
-    fn animation_keyframes(&self, animation_instance: Object) -> Vec<Object>;
-    fn make_keyframe_holder(&mut self, keyframe_type: u16) -> Object;
-    fn add_keyframe_holder(&mut self, animation_instance: Object, keyframe: Object, holder: Object);
-    fn scripted_clone(&mut self, source: Object, machine: *mut ()) -> Object;
-    fn scripted_set_data_context(&mut self, object: Object, context: Object);
-    fn scripted_initialize(&mut self, object: Object);
-    fn scripted_hydrate_inputs(&mut self, object: Object);
-    fn scripted_delete(&mut self, object: Object);
-    fn event_is_audio(&self, event: Object) -> bool;
-    fn event_play_audio(&mut self, event: Object);
-    fn nested_event_listeners(&self, machine: *mut ()) -> Vec<*mut StateMachineInstance>;
-    fn nested_artboard_context(&self, machine: *mut ()) -> Object;
-    fn gamepad_submit_buffer(&mut self, machine: *mut (), data: &[u8]) -> bool;
+    fn artboard_set_data_context(
+        &mut self,
+        artboard: &RuntimeArtboardInstanceWeakHandle,
+        context: Object,
+    );
+    fn artboard_clear_data_context(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
+    fn artboard_relink_data_context(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle);
+    fn bind_data_binds_from_context(&mut self, machine: &mut StateMachineInstance, context: Object);
+    fn unbind_data_binds(&mut self, machine: &mut StateMachineInstance);
+    fn clone_data_bind(&mut self, bind: &CoreHandle) -> CoreHandle;
+    fn data_bind_file(&self, bind: &CoreHandle) -> Object;
+    fn data_bind_set_file(&mut self, bind: &CoreHandle, file: Object);
+    fn data_bind_converter(&self, bind: &CoreHandle) -> Option<CoreHandle>;
+    fn clone_data_converter(&mut self, converter: &CoreHandle) -> CoreHandle;
+    fn data_bind_set_converter(&mut self, bind: &CoreHandle, converter: CoreHandle);
+    fn data_bind_initialize(&mut self, bind: &CoreHandle);
+    fn data_bind_target(&self, bind: &CoreHandle) -> Option<CoreHandle>;
+    fn data_bind_flags(&self, bind: &CoreHandle) -> u32;
+    fn data_bind_property_key(&self, bind: &CoreHandle) -> u32;
+    fn data_bind_is_transition_target(&self, bind: &CoreHandle) -> bool;
+    fn data_bind_is_keyframe_target(&self, bind: &CoreHandle) -> bool;
+    fn data_bind_bindable_target(&self, bind: &CoreHandle) -> bool;
+    fn clone_bindable_property(&mut self, property: &CoreHandle) -> CoreHandle;
+    fn make_transition_property(&mut self) -> CoreHandle;
+    fn configure_data_bind_target(
+        &mut self,
+        bind: &CoreHandle,
+        target: CoreHandle,
+        property_key: u32,
+    );
+    fn add_data_bind(&mut self, machine: &mut StateMachineInstance, bind: CoreHandle);
+    fn remove_data_bind(&mut self, machine: &mut StateMachineInstance, bind: &CoreHandle);
+    fn delete_data_bind(&mut self, bind: CoreHandle);
+    fn delete_all_data_binds(&mut self, machine: &mut StateMachineInstance);
+    fn data_bind_on_changed(&mut self, bind: &CoreHandle, callback: fn());
+    fn delete_owned_object(&mut self, object: CoreHandle);
+    fn keyframe_type(&self, keyframe: &CoreHandle) -> u16;
+    fn animation_keyframes(&self, animation_instance: Object) -> Vec<CoreHandle>;
+    fn make_keyframe_holder(&mut self, keyframe_type: u16) -> CoreHandle;
+    fn add_keyframe_holder(
+        &mut self,
+        animation_instance: Object,
+        keyframe: &CoreHandle,
+        holder: CoreHandle,
+    );
+    fn scripted_clone(
+        &mut self,
+        source: &CoreHandle,
+        machine: &mut StateMachineInstance,
+    ) -> CoreHandle;
+    fn scripted_set_data_context(&mut self, object: &CoreHandle, context: Object);
+    fn scripted_initialize(&mut self, object: &CoreHandle);
+    fn scripted_hydrate_inputs(&mut self, object: &CoreHandle);
+    fn scripted_delete(&mut self, object: CoreHandle);
+    fn event_is_audio(&self, event: &CoreHandle) -> bool;
+    fn event_play_audio(&mut self, event: &CoreHandle);
+    fn nested_event_listeners(
+        &self,
+        machine: &StateMachineInstance,
+    ) -> Vec<RuntimeStateMachineInstanceWeakHandle>;
+    fn nested_artboard_context(&self, machine: &StateMachineInstance) -> Object;
+    fn gamepad_submit_buffer(&mut self, machine: &mut StateMachineInstance, data: &[u8]) -> bool;
     fn gamepad_broadcast(
         &mut self,
-        machine: *mut (),
-        invocation: Object,
-        skipped: Object,
+        machine: &mut StateMachineInstance,
+        invocation: &ListenerInvocation,
+        skipped: Option<&CoreHandle>,
     ) -> HitResult;
 }
 
-struct StateMachineLayerInstance {
-    state_machine_instance: *mut StateMachineInstance,
-    layer: Object,
-    artboard_instance: Object,
+pub type RuntimeServicesHandle = Rc<RefCell<Box<dyn StateMachineInstanceRuntime>>>;
+
+pub struct StateMachineLayerInstance {
+    runtime_services: Option<RuntimeServicesHandle>,
+    occurrence: RuntimeStateMachineLayerInstanceWeakHandle,
+    layer: Option<CoreHandle>,
+    artboard_instance: RuntimeArtboardInstanceWeakHandle,
     any_state_instance: Object,
     current_state: Object,
     state_from: Object,
-    transition: Object,
-    transition_duration_property: Object,
+    transition: Option<CoreHandle>,
+    transition_duration_property: Option<CoreHandle>,
     animation_reset: Object,
     transition_completed: bool,
     hold_animation_from: bool,
@@ -392,29 +716,72 @@ struct StateMachineLayerInstance {
     mix_from: f32,
     state_machine_changed_on_advance: bool,
     waiting_for_exit: bool,
-    hold_animation: Object,
+    hold_animation: Option<CoreHandle>,
     hold_time: f32,
+}
+
+#[derive(Clone)]
+pub struct RuntimeStateMachineLayerInstanceHandle(Rc<RefCell<StateMachineLayerInstance>>);
+
+#[derive(Clone, Default)]
+pub struct RuntimeStateMachineLayerInstanceWeakHandle(Weak<RefCell<StateMachineLayerInstance>>);
+
+impl RuntimeStateMachineLayerInstanceHandle {
+    fn new(layer: StateMachineLayerInstance) -> Self {
+        let handle = Self(Rc::new(RefCell::new(layer)));
+        handle.0.borrow_mut().occurrence = handle.downgrade();
+        handle
+    }
+    pub fn downgrade(&self) -> RuntimeStateMachineLayerInstanceWeakHandle {
+        RuntimeStateMachineLayerInstanceWeakHandle(Rc::downgrade(&self.0))
+    }
+    pub fn with_layer<R>(&self, f: impl FnOnce(&StateMachineLayerInstance) -> R) -> R {
+        f(&self.0.borrow())
+    }
+    pub fn with_layer_mut<R>(&self, f: impl FnOnce(&mut StateMachineLayerInstance) -> R) -> R {
+        f(&mut self.0.borrow_mut())
+    }
+}
+
+impl RuntimeStateMachineLayerInstanceWeakHandle {
+    pub fn upgrade(&self) -> Option<RuntimeStateMachineLayerInstanceHandle> {
+        self.0.upgrade().map(RuntimeStateMachineLayerInstanceHandle)
+    }
+    pub fn with_layer<R>(&self, f: impl FnOnce(&StateMachineLayerInstance) -> R) -> Option<R> {
+        self.upgrade().map(|layer| layer.with_layer(f))
+    }
+    pub fn with_layer_mut<R>(
+        &self,
+        f: impl FnOnce(&mut StateMachineLayerInstance) -> R,
+    ) -> Option<R> {
+        self.upgrade().map(|layer| layer.with_layer_mut(f))
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
+    }
 }
 
 impl Default for StateMachineLayerInstance {
     fn default() -> Self {
         Self {
-            state_machine_instance: std::ptr::null_mut(),
-            layer: 0,
-            artboard_instance: 0,
-            any_state_instance: 0,
-            current_state: 0,
-            state_from: 0,
-            transition: 0,
-            transition_duration_property: 0,
-            animation_reset: 0,
+            runtime_services: None,
+            occurrence: RuntimeStateMachineLayerInstanceWeakHandle::default(),
+            layer: None,
+            artboard_instance: RuntimeArtboardInstanceWeakHandle::default(),
+            any_state_instance: RuntimeObjectHandle::NONE,
+            current_state: RuntimeObjectHandle::NONE,
+            state_from: RuntimeObjectHandle::NONE,
+            transition: None,
+            transition_duration_property: None,
+            animation_reset: RuntimeObjectHandle::NONE,
             transition_completed: false,
             hold_animation_from: false,
             mix: 1.0,
             mix_from: 1.0,
             state_machine_changed_on_advance: false,
             waiting_for_exit: false,
-            hold_animation: 0,
+            hold_animation: None,
             hold_time: 0.0,
         }
     }
@@ -423,73 +790,71 @@ impl Default for StateMachineLayerInstance {
 impl StateMachineLayerInstance {
     const MAX_ITERATIONS: usize = 100;
 
-    fn runtime(&mut self) -> &mut dyn StateMachineInstanceRuntime {
-        unsafe { (&mut *self.state_machine_instance).runtime_mut() }
+    fn runtime(&self) -> RefMut<'_, dyn StateMachineInstanceRuntime> {
+        RefMut::map(
+            self.runtime_services
+                .as_ref()
+                .expect("initialized layer retains runtime services")
+                .borrow_mut(),
+            |runtime| runtime.as_mut(),
+        )
     }
 
     fn init(
         &mut self,
-        state_machine_instance: *mut StateMachineInstance,
-        layer: Object,
-        artboard: Object,
+        state_machine_instance: &mut StateMachineInstance,
+        runtime_services: RuntimeServicesHandle,
+        layer: CoreHandle,
+        artboard: RuntimeArtboardInstanceWeakHandle,
     ) {
-        self.state_machine_instance = state_machine_instance;
-        self.artboard_instance = artboard;
-        let runtime = self.runtime();
-        let seed = if runtime.deterministic_mode() {
-            1
-        } else {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos() as u32
-        };
-        runtime.seed_random(seed);
-        debug_assert_eq!(self.layer, 0);
-        self.any_state_instance =
-            runtime.make_state_instance(runtime.layer_any_state(layer), artboard);
-        unsafe {
-            (&mut *state_machine_instance).build_state_keyframe_binds(self.any_state_instance)
-        };
-        self.layer = layer;
-        let entry = self.runtime().layer_entry_state(layer);
-        self.change_state(entry);
+        self.runtime_services = Some(runtime_services);
+        self.artboard_instance = artboard.clone();
+        let deterministic = self.runtime().deterministic_mode();
+        let seed = RandomProvider::layer_seed(deterministic);
+        RandomProvider::seed(seed);
+        debug_assert!(self.layer.is_none());
+        let any_state = self.runtime().layer_any_state(&layer);
+        self.any_state_instance = self.runtime().make_state_instance(any_state, &artboard);
+        state_machine_instance.build_state_keyframe_binds(self.any_state_instance);
+        let entry = self.runtime().layer_entry_state(&layer);
+        self.layer = Some(layer);
+        self.change_state(state_machine_instance, entry);
     }
 
-    fn reset_state(&mut self) {
+    fn reset_state(&mut self, machine: &mut StateMachineInstance) {
         if self.state_from != 0
             && self.state_from != self.any_state_instance
             && self.state_from != self.current_state
         {
-            unsafe {
-                (&mut *self.state_machine_instance).remove_state_keyframe_binds(self.state_from)
-            };
+            machine.remove_state_keyframe_binds(self.state_from);
             let state = self.state_from;
             self.runtime().delete_state_instance(state);
         }
-        self.state_from = 0;
+        self.state_from = RuntimeObjectHandle::NONE;
         if self.current_state != 0 && self.current_state != self.any_state_instance {
-            unsafe {
-                (&mut *self.state_machine_instance).remove_state_keyframe_binds(self.current_state)
-            };
+            machine.remove_state_keyframe_binds(self.current_state);
             let state = self.current_state;
             self.runtime().delete_state_instance(state);
         }
-        self.current_state = 0;
-        let entry = self.runtime().layer_entry_state(self.layer);
-        self.change_state(entry);
+        self.current_state = RuntimeObjectHandle::NONE;
+        let entry = self
+            .runtime()
+            .layer_entry_state(self.layer.as_ref().expect("initialized layer"));
+        self.change_state(machine, entry);
     }
 
     fn resolved_duration(&mut self) -> u32 {
-        if self.transition_duration_property != 0 {
+        if let Some(property) = self.transition_duration_property.clone() {
             return self
                 .runtime()
-                .transition_property_value(self.transition_duration_property)
+                .transition_property_value(&property)
                 .round()
                 .max(0.0) as u32;
         }
-        self.runtime().transition_duration(self.transition)
+        self.transition
+            .clone()
+            .map(|transition| self.runtime().transition_duration(&transition))
+            .unwrap_or(0)
     }
 
     fn resolved_mix_time(&mut self) -> f32 {
@@ -497,24 +862,26 @@ impl StateMachineLayerInstance {
         if duration == 0 {
             return 0.0;
         }
+        let Some(transition) = self.transition.clone() else {
+            return 0.0;
+        };
         if self
             .runtime()
-            .transition_duration_is_percentage(self.transition)
+            .transition_duration_is_percentage(&transition)
         {
             let animation = self.runtime().state_animation(self.state_from);
-            let animation_duration = if animation == 0 {
-                0.0
-            } else {
-                self.runtime().animation_duration_seconds(animation)
-            };
+            let animation_duration = animation
+                .as_ref()
+                .map(|animation| self.runtime().animation_duration_seconds(animation))
+                .unwrap_or(0.0);
             duration as f32 / 100.0 * animation_duration
         } else {
             duration as f32 / 1000.0
         }
     }
 
-    fn update_mix(&mut self, seconds: f32) {
-        if self.transition != 0 && self.state_from != 0 && self.resolved_duration() != 0 {
+    fn update_mix(&mut self, machine: &mut StateMachineInstance, seconds: f32) {
+        if self.transition.is_some() && self.state_from != 0 && self.resolved_duration() != 0 {
             let mix_time = self.resolved_mix_time();
             self.mix = if mix_time == 0.0 {
                 1.0
@@ -524,24 +891,29 @@ impl StateMachineLayerInstance {
             if self.mix == 1.0 && !self.transition_completed {
                 self.transition_completed = true;
                 self.clear_animation_reset();
-                let events = self.runtime().transition_events(self.transition);
-                self.fire_events(1, &events);
-                let actions = self.runtime().transition_listener_actions(self.transition);
-                self.perform_listener_actions(1, &actions);
+                let transition = self.transition.clone().expect("active transition");
+                let events = self.runtime().transition_events(&transition);
+                self.fire_events(machine, 1, &events);
+                let actions = self.runtime().transition_listener_actions(&transition);
+                self.perform_listener_actions(machine, 1, &actions);
             }
         } else {
             self.mix = 1.0;
         }
     }
 
-    fn advance(&mut self, seconds: f32, new_frame: bool) -> bool {
+    fn advance(
+        &mut self,
+        machine: &mut StateMachineInstance,
+        seconds: f32,
+        new_frame: bool,
+    ) -> bool {
         if new_frame {
             self.state_machine_changed_on_advance = false;
         }
         let current = self.current_state;
-        let machine = self.state_machine_instance.cast();
         self.runtime().state_advance(current, seconds, machine);
-        self.update_mix(seconds);
+        self.update_mix(machine, seconds);
         if self.state_from != 0 && self.mix < 1.0 && !self.hold_animation_from {
             let from = self.state_from;
             self.runtime().state_advance(from, seconds, machine);
@@ -549,18 +921,20 @@ impl StateMachineLayerInstance {
         self.apply();
         let mut changed = false;
         for iteration in 0.. {
-            if !self.update_state() {
+            if !self.update_state(machine) {
                 break;
             }
             changed = true;
             self.apply();
             if iteration == Self::MAX_ITERATIONS {
-                let machine_name = unsafe { (&*self.state_machine_instance).name() };
-                let layer = self.layer;
-                let artboard = self.artboard_instance;
+                let machine_name = machine.name();
+                let layer = self.layer.as_ref();
+                let artboard = &self.artboard_instance;
                 eprintln!(
                     "{} StateMachine exceeded max iterations in layer {} on artboard {}",
-                    machine_name, layer, artboard
+                    machine_name,
+                    layer.is_some(),
+                    artboard.upgrade().is_some()
                 );
                 return false;
             }
@@ -574,49 +948,61 @@ impl StateMachineLayerInstance {
     }
 
     fn is_transitioning(&mut self) -> bool {
-        self.transition != 0
+        self.transition.is_some()
             && self.state_from != 0
             && self.resolved_duration() != 0
             && self.mix < 1.0
     }
 
-    fn update_state(&mut self) -> bool {
-        if self.is_transitioning() && !self.runtime().transition_enable_early_exit(self.transition)
+    fn update_state(&mut self, machine: &mut StateMachineInstance) -> bool {
+        if self.is_transitioning()
+            && !self
+                .runtime()
+                .transition_enable_early_exit(self.transition.as_ref().expect("active transition"))
         {
             return false;
         }
         self.waiting_for_exit = false;
-        if self.try_change_state_from(self.any_state_instance) {
+        if self.try_change_state_from(machine, self.any_state_instance) {
             return true;
         }
-        self.try_change_state_from(self.current_state)
+        self.try_change_state_from(machine, self.current_state)
     }
 
-    fn fire_events(&mut self, occurrence: u8, events: &[Object]) {
-        for &event in events {
+    fn fire_events(
+        &mut self,
+        machine: &mut StateMachineInstance,
+        occurrence: u8,
+        events: &[CoreHandle],
+    ) {
+        for event in events {
             if self.runtime().fire_action_occurs(event) == occurrence {
-                let machine = self.state_machine_instance.cast();
                 self.runtime().fire_action_perform(event, machine);
             }
         }
     }
 
-    fn perform_listener_actions(&mut self, occurrence: u8, actions: &[Object]) {
-        for &action in actions {
+    fn perform_listener_actions(
+        &mut self,
+        machine: &mut StateMachineInstance,
+        occurrence: u8,
+        actions: &[CoreHandle],
+    ) {
+        for action in actions {
             if self.runtime().listener_action_matches(action, occurrence) {
-                let machine = self.state_machine_instance.cast();
                 let invocation = self.runtime().listener_invocation_none();
                 self.runtime()
-                    .listener_action_perform(action, machine, invocation);
+                    .listener_action_perform(action, machine, &invocation);
             }
         }
     }
 
-    fn can_change_state(&mut self, state_to: Object) -> bool {
-        self.current_state == 0 || self.runtime().state_definition(self.current_state) != state_to
+    fn can_change_state(&mut self, state_to: &CoreHandle) -> bool {
+        self.current_state == 0
+            || self.runtime().state_definition(self.current_state) != state_to.clone()
     }
 
-    fn change_state(&mut self, state_to: Object) {
+    fn change_state(&mut self, machine: &mut StateMachineInstance, state_to: CoreHandle) {
         if self.current_state != 0
             && self.runtime().state_definition(self.current_state) == state_to
         {
@@ -624,155 +1010,155 @@ impl StateMachineLayerInstance {
         }
         if self.current_state != 0 {
             let state = self.runtime().state_definition(self.current_state);
-            let events = self.runtime().state_events(state);
-            self.fire_events(1, &events);
-            let actions = self.runtime().state_listener_actions(state);
-            self.perform_listener_actions(1, &actions);
+            let events = self.runtime().state_events(&state);
+            self.fire_events(machine, 1, &events);
+            let actions = self.runtime().state_listener_actions(&state);
+            self.perform_listener_actions(machine, 1, &actions);
         }
-        self.current_state = if state_to == 0 {
-            0
-        } else {
-            self.runtime()
-                .make_state_instance(state_to, self.artboard_instance)
-        };
+        self.current_state = self
+            .runtime()
+            .make_state_instance(state_to, &self.artboard_instance);
         if self.current_state != 0 {
-            unsafe {
-                (&mut *self.state_machine_instance).build_state_keyframe_binds(self.current_state)
-            };
+            machine.build_state_keyframe_binds(self.current_state);
             let state = self.runtime().state_definition(self.current_state);
-            let events = self.runtime().state_events(state);
-            self.fire_events(0, &events);
-            let actions = self.runtime().state_listener_actions(state);
-            self.perform_listener_actions(0, &actions);
+            let events = self.runtime().state_events(&state);
+            self.fire_events(machine, 0, &events);
+            let actions = self.runtime().state_listener_actions(&state);
+            self.perform_listener_actions(machine, 0, &actions);
         }
     }
 
-    fn find_random_transition(&mut self, from_instance: Object) -> Object {
+    fn find_random_transition(
+        &mut self,
+        machine: &mut StateMachineInstance,
+        from_instance: Object,
+    ) -> Option<CoreHandle> {
         let state = self.runtime().state_definition(from_instance);
         let mut total_weight = 0;
-        for index in 0..self.runtime().state_transition_count(state) {
-            let transition = self.runtime().state_transition(state, index);
-            if self.can_change_state(self.runtime().transition_state_to(transition)) {
+        for index in 0..self.runtime().state_transition_count(&state) {
+            let transition = self.runtime().state_transition(&state, index);
+            let state_to = self.runtime().transition_state_to(&transition);
+            if self.can_change_state(&state_to) {
                 let allowed = self.runtime().transition_allowed(
-                    transition,
+                    &transition,
                     from_instance,
-                    self.state_machine_instance.cast(),
-                    (self as *mut Self).cast(),
+                    machine,
+                    self.occurrence.clone(),
                 );
                 if allowed == 2 {
-                    let weight = self.runtime().transition_random_weight(transition);
+                    let weight = self.runtime().transition_random_weight(&transition);
                     self.runtime()
-                        .set_transition_evaluated_weight(transition, weight);
+                        .set_transition_evaluated_weight(&transition, weight);
                     total_weight += weight;
                 } else {
                     self.runtime()
-                        .set_transition_evaluated_weight(transition, 0);
+                        .set_transition_evaluated_weight(&transition, 0);
                     if allowed == 1 {
                         self.waiting_for_exit = true;
                     }
                 }
             } else {
                 self.runtime()
-                    .set_transition_evaluated_weight(transition, 0);
+                    .set_transition_evaluated_weight(&transition, 0);
             }
         }
         if total_weight == 0 {
-            return 0;
+            return None;
         }
-        let random_weight = self.runtime().random_value() * total_weight as f64;
+        let random_weight = RandomProvider::generate_random_float() as f64 * total_weight as f64;
         let mut current_weight = 0.0;
-        for index in 0..self.runtime().state_transition_count(state) {
-            let transition = self.runtime().state_transition(state, index);
-            let weight = self.runtime().transition_evaluated_weight(transition) as f64;
+        for index in 0..self.runtime().state_transition_count(&state) {
+            let transition = self.runtime().state_transition(&state, index);
+            let weight = self.runtime().transition_evaluated_weight(&transition) as f64;
             if current_weight + weight > random_weight {
-                self.runtime().transition_use_layer(
-                    transition,
-                    self.state_machine_instance.cast(),
-                    (self as *mut Self).cast(),
-                );
-                return transition;
+                self.runtime()
+                    .transition_use_layer(&transition, machine, self.occurrence.clone());
+                return Some(transition);
             }
             current_weight += weight;
         }
-        0
+        None
     }
 
-    fn find_allowed_transition(&mut self, from_instance: Object) -> Object {
+    fn find_allowed_transition(
+        &mut self,
+        machine: &mut StateMachineInstance,
+        from_instance: Object,
+    ) -> Option<CoreHandle> {
         let state = self.runtime().state_definition(from_instance);
-        if self.runtime().state_flags(state) & 1 != 0 {
-            return self.find_random_transition(from_instance);
+        if self.runtime().state_flags(&state) & 1 != 0 {
+            return self.find_random_transition(machine, from_instance);
         }
-        for index in 0..self.runtime().state_transition_count(state) {
-            let transition = self.runtime().state_transition(state, index);
-            if !self.can_change_state(self.runtime().transition_state_to(transition)) {
+        for index in 0..self.runtime().state_transition_count(&state) {
+            let transition = self.runtime().state_transition(&state, index);
+            let state_to = self.runtime().transition_state_to(&transition);
+            if !self.can_change_state(&state_to) {
                 continue;
             }
             let allowed = self.runtime().transition_allowed(
-                transition,
+                &transition,
                 from_instance,
-                self.state_machine_instance.cast(),
-                (self as *mut Self).cast(),
+                machine,
+                self.occurrence.clone(),
             );
             if allowed == 2 {
-                let weight = self.runtime().transition_random_weight(transition);
+                let weight = self.runtime().transition_random_weight(&transition);
                 self.runtime()
-                    .set_transition_evaluated_weight(transition, weight);
-                self.runtime().transition_use_layer(
-                    transition,
-                    self.state_machine_instance.cast(),
-                    (self as *mut Self).cast(),
-                );
-                return transition;
+                    .set_transition_evaluated_weight(&transition, weight);
+                self.runtime()
+                    .transition_use_layer(&transition, machine, self.occurrence.clone());
+                return Some(transition);
             }
             self.runtime()
-                .set_transition_evaluated_weight(transition, 0);
+                .set_transition_evaluated_weight(&transition, 0);
             if allowed == 1 {
                 self.waiting_for_exit = true;
             }
         }
-        0
+        None
     }
 
     fn clear_animation_reset(&mut self) {
         if self.animation_reset != 0 {
             let reset = self.animation_reset;
             self.runtime().release_animation_reset(reset);
-            self.animation_reset = 0;
+            self.animation_reset = RuntimeObjectHandle::NONE;
         }
     }
 
-    fn try_change_state_from(&mut self, from_instance: Object) -> bool {
+    fn try_change_state_from(
+        &mut self,
+        machine: &mut StateMachineInstance,
+        from_instance: Object,
+    ) -> bool {
         if from_instance == 0 {
             return false;
         }
         let out_state = self.current_state;
-        let transition = self.find_allowed_transition(from_instance);
-        if transition == 0 {
+        let Some(transition) = self.find_allowed_transition(machine, from_instance) else {
             return false;
-        }
+        };
         self.clear_animation_reset();
-        let state_to = self.runtime().transition_state_to(transition);
-        self.change_state(state_to);
+        let state_to = self.runtime().transition_state_to(&transition);
+        self.change_state(machine, state_to);
         self.state_machine_changed_on_advance = true;
-        self.transition = transition;
+        self.transition = Some(transition.clone());
         self.transition_duration_property = self.runtime().transition_property_instance(
-            unsafe { &*self.state_machine_instance },
-            transition,
+            machine,
+            &transition,
             StateTransitionBase::DURATION_PROPERTY_KEY as u32,
         );
-        let events = self.runtime().transition_events(transition);
-        self.fire_events(0, &events);
-        let actions = self.runtime().transition_listener_actions(transition);
-        self.perform_listener_actions(0, &actions);
+        let events = self.runtime().transition_events(&transition);
+        self.fire_events(machine, 0, &events);
+        let actions = self.runtime().transition_listener_actions(&transition);
+        self.perform_listener_actions(machine, 0, &actions);
         self.transition_completed = self.resolved_duration() == 0;
         if self.transition_completed {
-            self.fire_events(1, &events);
-            self.perform_listener_actions(1, &actions);
+            self.fire_events(machine, 1, &events);
+            self.perform_listener_actions(machine, 1, &actions);
         }
         if self.state_from != 0 && self.state_from != self.any_state_instance {
-            unsafe {
-                (&mut *self.state_machine_instance).remove_state_keyframe_binds(self.state_from)
-            };
+            machine.remove_state_keyframe_binds(self.state_from);
             let old = self.state_from;
             self.runtime().delete_state_instance(old);
         }
@@ -781,13 +1167,13 @@ impl StateMachineLayerInstance {
             self.animation_reset = self.runtime().make_animation_reset(
                 self.state_from,
                 self.current_state,
-                self.artboard_instance,
+                &self.artboard_instance,
             );
         }
         if out_state != 0
             && self
                 .runtime()
-                .transition_apply_exit_condition(transition, out_state)
+                .transition_apply_exit_condition(&transition, out_state)
         {
             let instance = self.runtime().state_animation_instance(self.state_from);
             self.hold_animation = self.runtime().state_animation(self.state_from);
@@ -795,7 +1181,7 @@ impl StateMachineLayerInstance {
         }
         self.mix_from = self.mix;
         if self.mix != 0.0 {
-            self.hold_animation_from = self.runtime().transition_pause_on_exit(transition);
+            self.hold_animation_from = self.runtime().transition_pause_on_exit(&transition);
         }
         if self.current_state != 0 {
             let advance_time = if self.state_from == 0 {
@@ -803,14 +1189,11 @@ impl StateMachineLayerInstance {
             } else {
                 self.runtime().state_spilled_time(self.state_from)
             };
-            self.runtime().state_advance(
-                self.current_state,
-                advance_time,
-                self.state_machine_instance.cast(),
-            );
+            self.runtime()
+                .state_advance(self.current_state, advance_time, machine);
         }
         self.mix = 0.0;
-        self.update_mix(0.0);
+        self.update_mix(machine, 0.0);
         self.waiting_for_exit = false;
         true
     }
@@ -818,49 +1201,49 @@ impl StateMachineLayerInstance {
     fn apply(&mut self) {
         if self.animation_reset != 0 {
             self.runtime()
-                .apply_animation_reset(self.animation_reset, self.artboard_instance);
+                .apply_animation_reset(self.animation_reset, &self.artboard_instance);
         }
-        if self.hold_animation != 0 {
+        if let Some(hold_animation) = self.hold_animation.take() {
             self.runtime().animation_apply(
-                self.hold_animation,
-                self.artboard_instance,
+                &hold_animation,
+                &self.artboard_instance,
                 self.hold_time,
                 self.mix_from,
             );
-            self.hold_animation = 0;
         }
-        let interpolator = if self.transition == 0 {
-            0
-        } else {
-            self.runtime().transition_interpolator(self.transition)
-        };
+        let interpolator = self
+            .transition
+            .clone()
+            .and_then(|transition| self.runtime().transition_interpolator(&transition));
         if self.state_from != 0 && self.mix < 1.0 {
-            let mix = if interpolator == 0 {
-                self.mix_from
-            } else {
-                self.runtime()
-                    .interpolator_transform(interpolator, self.mix_from)
-            };
+            let mix = interpolator
+                .as_ref()
+                .map(|interpolator| {
+                    self.runtime()
+                        .interpolator_transform(interpolator, self.mix_from)
+                })
+                .unwrap_or(self.mix_from);
             self.runtime()
-                .state_apply(self.state_from, self.artboard_instance, mix);
+                .state_apply(self.state_from, &self.artboard_instance, mix);
         }
         if self.current_state != 0 {
-            let mix = if interpolator == 0 {
-                self.mix
-            } else {
-                self.runtime()
-                    .interpolator_transform(interpolator, self.mix)
-            };
+            let mix = interpolator
+                .as_ref()
+                .map(|interpolator| {
+                    self.runtime()
+                        .interpolator_transform(interpolator, self.mix)
+                })
+                .unwrap_or(self.mix);
             self.runtime()
-                .state_apply(self.current_state, self.artboard_instance, mix);
+                .state_apply(self.current_state, &self.artboard_instance, mix);
         }
     }
 
-    fn current_state(&mut self) -> Object {
+    fn current_state(&mut self) -> Option<CoreHandle> {
         if self.current_state == 0 {
-            0
+            None
         } else {
-            self.runtime().state_definition(self.current_state)
+            Some(self.runtime().state_definition(self.current_state))
         }
     }
 
@@ -875,7 +1258,7 @@ impl StateMachineLayerInstance {
 
 impl Drop for StateMachineLayerInstance {
     fn drop(&mut self) {
-        if self.state_machine_instance.is_null() {
+        if self.runtime_services.is_none() {
             return;
         }
         let any = self.any_state_instance;
@@ -894,14 +1277,18 @@ impl Drop for StateMachineLayerInstance {
 }
 
 pub trait HitComponent {
-    fn component(&self) -> Object;
-    #[cfg(feature = "testing")]
+    fn component(&self) -> CoreHandle;
+    fn as_hit_drawable_mut(&mut self) -> Option<&mut HitDrawable> {
+        None
+    }
+    #[cfg(test)]
     fn early_out_count(&self) -> i32 {
         0
     }
     fn process_event(
         &mut self,
         runtime: &mut dyn StateMachineInstanceRuntime,
+        machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
         can_hit: bool,
@@ -911,8 +1298,8 @@ pub trait HitComponent {
     fn process_gamepad_invocation(
         &mut self,
         runtime: &mut dyn StateMachineInstanceRuntime,
-        invocation: Object,
-        already_dispatched: Object,
+        invocation: &ListenerInvocation,
+        already_dispatched: Option<&CoreHandle>,
     ) -> HitResult;
     fn prepare_event(
         &mut self,
@@ -936,10 +1323,9 @@ pub trait HitComponent {
     }
 }
 
-struct HitDrawable {
-    component: Object,
-    state_machine_instance: *mut StateMachineInstance,
-    drawable: Object,
+pub struct HitDrawable {
+    component: CoreHandle,
+    drawable: CoreHandle,
     hit_radius: f32,
     is_hovered: bool,
     can_early_out: bool,
@@ -949,7 +1335,7 @@ struct HitDrawable {
     listeners: Vec<Object>,
     hit_path: bool,
     hit_clip: bool,
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     early_out_count: i32,
 }
 
@@ -960,39 +1346,37 @@ type HitLayout = HitDrawable;
 impl HitDrawable {
     fn new(
         runtime: &dyn StateMachineInstanceRuntime,
-        drawable: Object,
-        component: Object,
-        machine: *mut StateMachineInstance,
+        drawable: CoreHandle,
+        component: CoreHandle,
         is_opaque: bool,
         hit_path: bool,
         hit_clip: bool,
     ) -> Self {
         Self {
             component,
-            state_machine_instance: machine,
             drawable,
             hit_radius: 2.0,
             is_hovered: false,
-            can_early_out: !runtime.component_is_target_opaque(drawable),
+            can_early_out: !runtime.component_is_target_opaque(&drawable),
             has_down_listener: false,
             has_up_listener: false,
             is_opaque,
             listeners: Vec::new(),
             hit_path,
             hit_clip,
-            #[cfg(feature = "testing")]
+            #[cfg(test)]
             early_out_count: 0,
         }
     }
 
     fn add_listener(&mut self, runtime: &dyn StateMachineInstanceRuntime, group: Object) {
-        if !runtime.listener_group_can_early_out(group, self.component) {
+        if !runtime.listener_group_can_early_out(group, &self.component) {
             self.can_early_out = false;
         } else {
-            if runtime.listener_group_needs_down(group, self.component) {
+            if runtime.listener_group_needs_down(group, &self.component) {
                 self.has_down_listener = true;
             }
-            if runtime.listener_group_needs_up(group, self.component) {
+            if runtime.listener_group_needs_up(group, &self.component) {
                 self.has_up_listener = true;
             }
         }
@@ -1001,17 +1385,21 @@ impl HitDrawable {
 }
 
 impl HitComponent for HitDrawable {
-    fn component(&self) -> Object {
-        self.component
+    fn component(&self) -> CoreHandle {
+        self.component.clone()
     }
 
-    #[cfg(feature = "testing")]
+    fn as_hit_drawable_mut(&mut self) -> Option<&mut HitDrawable> {
+        Some(self)
+    }
+
+    #[cfg(test)]
     fn early_out_count(&self) -> i32 {
         self.early_out_count
     }
 
     fn hit_test(&self, runtime: &dyn StateMachineInstanceRuntime, position: Vec2D) -> bool {
-        runtime.component_hit_test(self.component, position, self.hit_path, self.hit_clip)
+        runtime.component_hit_test(&self.component, position, self.hit_path, self.hit_clip)
     }
 
     fn prepare_event(
@@ -1025,7 +1413,7 @@ impl HitComponent for HitDrawable {
             && (hit_type != ListenerType::Down || !self.has_down_listener)
             && (hit_type != ListenerType::Up || !self.has_up_listener)
         {
-            #[cfg(feature = "testing")]
+            #[cfg(test)]
             {
                 self.early_out_count += 1;
             }
@@ -1042,8 +1430,8 @@ impl HitComponent for HitDrawable {
     fn process_gamepad_invocation(
         &mut self,
         _runtime: &mut dyn StateMachineInstanceRuntime,
-        _invocation: Object,
-        _already_dispatched: Object,
+        _invocation: &ListenerInvocation,
+        _already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
         HitResult::None
     }
@@ -1051,6 +1439,7 @@ impl HitComponent for HitDrawable {
     fn process_event(
         &mut self,
         runtime: &mut dyn StateMachineInstanceRuntime,
+        machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
         can_hit: bool,
@@ -1070,13 +1459,13 @@ impl HitComponent for HitDrawable {
             }
             if runtime.listener_group_process(
                 listener,
-                self.component,
+                &self.component,
                 position,
                 pointer_id,
                 hit_type,
                 can_hit,
                 timestamp,
-                self.state_machine_instance.cast(),
+                machine,
             ) == ProcessEventResult::Scroll
             {
                 blocking = true;
@@ -1084,7 +1473,7 @@ impl HitComponent for HitDrawable {
         }
         if !self.is_hovered || !can_hit {
             HitResult::None
-        } else if self.is_opaque || runtime.component_is_target_opaque(self.drawable) || blocking {
+        } else if self.is_opaque || runtime.component_is_target_opaque(&self.drawable) || blocking {
             HitResult::HitOpaque
         } else {
             HitResult::Hit
@@ -1113,83 +1502,84 @@ impl HitComponent for HitDrawable {
 }
 
 struct HitNestedArtboard {
-    component: Object,
-    state_machine_instance: *mut StateMachineInstance,
+    component: CoreHandle,
 }
 
 impl HitComponent for HitNestedArtboard {
-    fn component(&self) -> Object {
-        self.component
+    fn component(&self) -> CoreHandle {
+        self.component.clone()
     }
 
     fn hit_test(&self, runtime: &dyn StateMachineInstanceRuntime, position: Vec2D) -> bool {
-        if runtime.component_is_collapsed(self.component)
-            || runtime.component_is_paused(self.component)
+        if runtime.component_is_collapsed(&self.component)
+            || runtime.component_is_paused(&self.component)
         {
             return false;
         }
-        let Some(local) = runtime.component_world_to_local(self.component, position, None) else {
+        let Some(local) = runtime.component_world_to_local(&self.component, position, None) else {
             return false;
         };
         runtime
-            .nested_animations(self.component)
+            .nested_animations(&self.component)
             .into_iter()
-            .filter(|&animation| runtime.nested_is_state_machine(animation))
+            .filter(|animation| runtime.nested_is_state_machine(animation))
             .any(|animation| {
-                let instance = runtime.nested_state_machine_instance(animation);
-                !instance.is_null() && unsafe { (&*instance).hit_test(local) }
+                runtime
+                    .nested_state_machine_instance(&animation)
+                    .is_some_and(|instance| instance.with_instance(|nested| nested.hit_test(local)))
             })
     }
 
     fn process_event(
         &mut self,
         runtime: &mut dyn StateMachineInstanceRuntime,
+        _machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
         can_hit: bool,
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        if runtime.component_is_collapsed(self.component)
-            || runtime.component_is_paused(self.component)
+        if runtime.component_is_collapsed(&self.component)
+            || runtime.component_is_paused(&self.component)
         {
             return HitResult::None;
         }
-        let Some(local) = runtime.component_world_to_local(self.component, position, None) else {
+        let Some(local) = runtime.component_world_to_local(&self.component, position, None) else {
             return HitResult::None;
         };
         let mut result = HitResult::None;
-        for animation in runtime.nested_animations(self.component) {
-            if !runtime.nested_is_state_machine(animation) {
+        for animation in runtime.nested_animations(&self.component) {
+            if !runtime.nested_is_state_machine(&animation) {
                 continue;
             }
-            let instance = runtime.nested_state_machine_instance(animation);
-            if instance.is_null() {
+            let Some(instance) = runtime.nested_state_machine_instance(&animation) else {
                 continue;
-            }
-            let nested = unsafe { &mut *instance };
-            if can_hit {
-                result = match hit_type {
-                    ListenerType::Down => nested.pointer_down(local, pointer_id),
-                    ListenerType::Up => nested.pointer_up(local, pointer_id),
-                    ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
-                    ListenerType::Exit => nested.pointer_exit(local, pointer_id),
-                    ListenerType::DragStart => {
-                        nested.drag_start(local, timestamp, true, pointer_id);
-                        result
-                    }
-                    ListenerType::DragEnd => {
-                        nested.drag_end(local, timestamp, pointer_id);
-                        result
-                    }
-                    _ => result,
-                };
-            } else if matches!(
-                hit_type,
-                ListenerType::Down | ListenerType::Up | ListenerType::Move | ListenerType::Exit
-            ) {
-                nested.pointer_exit(local, pointer_id);
-            }
+            };
+            instance.with_instance_mut(|nested| {
+                if can_hit {
+                    result = match hit_type {
+                        ListenerType::Down => nested.pointer_down(local, pointer_id),
+                        ListenerType::Up => nested.pointer_up(local, pointer_id),
+                        ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
+                        ListenerType::Exit => nested.pointer_exit(local, pointer_id),
+                        ListenerType::DragStart => {
+                            nested.drag_start(local, timestamp, true, pointer_id);
+                            result
+                        }
+                        ListenerType::DragEnd => {
+                            nested.drag_end(local, timestamp, pointer_id);
+                            result
+                        }
+                        _ => result,
+                    };
+                } else if matches!(
+                    hit_type,
+                    ListenerType::Down | ListenerType::Up | ListenerType::Move | ListenerType::Exit
+                ) {
+                    nested.pointer_exit(local, pointer_id);
+                }
+            });
         }
         result
     }
@@ -1197,19 +1587,18 @@ impl HitComponent for HitNestedArtboard {
     fn process_gamepad_invocation(
         &mut self,
         runtime: &mut dyn StateMachineInstanceRuntime,
-        invocation: Object,
-        already_dispatched: Object,
+        invocation: &ListenerInvocation,
+        already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
-        for animation in runtime.nested_animations(self.component) {
-            if runtime.nested_is_state_machine(animation) {
-                let instance = runtime.nested_state_machine_instance(animation);
-                if !instance.is_null() {
-                    unsafe {
-                        (&mut *instance).broadcast_gamepad_to_scripted_drawables(
+        for animation in runtime.nested_animations(&self.component) {
+            if runtime.nested_is_state_machine(&animation) {
+                if let Some(instance) = runtime.nested_state_machine_instance(&animation) {
+                    instance.with_instance_mut(|nested| {
+                        nested.broadcast_gamepad_to_scripted_drawables(
                             invocation,
                             already_dispatched,
                         );
-                    }
+                    });
                 }
             }
         }
@@ -1227,31 +1616,32 @@ impl HitComponent for HitNestedArtboard {
 }
 
 struct HitComponentList {
-    component: Object,
-    state_machine_instance: *mut StateMachineInstance,
+    component: CoreHandle,
 }
 
 impl HitComponent for HitComponentList {
-    fn component(&self) -> Object {
-        self.component
+    fn component(&self) -> CoreHandle {
+        self.component.clone()
     }
 
     fn hit_test(&self, runtime: &dyn StateMachineInstanceRuntime, position: Vec2D) -> bool {
-        if runtime.component_is_collapsed(self.component) {
+        if runtime.component_is_collapsed(&self.component) {
             return false;
         }
         for index in runtime
-            .component_ordered_indices(self.component)
+            .component_ordered_indices(&self.component)
             .into_iter()
             .rev()
         {
             let Some(local) =
-                runtime.component_world_to_local(self.component, position, Some(index))
+                runtime.component_world_to_local(&self.component, position, Some(index))
             else {
                 continue;
             };
-            let machine = runtime.component_state_machine(self.component, index);
-            if !machine.is_null() && unsafe { (&*machine).hit_test(local) } {
+            if runtime
+                .component_state_machine(&self.component, index)
+                .is_some_and(|machine| machine.with_instance(|nested| nested.hit_test(local)))
+            {
                 return true;
             }
         }
@@ -1261,57 +1651,61 @@ impl HitComponent for HitComponentList {
     fn process_event(
         &mut self,
         runtime: &mut dyn StateMachineInstanceRuntime,
+        _machine: &mut StateMachineInstance,
         position: Vec2D,
         hit_type: ListenerType,
         can_hit: bool,
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        if runtime.component_is_collapsed(self.component) {
+        if runtime.component_is_collapsed(&self.component) {
             return HitResult::None;
         }
         let mut result = HitResult::None;
         let mut running_can_hit = can_hit;
         for index in runtime
-            .component_ordered_indices(self.component)
+            .component_ordered_indices(&self.component)
             .into_iter()
             .rev()
         {
             let Some(local) =
-                runtime.component_world_to_local(self.component, position, Some(index))
+                runtime.component_world_to_local(&self.component, position, Some(index))
             else {
                 continue;
             };
-            let machine = runtime.component_state_machine(self.component, index);
-            if machine.is_null() {
+            let Some(machine) = runtime.component_state_machine(&self.component, index) else {
                 continue;
-            }
-            let nested = unsafe { &mut *machine };
-            let item = if running_can_hit {
-                match hit_type {
-                    ListenerType::Down => nested.pointer_down(local, pointer_id),
-                    ListenerType::Up => nested.pointer_up(local, pointer_id),
-                    ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
-                    ListenerType::Exit => nested.pointer_exit(local, pointer_id),
-                    ListenerType::DragStart => {
-                        nested.drag_start(local, 0.0, true, pointer_id);
-                        HitResult::None
-                    }
-                    ListenerType::DragEnd => {
-                        nested.drag_end(local, 0.0, pointer_id);
-                        HitResult::None
-                    }
-                    _ => HitResult::None,
-                }
-            } else {
-                if matches!(
-                    hit_type,
-                    ListenerType::Down | ListenerType::Up | ListenerType::Move | ListenerType::Exit
-                ) {
-                    nested.pointer_exit(local, pointer_id);
-                }
-                HitResult::None
             };
+            let item = machine.with_instance_mut(|nested| {
+                if running_can_hit {
+                    match hit_type {
+                        ListenerType::Down => nested.pointer_down(local, pointer_id),
+                        ListenerType::Up => nested.pointer_up(local, pointer_id),
+                        ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
+                        ListenerType::Exit => nested.pointer_exit(local, pointer_id),
+                        ListenerType::DragStart => {
+                            nested.drag_start(local, 0.0, true, pointer_id);
+                            HitResult::None
+                        }
+                        ListenerType::DragEnd => {
+                            nested.drag_end(local, 0.0, pointer_id);
+                            HitResult::None
+                        }
+                        _ => HitResult::None,
+                    }
+                } else {
+                    if matches!(
+                        hit_type,
+                        ListenerType::Down
+                            | ListenerType::Up
+                            | ListenerType::Move
+                            | ListenerType::Exit
+                    ) {
+                        nested.pointer_exit(local, pointer_id);
+                    }
+                    HitResult::None
+                }
+            });
             if (result == HitResult::None && matches!(item, HitResult::Hit | HitResult::HitOpaque))
                 || (result == HitResult::Hit && item == HitResult::HitOpaque)
             {
@@ -1327,28 +1721,26 @@ impl HitComponent for HitComponentList {
     fn process_gamepad_invocation(
         &mut self,
         runtime: &mut dyn StateMachineInstanceRuntime,
-        invocation: Object,
-        already_dispatched: Object,
+        invocation: &ListenerInvocation,
+        already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
-        if runtime.component_is_collapsed(self.component) {
+        if runtime.component_is_collapsed(&self.component) {
             return HitResult::None;
         }
         let mut result = HitResult::None;
         let mut running_can_hit = true;
         for index in runtime
-            .component_ordered_indices(self.component)
+            .component_ordered_indices(&self.component)
             .into_iter()
             .rev()
         {
-            let machine = runtime.component_state_machine(self.component, index);
-            if machine.is_null() {
+            let Some(machine) = runtime.component_state_machine(&self.component, index) else {
                 continue;
-            }
+            };
             let item = if running_can_hit {
-                unsafe {
-                    (&mut *machine)
-                        .broadcast_gamepad_to_scripted_drawables(invocation, already_dispatched)
-                }
+                machine.with_instance_mut(|nested| {
+                    nested.broadcast_gamepad_to_scripted_drawables(invocation, already_dispatched)
+                })
             } else {
                 HitResult::None
             };
@@ -1375,24 +1767,65 @@ impl HitComponent for HitComponentList {
 }
 
 struct ListenerViewModelPropertyBinding {
-    parent: *mut ListenerViewModel,
+    occurrence: RuntimeListenerViewModelPropertyBindingWeakHandle,
+    parent: RuntimeListenerViewModelWeakHandle,
     view_model_instance_value: Object,
-    path_owner: Object,
+    path_owner: CoreHandle,
+}
+
+#[derive(Clone)]
+pub struct RuntimeListenerViewModelPropertyBindingHandle(
+    Rc<RefCell<ListenerViewModelPropertyBinding>>,
+);
+
+#[derive(Clone, Default)]
+pub struct RuntimeListenerViewModelPropertyBindingWeakHandle(
+    Weak<RefCell<ListenerViewModelPropertyBinding>>,
+);
+
+impl RuntimeListenerViewModelPropertyBindingHandle {
+    fn new(binding: ListenerViewModelPropertyBinding) -> Self {
+        let handle = Self(Rc::new(RefCell::new(binding)));
+        handle.0.borrow_mut().occurrence = handle.downgrade();
+        handle
+    }
+
+    fn downgrade(&self) -> RuntimeListenerViewModelPropertyBindingWeakHandle {
+        RuntimeListenerViewModelPropertyBindingWeakHandle(Rc::downgrade(&self.0))
+    }
+
+    fn with_binding<R>(&self, f: impl FnOnce(&ListenerViewModelPropertyBinding) -> R) -> R {
+        f(&self.0.borrow())
+    }
+
+    fn with_binding_mut<R>(&self, f: impl FnOnce(&mut ListenerViewModelPropertyBinding) -> R) -> R {
+        f(&mut self.0.borrow_mut())
+    }
+}
+
+impl RuntimeListenerViewModelPropertyBindingWeakHandle {
+    pub fn with_binding_mut<R>(
+        &self,
+        f: impl FnOnce(&mut ListenerViewModelPropertyBinding) -> R,
+    ) -> Option<R> {
+        self.0.upgrade().map(|binding| f(&mut binding.borrow_mut()))
+    }
 }
 
 impl ListenerViewModelPropertyBinding {
     fn new(
-        parent: *mut ListenerViewModel,
+        parent: RuntimeListenerViewModelWeakHandle,
         value: Object,
-        path_owner: Object,
+        path_owner: CoreHandle,
         runtime: &mut dyn StateMachineInstanceRuntime,
-    ) -> Self {
-        let mut binding = Self {
+    ) -> RuntimeListenerViewModelPropertyBindingHandle {
+        let binding = RuntimeListenerViewModelPropertyBindingHandle::new(Self {
+            occurrence: RuntimeListenerViewModelPropertyBindingWeakHandle::default(),
             parent,
             view_model_instance_value: value,
             path_owner,
-        };
-        runtime.view_model_add_dependent(value, (&mut binding as *mut Self) as Object);
+        });
+        runtime.view_model_add_dependent(value, binding.downgrade());
         binding
     }
 
@@ -1400,126 +1833,145 @@ impl ListenerViewModelPropertyBinding {
         if self.view_model_instance_value != 0 {
             runtime.view_model_remove_dependent(
                 self.view_model_instance_value,
-                (self as *mut Self) as Object,
+                self.occurrence.clone(),
             );
-            self.view_model_instance_value = 0;
+            self.view_model_instance_value = RuntimeObjectHandle::NONE;
         }
     }
 
     fn relink_data_bind(&mut self, runtime: &mut dyn StateMachineInstanceRuntime) {
-        if self.parent.is_null() {
+        let Some(context) = self.parent.with_listener(|parent| parent.data_context) else {
             return;
-        }
-        let context = unsafe { (&*self.parent).data_context };
+        };
         if context == 0 {
             return;
         }
-        let value = runtime.data_context_property(context, self.path_owner);
+        let value = runtime.data_context_property(context, self.path_owner.clone());
         if value != self.view_model_instance_value {
             self.clear_data_context(runtime);
             if value != 0 {
                 self.view_model_instance_value = value;
-                runtime.view_model_add_dependent(value, (self as *mut Self) as Object);
+                runtime.view_model_add_dependent(value, self.occurrence.clone());
             }
         }
     }
 
     fn add_dirt(&mut self) {
-        if !self.parent.is_null() && self.view_model_instance_value != 0 {
-            unsafe { (&mut *self.parent).report_to_state_machine(self.view_model_instance_value) };
-        }
-    }
-}
-
-struct ListenerViewModelPropertyBindingListener(ListenerViewModelPropertyBinding);
-struct ListenerViewModelPropertyBindingInput(ListenerViewModelPropertyBinding);
-
-enum ListenerViewModelBinding {
-    Listener(ListenerViewModelPropertyBindingListener),
-    Input(ListenerViewModelPropertyBindingInput),
-}
-
-impl ListenerViewModelBinding {
-    fn binding(&self) -> &ListenerViewModelPropertyBinding {
-        match self {
-            Self::Listener(value) => &value.0,
-            Self::Input(value) => &value.0,
-        }
-    }
-
-    fn binding_mut(&mut self) -> &mut ListenerViewModelPropertyBinding {
-        match self {
-            Self::Listener(value) => &mut value.0,
-            Self::Input(value) => &mut value.0,
+        if self.view_model_instance_value != 0 {
+            self.parent.with_listener_mut(|parent| {
+                parent.report_to_state_machine(self.view_model_instance_value)
+            });
         }
     }
 }
 
 struct ListenerViewModel {
-    state_machine_instance: *mut StateMachineInstance,
-    listener: Object,
+    occurrence: RuntimeListenerViewModelWeakHandle,
+    state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
+    listener: CoreHandle,
     data_context: Object,
-    property_bindings: Vec<ListenerViewModelBinding>,
+    property_bindings: Vec<RuntimeListenerViewModelPropertyBindingHandle>,
+}
+
+#[derive(Clone)]
+struct RuntimeListenerViewModelHandle(Rc<RefCell<ListenerViewModel>>);
+
+#[derive(Clone, Default)]
+pub struct RuntimeListenerViewModelWeakHandle(Weak<RefCell<ListenerViewModel>>);
+
+impl RuntimeListenerViewModelHandle {
+    fn new(listener: ListenerViewModel) -> Self {
+        let handle = Self(Rc::new(RefCell::new(listener)));
+        handle.0.borrow_mut().occurrence = handle.downgrade();
+        handle
+    }
+
+    fn downgrade(&self) -> RuntimeListenerViewModelWeakHandle {
+        RuntimeListenerViewModelWeakHandle(Rc::downgrade(&self.0))
+    }
+
+    fn with_listener<R>(&self, f: impl FnOnce(&ListenerViewModel) -> R) -> R {
+        f(&self.0.borrow())
+    }
+
+    fn with_listener_mut<R>(&self, f: impl FnOnce(&mut ListenerViewModel) -> R) -> R {
+        f(&mut self.0.borrow_mut())
+    }
+}
+
+impl RuntimeListenerViewModelWeakHandle {
+    fn with_listener<R>(&self, f: impl FnOnce(&ListenerViewModel) -> R) -> Option<R> {
+        self.0.upgrade().map(|listener| f(&listener.borrow()))
+    }
+
+    fn with_listener_mut<R>(&self, f: impl FnOnce(&mut ListenerViewModel) -> R) -> Option<R> {
+        self.0
+            .upgrade()
+            .map(|listener| f(&mut listener.borrow_mut()))
+    }
 }
 
 impl ListenerViewModel {
-    fn new(machine: *mut StateMachineInstance, listener: Object) -> Self {
-        Self {
+    fn new(
+        machine: RuntimeStateMachineInstanceWeakHandle,
+        listener: CoreHandle,
+    ) -> RuntimeListenerViewModelHandle {
+        RuntimeListenerViewModelHandle::new(Self {
+            occurrence: RuntimeListenerViewModelWeakHandle::default(),
             state_machine_instance: machine,
             listener,
-            data_context: 0,
+            data_context: RuntimeObjectHandle::NONE,
             property_bindings: Vec::new(),
-        }
+        })
     }
 
     fn clear_data_context(&mut self) {
-        if self.state_machine_instance.is_null() {
-            self.property_bindings.clear();
-            return;
-        }
-        let runtime = unsafe { (&mut *self.state_machine_instance).runtime_mut() };
-        for binding in &mut self.property_bindings {
-            binding.binding_mut().clear_data_context(runtime);
-        }
+        self.state_machine_instance.with_instance_mut(|machine| {
+            let mut runtime = machine.runtime_mut();
+            for binding in &self.property_bindings {
+                binding.with_binding_mut(|binding| binding.clear_data_context(&mut *runtime));
+            }
+        });
         self.property_bindings.clear();
     }
 
     fn bind_from_context(&mut self, context: Object) {
         self.data_context = context;
         self.clear_data_context();
-        let runtime = unsafe { (&mut *self.state_machine_instance).runtime_mut() };
-        let self_ptr = self as *mut Self;
-        if runtime.listener_is_single(self.listener) {
-            let value = runtime.data_context_property(context, self.listener);
+        let Some(machine) = self.state_machine_instance.upgrade() else {
+            return;
+        };
+        let runtime_services = machine.with_instance(|machine| Rc::clone(&machine.runtime));
+        let mut runtime = runtime_services.borrow_mut();
+        if runtime.listener_is_single(&self.listener) {
+            let value = runtime.data_context_property(context, self.listener.clone());
             if value != 0 {
                 self.property_bindings
-                    .push(ListenerViewModelBinding::Listener(
-                        ListenerViewModelPropertyBindingListener(
-                            ListenerViewModelPropertyBinding::new(
-                                self_ptr,
-                                value,
-                                self.listener,
-                                runtime,
-                            ),
-                        ),
+                    .push(ListenerViewModelPropertyBinding::new(
+                        self.occurrence.clone(),
+                        value,
+                        self.listener.clone(),
+                        runtime.as_mut(),
                     ));
             }
         } else {
-            for input in runtime.listener_view_model_inputs(self.listener) {
-                let value = runtime.data_context_property(context, input);
+            for input in runtime.listener_view_model_inputs(&self.listener) {
+                let value = runtime.data_context_property(context, input.clone());
                 if value != 0 {
-                    self.property_bindings.push(ListenerViewModelBinding::Input(
-                        ListenerViewModelPropertyBindingInput(
-                            ListenerViewModelPropertyBinding::new(self_ptr, value, input, runtime),
-                        ),
-                    ));
+                    self.property_bindings
+                        .push(ListenerViewModelPropertyBinding::new(
+                            self.occurrence.clone(),
+                            value,
+                            input,
+                            runtime.as_mut(),
+                        ));
                 }
             }
         }
         let pending: Vec<Object> = self
             .property_bindings
             .iter()
-            .map(|binding| binding.binding().view_model_instance_value)
+            .map(|binding| binding.with_binding(|binding| binding.view_model_instance_value))
             .filter(|&value| {
                 runtime.view_model_value_is_trigger(value)
                     && runtime.view_model_trigger_value(value) != 0
@@ -1531,89 +1983,132 @@ impl ListenerViewModel {
     }
 
     fn report_to_state_machine(&mut self, value: Object) {
-        let runtime = unsafe { (&mut *self.state_machine_instance).runtime_mut() };
-        if !runtime.view_model_value_is_trigger(value)
-            || runtime.view_model_trigger_value(value) != 0
-        {
-            unsafe {
-                (&mut *self.state_machine_instance)
-                    .report_listener_view_model((self as *mut Self) as Object)
+        let occurrence = self.occurrence.clone();
+        self.state_machine_instance.with_instance_mut(|machine| {
+            let should_report = {
+                let runtime = machine.runtime_mut();
+                !runtime.view_model_value_is_trigger(value)
+                    || runtime.view_model_trigger_value(value) != 0
             };
-        }
+            if should_report {
+                machine.report_listener_view_model(occurrence);
+            }
+        });
     }
 }
 
-impl Drop for ListenerViewModel {
-    fn drop(&mut self) {
-        self.clear_data_context();
+#[derive(Clone)]
+pub struct RuntimeStateMachineInstanceHandle(Rc<RefCell<StateMachineInstance>>);
+
+#[derive(Clone, Default)]
+pub struct RuntimeStateMachineInstanceWeakHandle(Weak<RefCell<StateMachineInstance>>);
+
+impl RuntimeStateMachineInstanceHandle {
+    fn new(instance: StateMachineInstance) -> Self {
+        Self(Rc::new(RefCell::new(instance)))
+    }
+
+    pub fn downgrade(&self) -> RuntimeStateMachineInstanceWeakHandle {
+        RuntimeStateMachineInstanceWeakHandle(Rc::downgrade(&self.0))
+    }
+
+    pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> R {
+        f(&self.0.borrow())
+    }
+
+    pub fn with_instance_mut<R>(&self, f: impl FnOnce(&mut StateMachineInstance) -> R) -> R {
+        f(&mut self.0.borrow_mut())
+    }
+}
+
+impl RuntimeStateMachineInstanceWeakHandle {
+    pub fn upgrade(&self) -> Option<RuntimeStateMachineInstanceHandle> {
+        self.0.upgrade().map(RuntimeStateMachineInstanceHandle)
+    }
+
+    pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> Option<R> {
+        self.upgrade().map(|instance| instance.with_instance(f))
+    }
+
+    pub fn with_instance_mut<R>(
+        &self,
+        f: impl FnOnce(&mut StateMachineInstance) -> R,
+    ) -> Option<R> {
+        self.upgrade().map(|instance| instance.with_instance_mut(f))
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.0, &other.0)
     }
 }
 
 pub struct StateMachineInstance {
-    runtime: Box<dyn StateMachineInstanceRuntime>,
+    occurrence: RuntimeStateMachineInstanceWeakHandle,
+    runtime: RuntimeServicesHandle,
     reported_events: Vec<EventReport>,
     reporting_events: Vec<EventReport>,
     events_applied_during_loop: Vec<EventReport>,
-    machine: Object,
-    artboard_instance: Object,
-    needs_advance: bool,
+    machine: CoreHandle,
+    artboard_instance: RuntimeArtboardInstanceWeakHandle,
+    needs_advance: Rc<Cell<bool>>,
     input_instances: Vec<Option<InputInstance>>,
-    layers: Vec<StateMachineLayerInstance>,
+    layers: Vec<RuntimeStateMachineLayerInstanceHandle>,
     hit_components: Vec<Box<dyn HitComponent>>,
     listener_groups: Vec<Object>,
-    parent_state_machine_instance: *mut StateMachineInstance,
-    parent_nested_artboard: Object,
+    parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
+    parent_nested_artboard: Option<CoreHandle>,
     data_context: Object,
-    data_binds: Vec<Object>,
-    listener_view_models: Vec<Box<ListenerViewModel>>,
-    reported_listener_view_models: Vec<Object>,
-    reporting_listener_view_models: Vec<Object>,
-    bindable_property_instances: HashMap<Object, Object>,
-    scripted_objects_map: HashMap<Object, Object>,
-    bindable_data_binds_to_target: HashMap<Object, Object>,
-    bindable_data_binds_to_source: HashMap<Object, Object>,
-    transition_property_instances: HashMap<Object, HashMap<u32, Object>>,
-    state_keyframe_data_binds: HashMap<Object, Vec<Object>>,
+    data_binds: Vec<CoreHandle>,
+    listener_view_models: Vec<RuntimeListenerViewModelHandle>,
+    reported_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
+    reporting_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
+    bindable_property_instances: HashMap<CoreHandle, CoreHandle>,
+    scripted_objects_map: HashMap<CoreHandle, CoreHandle>,
+    bindable_data_binds_to_target: HashMap<CoreHandle, CoreHandle>,
+    bindable_data_binds_to_source: HashMap<CoreHandle, CoreHandle>,
+    transition_property_instances: HashMap<CoreHandle, HashMap<u32, CoreHandle>>,
+    state_keyframe_data_binds: HashMap<Object, Vec<CoreHandle>>,
     draw_order_change_counter: u8,
     focus_manager: Object,
     external_focus_manager: Object,
     focus_listener_groups: Vec<Object>,
     keyboard_listener_groups: Vec<Object>,
     gamepad_listener_groups: Vec<Object>,
-    gamepad_scripted_drawables: Vec<Object>,
+    gamepad_scripted_drawables: Vec<CoreHandle>,
     embedder_gamepads: HashMap<i32, Object>,
     semantic_manager: Object,
     external_semantic_manager: Object,
     queued_focus_events: Vec<QueuedFocusEvent>,
     semantic_listener_groups: Vec<Object>,
     queued_semantic_events: Vec<QueuedSemanticEvent>,
-    nested_event_listeners: Vec<*mut StateMachineInstance>,
-    nested_artboard: Object,
-    #[cfg(feature = "rive_tools")]
-    input_changed_callback: Option<fn(*mut StateMachineInstance, u64)>,
+    nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
+    nested_artboard: Option<CoreHandle>,
+    #[cfg(feature = "tools")]
+    input_changed_callback: Option<Box<dyn FnMut(RuntimeStateMachineInstanceWeakHandle, u64)>>,
 }
 
 impl StateMachineInstance {
     pub fn new(
-        machine: Object,
-        artboard_instance: Object,
-        runtime: Box<dyn StateMachineInstanceRuntime>,
-    ) -> Box<Self> {
-        let mut instance = Box::new(Self {
+        machine: CoreHandle,
+        artboard_instance: RuntimeArtboardInstanceWeakHandle,
+        runtime: RuntimeServicesHandle,
+    ) -> RuntimeStateMachineInstanceHandle {
+        let instance = Self {
+            occurrence: RuntimeStateMachineInstanceWeakHandle::default(),
             runtime,
             reported_events: Vec::new(),
             reporting_events: Vec::new(),
             events_applied_during_loop: Vec::new(),
             machine,
             artboard_instance,
-            needs_advance: false,
+            needs_advance: Rc::new(Cell::new(false)),
             input_instances: Vec::new(),
             layers: Vec::new(),
             hit_components: Vec::new(),
             listener_groups: Vec::new(),
-            parent_state_machine_instance: std::ptr::null_mut(),
-            parent_nested_artboard: 0,
-            data_context: 0,
+            parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
+            parent_nested_artboard: None,
+            data_context: RuntimeObjectHandle::NONE,
             data_binds: Vec::new(),
             listener_view_models: Vec::new(),
             reported_listener_view_models: Vec::new(),
@@ -1625,106 +2120,189 @@ impl StateMachineInstance {
             transition_property_instances: HashMap::new(),
             state_keyframe_data_binds: HashMap::new(),
             draw_order_change_counter: 0,
-            focus_manager: 0,
-            external_focus_manager: 0,
+            focus_manager: RuntimeObjectHandle::NONE,
+            external_focus_manager: RuntimeObjectHandle::NONE,
             focus_listener_groups: Vec::new(),
             keyboard_listener_groups: Vec::new(),
             gamepad_listener_groups: Vec::new(),
             gamepad_scripted_drawables: Vec::new(),
             embedder_gamepads: HashMap::new(),
-            semantic_manager: 0,
-            external_semantic_manager: 0,
+            semantic_manager: RuntimeObjectHandle::NONE,
+            external_semantic_manager: RuntimeObjectHandle::NONE,
             queued_focus_events: Vec::new(),
             semantic_listener_groups: Vec::new(),
             queued_semantic_events: Vec::new(),
             nested_event_listeners: Vec::new(),
-            nested_artboard: 0,
-            #[cfg(feature = "rive_tools")]
+            nested_artboard: None,
+            #[cfg(feature = "tools")]
             input_changed_callback: None,
+        };
+        let handle = RuntimeStateMachineInstanceHandle::new(instance);
+        handle.with_instance_mut(|instance| {
+            instance.occurrence = handle.downgrade();
+            instance.focus_manager = instance.runtime.borrow_mut().focus_manager_new();
+            let mut input_notifier = InputInstanceNotifier::new(Rc::clone(&instance.needs_advance));
+            #[cfg(feature = "tools")]
+            input_notifier.set_machine(handle.downgrade());
+
+            let input_count = instance
+                .runtime
+                .borrow_mut()
+                .machine_input_count(&instance.machine);
+            instance.input_instances.resize_with(input_count, || None);
+            for index in 0..input_count {
+                let Some(input) = instance
+                    .runtime
+                    .borrow_mut()
+                    .machine_input(&instance.machine, index)
+                else {
+                    continue;
+                };
+                instance.input_instances[index] = instance
+                    .runtime
+                    .borrow_mut()
+                    .make_input_instance(input, input_notifier.clone());
+                #[cfg(feature = "tools")]
+                if let Some(input_instance) = instance.input_instances[index].as_mut() {
+                    input_instance.base_mut().set_index(index as u64);
+                }
+            }
+
+            let layer_count = instance
+                .runtime
+                .borrow_mut()
+                .machine_layer_count(&instance.machine);
+            for index in 0..layer_count {
+                let Some(layer) = instance
+                    .runtime
+                    .borrow_mut()
+                    .machine_layer(&instance.machine, index)
+                else {
+                    continue;
+                };
+                let layer_instance = RuntimeStateMachineLayerInstanceHandle::new(
+                    StateMachineLayerInstance::default(),
+                );
+                let runtime_services = Rc::clone(&instance.runtime);
+                layer_instance.with_layer_mut(|layer_instance| {
+                    layer_instance.init(
+                        instance,
+                        runtime_services,
+                        layer,
+                        artboard_instance.clone(),
+                    );
+                });
+                instance.layers.push(layer_instance);
+            }
+
+            instance.initialize_data_binds();
+            let mut hit_lookup = HashMap::new();
+            instance.initialize_listeners(&mut hit_lookup);
+            instance.initialize_component_provided_listeners(&mut hit_lookup);
+            instance.initialize_nested_hit_components();
+            instance.initialize_text_inputs();
+            instance.initialize_scripted_objects();
+            instance.sort_hit_components();
+            let manager = instance.focus_manager();
+            instance
+                .runtime
+                .borrow_mut()
+                .artboard_build_focus_tree(&artboard_instance, manager, 0);
         });
-        instance.focus_manager = instance.runtime.focus_manager_new();
-        let machine_ptr = (&mut *instance as *mut Self).cast();
-
-        let input_count = instance.runtime.machine_input_count(machine);
-        instance.input_instances.resize(input_count, None);
-        for index in 0..input_count {
-            let input = instance.runtime.machine_input(machine, index);
-            if input == 0 {
-                continue;
-            }
-            instance.input_instances[index] =
-                instance.runtime.make_input_instance(input, machine_ptr);
-            #[cfg(feature = "rive_tools")]
-            if let Some(input_instance) = instance.input_instances[index] {
-                unsafe { (&mut *input_instance.base()).set_index(index as u64) };
-            }
-        }
-
-        let layer_count = instance.runtime.machine_layer_count(machine);
-        instance.layers.resize_with(layer_count, Default::default);
-        for index in 0..layer_count {
-            let layer = instance.runtime.machine_layer(machine, index);
-            let ptr = &mut *instance as *mut Self;
-            instance.layers[index].init(ptr, layer, artboard_instance);
-        }
-
-        instance.initialize_data_binds();
-        let mut hit_lookup = HashMap::new();
-        instance.initialize_listeners(&mut hit_lookup);
-        instance.initialize_component_provided_listeners(&mut hit_lookup);
-        instance.initialize_nested_hit_components();
-        #[cfg(feature = "rive_text")]
-        instance.initialize_text_inputs();
-        instance.initialize_scripted_objects();
-        instance.sort_hit_components();
-        let manager = instance.focus_manager();
-        instance
-            .runtime
-            .artboard_build_focus_tree(artboard_instance, manager, 0);
-        instance
+        handle
     }
 
-    fn runtime_mut(&mut self) -> &mut dyn StateMachineInstanceRuntime {
-        self.runtime.as_mut()
+    fn runtime_mut(&self) -> RefMut<'_, dyn StateMachineInstanceRuntime> {
+        RefMut::map(self.runtime.borrow_mut(), |runtime| runtime.as_mut())
+    }
+
+    pub fn listener_has(&self, listener: &CoreHandle, listener_type: ListenerType) -> bool {
+        self.runtime.borrow().listener_has(listener, listener_type)
+    }
+
+    pub fn perform_listener_changes(
+        &mut self,
+        listener: &CoreHandle,
+        invocation: ListenerInvocation,
+    ) {
+        let runtime = Rc::clone(&self.runtime);
+        runtime
+            .borrow_mut()
+            .listener_perform_changes(listener, self, &invocation);
+    }
+
+    pub fn semantic_constraints_met(
+        &self,
+        listener: &CoreHandle,
+        action: crate::mechanical_port::source::animation::semantic_listener_group::SemanticActionType,
+    ) -> bool {
+        self.runtime
+            .borrow()
+            .listener_semantic_constraints_met(listener, action as u8)
     }
 
     fn initialize_data_binds(&mut self) {
-        for index in 0..self.runtime.machine_data_bind_count(self.machine) {
-            let source = self.runtime.machine_data_bind(self.machine, index);
-            let original_target = self.runtime.data_bind_target(source);
-            if original_target == 0 {
+        for index in 0..self
+            .runtime
+            .borrow_mut()
+            .machine_data_bind_count(&self.machine)
+        {
+            let Some(source) = self
+                .runtime
+                .borrow_mut()
+                .machine_data_bind(&self.machine, index)
+            else {
                 continue;
-            }
-            let clone = self.runtime.clone_data_bind(source);
-            self.runtime
-                .data_bind_set_file(clone, self.runtime.data_bind_file(source));
-            let converter = self.runtime.data_bind_converter(source);
-            if converter != 0 {
-                let converter_clone = self.runtime.clone_data_converter(converter);
-                self.runtime.data_bind_set_converter(clone, converter_clone);
-            }
-            self.add_data_bind(clone);
-            if self.runtime.data_bind_bindable_target(source) {
-                let property = *self
-                    .bindable_property_instances
-                    .entry(original_target)
-                    .or_insert_with(|| self.runtime.clone_bindable_property(original_target));
-                let property_key = self.runtime.data_bind_property_key(clone);
+            };
+            let Some(original_target) = self.runtime.borrow_mut().data_bind_target(&source) else {
+                continue;
+            };
+            let clone = self.runtime.borrow_mut().clone_data_bind(&source);
+            let file = self.runtime.borrow_mut().data_bind_file(&source);
+            self.runtime.borrow_mut().data_bind_set_file(&clone, file);
+            if let Some(converter) = self.runtime.borrow_mut().data_bind_converter(&source) {
+                let converter_clone = self.runtime.borrow_mut().clone_data_converter(&converter);
                 self.runtime
-                    .configure_data_bind_target(clone, property, property_key);
-                if self.runtime.data_bind_flags(clone) & 1 != 0 {
+                    .borrow_mut()
+                    .data_bind_set_converter(&clone, converter_clone);
+            }
+            self.add_data_bind(clone.clone());
+            if self.runtime.borrow_mut().data_bind_bindable_target(&source) {
+                let property = self
+                    .bindable_property_instances
+                    .entry(original_target.clone())
+                    .or_insert_with(|| {
+                        self.runtime
+                            .borrow_mut()
+                            .clone_bindable_property(&original_target)
+                    })
+                    .clone();
+                let property_key = self.runtime.borrow_mut().data_bind_property_key(&clone);
+                self.runtime.borrow_mut().configure_data_bind_target(
+                    &clone,
+                    property.clone(),
+                    property_key,
+                );
+                if self.runtime.borrow_mut().data_bind_flags(&clone) & 1 != 0 {
                     self.bindable_data_binds_to_source.insert(property, clone);
                 } else {
                     self.bindable_data_binds_to_target.insert(property, clone);
                 }
-            } else if self.runtime.data_bind_is_transition_target(source) {
-                let property = self.runtime.make_transition_property();
+            } else if self
+                .runtime
+                .borrow_mut()
+                .data_bind_is_transition_target(&source)
+            {
+                let property = self.runtime.borrow_mut().make_transition_property();
                 self.transition_property_instances
                     .entry(original_target)
                     .or_default()
-                    .insert(self.runtime.data_bind_property_key(source), property);
-                self.runtime.configure_data_bind_target(
-                    clone,
+                    .insert(
+                        self.runtime.borrow_mut().data_bind_property_key(&source),
+                        property.clone(),
+                    );
+                self.runtime.borrow_mut().configure_data_bind_target(
+                    &clone,
                     property,
                     BindablePropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY as u32,
                 );
@@ -1732,196 +2310,282 @@ impl StateMachineInstance {
         }
     }
 
-    fn initialize_listeners(&mut self, hit_lookup: &mut HashMap<Object, usize>) {
-        let machine_ptr = (self as *mut Self).cast();
-        for index in 0..self.runtime.machine_listener_count(self.machine) {
-            let listener = self.runtime.machine_listener(self.machine, index);
-            if self.runtime.listener_has(listener, ListenerType::Event) {
+    fn initialize_listeners(&mut self, hit_lookup: &mut HashMap<CoreHandle, usize>) {
+        let machine = self.occurrence.clone();
+        for index in 0..self
+            .runtime
+            .borrow_mut()
+            .machine_listener_count(&self.machine)
+        {
+            let Some(listener) = self
+                .runtime
+                .borrow_mut()
+                .machine_listener(&self.machine, index)
+            else {
                 continue;
-            }
-            if self.runtime.listener_has(listener, ListenerType::ViewModel) {
-                self.listener_view_models
-                    .push(Box::new(ListenerViewModel::new(self, listener)));
-                continue;
-            }
-            let target = self.runtime.artboard_resolve(
-                self.artboard_instance,
-                self.runtime.listener_target_id(listener),
-            );
-            if self.runtime.listener_has(listener, ListenerType::Focus)
-                || self.runtime.listener_has(listener, ListenerType::Blur)
+            };
+            if self
+                .runtime
+                .borrow_mut()
+                .listener_has(&listener, ListenerType::Event)
             {
-                let focus_data = self.runtime.resolve_focus_data(target);
-                if focus_data != 0 {
-                    let group =
-                        self.runtime
-                            .make_focus_listener_group(focus_data, listener, machine_ptr);
+                continue;
+            }
+            if self
+                .runtime
+                .borrow_mut()
+                .listener_has(&listener, ListenerType::ViewModel)
+            {
+                self.listener_view_models
+                    .push(ListenerViewModel::new(machine.clone(), listener));
+                continue;
+            }
+            let target = self.runtime.borrow_mut().artboard_resolve(
+                &self.artboard_instance,
+                self.runtime.borrow_mut().listener_target_id(&listener),
+            );
+            if self
+                .runtime
+                .borrow_mut()
+                .listener_has(&listener, ListenerType::Focus)
+                || self
+                    .runtime
+                    .borrow_mut()
+                    .listener_has(&listener, ListenerType::Blur)
+            {
+                if let Some(focus_data) = target
+                    .as_ref()
+                    .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
+                {
+                    let group = self.runtime.borrow_mut().make_focus_listener_group(
+                        &focus_data,
+                        &listener,
+                        machine.clone(),
+                    );
                     self.focus_listener_groups.push(group);
                 }
             }
-            if self.runtime.listener_has(listener, ListenerType::Keyboard)
-                || self.runtime.listener_has(listener, ListenerType::TextInput)
+            if self
+                .runtime
+                .borrow_mut()
+                .listener_has(&listener, ListenerType::Keyboard)
+                || self
+                    .runtime
+                    .borrow_mut()
+                    .listener_has(&listener, ListenerType::TextInput)
             {
-                let focus_data = self.runtime.resolve_focus_data(target);
-                if focus_data != 0 {
-                    let group = self.runtime.make_keyboard_listener_group(
-                        focus_data,
-                        listener,
-                        machine_ptr,
+                if let Some(focus_data) = target
+                    .as_ref()
+                    .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
+                {
+                    let group = self.runtime.borrow_mut().make_keyboard_listener_group(
+                        &focus_data,
+                        &listener,
+                        machine.clone(),
                     );
                     self.keyboard_listener_groups.push(group);
                 }
             }
             if self
                 .runtime
-                .listener_has(listener, ListenerType::SemanticAction)
+                .borrow_mut()
+                .listener_has(&listener, ListenerType::SemanticAction)
             {
-                let semantic_data = self.runtime.resolve_semantic_data(target);
-                if semantic_data != 0 {
-                    let group = self.runtime.make_semantic_listener_group(
-                        semantic_data,
-                        listener,
-                        machine_ptr,
+                if let Some(semantic_data) = target
+                    .as_ref()
+                    .and_then(|target| self.runtime.borrow_mut().resolve_semantic_data(target))
+                {
+                    let group = self.runtime.borrow_mut().make_semantic_listener_group(
+                        &semantic_data,
+                        &listener,
+                        machine.clone(),
                     );
                     self.semantic_listener_groups.push(group);
                 }
             }
             if self
                 .runtime
-                .listener_has_any(listener, &POINTER_HIT_LISTENER_TYPES)
+                .borrow_mut()
+                .listener_has_any(&listener, &POINTER_HIT_LISTENER_TYPES)
             {
-                let group = self.runtime.make_listener_group(listener);
-                if target != 0 {
-                    let is_layout = self.runtime.component_is_layout(target);
-                    let target = if is_layout {
-                        self.runtime.component_proxy(target)
+                let group = self.runtime.borrow_mut().make_listener_group(&listener);
+                if let Some(target) = target.as_ref() {
+                    let is_layout = self.runtime.borrow_mut().component_is_layout(target);
+                    let hit_target = if is_layout {
+                        self.runtime.borrow_mut().component_proxy(target)
                     } else {
-                        target
+                        Some(target.clone())
                     };
-                    self.add_to_hit_lookup(target, is_layout, hit_lookup, group, false);
+                    if let Some(hit_target) = hit_target {
+                        self.add_to_hit_lookup(hit_target, is_layout, hit_lookup, group, false);
+                    }
                 }
                 self.listener_groups.push(group);
             }
-            if self.runtime.listener_has(listener, ListenerType::Gamepad) {
-                let focus_data = self.runtime.resolve_focus_data(target);
-                if focus_data != 0 {
-                    let group =
-                        self.runtime
-                            .make_gamepad_listener_group(focus_data, listener, machine_ptr);
+            if self
+                .runtime
+                .borrow_mut()
+                .listener_has(&listener, ListenerType::Gamepad)
+            {
+                if let Some(focus_data) = target
+                    .as_ref()
+                    .and_then(|target| self.runtime.borrow_mut().resolve_focus_data(target))
+                {
+                    let group = self.runtime.borrow_mut().make_gamepad_listener_group(
+                        &focus_data,
+                        &listener,
+                        machine.clone(),
+                    );
                     self.gamepad_listener_groups.push(group);
                 }
             }
         }
     }
 
-    fn initialize_component_provided_listeners(&mut self, hit_lookup: &mut HashMap<Object, usize>) {
-        let machine_ptr = (self as *mut Self).cast();
-        let providers: Vec<Object> = self
+    fn initialize_component_provided_listeners(
+        &mut self,
+        hit_lookup: &mut HashMap<CoreHandle, usize>,
+    ) {
+        let providers: Vec<CoreHandle> = self
             .runtime
-            .artboard_objects(self.artboard_instance)
+            .borrow_mut()
+            .artboard_objects(&self.artboard_instance)
             .into_iter()
-            .map(|object| self.runtime.object_listener_provider(object))
-            .filter(|&provider| provider != 0)
+            .filter_map(|object| self.runtime.borrow_mut().object_listener_provider(&object))
             .collect();
         for provider in providers {
-            for (group, targets) in self.runtime.listener_groups_from_provider(provider) {
-                for &(target, opaque) in &targets {
-                    let layout = self.runtime.component_is_layout(target)
-                        || self.runtime.component_is_drawable_proxy(target);
+            for (group, targets) in self
+                .runtime
+                .borrow_mut()
+                .listener_groups_from_provider(&provider)
+            {
+                for (target, opaque) in targets {
+                    let layout = self.runtime.borrow_mut().component_is_layout(&target)
+                        || self
+                            .runtime
+                            .borrow_mut()
+                            .component_is_drawable_proxy(&target);
                     self.add_to_hit_lookup(target, layout, hit_lookup, group, opaque);
                 }
                 self.listener_groups.push(group);
             }
-            self.hit_components
-                .extend(self.runtime.provided_hit_components(provider, machine_ptr));
+            let runtime = Rc::clone(&self.runtime);
+            let hits = runtime
+                .borrow_mut()
+                .provided_hit_components(&provider, self);
+            self.hit_components.extend(hits);
         }
     }
 
     fn initialize_nested_hit_components(&mut self) {
         for nested in self
             .runtime
-            .artboard_nested_artboards(self.artboard_instance)
+            .borrow_mut()
+            .artboard_nested_artboards(&self.artboard_instance)
         {
-            self.hit_components.push(Box::new(HitNestedArtboard {
-                component: nested,
-                state_machine_instance: self,
-            }));
-            for animation in self.runtime.nested_animations(nested) {
-                if self.runtime.nested_is_state_machine(animation) {
-                    let notifier = self.runtime.nested_state_machine_instance(animation);
-                    if !notifier.is_null() {
-                        unsafe {
-                            (&mut *notifier).set_parent_nested_artboard(nested);
-                            (&mut *notifier).add_nested_event_listener(self);
-                        }
+            self.hit_components
+                .push(Box::new(HitNestedArtboard { component: nested }));
+            for animation in self.runtime.borrow_mut().nested_animations(&nested) {
+                if self
+                    .runtime
+                    .borrow_mut()
+                    .nested_is_state_machine(&animation)
+                {
+                    let notifier = self
+                        .runtime
+                        .borrow_mut()
+                        .nested_state_machine_instance(&animation);
+                    if let Some(notifier) = notifier {
+                        let listener = self.occurrence.clone();
+                        notifier.with_instance_mut(|notifier| {
+                            notifier.set_parent_nested_artboard(nested.clone());
+                            notifier.set_nested_artboard(nested.clone());
+                            notifier.add_nested_event_listener(listener);
+                        });
                     }
                 } else {
-                    self.runtime
-                        .nested_add_event_listener(animation, (self as *mut Self).cast());
+                    self.runtime.borrow_mut().nested_add_event_listener(
+                        &animation,
+                        &nested,
+                        self.occurrence.clone(),
+                    );
                 }
             }
         }
         for list in self
             .runtime
-            .artboard_component_lists(self.artboard_instance)
+            .borrow_mut()
+            .artboard_component_lists(&self.artboard_instance)
         {
-            self.hit_components.push(Box::new(HitComponentList {
-                component: list,
-                state_machine_instance: self,
-            }));
+            self.hit_components
+                .push(Box::new(HitComponentList { component: list }));
         }
     }
 
-    #[cfg(feature = "rive_text")]
     fn initialize_text_inputs(&mut self) {
-        let machine_ptr = (self as *mut Self).cast();
-        for text_input in self.runtime.artboard_text_inputs(self.artboard_instance) {
+        let machine = self.occurrence.clone();
+        for text_input in self
+            .runtime
+            .borrow_mut()
+            .artboard_text_inputs(&self.artboard_instance)
+        {
             let group = self
                 .runtime
-                .make_text_input_listener_group(text_input, machine_ptr);
+                .borrow_mut()
+                .make_text_input_listener_group(&text_input, machine);
             let mut hit = HitDrawable::new(
-                self.runtime.as_ref(),
+                self.runtime.borrow_mut().as_ref(),
+                text_input.clone(),
                 text_input,
-                text_input,
-                self,
                 true,
                 true,
                 true,
             );
-            hit.add_listener(self.runtime.as_ref(), group);
+            hit.add_listener(self.runtime.borrow_mut().as_ref(), group);
             self.hit_components.push(Box::new(hit));
             self.listener_groups.push(group);
         }
     }
 
     fn initialize_scripted_objects(&mut self) {
-        let machine_ptr = (self as *mut Self).cast();
-        for source in self.runtime.machine_scripted_objects(self.machine) {
-            let clone = self.runtime.scripted_clone(source, machine_ptr);
+        for source in self
+            .runtime
+            .borrow_mut()
+            .machine_scripted_objects(&self.machine)
+        {
+            let clone = self.runtime.borrow_mut().scripted_clone(&source, self);
             self.scripted_objects_map.insert(source, clone);
         }
-        for &object in self.scripted_objects_map.values() {
+        for object in self.scripted_objects_map.values() {
             self.runtime
+                .borrow_mut()
                 .scripted_set_data_context(object, self.data_context);
         }
         self.init_scripted_objects();
-        for object in self.runtime.artboard_objects(self.artboard_instance) {
-            let scripted = self.runtime.object_scripted(object);
-            if scripted == 0 {
+        for object in self
+            .runtime
+            .borrow_mut()
+            .artboard_objects(&self.artboard_instance)
+        {
+            let Some(scripted) = self.runtime.borrow_mut().object_scripted(&object) else {
                 continue;
-            }
-            if self.runtime.scripted_wants_keyboard(scripted)
-                || self.runtime.scripted_wants_text(scripted)
+            };
+            if self.runtime.borrow_mut().scripted_wants_keyboard(&scripted)
+                || self.runtime.borrow_mut().scripted_wants_text(&scripted)
             {
-                let focus_data = self.runtime.resolve_focus_data(object);
-                if focus_data != 0 {
-                    let group =
-                        self.runtime
-                            .make_keyboard_listener_group(focus_data, 0, machine_ptr);
+                if let Some(focus_data) = self.runtime.borrow_mut().resolve_focus_data(&object) {
+                    let group = self
+                        .runtime
+                        .borrow_mut()
+                        .make_keyboard_listener_group_for_scripted(
+                            &focus_data,
+                            &scripted,
+                            self.occurrence.clone(),
+                        );
                     self.keyboard_listener_groups.push(group);
                 }
             }
-            if self.runtime.scripted_wants_gamepad(scripted) {
+            if self.runtime.borrow_mut().scripted_wants_gamepad(&scripted) {
                 self.gamepad_scripted_drawables.push(object);
             }
         }
@@ -1929,9 +2593,9 @@ impl StateMachineInstance {
 
     fn add_to_hit_lookup(
         &mut self,
-        target: Object,
+        target: CoreHandle,
         is_layout_component: bool,
-        hit_lookup: &mut HashMap<Object, usize>,
+        hit_lookup: &mut HashMap<CoreHandle, usize>,
         listener_group: Object,
         is_opaque: bool,
     ) {
@@ -1940,10 +2604,9 @@ impl StateMachineInstance {
                 index
             } else {
                 let hit = HitDrawable::new(
-                    self.runtime.as_ref(),
-                    target,
-                    target,
-                    self,
+                    self.runtime.borrow_mut().as_ref(),
+                    target.clone(),
+                    target.clone(),
                     is_opaque,
                     false,
                     true,
@@ -1953,28 +2616,32 @@ impl StateMachineInstance {
                 hit_lookup.insert(target, index);
                 index
             };
-            let drawable = self.hit_components[index].as_mut().as_any_hit_drawable();
+            let drawable = self.hit_components[index].as_mut().as_hit_drawable_mut();
             if let Some(drawable) = drawable {
-                drawable.add_listener(self.runtime.as_ref(), listener_group);
+                drawable.add_listener(self.runtime.borrow_mut().as_ref(), listener_group);
                 drawable.is_opaque |= is_opaque;
             }
             return;
         }
-        if self.runtime.component_is_shape(target) || self.runtime.component_is_text_run(target) {
+        if self.runtime.borrow_mut().component_is_shape(&target)
+            || self.runtime.borrow_mut().component_is_text_run(&target)
+        {
             let index = if let Some(&index) = hit_lookup.get(&target) {
                 index
             } else {
-                self.runtime.component_mark_hit_path(target);
-                let drawable = if self.runtime.component_is_text_run(target) {
-                    self.runtime.text_run_text_component(target)
+                self.runtime.borrow_mut().component_mark_hit_path(&target);
+                let drawable = if self.runtime.borrow_mut().component_is_text_run(&target) {
+                    self.runtime
+                        .borrow_mut()
+                        .text_run_text_component(&target)
+                        .unwrap_or_else(|| target.clone())
                 } else {
-                    target
+                    target.clone()
                 };
                 let hit = HitDrawable::new(
-                    self.runtime.as_ref(),
+                    self.runtime.borrow_mut().as_ref(),
                     drawable,
-                    target,
-                    self,
+                    target.clone(),
                     false,
                     true,
                     true,
@@ -1984,35 +2651,41 @@ impl StateMachineInstance {
                 hit_lookup.insert(target, index);
                 index
             };
-            if let Some(drawable) = self.hit_components[index].as_mut().as_any_hit_drawable() {
-                drawable.add_listener(self.runtime.as_ref(), listener_group);
+            if let Some(drawable) = self.hit_components[index].as_mut().as_hit_drawable_mut() {
+                drawable.add_listener(self.runtime.borrow_mut().as_ref(), listener_group);
             }
             return;
         }
-        if self.runtime.component_is_container(target) {
-            for child in self.runtime.component_children(target) {
-                self.add_to_hit_lookup(
-                    child,
-                    self.runtime.component_is_layout(child),
-                    hit_lookup,
-                    listener_group,
-                    is_opaque,
-                );
+        if self.runtime.borrow_mut().component_is_container(&target) {
+            for child in self.runtime.borrow_mut().component_children(&target) {
+                let is_layout = self.runtime.borrow_mut().component_is_layout(&child);
+                self.add_to_hit_lookup(child, is_layout, hit_lookup, listener_group, is_opaque);
             }
         }
     }
 
     fn normalize_pointer_position(&self, mut position: Vec2D) -> Vec2D {
-        if self.runtime.artboard_frame_origin(self.artboard_instance) {
-            let origin = self.runtime.artboard_origin(self.artboard_instance);
-            let size = self.runtime.artboard_layout_size(self.artboard_instance);
+        if self
+            .runtime
+            .borrow_mut()
+            .artboard_frame_origin(&self.artboard_instance)
+        {
+            let origin = self
+                .runtime
+                .borrow_mut()
+                .artboard_origin(&self.artboard_instance);
+            let size = self
+                .runtime
+                .borrow_mut()
+                .artboard_layout_size(&self.artboard_instance);
             position = Vec2D::new(
                 position.x - origin.x * size.x,
                 position.y - origin.y * size.y,
             );
         }
         self.runtime
-            .artboard_inverse_self_transform(self.artboard_instance, position)
+            .borrow_mut()
+            .artboard_inverse_self_transform(&self.artboard_instance, position)
             .unwrap_or(position)
     }
 
@@ -2025,30 +2698,46 @@ impl StateMachineInstance {
     ) -> HitResult {
         let position = self.normalize_pointer_position(position);
         for &group in &self.listener_groups {
-            self.runtime.listener_group_reset(group, pointer_id);
+            self.runtime
+                .borrow_mut()
+                .listener_group_reset(group, pointer_id);
         }
-        for component in &mut self.hit_components {
-            component.prepare_event(self.runtime.as_mut(), position, hit_type, pointer_id);
+        let mut hit_components = std::mem::take(&mut self.hit_components);
+        for component in &mut hit_components {
+            component.prepare_event(
+                self.runtime.borrow_mut().as_mut(),
+                position,
+                hit_type,
+                pointer_id,
+            );
         }
         let mut hit_something = false;
         let mut hit_opaque = false;
-        for component in &mut self.hit_components {
-            let result = component.process_event(
-                self.runtime.as_mut(),
-                position,
-                hit_type,
-                !hit_opaque,
-                timestamp,
-                pointer_id,
-            );
+        for component in &mut hit_components {
+            let runtime = Rc::clone(&self.runtime);
+            let result = {
+                let mut runtime = runtime.borrow_mut();
+                component.process_event(
+                    runtime.as_mut(),
+                    self,
+                    position,
+                    hit_type,
+                    !hit_opaque,
+                    timestamp,
+                    pointer_id,
+                )
+            };
             if result != HitResult::None {
                 hit_something = true;
                 hit_opaque |= result == HitResult::HitOpaque;
             }
         }
+        self.hit_components = hit_components;
         if hit_type == ListenerType::Exit {
             for &group in &self.listener_groups {
-                self.runtime.listener_group_release(group, pointer_id);
+                self.runtime
+                    .borrow_mut()
+                    .listener_group_release(group, pointer_id);
             }
         }
         if !hit_something {
@@ -2064,7 +2753,7 @@ impl StateMachineInstance {
         let position = self.normalize_pointer_position(position);
         self.hit_components
             .iter()
-            .any(|component| component.hit_test(self.runtime.as_ref(), position))
+            .any(|component| component.hit_test(self.runtime.borrow_mut().as_ref(), position))
     }
 
     pub fn pointer_move(&mut self, position: Vec2D, timestamp: f32, id: i32) -> HitResult {
@@ -2111,7 +2800,8 @@ impl StateMachineInstance {
             .collect();
         let order = self
             .runtime
-            .artboard_ordered_hit_components(self.artboard_instance, &components);
+            .borrow_mut()
+            .artboard_ordered_hit_components(&self.artboard_instance, &components);
         let mut old: Vec<Option<Box<dyn HitComponent>>> =
             self.hit_components.drain(..).map(Some).collect();
         for index in order {
@@ -2126,11 +2816,12 @@ impl StateMachineInstance {
     }
 
     pub fn try_change_state(&mut self) -> bool {
-        let machine = (self as *mut Self).cast();
-        self.runtime.artboard_update_data_binds(machine, false);
+        let runtime = Rc::clone(&self.runtime);
+        runtime.borrow_mut().artboard_update_data_binds(self, false);
         let mut changed = false;
-        for layer in &mut self.layers {
-            changed |= layer.update_state();
+        let layers = self.layers.clone();
+        for layer in layers {
+            changed |= layer.with_layer_mut(|layer| layer.update_state(self));
         }
         changed
     }
@@ -2142,25 +2833,27 @@ impl StateMachineInstance {
             && iteration < 100
         {
             iteration += 1;
-            let machine = (self as *mut Self).cast();
-            self.runtime.artboard_update_data_binds(machine, false);
+            let runtime = Rc::clone(&self.runtime);
+            runtime.borrow_mut().artboard_update_data_binds(self, false);
             self.reporting_events = std::mem::take(&mut self.reported_events);
             self.reporting_listener_view_models =
                 std::mem::take(&mut self.reported_listener_view_models);
             if iteration > 1 {
                 self.events_applied_during_loop
-                    .extend(self.reporting_events.iter().copied());
+                    .extend(self.reporting_events.iter().cloned());
             }
             let events = self.reporting_events.clone();
             let view_models = self.reporting_listener_view_models.clone();
-            self.notify_event_listeners(&events, 0);
+            self.notify_event_listeners(&events, None);
             self.notify_listener_view_models(&view_models);
         }
         if iteration >= 100 {
             eprintln!(
                 "{} StateMachine exceeded max event iterations on artboard {}",
                 self.name(),
-                self.runtime.artboard_name(self.artboard_instance)
+                self.runtime
+                    .borrow_mut()
+                    .artboard_name(&self.artboard_instance)
             );
         }
     }
@@ -2169,17 +2862,25 @@ impl StateMachineInstance {
         if self.external_focus_manager == manager {
             return;
         }
-        if self.artboard_instance != 0
-            && self.runtime.artboard_focus_manager(self.artboard_instance) != 0
+        if self.artboard_instance.upgrade().is_some()
+            && self
+                .runtime
+                .borrow_mut()
+                .artboard_focus_manager(&self.artboard_instance)
+                != 0
         {
             self.runtime
-                .artboard_cleanup_focus_tree(self.artboard_instance);
+                .borrow_mut()
+                .artboard_cleanup_focus_tree(&self.artboard_instance);
         }
         self.external_focus_manager = manager;
-        if self.artboard_instance != 0 {
+        if self.artboard_instance.upgrade().is_some() {
             let focus_manager = self.focus_manager();
-            self.runtime
-                .artboard_build_focus_tree(self.artboard_instance, focus_manager, 0);
+            self.runtime.borrow_mut().artboard_build_focus_tree(
+                &self.artboard_instance,
+                focus_manager,
+                0,
+            );
         }
     }
 
@@ -2203,11 +2904,14 @@ impl StateMachineInstance {
         if self.semantic_manager() != 0 {
             return;
         }
-        self.semantic_manager = self.runtime.semantic_manager_new();
-        if self.artboard_instance != 0 {
+        self.semantic_manager = self.runtime.borrow_mut().semantic_manager_new();
+        if self.artboard_instance.upgrade().is_some() {
             let manager = self.semantic_manager();
-            self.runtime
-                .artboard_build_semantic_tree(self.artboard_instance, manager, 0);
+            self.runtime.borrow_mut().artboard_build_semantic_tree(
+                &self.artboard_instance,
+                manager,
+                0,
+            );
         }
     }
 
@@ -2223,57 +2927,80 @@ impl StateMachineInstance {
         if self.external_semantic_manager == manager {
             return;
         }
-        if self.artboard_instance != 0
+        if self.artboard_instance.upgrade().is_some()
             && self
                 .runtime
-                .artboard_semantic_manager(self.artboard_instance)
+                .borrow_mut()
+                .artboard_semantic_manager(&self.artboard_instance)
                 != 0
         {
             self.runtime
-                .artboard_cleanup_semantic_tree(self.artboard_instance);
+                .borrow_mut()
+                .artboard_cleanup_semantic_tree(&self.artboard_instance);
         }
         self.external_semantic_manager = manager;
-        if self.artboard_instance != 0 {
+        if self.artboard_instance.upgrade().is_some() {
             let manager = self.semantic_manager();
-            self.runtime
-                .artboard_build_semantic_tree(self.artboard_instance, manager, parent_node);
+            self.runtime.borrow_mut().artboard_build_semantic_tree(
+                &self.artboard_instance,
+                manager,
+                parent_node,
+            );
         }
     }
 
     pub fn queue_focus_event(&mut self, group: Object, is_focus: bool) {
         self.queued_focus_events
             .push(QueuedFocusEvent { group, is_focus });
-        self.needs_advance = true;
+        self.needs_advance.set(true);
     }
 
     pub fn set_focus(&mut self, focus_data: Object) {
         let manager = self.focus_manager();
         if focus_data != 0 {
-            self.runtime.focus_manager_set_focus(manager, focus_data);
+            self.runtime
+                .borrow_mut()
+                .focus_manager_set_focus(manager, focus_data);
         } else {
-            self.runtime.focus_manager_clear(manager);
+            self.runtime.borrow_mut().focus_manager_clear(manager);
         }
     }
 
     pub fn focus_state(&self) -> FocusState {
-        self.runtime.focus_manager_state(self.focus_manager())
+        self.runtime
+            .borrow_mut()
+            .focus_manager_state(self.focus_manager())
     }
 
     fn process_focus_events(&mut self) {
         let events = std::mem::take(&mut self.queued_focus_events);
         for event in events {
-            let listener = self.runtime.listener_for_focus_group(event.group);
-            if (event.is_focus && self.runtime.listener_has(listener, ListenerType::Focus))
-                || (!event.is_focus && self.runtime.listener_has(listener, ListenerType::Blur))
+            let Some(listener) = self
+                .runtime
+                .borrow_mut()
+                .listener_for_focus_group(event.group)
+            else {
+                continue;
+            };
+            if (event.is_focus
+                && self
+                    .runtime
+                    .borrow_mut()
+                    .listener_has(&listener, ListenerType::Focus))
+                || (!event.is_focus
+                    && self
+                        .runtime
+                        .borrow_mut()
+                        .listener_has(&listener, ListenerType::Blur))
             {
                 let invocation = self
                     .runtime
+                    .borrow_mut()
                     .listener_invocation_focus(event.group, event.is_focus);
-                self.runtime.listener_perform_changes(
-                    listener,
-                    (self as *mut Self).cast(),
-                    invocation,
-                );
+                let runtime = Rc::clone(&self.runtime);
+                runtime
+                    .borrow_mut()
+                    .listener_perform_changes(&listener, self, &invocation);
             }
         }
     }
@@ -2281,7 +3008,7 @@ impl StateMachineInstance {
     pub fn queue_semantic_event(&mut self, group: Object, action_type: u8) {
         self.queued_semantic_events
             .push(QueuedSemanticEvent { group, action_type });
-        self.needs_advance = true;
+        self.needs_advance.set(true);
     }
 
     fn process_semantic_events(&mut self) {
@@ -2290,15 +3017,21 @@ impl StateMachineInstance {
             if event.group == 0 {
                 continue;
             }
-            let listener = self.runtime.listener_for_semantic_group(event.group);
-            if listener == 0 {
+            let Some(listener) = self
+                .runtime
+                .borrow_mut()
+                .listener_for_semantic_group(event.group)
+            else {
                 continue;
-            }
+            };
             let invocation = self
                 .runtime
+                .borrow_mut()
                 .listener_invocation_semantic(event.group, event.action_type);
-            self.runtime
-                .listener_perform_changes(listener, (self as *mut Self).cast(), invocation);
+            let runtime = Rc::clone(&self.runtime);
+            runtime
+                .borrow_mut()
+                .listener_perform_changes(&listener, self, &invocation);
         }
     }
 
@@ -2306,6 +3039,7 @@ impl StateMachineInstance {
         let manager = self.semantic_manager();
         if manager != 0 {
             self.runtime
+                .borrow_mut()
                 .semantic_fire_action(manager, node_id, action_type);
         }
     }
@@ -2313,7 +3047,8 @@ impl StateMachineInstance {
     pub fn advance(&mut self, seconds: f32, new_frame: bool) -> bool {
         let counter = self
             .runtime
-            .artboard_draw_order_change_counter(self.artboard_instance);
+            .borrow_mut()
+            .artboard_draw_order_change_counter(&self.artboard_instance);
         if self.draw_order_change_counter != counter {
             self.draw_order_change_counter = counter;
             self.sort_hit_components();
@@ -2322,22 +3057,26 @@ impl StateMachineInstance {
             self.process_focus_events();
             self.process_semantic_events();
             self.apply_events();
-            self.needs_advance = false;
+            self.needs_advance.set(false);
         }
-        let machine = (self as *mut Self).cast();
-        self.runtime.artboard_update_data_binds(machine, false);
-        for layer in &mut self.layers {
-            if layer.advance(seconds, new_frame) {
-                self.needs_advance = true;
+        let runtime = Rc::clone(&self.runtime);
+        runtime.borrow_mut().artboard_update_data_binds(self, false);
+        let layers = self.layers.clone();
+        for layer in layers {
+            if layer.with_layer_mut(|layer| layer.advance(self, seconds, new_frame)) {
+                self.needs_advance.set(true);
             }
         }
-        if self.runtime.artboard_advance_data_binds(machine, seconds) {
-            self.needs_advance = true;
+        if runtime
+            .borrow_mut()
+            .artboard_advance_data_binds(self, seconds)
+        {
+            self.needs_advance.set(true);
         }
-        for input in self.input_instances.iter().flatten().copied() {
-            self.runtime.input_advanced(input);
+        for input in self.input_instances.iter_mut().flatten() {
+            self.runtime.borrow_mut().input_advanced(input);
         }
-        self.needs_advance
+        self.needs_advance.get()
             || !self.reported_events.is_empty()
             || !self.reported_listener_view_models.is_empty()
     }
@@ -2348,13 +3087,17 @@ impl StateMachineInstance {
 
     pub fn advanced_data_context(&mut self) {
         if self.data_context != 0 {
-            self.runtime.data_context_advanced(self.data_context);
+            self.runtime
+                .borrow_mut()
+                .data_context_advanced(self.data_context);
         }
     }
 
     pub fn reset(&mut self) {
         self.advanced_data_context();
-        self.runtime.artboard_reset(self.artboard_instance);
+        self.runtime
+            .borrow_mut()
+            .artboard_reset(&self.artboard_instance);
     }
 
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
@@ -2372,9 +3115,9 @@ impl StateMachineInstance {
         const NEW_FRAME: u32 = 8;
         let mut keep_going = self.advance(seconds, true) || seconds == 0.0;
         let manager = self.focus_manager();
-        self.runtime.focus_manager_drop_hidden(manager);
-        if self.runtime.artboard_advance_internal(
-            self.artboard_instance,
+        self.runtime.borrow_mut().focus_manager_drop_hidden(manager);
+        if self.runtime.borrow_mut().artboard_advance_internal(
+            &self.artboard_instance,
             seconds,
             IS_ROOT | ANIMATE | ADVANCE_NESTED | NEW_FRAME,
         ) {
@@ -2383,7 +3126,8 @@ impl StateMachineInstance {
         for _ in 0..5 {
             if self
                 .runtime
-                .artboard_update_pass(self.artboard_instance, true)
+                .borrow_mut()
+                .artboard_update_pass(&self.artboard_instance, true)
             {
                 keep_going = true;
             }
@@ -2391,8 +3135,8 @@ impl StateMachineInstance {
                 self.advance(0.0, false);
                 keep_going = true;
             }
-            if self.runtime.artboard_advance_internal(
-                self.artboard_instance,
+            if self.runtime.borrow_mut().artboard_advance_internal(
+                &self.artboard_instance,
                 0.0,
                 IS_ROOT | ANIMATE | ADVANCE_NESTED,
             ) {
@@ -2401,18 +3145,22 @@ impl StateMachineInstance {
             if advance_view_models {
                 self.reset();
             } else {
-                self.runtime.artboard_reset(self.artboard_instance);
+                self.runtime
+                    .borrow_mut()
+                    .artboard_reset(&self.artboard_instance);
             }
             if !self
                 .runtime
-                .artboard_has_component_dirt(self.artboard_instance)
+                .borrow_mut()
+                .artboard_has_component_dirt(&self.artboard_instance)
             {
                 break;
             }
         }
         if advance_view_models {
             self.runtime
-                .artboard_advance_scripted_view_models(self.artboard_instance);
+                .borrow_mut()
+                .artboard_advance_scripted_view_models(&self.artboard_instance);
         }
         keep_going
             || !self.reported_events.is_empty()
@@ -2420,109 +3168,214 @@ impl StateMachineInstance {
     }
 
     pub fn mark_needs_advance(&mut self) {
-        self.needs_advance = true;
+        self.needs_advance.set(true);
     }
 
     pub fn needs_advance(&self) -> bool {
-        self.needs_advance
+        self.needs_advance.get()
     }
 
     pub fn reset_state(&mut self) {
-        for layer in &mut self.layers {
-            layer.reset_state();
+        let layers = self.layers.clone();
+        for layer in layers {
+            layer.with_layer_mut(|layer| layer.reset_state(self));
         }
     }
 
     pub fn name(&self) -> String {
-        self.runtime.machine_name(self.machine)
+        self.runtime.borrow_mut().machine_name(&self.machine)
     }
 
-    pub fn state_machine(&self) -> Object {
-        self.machine
+    pub fn state_machine(&self) -> CoreHandle {
+        self.machine.clone()
     }
 
-    pub fn artboard(&self) -> Object {
-        self.artboard_instance
+    pub fn artboard(&self) -> RuntimeArtboardInstanceWeakHandle {
+        self.artboard_instance.clone()
     }
 
     pub fn input_count(&self) -> usize {
         self.input_instances.len()
     }
 
-    pub fn input(&self, index: usize) -> Option<*mut SMIInput> {
+    pub fn input(&self, index: usize) -> Option<&SMIInput> {
         self.input_instances
             .get(index)
-            .copied()
-            .flatten()
+            .and_then(Option::as_ref)
             .map(InputInstance::base)
     }
 
-    pub fn get_bool(&self, name: &str) -> Option<*mut SMIBool> {
+    pub fn number_input_value(&self, index: u32) -> Option<f32> {
+        let InputInstance::Number(value) = self.input_instances.get(index as usize)?.as_ref()?
+        else {
+            return None;
+        };
+        Some(value.value())
+    }
+
+    pub fn bindable_property_number_value(&self, property: &CoreHandle) -> Option<f32> {
+        self.runtime
+            .borrow_mut()
+            .bindable_property_number_value(property)
+    }
+
+    pub fn bindable_property_comparison_value(
+        &self,
+        property: &CoreHandle,
+    ) -> Option<RuntimeComparisonValue> {
+        self.runtime
+            .borrow_mut()
+            .bindable_property_comparison_value(property)
+    }
+
+    pub fn component_comparison_value(
+        &self,
+        object_id: u32,
+        property_key: u32,
+    ) -> Option<RuntimeComparisonValue> {
+        self.runtime
+            .borrow_mut()
+            .component_comparison_value(object_id, property_key)
+    }
+
+    pub fn artboard_layout_size(&self) -> Option<(f32, f32)> {
+        self.runtime
+            .borrow_mut()
+            .artboard_layout_dimensions(&self.artboard_instance)
+    }
+
+    pub fn bindable_source_changed_in_layer(
+        &self,
+        property: &CoreHandle,
+        layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
+    ) -> bool {
+        self.runtime
+            .borrow_mut()
+            .bindable_source_changed_in_layer(property, layer)
+    }
+
+    pub fn use_bindable_property_in_layer(
+        &self,
+        property: &CoreHandle,
+        layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
+    ) {
+        self.runtime
+            .borrow_mut()
+            .use_bindable_property_in_layer(property, layer);
+    }
+
+    pub fn get_bool(&self, name: &str) -> Option<&SMIBool> {
         self.input_instances.iter().flatten().find_map(|instance| {
-            let InputInstance::Bool(value) = *instance else {
+            let InputInstance::Bool(value) = instance else {
                 return None;
             };
-            (unsafe { (&*value).base.name() } == name).then_some(value)
+            (value.base.name() == name).then_some(value.as_ref())
         })
     }
 
-    pub fn get_number(&self, name: &str) -> Option<*mut SMINumber> {
+    pub fn get_number(&self, name: &str) -> Option<&SMINumber> {
         self.input_instances.iter().flatten().find_map(|instance| {
-            let InputInstance::Number(value) = *instance else {
+            let InputInstance::Number(value) = instance else {
                 return None;
             };
-            (unsafe { (&*value).base.name() } == name).then_some(value)
+            (value.base.name() == name).then_some(value.as_ref())
         })
     }
 
-    pub fn get_trigger(&self, name: &str) -> Option<*mut SMITrigger> {
+    pub fn get_trigger(&self, name: &str) -> Option<&SMITrigger> {
         self.input_instances.iter().flatten().find_map(|instance| {
-            let InputInstance::Trigger(value) = *instance else {
+            let InputInstance::Trigger(value) = instance else {
                 return None;
             };
-            (unsafe { (&*value).base.name() } == name).then_some(value)
+            (value.base.name() == name).then_some(value.as_ref())
         })
     }
 
-    pub fn set_parent_state_machine_instance(&mut self, instance: *mut StateMachineInstance) {
+    pub fn get_bool_mut(&mut self, name: &str) -> Option<&mut SMIBool> {
+        self.input_instances
+            .iter_mut()
+            .flatten()
+            .find_map(|instance| {
+                let InputInstance::Bool(value) = instance else {
+                    return None;
+                };
+                (value.base.name() == name).then_some(value.as_mut())
+            })
+    }
+
+    pub fn get_number_mut(&mut self, name: &str) -> Option<&mut SMINumber> {
+        self.input_instances
+            .iter_mut()
+            .flatten()
+            .find_map(|instance| {
+                let InputInstance::Number(value) = instance else {
+                    return None;
+                };
+                (value.base.name() == name).then_some(value.as_mut())
+            })
+    }
+
+    pub fn get_trigger_mut(&mut self, name: &str) -> Option<&mut SMITrigger> {
+        self.input_instances
+            .iter_mut()
+            .flatten()
+            .find_map(|instance| {
+                let InputInstance::Trigger(value) = instance else {
+                    return None;
+                };
+                (value.base.name() == name).then_some(value.as_mut())
+            })
+    }
+
+    pub fn set_parent_state_machine_instance(
+        &mut self,
+        instance: RuntimeStateMachineInstanceWeakHandle,
+    ) {
         self.parent_state_machine_instance = instance;
     }
 
-    pub fn parent_state_machine_instance(&self) -> *mut StateMachineInstance {
-        self.parent_state_machine_instance
+    pub fn parent_state_machine_instance(&self) -> Option<RuntimeStateMachineInstanceHandle> {
+        self.parent_state_machine_instance.upgrade()
     }
 
-    pub fn set_parent_nested_artboard(&mut self, artboard: Object) {
-        self.parent_nested_artboard = artboard;
+    pub fn set_parent_nested_artboard(&mut self, artboard: CoreHandle) {
+        self.parent_nested_artboard = Some(artboard);
     }
 
-    pub fn parent_nested_artboard(&self) -> Object {
-        self.parent_nested_artboard
+    pub fn parent_nested_artboard(&self) -> Option<CoreHandle> {
+        self.parent_nested_artboard.clone()
     }
 
-    pub fn add_nested_event_listener(&mut self, listener: *mut StateMachineInstance) {
-        if !self.nested_event_listeners.contains(&listener) {
+    pub fn add_nested_event_listener(&mut self, listener: RuntimeStateMachineInstanceWeakHandle) {
+        if !self
+            .nested_event_listeners
+            .iter()
+            .any(|candidate| candidate.ptr_eq(&listener))
+        {
             self.nested_event_listeners.push(listener);
         }
     }
 
-    pub fn remove_nested_event_listener(&mut self, listener: *mut StateMachineInstance) {
+    pub fn remove_nested_event_listener(
+        &mut self,
+        listener: RuntimeStateMachineInstanceWeakHandle,
+    ) {
         self.nested_event_listeners
-            .retain(|&candidate| candidate != listener);
+            .retain(|candidate| !candidate.ptr_eq(&listener));
     }
 
-    pub fn set_nested_artboard(&mut self, artboard: Object) {
-        self.nested_artboard = artboard;
+    pub fn set_nested_artboard(&mut self, artboard: CoreHandle) {
+        self.nested_artboard = Some(artboard);
     }
 
-    pub fn report_event(&mut self, event: Object, seconds_delay: f32) {
+    pub fn report_event(&mut self, event: CoreHandle, seconds_delay: f32) {
         self.reported_events.push(EventReport {
-            event,
+            event: Some(event),
             seconds_delay,
         });
     }
 
-    fn report_listener_view_model(&mut self, listener: Object) {
+    fn report_listener_view_model(&mut self, listener: RuntimeListenerViewModelWeakHandle) {
         self.reported_listener_view_models.push(listener);
     }
 
@@ -2532,105 +3385,142 @@ impl StateMachineInstance {
 
     pub fn reported_event_at(&self, mut index: usize) -> EventReport {
         if index < self.events_applied_during_loop.len() {
-            return self.events_applied_during_loop[index];
+            return self.events_applied_during_loop[index].clone();
         }
         index -= self.events_applied_during_loop.len();
-        self.reported_events.get(index).copied().unwrap_or_default()
+        self.reported_events.get(index).cloned().unwrap_or_default()
     }
 
-    pub fn notify(&mut self, events: &[EventReport], context: Object) {
-        self.notify_event_listeners(events, context);
-        let machine = (self as *mut Self).cast();
-        self.runtime.artboard_update_data_binds(machine, false);
+    pub fn notify(&mut self, events: &[EventReport], context: CoreHandle) {
+        self.notify_event_listeners(events, Some(context));
+        let runtime = Rc::clone(&self.runtime);
+        runtime.borrow_mut().artboard_update_data_binds(self, false);
     }
 
-    fn notify_listener_view_models(&mut self, events: &[Object]) {
-        for &view_model in events {
-            if view_model == 0 {
+    fn notify_listener_view_models(&mut self, events: &[RuntimeListenerViewModelWeakHandle]) {
+        for view_model in events {
+            let Some(listener) = view_model.with_listener(|view_model| view_model.listener.clone())
+            else {
                 continue;
-            }
-            let listener = unsafe { (*(view_model as *mut ListenerViewModel)).listener };
-            let invocation = self.runtime.listener_invocation_view_model(view_model);
-            self.runtime
-                .listener_perform_changes(listener, (self as *mut Self).cast(), invocation);
+            };
+            let invocation = self
+                .runtime
+                .borrow_mut()
+                .listener_invocation_view_model(view_model.clone());
+            let runtime = Rc::clone(&self.runtime);
+            runtime
+                .borrow_mut()
+                .listener_perform_changes(&listener, self, &invocation);
         }
     }
 
-    fn notify_event_listeners(&mut self, events: &[EventReport], source: Object) {
+    fn notify_event_listeners(&mut self, events: &[EventReport], source: Option<CoreHandle>) {
         if events.is_empty() {
             return;
         }
-        for index in 0..self.runtime.machine_listener_count(self.machine) {
-            let listener = self.runtime.machine_listener(self.machine, index);
-            if listener == 0 || !self.runtime.listener_has(listener, ListenerType::Event) {
+        for index in 0..self
+            .runtime
+            .borrow_mut()
+            .machine_listener_count(&self.machine)
+        {
+            let Some(listener) = self
+                .runtime
+                .borrow_mut()
+                .machine_listener(&self.machine, index)
+            else {
+                continue;
+            };
+            if !self
+                .runtime
+                .borrow_mut()
+                .listener_has(&listener, ListenerType::Event)
+            {
                 continue;
             }
-            let target = self.runtime.artboard_resolve(
-                self.artboard_instance,
-                self.runtime.listener_target_id(listener),
+            let target = self.runtime.borrow_mut().artboard_resolve(
+                &self.artboard_instance,
+                self.runtime.borrow_mut().listener_target_id(&listener),
             );
-            if source != 0 && source != target {
+            if source
+                .as_ref()
+                .is_some_and(|source| target.as_ref() != Some(source))
+            {
                 continue;
             }
-            let source_artboard = if source == 0 {
-                self.artboard_instance
+            let source_artboard = if let Some(source) = source.as_ref() {
+                self.runtime.borrow_mut().nested_artboard_instance(source)
             } else {
-                self.runtime.nested_artboard_instance(source)
+                self.artboard_instance.clone()
             };
             for report in events {
-                if source == 0 {
-                    let resolved_target = self.runtime.artboard_resolve(
-                        source_artboard,
-                        self.runtime.listener_target_id(listener),
+                if source.is_none() {
+                    let resolved_target = self.runtime.borrow_mut().artboard_resolve(
+                        &source_artboard,
+                        self.runtime.borrow_mut().listener_target_id(&listener),
                     );
-                    if resolved_target != 0
-                        && resolved_target != self.artboard_instance
-                        && !self.runtime.object_is_event(resolved_target)
-                    {
+                    if resolved_target.as_ref().is_some_and(|resolved_target| {
+                        !self
+                            .runtime
+                            .borrow_mut()
+                            .component_is_artboard(resolved_target)
+                            && !self.runtime.borrow_mut().object_is_event(resolved_target)
+                    }) {
                         continue;
                     }
                 }
-                for event_id in self.runtime.listener_event_ids(listener) {
-                    if self.runtime.artboard_resolve(source_artboard, event_id) == report.event {
+                for event_id in self.runtime.borrow_mut().listener_event_ids(&listener) {
+                    if self
+                        .runtime
+                        .borrow_mut()
+                        .artboard_resolve(&source_artboard, event_id)
+                        .as_ref()
+                        == report.event.as_ref()
+                    {
+                        let Some(event) = report.event.as_ref() else {
+                            continue;
+                        };
                         let invocation = self
                             .runtime
-                            .listener_invocation_event(report.event, report.seconds_delay);
-                        self.runtime.listener_perform_changes(
-                            listener,
-                            (self as *mut Self).cast(),
-                            invocation,
-                        );
+                            .borrow_mut()
+                            .listener_invocation_event(event, report.seconds_delay);
+                        let runtime = Rc::clone(&self.runtime);
+                        runtime
+                            .borrow_mut()
+                            .listener_perform_changes(&listener, self, &invocation);
                         break;
                     }
                 }
             }
         }
         let listeners = self.nested_event_listeners.clone();
-        let nested_artboard = self.nested_artboard;
-        for listener in listeners {
-            if !listener.is_null() {
-                unsafe { (&mut *listener).notify(events, nested_artboard) };
+        if let Some(nested_artboard) = self.nested_artboard.clone() {
+            for listener in listeners {
+                listener
+                    .with_instance_mut(|listener| listener.notify(events, nested_artboard.clone()));
             }
         }
         for report in events {
-            if self.runtime.event_is_audio(report.event) {
-                self.runtime.event_play_audio(report.event);
+            let Some(event) = report.event.as_ref() else {
+                continue;
+            };
+            if self.runtime.borrow_mut().event_is_audio(event) {
+                self.runtime.borrow_mut().event_play_audio(event);
             }
         }
     }
 
     pub fn current_animation_count(&mut self) -> usize {
         self.layers
-            .iter_mut()
-            .filter(|layer| layer.current_animation() != 0)
+            .iter()
+            .filter(|layer| layer.with_layer_mut(StateMachineLayerInstance::current_animation) != 0)
             .count()
     }
 
     pub fn current_animation_by_index(&mut self, index: usize) -> Object {
         self.layers
-            .iter_mut()
+            .iter()
             .filter_map(|layer| {
-                let animation = layer.current_animation();
+                let animation = layer.with_layer_mut(StateMachineLayerInstance::current_animation);
                 (animation != 0).then_some(animation)
             })
             .nth(index)
@@ -2640,16 +3530,16 @@ impl StateMachineInstance {
     pub fn state_changed_count(&self) -> usize {
         self.layers
             .iter()
-            .filter(|layer| layer.state_machine_changed_on_advance)
+            .filter(|layer| layer.with_layer(|layer| layer.state_machine_changed_on_advance))
             .count()
     }
 
     pub fn state_changed_by_index(&mut self, index: usize) -> Object {
         let mut count = 0;
-        for layer in &mut self.layers {
-            if layer.state_machine_changed_on_advance {
+        for layer in &self.layers {
+            if layer.with_layer(|layer| layer.state_machine_changed_on_advance) {
                 if count == index {
-                    return layer.current_state();
+                    return layer.with_layer_mut(StateMachineLayerInstance::current_state);
                 }
                 count += 1;
             }
@@ -2659,13 +3549,13 @@ impl StateMachineInstance {
 
     pub fn enable_pointer_events(&mut self, pointer_id: i32) {
         for component in &mut self.hit_components {
-            component.enable_pointer_events(self.runtime.as_mut(), pointer_id);
+            component.enable_pointer_events(self.runtime.borrow_mut().as_mut(), pointer_id);
         }
     }
 
     pub fn disable_pointer_events(&mut self, pointer_id: i32) {
         for component in &mut self.hit_components {
-            component.disable_pointer_events(self.runtime.as_mut(), pointer_id);
+            component.disable_pointer_events(self.runtime.borrow_mut().as_mut(), pointer_id);
         }
     }
 
@@ -2674,36 +3564,40 @@ impl StateMachineInstance {
     }
 
     pub fn has_focus_nodes(&self) -> bool {
-        self.runtime.focus_manager_has_content(self.focus_manager())
+        self.runtime
+            .borrow_mut()
+            .focus_manager_has_content(self.focus_manager())
     }
 
     pub fn focus_next(&mut self) -> bool {
         let manager = self.focus_manager();
-        self.runtime.focus_manager_next(manager)
+        self.runtime.borrow_mut().focus_manager_next(manager)
     }
 
     pub fn focus_previous(&mut self) -> bool {
         let manager = self.focus_manager();
-        self.runtime.focus_manager_previous(manager)
+        self.runtime.borrow_mut().focus_manager_previous(manager)
     }
 
     pub fn clear_focus(&mut self) {
         let manager = self.focus_manager();
-        self.runtime.focus_manager_clear(manager);
+        self.runtime.borrow_mut().focus_manager_clear(manager);
     }
 
     pub fn submit_gamepads_from_buffer(&mut self, data: &[u8]) -> bool {
-        self.runtime
-            .gamepad_submit_buffer((self as *mut Self).cast(), data)
+        let runtime = Rc::clone(&self.runtime);
+        runtime.borrow_mut().gamepad_submit_buffer(self, data)
     }
 
     pub fn broadcast_gamepad_to_scripted_drawables(
         &mut self,
-        invocation: Object,
-        already_dispatched: Object,
+        invocation: &ListenerInvocation,
+        already_dispatched: Option<&CoreHandle>,
     ) -> HitResult {
-        self.runtime
-            .gamepad_broadcast((self as *mut Self).cast(), invocation, already_dispatched)
+        let runtime = Rc::clone(&self.runtime);
+        runtime
+            .borrow_mut()
+            .gamepad_broadcast(self, invocation, already_dispatched)
     }
 
     pub fn duration_seconds(&self) -> f32 {
@@ -2731,12 +3625,17 @@ impl StateMachineInstance {
             return;
         }
         if self.data_context == 0 {
-            self.data_context = self.runtime.data_context_new(view_model_instance);
+            self.data_context = self
+                .runtime
+                .borrow_mut()
+                .data_context_new(view_model_instance);
             self.runtime
-                .data_context_add_container(self.data_context, (self as *mut Self).cast());
+                .borrow_mut()
+                .data_context_add_container(self.data_context, self.occurrence.clone());
             return;
         }
         self.runtime
+            .borrow_mut()
             .data_context_set_main(self.data_context, view_model_instance);
     }
 
@@ -2745,63 +3644,94 @@ impl StateMachineInstance {
         name: &str,
         view_model_instance: Object,
     ) -> bool {
-        let file = self.runtime.artboard_file(self.artboard_instance);
+        let file = self
+            .runtime
+            .borrow_mut()
+            .artboard_file(&self.artboard_instance);
         if file == 0 {
             return false;
         }
-        let Some(slot) = self.runtime.view_model_slot(file, name) else {
+        let Some(slot) = self.runtime.borrow_mut().view_model_slot(file, name) else {
             return false;
         };
-        if !self.runtime.view_model_is_global(file, slot) {
+        if !self.runtime.borrow_mut().view_model_is_global(file, slot) {
             return false;
         }
         if self.data_context == 0 {
             if view_model_instance == 0 {
                 return true;
             }
-            self.data_context = self.runtime.data_context_new(0);
+            self.data_context = self.runtime.borrow_mut().data_context_new(0);
             self.runtime
-                .data_context_add_container(self.data_context, (self as *mut Self).cast());
+                .borrow_mut()
+                .data_context_add_container(self.data_context, self.occurrence.clone());
         }
-        self.runtime
-            .data_context_set_slot(self.data_context, slot, view_model_instance);
+        self.runtime.borrow_mut().data_context_set_slot(
+            self.data_context,
+            slot,
+            view_model_instance,
+        );
         true
     }
 
     pub fn bind(&mut self) {
         if self.data_context == 0 {
-            self.data_context = self.runtime.data_context_new(0);
+            self.data_context = self.runtime.borrow_mut().data_context_new(0);
             self.runtime
-                .data_context_add_container(self.data_context, (self as *mut Self).cast());
+                .borrow_mut()
+                .data_context_add_container(self.data_context, self.occurrence.clone());
         }
         self.complete_view_model_instances();
         self.runtime
-            .artboard_set_data_context(self.artboard_instance, self.data_context);
+            .borrow_mut()
+            .artboard_set_data_context(&self.artboard_instance, self.data_context);
         self.internal_data_context(self.data_context);
     }
 
     fn complete_view_model_instances(&mut self) {
-        let file = self.runtime.artboard_file(self.artboard_instance);
+        let file = self
+            .runtime
+            .borrow_mut()
+            .artboard_file(&self.artboard_instance);
         if file == 0 {
             return;
         }
-        if self.runtime.data_context_main(self.data_context) == 0 {
-            let main = self.runtime.complete_default_main(self.artboard_instance);
+        if self
+            .runtime
+            .borrow_mut()
+            .data_context_main(self.data_context)
+            == 0
+        {
+            let main = self
+                .runtime
+                .borrow_mut()
+                .complete_default_main(&self.artboard_instance);
             if main != 0 {
-                self.runtime.data_context_set_main(self.data_context, main);
+                self.runtime
+                    .borrow_mut()
+                    .data_context_set_main(self.data_context, main);
             }
         }
-        for view_model in self.runtime.global_view_models(file) {
-            let name = self.runtime.view_model_name(view_model);
-            let Some(slot) = self.runtime.view_model_slot(file, &name) else {
+        for view_model in self.runtime.borrow_mut().global_view_models(file) {
+            let name = self.runtime.borrow_mut().view_model_name(view_model);
+            let Some(slot) = self.runtime.borrow_mut().view_model_slot(file, &name) else {
                 continue;
             };
-            if self.runtime.data_context_slot(self.data_context, slot) != 0 {
+            if self
+                .runtime
+                .borrow_mut()
+                .data_context_slot(self.data_context, slot)
+                != 0
+            {
                 continue;
             }
-            let instance = self.runtime.create_default_view_model(file, view_model);
+            let instance = self
+                .runtime
+                .borrow_mut()
+                .create_default_view_model(file, view_model);
             if instance != 0 {
                 self.runtime
+                    .borrow_mut()
                     .data_context_set_slot(self.data_context, slot, instance);
             }
         }
@@ -2811,7 +3741,8 @@ impl StateMachineInstance {
         if view_model_instance == 0 {
             self.clear_data_context();
             self.runtime
-                .artboard_clear_data_context(self.artboard_instance);
+                .borrow_mut()
+                .artboard_clear_data_context(&self.artboard_instance);
             return;
         }
         self.set_view_model_instance(view_model_instance);
@@ -2820,26 +3751,37 @@ impl StateMachineInstance {
 
     pub fn global_view_model_instance(&self, name: &str) -> Object {
         if self.data_context == 0 {
-            return 0;
+            return RuntimeObjectHandle::NONE;
         }
-        let file = self.runtime.artboard_file(self.artboard_instance);
+        let file = self
+            .runtime
+            .borrow_mut()
+            .artboard_file(&self.artboard_instance);
         if file == 0 {
-            return 0;
+            return RuntimeObjectHandle::NONE;
         }
         self.runtime
+            .borrow_mut()
             .view_model_slot(file, name)
-            .map(|slot| self.runtime.data_context_slot(self.data_context, slot))
+            .map(|slot| {
+                self.runtime
+                    .borrow_mut()
+                    .data_context_slot(self.data_context, slot)
+            })
             .unwrap_or(0)
     }
 
     pub fn bind_data_context(&mut self, data_context: Object) {
         self.clear_data_context();
         self.runtime
-            .data_context_add_container(data_context, (self as *mut Self).cast());
+            .borrow_mut()
+            .data_context_add_container(data_context, self.occurrence.clone());
         self.runtime
-            .artboard_clear_data_context(self.artboard_instance);
+            .borrow_mut()
+            .artboard_clear_data_context(&self.artboard_instance);
         self.runtime
-            .artboard_set_data_context(self.artboard_instance, data_context);
+            .borrow_mut()
+            .artboard_set_data_context(&self.artboard_instance, data_context);
         self.internal_data_context(data_context);
     }
 
@@ -2848,7 +3790,8 @@ impl StateMachineInstance {
             return;
         }
         self.runtime
-            .data_context_add_container(data_context, (self as *mut Self).cast());
+            .borrow_mut()
+            .data_context_add_container(data_context, self.occurrence.clone());
         self.internal_data_context(data_context);
     }
 
@@ -2863,104 +3806,107 @@ impl StateMachineInstance {
 
     fn init_scripted_objects(&mut self) {
         for &object in self.scripted_objects_map.values() {
-            self.runtime.scripted_initialize(object);
-            self.runtime.scripted_hydrate_inputs(object);
+            self.runtime.borrow_mut().scripted_initialize(object);
+            self.runtime.borrow_mut().scripted_hydrate_inputs(object);
         }
     }
 
     fn internal_data_context(&mut self, data_context: Object) {
         self.data_context = data_context;
-        self.runtime
-            .bind_data_binds_from_context((self as *mut Self).cast(), data_context);
-        for listener in &mut self.listener_view_models {
-            listener.bind_from_context(data_context);
+        let runtime = Rc::clone(&self.runtime);
+        runtime
+            .borrow_mut()
+            .bind_data_binds_from_context(self, data_context);
+        for listener in &self.listener_view_models {
+            listener.with_listener_mut(|listener| listener.bind_from_context(data_context));
         }
         for &object in self.scripted_objects_map.values() {
-            self.runtime.scripted_set_data_context(object, data_context);
+            self.runtime
+                .borrow_mut()
+                .scripted_set_data_context(object, data_context);
         }
         self.init_scripted_objects();
     }
 
     pub fn rebind(&mut self) {
         self.runtime
-            .artboard_clear_data_context(self.artboard_instance);
+            .borrow_mut()
+            .artboard_clear_data_context(&self.artboard_instance);
         self.runtime
-            .artboard_set_data_context(self.artboard_instance, self.data_context);
+            .borrow_mut()
+            .artboard_set_data_context(&self.artboard_instance, self.data_context);
         self.internal_data_context(self.data_context);
     }
 
     pub fn clear_data_context(&mut self) {
         if self.data_context != 0 {
             self.runtime
-                .data_context_remove_container(self.data_context, (self as *mut Self).cast());
-            self.data_context = 0;
+                .borrow_mut()
+                .data_context_remove_container(self.data_context, self.occurrence.clone());
+            self.data_context = RuntimeObjectHandle::NONE;
         }
-        for listener in &mut self.listener_view_models {
-            listener.clear_data_context();
+        for listener in &self.listener_view_models {
+            listener.with_listener_mut(ListenerViewModel::clear_data_context);
         }
     }
 
     pub fn relink_data_context(&mut self) {
         self.runtime
-            .artboard_relink_data_context(self.artboard_instance);
-        for listener in &mut self.listener_view_models {
-            for binding in &mut listener.property_bindings {
-                binding
-                    .binding_mut()
-                    .relink_data_bind(self.runtime.as_mut());
-            }
+            .borrow_mut()
+            .artboard_relink_data_context(&self.artboard_instance);
+        for listener in &self.listener_view_models {
+            listener.with_listener_mut(|listener| {
+                for binding in &listener.property_bindings {
+                    binding.with_binding_mut(|binding| {
+                        binding.relink_data_bind(self.runtime.borrow_mut().as_mut())
+                    });
+                }
+            });
         }
     }
 
     pub fn rebuild_data_bind(&mut self, data_bind: Object) {
         if data_bind != 0 && self.data_context != 0 {
-            self.runtime
-                .bind_data_binds_from_context((self as *mut Self).cast(), self.data_context);
+            let runtime = Rc::clone(&self.runtime);
+            runtime
+                .borrow_mut()
+                .bind_data_binds_from_context(self, self.data_context);
         }
     }
 
     fn unbind(&mut self) {
         self.clear_data_context();
-        self.runtime.unbind_data_binds((self as *mut Self).cast());
+        let runtime = Rc::clone(&self.runtime);
+        runtime.borrow_mut().unbind_data_binds(self);
     }
 
-    fn add_data_bind(&mut self, data_bind: Object) {
-        self.runtime
-            .add_data_bind((self as *mut Self).cast(), data_bind);
+    fn add_data_bind(&mut self, data_bind: CoreHandle) {
+        let runtime = Rc::clone(&self.runtime);
+        runtime.borrow_mut().add_data_bind(self, data_bind.clone());
         self.data_binds.push(data_bind);
     }
 
-    pub fn bindable_property_instance(&self, property: Object) -> Object {
-        self.bindable_property_instances
-            .get(&property)
-            .copied()
-            .unwrap_or(0)
+    pub fn bindable_property_instance(&self, property: &CoreHandle) -> Option<CoreHandle> {
+        self.bindable_property_instances.get(property).cloned()
     }
 
-    pub fn bindable_data_bind_to_source(&self, property: Object) -> Object {
-        self.bindable_data_binds_to_source
-            .get(&property)
-            .copied()
-            .unwrap_or(0)
+    pub fn bindable_data_bind_to_source(&self, property: &CoreHandle) -> Option<CoreHandle> {
+        self.bindable_data_binds_to_source.get(property).cloned()
     }
 
-    pub fn bindable_data_bind_to_target(&self, property: Object) -> Object {
-        self.bindable_data_binds_to_target
-            .get(&property)
-            .copied()
-            .unwrap_or(0)
+    pub fn bindable_data_bind_to_target(&self, property: &CoreHandle) -> Option<CoreHandle> {
+        self.bindable_data_binds_to_target.get(property).cloned()
     }
 
     pub fn find_transition_property_instance(
         &self,
-        transition: Object,
+        transition: &CoreHandle,
         property_key: u32,
-    ) -> Object {
+    ) -> Option<CoreHandle> {
         self.transition_property_instances
-            .get(&transition)
+            .get(transition)
             .and_then(|properties| properties.get(&property_key))
-            .copied()
-            .unwrap_or(0)
+            .cloned()
     }
 
     fn keyframe_holder_property_key(keyframe_type: u16) -> u32 {
@@ -2982,55 +3928,59 @@ impl StateMachineInstance {
     }
 
     pub fn build_state_keyframe_binds(&mut self, state_instance: Object) {
-        if state_instance == 0 || self.artboard_instance == 0 {
+        if state_instance == 0 || self.artboard_instance.upgrade().is_none() {
             return;
         }
         let mut first_bind_by_target = HashMap::new();
         for data_bind in self
             .runtime
-            .artboard_source_data_binds(self.artboard_instance)
+            .borrow_mut()
+            .artboard_source_data_binds(&self.artboard_instance)
         {
-            let target = self.runtime.data_bind_target(data_bind);
-            if target != 0 && self.runtime.data_bind_is_keyframe_target(data_bind) {
+            if let Some(target) = self.runtime.borrow_mut().data_bind_target(&data_bind)
+                && self
+                    .runtime
+                    .borrow_mut()
+                    .data_bind_is_keyframe_target(&data_bind)
+            {
                 first_bind_by_target.entry(target).or_insert(data_bind);
             }
         }
         if first_bind_by_target.is_empty() {
             return;
         }
-        let machine = self as *mut Self;
-        self.runtime.state_for_each_animation_instance(
+        let runtime = Rc::clone(&self.runtime);
+        runtime.borrow_mut().state_for_each_animation_instance(
+            self,
             state_instance,
-            &mut |runtime, animation_instance| {
+            &mut |runtime, machine, animation_instance| {
                 for keyframe in runtime.animation_keyframes(animation_instance) {
-                    let keyframe_type = runtime.keyframe_type(keyframe);
+                    let keyframe_type = runtime.keyframe_type(&keyframe);
                     let holder_property_key = Self::keyframe_holder_property_key(keyframe_type);
                     if holder_property_key == 0 {
                         continue;
                     }
-                    let Some(&source_bind) = first_bind_by_target.get(&keyframe) else {
+                    let Some(source_bind) = first_bind_by_target.get(&keyframe) else {
                         continue;
                     };
                     let holder = runtime.make_keyframe_holder(keyframe_type);
-                    runtime.add_keyframe_holder(animation_instance, keyframe, holder);
+                    runtime.add_keyframe_holder(animation_instance, &keyframe, holder.clone());
                     let clone = runtime.clone_data_bind(source_bind);
-                    runtime.data_bind_set_file(clone, runtime.data_bind_file(source_bind));
-                    runtime.configure_data_bind_target(clone, holder, holder_property_key);
-                    runtime.data_bind_initialize(clone);
-                    let converter = runtime.data_bind_converter(source_bind);
-                    if converter != 0 {
-                        let converter_clone = runtime.clone_data_converter(converter);
-                        runtime.data_bind_set_converter(clone, converter_clone);
+                    let file = runtime.data_bind_file(source_bind);
+                    runtime.data_bind_set_file(&clone, file);
+                    runtime.configure_data_bind_target(&clone, holder, holder_property_key);
+                    runtime.data_bind_initialize(&clone);
+                    if let Some(converter) = runtime.data_bind_converter(source_bind) {
+                        let converter_clone = runtime.clone_data_converter(&converter);
+                        runtime.data_bind_set_converter(&clone, converter_clone);
                     }
-                    runtime.add_data_bind(machine.cast(), clone);
-                    unsafe {
-                        (&mut *machine).data_binds.push(clone);
-                        (&mut *machine)
-                            .state_keyframe_data_binds
-                            .entry(state_instance)
-                            .or_default()
-                            .push(clone);
-                    }
+                    runtime.add_data_bind(machine, clone.clone());
+                    machine.data_binds.push(clone.clone());
+                    machine
+                        .state_keyframe_data_binds
+                        .entry(state_instance)
+                        .or_default()
+                        .push(clone);
                 }
             },
         );
@@ -3041,154 +3991,141 @@ impl StateMachineInstance {
             return;
         };
         for data_bind in data_binds {
-            self.runtime
-                .remove_data_bind((self as *mut Self).cast(), data_bind);
-            self.data_binds.retain(|&candidate| candidate != data_bind);
-            self.runtime.delete_data_bind(data_bind);
+            let runtime = Rc::clone(&self.runtime);
+            runtime.borrow_mut().remove_data_bind(self, &data_bind);
+            self.data_binds.retain(|candidate| candidate != &data_bind);
+            self.runtime.borrow_mut().delete_data_bind(data_bind);
         }
     }
 
-    pub fn scripted_object(&self, source: Object) -> Object {
-        self.scripted_objects_map.get(&source).copied().unwrap_or(0)
+    pub fn scripted_object(&self, source: &CoreHandle) -> Option<CoreHandle> {
+        self.scripted_objects_map.get(source).cloned()
     }
 
     pub fn dispose(&mut self) {
         self.remove_event_listeners();
     }
 
-    fn random_value(&mut self) -> f64 {
-        self.runtime.random_value()
-    }
-
-    fn find_random_transition(&mut self, state_from: Object, layer_index: usize) -> Object {
+    fn find_random_transition(
+        &mut self,
+        state_from: Object,
+        layer_index: usize,
+    ) -> Option<CoreHandle> {
         if layer_index >= self.layers.len() {
-            return 0;
+            return None;
         }
-        self.layers[layer_index].find_random_transition(state_from)
+        let layer = self.layers[layer_index].clone();
+        layer.with_layer_mut(|layer| layer.find_random_transition(self, state_from))
     }
 
-    fn find_allowed_transition(&mut self, state_from: Object, layer_index: usize) -> Object {
+    fn find_allowed_transition(
+        &mut self,
+        state_from: Object,
+        layer_index: usize,
+    ) -> Option<CoreHandle> {
         if layer_index >= self.layers.len() {
-            return 0;
+            return None;
         }
-        self.layers[layer_index].find_allowed_transition(state_from)
+        let layer = self.layers[layer_index].clone();
+        layer.with_layer_mut(|layer| layer.find_allowed_transition(self, state_from))
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn hit_components_count(&self) -> usize {
         self.hit_components.len()
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn hit_component(&self, index: usize) -> Option<&dyn HitComponent> {
         self.hit_components.get(index).map(Box::as_ref)
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(test)]
     pub fn layer_state(&mut self, index: usize) -> Object {
         self.layers
-            .get_mut(index)
-            .map(StateMachineLayerInstance::current_state)
+            .get(index)
+            .map(|layer| layer.with_layer_mut(StateMachineLayerInstance::current_state))
             .unwrap_or(0)
     }
 
     fn remove_event_listeners(&mut self) {
         for nested in self
             .runtime
-            .artboard_nested_artboards(self.artboard_instance)
+            .borrow_mut()
+            .artboard_nested_artboards(&self.artboard_instance)
         {
-            if nested == 0 {
-                continue;
-            }
-            for animation in self.runtime.nested_animations(nested) {
-                if animation != 0 {
-                    self.runtime
-                        .nested_remove_event_listener(animation, (self as *mut Self).cast());
-                }
+            for animation in self.runtime.borrow_mut().nested_animations(&nested) {
+                self.runtime
+                    .borrow_mut()
+                    .nested_remove_event_listener(&animation, self.occurrence.clone());
             }
         }
     }
 
-    #[cfg(feature = "rive_tools")]
-    pub fn on_input_changed(&mut self, callback: Option<fn(*mut StateMachineInstance, u64)>) {
+    #[cfg(feature = "tools")]
+    pub fn on_input_changed(
+        &mut self,
+        callback: Option<Box<dyn FnMut(RuntimeStateMachineInstanceWeakHandle, u64)>>,
+    ) {
         self.input_changed_callback = callback;
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn on_data_bind_changed(&mut self, callback: fn()) {
-        for &data_bind in &self.data_binds {
-            self.runtime.data_bind_on_changed(data_bind, callback);
+        for data_bind in &self.data_binds {
+            self.runtime
+                .borrow_mut()
+                .data_bind_on_changed(data_bind, callback);
         }
     }
 }
 
-impl InputInstanceMachine for StateMachineInstance {
-    fn mark_needs_advance(&mut self) {
-        StateMachineInstance::mark_needs_advance(self);
-    }
-
-    #[cfg(feature = "rive_tools")]
-    fn input_changed(&mut self, index: u64) {
-        if let Some(callback) = self.input_changed_callback {
-            callback(self, index);
+#[cfg(feature = "tools")]
+impl StateMachineInstance {
+    pub(crate) fn input_changed(&mut self, index: u64) {
+        if let Some(callback) = self.input_changed_callback.as_mut() {
+            callback(self.occurrence.clone(), index);
         }
     }
 }
 
 impl Drop for StateMachineInstance {
     fn drop(&mut self) {
-        if self.external_focus_manager == 0 && self.artboard_instance != 0 {
+        if self.external_focus_manager == 0 && self.artboard_instance.upgrade().is_some() {
             self.runtime
-                .artboard_cleanup_focus_tree(self.artboard_instance);
+                .borrow_mut()
+                .artboard_cleanup_focus_tree(&self.artboard_instance);
         }
         if self.external_semantic_manager == 0
             && self.semantic_manager != 0
-            && self.artboard_instance != 0
+            && self.artboard_instance.upgrade().is_some()
         {
             self.runtime
-                .artboard_cleanup_semantic_tree(self.artboard_instance);
+                .borrow_mut()
+                .artboard_cleanup_semantic_tree(&self.artboard_instance);
         }
         self.embedder_gamepads.clear();
         self.unbind();
-        for input in self.input_instances.drain(..).flatten() {
-            unsafe {
-                match input {
-                    InputInstance::Bool(value) => drop(Box::from_raw(value)),
-                    InputInstance::Number(value) => drop(Box::from_raw(value)),
-                    InputInstance::Trigger(value) => drop(Box::from_raw(value)),
-                }
-            }
-        }
+        self.input_instances.clear();
         for group in self.listener_groups.drain(..) {
-            self.runtime.delete_owned_object(group);
+            self.runtime.borrow_mut().delete_owned_object(group);
         }
-        self.runtime
-            .delete_all_data_binds((self as *mut Self).cast());
+        let runtime = Rc::clone(&self.runtime);
+        runtime.borrow_mut().delete_all_data_binds(self);
         self.data_binds.clear();
         self.state_keyframe_data_binds.clear();
         self.layers.clear();
         for (_, property) in self.bindable_property_instances.drain() {
-            self.runtime.delete_owned_object(property);
+            self.runtime.borrow_mut().delete_owned_object(property);
         }
         for (_, properties) in self.transition_property_instances.drain() {
             for (_, property) in properties {
-                self.runtime.delete_owned_object(property);
+                self.runtime.borrow_mut().delete_owned_object(property);
             }
         }
         self.listener_view_models.clear();
         for (_, object) in self.scripted_objects_map.drain() {
-            self.runtime.scripted_delete(object);
+            self.runtime.borrow_mut().scripted_delete(object);
         }
-    }
-}
-
-trait HitDrawableDowncast {
-    fn as_any_hit_drawable(&mut self) -> Option<&mut HitDrawable>;
-}
-
-impl HitDrawableDowncast for dyn HitComponent {
-    fn as_any_hit_drawable(&mut self) -> Option<&mut HitDrawable> {
-        let pointer = self as *mut dyn HitComponent as *mut HitDrawable;
-        Some(unsafe { &mut *pointer })
     }
 }

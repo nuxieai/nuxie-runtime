@@ -1,169 +1,130 @@
-use crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation;
-use std::ptr::NonNull;
-pub trait KeyboardListenerHost {
-    fn add_keyboard(&mut self, group: NonNull<KeyboardListenerGroup>);
-    fn remove_keyboard(&mut self, group: NonNull<KeyboardListenerGroup>);
-    fn add_text(&mut self, group: NonNull<KeyboardListenerGroup>);
-    fn remove_text(&mut self, group: NonNull<KeyboardListenerGroup>);
-    fn listener_wants_keyboard(&self, listener: *const ()) -> bool;
-    fn listener_wants_text(&self, listener: *const ()) -> bool;
-    fn scripted_wants_keyboard(&self) -> bool;
-    fn scripted_wants_text(&self) -> bool;
-    fn text_input_key(
-        &mut self,
-        key: u32,
-        modifiers: u32,
-        pressed: bool,
-        repeat: bool,
-    ) -> Option<bool>;
-    fn text_input_text(&mut self, text: &str) -> Option<bool>;
-    #[cfg(feature = "rive_scripting")]
-    fn scripted_key(
-        &mut self,
-        key: u32,
-        modifiers: u32,
-        pressed: bool,
-        repeat: bool,
-    ) -> Option<bool>;
-    #[cfg(feature = "rive_scripting")]
-    fn scripted_text(&mut self, text: &str) -> Option<bool>;
-    fn keyboard_constraints_met(
-        &self,
-        listener: *const (),
-        key: u32,
-        modifiers: u32,
-        pressed: bool,
-        repeat: bool,
-    ) -> bool;
-    fn perform_changes(
-        &mut self,
-        machine: *mut (),
-        listener: *const (),
-        invocation: ListenerInvocation,
-    );
-}
+use crate::mechanical_port::source::{
+    animation::{
+        listener_invocation::ListenerInvocation,
+        state_machine_instance::{
+            RuntimeObjectHandle, RuntimeServicesHandle, RuntimeStateMachineInstanceWeakHandle,
+        },
+    },
+    core::CoreHandle,
+};
+
 pub struct KeyboardListenerGroup {
-    focus_data: NonNull<dyn KeyboardListenerHost>,
-    listener: *const (),
-    machine: *mut (),
+    runtime: RuntimeServicesHandle,
+    focus_data: CoreHandle,
+    listener: Option<CoreHandle>,
+    machine: RuntimeStateMachineInstanceWeakHandle,
+    keyboard_registration: Option<RuntimeObjectHandle>,
+    text_registration: Option<RuntimeObjectHandle>,
 }
+
 impl KeyboardListenerGroup {
     pub fn new(
-        mut focus: NonNull<dyn KeyboardListenerHost>,
-        listener: *const (),
-        machine: *mut (),
+        runtime: RuntimeServicesHandle,
+        focus_data: CoreHandle,
+        listener: Option<CoreHandle>,
+        machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> Box<Self> {
-        let keyboard = if listener.is_null() {
-            unsafe { focus.as_ref().scripted_wants_keyboard() }
-        } else {
-            unsafe { focus.as_ref().listener_wants_keyboard(listener) }
-        };
-        let text = if listener.is_null() {
-            unsafe { focus.as_ref().scripted_wants_text() }
-        } else {
-            unsafe { focus.as_ref().listener_wants_text(listener) }
-        };
-        let mut value = Box::new(Self {
-            focus_data: focus,
+        let keyboard_registration = runtime.borrow_mut().focus_data_add_keyboard_listener(
+            &focus_data,
+            listener.as_ref(),
+            machine.clone(),
+        );
+        let text_registration = runtime.borrow_mut().focus_data_add_text_listener(
+            &focus_data,
+            listener.as_ref(),
+            machine.clone(),
+        );
+        Box::new(Self {
+            runtime,
+            focus_data,
             listener,
             machine,
-        });
-        let this = NonNull::from(value.as_mut());
-        unsafe {
-            if keyboard {
-                focus.as_mut().add_keyboard(this);
-            }
-            if text {
-                focus.as_mut().add_text(this);
-            }
-        }
-        value
+            keyboard_registration,
+            text_registration,
+        })
     }
+
+    pub fn listener(&self) -> Option<CoreHandle> {
+        self.listener.clone()
+    }
+
+    pub fn focus_data(&self) -> CoreHandle {
+        self.focus_data.clone()
+    }
+
     pub fn key_input(&mut self, key: u32, modifiers: u32, pressed: bool, repeat: bool) -> bool {
-        if let Some(result) = unsafe {
-            self.focus_data
-                .as_mut()
-                .text_input_key(key, modifiers, pressed, repeat)
-        } {
+        if let Some(result) = self.runtime.borrow_mut().focus_data_text_input_key(
+            &self.focus_data,
+            key,
+            modifiers,
+            pressed,
+            repeat,
+        ) {
             return result;
         }
-        #[cfg(feature = "rive_scripting")]
-        if self.listener.is_null() {
-            if let Some(result) = unsafe {
-                self.focus_data
-                    .as_mut()
-                    .scripted_key(key, modifiers, pressed, repeat)
-            } {
-                return result;
-            }
-        }
-        if !self.listener.is_null()
-            && unsafe {
-                self.focus_data.as_ref().keyboard_constraints_met(
-                    self.listener,
-                    key,
-                    modifiers,
-                    pressed,
-                    repeat,
-                )
-            }
+        if self.listener.is_none()
+            && let Some(result) = self.runtime.borrow_mut().focus_data_scripted_key(
+                &self.focus_data,
+                key,
+                modifiers,
+                pressed,
+                repeat,
+            )
         {
-            unsafe {
-                self.focus_data.as_mut().perform_changes(
-                    self.machine,
-                    self.listener,
+            return result;
+        }
+        if let Some(listener) = self.listener.as_ref()
+            && self
+                .runtime
+                .borrow()
+                .listener_keyboard_constraints_met(listener, key, modifiers, pressed, repeat)
+        {
+            self.machine.with_instance_mut(|machine| {
+                machine.perform_listener_changes(
+                    listener,
                     ListenerInvocation::keyboard(key, modifiers, pressed, repeat),
                 );
-            }
+            });
         }
         false
     }
+
     pub fn text_input(&mut self, text: &str) -> bool {
-        if let Some(result) = unsafe { self.focus_data.as_mut().text_input_text(text) } {
+        if let Some(result) = self
+            .runtime
+            .borrow_mut()
+            .focus_data_text_input_text(&self.focus_data, text)
+        {
             return result;
         }
-        #[cfg(feature = "rive_scripting")]
-        if self.listener.is_null() {
-            if let Some(result) = unsafe { self.focus_data.as_mut().scripted_text(text) } {
-                return result;
-            }
+        if self.listener.is_none()
+            && let Some(result) = self
+                .runtime
+                .borrow_mut()
+                .focus_data_scripted_text(&self.focus_data, text)
+        {
+            return result;
         }
-        if !self.listener.is_null() {
-            unsafe {
-                self.focus_data.as_mut().perform_changes(
-                    self.machine,
-                    self.listener,
+        if let Some(listener) = self.listener.as_ref() {
+            self.machine.with_instance_mut(|machine| {
+                machine.perform_listener_changes(
+                    listener,
                     ListenerInvocation::text_input(text.to_owned()),
                 );
-            }
+            });
         }
         false
     }
 }
+
 impl Drop for KeyboardListenerGroup {
     fn drop(&mut self) {
-        let this = NonNull::from(&mut *self);
-        let keyboard = if self.listener.is_null() {
-            unsafe { self.focus_data.as_ref().scripted_wants_keyboard() }
-        } else {
-            unsafe {
-                self.focus_data
-                    .as_ref()
-                    .listener_wants_keyboard(self.listener)
-            }
-        };
-        let text = if self.listener.is_null() {
-            unsafe { self.focus_data.as_ref().scripted_wants_text() }
-        } else {
-            unsafe { self.focus_data.as_ref().listener_wants_text(self.listener) }
-        };
-        unsafe {
-            if keyboard {
-                self.focus_data.as_mut().remove_keyboard(this);
-            }
-            if text {
-                self.focus_data.as_mut().remove_text(this);
-            }
+        let mut runtime = self.runtime.borrow_mut();
+        if let Some(group) = self.keyboard_registration {
+            runtime.focus_data_remove_keyboard_listener(&self.focus_data, group);
+        }
+        if let Some(group) = self.text_registration {
+            runtime.focus_data_remove_text_listener(&self.focus_data, group);
         }
     }
 }

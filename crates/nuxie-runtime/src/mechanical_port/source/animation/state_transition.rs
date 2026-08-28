@@ -1,12 +1,19 @@
 use crate::mechanical_port::source::{
-    animation::{layer_state::LayerState, transition_condition::TransitionCondition},
+    animation::{
+        layer_state::LayerState,
+        state_machine_instance::{
+            RuntimeObjectHandle, RuntimeStateMachineLayerInstanceWeakHandle, StateMachineInstance,
+        },
+    },
+    core::CoreHandle,
+    core_context::CoreContext,
     generated::animation::{
-        layer_state_base::LayerStateBase, state_transition_base::StateTransitionBase,
+        keyframe_interpolator_base::KeyFrameInterpolatorBase, layer_state_base::LayerStateBase,
+        state_transition_base::StateTransitionBase,
     },
     importers::{import_stack::ImportStack, layer_state_importer::LayerStateImporter},
     status_code::StatusCode,
 };
-use std::ptr::NonNull;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AllowTransition {
     No,
@@ -14,23 +21,29 @@ pub enum AllowTransition {
     Yes,
 }
 pub trait TransitionRuntime {
-    fn resolve_interpolator(&self, id: u32) -> Option<*mut ()>;
-    fn condition_added_dirty(&mut self, c: &mut TransitionCondition) -> StatusCode;
-    fn condition_added_clean(&mut self, c: &mut TransitionCondition) -> StatusCode;
-    fn evaluate_condition(&self, c: &TransitionCondition, machine: *mut (), layer: *mut ())
-    -> bool;
-    fn use_condition_in_layer(&self, c: &TransitionCondition, machine: *mut (), layer: *mut ());
+    fn evaluate_condition(
+        &self,
+        condition: &CoreHandle,
+        machine: &mut StateMachineInstance,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> bool;
+    fn use_condition_in_layer(
+        &self,
+        condition: &CoreHandle,
+        machine: &mut StateMachineInstance,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
+    );
     fn animation_duration(&self, state: &LayerState) -> Option<f32>;
     fn exit_animation(&self, state: &LayerState) -> Option<(f32, f32)>;
-    fn exit_instance_times(&self, from: *mut ()) -> Option<(f32, f32, f32, i32)>;
-    fn set_exit_instance_time(&self, from: *mut (), time: f32);
+    fn exit_instance_times(&self, from: RuntimeObjectHandle) -> Option<(f32, f32, f32, i32)>;
+    fn set_exit_instance_time(&self, from: RuntimeObjectHandle, time: f32);
 }
 pub struct StateTransition {
     pub base: StateTransitionBase,
-    state_to: Option<NonNull<LayerState>>,
+    state_to: Option<CoreHandle>,
     evaluated_random_weight: u32,
-    interpolator: Option<*mut ()>,
-    conditions: Vec<Box<TransitionCondition>>,
+    interpolator: Option<CoreHandle>,
+    conditions: Vec<CoreHandle>,
 }
 impl Default for StateTransition {
     fn default() -> Self {
@@ -47,11 +60,14 @@ impl StateTransition {
     fn flags(&self) -> u32 {
         self.base.flags()
     }
-    pub fn state_to(&self) -> Option<&LayerState> {
-        self.state_to.map(|v| unsafe { v.as_ref() })
+    pub fn state_to(&self) -> Option<CoreHandle> {
+        self.state_to.clone()
     }
-    pub fn interpolator(&self) -> Option<*mut ()> {
-        self.interpolator
+    pub fn set_state_to(&mut self, state: Option<CoreHandle>) {
+        self.state_to = state;
+    }
+    pub fn interpolator(&self) -> Option<CoreHandle> {
+        self.interpolator.clone()
     }
     pub fn evaluated_random_weight(&self) -> u32 {
         self.evaluated_random_weight
@@ -59,41 +75,51 @@ impl StateTransition {
     pub fn set_evaluated_random_weight(&mut self, v: u32) {
         self.evaluated_random_weight = v
     }
-    pub(crate) fn add_condition(&mut self, c: Box<TransitionCondition>) {
+    pub(crate) fn add_condition(&mut self, c: CoreHandle) {
         self.conditions.push(c)
     }
-    pub fn on_added_dirty(&mut self, r: &mut dyn TransitionRuntime) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         if self.base.interpolator_id() != u32::MAX {
-            let Some(i) = r.resolve_interpolator(self.base.interpolator_id()) else {
+            let Some(interpolator) = context.resolve(self.base.interpolator_id()) else {
                 return StatusCode::MissingObject;
             };
-            self.interpolator = Some(i)
+            if !interpolator.is_type_of(KeyFrameInterpolatorBase::TYPE_KEY) {
+                return StatusCode::MissingObject;
+            }
+            self.interpolator = Some(interpolator)
         }
-        for c in &mut self.conditions {
-            let s = r.condition_added_dirty(c);
-            if s != StatusCode::Ok {
-                return s;
+        for condition in self.conditions.iter().cloned() {
+            let code = condition
+                .with_mut(|condition| condition.transition_condition_on_added_dirty(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
+            if code != StatusCode::Ok {
+                return code;
             }
         }
         StatusCode::Ok
     }
-    pub fn on_added_clean(&mut self, r: &mut dyn TransitionRuntime) -> StatusCode {
-        for c in &mut self.conditions {
-            let s = r.condition_added_clean(c);
-            if s != StatusCode::Ok {
-                return s;
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        for condition in self.conditions.iter().cloned() {
+            let code = condition
+                .with_mut(|condition| condition.transition_condition_on_added_clean(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
+            if code != StatusCode::Ok {
+                return code;
             }
         }
         StatusCode::Ok
     }
-    pub fn import(self: Box<Self>, stack: &mut ImportStack) -> StatusCode {
-        let raw = Box::into_raw(self);
+    pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
         let Some(i) = stack.latest::<LayerStateImporter>(LayerStateBase::TYPE_KEY) else {
-            unsafe { drop(Box::from_raw(raw)) };
             return StatusCode::MissingObject;
         };
-        i.add_transition(unsafe { Box::from_raw(raw) });
-        unsafe { (*raw).base.base.import(stack) }
+        let Some(this) = self.base.base.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        i.add_transition(this);
+        self.base.base.base.base.import(stack)
     }
     pub fn is_disabled(&self) -> bool {
         self.flags() & 1 != 0
@@ -113,8 +139,8 @@ impl StateTransition {
     pub fn condition_count(&self) -> usize {
         self.conditions.len()
     }
-    pub fn condition(&self, i: usize) -> Option<&TransitionCondition> {
-        self.conditions.get(i).map(Box::as_ref)
+    pub fn condition(&self, i: usize) -> Option<CoreHandle> {
+        self.conditions.get(i).cloned()
     }
     pub fn mix_time(&self, from: &LayerState, r: &dyn TransitionRuntime) -> f32 {
         if self.base.duration() == 0 {
@@ -141,16 +167,16 @@ impl StateTransition {
     }
     pub fn allowed(
         &self,
-        from: *mut (),
-        machine: *mut (),
-        layer: *mut (),
+        from: RuntimeObjectHandle,
+        machine: &mut StateMachineInstance,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
         r: &dyn TransitionRuntime,
     ) -> AllowTransition {
         if self.is_disabled() {
             return AllowTransition::No;
         }
         for c in &self.conditions {
-            if !r.evaluate_condition(c, machine, layer) {
+            if !r.evaluate_condition(c, machine, layer.clone()) {
                 return AllowTransition::No;
             }
         }
@@ -173,7 +199,7 @@ impl StateTransition {
     }
     pub fn apply_exit_condition(
         &self,
-        from: *mut (),
+        from: RuntimeObjectHandle,
         state: &LayerState,
         r: &dyn TransitionRuntime,
     ) -> bool {
@@ -184,9 +210,26 @@ impl StateTransition {
         }
         use_exit
     }
-    pub fn use_layer_in_conditions(&self, m: *mut (), l: *mut (), r: &dyn TransitionRuntime) {
+    pub fn use_layer_in_conditions(
+        &self,
+        machine: &mut StateMachineInstance,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
+        r: &dyn TransitionRuntime,
+    ) {
         for c in &self.conditions {
-            r.use_condition_in_layer(c, m, l)
+            r.use_condition_in_layer(c, machine, layer.clone())
         }
     }
 }
+impl std::ops::Deref for StateTransition {
+    type Target = StateTransitionBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for StateTransition {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+impl crate::mechanical_port::source::generated::animation::state_transition_base::StateTransitionBaseCallbacks for StateTransition { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }

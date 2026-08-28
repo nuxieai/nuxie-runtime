@@ -12,22 +12,26 @@ pub enum NSlicerTileModeType {
     Hidden = 2,
 }
 
+#[derive(Default)]
 pub struct NSlicerTileMode {
     pub base: NSlicerTileModeBase,
 }
 impl NSlicerTileMode {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
         }
-        let Some(container) = n_slicer_details::from(self.base.parent_mut()) else {
+        let Some(parent) = self.base.parent_handle() else {
             return StatusCode::MissingObject;
         };
-        container.add_tile_mode(
+        if !n_slicer_details::add_tile_mode(
+            &parent,
             self.base.patch_index(),
             NSlicerTileModeType::from(self.base.style()),
-        );
+        ) {
+            return StatusCode::MissingObject;
+        }
         StatusCode::Ok
     }
 }

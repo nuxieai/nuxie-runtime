@@ -1,65 +1,79 @@
 use crate::mechanical_port::source::{
-    animation::{
-        state_machine_input::StateMachineInput, state_machine_layer::StateMachineLayer,
-        state_machine_listener::StateMachineListener,
-    },
-    data_bind::data_bind::DataBind,
+    core::CoreHandle,
+    core_context::CoreContext,
     generated::{animation::state_machine_base::StateMachineBase, artboard_base::ArtboardBase},
     importers::{artboard_importer::ArtboardImporter, import_stack::ImportStack},
     status_code::StatusCode,
 };
-use std::ptr::NonNull;
-pub trait StateMachineOwnedObject {
-    fn on_added_dirty(&mut self, context: *mut ()) -> StatusCode;
-    fn on_added_clean(&mut self, context: *mut ()) -> StatusCode;
-    fn name(&self) -> &str;
-}
+
 #[derive(Default)]
 pub struct StateMachine {
     pub base: StateMachineBase,
-    layers: Vec<Box<StateMachineLayer>>,
-    inputs: Vec<Option<Box<StateMachineInput>>>,
-    listeners: Vec<Box<StateMachineListener>>,
-    data_binds: Vec<Box<DataBind>>,
-    scripted_objects: Vec<*mut ()>,
+    layers: Vec<CoreHandle>,
+    inputs: Vec<Option<CoreHandle>>,
+    listeners: Vec<CoreHandle>,
+    data_binds: Vec<CoreHandle>,
+    scripted_objects: Vec<CoreHandle>,
 }
 impl StateMachine {
-    pub fn on_added_dirty(&mut self, context: *mut ()) -> StatusCode {
-        for object in self.inputs.iter_mut().filter_map(Option::as_deref_mut) {
-            let code = object.on_added_dirty_raw(context);
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        for input in self.inputs.iter().filter_map(Clone::clone) {
+            let code = input
+                .with_mut(|input| input.state_machine_input_on_added_dirty(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
             }
         }
-        for object in &mut self.layers {
-            let code = object.on_added_dirty_raw(context);
+        for layer in self.layers.iter().cloned() {
+            let code = layer
+                .with_downcast_mut::<
+                    crate::mechanical_port::source::animation::state_machine_layer::StateMachineLayer,
+                    _,
+                >(|layer| layer.on_added_dirty(context))
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
             }
         }
-        for object in &mut self.listeners {
-            let code = object.on_added_dirty_raw(context);
+        for listener in self.listeners.iter().cloned() {
+            let code = listener
+                .with_mut(|listener| listener.state_machine_listener_on_added_dirty(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
             }
         }
         StatusCode::Ok
     }
-    pub fn on_added_clean(&mut self, context: *mut ()) -> StatusCode {
-        for object in self.inputs.iter_mut().filter_map(Option::as_deref_mut) {
-            let code = object.on_added_clean_raw(context);
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        for input in self.inputs.iter().filter_map(Clone::clone) {
+            let code = input
+                .with_mut(|input| input.state_machine_input_on_added_clean(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
             }
         }
-        for object in &mut self.layers {
-            let code = object.on_added_clean_raw(context);
+        for layer in self.layers.iter().cloned() {
+            let code = layer
+                .with_downcast_mut::<
+                    crate::mechanical_port::source::animation::state_machine_layer::StateMachineLayer,
+                    _,
+                >(|layer| layer.on_added_clean(context))
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
             }
         }
-        for object in &mut self.listeners {
-            let code = object.on_added_clean_raw(context);
+        for listener in self.listeners.iter().cloned() {
+            let code = listener
+                .with_mut(|listener| listener.state_machine_listener_on_added_clean(context))
+                .flatten()
+                .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
             }
@@ -70,23 +84,26 @@ impl StateMachine {
         let Some(importer) = stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY) else {
             return StatusCode::MissingObject;
         };
-        importer.add_state_machine(NonNull::from(&mut *self));
+        let Some(this) = self.base.base.base.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        importer.add_state_machine(this);
         self.base.base.import(stack)
     }
-    pub(crate) fn add_layer(&mut self, value: Box<StateMachineLayer>) {
+    pub(crate) fn add_layer(&mut self, value: CoreHandle) {
         self.layers.push(value);
     }
-    pub(crate) fn add_input(&mut self, value: Option<Box<StateMachineInput>>) {
+    pub(crate) fn add_input(&mut self, value: Option<CoreHandle>) {
         self.inputs.push(value);
     }
-    pub(crate) fn add_listener(&mut self, value: Box<StateMachineListener>) {
+    pub(crate) fn add_listener(&mut self, value: CoreHandle) {
         self.listeners.push(value);
     }
-    pub(crate) fn add_data_bind(&mut self, value: Box<DataBind>) {
+    pub(crate) fn add_data_bind(&mut self, value: CoreHandle) {
         self.data_binds.push(value);
     }
-    pub(crate) fn add_scripted_object<T>(&mut self, value: NonNull<T>) {
-        self.scripted_objects.push(value.as_ptr().cast());
+    pub(crate) fn add_scripted_object(&mut self, value: CoreHandle) {
+        self.scripted_objects.push(value);
     }
     pub fn layer_count(&self) -> usize {
         self.layers.len()
@@ -100,31 +117,36 @@ impl StateMachine {
     pub fn data_bind_count(&self) -> usize {
         self.data_binds.len()
     }
-    pub fn scripted_objects(&self) -> Vec<*mut ()> {
+    pub fn scripted_objects(&self) -> Vec<CoreHandle> {
         self.scripted_objects.clone()
     }
-    pub fn input(&self, index: usize) -> Option<&StateMachineInput> {
-        self.inputs.get(index).and_then(Option::as_deref)
+    pub fn input(&self, index: usize) -> Option<CoreHandle> {
+        self.inputs.get(index).and_then(Clone::clone)
     }
-    pub fn input_named(&self, name: &str) -> Option<&StateMachineInput> {
-        self.inputs
-            .iter()
-            .filter_map(Option::as_deref)
-            .find(|v| v.name() == name)
+    pub fn input_named(&self, name: &str) -> Option<CoreHandle> {
+        self.inputs.iter().filter_map(Clone::clone).find(|input| {
+            input
+                .with(|input| input.state_machine_input_name().as_deref() == Some(name))
+                .unwrap_or(false)
+        })
     }
-    pub fn layer(&self, index: usize) -> Option<&StateMachineLayer> {
-        self.layers.get(index).map(Box::as_ref)
+    pub fn layer(&self, index: usize) -> Option<CoreHandle> {
+        self.layers.get(index).cloned()
     }
-    pub fn layer_named(&self, name: &str) -> Option<&StateMachineLayer> {
+    pub fn layer_named(&self, name: &str) -> Option<CoreHandle> {
         self.layers
             .iter()
-            .map(Box::as_ref)
-            .find(|v| v.name() == name)
+            .find(|layer| {
+                layer
+                    .with(|layer| layer.state_machine_component_name().as_deref() == Some(name))
+                    .unwrap_or(false)
+            })
+            .cloned()
     }
-    pub fn listener(&self, index: usize) -> Option<&StateMachineListener> {
-        self.listeners.get(index).map(Box::as_ref)
+    pub fn listener(&self, index: usize) -> Option<CoreHandle> {
+        self.listeners.get(index).cloned()
     }
-    pub fn data_bind(&self, index: usize) -> Option<&DataBind> {
-        self.data_binds.get(index).map(Box::as_ref)
+    pub fn data_bind(&self, index: usize) -> Option<CoreHandle> {
+        self.data_binds.get(index).cloned()
     }
 }

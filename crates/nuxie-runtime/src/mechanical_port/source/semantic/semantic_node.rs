@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::semantic::semantic_snapshot::Bounds;
+use crate::mechanical_port::source::{core::CoreHandle, semantic::semantic_snapshot::Bounds};
 use std::{
     cell::RefCell,
     rc::{Rc, Weak},
@@ -18,10 +18,10 @@ pub struct SemanticNode {
     pub heading_level: u32,
     pub bounds: Bounds,
     pub trait_flags: u32,
-    pub core_owner: Option<usize>,
+    pub core_owner: Option<CoreHandle>,
     pub is_boundary_node: bool,
-    pub semantic_data: Option<usize>,
-    pub boundary_artboard: Option<usize>,
+    pub semantic_data: Option<CoreHandle>,
+    pub boundary_artboard: Option<CoreHandle>,
 }
 impl SemanticNode {
     pub fn new(id: u32) -> SemanticNodeRef {

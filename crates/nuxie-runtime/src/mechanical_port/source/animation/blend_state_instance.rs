@@ -1,35 +1,51 @@
-use crate::mechanical_port::source::animation::{
-    linear_animation_instance::LinearAnimationInstance, state_instance::StateInstance,
-    state_machine_instance::StateMachineInstance,
+use std::{any::Any, marker::PhantomData};
+
+use crate::mechanical_port::source::{
+    animation::{
+        linear_animation_instance::LinearAnimationInstance, state_instance::StateInstance,
+        state_machine_instance::StateMachineInstance,
+    },
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    core::CoreHandle,
 };
 
 pub trait BlendAnimationDefinition {
-    type Animation;
-    fn animation(&self) -> &Self::Animation;
+    fn animation(&self) -> Option<CoreHandle>;
 }
 
 pub trait BlendStateDefinition<T> {
-    fn animations(&self) -> Vec<&T>;
+    fn animations(&self) -> Vec<CoreHandle>;
     fn flags(&self) -> u8;
 }
 
-pub struct BlendStateAnimationInstance<'a, T: BlendAnimationDefinition> {
-    blend_animation: &'a T,
+pub struct BlendStateAnimationInstance<T: BlendAnimationDefinition + Any> {
+    blend_animation: CoreHandle,
     animation_instance: LinearAnimationInstance,
     mix: f32,
+    definition: PhantomData<T>,
 }
 
-impl<'a, T: BlendAnimationDefinition> BlendStateAnimationInstance<'a, T> {
-    pub fn new(blend_animation: &'a T, instance: *mut ()) -> Self {
+impl<T: BlendAnimationDefinition + Any> BlendStateAnimationInstance<T> {
+    pub fn new(blend_animation: CoreHandle, instance: RuntimeArtboardInstanceWeakHandle) -> Self {
+        let animation = blend_animation
+            .with_downcast::<T, _>(BlendAnimationDefinition::animation)
+            .flatten()
+            .expect("a validated BlendAnimation retains a LinearAnimation");
         Self {
             blend_animation,
-            animation_instance: LinearAnimationInstance::new(blend_animation.animation(), instance),
+            animation_instance: LinearAnimationInstance::new(animation, instance, 1.0),
             mix: 0.0,
+            definition: PhantomData,
         }
     }
 
-    pub fn blend_animation(&self) -> &T {
+    pub fn blend_animation(&self) -> CoreHandle {
+        self.blend_animation.clone()
+    }
+    pub fn with_blend_animation<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         self.blend_animation
+            .with_downcast::<T, _>(f)
+            .expect("BlendStateAnimationInstance retains its typed definition")
     }
     pub fn animation_instance(&self) -> &LinearAnimationInstance {
         &self.animation_instance
@@ -39,45 +55,53 @@ impl<'a, T: BlendAnimationDefinition> BlendStateAnimationInstance<'a, T> {
     }
 }
 
-pub struct BlendStateInstance<'a, K, T>
+pub struct BlendStateInstance<K, T>
 where
-    K: BlendStateDefinition<T>,
-    T: BlendAnimationDefinition,
+    K: BlendStateDefinition<T> + Any,
+    T: BlendAnimationDefinition + Any,
 {
     pub base: StateInstance,
-    pub(crate) animation_instances: Vec<BlendStateAnimationInstance<'a, T>>,
+    pub(crate) animation_instances: Vec<BlendStateAnimationInstance<T>>,
     keep_going: bool,
-    blend_state: &'a K,
+    blend_state: CoreHandle,
+    definition: PhantomData<K>,
 }
 
-impl<'a, K, T> BlendStateInstance<'a, K, T>
+impl<K, T> BlendStateInstance<K, T>
 where
-    K: BlendStateDefinition<T>,
-    T: BlendAnimationDefinition,
+    K: BlendStateDefinition<T> + Any,
+    T: BlendAnimationDefinition + Any,
 {
-    pub fn new(blend_state: &'a K, instance: *mut ()) -> Self {
-        let animations = blend_state.animations();
+    pub fn new(blend_state: CoreHandle, instance: RuntimeArtboardInstanceWeakHandle) -> Self {
+        let (animations, flags) = blend_state
+            .with_downcast::<K, _>(|state| (state.animations(), state.flags()))
+            .expect("BlendStateInstance retains its typed BlendState");
         let mut animation_instances = Vec::with_capacity(animations.len());
         for blend_animation in animations {
-            animation_instances.push(BlendStateAnimationInstance::new(blend_animation, instance));
+            animation_instances.push(BlendStateAnimationInstance::new(
+                blend_animation,
+                instance.clone(),
+            ));
         }
 
         // Upstream gathers the reset animations when the Reset bit is set; the
         // resulting local vector is intentionally discarded there as well.
-        if blend_state.flags() & (1 << 1) != 0 {
-            let animations: Vec<_> = blend_state
-                .animations()
-                .into_iter()
-                .map(BlendAnimationDefinition::animation)
+        if flags & (1 << 1) != 0 {
+            let animations: Vec<_> = animation_instances
+                .iter()
+                .map(|animation| {
+                    animation.with_blend_animation(BlendAnimationDefinition::animation)
+                })
                 .collect();
             drop(animations);
         }
 
         Self {
-            base: StateInstance::new(blend_state),
+            base: StateInstance::new(blend_state.clone()),
             animation_instances,
             keep_going: true,
             blend_state,
+            definition: PhantomData,
         }
     }
 
@@ -104,23 +128,34 @@ where
         }
     }
 
+    pub fn clear_spilled_time(&mut self) {
+        for animation in &mut self.animation_instances {
+            animation.animation_instance.clear_spilled_time();
+        }
+    }
+
     pub fn for_each_animation_instance(
         &mut self,
-        mut callback: impl FnMut(&mut LinearAnimationInstance),
+        callback: &mut dyn FnMut(&mut LinearAnimationInstance),
     ) {
         for animation in &mut self.animation_instances {
             callback(&mut animation.animation_instance);
         }
     }
 
-    pub fn animation_instance(&self, blend_animation: &T) -> Option<&LinearAnimationInstance> {
+    pub fn animation_instance(
+        &self,
+        blend_animation: &CoreHandle,
+    ) -> Option<&LinearAnimationInstance> {
         self.animation_instances
             .iter()
-            .find(|animation| std::ptr::eq(animation.blend_animation, blend_animation))
+            .find(|animation| &animation.blend_animation == blend_animation)
             .map(BlendStateAnimationInstance::animation_instance)
     }
 
-    pub fn blend_state(&self) -> &K {
+    pub fn with_blend_state<R>(&self, f: impl FnOnce(&K) -> R) -> R {
         self.blend_state
+            .with_downcast::<K, _>(f)
+            .expect("BlendStateInstance retains its typed BlendState")
     }
 }

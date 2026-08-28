@@ -47,6 +47,10 @@ impl Default for SemanticManager {
     }
 }
 impl SemanticManager {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn set_frame_number(&mut self, value: u64) {
         self.frame_number = value;
     }

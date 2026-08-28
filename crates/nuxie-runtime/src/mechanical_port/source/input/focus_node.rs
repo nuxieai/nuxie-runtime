@@ -24,7 +24,7 @@ pub struct FocusNode {
     pub world_bounds: Bounds,
     flags: u8,
     tab_index: i16,
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub is_collapsed: bool,
 }
 impl FocusNode {
@@ -41,7 +41,7 @@ impl FocusNode {
             world_bounds: Bounds::default(),
             flags: 7,
             tab_index: 0,
-            #[cfg(feature = "rive_tools")]
+            #[cfg(feature = "tools")]
             is_collapsed: false,
         }))
     }
@@ -49,9 +49,9 @@ impl FocusNode {
         let n = Self::new(None);
         {
             let mut n = n.borrow_mut();
-            n.can_focus(false);
-            n.can_traverse(false);
-            n.can_touch(false);
+            n.set_can_focus(false);
+            n.set_can_traverse(false);
+            n.set_can_touch(false);
         }
         n
     }
@@ -73,19 +73,19 @@ impl FocusNode {
     pub fn can_focus(&self) -> bool {
         self.flag(Self::CAN_FOCUS)
     }
-    pub fn can_focus(&mut self, v: bool) {
+    pub fn set_can_focus(&mut self, v: bool) {
         self.set_flag(Self::CAN_FOCUS, v)
     }
     pub fn can_touch(&self) -> bool {
         self.flag(Self::CAN_TOUCH)
     }
-    pub fn can_touch(&mut self, v: bool) {
+    pub fn set_can_touch(&mut self, v: bool) {
         self.set_flag(Self::CAN_TOUCH, v)
     }
     pub fn can_traverse(&self) -> bool {
         self.flag(Self::CAN_TRAVERSE)
     }
-    pub fn can_traverse(&mut self, v: bool) {
+    pub fn set_can_traverse(&mut self, v: bool) {
         self.set_flag(Self::CAN_TRAVERSE, v)
     }
     pub fn has_focus(&self) -> bool {

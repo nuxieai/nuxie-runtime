@@ -234,7 +234,7 @@ impl ListenerGroup {
                     position,
                     pointer.previous_position,
                     pointer_id,
-                    listener_type_matched,
+                    listener_type_matched as u32,
                     time_stamp,
                 ),
             );

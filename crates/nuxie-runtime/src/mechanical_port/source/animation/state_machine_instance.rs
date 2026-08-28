@@ -83,6 +83,7 @@ use crate::mechanical_port::source::{
     listener_type::ListenerType,
     math::{random::RandomProvider, vec2d::Vec2D},
     process_event_result::ProcessEventResult,
+    scripted::scripted_object::{ScriptUpdateRequestHost, ScriptedObject},
     semantic::{
         semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
         semantic_node::SemanticNodeRef,
@@ -96,7 +97,7 @@ use crate::mechanical_port::source::{
     },
 };
 use std::{
-    cell::{Cell, RefCell, RefMut},
+    cell::{Cell, RefCell},
     collections::HashMap,
     rc::{Rc, Weak},
     sync::atomic::Ordering,
@@ -193,176 +194,6 @@ impl InputInstance {
         }
     }
 }
-
-/// The services owned by the surrounding translated runtime. This interface
-/// keeps all cross-owner object operations explicit while this owner retains
-/// the exact state, ordering, and branches of the pinned implementation.
-pub trait StateMachineInstanceRuntime {
-    fn bindable_property_number_value(&self, property: &CoreHandle) -> Option<f32>;
-    fn bindable_property_comparison_value(
-        &self,
-        property: &CoreHandle,
-    ) -> Option<RuntimeComparisonValue>;
-    fn component_comparison_value(
-        &self,
-        object_id: u32,
-        property_key: u32,
-    ) -> Option<RuntimeComparisonValue>;
-    fn artboard_layout_dimensions(
-        &self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-    ) -> Option<(f32, f32)>;
-    fn bindable_source_changed_in_layer(
-        &self,
-        property: &CoreHandle,
-        layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
-    ) -> bool;
-    fn use_bindable_property_in_layer(
-        &self,
-        property: &CoreHandle,
-        layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
-    );
-    fn artboard_frame_origin(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> bool;
-    fn artboard_origin(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Vec2D;
-    fn artboard_layout_size(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Vec2D;
-    fn artboard_inverse_self_transform(
-        &self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        point: Vec2D,
-    ) -> Option<Vec2D>;
-    fn artboard_draw_order_change_counter(
-        &self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-    ) -> u8;
-    fn artboard_ordered_hit_components(
-        &self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        components: &[CoreHandle],
-    ) -> Vec<usize>;
-    fn artboard_resolve(
-        &self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-        id: u32,
-    ) -> Option<CoreHandle>;
-    fn object_is_event(&self, object: &CoreHandle) -> bool;
-    fn artboard_nested_artboards(
-        &self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-    ) -> Vec<CoreHandle>;
-    fn artboard_component_lists(
-        &self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-    ) -> Vec<CoreHandle>;
-    fn artboard_objects(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> Vec<CoreHandle>;
-    fn artboard_text_inputs(&self, artboard: &RuntimeArtboardInstanceWeakHandle)
-    -> Vec<CoreHandle>;
-    fn artboard_source_data_binds(
-        &self,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-    ) -> Vec<CoreHandle>;
-    fn artboard_name(&self, artboard: &RuntimeArtboardInstanceWeakHandle) -> String;
-    fn component_id(&self, component: &CoreHandle) -> u32;
-    fn component_is_artboard(&self, component: &CoreHandle) -> bool;
-    fn component_hit_test(
-        &self,
-        component: &CoreHandle,
-        point: Vec2D,
-        path: bool,
-        clip: bool,
-    ) -> bool;
-    fn component_is_target_opaque(&self, component: &CoreHandle) -> bool;
-    fn component_is_shape(&self, component: &CoreHandle) -> bool;
-    fn component_is_text_run(&self, component: &CoreHandle) -> bool;
-    fn component_is_container(&self, component: &CoreHandle) -> bool;
-    fn component_is_layout(&self, component: &CoreHandle) -> bool;
-    fn component_is_drawable_proxy(&self, component: &CoreHandle) -> bool;
-    fn component_proxy(&self, component: &CoreHandle) -> Option<CoreHandle>;
-    fn component_children(&self, component: &CoreHandle) -> Vec<CoreHandle>;
-    fn component_mark_hit_path(&mut self, component: &CoreHandle);
-    fn text_run_text_component(&self, component: &CoreHandle) -> Option<CoreHandle>;
-    fn component_is_collapsed(&self, component: &CoreHandle) -> bool;
-    fn component_is_paused(&self, component: &CoreHandle) -> bool;
-    fn component_world_to_local(
-        &self,
-        component: &CoreHandle,
-        point: Vec2D,
-        index: Option<i32>,
-    ) -> Option<Vec2D>;
-    fn component_ordered_indices(&self, component: &CoreHandle) -> Vec<i32>;
-    fn component_state_machine(
-        &self,
-        component: &CoreHandle,
-        index: i32,
-    ) -> Option<RuntimeStateMachineInstanceHandle>;
-    fn nested_animations(&self, nested_artboard: &CoreHandle) -> Vec<CoreHandle>;
-    fn nested_artboard_instance(
-        &self,
-        nested_artboard: &CoreHandle,
-    ) -> RuntimeArtboardInstanceWeakHandle;
-    fn nested_is_state_machine(&self, animation: &CoreHandle) -> bool;
-    fn nested_state_machine_instance(
-        &self,
-        animation: &CoreHandle,
-    ) -> Option<RuntimeStateMachineInstanceHandle>;
-    fn nested_add_event_listener(
-        &mut self,
-        animation: &CoreHandle,
-        nested_artboard: &CoreHandle,
-        listener: RuntimeStateMachineInstanceWeakHandle,
-    );
-    fn nested_remove_event_listener(
-        &mut self,
-        animation: &CoreHandle,
-        listener: RuntimeStateMachineInstanceWeakHandle,
-    );
-    fn make_text_input_listener_group(
-        &mut self,
-        text_input: &CoreHandle,
-        machine: RuntimeStateMachineInstanceWeakHandle,
-    ) -> RuntimeListenerGroupHandle;
-    fn resolve_focus_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
-    fn resolve_semantic_data(&self, target: &CoreHandle) -> Option<CoreHandle>;
-    fn provided_hit_components(
-        &mut self,
-        provider: &CoreHandle,
-        machine: &mut StateMachineInstance,
-    ) -> Vec<Box<dyn HitComponent>>;
-    fn object_listener_provider(&self, object: &CoreHandle) -> Option<CoreHandle>;
-    fn object_scripted(&self, object: &CoreHandle) -> Option<CoreHandle>;
-    fn scripted_wants_keyboard(&self, object: &CoreHandle) -> bool;
-    fn scripted_wants_text(&self, object: &CoreHandle) -> bool;
-    fn scripted_wants_gamepad(&self, object: &CoreHandle) -> bool;
-    fn listener_target_id(&self, listener: &CoreHandle) -> u32;
-    fn listener_event_ids(&self, listener: &CoreHandle) -> Vec<u32>;
-    fn listener_perform_changes(
-        &mut self,
-        listener: &CoreHandle,
-        machine: &mut StateMachineInstance,
-        invocation: &ListenerInvocation,
-    );
-    fn listener_invocation_none(&mut self) -> ListenerInvocation;
-    fn listener_invocation_event(&mut self, event: &CoreHandle, delay: f32) -> ListenerInvocation;
-    fn listener_invocation_view_model(
-        &mut self,
-        view_model: RuntimeListenerViewModelWeakHandle,
-    ) -> ListenerInvocation;
-    fn scripted_clone(
-        &mut self,
-        source: &CoreHandle,
-        machine: &mut StateMachineInstance,
-    ) -> CoreHandle;
-    fn scripted_initialize(&mut self, object: &CoreHandle);
-    fn scripted_hydrate_inputs(&mut self, object: &CoreHandle);
-    fn gamepad_submit_buffer(&mut self, machine: &mut StateMachineInstance, data: &[u8]) -> bool;
-    fn gamepad_broadcast(
-        &mut self,
-        machine: &mut StateMachineInstance,
-        invocation: &ListenerInvocation,
-        skipped: Option<&CoreHandle>,
-    ) -> HitResult;
-}
-
-pub type RuntimeServicesHandle = Rc<RefCell<Box<dyn StateMachineInstanceRuntime>>>;
 
 pub struct StateMachineLayerInstance {
     occurrence: RuntimeStateMachineLayerInstanceWeakHandle,
@@ -2064,7 +1895,6 @@ impl RuntimeStateMachineInstanceWeakHandle {
 
 pub struct StateMachineInstance {
     occurrence: RuntimeStateMachineInstanceWeakHandle,
-    runtime: RuntimeServicesHandle,
     reported_events: Vec<EventReport>,
     reporting_events: Vec<EventReport>,
     events_applied_during_loop: Vec<EventReport>,
@@ -2132,11 +1962,9 @@ impl StateMachineInstance {
     pub fn new(
         machine: CoreHandle,
         artboard_instance: RuntimeArtboardInstanceWeakHandle,
-        runtime: RuntimeServicesHandle,
     ) -> RuntimeStateMachineInstanceHandle {
         let instance = Self {
             occurrence: RuntimeStateMachineInstanceWeakHandle::default(),
-            runtime,
             reported_events: Vec::new(),
             reporting_events: Vec::new(),
             events_applied_during_loop: Vec::new(),
@@ -2244,10 +2072,6 @@ impl StateMachineInstance {
             });
         });
         handle
-    }
-
-    fn runtime_mut(&self) -> RefMut<'_, dyn StateMachineInstanceRuntime> {
-        RefMut::map(self.runtime.borrow_mut(), |runtime| runtime.as_mut())
     }
 
     pub fn listener_has(&self, listener: &CoreHandle, listener_type: ListenerType) -> bool {
@@ -2651,30 +2475,59 @@ impl StateMachineInstance {
             .with_downcast::<StateMachine, _>(StateMachine::scripted_objects)
             .unwrap_or_default();
         for source in scripted_objects {
-            let runtime = Rc::clone(&self.runtime);
-            let clone = runtime.borrow_mut().scripted_clone(&source, self);
+            let mut host = ScriptUpdateRequestHost::default();
+            let clone = if source.is_type_of(crate::mechanical_port::source::generated::animation::scripted_listener_action_base::ScriptedListenerActionBase::TYPE_KEY) {
+                crate::mechanical_port::source::animation::scripted_listener_action::ScriptedListenerAction::clone_scripted_occurrence(&source, &mut self.data_bind_container, &mut host)
+            } else {
+                crate::mechanical_port::source::animation::scripted_transition_condition::ScriptedTransitionCondition::clone_scripted_occurrence(&source, &mut self.data_bind_container, &mut host)
+            }.expect("a state-machine scripted definition has a concrete clone owner");
+            if host.take_requested() {
+                ScriptedObject::apply_update_request(&clone);
+            }
             self.scripted_objects_map.insert(source, clone);
         }
+        let context = self
+            .artboard_instance
+            .with_artboard(|artboard| artboard.data_context())
+            .flatten();
         for object in self.scripted_objects_map.values() {
             object.with_mut(|object| {
                 if let Some(object) = object.as_scripted_object_mut() {
-                    object.set_data_context(self.data_context_handle.clone());
+                    object.set_data_context(context.clone());
                 }
             });
         }
         self.init_scripted_objects();
         for object in self
-            .runtime
-            .borrow_mut()
-            .artboard_objects(&self.artboard_instance)
+            .artboard_instance
+            .with_artboard(|artboard| {
+                artboard
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .expect("a state machine retains its ArtboardInstance")
         {
-            let Some(scripted) = self.runtime.borrow_mut().object_scripted(&object) else {
+            let Some((wants_keyboard, wants_gamepad)) = object
+                .with(|object| {
+                    object.as_container_component()?;
+                    let scripted = object.as_scripted_object()?;
+                    Some((
+                        scripted.wants_keyboard_input() || scripted.wants_text_input(),
+                        object.as_scripted_drawable().is_some()
+                            && (scripted.wants_gamepad_connect()
+                                || scripted.wants_gamepad_disconnect()
+                                || scripted.wants_gamepad_event()),
+                    ))
+                })
+                .flatten()
+            else {
                 continue;
             };
-            if self.runtime.borrow_mut().scripted_wants_keyboard(&scripted)
-                || self.runtime.borrow_mut().scripted_wants_text(&scripted)
-            {
-                if let Some(focus_data) = self.runtime.borrow_mut().resolve_focus_data(&object) {
+            if wants_keyboard {
+                if let Some(focus_data) = Self::focus_data_child(&object) {
                     let group = RuntimeKeyboardListenerGroupHandle::new(
                         focus_data,
                         None,
@@ -2683,7 +2536,7 @@ impl StateMachineInstance {
                     self.keyboard_listener_groups.push(group);
                 }
             }
-            if self.runtime.borrow_mut().scripted_wants_gamepad(&scripted) {
+            if wants_gamepad {
                 self.gamepad_scripted_drawables.push(object);
             }
         }
@@ -4235,9 +4088,20 @@ impl StateMachineInstance {
     }
 
     fn init_scripted_objects(&mut self) {
-        for object in self.scripted_objects_map.values() {
-            self.runtime.borrow_mut().scripted_initialize(object);
-            self.runtime.borrow_mut().scripted_hydrate_inputs(object);
+        for object in self
+            .scripted_objects_map
+            .values()
+            .cloned()
+            .collect::<Vec<_>>()
+        {
+            let properties = object.with_downcast::<crate::mechanical_port::source::animation::scripted_listener_action::ScriptedListenerAction, _>(|object| object.properties.clone())
+                .or_else(|| object.with_downcast::<crate::mechanical_port::source::animation::scripted_transition_condition::ScriptedTransitionCondition, _>(|object| object.properties.clone()))
+                .expect("a state-machine scripted occurrence retains its concrete owner");
+            let mut host = ScriptUpdateRequestHost::default();
+            ScriptedObject::reinit_occurrence(&object, &properties, &mut host);
+            if host.take_requested() {
+                ScriptedObject::apply_update_request(&object);
+            }
         }
     }
 
@@ -4446,6 +4310,91 @@ impl StateMachineInstance {
 
     pub fn scripted_object(&self, source: &CoreHandle) -> Option<CoreHandle> {
         self.scripted_objects_map.get(source).cloned()
+    }
+
+    pub fn perform_scripted_listener(
+        &mut self,
+        owner: &CoreHandle,
+        invocation: &ListenerInvocation,
+    ) {
+        let mut host = ScriptUpdateRequestHost::default();
+        crate::mechanical_port::source::animation::scripted_listener_action::ScriptedListenerAction::perform_stateful(
+            owner, &invocation.to_script_invocation(), &mut host,
+        );
+        if host.take_requested() {
+            ScriptedObject::apply_update_request(owner);
+        }
+    }
+
+    pub fn evaluate_scripted_condition(&self, owner: &CoreHandle) -> bool {
+        let mut host = ScriptUpdateRequestHost::default();
+        let result = crate::mechanical_port::source::animation::scripted_transition_condition::ScriptedTransitionCondition::evaluate_stateful(owner, &mut host);
+        if host.take_requested() {
+            ScriptedObject::apply_update_request(owner);
+        }
+        result
+    }
+
+    pub fn perform_scripted_pointer(
+        &mut self,
+        owner: &CoreHandle,
+        hit_type: ListenerType,
+        can_hit: bool,
+        position: Vec2D,
+        pointer_id: i32,
+    ) -> HitResult {
+        use crate::scripting::{ScriptMethod, ScriptedDrawablePointerHit};
+        let Some((method, local)) = owner
+            .with(|owner| {
+                let scripted = owner.as_scripted_object()?;
+                scripted.script_asset()?;
+                if scripted.self_ref() == 0 {
+                    return None;
+                }
+                let (accepts, method) = if can_hit {
+                    match hit_type {
+                        ListenerType::Down => {
+                            (scripted.wants_pointer_down(), ScriptMethod::PointerDown)
+                        }
+                        ListenerType::Up => (scripted.wants_pointer_up(), ScriptMethod::PointerUp),
+                        ListenerType::DragStart | ListenerType::DragEnd => return None,
+                        _ => (scripted.wants_pointer_move(), ScriptMethod::PointerMove),
+                    }
+                } else {
+                    (scripted.wants_pointer_exit(), ScriptMethod::PointerExit)
+                };
+                if !accepts {
+                    return None;
+                }
+                let transform = owner.as_world_transform_component()?.world_transform();
+                let mut inverse = crate::mechanical_port::source::math::mat2d::Mat2D::IDENTITY;
+                if !transform.invert(&mut inverse) {
+                    return None;
+                }
+                Some((method, inverse * position))
+            })
+            .flatten()
+        else {
+            return HitResult::None;
+        };
+        let mut host = ScriptUpdateRequestHost::default();
+        let result = ScriptedObject::perform_pointer(owner, method, pointer_id, local, &mut host);
+        if host.take_requested() {
+            ScriptedObject::apply_update_request(owner);
+        }
+        if result.invoked {
+            owner.with_mut(|owner| {
+                owner
+                    .as_scripted_drawable_mut()
+                    .expect("a pointer script retains its ScriptedDrawable")
+                    .wake_advance()
+            });
+        }
+        match result.hit {
+            ScriptedDrawablePointerHit::None => HitResult::None,
+            ScriptedDrawablePointerHit::Hit => HitResult::Hit,
+            ScriptedDrawablePointerHit::HitOpaque => HitResult::HitOpaque,
+        }
     }
 
     pub fn dispose(&mut self) {

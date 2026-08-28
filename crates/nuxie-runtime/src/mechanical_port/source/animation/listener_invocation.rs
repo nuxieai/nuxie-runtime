@@ -99,6 +99,115 @@ pub struct ListenerInvocation {
 }
 
 impl ListenerInvocation {
+    pub fn to_script_invocation(&self) -> crate::state_machine::ScriptListenerInvocation {
+        use crate::mechanical_port::source::input::gamepad_snapshot::{
+            GamepadInputChangeKind, GamepadMappingKind,
+        };
+        use crate::state_machine::{
+            ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
+            ScriptListenerInvocation as Invocation, ScriptPointerEventKind,
+        };
+        fn snapshot(value: &GamepadSnapshot) -> ScriptGamepadSnapshot {
+            ScriptGamepadSnapshot {
+                device_id: value.device_id,
+                button_mask: value.button_mask,
+                button_values: value.button_values.clone(),
+                axes: value.axes.clone(),
+                mapping: match value.mapping {
+                    GamepadMappingKind::Standard => ScriptGamepadMappingKind::Standard,
+                    GamepadMappingKind::Unknown => ScriptGamepadMappingKind::Unknown,
+                },
+            }
+        }
+        match &self.storage {
+            ListenerInvocationStorage::Pointer(value) => Invocation::Pointer {
+                pointer_id: value.pointer_id,
+                x: value.position.x,
+                y: value.position.y,
+                previous_x: value.previous_position.x,
+                previous_y: value.previous_position.y,
+                event: match value.hit_event {
+                    0 => ScriptPointerEventKind::Enter,
+                    1 => ScriptPointerEventKind::Exit,
+                    2 => ScriptPointerEventKind::Down,
+                    3 => ScriptPointerEventKind::Up,
+                    4 => ScriptPointerEventKind::Move,
+                    6 => ScriptPointerEventKind::Click,
+                    9 => ScriptPointerEventKind::DragStart,
+                    10 => ScriptPointerEventKind::DragEnd,
+                    12 => ScriptPointerEventKind::Drag,
+                    _ => panic!("a pointer invocation carries a pointer listener type"),
+                },
+                timestamp_seconds: value.time_stamp,
+            },
+            ListenerInvocationStorage::Keyboard(value) => Invocation::Keyboard {
+                key: value.key,
+                modifiers: value.modifiers,
+                is_pressed: value.is_pressed,
+                is_repeat: value.is_repeat,
+            },
+            ListenerInvocationStorage::TextInput(value) => Invocation::TextInput {
+                text: value.text.clone(),
+            },
+            ListenerInvocationStorage::Focus(value) => Invocation::Focus {
+                listener_index: value.listener_index,
+                is_focus: value.is_focus,
+            },
+            ListenerInvocationStorage::ReportedEvent(value) => {
+                let artboard = value
+                    .event
+                    .with(|event| {
+                        event
+                            .as_component()
+                            .and_then(|event| event.artboard_handle())
+                    })
+                    .flatten()
+                    .expect("a reported event retains its owning artboard");
+                let index = artboard
+                    .with_downcast::<crate::mechanical_port::source::artboard::Artboard, _>(
+                        |artboard| artboard.object_index(&value.event),
+                    )
+                    .expect("an event's owning artboard remains live");
+                Invocation::ReportedEvent {
+                    event_local_index: usize::try_from(index)
+                        .expect("a reported event belongs to its artboard"),
+                    seconds_delay: value.delay_seconds,
+                }
+            }
+            ListenerInvocationStorage::ViewModelChange(value) => Invocation::ViewModelChange {
+                listener_index: value.listener_index,
+            },
+            ListenerInvocationStorage::None(_) => Invocation::None,
+            ListenerInvocationStorage::GamepadConnected(value) => Invocation::GamepadConnected {
+                snapshot: snapshot(&value.snapshot),
+            },
+            ListenerInvocationStorage::GamepadEvent(value) => Invocation::GamepadEvent {
+                full_state: snapshot(&value.full_state),
+                change: match value.change.kind {
+                    GamepadInputChangeKind::Button => ScriptGamepadInputChange::Button {
+                        index: value.change.index,
+                        value: value.change.value,
+                    },
+                    GamepadInputChangeKind::Axis => ScriptGamepadInputChange::Axis {
+                        index: value.change.index,
+                        value: value.change.value,
+                    },
+                },
+                standard_button_intent: value.standard_button.map(|button| button as u32),
+                standard_axis_intent: value.standard_axis.map(|axis| axis as u32),
+            },
+            ListenerInvocationStorage::GamepadDisconnected(value) => {
+                Invocation::GamepadDisconnected {
+                    device_id: value.device_id,
+                }
+            }
+            ListenerInvocationStorage::Semantic(value) => Invocation::Semantic {
+                listener_index: value.listener_index,
+                action_type: value.action_type as u32,
+            },
+        }
+    }
+
     pub fn pointer(
         position: Vec2D,
         previous_position: Vec2D,

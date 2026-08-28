@@ -1546,6 +1546,37 @@ pub trait CoreCapabilities: Any {
     fn artboard_on_component_dirty_at(&mut self, _graph_order: u32) -> bool {
         false
     }
+    fn semantic_provider_local_bounds(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
+        if let Some(text) = self.as_text() {
+            return Some(text.local_bounds());
+        }
+        if let Some(text_input) = self.as_text_input() {
+            return Some(text_input.local_bounds());
+        }
+        if let Some(shape) = self.as_shape() {
+            return Some(shape.local_bounds());
+        }
+        if let Some(path) = self.as_path() {
+            return Some(path.local_bounds());
+        }
+        if let Some(layout) = self.as_layout_component() {
+            return Some(layout.local_bounds());
+        }
+        self.as_transform_component()
+            .map(|transform| transform.local_bounds())
+    }
+    fn semantic_provider_can_infer(&self) -> bool {
+        self.as_text().is_some()
+    }
+    fn semantic_provider_inferred_data(
+        &self,
+    ) -> Option<
+        crate::mechanical_port::source::semantic::semantic_provider::ResolvedSemanticData,
+    > {
+        self.as_text().and_then(|text| text.inferred_semantic_data())
+    }
     fn component_update(
         &mut self,
         value: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -51499,6 +51530,9 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSli
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode {
+    fn semantic_provider_local_bounds(&self) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
+        Some(self.local_bounds())
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::transform_component::TransformComponent::build_dependencies(
             &mut self.base.base.base.base,
@@ -57011,6 +57045,9 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
+    fn semantic_provider_local_bounds(&self) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
+        Some(self.local_bounds())
+    }
     fn drawable_hit_test(
         &mut self,
         info: &mut crate::mechanical_port::source::hit_info::HitInfo,
@@ -58260,6 +58297,21 @@ impl CoreCapabilities for crate::mechanical_port::source::open_url_event::OpenUr
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::semantic::semantic_data::SemanticData {
+    fn component_update(
+        &mut self,
+        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        self.update(value);
+        true
+    }
+    fn component_build_dependencies(&mut self) -> bool {
+        self.build_dependencies();
+        true
+    }
+    fn component_collapse_post(&mut self, value: bool) -> bool {
+        self.collapse_after_component(value);
+        true
+    }
     fn as_semantic_data(
         &self,
     ) -> Option<&crate::mechanical_port::source::semantic::semantic_data::SemanticData> {
@@ -66653,6 +66705,27 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBaseCallbacks for crate::mechanical_port::source::semantic::semantic_data::SemanticData {
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base, property_key)
+    }
+    fn role_changed(&mut self) {
+        crate::mechanical_port::source::semantic::semantic_data::SemanticData::role_changed(self);
+    }
+    fn label_changed(&mut self) {
+        crate::mechanical_port::source::semantic::semantic_data::SemanticData::label_changed(self);
+    }
+    fn value_changed(&mut self) {
+        crate::mechanical_port::source::semantic::semantic_data::SemanticData::value_changed(self);
+    }
+    fn hint_changed(&mut self) {
+        crate::mechanical_port::source::semantic::semantic_data::SemanticData::hint_changed(self);
+    }
+    fn heading_level_changed(&mut self) {
+        crate::mechanical_port::source::semantic::semantic_data::SemanticData::heading_level_changed(self);
+    }
+    fn trait_flags_changed(&mut self) {
+        crate::mechanical_port::source::semantic::semantic_data::SemanticData::trait_flags_changed(self);
+    }
+    fn state_flags_changed(&mut self) {
+        crate::mechanical_port::source::semantic::semantic_data::SemanticData::state_flags_changed(self);
     }
 }
 impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks

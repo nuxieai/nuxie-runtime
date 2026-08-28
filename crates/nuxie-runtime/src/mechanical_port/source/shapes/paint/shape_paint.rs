@@ -62,6 +62,7 @@ pub struct ShapePaint {
     render_paint: Option<RuntimeRenderPaintHandle>,
     paint_mutator: Option<CoreHandle>,
     feather: Option<CoreHandle>,
+    script_paint_scope: Option<Rc<crate::scripting::ScriptPaint>>,
 }
 
 impl Default for ShapePaint {
@@ -73,6 +74,7 @@ impl Default for ShapePaint {
             render_paint: None,
             paint_mutator: None,
             feather: None,
+            script_paint_scope: None,
         }
     }
 }
@@ -95,29 +97,53 @@ impl ShapePaint {
             .unwrap_or(StatusCode::MissingObject)
     }
 
-    pub fn update_with_path_kind(&mut self, value: ComponentDirt, kind: ShapePaintPathKind) {
+    pub fn script_paint_scope(&self) -> std::rc::Weak<crate::scripting::ScriptPaint> {
+        self.script_paint_scope
+            .as_ref()
+            .map(Rc::downgrade)
+            .unwrap_or_default()
+    }
+
+    pub fn update_with_path_kind(
+        &mut self,
+        value: ComponentDirt,
+        kind: ShapePaintPathKind,
+        paint_snapshot: crate::scripting::ScriptPaint,
+    ) {
         if has_dirt(value, ComponentDirt::PATH) && !self.effects_container.effects.is_empty() {
             let parent = self.base.parent_handle().expect("ShapePaint container");
+            let mut source = None;
             parent.with_mut(|container| {
                 container.with_shape_paint_path_mut(kind, &mut |path| {
-                    let mut current: Option<Rc<RefCell<ShapePaintPath>>> = None;
-                    for handle in self.effects_container.effects.iter().cloned() {
-                        handle.with_mut(|effect| {
-                            let Some(effect) = effect.as_stroke_effect_mut() else {
-                                return;
-                            };
-                            if let Some(current) = current.as_ref() {
-                                effect.update_effect(&self.path_provider, &current.borrow(), self);
-                            } else {
-                                effect.update_effect(&self.path_provider, path, self);
-                            }
-                            if let Some(new_path) = effect.effect_path(&self.path_provider) {
-                                current = Some(new_path);
-                            }
-                        });
-                    }
+                    let mut snapshot =
+                        ShapePaintPath::with_fill_rule(path.is_local(), path.fill_rule());
+                    *snapshot.mutable_raw_path() = path.raw_path().clone();
+                    source = Some(snapshot);
                 });
             });
+            // Effects consume immutable raw geometry. Release the container before
+            // a scripted effect reads or edits that same parent TransformComponent.
+            let Some(source) = source else {
+                return;
+            };
+            self.script_paint_scope = Some(Rc::new(paint_snapshot));
+            let mut current: Option<Rc<RefCell<ShapePaintPath>>> = None;
+            for handle in self.effects_container.effects.iter().cloned() {
+                handle.with_mut(|effect| {
+                    let Some(effect) = effect.as_stroke_effect_mut() else {
+                        return;
+                    };
+                    if let Some(current) = current.as_ref() {
+                        effect.update_effect(&self.path_provider, &current.borrow(), self);
+                    } else {
+                        effect.update_effect(&self.path_provider, &source, self);
+                    }
+                    if let Some(new_path) = effect.effect_path(&self.path_provider) {
+                        current = Some(new_path);
+                    }
+                });
+            }
+            self.script_paint_scope = None;
         }
     }
 

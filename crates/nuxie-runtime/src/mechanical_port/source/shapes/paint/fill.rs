@@ -20,7 +20,8 @@ pub struct Fill {
 impl Fill {
     pub fn update(&mut self, value: ComponentDirt) {
         let kind = self.pick_path_kind();
-        self.base.base.update_with_path_kind(value, kind);
+        let paint = crate::scripting::ScriptPaint::from_fresh(&self.base.base, None);
+        self.base.base.update_with_path_kind(value, kind, paint);
     }
     pub fn path_flags(&self) -> PathFlags {
         if self.base.fill_rule() == nuxie_render_api::FillRule::Clockwise as u32 {

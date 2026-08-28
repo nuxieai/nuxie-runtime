@@ -786,14 +786,7 @@ fn one_persistent_render_context_serves_every_callback_family() {
     );
     instance.call_input_trigger("pulse", &mut host).unwrap();
     instance
-        .call_path_effect_update(
-            RawPath::new(),
-            ScriptNode {
-                path: None,
-                paint: None,
-            },
-            &mut host,
-        )
+        .call_path_effect_update(RawPath::new(), ScriptNode::snapshot(None, None), &mut host)
         .unwrap();
     assert_eq!(
         instance

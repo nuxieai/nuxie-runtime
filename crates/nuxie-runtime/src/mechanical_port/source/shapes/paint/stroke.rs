@@ -79,7 +79,11 @@ impl Stroke {
 
     pub fn update(&mut self, value: ComponentDirt) {
         let kind = self.pick_path_kind();
-        self.base.base.update_with_path_kind(value, kind);
+        let paint = crate::scripting::ScriptPaint::from_fresh(
+            &self.base.base,
+            Some((self.base.thickness(), self.base.cap(), self.base.join())),
+        );
+        self.base.base.update_with_path_kind(value, kind, paint);
         if has_dirt(value, ComponentDirt::PAINT) {
             let thickness = self.base.thickness();
             let cap = StrokeCap::from(self.base.cap()).into();

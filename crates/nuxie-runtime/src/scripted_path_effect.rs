@@ -29,10 +29,7 @@ pub(crate) fn update_effect(
     let output = match artboard.apply_scripted_path_effect(
         effect.global_id,
         runtime_raw_path_from_commands(source),
-        ScriptNode {
-            path: None,
-            paint: Some(script_paint_for_shape(artboard, paint)),
-        },
+        ScriptNode::snapshot(None, Some(script_paint_for_shape(artboard, paint))),
     ) {
         Ok(output) => output,
         Err(_) => {

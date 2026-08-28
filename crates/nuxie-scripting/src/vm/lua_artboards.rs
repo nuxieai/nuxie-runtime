@@ -505,12 +505,7 @@ mod artboard_owner_tests {
         }
 
         fn node(&self, name: &str) -> std::result::Result<Option<ScriptNode>, ScriptError> {
-            Ok(
-                (name == "muzzle" || name == "Weapon").then_some(ScriptNode {
-                    path: None,
-                    paint: None,
-                }),
-            )
+            Ok((name == "muzzle" || name == "Weapon").then_some(ScriptNode::snapshot(None, None)))
         }
 
         fn draw(

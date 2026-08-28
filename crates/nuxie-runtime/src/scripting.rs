@@ -799,6 +799,276 @@ pub enum ScriptDataConverterOptionalCall {
 pub struct ScriptNode {
     pub path: Option<RawPath>,
     pub paint: Option<ScriptPaint>,
+    live: Option<LiveScriptNode>,
+}
+
+#[derive(Debug, Clone)]
+struct LiveScriptNode {
+    component: crate::mechanical_port::source::core::CoreHandle,
+    paint: Option<crate::mechanical_port::source::core::CoreHandle>,
+    // The effect callback runs while its ShapePaint is borrowed. During that
+    // scope use its exact most-derived snapshot; retained nodes subsequently
+    // construct new PaintData from the live paint occurrence.
+    active_paint: Weak<ScriptPaint>,
+}
+
+impl ScriptNode {
+    pub fn snapshot(path: Option<RawPath>, paint: Option<ScriptPaint>) -> Self {
+        Self {
+            path,
+            paint,
+            live: None,
+        }
+    }
+
+    pub(crate) fn from_component(
+        component: crate::mechanical_port::source::core::CoreHandle,
+    ) -> Self {
+        Self {
+            path: None,
+            paint: None,
+            live: Some(LiveScriptNode {
+                component,
+                paint: None,
+                active_paint: Weak::new(),
+            }),
+        }
+    }
+
+    pub(crate) fn from_path_effect(
+        paint: &crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint,
+    ) -> Self {
+        let component = paint
+            .parent_transform_component()
+            .expect("path effect parent TransformComponent");
+        Self {
+            path: None,
+            paint: None,
+            live: Some(LiveScriptNode {
+                component,
+                paint: paint.handle(),
+                active_paint: paint.script_paint_scope(),
+            }),
+        }
+    }
+
+    fn component(&self) -> &crate::mechanical_port::source::core::CoreHandle {
+        &self
+            .live
+            .as_ref()
+            .expect("transform access requires a live ScriptNode")
+            .component
+    }
+
+    fn position(&self) -> (f32, f32) {
+        self.component()
+            .with(|object| {
+                if let Some(layout) = object.as_layout_component() {
+                    (layout.layout_x(), layout.layout_y())
+                } else if let Some(root) = object.as_root_bone() {
+                    (root.x(), root.y())
+                } else if object.as_bone().is_some() {
+                    let parent = object.component_parent_handle().expect("Bone parent");
+                    (
+                        parent
+                            .with(|parent| parent.as_bone().expect("Bone parent").length())
+                            .expect("live Bone parent"),
+                        0.0,
+                    )
+                } else {
+                    let node = object.as_node().expect("concrete TransformComponent x/y");
+                    (node.base.x(), node.base.y())
+                }
+            })
+            .expect("live ScriptNode occurrence")
+    }
+
+    pub fn x(&self) -> f32 {
+        self.position().0
+    }
+    pub fn y(&self) -> f32 {
+        self.position().1
+    }
+
+    fn set_position_axis(&mut self, x: bool, value: f32) {
+        use crate::mechanical_port::source::generated::core_registry::CoreField;
+        self.component().with_mut(|object| {
+            let field = if object.as_node().is_some() {
+                if x {
+                    CoreField::NodeX
+                } else {
+                    CoreField::NodeY
+                }
+            } else if object.as_root_bone().is_some() {
+                if x {
+                    CoreField::RootBoneX
+                } else {
+                    CoreField::RootBoneY
+                }
+            } else {
+                return;
+            };
+            object.set_double(field, value);
+        });
+    }
+    pub fn set_x(&mut self, value: f32) {
+        self.set_position_axis(true, value);
+    }
+    pub fn set_y(&mut self, value: f32) {
+        self.set_position_axis(false, value);
+    }
+
+    pub fn rotation(&self) -> f32 {
+        self.component()
+            .with(|object| object.as_transform_component().unwrap().rotation())
+            .expect("live ScriptNode")
+    }
+    pub fn scale_x(&self) -> f32 {
+        self.component()
+            .with(|object| object.as_transform_component().unwrap().scale_x())
+            .expect("live ScriptNode")
+    }
+    pub fn scale_y(&self) -> f32 {
+        self.component()
+            .with(|object| object.as_transform_component().unwrap().scale_y())
+            .expect("live ScriptNode")
+    }
+    pub fn set_rotation(&mut self, value: f32) {
+        self.component().with_mut(|object| object.set_double(crate::mechanical_port::source::generated::core_registry::CoreField::TransformComponentRotation, value));
+    }
+    pub fn set_scale_x(&mut self, value: f32) {
+        self.component().with_mut(|object| object.set_double(crate::mechanical_port::source::generated::core_registry::CoreField::TransformComponentScaleX, value));
+    }
+    pub fn set_scale_y(&mut self, value: f32) {
+        self.component().with_mut(|object| object.set_double(crate::mechanical_port::source::generated::core_registry::CoreField::TransformComponentScaleY, value));
+    }
+    pub fn world_transform(&self) -> nuxie_render_api::Mat2D {
+        self.component()
+            .with(|object| {
+                nuxie_render_api::Mat2D(
+                    *object
+                        .as_world_transform_component()
+                        .unwrap()
+                        .world_transform()
+                        .values(),
+                )
+            })
+            .expect("live ScriptNode")
+    }
+    pub fn set_world_transform(&mut self, transform: nuxie_render_api::Mat2D) {
+        let [a, b, c, d, x, y] = transform.0;
+        self.component().with_mut(|object| {
+            object
+                .as_world_transform_component_mut()
+                .unwrap()
+                .set_world_transform(crate::mechanical_port::source::math::mat2d::Mat2D::new(
+                    a, b, c, d, x, y,
+                ))
+        });
+    }
+    pub fn children(&self) -> Vec<Self> {
+        let children = self
+            .component()
+            .with(|object| {
+                object
+                    .as_container_component()
+                    .map(|container| container.children().to_vec())
+                    .unwrap_or_default()
+            })
+            .expect("live ScriptNode");
+        children
+            .into_iter()
+            .filter(|child| {
+                // An effect's own ShapePaint is currently mutably borrowed and
+                // cannot be a TransformComponent child.
+                if self.live.as_ref().and_then(|live| live.paint.as_ref()) == Some(child) {
+                    return false;
+                }
+                child
+                    .with(|child| child.as_transform_component().is_some())
+                    .unwrap_or(false)
+            })
+            .map(Self::from_component)
+            .collect()
+    }
+    pub fn parent(&self) -> Option<Self> {
+        self.component()
+            .with(|object| object.component_parent_handle())
+            .flatten()
+            .filter(|parent| {
+                parent
+                    .with(|parent| parent.as_transform_component().is_some())
+                    .unwrap_or(false)
+            })
+            .map(Self::from_component)
+    }
+    pub fn decompose(&mut self, transform: nuxie_render_api::Mat2D) {
+        use crate::mechanical_port::source::math::mat2d::Mat2D;
+        let parent = self
+            .component()
+            .with(|object| object.component_parent_handle())
+            .flatten();
+        let parent_world = parent
+            .and_then(|parent| {
+                parent
+                    .with(|parent| {
+                        parent
+                            .as_world_transform_component()
+                            .map(|parent| *parent.world_transform())
+                    })
+                    .flatten()
+            })
+            .unwrap_or_else(Mat2D::identity);
+        let [a, b, c, d, x, y] = transform.0;
+        let components =
+            (parent_world.invert_or_identity() * Mat2D::new(a, b, c, d, x, y)).decompose();
+        self.set_x(components.x());
+        self.set_y(components.y());
+        self.set_scale_x(components.scale_x());
+        self.set_scale_y(components.scale_y());
+        self.set_rotation(components.rotation());
+    }
+    pub fn path(&self) -> Option<RawPath> {
+        match &self.live {
+            Some(live) => live
+                .component
+                .with(|object| {
+                    object.as_path().map(|path| {
+                        crate::mechanical_port::source::renderer::to_render_raw_path(
+                            path.raw_path(),
+                        )
+                    })
+                })
+                .flatten(),
+            None => self.path.clone(),
+        }
+    }
+    pub fn paint(&self) -> Option<ScriptPaint> {
+        let Some(live) = &self.live else {
+            return self.paint;
+        };
+        if let Some(paint) = live.active_paint.upgrade() {
+            return Some(*paint);
+        }
+        live.paint
+            .as_ref()
+            .unwrap_or(&live.component)
+            .with(|object| {
+                let paint = object.as_shape_paint()?;
+                let stroke = object
+                    .as_any()
+                    .downcast_ref::<crate::mechanical_port::source::shapes::paint::stroke::Stroke>()
+                    .map(|stroke| {
+                        (
+                            stroke.base.thickness(),
+                            stroke.base.cap(),
+                            stroke.base.join(),
+                        )
+                    });
+                Some(ScriptPaint::from_fresh(paint, stroke))
+            })
+            .flatten()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -810,6 +1080,51 @@ pub struct ScriptPaint {
     pub cap: StrokeCap,
     pub feather: f32,
     pub blend_mode: BlendMode,
+}
+
+impl ScriptPaint {
+    pub(crate) fn from_fresh(
+        paint: &crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint,
+        stroke: Option<(f32, u32, u32)>,
+    ) -> Self {
+        use crate::mechanical_port::source::shapes::{
+            paint::solid_color::SolidColor, stroke_cap::StrokeCap as RiveCap,
+            stroke_join::StrokeJoin as RiveJoin,
+        };
+        let mut result = Self {
+            style: RenderPaintStyle::Fill,
+            color: 0xff000000,
+            thickness: 1.0,
+            join: StrokeJoin::Miter,
+            cap: StrokeCap::Butt,
+            feather: 0.0,
+            blend_mode: script_blend_mode(paint.blend_mode_value()),
+        };
+        if let Some((thickness, cap, join)) = stroke {
+            result.style = RenderPaintStyle::Stroke;
+            result.thickness = thickness;
+            result.cap = RiveCap::from(cap).into();
+            result.join = RiveJoin::from(join).into();
+        }
+        for child in paint.children() {
+            if let Some(color) = child
+                .with(|child| {
+                    child
+                        .as_any()
+                        .downcast_ref::<SolidColor>()
+                        .map(|color| color.base.color_value())
+                })
+                .flatten()
+            {
+                result.color = color;
+                break;
+            }
+        }
+        if let Some(strength) = paint.feather().and_then(|feather| feather.with(|feather| feather.as_any().downcast_ref::<crate::mechanical_port::source::shapes::paint::feather::Feather>().map(|feather| feather.base.strength())).flatten()) {
+            result.feather = strength;
+        }
+        result
+    }
 }
 
 /// Ports the lookup/snapshot portion of C++ `src/lua/lua_artboards.cpp`'s
@@ -841,7 +1156,7 @@ pub fn script_node_for_artboard(
         .flat_map(|container| &container.paints)
         .find(|paint| paint.local_id == component.local_id)
         .map(|paint| script_paint_for_shape(instance, paint));
-    Some(ScriptNode { path, paint })
+    Some(ScriptNode::snapshot(path, paint))
 }
 
 pub(crate) fn script_paint_for_shape(

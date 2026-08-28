@@ -57,6 +57,37 @@ pub fn to_render_raw_path(path: &RawPath) -> nuxie_render_api::RawPath {
     result
 }
 
+/// Preserve every verb and control point across the approved renderer/VM DTO seam.
+pub fn from_render_raw_path(path: &nuxie_render_api::RawPath) -> RawPath {
+    let mut result = RawPath::default();
+    let mut points = path.points().iter();
+    for verb in path.verbs() {
+        match verb {
+            nuxie_render_api::PathVerb::Move => {
+                let p = points.next().unwrap();
+                result.move_to(p.x, p.y);
+            }
+            nuxie_render_api::PathVerb::Line => {
+                let p = points.next().unwrap();
+                result.line_to(p.x, p.y);
+            }
+            nuxie_render_api::PathVerb::Quad => {
+                let c = points.next().unwrap();
+                let p = points.next().unwrap();
+                result.quad_to(c.x, c.y, p.x, p.y);
+            }
+            nuxie_render_api::PathVerb::Cubic => {
+                let a = points.next().unwrap();
+                let b = points.next().unwrap();
+                let p = points.next().unwrap();
+                result.cubic_to(a.x, a.y, b.x, b.y, p.x, p.y);
+            }
+            nuxie_render_api::PathVerb::Close => result.close(),
+        }
+    }
+    result
+}
+
 /// Compute the exact pinned alignment matrix in the mechanical math domain.
 /// Renderer call sites convert its six scalar lanes to
 /// `nuxie_render_api::Mat2D` at the call boundary.

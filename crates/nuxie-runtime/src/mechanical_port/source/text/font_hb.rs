@@ -1,37 +1,50 @@
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-use std::ffi::c_void;
-use std::ptr;
-use std::rc::Rc;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    sync::Arc,
+};
 
-use harfbuzz_sys::*;
-use sheenbidi_sys::*;
+use harfrust::{
+    Direction, Feature as ShapingFeature, FontRef as ShapingFont, ShapeOptions, ShaperData,
+    ShaperInstance, Tag, UnicodeBuffer,
+};
+use skrifa::instance::{Location, LocationRef, Size};
+use skrifa::outline::{DrawSettings, OutlinePen};
+use skrifa::raw::TableProvider;
+use skrifa::setting::VariationSetting;
+use skrifa::{FontRef as OutlineFont, GlyphId as OutlineGlyphId, MetadataProvider};
+use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
+use unicode_script::UnicodeScript;
 
-use crate::mechanical_port::source::math::mat2d::Mat2D;
-use crate::mechanical_port::source::math::raw_path::RawPath;
-use crate::mechanical_port::source::math::vec2d::Vec2D;
-use crate::mechanical_port::source::shapes::paint::color::{ColorInt, color_argb};
+use crate::mechanical_port::source::math::{mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D};
+use crate::mechanical_port::source::shapes::paint::color::ColorInt;
 use crate::mechanical_port::source::text_engine::{
     Axis, ColorGlyphLayer, ColorGlyphPaintType, Coord, Feature, Font, FontBase, FontRef, GlyphId,
-    GlyphRun, GradientStop, LineMetrics, Paragraph, TextDirection, TextRun, Unichar, fallback_proc,
+    GlyphRun, GradientStop, LineMetrics, Paragraph, TextRun, Unichar, fallback_proc,
     fallback_proc_enabled,
 };
 
 const STANDARD_SCALE: i32 = 2048;
 const INVERSE_SCALE: f32 = 1.0 / STANDARD_SCALE as f32;
 
+/// The HBFont owner retains Rive's run/fallback/color semantics. Only its
+/// backend is adapted: harfrust shapes, skrifa reads outlines and color tables,
+/// and unicode-bidi supplies paragraph levels. No C font or bidi pointer lives
+/// in this owner, and no legacy packed text implementation is consulted.
 pub struct HbFont {
     base: FontBase,
-    pub font: *mut hb_font_t,
-    pub features: Vec<hb_feature_t>,
-    draw_funcs: *mut hb_draw_funcs_t,
-    paint_funcs: *mut hb_paint_funcs_t,
+    bytes: Arc<[u8]>,
+    face_index: u32,
+    shaper_data: ShaperData,
+    shaper_instance: ShaperInstance,
+    features: Vec<ShapingFeature>,
     feature_values: HashMap<u32, u32>,
     axis_values: HashMap<u32, f32>,
     has_color_layers: bool,
     has_color_paint: bool,
     has_png: bool,
-    palette_colors: Vec<hb_color_t>,
+    palette_colors: Vec<skrifa::color::Color>,
     color_layer_cache: RefCell<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
 }
 
@@ -41,38 +54,22 @@ impl HbFont {
     }
 
     pub fn decode_face(bytes: &[u8], face_index: u32) -> Option<FontRef> {
-        // SAFETY: HarfBuzz duplicates `bytes` before this call returns. Every
-        // successfully created blob/face is destroyed after transferring its
-        // reference to the next HarfBuzz owner, and the returned font becomes
-        // the singular owned handle destroyed by `HbFont::drop`.
-        unsafe {
-            let blob = hb_blob_create_or_fail(
-                bytes.as_ptr().cast(),
-                bytes.len() as u32,
-                HB_MEMORY_MODE_DUPLICATE,
-                ptr::null_mut(),
-                None,
-            );
-            if !blob.is_null() {
-                let face = hb_face_create_or_fail(blob, face_index);
-                hb_blob_destroy(blob);
-                if !face.is_null() {
-                    let font = hb_font_create(face);
-                    hb_face_destroy(face);
-                    if !font.is_null() {
-                        return Some(Rc::new(Self::new(font)));
-                    }
-                }
-            }
-        }
-        None
+        let shaping = ShapingFont::from_index(bytes, face_index).ok()?;
+        let outline = OutlineFont::from_index(bytes, face_index).ok()?;
+        let _ = (shaping, outline);
+        Some(Rc::new(Self::with_stored_options(
+            Arc::from(bytes),
+            face_index,
+            HashMap::new(),
+            HashMap::new(),
+        )))
     }
 
-    /// Rebuild a server-local HarfBuzz font from the Send-safe font payload
-    /// used at the command-queue boundary.
+    /// Reconstruct a server-local font from the public Send-safe byte payload.
+    /// RawTextFont is a host DTO here, never a shaping or fallback owner.
     pub fn from_raw_text(font: &crate::text::RawTextFont) -> Option<FontRef> {
         let decoded = Self::decode_face(font.source_bytes().as_ref(), font.face_index())?;
-        let variable_axes = (0..font.axis_count())
+        let coords: Vec<_> = (0..font.axis_count())
             .map(|index| {
                 let axis = font.axis(index);
                 Coord {
@@ -80,191 +77,91 @@ impl HbFont {
                     value: font.axis_value(axis.tag),
                 }
             })
-            .collect::<Vec<_>>();
-        let features = font
+            .collect();
+        let features: Vec<_> = font
             .features()
             .into_iter()
             .filter_map(|tag| {
                 let value = font.feature_value(tag);
                 (value != u32::MAX).then_some(Feature { tag, value })
             })
-            .collect::<Vec<_>>();
-        Some(decoded.with_options(&variable_axes, &features))
+            .collect();
+        Some(decoded.with_options(&coords, &features))
     }
 
-    #[cfg(not(target_os = "macos"))]
-    pub fn from_system(
-        _system_font: *mut c_void,
-        _use_system_shaper: bool,
-        _weight: u16,
-        _width: u8,
-    ) -> Option<FontRef> {
-        None
+    /// System fonts cross the approved Rust host boundary as owned bytes plus
+    /// a face index; the runtime does not take a platform font pointer.
+    pub fn from_system_bytes(bytes: &[u8], face_index: u32) -> Option<FontRef> {
+        Self::decode_face(bytes, face_index)
     }
 
-    pub fn get_style(font: *mut hb_font_t, style_tag: u32) -> f32 {
-        // SAFETY: callers supply the live font owned by an `HbFont`; HarfBuzz
-        // reads it only for this call and does not retain it.
-        unsafe { hb_style_get_value(font, style_tag as hb_style_tag_t) }
+    fn outline_font(&self) -> OutlineFont<'_> {
+        OutlineFont::from_index(&self.bytes, self.face_index)
+            .expect("HBFont retains the face validated at decode")
     }
 
-    pub fn font(&self) -> *mut hb_font_t {
-        self.font
-    }
-
-    pub fn new(font: *mut hb_font_t) -> Self {
-        Self::with_stored_options(font, HashMap::new(), HashMap::new(), Vec::new())
+    fn location(&self, font: &OutlineFont<'_>) -> Location {
+        font.axes().location(
+            self.axis_values
+                .iter()
+                .map(|(&tag, &value)| VariationSetting::new(skrifa::Tag::from_u32(tag), value)),
+        )
     }
 
     fn with_stored_options(
-        font: *mut hb_font_t,
+        bytes: Arc<[u8]>,
+        face_index: u32,
         axis_values: HashMap<u32, f32>,
         feature_values: HashMap<u32, u32>,
-        features: Vec<hb_feature_t>,
     ) -> Self {
-        // SAFETY: `font` is a newly owned/live HarfBuzz reference. Callback
-        // function tables are created here, retained only by this `HbFont`,
-        // and destroyed exactly once in `Drop`; callback userdata is null or
-        // points to same-call stack values supplied by the invoking methods.
-        unsafe {
-            let draw_funcs = hb_draw_funcs_create();
-            hb_draw_funcs_set_move_to_func(
-                draw_funcs,
-                Some(raw_path_move_to),
-                ptr::null_mut(),
-                None,
-            );
-            hb_draw_funcs_set_line_to_func(
-                draw_funcs,
-                Some(raw_path_line_to),
-                ptr::null_mut(),
-                None,
-            );
-            hb_draw_funcs_set_quadratic_to_func(
-                draw_funcs,
-                Some(raw_path_quadratic_to),
-                ptr::null_mut(),
-                None,
-            );
-            hb_draw_funcs_set_cubic_to_func(
-                draw_funcs,
-                Some(raw_path_cubic_to),
-                ptr::null_mut(),
-                None,
-            );
-            hb_draw_funcs_set_close_path_func(
-                draw_funcs,
-                Some(raw_path_close),
-                ptr::null_mut(),
-                None,
-            );
-            hb_draw_funcs_make_immutable(draw_funcs);
-
-            let paint_funcs = hb_paint_funcs_create();
-            hb_paint_funcs_set_push_transform_func(
-                paint_funcs,
-                Some(paint_push_transform),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_pop_transform_func(
-                paint_funcs,
-                Some(paint_pop_transform),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_push_clip_glyph_func(
-                paint_funcs,
-                Some(paint_push_clip_glyph),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_push_clip_rectangle_func(
-                paint_funcs,
-                Some(paint_push_clip_rectangle),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_pop_clip_func(
-                paint_funcs,
-                Some(paint_pop_clip),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_color_func(paint_funcs, Some(paint_solid), ptr::null_mut(), None);
-            hb_paint_funcs_set_push_group_func(
-                paint_funcs,
-                Some(paint_push_group),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_pop_group_func(
-                paint_funcs,
-                Some(paint_pop_group),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_color_glyph_func(
-                paint_funcs,
-                Some(paint_color_glyph),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_linear_gradient_func(
-                paint_funcs,
-                Some(paint_linear_gradient),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_radial_gradient_func(
-                paint_funcs,
-                Some(paint_radial_gradient),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_sweep_gradient_func(
-                paint_funcs,
-                Some(paint_sweep_gradient),
-                ptr::null_mut(),
-                None,
-            );
-            hb_paint_funcs_set_image_func(paint_funcs, Some(paint_image), ptr::null_mut(), None);
-            hb_paint_funcs_make_immutable(paint_funcs);
-
-            let face = hb_font_get_face(font);
-            let has_color_layers = hb_ot_color_has_layers(face) != 0;
-            let has_color_paint = hb_ot_color_has_paint(face) != 0;
-            let has_png = hb_ot_color_has_png(face) != 0;
-            let mut palette_colors = Vec::new();
-            if has_color_layers || has_color_paint {
-                let mut color_count = 0;
-                hb_ot_color_palette_get_colors(face, 0, 0, &mut color_count, ptr::null_mut());
-                if color_count > 0 {
-                    palette_colors.resize(color_count as usize, 0);
-                    hb_ot_color_palette_get_colors(
-                        face,
-                        0,
-                        0,
-                        &mut color_count,
-                        palette_colors.as_mut_ptr(),
-                    );
-                }
-            }
-
-            Self {
-                base: FontBase::new(make_line_metrics(font)),
-                font,
-                features,
-                draw_funcs,
-                paint_funcs,
-                feature_values,
-                axis_values,
-                has_color_layers,
-                has_color_paint,
-                has_png,
-                palette_colors,
-                color_layer_cache: RefCell::new(HashMap::new()),
-            }
+        let shaping = ShapingFont::from_index(&bytes, face_index).expect("validated shaping face");
+        let shaper_data = ShaperData::new(&shaping);
+        let shaper_instance = ShaperInstance::from_variations(
+            &shaping,
+            axis_values
+                .iter()
+                .map(|(&tag, &value)| harfrust::Variation {
+                    tag: Tag::from_u32(tag),
+                    value,
+                }),
+        );
+        let outline = OutlineFont::from_index(&bytes, face_index).expect("validated outline face");
+        let location = outline.axes().location(
+            axis_values
+                .iter()
+                .map(|(&tag, &value)| VariationSetting::new(skrifa::Tag::from_u32(tag), value)),
+        );
+        let line_metrics = make_line_metrics(&outline, LocationRef::from(&location));
+        let has_color_layers = outline.colr().is_ok();
+        let has_color_paint = outline.colr().is_ok_and(|colr| colr.version() >= 1);
+        let has_png = outline.sbix().is_ok() || outline.cbdt().is_ok();
+        let palette_colors = if has_color_layers || has_color_paint {
+            outline
+                .color_palettes()
+                .get(0)
+                .map(|palette| palette.colors().to_vec())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let features = feature_values
+            .iter()
+            .map(|(&tag, &value)| ShapingFeature::new(Tag::from_u32(tag), value, ..))
+            .collect();
+        Self {
+            base: FontBase::new(line_metrics),
+            bytes,
+            face_index,
+            shaper_data,
+            shaper_instance,
+            features,
+            feature_values,
+            axis_values,
+            has_color_layers,
+            has_color_paint,
+            has_png,
+            palette_colors,
+            color_layer_cache: RefCell::new(HashMap::new()),
         }
     }
 
@@ -308,306 +205,179 @@ impl HbFont {
     }
 }
 
-impl Drop for HbFont {
-    fn drop(&mut self) {
-        // SAFETY: these are the three owned HarfBuzz references established
-        // by `with_stored_options`; no other `HbFont` destroys them.
-        unsafe {
-            hb_draw_funcs_destroy(self.draw_funcs);
-            hb_paint_funcs_destroy(self.paint_funcs);
-            hb_font_destroy(self.font);
-        }
-    }
-}
-
 impl Font for HbFont {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-
     fn base(&self) -> &FontBase {
         &self.base
     }
-
     fn get_axis(&self, index: u16) -> Axis {
-        // SAFETY: `self.font` owns a live face for this whole call; `index` is
-        // checked before the single bounded POD out-parameter is read.
-        unsafe {
-            let face = hb_font_get_face(self.font);
-            assert!((index as u32) < hb_ot_var_get_axis_count(face));
-            let mut count = 1;
-            // SAFETY: HarfBuzz declares this record as C POD; zero is a valid
-            // out-parameter seed. `count == 1` bounds the single live slot,
-            // and `face` remains owned by `self.font` for this call.
-            let mut info = std::mem::zeroed::<hb_ot_var_axis_info_t>();
-            hb_ot_var_get_axis_infos(face, index as u32, &mut count, &mut info);
-            assert_eq!(count, 1);
-            Axis {
-                tag: info.tag,
-                min: info.min_value,
-                def: info.default_value,
-                max: info.max_value,
-            }
+        let font = self.outline_font();
+        let axis = font
+            .axes()
+            .get(index as usize)
+            .expect("font axis index in range");
+        Axis {
+            tag: u32::from_be_bytes(axis.tag().to_be_bytes()),
+            min: axis.min_value(),
+            def: axis.default_value(),
+            max: axis.max_value(),
         }
     }
-
     fn get_axis_count(&self) -> u16 {
-        // SAFETY: `self.font` remains live and HarfBuzz retains no returned
-        // face pointer beyond this expression.
-        unsafe { hb_ot_var_get_axis_count(hb_font_get_face(self.font)) as u16 }
+        self.outline_font().axes().len() as u16
     }
-
     fn get_axis_value(&self, axis_tag: u32) -> f32 {
-        if let Some(value) = self.axis_values.get(&axis_tag) {
-            return *value;
-        }
-        // SAFETY: `self.font` keeps the face live, and every requested axis
-        // record uses one bounded POD out slot initialized before inspection.
-        unsafe {
-            let face = hb_font_get_face(self.font);
-            let count = hb_ot_var_get_axis_count(face);
-            for index in 0..count {
-                // SAFETY: HarfBuzz's axis-info record is C POD and the API
-                // initializes one requested slot before it is read. The face
-                // pointer remains valid through the owning `self.font`.
-                let mut info = std::mem::zeroed::<hb_ot_var_axis_info_t>();
-                let mut one = 1;
-                hb_ot_var_get_axis_infos(face, index, &mut one, &mut info);
-                if info.tag == axis_tag {
-                    return info.default_value;
-                }
-            }
-        }
-        0.0
+        self.axis_values.get(&axis_tag).copied().unwrap_or_else(|| {
+            self.outline_font()
+                .axes()
+                .get_by_tag(skrifa::Tag::from_u32(axis_tag))
+                .map_or(0.0, |axis| axis.default_value())
+        })
     }
-
     fn get_feature_value(&self, feature_tag: u32) -> u32 {
         self.feature_values
             .get(&feature_tag)
             .copied()
             .unwrap_or(u32::MAX)
     }
-
     fn get_weight(&self) -> u16 {
-        Self::get_style(self.font, tag(b'w', b'g', b'h', b't')) as u16
+        let font = self.outline_font();
+        let tag = u32::from_be_bytes(*b"wght");
+        if font.axes().get_by_tag(skrifa::Tag::from_u32(tag)).is_some() {
+            self.get_axis_value(tag) as u16
+        } else {
+            font.attributes().weight.value() as u16
+        }
     }
-
     fn is_italic(&self) -> bool {
-        Self::get_style(self.font, tag(b'i', b't', b'a', b'l')) != 0.0
+        let font = self.outline_font();
+        let tag = u32::from_be_bytes(*b"ital");
+        if font.axes().get_by_tag(skrifa::Tag::from_u32(tag)).is_some() {
+            self.get_axis_value(tag) != 0.0
+        } else {
+            !matches!(font.attributes().style, skrifa::attribute::Style::Normal)
+        }
     }
-
     fn features(&self) -> Vec<u32> {
-        // SAFETY: the face borrowed from the owned font remains live while the
-        // helpers perform count-then-fill calls into correctly sized vectors.
-        unsafe {
-            let mut features = HashSet::new();
-            let face = hb_font_get_face(self.font);
-            fill_features(face, HB_OT_TAG_GSUB, &mut features);
-            fill_features(face, HB_OT_TAG_GPOS, &mut features);
-            features.into_iter().collect()
+        let font = self.outline_font();
+        let mut features = HashSet::new();
+        if let Ok(table) = font.gsub() {
+            if let (Ok(scripts), Ok(list)) = (table.script_list(), table.feature_list()) {
+                fill_features(scripts, list, &mut features);
+            }
         }
-    }
-
-    fn has_glyph(&self, missing: Unichar) -> bool {
-        // SAFETY: HarfBuzz receives the owned live font and one same-call
-        // scalar out-parameter, which is not read after the call returns false.
-        unsafe {
-            let mut glyph = 0;
-            hb_font_get_nominal_glyph(self.font, missing, &mut glyph) != 0
+        if let Ok(table) = font.gpos() {
+            if let (Ok(scripts), Ok(list)) = (table.script_list(), table.feature_list()) {
+                fill_features(scripts, list, &mut features);
+            }
         }
+        features.into_iter().collect()
     }
-
+    fn has_glyph(&self, value: Unichar) -> bool {
+        self.outline_font()
+            .charmap()
+            .map(value)
+            .is_some_and(|glyph| glyph.to_u32() != 0)
+    }
     fn with_options(&self, coords: &[Coord], features: &[Feature]) -> FontRef {
-        // SAFETY: HarfBuzz creates a new owned sub-font reference. Variation
-        // slices are live for the call and copied into the sub-font; ownership
-        // then transfers to the returned `HbFont`.
-        unsafe {
-            let mut axis_values = self.axis_values.clone();
-            for coord in coords {
-                axis_values.insert(coord.axis, coord.value);
-            }
-            let variations: Vec<hb_variation_t> = axis_values
-                .iter()
-                .map(|(tag, value)| hb_variation_t {
-                    tag: *tag,
-                    value: *value,
-                })
-                .collect();
-            let font = hb_font_create_sub_font(self.font);
-            hb_font_set_variations(font, variations.as_ptr(), variations.len() as u32);
-
-            let mut feature_values = self.feature_values.clone();
-            for feature in features {
-                feature_values.insert(feature.tag, feature.value);
-            }
-            let hb_features = feature_values
-                .iter()
-                .map(|(tag, value)| hb_feature_t {
-                    tag: *tag,
-                    value: *value,
-                    start: HB_FEATURE_GLOBAL_START,
-                    end: HB_FEATURE_GLOBAL_END,
-                })
-                .collect();
-            Rc::new(Self::with_stored_options(
-                font,
-                axis_values,
-                feature_values,
-                hb_features,
-            ))
+        let mut axes = self.axis_values.clone();
+        for coord in coords {
+            axes.insert(coord.axis, coord.value);
         }
+        let mut values = self.feature_values.clone();
+        for feature in features {
+            values.insert(feature.tag, feature.value);
+        }
+        Rc::new(Self::with_stored_options(
+            Arc::clone(&self.bytes),
+            self.face_index,
+            axes,
+            values,
+        ))
     }
-
     fn get_path(&self, glyph: GlyphId) -> RawPath {
-        let mut path = RawPath::default();
-        // SAFETY: callback userdata points to this stack-local `RawPath` only
-        // for the synchronous draw call; the callback table is owned by self.
-        unsafe {
-            hb_font_draw_glyph(
-                self.font,
-                glyph as u32,
-                self.draw_funcs,
-                (&mut path as *mut RawPath).cast(),
-            );
-        }
-        path
+        let font = self.outline_font();
+        let location = self.location(&font);
+        glyph_path(&font, LocationRef::from(&location), glyph)
     }
-
     fn has_color_glyphs(&self) -> bool {
         self.has_color_layers || self.has_color_paint || self.has_png
     }
-
     fn is_color_glyph(&self, glyph: GlyphId) -> bool {
-        if !self.has_color_layers && !self.has_color_paint && !self.has_png {
+        if !self.has_color_glyphs() {
             return false;
         }
-        // SAFETY: every HarfBuzz handle is borrowed from `self.font` for this
-        // call. Any returned PNG blob is destroyed exactly once after its
-        // length is inspected.
-        unsafe {
-            let face = hb_font_get_face(self.font);
-            if self.has_color_layers
-                && hb_ot_color_glyph_get_layers(
-                    face,
-                    glyph as u32,
-                    0,
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                ) > 0
-            {
-                return true;
-            }
-            if self.has_color_paint && hb_ot_color_glyph_has_paint(face, glyph as u32) != 0 {
-                return true;
-            }
-            if self.has_png {
-                let blob = hb_ot_color_glyph_reference_png(self.font, glyph as u32);
-                if !blob.is_null() {
-                    let has_data = hb_blob_get_length(blob) > 0;
-                    hb_blob_destroy(blob);
-                    return has_data;
-                }
-            }
-        }
-        false
+        let font = self.outline_font();
+        let id = OutlineGlyphId::new(glyph as u32);
+        font.color_glyphs().get(id).is_some() || font.bitmap_strikes()
+            .glyph_for_size(Size::unscaled(), id)
+            .is_some_and(|bitmap| matches!(bitmap.data, skrifa::bitmap::BitmapData::Png(bytes) if !bytes.is_empty()))
     }
-
     fn get_color_layers(
         &self,
         glyph: GlyphId,
         out: &mut Vec<ColorGlyphLayer>,
         foreground: ColorInt,
     ) -> usize {
-        if !self.has_color_layers && !self.has_color_paint && !self.has_png {
+        if !self.has_color_glyphs() {
             return 0;
         }
-        if let Some(cached_layers) = self.color_layer_cache.borrow().get(&glyph).cloned() {
-            for cached in &cached_layers {
-                let mut layer = cached.clone();
-                layer.color = if cached.use_foreground {
-                    foreground
-                } else {
-                    cached.color
-                };
-                out.push(layer);
-            }
-            return cached_layers.len();
+        if let Some(cached) = self.color_layer_cache.borrow().get(&glyph).cloned() {
+            let count = cached.len();
+            out.extend(cached.into_iter().map(|mut layer| {
+                if layer.use_foreground {
+                    layer.color = foreground;
+                }
+                layer
+            }));
+            return count;
         }
-
+        let font = self.outline_font();
+        let location = self.location(&font);
+        let id = OutlineGlyphId::new(glyph as u32);
         let mut layers = Vec::new();
-        // SAFETY: all callback userdata points to stack-local `RawPath` or
-        // `PaintState` values for synchronous HarfBuzz calls only. Count/fill
-        // queries bound every POD vector, and owned font/function handles stay
-        // live throughout callback execution.
-        unsafe {
-            let face = hb_font_get_face(self.font);
-            if self.has_color_layers {
-                let mut layer_count = hb_ot_color_glyph_get_layers(
-                    face,
-                    glyph as u32,
-                    0,
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                );
-                if layer_count > 0 {
-                    // SAFETY: `hb_ot_color_layer_t` is C POD. The first query
-                    // supplies the allocation bound; the second initializes at
-                    // most `layer_count` elements while `face` stays alive.
-                    let mut hb_layers =
-                        vec![std::mem::zeroed::<hb_ot_color_layer_t>(); layer_count as usize];
-                    hb_ot_color_glyph_get_layers(
-                        face,
-                        glyph as u32,
-                        0,
-                        &mut layer_count,
-                        hb_layers.as_mut_ptr(),
-                    );
-                    layers.reserve(layer_count as usize);
-                    for hb_layer in hb_layers.into_iter().take(layer_count as usize) {
+        // Pinned order is COLRv0 layers, then COLRv1/PNG only if no v0 layers.
+        if self.has_color_layers {
+            if let Some(color) = font
+                .color_glyphs()
+                .get_with_format(id, skrifa::color::ColorGlyphFormat::ColrV0)
+            {
+                let mut collector = PaintState::new(self, &mut layers, foreground);
+                let _ = color.paint(LocationRef::from(&location), &mut collector);
+            }
+        }
+        if layers.is_empty() && self.has_color_paint {
+            if let Some(color) = font
+                .color_glyphs()
+                .get_with_format(id, skrifa::color::ColorGlyphFormat::ColrV1)
+            {
+                let mut collector = PaintState::new(self, &mut layers, foreground);
+                let _ = color.paint(LocationRef::from(&location), &mut collector);
+            }
+        }
+        if layers.is_empty() && self.has_png {
+            if let Some(bitmap) = font.bitmap_strikes().glyph_for_size(Size::unscaled(), id) {
+                if let skrifa::bitmap::BitmapData::Png(bytes) = bitmap.data {
+                    if !bytes.is_empty() {
+                        let units = font
+                            .metrics(Size::unscaled(), LocationRef::from(&location))
+                            .units_per_em as f32;
                         let mut layer = ColorGlyphLayer::default();
-                        hb_font_draw_glyph(
-                            self.font,
-                            hb_layer.glyph,
-                            self.draw_funcs,
-                            (&mut layer.path as *mut RawPath).cast(),
-                        );
-                        if hb_layer.color_index == 0xffff {
-                            layer.use_foreground = true;
-                            layer.color = foreground;
-                        } else {
-                            layer.use_foreground = false;
-                            layer.color =
-                                if (hb_layer.color_index as usize) < self.palette_colors.len() {
-                                    hb_color_to_color_int(
-                                        self.palette_colors[hb_layer.color_index as usize],
-                                    )
-                                } else {
-                                    0xff000000
-                                };
-                        }
+                        layer.paint_type = ColorGlyphPaintType::Image;
+                        layer.image_bytes = bytes.to_vec();
+                        layer.image_width = bitmap.width;
+                        layer.image_height = bitmap.height;
+                        layer.image_bearing_x =
+                            bitmap.bearing_x / units + bitmap.inner_bearing_x / bitmap.ppem_x;
+                        layer.image_bearing_y =
+                            -bitmap.bearing_y / units - bitmap.inner_bearing_y / bitmap.ppem_y;
+                        layer.image_extent_x = bitmap.width as f32 / bitmap.ppem_x;
+                        layer.image_extent_y = bitmap.height as f32 / bitmap.ppem_y;
                         layers.push(layer);
                     }
                 }
-            }
-
-            if layers.is_empty() && (self.has_color_paint || self.has_png) {
-                let mut state = PaintState {
-                    font: self.font,
-                    draw_funcs: self.draw_funcs,
-                    layers: &mut layers,
-                    clip_glyph: 0,
-                    has_clip: false,
-                    foreground,
-                    transform_stack: Vec::new(),
-                };
-                hb_font_paint_glyph(
-                    self.font,
-                    glyph as u32,
-                    self.paint_funcs,
-                    (&mut state as *mut PaintState).cast(),
-                    0,
-                    hb_color(0, 0, 0, 255),
-                );
             }
         }
         if layers.is_empty() {
@@ -620,59 +390,222 @@ impl Font for HbFont {
         out.extend(layers);
         count
     }
+    fn on_shape_text(&self, text: &[Unichar], runs: &[TextRun], direction: i32) -> Vec<Paragraph> {
+        self.on_shape_text_native(text, runs, direction)
+    }
+}
 
-    fn on_shape_text(
-        &self,
-        text: &[Unichar],
-        text_runs: &[TextRun],
-        text_direction_flag: i32,
-    ) -> Vec<Paragraph> {
-        // SAFETY: the implementation passes only call-scoped slice buffers to
-        // SheenBidi/HarfBuzz and releases every created algorithm/paragraph/
-        // buffer handle before returning.
-        unsafe { self.on_shape_text_ffi(text, text_runs, text_direction_flag) }
+fn make_line_metrics(font: &OutlineFont<'_>, location: LocationRef<'_>) -> LineMetrics {
+    let metrics = font.metrics(Size::new(STANDARD_SCALE as f32), location);
+    let ascent = -metrics.ascent.round() * INVERSE_SCALE;
+    let glyph_scale = STANDARD_SCALE as f32 / metrics.units_per_em as f32;
+    let top = |value| {
+        font.charmap()
+            .map(value)
+            .and_then(|glyph| font.glyph_metrics(Size::unscaled(), location).bounds(glyph))
+            .map(|bounds| {
+                // The pinned glyf extents round the varied font-unit bound,
+                // then hb_font_t::scale_glyph_extents rounds at the 2048 scale.
+                -(bounds.y_max.round() * glyph_scale).round() * INVERSE_SCALE
+            })
+            .unwrap_or(ascent)
+    };
+    LineMetrics {
+        ascent,
+        descent: -metrics.descent.round() * INVERSE_SCALE,
+        cap_height: top('H'),
+        x_height: top('x'),
+    }
+}
+
+fn fill_features(
+    scripts: skrifa::raw::tables::layout::ScriptList<'_>,
+    features: skrifa::raw::tables::layout::FeatureList<'_>,
+    out: &mut HashSet<u32>,
+) {
+    let mut language_features = |language: skrifa::raw::tables::layout::LangSys<'_>| {
+        // hb_ot_layout_language_get_feature_tags enumerates feature_indices,
+        // not the separately exposed required_feature_index.
+        for index in language.feature_indices() {
+            if let Ok(record) = features.get(index.get()) {
+                out.insert(u32::from_be_bytes(record.tag.to_be_bytes()));
+            }
+        }
+    };
+    for index in 0..scripts.script_count() {
+        let Ok(script) = scripts.get(index) else {
+            continue;
+        };
+        if script.lang_sys_count() == 0 {
+            if let Some(Ok(language)) = script.default_lang_sys() {
+                language_features(language);
+            }
+        } else {
+            for index in 0..script.lang_sys_count() {
+                if let Ok(language) = script.lang_sys(index) {
+                    language_features(language.element);
+                }
+            }
+        }
+    }
+}
+
+fn unicode_script(point: u32) -> u32 {
+    char::from_u32(point)
+        .unwrap_or(char::REPLACEMENT_CHARACTER)
+        .script()
+        .as_iso15924_tag()
+}
+
+fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun {
+    let font = text_run
+        .font
+        .as_ref()
+        .expect("text run font")
+        .as_any()
+        .downcast_ref::<HbFont>()
+        .expect("text font must be an HBFont");
+    let face =
+        ShapingFont::from_index(&font.bytes, font.face_index).expect("validated shaping face");
+    let shaper = font
+        .shaper_data
+        .shaper(&face)
+        .instance(Some(&font.shaper_instance))
+        .build();
+    let mut buffer = UnicodeBuffer::new();
+    for (index, &point) in text[..text_run.unichar_count as usize].iter().enumerate() {
+        buffer.add(
+            char::from_u32(point).unwrap_or(char::REPLACEMENT_CHARACTER),
+            index as u32,
+        );
+    }
+    buffer.set_direction(if text_run.level & 1 != 0 {
+        Direction::RightToLeft
+    } else {
+        Direction::LeftToRight
+    });
+    buffer.set_script(
+        harfrust::Script::from_iso15924_tag(Tag::from_u32(text_run.script))
+            .unwrap_or(harfrust::script::UNKNOWN),
+    );
+    buffer.guess_segment_properties();
+    let shaped = shaper.shape(
+        buffer,
+        ShapeOptions::new()
+            .scale(Some(STANDARD_SCALE))
+            .features(&font.features),
+    );
+    let infos = shaped.glyph_infos();
+    let positions = shaped.glyph_positions();
+    let count = infos.len();
+    let mut run = GlyphRun::new(count);
+    run.font = text_run.font.clone();
+    run.size = text_run.size;
+    run.line_height = text_run.line_height;
+    run.letter_spacing = text_run.letter_spacing;
+    run.style_id = text_run.style_id;
+    run.level = text_run.level;
+    let scale = text_run.size / STANDARD_SCALE as f32;
+    for index in 0..count {
+        let source = if text_run.level & 1 != 0 {
+            count - 1 - index
+        } else {
+            index
+        };
+        run.glyphs[index] = infos[source].glyph_id as GlyphId;
+        run.text_indices[index] = text_offset + infos[source].cluster;
+        let advance = positions[source].x_advance as f32 * scale + text_run.letter_spacing;
+        run.advances[index] = advance;
+        run.xpos[index] = advance;
+        run.offsets[index] = Vec2D::new(
+            positions[source].x_offset as f32 * scale,
+            -positions[source].y_offset as f32 * scale,
+        );
+    }
+    run.xpos[count] = 0.0;
+    run
+}
+
+fn glyph_path(font: &OutlineFont<'_>, location: LocationRef<'_>, glyph: GlyphId) -> RawPath {
+    let mut path = RawPath::default();
+    if let Some(outline) = font.outline_glyphs().get(OutlineGlyphId::new(glyph as u32)) {
+        let settings = DrawSettings::unhinted(Size::new(STANDARD_SCALE as f32), location)
+            .with_path_style(skrifa::outline::pen::PathStyle::FreeType);
+        let _ = outline.draw(settings, &mut RawPathPen(&mut path));
+    }
+    path
+}
+struct RawPathPen<'a>(&'a mut RawPath);
+impl OutlinePen for RawPathPen<'_> {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.0.move_to(x * INVERSE_SCALE, -y * INVERSE_SCALE);
+    }
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.0.line_to(x * INVERSE_SCALE, -y * INVERSE_SCALE);
+    }
+    fn quad_to(&mut self, x: f32, y: f32, end_x: f32, end_y: f32) {
+        self.0.quad_to_cubic(
+            x * INVERSE_SCALE,
+            -y * INVERSE_SCALE,
+            end_x * INVERSE_SCALE,
+            -end_y * INVERSE_SCALE,
+        );
+    }
+    fn curve_to(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, x2: f32, y2: f32) {
+        self.0.cubic_to(
+            x0 * INVERSE_SCALE,
+            -y0 * INVERSE_SCALE,
+            x1 * INVERSE_SCALE,
+            -y1 * INVERSE_SCALE,
+            x2 * INVERSE_SCALE,
+            -y2 * INVERSE_SCALE,
+        );
+    }
+    fn close(&mut self) {
+        self.0.close();
     }
 }
 
 impl HbFont {
-    unsafe fn on_shape_text_ffi(
+    fn on_shape_text_native(
         &self,
         text: &[Unichar],
         text_runs: &[TextRun],
         text_direction_flag: i32,
     ) -> Vec<Paragraph> {
         let mut paragraphs = Vec::new();
-        let sequence = SBCodepointSequence {
-            stringEncoding: SBStringEncodingUTF32,
-            stringBuffer: text.as_ptr() as *mut c_void,
-            stringLength: text.len(),
-        };
-        let unicode_funcs = hb_unicode_funcs_get_default();
         let mut text_index = 0usize;
         let mut run_index = 0usize;
         let mut run_start_text_index = 0usize;
-        let mut paragraph_start = 0usize;
-        let algorithm = SBAlgorithmCreate(&sequence);
         let mut unichar_index = 0usize;
         let mut run_text_index = 0u32;
         let default_level = match text_direction_flag {
-            0 => 0,
-            1 => 1,
-            _ => SBLevelDefaultLTR,
+            0 => Some(unicode_bidi::Level::ltr()),
+            1 => Some(unicode_bidi::Level::rtl()),
+            _ => None,
         };
-
-        while paragraph_start < text.len() {
-            let paragraph = SBAlgorithmCreateParagraph(
-                algorithm,
-                paragraph_start,
-                i32::MAX as usize,
-                default_level,
-            );
-            let paragraph_length = SBParagraphGetLength(paragraph);
-            paragraph_start += paragraph_length;
-            let bidi_levels =
-                std::slice::from_raw_parts(SBParagraphGetLevelsPtr(paragraph), paragraph_length);
-            let paragraph_level = SBParagraphGetBaseLevel(paragraph);
+        // Bidi's UTF-8 offsets never enter Rive's UTF-32 index domain.
+        let mut utf8 = String::new();
+        let mut byte_offsets = Vec::with_capacity(text.len() + 1);
+        for &point in text {
+            byte_offsets.push(utf8.len());
+            utf8.push(char::from_u32(point).unwrap_or(char::REPLACEMENT_CHARACTER));
+        }
+        byte_offsets.push(utf8.len());
+        let bidi = unicode_bidi::BidiInfo::new(&utf8, default_level);
+        for paragraph in &bidi.paragraphs {
+            let start = byte_offsets
+                .binary_search(&paragraph.range.start)
+                .expect("paragraph scalar boundary");
+            let end = byte_offsets
+                .binary_search(&paragraph.range.end)
+                .expect("paragraph scalar boundary");
+            let paragraph_length = end - start;
+            let bidi_levels: Vec<u8> = byte_offsets[start..end]
+                .iter()
+                .map(|&offset| bidi.levels[offset].number())
+                .collect();
+            let paragraph_level = paragraph.level.number();
             let mut paragraph_text_index = 0usize;
             let mut bidi_runs = Vec::with_capacity(text_runs.len());
 
@@ -681,7 +614,7 @@ impl HbFont {
                 assert_ne!(text_run.unichar_count, 0);
                 let mut last_level = bidi_levels[paragraph_text_index];
                 let point = text[text_index];
-                let mut last_script = hb_unicode_script(unicode_funcs, point);
+                let mut last_script = unicode_script(point);
                 let split_run = TextRun {
                     font: text_run.font.clone(),
                     size: text_run.size,
@@ -702,14 +635,16 @@ impl HbFont {
                     && paragraph_text_index < paragraph_length
                 {
                     let point = text[text_index];
-                    let mut script = if hb_unicode_general_category(unicode_funcs, point)
-                        == HB_UNICODE_GENERAL_CATEGORY_NON_SPACING_MARK
-                    {
-                        HB_SCRIPT_INHERITED
+                    let mut script = if char::from_u32(point).is_some_and(|point| {
+                        point.general_category() == GeneralCategory::NonspacingMark
+                    }) {
+                        u32::from_be_bytes(*b"Zinh")
                     } else {
-                        hb_unicode_script(unicode_funcs, point)
+                        unicode_script(point)
                     };
-                    if script == HB_SCRIPT_COMMON || script == HB_SCRIPT_INHERITED {
+                    if script == u32::from_be_bytes(*b"Zyyy")
+                        || script == u32::from_be_bytes(*b"Zinh")
+                    {
                         script = last_script;
                     }
                     if bidi_levels[paragraph_text_index] != last_level || script != last_script {
@@ -799,182 +734,8 @@ impl HbFont {
                 runs: glyph_runs,
                 level: paragraph_level,
             });
-            SBParagraphRelease(paragraph);
         }
-        SBAlgorithmRelease(algorithm);
         paragraphs
-    }
-}
-
-unsafe fn make_line_metrics(font: *mut hb_font_t) -> LineMetrics {
-    hb_ot_font_set_funcs(font);
-    hb_font_set_scale(font, STANDARD_SCALE, STANDARD_SCALE);
-    // SAFETY: both HarfBuzz extent records are C POD, zero is a valid
-    // out-parameter seed, and `font` is required by this function's contract
-    // to remain live for every same-call HarfBuzz access below.
-    let mut extents = std::mem::zeroed::<hb_font_extents_t>();
-    hb_font_get_h_extents(font, &mut extents);
-    let ascent = -extents.ascender as f32 * INVERSE_SCALE;
-    let measure_glyph_top = |unicode: u32| {
-        let mut glyph = 0;
-        // SAFETY: this HarfBuzz C POD is a same-call out parameter; it is read
-        // only when the API reports successful initialization.
-        let mut glyph_extents = std::mem::zeroed::<hb_glyph_extents_t>();
-        if hb_font_get_nominal_glyph(font, unicode, &mut glyph) != 0
-            && hb_font_get_glyph_extents(font, glyph, &mut glyph_extents) != 0
-        {
-            -glyph_extents.y_bearing as f32 * INVERSE_SCALE
-        } else {
-            ascent
-        }
-    };
-    LineMetrics {
-        ascent,
-        descent: -extents.descender as f32 * INVERSE_SCALE,
-        cap_height: measure_glyph_top(b'H' as u32),
-        x_height: measure_glyph_top(b'x' as u32),
-    }
-}
-
-unsafe fn fill_language_features(
-    face: *mut hb_face_t,
-    table_tag: u32,
-    script_index: u32,
-    language_index: u32,
-    features: &mut HashSet<u32>,
-) {
-    let mut count = hb_ot_layout_language_get_feature_tags(
-        face,
-        table_tag,
-        script_index,
-        language_index,
-        0,
-        ptr::null_mut(),
-        ptr::null_mut(),
-    );
-    let mut tags = vec![0; count as usize];
-    hb_ot_layout_language_get_feature_tags(
-        face,
-        table_tag,
-        script_index,
-        language_index,
-        0,
-        &mut count,
-        tags.as_mut_ptr(),
-    );
-    for feature_tag in tags.into_iter().take(count as usize) {
-        features.insert(feature_tag);
-    }
-}
-
-unsafe fn fill_features(face: *mut hb_face_t, table_tag: u32, features: &mut HashSet<u32>) {
-    let mut script_count =
-        hb_ot_layout_table_get_script_tags(face, table_tag, 0, ptr::null_mut(), ptr::null_mut());
-    let mut scripts = vec![0; script_count as usize];
-    hb_ot_layout_table_get_script_tags(face, table_tag, 0, &mut script_count, scripts.as_mut_ptr());
-    for script_index in 0..script_count {
-        let mut language_count = hb_ot_layout_script_get_language_tags(
-            face,
-            table_tag,
-            script_index,
-            0,
-            ptr::null_mut(),
-            ptr::null_mut(),
-        );
-        if language_count > 0 {
-            let mut languages = vec![0; language_count as usize];
-            hb_ot_layout_script_get_language_tags(
-                face,
-                table_tag,
-                script_index,
-                0,
-                &mut language_count,
-                languages.as_mut_ptr(),
-            );
-            for language_index in 0..language_count {
-                fill_language_features(face, table_tag, script_index, language_index, features);
-            }
-        } else {
-            fill_language_features(
-                face,
-                table_tag,
-                script_index,
-                HB_OT_LAYOUT_DEFAULT_LANGUAGE_INDEX,
-                features,
-            );
-        }
-    }
-}
-
-fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun {
-    // SAFETY: the HarfBuzz buffer is owned and destroyed in this call. Input
-    // slices outlive shaping, and glyph info/position slices are bounded by
-    // the count HarfBuzz returns while the buffer remains live.
-    unsafe {
-        let buffer = hb_buffer_create();
-        hb_buffer_add_utf32(
-            buffer,
-            text.as_ptr(),
-            text_run.unichar_count as i32,
-            0,
-            text_run.unichar_count as i32,
-        );
-        hb_buffer_set_direction(
-            buffer,
-            if text_run.level & 1 != 0 {
-                HB_DIRECTION_RTL
-            } else {
-                HB_DIRECTION_LTR
-            },
-        );
-        hb_buffer_set_script(buffer, text_run.script as hb_script_t);
-        hb_buffer_set_language(buffer, hb_language_get_default());
-        let hb_font = text_run
-            .font
-            .as_ref()
-            .unwrap()
-            .as_any()
-            .downcast_ref::<HbFont>()
-            .expect("text font must be an HBFont");
-        hb_shape(
-            hb_font.font,
-            buffer,
-            hb_font.features.as_ptr(),
-            hb_font.features.len() as u32,
-        );
-        let mut glyph_count = 0;
-        let glyph_info = hb_buffer_get_glyph_infos(buffer, &mut glyph_count);
-        let glyph_positions = hb_buffer_get_glyph_positions(buffer, &mut glyph_count);
-        let infos = std::slice::from_raw_parts(glyph_info, glyph_count as usize);
-        let positions = std::slice::from_raw_parts(glyph_positions, glyph_count as usize);
-        let mut glyph_run = GlyphRun::new(glyph_count as usize);
-        glyph_run.font = text_run.font.clone();
-        glyph_run.size = text_run.size;
-        glyph_run.line_height = text_run.line_height;
-        glyph_run.letter_spacing = text_run.letter_spacing;
-        glyph_run.style_id = text_run.style_id;
-        glyph_run.level = text_run.level;
-        let scale = text_run.size / STANDARD_SCALE as f32;
-        for index in 0..glyph_count as usize {
-            let source_index = if text_run.level & 1 != 0 {
-                glyph_count as usize - 1 - index
-            } else {
-                index
-            };
-            glyph_run.glyphs[index] = infos[source_index].codepoint as u16;
-            glyph_run.text_indices[index] = text_offset + infos[source_index].cluster;
-            let advance =
-                positions[source_index].x_advance as f32 * scale + text_run.letter_spacing;
-            glyph_run.advances[index] = advance;
-            glyph_run.xpos[index] = advance;
-            glyph_run.offsets[index] = Vec2D::new(
-                positions[source_index].x_offset as f32 * scale,
-                -positions[source_index].y_offset as f32 * scale,
-            );
-        }
-        glyph_run.xpos[glyph_count as usize] = 0.0;
-        hb_buffer_destroy(buffer);
-        glyph_run
     }
 }
 
@@ -1053,8 +814,7 @@ fn perform_fallback(
 }
 
 struct PaintState<'a> {
-    font: *mut hb_font_t,
-    draw_funcs: *mut hb_draw_funcs_t,
+    font: &'a HbFont,
     layers: &'a mut Vec<ColorGlyphLayer>,
     clip_glyph: GlyphId,
     has_clip: bool,
@@ -1062,14 +822,24 @@ struct PaintState<'a> {
     transform_stack: Vec<Mat2D>,
 }
 
-impl PaintState<'_> {
+impl<'a> PaintState<'a> {
+    fn new(font: &'a HbFont, layers: &'a mut Vec<ColorGlyphLayer>, foreground: ColorInt) -> Self {
+        Self {
+            font,
+            layers,
+            clip_glyph: 0,
+            has_clip: false,
+            foreground,
+            transform_stack: Vec::new(),
+        }
+    }
     fn push_transform(&mut self, xx: f32, yx: f32, xy: f32, yy: f32, dx: f32, dy: f32) {
         let matrix = Mat2D::new(xx, yx, xy, yy, dx * INVERSE_SCALE, -dy * INVERSE_SCALE);
         if self.transform_stack.is_empty() {
             self.transform_stack.push(matrix);
         } else {
             self.transform_stack
-                .push(self.transform_stack.last().unwrap().multiply(&matrix));
+                .push(*self.transform_stack.last().unwrap() * matrix);
         }
     }
 
@@ -1102,356 +872,140 @@ impl PaintState<'_> {
         }
     }
 
-    unsafe fn extract_stops(
-        color_line: *mut hb_color_line_t,
-        foreground: ColorInt,
-    ) -> Vec<GradientStop> {
-        let mut count = 0;
-        hb_color_line_get_color_stops(color_line, 0, &mut count, ptr::null_mut());
-        // SAFETY: `hb_color_stop_t` is C POD. The count-only query determines
-        // the allocation bound, the fill query initializes at most that many
-        // slots, and `color_line` remains live for both adjacent calls.
-        let mut hb_stops = vec![std::mem::zeroed::<hb_color_stop_t>(); count as usize];
-        hb_color_line_get_color_stops(color_line, 0, &mut count, hb_stops.as_mut_ptr());
-        hb_stops
-            .into_iter()
-            .take(count as usize)
+    fn color(&self, palette: u16, alpha: f32) -> (ColorInt, bool) {
+        if palette == 0xffff {
+            return (self.foreground, true);
+        }
+        let Some(color) = self.font.palette_colors.get(palette as usize) else {
+            return (0xff000000, false);
+        };
+        let alpha = (color.alpha() as f32 * alpha).round().clamp(0.0, 255.0) as u32;
+        (
+            (alpha << 24)
+                | ((color.red() as u32) << 16)
+                | ((color.green() as u32) << 8)
+                | color.blue() as u32,
+            false,
+        )
+    }
+    fn extract_stops(&self, stops: &[skrifa::color::ColorStop]) -> Vec<GradientStop> {
+        stops
+            .iter()
             .map(|stop| GradientStop {
                 offset: stop.offset,
-                color: if stop.is_foreground != 0 {
-                    foreground
-                } else {
-                    hb_color_to_color_int(stop.color)
-                },
+                color: self.color(stop.palette_index, stop.alpha).0,
             })
             .collect()
     }
-
-    unsafe fn make_clip_layer(&self) -> ColorGlyphLayer {
-        let mut layer = ColorGlyphLayer::default();
-        hb_font_draw_glyph(
-            self.font,
-            self.clip_glyph as u32,
-            self.draw_funcs,
-            (&mut layer.path as *mut RawPath).cast(),
+    fn make_clip_layer(&self) -> ColorGlyphLayer {
+        ColorGlyphLayer {
+            path: self.font.get_path(self.clip_glyph),
+            ..ColorGlyphLayer::default()
+        }
+    }
+    fn font_scale(&self) -> f32 {
+        STANDARD_SCALE as f32
+            / self
+                .font
+                .outline_font()
+                .metrics(Size::unscaled(), LocationRef::default())
+                .units_per_em as f32
+    }
+}
+impl skrifa::color::ColorPainter for PaintState<'_> {
+    fn push_transform(&mut self, transform: skrifa::color::Transform) {
+        let scale = self.font_scale();
+        PaintState::push_transform(
+            self,
+            transform.xx,
+            transform.yx,
+            transform.xy,
+            transform.yy,
+            transform.dx * scale,
+            transform.dy * scale,
         );
-        layer
     }
-}
-
-fn hb_color_to_color_int(color: hb_color_t) -> ColorInt {
-    // SAFETY: HarfBuzz's color accessors are pure scalar extraction macros/
-    // functions and do not dereference or retain external storage.
-    unsafe {
-        color_argb(
-            hb_color_get_alpha(color),
-            hb_color_get_red(color),
-            hb_color_get_green(color),
-            hb_color_get_blue(color),
-        )
+    fn pop_transform(&mut self) {
+        PaintState::pop_transform(self);
     }
-}
-
-const fn tag(a: u8, b: u8, c: u8, d: u8) -> u32 {
-    ((a as u32) << 24) | ((b as u32) << 16) | ((c as u32) << 8) | d as u32
-}
-
-const fn hb_color(red: u8, green: u8, blue: u8, alpha: u8) -> u32 {
-    (blue as u32) | ((green as u32) << 8) | ((red as u32) << 16) | ((alpha as u32) << 24)
-}
-
-// SAFETY CONTRACT FOR THE HARFBUZZ CALLBACKS BELOW: HarfBuzz invokes each
-// callback synchronously from `hb_font_draw_glyph`/`hb_font_paint_glyph`.
-// `path` is the unique stack-local `RawPath` supplied by `get_path` or layer
-// construction; `data` is the unique stack-local `PaintState` supplied by
-// `get_color_layers`; HarfBuzz color-line/blob/extent handles remain live for
-// the callback and are never retained. Every callback returns before those
-// stack locals or HarfBuzz handles are released.
-unsafe extern "C" fn raw_path_move_to(
-    _: *mut hb_draw_funcs_t,
-    path: *mut c_void,
-    _: *mut hb_draw_state_t,
-    x: f32,
-    y: f32,
-    _: *mut c_void,
-) {
-    (*(path as *mut RawPath)).move_to(x * INVERSE_SCALE, -y * INVERSE_SCALE);
-}
-
-unsafe extern "C" fn raw_path_line_to(
-    _: *mut hb_draw_funcs_t,
-    path: *mut c_void,
-    _: *mut hb_draw_state_t,
-    x: f32,
-    y: f32,
-    _: *mut c_void,
-) {
-    (*(path as *mut RawPath)).line_to(x * INVERSE_SCALE, -y * INVERSE_SCALE);
-}
-
-unsafe extern "C" fn raw_path_quadratic_to(
-    _: *mut hb_draw_funcs_t,
-    path: *mut c_void,
-    _: *mut hb_draw_state_t,
-    x1: f32,
-    y1: f32,
-    x2: f32,
-    y2: f32,
-    _: *mut c_void,
-) {
-    (*(path as *mut RawPath)).quad_to_cubic(
-        x1 * INVERSE_SCALE,
-        -y1 * INVERSE_SCALE,
-        x2 * INVERSE_SCALE,
-        -y2 * INVERSE_SCALE,
-    );
-}
-
-unsafe extern "C" fn raw_path_cubic_to(
-    _: *mut hb_draw_funcs_t,
-    path: *mut c_void,
-    _: *mut hb_draw_state_t,
-    x1: f32,
-    y1: f32,
-    x2: f32,
-    y2: f32,
-    x3: f32,
-    y3: f32,
-    _: *mut c_void,
-) {
-    (*(path as *mut RawPath)).cubic_to(
-        x1 * INVERSE_SCALE,
-        -y1 * INVERSE_SCALE,
-        x2 * INVERSE_SCALE,
-        -y2 * INVERSE_SCALE,
-        x3 * INVERSE_SCALE,
-        -y3 * INVERSE_SCALE,
-    );
-}
-
-unsafe extern "C" fn raw_path_close(
-    _: *mut hb_draw_funcs_t,
-    path: *mut c_void,
-    _: *mut hb_draw_state_t,
-    _: *mut c_void,
-) {
-    (*(path as *mut RawPath)).close();
-}
-
-unsafe fn paint_state<'a>(data: *mut c_void) -> &'a mut PaintState<'a> {
-    // SAFETY: established by the callback contract immediately above.
-    &mut *(data as *mut PaintState<'a>)
-}
-
-unsafe extern "C" fn paint_push_transform(
-    _: *mut hb_paint_funcs_t,
-    data: *mut c_void,
-    xx: f32,
-    yx: f32,
-    xy: f32,
-    yy: f32,
-    dx: f32,
-    dy: f32,
-    _: *mut c_void,
-) {
-    paint_state(data).push_transform(xx, yx, xy, yy, dx, dy);
-}
-
-unsafe extern "C" fn paint_pop_transform(
-    _: *mut hb_paint_funcs_t,
-    data: *mut c_void,
-    _: *mut c_void,
-) {
-    paint_state(data).pop_transform();
-}
-
-unsafe extern "C" fn paint_push_clip_glyph(
-    _: *mut hb_paint_funcs_t,
-    data: *mut c_void,
-    glyph: u32,
-    _: *mut hb_font_t,
-    _: *mut c_void,
-) {
-    let state = paint_state(data);
-    state.clip_glyph = glyph as GlyphId;
-    state.has_clip = true;
-}
-
-unsafe extern "C" fn paint_push_clip_rectangle(
-    _: *mut hb_paint_funcs_t,
-    _: *mut c_void,
-    _: f32,
-    _: f32,
-    _: f32,
-    _: f32,
-    _: *mut c_void,
-) {
-}
-
-unsafe extern "C" fn paint_pop_clip(_: *mut hb_paint_funcs_t, data: *mut c_void, _: *mut c_void) {
-    paint_state(data).has_clip = false;
-}
-
-unsafe extern "C" fn paint_solid(
-    _: *mut hb_paint_funcs_t,
-    data: *mut c_void,
-    is_foreground: i32,
-    color: hb_color_t,
-    _: *mut c_void,
-) {
-    let state = paint_state(data);
-    if !state.has_clip {
-        return;
+    fn push_clip_glyph(&mut self, glyph: OutlineGlyphId) {
+        self.clip_glyph = glyph.to_u32() as GlyphId;
+        self.has_clip = true;
     }
-    let mut layer = state.make_clip_layer();
-    layer.paint_type = ColorGlyphPaintType::Solid;
-    if is_foreground != 0 {
-        layer.use_foreground = true;
-        layer.color = state.foreground;
-    } else {
-        layer.color = hb_color_to_color_int(color);
+    fn push_clip_box(&mut self, _: skrifa::raw::types::BoundingBox<f32>) {}
+    fn pop_clip(&mut self) {
+        self.has_clip = false;
     }
-    state.layers.push(layer);
-}
-
-unsafe extern "C" fn paint_linear_gradient(
-    _: *mut hb_paint_funcs_t,
-    data: *mut c_void,
-    color_line: *mut hb_color_line_t,
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-    _: f32,
-    _: f32,
-    _: *mut c_void,
-) {
-    let state = paint_state(data);
-    if !state.has_clip {
-        return;
+    fn fill(&mut self, brush: skrifa::color::Brush<'_>) {
+        if !self.has_clip {
+            return;
+        }
+        let mut layer = self.make_clip_layer();
+        // Skrifa's callbacks are font-unit based; normalize them to the
+        // standard 2048-unit callback inputs before the pinned Rive mapping.
+        let scale = self.font_scale();
+        match brush {
+            skrifa::color::Brush::Solid {
+                palette_index,
+                alpha,
+            } => {
+                let (color, foreground) = self.color(palette_index, alpha);
+                layer.color = color;
+                layer.use_foreground = foreground;
+            }
+            skrifa::color::Brush::LinearGradient {
+                p0,
+                p1,
+                color_stops,
+                ..
+            } => {
+                layer.paint_type = ColorGlyphPaintType::LinearGradient;
+                layer.stops = self.extract_stops(color_stops);
+                let a = self.map_point(p0.x * scale, p0.y * scale);
+                let b = self.map_point(p1.x * scale, p1.y * scale);
+                layer.x0 = a.x;
+                layer.y0 = a.y;
+                layer.x1 = b.x;
+                layer.y1 = b.y;
+            }
+            skrifa::color::Brush::RadialGradient {
+                c0,
+                r0,
+                c1,
+                r1,
+                color_stops,
+                ..
+            } => {
+                layer.paint_type = ColorGlyphPaintType::RadialGradient;
+                layer.stops = self.extract_stops(color_stops);
+                let a = self.map_point(c0.x * scale, c0.y * scale);
+                let b = self.map_point(c1.x * scale, c1.y * scale);
+                layer.x0 = a.x;
+                layer.y0 = a.y;
+                layer.x1 = b.x;
+                layer.y1 = b.y;
+                layer.r0 = self.map_radius(r0 * scale);
+                layer.r1 = self.map_radius(r1 * scale);
+            }
+            skrifa::color::Brush::SweepGradient {
+                c0,
+                start_angle,
+                end_angle,
+                color_stops,
+                ..
+            } => {
+                layer.paint_type = ColorGlyphPaintType::SweepGradient;
+                layer.stops = self.extract_stops(color_stops);
+                let center = self.map_point(c0.x * scale, c0.y * scale);
+                layer.x0 = center.x;
+                layer.y0 = center.y;
+                layer.start_angle = start_angle.to_radians();
+                layer.end_angle = end_angle.to_radians();
+            }
+        }
+        self.layers.push(layer);
     }
-    let mut layer = state.make_clip_layer();
-    layer.paint_type = ColorGlyphPaintType::LinearGradient;
-    layer.stops = PaintState::extract_stops(color_line, state.foreground);
-    let point0 = state.map_point(x0, y0);
-    let point1 = state.map_point(x1, y1);
-    layer.x0 = point0.x;
-    layer.y0 = point0.y;
-    layer.x1 = point1.x;
-    layer.y1 = point1.y;
-    state.layers.push(layer);
-}
-
-unsafe extern "C" fn paint_radial_gradient(
-    _: *mut hb_paint_funcs_t,
-    data: *mut c_void,
-    color_line: *mut hb_color_line_t,
-    x0: f32,
-    y0: f32,
-    radius0: f32,
-    x1: f32,
-    y1: f32,
-    radius1: f32,
-    _: *mut c_void,
-) {
-    let state = paint_state(data);
-    if !state.has_clip {
-        return;
-    }
-    let mut layer = state.make_clip_layer();
-    layer.paint_type = ColorGlyphPaintType::RadialGradient;
-    layer.stops = PaintState::extract_stops(color_line, state.foreground);
-    let point0 = state.map_point(x0, y0);
-    let point1 = state.map_point(x1, y1);
-    layer.x0 = point0.x;
-    layer.y0 = point0.y;
-    layer.x1 = point1.x;
-    layer.y1 = point1.y;
-    layer.r0 = state.map_radius(radius0);
-    layer.r1 = state.map_radius(radius1);
-    state.layers.push(layer);
-}
-
-unsafe extern "C" fn paint_sweep_gradient(
-    _: *mut hb_paint_funcs_t,
-    data: *mut c_void,
-    color_line: *mut hb_color_line_t,
-    center_x: f32,
-    center_y: f32,
-    start_angle: f32,
-    end_angle: f32,
-    _: *mut c_void,
-) {
-    let state = paint_state(data);
-    if !state.has_clip {
-        return;
-    }
-    let mut layer = state.make_clip_layer();
-    layer.paint_type = ColorGlyphPaintType::SweepGradient;
-    layer.stops = PaintState::extract_stops(color_line, state.foreground);
-    let center = state.map_point(center_x, center_y);
-    layer.x0 = center.x;
-    layer.y0 = center.y;
-    layer.start_angle = start_angle;
-    layer.end_angle = end_angle;
-    state.layers.push(layer);
-}
-
-unsafe extern "C" fn paint_push_group(_: *mut hb_paint_funcs_t, _: *mut c_void, _: *mut c_void) {}
-
-unsafe extern "C" fn paint_pop_group(
-    _: *mut hb_paint_funcs_t,
-    _: *mut c_void,
-    _: hb_paint_composite_mode_t,
-    _: *mut c_void,
-) {
-}
-
-unsafe extern "C" fn paint_color_glyph(
-    _: *mut hb_paint_funcs_t,
-    _: *mut c_void,
-    _: u32,
-    _: *mut hb_font_t,
-    _: *mut c_void,
-) -> i32 {
-    0
-}
-
-unsafe extern "C" fn paint_image(
-    _: *mut hb_paint_funcs_t,
-    data: *mut c_void,
-    blob: *mut hb_blob_t,
-    width: u32,
-    height: u32,
-    format: u32,
-    _: f32,
-    extents: *mut hb_glyph_extents_t,
-    _: *mut c_void,
-) -> i32 {
-    if format != tag(b'p', b'n', b'g', b' ') {
-        return 0;
-    }
-    let mut length = 0;
-    let bytes = hb_blob_get_data(blob, &mut length);
-    if bytes.is_null() || length == 0 {
-        return 0;
-    }
-    let state = paint_state(data);
-    let mut layer = ColorGlyphLayer::default();
-    layer.paint_type = ColorGlyphPaintType::Image;
-    // SAFETY: HarfBuzz returned `length` readable bytes owned by the live
-    // callback-scoped blob. They are copied before the callback returns.
-    layer.image_bytes = std::slice::from_raw_parts(bytes.cast::<u8>(), length as usize).to_vec();
-    layer.image_width = width;
-    layer.image_height = height;
-    if !extents.is_null() {
-        // SAFETY: HarfBuzz supplied a non-null callback-scoped extent record;
-        // it is read only during this callback and never retained.
-        layer.image_bearing_x = (*extents).x_bearing as f32 * INVERSE_SCALE;
-        layer.image_bearing_y = -(*extents).y_bearing as f32 * INVERSE_SCALE;
-        layer.image_extent_x = (*extents).width as f32 * INVERSE_SCALE;
-        layer.image_extent_y = -(*extents).height as f32 * INVERSE_SCALE;
-    }
-    state.layers.push(layer);
-    1
+    // Pinned HB callbacks deliberately do not implement group compositing.
+    fn push_layer(&mut self, _: skrifa::color::CompositeMode) {}
+    fn pop_layer(&mut self) {}
 }

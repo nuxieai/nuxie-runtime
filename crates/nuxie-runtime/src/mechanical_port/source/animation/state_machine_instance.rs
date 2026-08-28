@@ -24,6 +24,7 @@ use crate::mechanical_port::source::{
         state_machine_trigger::StateMachineTrigger,
     },
     artboard::{Artboard, RuntimeArtboardInstanceWeakHandle},
+    audio_event::AudioEvent,
     component_dirt::ComponentDirt,
     core::CoreHandle,
     data_bind::{
@@ -417,7 +418,6 @@ pub trait StateMachineInstanceRuntime {
         &mut self,
         view_model: RuntimeListenerViewModelWeakHandle,
     ) -> ListenerInvocation;
-    fn delete_owned_object(&mut self, object: CoreHandle);
     fn scripted_clone(
         &mut self,
         source: &CoreHandle,
@@ -425,13 +425,6 @@ pub trait StateMachineInstanceRuntime {
     ) -> CoreHandle;
     fn scripted_initialize(&mut self, object: &CoreHandle);
     fn scripted_hydrate_inputs(&mut self, object: &CoreHandle);
-    fn scripted_delete(&mut self, object: CoreHandle);
-    fn event_is_audio(&self, event: &CoreHandle) -> bool;
-    fn event_play_audio(&mut self, event: &CoreHandle);
-    fn nested_event_listeners(
-        &self,
-        machine: &StateMachineInstance,
-    ) -> Vec<RuntimeStateMachineInstanceWeakHandle>;
     fn gamepad_submit_buffer(&mut self, machine: &mut StateMachineInstance, data: &[u8]) -> bool;
     fn gamepad_broadcast(
         &mut self,
@@ -2395,7 +2388,8 @@ impl StateMachineInstance {
             .with_downcast::<StateMachine, _>(StateMachine::scripted_objects)
             .unwrap_or_default();
         for source in scripted_objects {
-            let clone = self.runtime.borrow_mut().scripted_clone(&source, self);
+            let runtime = Rc::clone(&self.runtime);
+            let clone = runtime.borrow_mut().scripted_clone(&source, self);
             self.scripted_objects_map.insert(source, clone);
         }
         for object in self.scripted_objects_map.values() {
@@ -3349,9 +3343,7 @@ impl StateMachineInstance {
             let Some(event) = report.event.as_ref() else {
                 continue;
             };
-            if self.runtime.borrow_mut().event_is_audio(event) {
-                self.runtime.borrow_mut().event_play_audio(event);
-            }
+            event.with_downcast_mut::<AudioEvent, _>(AudioEvent::play);
         }
     }
 
@@ -3698,7 +3690,7 @@ impl StateMachineInstance {
     }
 
     fn init_scripted_objects(&mut self) {
-        for &object in self.scripted_objects_map.values() {
+        for object in self.scripted_objects_map.values() {
             self.runtime.borrow_mut().scripted_initialize(object);
             self.runtime.borrow_mut().scripted_hydrate_inputs(object);
         }
@@ -4021,16 +4013,16 @@ impl Drop for StateMachineInstance {
         self.state_keyframe_data_binds.clear();
         self.layers.clear();
         for (_, property) in self.bindable_property_instances.drain() {
-            self.runtime.borrow_mut().delete_owned_object(property);
+            property.remove_occurrence();
         }
         for (_, properties) in self.transition_property_instances.drain() {
             for (_, property) in properties {
-                self.runtime.borrow_mut().delete_owned_object(property);
+                property.remove_occurrence();
             }
         }
         self.listener_view_models.clear();
         for (_, object) in self.scripted_objects_map.drain() {
-            self.runtime.borrow_mut().scripted_delete(object);
+            object.remove_occurrence();
         }
     }
 }

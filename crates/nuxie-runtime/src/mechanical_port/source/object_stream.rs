@@ -25,7 +25,7 @@ impl<T> ObjectStream<T> {
 
 #[derive(Default)]
 pub struct PodStream {
-    stream: VecDeque<Box<dyn Any>>,
+    stream: VecDeque<Box<dyn Any + Send>>,
 }
 
 impl PodStream {
@@ -33,12 +33,12 @@ impl PodStream {
         self.stream.is_empty()
     }
 
-    pub fn write<T: Copy + 'static>(&mut self, object: T) -> &mut Self {
+    pub fn write<T: Copy + Send + 'static>(&mut self, object: T) -> &mut Self {
         self.stream.push_back(Box::new(object));
         self
     }
 
-    pub fn read<T: Copy + 'static>(&mut self) -> T {
+    pub fn read<T: Copy + Send + 'static>(&mut self) -> T {
         let value = self
             .stream
             .pop_front()

@@ -80,7 +80,7 @@ impl SynchronizedPodStream {
             .empty()
     }
 
-    fn write<T: Copy + 'static>(&self, value: T) -> SynchronizedPodWriter<'_> {
+    fn write<T: Copy + Send + 'static>(&self, value: T) -> SynchronizedPodWriter<'_> {
         let mut guard = self
             .0
             .lock()
@@ -89,7 +89,7 @@ impl SynchronizedPodStream {
         SynchronizedPodWriter { guard }
     }
 
-    fn read<T: Copy + 'static>(&self) -> T {
+    fn read<T: Copy + Send + 'static>(&self) -> T {
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -102,7 +102,7 @@ struct SynchronizedPodWriter<'a> {
 }
 
 impl SynchronizedPodWriter<'_> {
-    fn write<T: Copy + 'static>(&mut self, value: T) -> &mut Self {
+    fn write<T: Copy + Send + 'static>(&mut self, value: T) -> &mut Self {
         self.guard.write(value);
         self
     }
@@ -912,7 +912,7 @@ pub struct MessageLock<'a> {
 }
 
 impl MessageLock<'_> {
-    pub fn write<T: Copy + 'static>(&mut self, value: T) -> &mut Self {
+    pub fn write<T: Copy + Send + 'static>(&mut self, value: T) -> &mut Self {
         self.queue.message_stream.write(value);
         self
     }
@@ -994,7 +994,7 @@ impl CommandQueue {
         self.read()
     }
 
-    pub(crate) fn read<T: Copy + 'static>(&self) -> T {
+    pub(crate) fn read<T: Copy + Send + 'static>(&self) -> T {
         self.command_stream.read()
     }
 
@@ -2359,7 +2359,7 @@ impl CommandQueue {
         *self.global_blob_listener.lock().unwrap() = listener.map(ListenerHandle::downgrade);
     }
 
-    fn read_message_pod<T: Copy + 'static>(&mut self) -> T {
+    fn read_message_pod<T: Copy + Send + 'static>(&mut self) -> T {
         self.message_stream.read()
     }
 

@@ -22,6 +22,9 @@ impl Default for ViewModelInstanceAssetBlob {
 }
 
 impl ViewModelInstanceAssetBlob {
+    pub(crate) fn restore_host_asset(&mut self, asset: Option<Arc<RuntimeBlobAsset>>) {
+        self.blob_asset = asset;
+    }
     pub fn new() -> Self {
         Self {
             base: ViewModelInstanceAssetBlobBase::default(),
@@ -37,6 +40,12 @@ impl ViewModelInstanceAssetBlob {
     }
 
     pub fn property_value_changed(&mut self) {
+        if let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
+            crate::host_viewmodel::capture_native_change(
+                owner,
+                crate::RuntimeViewModelChangeValue::Blob(self.base.property_value() as u64),
+            );
+        }
         self.base.add_dirt(ComponentDirt::BINDINGS);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.base.changed_callback() {

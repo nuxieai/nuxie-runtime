@@ -61,6 +61,9 @@ impl Default for FontAsset {
 }
 
 impl FontAsset {
+    pub(crate) fn restore_host_font(&mut self, font: Option<FontRef>) {
+        self.font = font;
+    }
     pub fn set_font_occurrence(owner: &CoreHandle, font: Option<FontRef>) {
         let referencers = owner
             .with_downcast_mut::<Self, _>(|owner| {

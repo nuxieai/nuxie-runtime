@@ -32,6 +32,12 @@ impl DataBindContainerDependent {
     }
 
     pub(crate) fn relink_data_context(&self) {
+        let dependent = self.clone();
+        if crate::view_model_cell::defer_transaction_notification(move || {
+            dependent.relink_data_context()
+        }) {
+            return;
+        }
         match self {
             Self::Authored(dependent) => {
                 if dependent.artboard_dirty_handle().is_some() {

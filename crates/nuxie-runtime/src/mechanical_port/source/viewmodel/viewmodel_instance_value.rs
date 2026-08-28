@@ -72,6 +72,10 @@ impl ValueDependentHandle {
     }
 
     pub(crate) fn relink(&self) {
+        let dependent = self.clone();
+        if crate::view_model_cell::defer_transaction_notification(move || dependent.relink()) {
+            return;
+        }
         match self {
             Self::Core(dependent) => {
                 crate::mechanical_port::source::data_bind::data_bind::DataBind::relink_handle(
@@ -112,6 +116,12 @@ pub struct ViewModelInstanceValue {
     delegates_copy: Vec<ViewModelInstanceValueDelegateWeakHandle>,
     dependents: Vec<ValueDependentHandle>,
     view_model_instance: Option<CoreHandle>,
+    used_layers: Vec<RuntimeStateMachineLayerInstanceWeakHandle>,
+}
+
+#[derive(Clone)]
+pub(crate) struct HostValueState {
+    value_changed: bool,
     used_layers: Vec<RuntimeStateMachineLayerInstanceWeakHandle>,
 }
 
@@ -239,6 +249,14 @@ impl ViewModelInstanceValue {
 
     pub fn add_dirt(&mut self, value: ComponentDirt) {
         self.dependents.retain(ValueDependentHandle::is_alive);
+        let dependents = self.dependents.clone();
+        if crate::view_model_cell::defer_transaction_notification(move || {
+            for dependent in dependents {
+                dependent.add_dirt(value);
+            }
+        }) {
+            return;
+        }
         for dependent in &self.dependents {
             dependent.add_dirt(value);
         }
@@ -246,6 +264,14 @@ impl ViewModelInstanceValue {
 
     pub fn relink_dependents(&mut self) {
         self.dependents.retain(ValueDependentHandle::is_alive);
+        let dependents = self.dependents.clone();
+        if crate::view_model_cell::defer_transaction_notification(move || {
+            for dependent in dependents {
+                dependent.relink();
+            }
+        }) {
+            return;
+        }
         for dependent in &self.dependents {
             dependent.relink();
         }
@@ -332,6 +358,18 @@ impl ViewModelInstanceValue {
         if self.has_flag(ValueFlags::Delegating) {
             return;
         }
+        let delegates = self.delegates_copy.clone();
+        let owner = self.handle();
+        if crate::view_model_cell::defer_transaction_notification(move || {
+            let _suppress = owner.map(SuppressDelegation::new);
+            for delegate in delegates {
+                if let Some(delegate) = delegate.upgrade() {
+                    delegate.borrow_mut().value_changed();
+                }
+            }
+        }) {
+            return;
+        }
         self.set_flag(ValueFlags::Delegating);
         for delegate in &self.delegates_copy {
             if let Some(delegate) = delegate.upgrade() {
@@ -343,6 +381,22 @@ impl ViewModelInstanceValue {
 
     pub fn dependents(&self) -> Vec<ValueDependentHandle> {
         self.dependents.clone()
+    }
+
+    pub(crate) fn host_snapshot(&self) -> HostValueState {
+        HostValueState {
+            value_changed: self.has_flag(ValueFlags::ValueChanged),
+            used_layers: self.used_layers.clone(),
+        }
+    }
+
+    pub(crate) fn restore_host_snapshot(&mut self, state: HostValueState) {
+        if state.value_changed {
+            self.set_flag(ValueFlags::ValueChanged);
+        } else {
+            self.clear_flag(ValueFlags::ValueChanged);
+        }
+        self.used_layers = state.used_layers;
     }
 
     fn has_flag(&self, flag: ValueFlags) -> bool {

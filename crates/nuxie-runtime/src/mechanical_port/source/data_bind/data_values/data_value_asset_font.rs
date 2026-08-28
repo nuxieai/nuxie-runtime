@@ -10,6 +10,13 @@ pub struct FontAsset {
     core_asset: RefCell<Option<CoreHandle>>,
 }
 impl FontAsset {
+    pub(crate) fn restore_host_font(&self, font: Option<FontRef>) {
+        if let Some(asset) = self.core_asset.borrow().clone() {
+            asset.with_downcast_mut::<CoreFontAsset, _>(|asset| asset.restore_host_font(font));
+        } else {
+            *self.font.borrow_mut() = font;
+        }
+    }
     pub fn new() -> Self {
         Self {
             font: RefCell::new(None),

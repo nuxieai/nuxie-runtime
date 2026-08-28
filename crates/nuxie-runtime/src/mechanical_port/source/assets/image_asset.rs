@@ -24,6 +24,9 @@ impl Default for ImageAsset {
 }
 
 impl ImageAsset {
+    pub(crate) fn restore_host_image(&mut self, image: Option<RenderImageRef>) {
+        self.render_image = image;
+    }
     pub fn set_render_image_occurrence(
         owner: &crate::mechanical_port::source::core::CoreHandle,
         image: Option<RenderImageRef>,

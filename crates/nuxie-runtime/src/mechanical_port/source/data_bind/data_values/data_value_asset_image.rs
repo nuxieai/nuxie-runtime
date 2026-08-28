@@ -10,6 +10,13 @@ pub struct ImageAsset {
     core_asset: RefCell<Option<CoreHandle>>,
 }
 impl ImageAsset {
+    pub(crate) fn restore_host_image(&self, image: Option<Rc<dyn RenderImage>>) {
+        if let Some(asset) = self.core_asset.borrow().clone() {
+            asset.with_downcast_mut::<CoreImageAsset, _>(|asset| asset.restore_host_image(image));
+        } else {
+            *self.image.borrow_mut() = image;
+        }
+    }
     pub fn new() -> Self {
         Self {
             image: RefCell::new(None),

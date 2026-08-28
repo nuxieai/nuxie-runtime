@@ -13,6 +13,29 @@ pub struct ViewModelInstanceList {
 }
 
 impl ViewModelInstanceList {
+    pub(crate) fn set_host_item_instance(&mut self, index: usize, instance: CoreHandle) -> bool {
+        let Some(item) = self.list_items.get(index).cloned() else {
+            return false;
+        };
+        self.remove_parent_from_item(&item);
+        item.with_mut(|item| {
+            item.as_view_model_instance_list_item_mut()
+                .unwrap()
+                .set_view_model_instance(Some(instance))
+        });
+        self.add_parent_to_item(&item);
+        self.property_value_changed();
+        true
+    }
+    pub(crate) fn restore_host_items(&mut self, items: Vec<CoreHandle>) {
+        for item in &self.list_items {
+            self.remove_parent_from_item(item);
+        }
+        for item in &items {
+            self.add_parent_to_item(item);
+        }
+        self.list_items = items;
+    }
     fn handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.base.base.handle()
     }
@@ -52,6 +75,9 @@ impl ViewModelInstanceList {
     }
 
     fn property_value_changed(&mut self) {
+        if let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
+            crate::host_viewmodel::capture_native_list_change(owner, &self.list_items);
+        }
         self.base.add_dirt(ComponentDirt::BINDINGS);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {

@@ -32,6 +32,14 @@ impl ViewModelInstanceString {
     }
 
     pub fn property_value_changed(&mut self) {
+        if let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
+            crate::host_viewmodel::capture_native_change(
+                owner,
+                crate::RuntimeViewModelChangeValue::String(std::sync::Arc::from(
+                    self.base.property_value().as_bytes(),
+                )),
+            );
+        }
         self.base.add_dirt(ComponentDirt::BINDINGS);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {

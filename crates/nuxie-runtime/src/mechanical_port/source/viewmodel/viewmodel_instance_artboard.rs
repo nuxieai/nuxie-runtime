@@ -14,7 +14,21 @@ pub struct ViewModelInstanceArtboard {
 }
 
 impl ViewModelInstanceArtboard {
+    pub(crate) fn restore_host_asset(
+        &mut self,
+        asset: Option<RuntimeBindableArtboardHandle>,
+        instance: Option<CoreHandle>,
+    ) {
+        self.bindable_artboard = asset;
+        self.bound_view_model_instance = instance;
+    }
     pub fn property_value_changed(&mut self) {
+        if let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
+            crate::host_viewmodel::capture_native_change(
+                owner,
+                crate::RuntimeViewModelChangeValue::Artboard(self.base.property_value() as u64),
+            );
+        }
         self.bindable_artboard = None;
         self.base.add_dirt(ComponentDirt::BINDINGS);
         #[cfg(feature = "tools")]

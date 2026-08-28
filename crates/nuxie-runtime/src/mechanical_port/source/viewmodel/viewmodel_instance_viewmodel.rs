@@ -22,6 +22,25 @@ pub struct ViewModelInstanceViewModel {
 }
 
 impl ViewModelInstanceViewModel {
+    pub(crate) fn restore_host_reference(&mut self, value: Option<CoreHandle>) {
+        if let (Some(previous), Some(parent)) = (
+            &self.reference_view_model_instance,
+            &self.parent_view_model_instance,
+        ) {
+            previous.with_downcast_mut::<ViewModelInstance, _>(|instance| {
+                instance.remove_parent(parent)
+            });
+        }
+        self.reference_view_model_instance = value;
+        if let (Some(next), Some(parent)) = (
+            &self.reference_view_model_instance,
+            &self.parent_view_model_instance,
+        ) {
+            next.with_downcast_mut::<ViewModelInstance, _>(|instance| {
+                instance.add_parent(parent.clone())
+            });
+        }
+    }
     pub fn set_reference_view_model_instance(&mut self, value: Option<CoreHandle>) {
         if let (Some(instance), Some(parent)) = (
             self.reference_view_model_instance.as_ref(),
@@ -60,6 +79,12 @@ impl ViewModelInstanceViewModel {
     }
 
     pub fn property_value_changed(&mut self) {
+        if let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
+            crate::host_viewmodel::capture_native_view_model_change(
+                owner,
+                self.reference_view_model_instance.as_ref(),
+            );
+        }
         self.base.add_dirt(ComponentDirt::BINDINGS);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {

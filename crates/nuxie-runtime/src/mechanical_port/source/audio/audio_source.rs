@@ -15,6 +15,15 @@ pub struct AudioSource {
 }
 
 impl AudioSource {
+    /// Retain the approved host backend directly; do not decode or copy it.
+    pub fn from_backend(backend: Arc<nuxie_audio::AudioSource>) -> AudioSourceRef {
+        Arc::new(Self {
+            format: backend.format().into(),
+            encoded_bytes: Arc::from(backend.bytes()),
+            backend: Some(backend),
+        })
+    }
+
     pub fn make_audio_source(bytes: SimpleArray<u8>) -> Option<AudioSourceRef> {
         Self::from_encoded(bytes.as_slice())
     }

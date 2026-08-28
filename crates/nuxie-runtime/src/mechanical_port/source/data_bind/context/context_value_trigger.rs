@@ -3,6 +3,7 @@ use crate::mechanical_port::source::data_bind::data_values::data_value_trigger::
 pub struct DataBindContextValueTrigger {
     base: DataBindContextValue,
 }
+super::context_value::impl_bind_context_value!(DataBindContextValueTrigger);
 impl DataBindContextValueTrigger {
     pub fn new(binding: &mut dyn ContextApplyBinding) -> Self {
         Self {

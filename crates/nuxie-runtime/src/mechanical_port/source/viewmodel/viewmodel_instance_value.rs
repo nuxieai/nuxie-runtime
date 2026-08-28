@@ -58,6 +58,8 @@ impl ValueDependentHandle {
                 dependent.with_mut(|dependent| {
                     if let Some(dependent) = dependent.as_data_bind_mut() {
                         dependent.add_dirt(u32::from(value.0), true);
+                    } else if let Some(formula) = dependent.as_any_mut().downcast_mut::<crate::mechanical_port::source::data_bind::converters::data_converter_formula::DataConverterFormula>() {
+                        formula.add_dirt(u32::from(value.0), true);
                     }
                 });
             }
@@ -69,14 +71,12 @@ impl ValueDependentHandle {
         }
     }
 
-    fn relink(&self) {
+    pub(crate) fn relink(&self) {
         match self {
             Self::Core(dependent) => {
-                dependent.with_mut(|dependent| {
-                    if let Some(dependent) = dependent.as_data_bind_mut() {
-                        dependent.relink_data_bind();
-                    }
-                });
+                crate::mechanical_port::source::data_bind::data_bind::DataBind::relink_handle(
+                    dependent,
+                );
             }
             Self::Runtime(dependent) => {
                 if let Some(dependent) = dependent.upgrade() {

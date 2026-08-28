@@ -14,6 +14,9 @@ impl DataValueSymbolListIndex {
     pub fn value(&self) -> u32 {
         self.integer.value()
     }
+    pub fn set_value(&mut self, value: u32) {
+        self.integer.set_value(value);
+    }
 }
 impl DataValue for DataValueSymbolListIndex {
     fn as_any(&self) -> &dyn Any {

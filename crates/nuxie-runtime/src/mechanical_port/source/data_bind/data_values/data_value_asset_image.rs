@@ -1,21 +1,51 @@
 use super::{data_type::DataType, data_value::DataValue, data_value_integer::DataValueInteger};
+use crate::mechanical_port::source::{
+    assets::image_asset::ImageAsset as CoreImageAsset, core::CoreHandle,
+};
 use core::any::Any;
 use nuxie_render_api::RenderImage;
 use std::{cell::RefCell, rc::Rc};
 pub struct ImageAsset {
     image: RefCell<Option<Rc<dyn RenderImage>>>,
+    core_asset: RefCell<Option<CoreHandle>>,
 }
 impl ImageAsset {
     pub fn new() -> Self {
         Self {
             image: RefCell::new(None),
+            core_asset: RefCell::new(None),
         }
     }
     pub fn set_render_image(&self, image: Option<Rc<dyn RenderImage>>) {
-        *self.image.borrow_mut() = image
+        if let Some(asset) = self.core_asset.borrow().clone() {
+            CoreImageAsset::set_render_image_occurrence(&asset, image);
+        } else {
+            *self.image.borrow_mut() = image;
+        }
     }
     pub fn render_image(&self) -> Option<Rc<dyn RenderImage>> {
-        self.image.borrow().clone()
+        if let Some(asset) = self.core_asset.borrow().as_ref() {
+            asset
+                .with_downcast::<CoreImageAsset, _>(|asset| asset.render_image().cloned())
+                .expect("retained image asset")
+        } else {
+            self.image.borrow().clone()
+        }
+    }
+
+    pub fn core_asset(&self, context: &CoreHandle) -> CoreHandle {
+        if let Some(asset) = self.core_asset.borrow().as_ref() {
+            return asset.clone();
+        }
+        let mut asset = CoreImageAsset::default();
+        // Move the retained payload into the Core occurrence; the wrapper reads
+        // that same owner thereafter, so host writes cannot leave a stale copy.
+        asset.set_render_image(self.image.borrow_mut().take());
+        let asset = context
+            .insert_sibling(asset)
+            .expect("live image asset arena");
+        *self.core_asset.borrow_mut() = Some(asset.clone());
+        asset
     }
 }
 #[derive(Clone)]

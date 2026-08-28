@@ -55,7 +55,7 @@ pub trait TargetBinding {
     fn string_value(&self) -> String;
     fn bool_value(&self) -> bool;
     fn active_child_name(&self) -> String;
-    fn active_child_index(&self) -> u32;
+    fn active_child_index(&self) -> i32;
     fn enum_index_for_name(&self, name: &str) -> Option<u32>;
     fn image_value(&self) -> Option<Rc<dyn RenderImage>>;
     fn font_value(&self) -> Option<FontRef>;
@@ -193,7 +193,9 @@ impl DataBindContextTargetValue {
                     match binding.source_output_type() {
                         DataType::String => self.update_string(binding.active_child_name()),
                         DataType::Number => self.update_number(binding.active_child_index() as f32),
-                        DataType::Integer => self.update_integer(binding.active_child_index()),
+                        DataType::Integer => {
+                            self.update_integer(binding.active_child_index() as u32)
+                        }
                         DataType::Enum => binding
                             .enum_index_for_name(&binding.active_child_name())
                             .is_some_and(|index| self.update_integer(index)),
@@ -227,7 +229,7 @@ impl DataBindContextTargetValue {
                         .and_then(|v| v.as_any_mut().downcast_mut::<DataValueAssetBlob>())
                     {
                         let next = binding.blob_value();
-                        if !same_rc(&value.file_asset(), &next) {
+                        if !same_arc(&value.file_asset(), &next) {
                             value.set_blob_value(next);
                             changed = true;
                         }
@@ -269,6 +271,13 @@ impl DataBindContextTargetValue {
 fn same_rc<T: ?Sized>(a: &Option<Rc<T>>, b: &Option<Rc<T>>) -> bool {
     match (a, b) {
         (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+        (None, None) => true,
+        _ => false,
+    }
+}
+fn same_arc<T: ?Sized>(a: &Option<Arc<T>>, b: &Option<Arc<T>>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => Arc::ptr_eq(a, b),
         (None, None) => true,
         _ => false,
     }

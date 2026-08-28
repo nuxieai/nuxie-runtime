@@ -34,11 +34,11 @@ impl DataBindContainerDependent {
     pub(crate) fn relink_data_context(&self) {
         match self {
             Self::Authored(dependent) => {
-                dependent.with_mut(|dependent| {
-                    if let Some(dependent) = dependent.as_bind_container_mut() {
-                        dependent.relink_data_context();
-                    }
-                });
+                if dependent.artboard_dirty_handle().is_some() {
+                    crate::mechanical_port::source::artboard::Artboard::relink_data_context_handle(
+                        dependent,
+                    );
+                }
             }
             Self::StateMachine(dependent) => {
                 dependent.with_instance_mut(|dependent| dependent.relink_data_context());
@@ -267,6 +267,93 @@ impl ViewModelInstance {
 
     pub fn property_values(&self) -> &[CoreHandle] {
         &self.property_values
+    }
+
+    pub fn replace_view_model_property_occurrence(
+        owner: &CoreHandle,
+        property: &CoreHandle,
+        value: Option<CoreHandle>,
+    ) -> bool {
+        if !owner
+            .with_downcast::<Self, _>(|owner| owner.property_values.contains(property))
+            .unwrap_or(false)
+        {
+            return false;
+        }
+        let previous = property
+            .with(|property| {
+                property
+                    .as_view_model_instance_view_model()?
+                    .reference_view_model_instance()
+            })
+            .flatten();
+        let notifications = crate::view_model_cell::RuntimeHostMutationNotifications::begin();
+        property.with_mut(|property| {
+            property
+                .as_view_model_instance_view_model_mut()
+                .expect("ViewModel property")
+                .set_reference_view_model_instance(value)
+        });
+        if let Some(notifications) = notifications {
+            notifications.commit();
+        }
+        let dependents = property
+            .with(|property| {
+                property
+                    .as_view_model_instance_value()
+                    .expect("ViewModel value")
+                    .dependents()
+            })
+            .expect("retained property");
+        for dependent in dependents {
+            dependent.relink();
+        }
+        Self::rebind_dependents_occurrence(owner);
+        if let Some(previous) = previous {
+            Self::rebind_properties_occurrence(&previous);
+        }
+        true
+    }
+
+    pub fn rebind_dependents_occurrence(owner: &CoreHandle) {
+        let (dependents, parents) = owner
+            .with_downcast::<Self, _>(|owner| (owner.dependents.clone(), owner.parents.clone()))
+            .expect("ViewModel occurrence");
+        for dependent in dependents {
+            dependent.relink_data_context();
+        }
+        for parent in parents {
+            Self::rebind_dependents_occurrence(&parent);
+        }
+    }
+
+    pub fn rebind_properties_occurrence(owner: &CoreHandle) {
+        let properties = owner
+            .with_downcast::<Self, _>(|owner| owner.property_values.clone())
+            .expect("ViewModel occurrence");
+        for property in properties {
+            let dependents = property
+                .with(|property| {
+                    property
+                        .as_view_model_instance_value()
+                        .expect("ViewModel value")
+                        .dependents()
+                })
+                .expect("retained property");
+            for dependent in dependents {
+                dependent.relink();
+            }
+            let nested = property
+                .with(|property| {
+                    property
+                        .as_view_model_instance_view_model()?
+                        .reference_view_model_instance()
+                })
+                .flatten();
+            if let Some(nested) = nested {
+                Self::rebind_properties_occurrence(&nested);
+            }
+        }
     }
 
     pub fn property_from_path(&self, path: &[u32], index: usize) -> Option<CoreHandle> {

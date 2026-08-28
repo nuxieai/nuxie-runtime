@@ -24,6 +24,23 @@ impl Default for ImageAsset {
 }
 
 impl ImageAsset {
+    pub fn set_render_image_occurrence(
+        owner: &crate::mechanical_port::source::core::CoreHandle,
+        image: Option<RenderImageRef>,
+    ) {
+        let referencers = owner
+            .with_downcast_mut::<Self, _>(|owner| {
+                owner.render_image = image;
+                owner.base.file_asset().file_asset_referencers().to_vec()
+            })
+            .expect("retained ImageAsset");
+        for referencer in referencers {
+            referencer
+                .with_mut(|referencer| referencer.file_asset_referencer_asset_updated())
+                .filter(|updated| *updated)
+                .expect("retained ImageAsset referencer");
+        }
+    }
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     pub fn decoded_async(&mut self) {
         self.notify_referencers();

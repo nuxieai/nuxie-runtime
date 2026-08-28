@@ -6,6 +6,7 @@ use crate::mechanical_port::source::data_bind::data_values::data_value_number::D
 pub struct DataBindContextValueNumber {
     base: DataBindContextValue,
 }
+super::context_value::impl_bind_context_value!(DataBindContextValueNumber);
 impl DataBindContextValueNumber {
     pub fn new(binding: &mut dyn ContextApplyBinding) -> Self {
         Self {

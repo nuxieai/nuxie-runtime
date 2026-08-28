@@ -41,14 +41,9 @@ impl Default for TextStyle {
 }
 impl TextStyle {
     fn font_asset(&self) -> Option<CoreHandle> {
-        self.file_asset_referencer.asset().filter(|asset| {
-            asset
-                .with(|asset| asset.as_image_asset().is_none() && asset.as_file_asset().is_some())
-                .unwrap_or(false)
-                && asset
-                    .with_downcast::<FontAsset, _>(|_| true)
-                    .unwrap_or(false)
-        })
+        self.file_asset_referencer
+            .asset()
+            .filter(|asset| asset.with_downcast::<FontAsset, _>(|_| ()).is_some())
     }
 
     pub fn add_variation(&mut self, axis: CoreHandle) {

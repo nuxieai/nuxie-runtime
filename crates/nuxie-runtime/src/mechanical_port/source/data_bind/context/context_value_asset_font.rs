@@ -5,6 +5,7 @@ use super::{
 pub struct DataBindContextValueAssetFont {
     base: DataBindContextValue,
 }
+super::context_value::impl_bind_context_value!(DataBindContextValueAssetFont);
 impl DataBindContextValueAssetFont {
     pub fn new(binding: &mut dyn ContextApplyBinding) -> Self {
         Self {

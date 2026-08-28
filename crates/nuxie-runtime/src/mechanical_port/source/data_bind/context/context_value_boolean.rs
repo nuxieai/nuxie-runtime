@@ -3,6 +3,7 @@ use crate::mechanical_port::source::data_bind::data_values::data_value_boolean::
 pub struct DataBindContextValueBoolean {
     base: DataBindContextValue,
 }
+super::context_value::impl_bind_context_value!(DataBindContextValueBoolean);
 impl DataBindContextValueBoolean {
     pub fn new(binding: &mut dyn ContextApplyBinding) -> Self {
         Self {

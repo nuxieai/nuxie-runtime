@@ -6,6 +6,7 @@ use crate::mechanical_port::source::data_bind::data_values::data_value_enum::Dat
 pub struct DataBindContextValueEnum {
     base: DataBindContextValue,
 }
+super::context_value::impl_bind_context_value!(DataBindContextValueEnum);
 impl DataBindContextValueEnum {
     pub fn new(binding: &mut dyn ContextApplyBinding) -> Self {
         Self {

@@ -6,15 +6,104 @@ use crate::mechanical_port::source::{
     core::CoreHandle, data_bind::data_values::data_value::DataValue, text_engine::FontRef,
 };
 use nuxie_render_api::RenderImage;
+use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
+#[path = "context_value/native_binding.rs"]
+mod native_binding;
+pub(super) use native_binding::CoreBinding;
+
+/// Static dispatch only: each concrete translated context retains its own base
+/// cache and supplies its original apply implementation.
+macro_rules! impl_bind_context_value {
+    ($owner:ty) => {
+        impl crate::mechanical_port::source::data_bind::data_bind::BindContextValue for $owner {
+            fn apply(
+                &mut self,
+                target: Option<crate::mechanical_port::source::core::CoreHandle>,
+                property_key: u32,
+                is_main: bool,
+                bind: crate::mechanical_port::source::core::CoreHandle,
+            ) {
+                let mut binding =
+                    super::context_value::CoreBinding::new(bind, target, property_key);
+                <$owner>::apply(self, property_key, is_main, &mut binding);
+            }
+            fn refresh_target_value(
+                &mut self,
+                bind: crate::mechanical_port::source::core::CoreHandle,
+            ) {
+                self.base
+                    .refresh_target_value(&super::context_value::CoreBinding::for_bind(bind));
+            }
+            fn invalidate(&mut self) {
+                self.base.invalidate();
+            }
+            fn invalidation_handle(&self) -> std::rc::Rc<std::cell::Cell<bool>> {
+                self.base.invalidation_handle()
+            }
+            fn apply_to_source(
+                &mut self,
+                target: crate::mechanical_port::source::core::CoreHandle,
+                property_key: u32,
+                is_main: bool,
+                bind: crate::mechanical_port::source::core::CoreHandle,
+            ) {
+                let mut binding = super::context_value::CoreBinding::new(
+                    bind,
+                    Some(target.clone()),
+                    property_key,
+                );
+                self.base
+                    .apply_to_source(Some(target), property_key, is_main, &mut binding);
+            }
+        }
+    };
+}
+pub(super) use impl_bind_context_value;
+
+pub fn create_context_value(
+    owner: &CoreHandle,
+) -> Option<Box<dyn crate::mechanical_port::source::data_bind::data_bind::BindContextValue>> {
+    use crate::mechanical_port::source::data_bind::data_values::data_type::DataType;
+    let output = owner
+        .with(|owner| owner.as_data_bind().map(|bind| bind.output_type()))
+        .flatten()?;
+    let mut binding = CoreBinding::for_bind(owner.clone());
+    macro_rules! context {
+        ($module:ident, $ty:ident) => {
+            Some(Box::new(super::$module::$ty::new(&mut binding)))
+        };
+    }
+    match output {
+        DataType::Number => context!(context_value_number, DataBindContextValueNumber),
+        DataType::String => context!(context_value_string, DataBindContextValueString),
+        DataType::Boolean => context!(context_value_boolean, DataBindContextValueBoolean),
+        DataType::Color => context!(context_value_color, DataBindContextValueColor),
+        DataType::Enum => context!(context_value_enum, DataBindContextValueEnum),
+        DataType::List => context!(context_value_list, DataBindContextValueList),
+        DataType::Trigger => context!(context_value_trigger, DataBindContextValueTrigger),
+        DataType::SymbolListIndex => context!(
+            context_value_symbol_list_index,
+            DataBindContextValueSymbolListIndex
+        ),
+        DataType::AssetImage => context!(context_value_asset_image, DataBindContextValueAssetImage),
+        DataType::AssetFont => context!(context_value_asset_font, DataBindContextValueAssetFont),
+        DataType::AssetBlob => context!(context_value_asset_blob, DataBindContextValueAssetBlob),
+        DataType::Artboard => context!(context_value_artboard, DataBindContextValueArtboard),
+        DataType::ViewModel => context!(context_value_viewmodel, DataBindContextValueViewModel),
+        DataType::Any => context!(context_value_any, DataBindContextValueAny),
+        _ => None,
+    }
+}
 pub trait ContextBinding: TargetBinding {
     fn to_source(&self) -> bool;
     fn initial_source_value(&self) -> Option<Box<dyn DataValue>>;
     fn sync_source_value(&self, value: &mut dyn DataValue);
     fn convert(&mut self, input: &dyn DataValue, is_main_direction: bool) -> Box<dyn DataValue>;
     fn suppress_dirt(&mut self, value: bool);
-    fn apply_source_value(&mut self, value: &dyn DataValue);
+    fn can_apply_to_source(&self) -> bool;
+    fn apply_source_value(&mut self, value: &dyn DataValue) -> bool;
 }
 pub trait ContextApplyBinding: ContextBinding {
     fn set_bool(&mut self, property_key: u32, value: bool);
@@ -54,7 +143,7 @@ pub trait ContextApplyBinding: ContextBinding {
 pub struct DataBindContextValue {
     data_value: Option<Box<dyn DataValue>>,
     target_value: DataBindContextTargetValue,
-    is_valid: bool,
+    is_valid: Rc<Cell<bool>>,
 }
 impl DataBindContextValue {
     pub fn new(data_bind: &mut dyn ContextBinding) -> Self {
@@ -66,11 +155,14 @@ impl DataBindContextValue {
         Self {
             data_value,
             target_value,
-            is_valid: false,
+            is_valid: Rc::new(Cell::new(false)),
         }
     }
     pub fn invalidate(&mut self) {
-        self.is_valid = false
+        self.is_valid.set(false);
+    }
+    pub fn invalidation_handle(&self) -> Rc<Cell<bool>> {
+        self.is_valid.clone()
     }
     pub fn refresh_target_value(&mut self, data_bind: &dyn ContextBinding) {
         if data_bind.to_source() {
@@ -100,13 +192,18 @@ impl DataBindContextValue {
         is_main_direction: bool,
         data_bind: &mut dyn ContextBinding,
     ) {
-        if self.target_value.sync_target_value(data_bind) || !self.is_valid {
+        if !data_bind.can_apply_to_source() {
+            return;
+        }
+        if self.target_value.sync_target_value(data_bind) || !self.is_valid.get() {
             if let Some(target_value) = self.target_value.data_value() {
                 let converted = data_bind.convert(target_value, is_main_direction);
                 data_bind.suppress_dirt(true);
-                data_bind.apply_source_value(converted.as_ref());
+                let applied = data_bind.apply_source_value(converted.as_ref());
                 data_bind.suppress_dirt(false);
-                self.is_valid = true;
+                if applied {
+                    self.is_valid.set(true);
+                }
             }
         }
     }

@@ -168,6 +168,20 @@ impl ViewModelInstanceViewModel {
         });
     }
 
+    pub fn update_view_model_occurrence(property: &CoreHandle, value: Option<CoreHandle>) -> bool {
+        let Some(owner) = property
+            .with(|property| {
+                property
+                    .as_view_model_instance_value()?
+                    .view_model_instance()
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        ViewModelInstance::replace_view_model_property_occurrence(&owner, property, value)
+    }
+
     pub fn apply_value(&mut self, data_value: &DataValueViewModel) {
         if let Some(value) = data_value.value() {
             self.update_view_model(value);

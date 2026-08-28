@@ -47,6 +47,11 @@ impl ViewModelInstanceAsset {
     }
 
     #[cfg(feature = "tools")]
+    pub fn changed_callback(&self) -> Option<fn(&mut Self, u32)> {
+        self.changed_callback
+    }
+
+    #[cfg(feature = "tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self, u32)>) {
         self.changed_callback = callback;
     }

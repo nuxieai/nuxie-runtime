@@ -3,7 +3,8 @@ use std::rc::Rc;
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
     data_bind::data_values::{
-        data_value_asset_image::ImageAsset, data_value_integer::DataValueInteger,
+        data_value_asset_image::{DataValueAssetImage, ImageAsset},
+        data_value_integer::DataValueInteger,
     },
     generated::viewmodel::viewmodel_instance_asset_image_base::ViewModelInstanceAssetImageBase,
 };
@@ -28,11 +29,19 @@ impl ViewModelInstanceAssetImage {
         }
     }
 
+    fn set_property_value(&mut self, value: u32) {
+        if self.base.set_property_value_value(value) {
+            self.property_value_changed();
+            <Self as crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_base::ViewModelInstanceAssetBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_base::ViewModelInstanceAssetBase::PROPERTY_VALUE_PROPERTY_KEY);
+        }
+    }
+
     pub fn property_value_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::BINDINGS);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.base.changed_callback() {
-            callback(self, self.base.property_value());
+            let value = self.base.property_value();
+            callback(&mut self.base.base, value);
         }
         self.base.on_value_changed();
     }
@@ -42,7 +51,7 @@ impl ViewModelInstanceAssetImage {
         if matches!((&previous, &image), (Some(left), Some(right)) if Rc::ptr_eq(left, right))
             || previous.is_none() && image.is_none()
         {
-            self.base.set_property_value(u32::MAX);
+            self.set_property_value(u32::MAX);
             return;
         }
         #[cfg(feature = "tools")]
@@ -50,12 +59,13 @@ impl ViewModelInstanceAssetImage {
         self.image_asset.set_render_image(image);
         #[cfg(feature = "tools")]
         if !already_sentinel {
-            self.base.set_property_value(u32::MAX);
+            self.set_property_value(u32::MAX);
         } else if let Some(callback) = self.base.changed_callback() {
-            callback(self, self.base.property_value());
+            let value = self.base.property_value();
+            callback(&mut self.base.base, value);
         }
         #[cfg(not(feature = "tools"))]
-        self.base.set_property_value(u32::MAX);
+        self.set_property_value(u32::MAX);
         self.base.add_dirt(ComponentDirt::BINDINGS);
         self.base.on_value_changed();
     }
@@ -65,19 +75,30 @@ impl ViewModelInstanceAssetImage {
     }
 
     pub fn apply_value(&mut self, data_value: &DataValueInteger) {
-        if let Some(asset_value) = data_value.as_asset_image() {
+        self.set_property_value(data_value.value());
+    }
+
+    pub fn apply_data_value(
+        &mut self,
+        data_value: &dyn crate::mechanical_port::source::data_bind::data_values::data_value::DataValue,
+    ) {
+        if let Some(asset_value) = data_value.as_any().downcast_ref::<DataValueAssetImage>() {
             let image = asset_value.image_value();
             self.set_value(image.clone());
             if image.is_some() {
                 return;
             }
         }
-        self.base.set_property_value(data_value.value());
+        if let Some(value) = crate::mechanical_port::source::data_bind::data_values::data_value_integer::integer_value(data_value) {
+            self.apply_value(&DataValueInteger::new(value));
+        }
     }
 
     pub fn clone_value(&self) -> Box<Self> {
         let mut cloned = Box::new(Self::new());
-        cloned.base.copy_from(&self.base);
+        let mut base = std::mem::take(&mut cloned.base.base.base);
+        base.copy(&self.base.base.base, &mut *cloned);
+        cloned.base.base.base = base;
         for asset in self.base.assets() {
             cloned.base.add_asset(asset.clone());
         }

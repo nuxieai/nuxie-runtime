@@ -3,6 +3,7 @@ use crate::mechanical_port::source::data_bind::data_values::data_value_list::Dat
 pub struct DataBindContextValueList {
     base: DataBindContextValue,
 }
+super::context_value::impl_bind_context_value!(DataBindContextValueList);
 impl DataBindContextValueList {
     pub fn new(binding: &mut dyn ContextApplyBinding) -> Self {
         Self {

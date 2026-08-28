@@ -1,5 +1,30 @@
 use super::{data_type::DataType, data_value::DataValue};
 use core::any::Any;
+
+/// The scalar lane shared by every DataValueInteger-derived source owner.
+pub fn integer_value(value: &dyn DataValue) -> Option<u32> {
+    if !value.is_type_of(DataType::Integer) {
+        return None;
+    }
+    use super::{
+        data_value_artboard::DataValueArtboard, data_value_asset_blob::DataValueAssetBlob,
+        data_value_asset_font::DataValueAssetFont, data_value_asset_image::DataValueAssetImage,
+        data_value_enum::DataValueEnum, data_value_symbol_list_index::DataValueSymbolListIndex,
+        data_value_trigger::DataValueTrigger,
+    };
+    macro_rules! lane { ($($ty:ty),* $(,)?) => { $(if let Some(value) = value.as_any().downcast_ref::<$ty>() { return Some(value.value()); })* }; }
+    lane!(
+        DataValueInteger,
+        DataValueEnum,
+        DataValueTrigger,
+        DataValueSymbolListIndex,
+        DataValueAssetImage,
+        DataValueAssetFont,
+        DataValueAssetBlob,
+        DataValueArtboard
+    );
+    None
+}
 #[derive(Clone, Debug, Default)]
 pub struct DataValueInteger {
     value: u32,

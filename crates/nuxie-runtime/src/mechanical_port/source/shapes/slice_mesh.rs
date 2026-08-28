@@ -178,12 +178,7 @@ impl SliceMesh {
             .image_handle()
             .and_then(|image| {
                 image.with_downcast::<crate::mechanical_port::source::shapes::image::Image, _>(
-                    |image| {
-                        image
-                            .image_asset()
-                            .and_then(|asset| asset.render_image())
-                            .map(|image| image.uv_transform())
-                    },
+                    |image| image.render_image().map(|image| image.uv_transform()),
                 )
             })
             .flatten()

@@ -61,6 +61,21 @@ impl Default for FontAsset {
 }
 
 impl FontAsset {
+    pub fn set_font_occurrence(owner: &CoreHandle, font: Option<FontRef>) {
+        let referencers = owner
+            .with_downcast_mut::<Self, _>(|owner| {
+                owner.font = font;
+                owner.base.file_asset().file_asset_referencers().to_vec()
+            })
+            .expect("retained FontAsset");
+        for referencer in referencers {
+            referencer
+                .with_mut(|referencer| {
+                    referencer.component_add_dirt(ComponentDirt::TEXT_SHAPE, false)
+                })
+                .expect("retained FontAsset referencer");
+        }
+    }
     pub fn decode(&mut self, data: &[u8], factory: &RuntimeFactoryHandle) -> bool {
         let font = factory.with_factory_mut(|factory| {
             factory

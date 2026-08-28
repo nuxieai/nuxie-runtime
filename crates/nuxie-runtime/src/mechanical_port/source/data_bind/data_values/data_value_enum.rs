@@ -49,6 +49,9 @@ impl DataValueEnum {
     pub fn value(&self) -> u32 {
         self.integer.value()
     }
+    pub fn set_value(&mut self, value: u32) {
+        self.integer.set_value(value);
+    }
     pub fn data_enum(&self) -> Option<DataEnumRef> {
         self.data_enum.clone()
     }

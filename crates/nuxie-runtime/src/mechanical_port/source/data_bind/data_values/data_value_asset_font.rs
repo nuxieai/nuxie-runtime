@@ -1,21 +1,49 @@
 use super::{data_type::DataType, data_value::DataValue, data_value_integer::DataValueInteger};
 use crate::mechanical_port::source::text_engine::FontRef;
+use crate::mechanical_port::source::{
+    assets::font_asset::FontAsset as CoreFontAsset, core::CoreHandle,
+};
 use core::any::Any;
 use std::{cell::RefCell, rc::Rc};
 pub struct FontAsset {
     font: RefCell<Option<FontRef>>,
+    core_asset: RefCell<Option<CoreHandle>>,
 }
 impl FontAsset {
     pub fn new() -> Self {
         Self {
             font: RefCell::new(None),
+            core_asset: RefCell::new(None),
         }
     }
     pub fn set_font(&self, font: Option<FontRef>) {
-        *self.font.borrow_mut() = font
+        if let Some(asset) = self.core_asset.borrow().clone() {
+            CoreFontAsset::set_font_occurrence(&asset, font);
+        } else {
+            *self.font.borrow_mut() = font;
+        }
     }
     pub fn font(&self) -> Option<FontRef> {
-        self.font.borrow().clone()
+        if let Some(asset) = self.core_asset.borrow().as_ref() {
+            asset
+                .with_downcast::<CoreFontAsset, _>(CoreFontAsset::font)
+                .expect("retained font asset")
+        } else {
+            self.font.borrow().clone()
+        }
+    }
+
+    pub fn core_asset(&self, context: &CoreHandle) -> CoreHandle {
+        if let Some(asset) = self.core_asset.borrow().as_ref() {
+            return asset.clone();
+        }
+        let mut asset = CoreFontAsset::default();
+        asset.set_font(self.font.borrow_mut().take());
+        let asset = context
+            .insert_sibling(asset)
+            .expect("live font asset arena");
+        *self.core_asset.borrow_mut() = Some(asset.clone());
+        asset
     }
 }
 #[derive(Clone)]

@@ -1,7 +1,5 @@
 use crate::mechanical_port::source::{
-    assets::{
-        file_asset::FileAsset, file_asset_referencer::FileAssetReferencer, image_asset::ImageAsset,
-    },
+    assets::{file_asset_referencer::FileAssetReferencer, image_asset::ImageAsset},
     core::{Core, CoreHandle, StatusCode},
     generated::shapes::image_base::ImageBase,
     hit_info::HitInfo,
@@ -12,7 +10,6 @@ use crate::mechanical_port::source::{
     },
     math::{aabb::Aabb, hit_test::HitTester, mat2d::Mat2D, vec2d::Vec2D},
     renderer::{BlendMode, ImageSampler, Renderer},
-    shapes::mesh_drawable::MeshType,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -26,6 +23,22 @@ pub enum ImageFit {
     None,
     ScaleDown,
     Fill,
+}
+
+impl From<u32> for ImageFit {
+    fn from(value: u32) -> Self {
+        match value as u8 {
+            0 => Self::Resize,
+            1 => Self::Contain,
+            2 => Self::Cover,
+            3 => Self::FitWidth,
+            4 => Self::FitHeight,
+            5 => Self::None,
+            6 => Self::ScaleDown,
+            // Upstream's switch shares its default with fill, not resize.
+            _ => Self::Fill,
+        }
+    }
 }
 
 pub struct Image {
@@ -59,11 +72,90 @@ impl Default for Image {
 }
 
 impl Image {
-    pub fn draw(&mut self, renderer: &mut Renderer) {
-        let Some(asset) = self.image_asset() else {
+    pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        let Some((image, mesh, save, world, origin_x, origin_y, blend_mode, opacity)) = owner
+            .with_downcast::<Self, _>(|owner| {
+                Some((
+                    owner.render_image()?,
+                    owner.mesh.clone(),
+                    owner.base.needs_save_operation(),
+                    *owner.base.world_transform(),
+                    owner.base.origin_x(),
+                    owner.base.origin_y(),
+                    owner.base.blend_mode(),
+                    owner.base.render_opacity(),
+                ))
+            })
+            .flatten()
+        else {
             return;
         };
-        let Some(render_image) = asset.render_image() else {
+        if save {
+            renderer.save();
+        }
+        if let Some(mesh) = mesh {
+            mesh.with_mut(|mesh| {
+                mesh.mesh_drawable_draw(
+                    renderer,
+                    image.as_ref(),
+                    ImageSampler::LINEAR_CLAMP,
+                    blend_mode.into(),
+                    opacity,
+                )
+            });
+        } else {
+            renderer.transform(nuxie_render_api::Mat2D(*world.values()));
+            renderer.translate(
+                -(image.width() as f32) * origin_x,
+                -(image.height() as f32) * origin_y,
+            );
+            renderer.draw_image(
+                Some(image.as_ref()),
+                ImageSampler::LINEAR_CLAMP,
+                blend_mode.into(),
+                opacity,
+            );
+        }
+        if save {
+            renderer.restore();
+        }
+    }
+
+    pub fn set_asset_occurrence(owner: &CoreHandle, asset: Option<CoreHandle>) {
+        let Some(asset) =
+            asset.filter(|asset| asset.with_downcast::<ImageAsset, _>(|_| ()).is_some())
+        else {
+            return;
+        };
+        let (mesh, image, is_instance) = owner
+            .with_downcast_mut::<Self, _>(|image| {
+                image
+                    .file_asset_referencer
+                    .set_asset(owner.clone(), Some(asset));
+                let is_instance = image.mesh.is_some()
+                    && image
+                        .base
+                        .artboard_handle()
+                        .and_then(|artboard| {
+                            artboard.with(|artboard| {
+                                artboard
+                                    .as_artboard()
+                                    .map(|artboard| artboard.is_instance())
+                            })
+                        })
+                        .flatten()
+                        .expect("Image artboard");
+                (image.mesh.clone(), image.render_image(), is_instance)
+            })
+            .expect("retained Image");
+        if !is_instance && let (Some(mesh), Some(image)) = (mesh, image) {
+            mesh.with_mut(|mesh| mesh.mesh_drawable_on_asset_loaded(image.as_ref()));
+        }
+        owner.with_downcast_mut::<Self, _>(Self::update_image_scale);
+    }
+
+    pub fn draw(&mut self, renderer: &mut Renderer) {
+        let Some(render_image) = self.render_image() else {
             return;
         };
         if self.base.needs_save_operation() {
@@ -75,7 +167,7 @@ impl Image {
             mesh.with_mut(|mesh| {
                 mesh.mesh_drawable_draw(
                     renderer,
-                    render_image,
+                    render_image.as_ref(),
                     ImageSampler::LINEAR_CLAMP,
                     self.base.blend_mode().into(),
                     self.base.render_opacity(),
@@ -90,7 +182,7 @@ impl Image {
                 -height * self.base.origin_y(),
             );
             renderer.draw_image(
-                Some(render_image),
+                Some(render_image.as_ref()),
                 ImageSampler::LINEAR_CLAMP,
                 self.base.blend_mode().into(),
                 self.base.render_opacity(),
@@ -106,7 +198,7 @@ impl Image {
     }
 
     pub fn hit_test<'a>(&'a self, hinfo: &HitInfo, xform: Mat2D) -> Option<&'a Core> {
-        let render_image = self.image_asset()?.render_image()?;
+        let render_image = self.render_image()?;
         let width = render_image.width() as f32;
         let height = render_image.height() as f32;
         if self.mesh.is_some() {
@@ -128,7 +220,10 @@ impl Image {
     }
 
     pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
-        let result = self.file_asset_referencer.register_referencer(stack);
+        let Some(this) = self.base.handle() else {
+            return StatusCode::MissingObject;
+        };
+        let result = self.file_asset_referencer.register_referencer(this, stack);
         if result != StatusCode::Ok {
             return result;
         }
@@ -142,14 +237,28 @@ impl Image {
         self.base.asset_id()
     }
 
-    pub fn set_asset(&mut self, asset: Option<FileAsset>) {
-        if let Some(asset) = asset.filter(FileAsset::is_image_asset) {
-            self.file_asset_referencer.set_asset(Some(asset));
+    pub fn set_asset(&mut self, asset: Option<CoreHandle>) {
+        if let Some(asset) =
+            asset.filter(|asset| asset.with_downcast::<ImageAsset, _>(|_| ()).is_some())
+        {
+            let this = self.base.handle().expect("live Image owner");
+            self.file_asset_referencer.set_asset(this, Some(asset));
             if let Some(mesh) = self.mesh.clone() {
-                if !self.base.artboard().is_instance() {
-                    let render_image = self.image_asset().and_then(ImageAsset::render_image);
+                let is_instance = self
+                    .base
+                    .artboard_handle()
+                    .and_then(|artboard| {
+                        artboard.with(|artboard| {
+                            artboard
+                                .as_artboard()
+                                .map(|artboard| artboard.is_instance())
+                        })
+                    })
+                    .flatten()
+                    .expect("Image artboard");
+                if !is_instance && let Some(render_image) = self.render_image() {
                     mesh.with_mut(|mesh| {
-                        mesh.mesh_drawable_on_asset_loaded(render_image);
+                        mesh.mesh_drawable_on_asset_loaded(render_image.as_ref());
                     });
                 }
             }
@@ -185,22 +294,26 @@ impl Image {
 
     pub fn width(&self) -> f32 {
         self.image_asset()
-            .map(|asset| {
-                asset
-                    .render_image()
-                    .map(|image| image.width() as f32)
-                    .unwrap_or_else(|| asset.width())
+            .and_then(|asset| {
+                asset.with_downcast::<ImageAsset, _>(|asset| {
+                    asset
+                        .render_image()
+                        .map(|image| image.width() as f32)
+                        .unwrap_or_else(|| asset.base.width())
+                })
             })
             .unwrap_or(0.0)
     }
 
     pub fn height(&self) -> f32 {
         self.image_asset()
-            .map(|asset| {
-                asset
-                    .render_image()
-                    .map(|image| image.height() as f32)
-                    .unwrap_or_else(|| asset.height())
+            .and_then(|asset| {
+                asset.with_downcast::<ImageAsset, _>(|asset| {
+                    asset
+                        .render_image()
+                        .map(|image| image.height() as f32)
+                        .unwrap_or_else(|| asset.base.height())
+                })
             })
             .unwrap_or(0.0)
     }
@@ -268,11 +381,16 @@ impl Image {
         false
     }
 
-    pub fn layout_participant(&self) -> Option<&LayoutParticipant> {
+    pub fn layout_participant(&self) -> Option<CoreHandle> {
         self.base
             .children()
             .iter()
-            .find_map(Core::as_layout_participant)
+            .find(|child| {
+                child
+                    .with_downcast::<LayoutParticipant, _>(|_| ())
+                    .is_some()
+            })
+            .cloned()
     }
 
     pub fn is_participating_in_layout(&self) -> bool {
@@ -312,8 +430,7 @@ impl Image {
         let mut new_offset_x = 0.0;
         let mut new_offset_y = 0.0;
         if let Some(render_image) = self
-            .image_asset()
-            .and_then(ImageAsset::render_image)
+            .render_image()
             .filter(|_| !self.layout_width.is_nan() && !self.layout_height.is_nan())
         {
             let image_width = render_image.width() as f32;
@@ -354,8 +471,7 @@ impl Image {
                 let mut bounds_left = -image_width * self.base.origin_x();
                 let mut bounds_top = -image_height * self.base.origin_y();
                 if self.mesh.as_ref().is_some_and(|mesh| {
-                    mesh.with(|mesh| mesh.mesh_drawable_type() == Some(MeshType::Vertex))
-                        .unwrap_or(false)
+                    mesh.core_type() == Some(crate::mechanical_port::source::generated::shapes::mesh_base::MeshBase::TYPE_KEY)
                 }) {
                     bounds_left = -image_width * 0.5;
                     bounds_top = -image_height * 0.5;
@@ -398,10 +514,15 @@ impl Image {
         )
     }
 
-    pub fn image_asset(&self) -> Option<&ImageAsset> {
+    pub fn image_asset(&self) -> Option<CoreHandle> {
         self.file_asset_referencer
-            .file_asset()
-            .and_then(FileAsset::as_image_asset)
+            .asset()
+            .filter(|asset| asset.with_downcast::<ImageAsset, _>(|_| ()).is_some())
+    }
+    pub fn render_image(&self) -> Option<crate::mechanical_port::source::renderer::RenderImageRef> {
+        self.image_asset()?
+            .with_downcast::<ImageAsset, _>(|asset| asset.render_image().cloned())
+            .flatten()
     }
     pub fn mesh(&self) -> Option<CoreHandle> {
         self.mesh.clone()

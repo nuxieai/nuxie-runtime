@@ -481,16 +481,7 @@ impl NativeScriptViewModel {
         else {
             return false;
         };
-        let notifications = RuntimeHostMutationNotifications::begin();
-        let changed = instance
-            .with_downcast_mut::<ViewModelInstance, _>(|owner| {
-                owner.replace_view_model_property_handle(property, value)
-            })
-            .unwrap_or(false);
-        if let Some(notifications) = notifications {
-            notifications.commit();
-        }
-        changed
+        ViewModelInstance::replace_view_model_property_occurrence(instance, &property, Some(value))
     }
     pub fn list_len(&self, name: &str) -> Option<usize> {
         self.property(name)?

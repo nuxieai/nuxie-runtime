@@ -3,6 +3,7 @@ use crate::mechanical_port::source::data_bind::data_values::data_value_color::Da
 pub struct DataBindContextValueColor {
     base: DataBindContextValue,
 }
+super::context_value::impl_bind_context_value!(DataBindContextValueColor);
 impl DataBindContextValueColor {
     pub fn new(binding: &mut dyn ContextApplyBinding) -> Self {
         Self {

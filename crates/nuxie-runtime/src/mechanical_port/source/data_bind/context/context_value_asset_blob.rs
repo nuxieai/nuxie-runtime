@@ -5,6 +5,7 @@ use super::{
 pub struct DataBindContextValueAssetBlob {
     base: DataBindContextValue,
 }
+super::context_value::impl_bind_context_value!(DataBindContextValueAssetBlob);
 impl DataBindContextValueAssetBlob {
     pub fn new(binding: &mut dyn ContextApplyBinding) -> Self {
         Self {

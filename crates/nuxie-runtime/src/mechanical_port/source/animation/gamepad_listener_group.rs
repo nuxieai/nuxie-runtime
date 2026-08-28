@@ -7,6 +7,7 @@ use crate::mechanical_port::source::{
     },
     core::CoreHandle,
     focus_data::{FocusData, RuntimeGamepadListenerHandle},
+    scripted::scripted_drawable::ScriptedDrawable,
 };
 use std::{
     cell::RefCell,
@@ -87,12 +88,11 @@ impl GamepadListenerGroup {
         out_scripted_drawable: Option<&mut Option<CoreHandle>>,
     ) -> bool {
         if let Some(parent) = focus_parent(&self.focus_data) {
-            let scripted_result = parent.with_mut(|parent| {
-                parent
-                    .as_scripted_drawable_mut()
-                    .map(|scripted| scripted.gamepad_dispatch(invocation))
-            });
-            if let Some(Some(handled)) = scripted_result {
+            if parent
+                .with(|parent| parent.as_scripted_drawable().is_some())
+                .unwrap_or(false)
+            {
+                let handled = ScriptedDrawable::gamepad_dispatch_occurrence(&parent, invocation);
                 if let Some(output) = out_scripted_drawable {
                     *output = Some(parent);
                 }

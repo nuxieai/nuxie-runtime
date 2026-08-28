@@ -1,34 +1,27 @@
 use crate::mechanical_port::source::{
+    advance_flags::AdvanceFlags,
     animation::listener_invocation::{ListenerInvocation, ListenerInvocationKind},
-    core::CoreHandle,
-    generated::scripted::scripted_drawable_base::ScriptedDrawableBase,
+    component_dirt::ComponentDirt,
+    core::{CoreHandle, CoreObject},
+    core_context::CoreContext,
+    generated::{
+        core_registry::CoreCapabilities, scripted::scripted_drawable_base::ScriptedDrawableBase,
+    },
+    hit_info::HitInfo,
+    importers::import_stack::ImportStack,
     input::focusable::{Key, KeyModifiers},
-    scripted::scripted_object::{ScriptProtocol, ScriptedObject},
+    math::{mat2d::Mat2D, vec2d::Vec2D},
+    renderer::Renderer,
+    scripted::scripted_object::{ScriptProtocol, ScriptUpdateRequestHost, ScriptedObject},
+    status_code::StatusCode,
 };
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Vec2 {
-    pub x: f32,
-    pub y: f32,
-}
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum HitResult {
-    #[default]
-    None,
-    Hit,
-    HitOpaque,
-}
+use crate::scripting::{ScriptMethod, ScriptedDrawableInputResult};
+
 pub struct ScriptedDrawable {
     pub base: ScriptedDrawableBase,
     pub scripted: ScriptedObject,
     pub properties: Vec<CoreHandle>,
-    pub children: Vec<CoreHandle>,
-    pub inverse_world: [f32; 6],
-    pub hidden: bool,
-    pub collapsed: bool,
-    pub opacity: f32,
     is_advance_active: bool,
-    needs_update: bool,
-    paint_dirty: bool,
 }
 
 impl std::ops::Deref for ScriptedDrawable {
@@ -48,14 +41,7 @@ impl Default for ScriptedDrawable {
             base: ScriptedDrawableBase::default(),
             scripted: ScriptedObject::default(),
             properties: Vec::new(),
-            children: Vec::new(),
-            inverse_world: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-            hidden: false,
-            collapsed: false,
-            opacity: 1.0,
             is_advance_active: true,
-            needs_update: false,
-            paint_dirty: false,
         }
     }
 }
@@ -66,45 +52,159 @@ impl ScriptedDrawable {
 
     pub fn did_hydrate_script_inputs(&mut self) {
         self.is_advance_active = true;
-        self.paint_dirty = true;
+        self.add_scripted_dirt(ComponentDirt::PAINT, false);
     }
-    pub fn draw(&mut self) {
-        if self.scripted.draws() && self.scripted.self_ref() != 0 {
-            self.scripted.script_draw()
+
+    pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        let Some((instance, opacity, save, transform, artboard)) = owner
+            .with(|owner| {
+                let drawable = owner.as_scripted_drawable()?;
+                if !drawable.scripted.draws() {
+                    return None;
+                }
+                Some((
+                    drawable.scripted.runtime_instance()?,
+                    owner.as_transform_component()?.render_opacity(),
+                    drawable.base.needs_save_operation(),
+                    *owner.as_world_transform_component()?.world_transform(),
+                    owner.as_component()?.artboard_handle(),
+                ))
+            })
+            .flatten()
+        else {
+            return;
+        };
+        let factory = artboard
+            .and_then(|artboard| {
+                artboard
+                    .with(|artboard| {
+                        artboard
+                            .as_artboard()
+                            .and_then(|artboard| artboard.factory())
+                    })
+                    .flatten()
+            })
+            .expect("an imported scripted drawable retains its Artboard factory");
+        let opacity_save = opacity != 1.0;
+        if save || opacity_save {
+            renderer.save();
+        }
+        if opacity_save {
+            renderer.modulate_opacity(opacity);
+        }
+        renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
+        let mut host = ScriptUpdateRequestHost::default();
+        factory.with_factory_mut(|factory| {
+            let _ = instance
+                .borrow_mut()
+                .call_draw(factory, renderer, &mut host);
+        });
+        if save || opacity_save {
+            renderer.restore();
+        }
+        if host.take_requested() {
+            ScriptedObject::apply_update_request(owner);
         }
     }
-    pub fn update(&mut self) {
-        self.scripted.script_update();
-        self.is_advance_active = true;
-        self.needs_update = false
+
+    /// Called after the inherited TransformComponent update has completed.
+    pub fn update_after_super_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+        if !dirt.contains(ComponentDirt::SCRIPT_UPDATE) {
+            return;
+        }
+        let instance = owner
+            .with_mut(|owner| {
+                let drawable = owner.as_scripted_drawable_mut()?;
+                if !drawable.scripted.updates() {
+                    return None;
+                }
+                let instance = drawable.scripted.runtime_instance()?;
+                drawable.scripted.set_in_update_phase(true);
+                Some(instance)
+            })
+            .flatten();
+        if let Some(instance) = instance {
+            let mut host = ScriptUpdateRequestHost::default();
+            let _ =
+                instance
+                    .borrow_mut()
+                    .call_optional_method(ScriptMethod::Update, &[], &mut host);
+            // markNeedsUpdate is ignored inside the upstream update phase.
+        }
+        owner.with_mut(|owner| {
+            let drawable = owner
+                .as_scripted_drawable_mut()
+                .expect("scripted update owner");
+            drawable.scripted.set_in_update_phase(false);
+            drawable.is_advance_active = true;
+        });
     }
+
     pub fn will_draw(&self) -> bool {
-        !self.hidden
-            && !self.collapsed
-            && self.opacity > 0.0
-            && self.scripted.self_ref() != 0
+        self.base.base.will_draw()
+            && self.scripted.runtime_instance().is_some()
             && self.scripted.draws()
     }
-    pub fn advance_component(&mut self, mut e: f32, advance_nested: bool) -> bool {
-        if e == 0.0 || !self.is_advance_active || self.collapsed {
+
+    pub fn advance_occurrence(
+        owner: &CoreHandle,
+        elapsed_seconds: f32,
+        flags: AdvanceFlags,
+    ) -> bool {
+        if elapsed_seconds == 0.0 {
             return false;
         }
-        self.is_advance_active = false;
-        if !advance_nested {
-            e = 0.0;
+        let instance = owner
+            .with_mut(|owner| {
+                if owner.as_component()?.is_collapsed() {
+                    return None;
+                }
+                let drawable = owner.as_scripted_drawable_mut()?;
+                if !drawable.is_advance_active {
+                    return None;
+                }
+                drawable.is_advance_active = false;
+                if !drawable.scripted.advances() {
+                    return None;
+                }
+                drawable.scripted.runtime_instance()
+            })
+            .flatten();
+        let Some(instance) = instance else {
+            return false;
+        };
+        let elapsed = if flags.0 & AdvanceFlags::ADVANCE_NESTED.0 == 0 {
+            0.0
+        } else {
+            elapsed_seconds
+        };
+        let mut host = ScriptUpdateRequestHost::default();
+        let advanced = instance
+            .borrow_mut()
+            .call_advance_truthy(elapsed, &mut host)
+            .unwrap_or(false);
+        if host.take_requested() {
+            ScriptedObject::apply_update_request(owner);
         }
-        let advanced = self.scripted.script_advance(e);
         if advanced {
-            self.is_advance_active = true;
-            self.paint_dirty = true;
+            owner.with_mut(|owner| {
+                owner
+                    .as_scripted_drawable_mut()
+                    .expect("scripted advance owner")
+                    .wake_advance()
+            });
         }
         advanced
     }
-    pub fn add_scripted_dirt(&mut self) {
-        self.mark_needs_update()
+
+    pub fn add_scripted_dirt(&mut self, value: ComponentDirt, recurse: bool) -> bool {
+        CoreCapabilities::component_add_dirt(self, value, recurse)
     }
-    pub fn add_property(&mut self, p: CoreHandle) {
-        self.properties.push(p)
+
+    pub fn add_property(&mut self, property: CoreHandle) {
+        let owner = CoreObject::core(self).handle();
+        property.with_mut(|property| property.script_input_set_scripted_object(owner));
+        self.properties.push(property);
     }
     pub fn remove_property(&mut self, property: &CoreHandle) {
         self.properties.retain(|item| item != property)
@@ -113,62 +213,146 @@ impl ScriptedDrawable {
         if self.scripted.in_update_phase() {
             return;
         }
-        self.needs_update = true
+        self.add_scripted_dirt(ComponentDirt::SCRIPT_UPDATE, false);
     }
-    pub fn world_to_local(&self, w: Vec2) -> Option<Vec2> {
-        let m = self.inverse_world;
-        let det = m[0] * m[3] - m[2] * m[1];
-        if det == 0.0 {
-            return None;
-        }
-        let inverse_det = 1.0 / det;
-        Some(Vec2 {
-            x: (m[3] * w.x - m[2] * w.y + m[2] * m[5] - m[3] * m[4]) * inverse_det,
-            y: (-m[1] * w.x + m[0] * w.y + m[1] * m[4] - m[0] * m[5]) * inverse_det,
-        })
+
+    pub fn world_to_local(&self, world: Vec2D) -> Option<Vec2D> {
+        let world_transform =
+            CoreCapabilities::as_world_transform_component(self)?.world_transform();
+        let mut inverse = Mat2D::default();
+        world_transform
+            .invert(&mut inverse)
+            .then(|| inverse * world)
     }
-    pub fn key_input(&mut self, k: Key, m: KeyModifiers, p: bool, r: bool) -> bool {
-        if !self.scripted.wants_keyboard_input() {
-            return false;
-        }
-        let handled = self.scripted.call_boolean(
-            "keyboardEvent",
-            &[k as u16 as f32, m.0 as f32, p as u8 as f32, r as u8 as f32],
-        );
-        if handled.is_some() {
-            self.wake_advance();
-        }
-        handled.unwrap_or(false)
-    }
-    pub fn text_input(&mut self, text: &str) -> bool {
-        if !self.scripted.wants_text_input() {
-            return false;
-        }
-        let handled = self.scripted.call_boolean_with_string("textEvent", text);
-        if handled.is_some() {
-            self.wake_advance();
-        }
-        handled.unwrap_or(false)
-    }
-    pub fn gamepad_dispatch(&mut self, invocation: &ListenerInvocation) -> bool {
-        let method = match invocation.kind() {
-            ListenerInvocationKind::GamepadConnected => "gamepadConnected",
-            ListenerInvocationKind::GamepadEvent => "gamepadEvent",
-            ListenerInvocationKind::GamepadDisconnected => "gamepadDisconnected",
-            _ => return false,
+
+    fn dispatch_input_occurrence(
+        owner: &CoreHandle,
+        invocation: &ListenerInvocation,
+    ) -> ScriptedDrawableInputResult {
+        let instance = owner
+            .with(|owner| {
+                let scripted = &owner.as_scripted_drawable()?.scripted;
+                match invocation.kind() {
+                    ListenerInvocationKind::Keyboard if !scripted.wants_keyboard_input() => {
+                        return None;
+                    }
+                    ListenerInvocationKind::TextInput if !scripted.wants_text_input() => {
+                        return None;
+                    }
+                    _ => {}
+                }
+                scripted.runtime_instance()
+            })
+            .flatten();
+        let Some(instance) = instance else {
+            return ScriptedDrawableInputResult::default();
         };
-        if !self.scripted.call_gamepad(method, invocation) {
-            return false;
+        let mut host = ScriptUpdateRequestHost::default();
+        let result = instance
+            .borrow_mut()
+            .call_scripted_drawable_input(&invocation.to_script_invocation(), &mut host)
+            .unwrap_or_default();
+        if host.take_requested() {
+            ScriptedObject::apply_update_request(owner);
         }
-        self.wake_advance();
-        true
+        if result.invoked {
+            owner.with_mut(|owner| {
+                owner
+                    .as_scripted_drawable_mut()
+                    .expect("scripted input owner")
+                    .wake_advance()
+            });
+        }
+        result
     }
+
+    pub fn key_input_occurrence(
+        owner: &CoreHandle,
+        key: Key,
+        modifiers: KeyModifiers,
+        pressed: bool,
+        repeat: bool,
+    ) -> bool {
+        Self::dispatch_input_occurrence(
+            owner,
+            &ListenerInvocation::keyboard(key.raw(), modifiers.bits(), pressed, repeat),
+        )
+        .handled
+    }
+
+    pub fn text_input_occurrence(owner: &CoreHandle, text: &str) -> bool {
+        Self::dispatch_input_occurrence(owner, &ListenerInvocation::text_input(text.to_owned()))
+            .handled
+    }
+
+    pub fn gamepad_dispatch_occurrence(
+        owner: &CoreHandle,
+        invocation: &ListenerInvocation,
+    ) -> bool {
+        match invocation.kind() {
+            ListenerInvocationKind::GamepadConnected
+            | ListenerInvocationKind::GamepadEvent
+            | ListenerInvocationKind::GamepadDisconnected => {}
+            _ => return false,
+        }
+        Self::dispatch_input_occurrence(owner, invocation).invoked
+    }
+
     pub fn wake_advance(&mut self) {
         self.is_advance_active = true;
-        self.paint_dirty = true
+        self.add_scripted_dirt(ComponentDirt::PAINT, false);
     }
     pub fn script_protocol(&self) -> ScriptProtocol {
         ScriptProtocol::Node
+    }
+
+    pub fn hit_test(&mut self, _info: &mut HitInfo, _transform: &Mat2D) -> Option<CoreHandle> {
+        None
+    }
+
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        let status = self.base.base.on_added_dirty(context);
+        if status != StatusCode::Ok {
+            return status;
+        }
+        let owner = CoreObject::core(self)
+            .handle()
+            .expect("attached scripted drawable");
+        let artboard = CoreCapabilities::as_component(self)
+            .and_then(|component| component.artboard_handle())
+            .expect("scripted drawable artboard");
+        artboard.with_mut(|artboard| {
+            artboard
+                .as_artboard_mut()
+                .expect("scripted drawable artboard")
+                .add_scripted_object(owner)
+        });
+        StatusCode::Ok
+    }
+
+    pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
+        let Some(owner) = CoreObject::core(self).handle() else {
+            return StatusCode::MissingObject;
+        };
+        let result = self.scripted.register_referencer(owner, stack);
+        if result != StatusCode::Ok {
+            return result;
+        }
+        CoreCapabilities::as_component_mut(self)
+            .expect("scripted drawable component")
+            .import(stack)
+    }
+
+    pub fn clone_definition(&self) -> Self {
+        let mut clone = Self::default();
+        let mut base = std::mem::take(&mut clone.base);
+        base.copy(&self.base, &mut clone);
+        clone.base = base;
+        clone
+            .scripted
+            .file_asset_referencer_mut()
+            .set_asset_unattached(self.scripted.script_asset());
+        clone
     }
 }
 pub struct HitScriptedDrawable {

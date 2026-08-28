@@ -3843,12 +3843,12 @@ impl StateMachineInstance {
             if Some(&drawable) == already_dispatched {
                 continue;
             }
-            hit_something |= drawable
-                .with_mut(|drawable| {
-                    let Some(drawable) = drawable.as_scripted_drawable_mut() else {
+            let accepts = drawable
+                .with(|drawable| {
+                    let Some(drawable) = drawable.as_scripted_drawable() else {
                         return false;
                     };
-                    let accepts = match invocation.kind() {
+                    match invocation.kind() {
                         ListenerInvocationKind::GamepadConnected => {
                             drawable.scripted.wants_gamepad_connect()
                         }
@@ -3859,10 +3859,12 @@ impl StateMachineInstance {
                             drawable.scripted.wants_gamepad_disconnect()
                         }
                         _ => false,
-                    };
-                    accepts && drawable.gamepad_dispatch(invocation)
+                    }
                 })
                 .unwrap_or(false);
+            if accepts {
+                hit_something |= crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::gamepad_dispatch_occurrence(&drawable, invocation);
+            }
         }
         if !hit_something {
             HitResult::None

@@ -9,6 +9,7 @@ use crate::mechanical_port::source::{
     focus_data::{FocusData, RuntimeKeyboardListenerHandle},
     input::focusable::{Key, KeyModifiers},
     listener_type::ListenerType,
+    scripted::scripted_drawable::ScriptedDrawable,
 };
 use std::{
     cell::RefCell,
@@ -137,15 +138,19 @@ impl KeyboardListenerGroup {
                 if let Some(text_input) = parent.as_text_input_mut() {
                     return Some(text_input.key_input(key, modifiers, pressed, repeat));
                 }
-                if self.listener.is_none()
-                    && let Some(scripted) = parent.as_scripted_drawable_mut()
-                {
-                    return Some(scripted.key_input(key, modifiers, pressed, repeat));
-                }
                 None
             });
             if let Some(Some(result)) = result {
                 return result;
+            }
+            if self.listener.is_none()
+                && parent
+                    .with(|parent| parent.as_scripted_drawable().is_some())
+                    .unwrap_or(false)
+            {
+                return ScriptedDrawable::key_input_occurrence(
+                    &parent, key, modifiers, pressed, repeat,
+                );
             }
         }
         let Some(listener) = self.listener.as_ref() else {
@@ -182,15 +187,17 @@ impl KeyboardListenerGroup {
                 if let Some(text_input) = parent.as_text_input_mut() {
                     return Some(text_input.text_input(text));
                 }
-                if self.listener.is_none()
-                    && let Some(scripted) = parent.as_scripted_drawable_mut()
-                {
-                    return Some(scripted.text_input(text));
-                }
                 None
             });
             if let Some(Some(result)) = result {
                 return result;
+            }
+            if self.listener.is_none()
+                && parent
+                    .with(|parent| parent.as_scripted_drawable().is_some())
+                    .unwrap_or(false)
+            {
+                return ScriptedDrawable::text_input_occurrence(&parent, text);
             }
         }
         if let Some(listener) = self.listener.as_ref() {

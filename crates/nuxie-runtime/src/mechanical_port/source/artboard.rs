@@ -1762,18 +1762,30 @@ impl Artboard {
             renderer.transform(nuxie_render_api::Mat2D(*self.self_transform().values()));
         }
         if self.clip() {
-            let path = self.base.base.local_path_mut().render_path(self);
+            let factory = self.factory().expect("Artboard renderer factory");
+            let path = self.base.base.local_path().render_path(&factory);
             renderer.clip_path(path);
         }
-        let world_transform = self.world_transform();
-        for paint in self.base.base.shape_paints_mut() {
-            if !paint.should_draw() {
-                continue;
-            }
-            let Some(path) = paint.pick_path(self) else {
-                continue;
-            };
-            paint.draw(renderer, path, world_transform);
+        let world_transform = *self.world_transform();
+        let paints = self
+            .base
+            .base
+            .shape_paint_container()
+            .shape_paints()
+            .to_vec();
+        for paint in paints {
+            paint.with_mut(|paint| {
+                let Some(behavior) = paint.as_shape_paint_behavior_mut() else { return; };
+                if !behavior.should_draw() { return; }
+                let kind = behavior.pick_path_kind();
+                let fill_rule = behavior.fill_rule();
+                let path = match kind {
+                    crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.base.base.local_path(),
+                    crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.base.base.local_clockwise_path(),
+                    crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.base.base.world_path(),
+                };
+                behavior.shape_paint_mut().draw_with_fill_rule(renderer, path, world_transform, false, None, true, fill_rule);
+            });
         }
         let mut empty_clips = 0;
         let mut pending_clip_operations = Vec::<RuntimeDrawableOccurrence>::new();

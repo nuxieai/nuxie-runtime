@@ -216,7 +216,7 @@ impl Shape {
                 let Some(behavior) = object.as_shape_paint_behavior_mut() else {
                     return;
                 };
-                if !behavior.shape_paint().base.is_visible() {
+                if !behavior.is_visible() {
                     return;
                 }
                 let kind = behavior.pick_path_kind();

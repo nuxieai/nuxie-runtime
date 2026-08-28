@@ -1331,17 +1331,18 @@ impl Text {
         {
             let factory = self
                 .base
-                .artboard()
-                .factory()
+                .with_artboard(|artboard| artboard.factory())
+                .flatten()
                 .expect("Text requires its Artboard renderer factory");
             renderer.clip_path(self.clip_path.render_path(&factory));
         }
         let world_transform = self.shape_world_transform;
+        let blend_mode = self.base.blend_mode().into();
         for index in 0..self.draw_commands.len() {
             match &self.draw_commands[index] {
                 TextDrawCommand::Style(style) => {
                     style.with_downcast_mut::<TextStylePaint, _>(|style| {
-                        style.draw(renderer, &world_transform)
+                        style.draw(renderer, &world_transform, blend_mode)
                     });
                 }
                 TextDrawCommand::ColorGlyph {

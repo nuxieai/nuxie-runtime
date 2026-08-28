@@ -1198,10 +1198,12 @@ pub trait DataConverterCapability {
     fn output_type(
         &self,
     ) -> crate::mechanical_port::source::data_bind::data_values::data_type::DataType;
-    fn bind_from_context(
-        &mut self,
-        context: crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
-        data_bind: crate::mechanical_port::source::core::CoreHandle,
+    fn bind_context_handler(
+        &self,
+    ) -> fn(
+        &CoreHandle,
+        crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
+        CoreHandle,
     );
     fn unbind(&mut self);
     fn update(&mut self);
@@ -1210,6 +1212,59 @@ pub trait DataConverterCapability {
 }
 
 pub trait CoreCapabilities: Any {
+    fn as_shape_paint_mutator(
+        &self,
+    ) -> Option<
+        &dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator,
+    > {
+        None
+    }
+    fn as_shape_paint_mutator_mut(&mut self) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator>{
+        None
+    }
+    fn as_text_input_drawable(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable> {
+        None
+    }
+    fn as_text_input_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable>
+    {
+        None
+    }
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        None
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        None
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        None
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        None
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        _kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        _f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        false
+    }
     fn as_scripted_drawable(
         &self,
     ) -> Option<&crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
@@ -49715,6 +49770,38 @@ impl CoreCapabilities for crate::mechanical_port::source::node::Node {
 impl CoreCapabilities
     for crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable
 {
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(self.shape_paint_container())
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(self.shape_paint_container_mut())
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(self.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        self.path_builder().map(Into::into)
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        self.with_path_mut(kind, f)
+    }
     fn drawable_hit_test(
         &mut self,
         info: &mut crate::mechanical_port::source::hit_info::HitInfo,
@@ -55133,6 +55220,16 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::dash_pa
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient
 {
+    fn as_shape_paint_mutator(
+        &self,
+    ) -> Option<
+        &dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator,
+    > {
+        Some(&self)
+    }
+    fn as_shape_paint_mutator_mut(&mut self) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator>{
+        Some(&mut self)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient::build_dependencies(&mut self);
         true
@@ -55197,6 +55294,16 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient
 {
+    fn as_shape_paint_mutator(
+        &self,
+    ) -> Option<
+        &dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator,
+    > {
+        Some(&self)
+    }
+    fn as_shape_paint_mutator_mut(&mut self) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator>{
+        Some(&mut self)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient::build_dependencies(&mut self.base.base);
         true
@@ -55205,10 +55312,7 @@ impl CoreCapabilities
         &mut self,
         value: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient::update(
-            &mut self.base.base,
-            value,
-        );
+        self.update(value);
         true
     }
     fn lifecycle_validate(
@@ -55430,6 +55534,16 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::stroke:
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::solid_color::SolidColor {
+    fn as_shape_paint_mutator(
+        &self,
+    ) -> Option<
+        &dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator,
+    > {
+        Some(&self)
+    }
+    fn as_shape_paint_mutator_mut(&mut self) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::shape_paint_mutator::ShapePaintMutator>{
+        Some(&mut self)
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -55647,10 +55761,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::fill::F
         &mut self,
         value: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint::update(
-            &mut self.base.base,
-            value,
-        );
+        self.update(value);
         true
     }
     fn lifecycle_validate(
@@ -55769,6 +55880,39 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh_vertex::M
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::shape::Shape {
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(&self.paint_container)
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(&mut self.paint_container)
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(*self.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        Some(self.path_builder())
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        self.with_path_mut(kind, f);
+        true
+    }
     fn drawable_hit_test(
         &mut self,
         info: &mut crate::mechanical_port::source::hit_info::HitInfo,
@@ -58391,6 +58535,41 @@ impl CoreCapabilities for crate::mechanical_port::source::draw_rules::DrawRules 
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout_component::LayoutComponent {
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(self.shape_paint_container())
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(self.shape_paint_container_mut())
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(self.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        crate::mechanical_port::source::core::CoreObject::core(self)
+            .handle()
+            .map(Into::into)
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        f(match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.local_clockwise_path() });
+        true
+    }
     fn drawable_hit_test(
         &mut self,
         info: &mut crate::mechanical_port::source::hit_info::HitInfo,
@@ -58650,6 +58829,41 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(self.base.base.shape_paint_container())
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(self.base.base.shape_paint_container_mut())
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(self.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        crate::mechanical_port::source::core::CoreObject::core(self)
+            .handle()
+            .map(Into::into)
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        f(match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.base.base.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.base.base.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.base.base.local_clockwise_path() });
+        true
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -60308,11 +60522,54 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input_cursor::TextInputCursor {
+    fn as_text_input_drawable(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable> {
+        Some(&self.base.base)
+    }
+    fn as_text_input_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable>
+    {
+        Some(&mut self.base.base)
+    }
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(&self.base.base.paints)
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(&mut self.base.base.paints)
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(self.base.base.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        Some(self.base.base.path_builder().into())
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        self.with_path_mut(kind, f)
+    }
     fn drawable_draw(
         &mut self,
         renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
-        self.base.base.draw(renderer);
+        self.draw(renderer);
         true
     }
     fn drawable_will_draw(&self) -> bool {
@@ -60497,11 +60754,54 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input_curso
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input_text::TextInputText {
+    fn as_text_input_drawable(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable> {
+        Some(&self.base.base)
+    }
+    fn as_text_input_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable>
+    {
+        Some(&mut self.base.base)
+    }
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(&self.base.base.paints)
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(&mut self.base.base.paints)
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(self.base.base.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        Some(self.base.base.path_builder().into())
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        self.with_path_mut(kind, f)
+    }
     fn drawable_draw(
         &mut self,
         renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
-        self.base.base.draw(renderer);
+        self.draw(renderer);
         true
     }
     fn drawable_will_draw(&self) -> bool {
@@ -60884,6 +61184,38 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style::Text
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint::TextStylePaint {
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(&self.paints)
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(&mut self.paints)
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(self.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        Some(self.path_builder().into())
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => false, _ => { f(self.local_path()); true } }
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::text::text_style::TextStyle::build_dependencies(
             &mut self.base.base,
@@ -60967,11 +61299,54 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText
 {
+    fn as_text_input_drawable(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable> {
+        Some(&self.base.base)
+    }
+    fn as_text_input_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable>
+    {
+        Some(&mut self.base.base)
+    }
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(&self.base.base.paints)
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(&mut self.base.base.paints)
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(self.base.base.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        Some(self.base.base.path_builder().into())
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        self.with_path_mut(kind, f)
+    }
     fn drawable_draw(
         &mut self,
         renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
-        self.base.base.draw(renderer);
+        self.draw(renderer);
         true
     }
     fn drawable_will_draw(&self) -> bool {
@@ -61381,11 +61756,54 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style_axis:
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_input_selection::TextInputSelection
 {
+    fn as_text_input_drawable(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable> {
+        Some(&self.base.base)
+    }
+    fn as_text_input_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable>
+    {
+        Some(&mut self.base.base)
+    }
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(&self.base.base.paints)
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(&mut self.base.base.paints)
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(self.base.base.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        Some(self.base.base.path_builder().into())
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        self.with_path_mut(kind, f)
+    }
     fn drawable_draw(
         &mut self,
         renderer: &mut crate::mechanical_port::source::renderer::Renderer,
     ) -> bool {
-        self.base.base.draw(renderer);
+        self.draw(renderer);
         true
     }
     fn drawable_will_draw(&self) -> bool {

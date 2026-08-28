@@ -39,13 +39,17 @@ impl PointerData {
 pub struct ListenerGroup {
     is_consumed: bool,
     has_dragged: bool,
-    listener: CoreHandle,
+    listener: Option<CoreHandle>,
     pointers: HashMap<i32, Box<PointerData>>,
     pointers_pool: Vec<Box<PointerData>>,
 }
 
 impl ListenerGroup {
     pub fn new(listener: CoreHandle) -> Self {
+        Self::new_optional(Some(listener))
+    }
+
+    pub fn new_optional(listener: Option<CoreHandle>) -> Self {
         Self {
             is_consumed: false,
             has_dragged: false,
@@ -108,8 +112,12 @@ impl ListenerGroup {
 
     fn has_listener(&self, kind: ListenerType) -> bool {
         self.listener
-            .with(|listener| listener.state_machine_listener_has(kind))
-            .flatten()
+            .as_ref()
+            .and_then(|listener| {
+                listener
+                    .with(|listener| listener.state_machine_listener_has(kind))
+                    .flatten()
+            })
             .unwrap_or(false)
     }
 
@@ -180,7 +188,10 @@ impl ListenerGroup {
             self.has_dragged = false;
         }
 
-        let listener = self.listener.clone();
+        let listener = self
+            .listener
+            .clone()
+            .expect("base listener dispatch requires an authored listener");
         let mut should_perform_changes = false;
         let mut listener_type_matched = hit_event;
         if hover_change {
@@ -236,7 +247,9 @@ impl ListenerGroup {
     }
 
     pub fn listener(&self) -> CoreHandle {
-        self.listener.clone()
+        self.listener
+            .clone()
+            .expect("an authored listener group retains its listener")
     }
 }
 

@@ -2614,17 +2614,31 @@ impl StateMachineInstance {
     }
 
     fn initialize_text_inputs(&mut self) {
-        let machine = self.occurrence.clone();
         for text_input in self
-            .runtime
-            .borrow_mut()
-            .artboard_text_inputs(&self.artboard_instance)
+            .artboard_instance
+            .with_artboard(|artboard| {
+                artboard
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .filter(|object| {
+                        object
+                            .with(|object| object.as_text_input().is_some())
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .expect("a state machine retains its ArtboardInstance")
         {
-            let group = self
-                .runtime
-                .borrow_mut()
-                .make_text_input_listener_group(&text_input, machine);
-            let mut hit = HitDrawable::new(text_input.clone(), text_input, true, true, true);
+            let group = RuntimeListenerGroupHandle::new(Box::new(crate::mechanical_port::source::animation::text_input_listener_group::TextInputListenerGroup::new(text_input.clone())));
+            let mut hit = HitDrawable::new(
+                RuntimeDrawableOccurrence::Authored(text_input.clone()),
+                RuntimeDrawableOccurrence::Authored(text_input),
+                true,
+                true,
+                true,
+            );
             hit.add_listener(group.clone());
             self.hit_components.push(Box::new(hit));
             self.listener_groups.push(group);

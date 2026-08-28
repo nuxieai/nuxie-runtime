@@ -54,6 +54,7 @@ use crate::mechanical_port::source::{
         data_context::{DataContext, RuntimeDataContextHandle},
     },
     dirtyable::Dirtyable,
+    drawable::RuntimeDrawableOccurrence,
     file::DETERMINISTIC_MODE,
     focus_data::FocusData,
     generated::{
@@ -1236,7 +1237,7 @@ impl TransitionRuntime for DirectTransitionRuntime {
 }
 
 pub trait HitComponent {
-    fn component(&self) -> CoreHandle;
+    fn component(&self) -> RuntimeDrawableOccurrence;
     fn as_hit_drawable_mut(&mut self) -> Option<&mut HitDrawable> {
         None
     }
@@ -1342,8 +1343,8 @@ fn component_list_state_machine(
 }
 
 pub struct HitDrawable {
-    component: CoreHandle,
-    drawable: CoreHandle,
+    component: RuntimeDrawableOccurrence,
+    drawable: RuntimeDrawableOccurrence,
     hit_radius: f32,
     is_hovered: bool,
     can_early_out: bool,
@@ -1363,25 +1364,19 @@ type HitLayout = HitDrawable;
 
 impl HitDrawable {
     fn new(
-        drawable: CoreHandle,
-        component: CoreHandle,
+        drawable: RuntimeDrawableOccurrence,
+        component: RuntimeDrawableOccurrence,
         is_opaque: bool,
         hit_path: bool,
         hit_clip: bool,
     ) -> Self {
+        let can_early_out = !drawable.is_target_opaque();
         Self {
             component,
             drawable,
             hit_radius: 2.0,
             is_hovered: false,
-            can_early_out: !drawable
-                .with(|drawable| {
-                    drawable
-                        .as_drawable()
-                        .map(|drawable| drawable.is_target_opaque())
-                })
-                .flatten()
-                .expect("a drawable hit target retains its Drawable"),
+            can_early_out,
             has_down_listener: false,
             has_up_listener: false,
             is_opaque,
@@ -1396,10 +1391,7 @@ impl HitDrawable {
     fn add_listener(&mut self, group: RuntimeListenerGroupHandle) {
         let (can_early_out, needs_down, needs_up) = self
             .component
-            .with(|component| {
-                let component = component
-                    .as_component()
-                    .expect("a hit target retains a Component");
+            .with_component(|component| {
                 group.with_group(|group| {
                     (
                         group.can_early_out(component),
@@ -1424,7 +1416,7 @@ impl HitDrawable {
 }
 
 impl HitComponent for HitDrawable {
-    fn component(&self) -> CoreHandle {
+    fn component(&self) -> RuntimeDrawableOccurrence {
         self.component.clone()
     }
 
@@ -1439,11 +1431,7 @@ impl HitComponent for HitDrawable {
 
     fn hit_test(&self, position: Vec2D) -> bool {
         self.component
-            .with_mut(|component| {
-                component.component_hit_test_point(&position, self.hit_path, self.hit_clip)
-            })
-            .flatten()
-            .expect("a hit target retains its Component")
+            .hit_test_point(&position, self.hit_path, self.hit_clip)
     }
 
     fn prepare_event(&mut self, position: Vec2D, hit_type: ListenerType, pointer_id: i32) {
@@ -1495,10 +1483,7 @@ impl HitComponent for HitDrawable {
             }
             let result = self
                 .component
-                .with_mut(|component| {
-                    let component = component
-                        .as_component_mut()
-                        .expect("a hit target retains a Component");
+                .with_component_mut(|component| {
                     listener.with_group_mut(|listener| {
                         listener.process_event(
                             component, position, pointer_id, hit_type, can_hit, timestamp, machine,
@@ -1512,18 +1497,7 @@ impl HitComponent for HitDrawable {
         }
         if !self.is_hovered || !can_hit {
             HitResult::None
-        } else if self.is_opaque
-            || self
-                .drawable
-                .with(|drawable| {
-                    drawable
-                        .as_drawable()
-                        .map(|drawable| drawable.is_target_opaque())
-                })
-                .flatten()
-                .unwrap_or(false)
-            || blocking
-        {
+        } else if self.is_opaque || self.drawable.is_target_opaque() || blocking {
             HitResult::HitOpaque
         } else {
             HitResult::Hit
@@ -1548,8 +1522,8 @@ struct HitNestedArtboard {
 }
 
 impl HitComponent for HitNestedArtboard {
-    fn component(&self) -> CoreHandle {
-        self.component.clone()
+    fn component(&self) -> RuntimeDrawableOccurrence {
+        RuntimeDrawableOccurrence::Authored(self.component.clone())
     }
 
     fn hit_test(&self, position: Vec2D) -> bool {
@@ -1647,8 +1621,8 @@ struct HitComponentList {
 }
 
 impl HitComponent for HitComponentList {
-    fn component(&self) -> CoreHandle {
-        self.component.clone()
+    fn component(&self) -> RuntimeDrawableOccurrence {
+        RuntimeDrawableOccurrence::Authored(self.component.clone())
     }
 
     fn hit_test(&self, position: Vec2D) -> bool {
@@ -2457,7 +2431,7 @@ impl StateMachineInstance {
         }
     }
 
-    fn initialize_listeners(&mut self, hit_lookup: &mut HashMap<CoreHandle, usize>) {
+    fn initialize_listeners(&mut self, hit_lookup: &mut HashMap<RuntimeDrawableOccurrence, usize>) {
         let machine = self.occurrence.clone();
         let listener_count = self
             .machine
@@ -2518,11 +2492,19 @@ impl StateMachineInstance {
                 let group =
                     RuntimeListenerGroupHandle::new(Box::new(ListenerGroup::new(listener.clone())));
                 if let Some(target) = target.as_ref() {
-                    let is_layout = self.runtime.borrow_mut().component_is_layout(target);
+                    let is_layout = target
+                        .with(|target| target.as_layout_component().is_some())
+                        .unwrap_or(false);
                     let hit_target = if is_layout {
-                        self.runtime.borrow_mut().component_proxy(target)
+                        target
+                            .with_mut(|target| {
+                                target
+                                    .as_layout_component_mut()
+                                    .and_then(|layout| layout.proxy())
+                            })
+                            .flatten()
                     } else {
-                        Some(target.clone())
+                        Some(RuntimeDrawableOccurrence::Authored(target.clone()))
                     };
                     if let Some(hit_target) = hit_target {
                         self.add_to_hit_lookup(hit_target, is_layout, hit_lookup, group, false);
@@ -2545,7 +2527,7 @@ impl StateMachineInstance {
 
     fn initialize_component_provided_listeners(
         &mut self,
-        hit_lookup: &mut HashMap<CoreHandle, usize>,
+        hit_lookup: &mut HashMap<RuntimeDrawableOccurrence, usize>,
     ) {
         let providers: Vec<CoreHandle> = self
             .runtime
@@ -2697,9 +2679,9 @@ impl StateMachineInstance {
 
     fn add_to_hit_lookup(
         &mut self,
-        target: CoreHandle,
+        target: RuntimeDrawableOccurrence,
         is_layout_component: bool,
-        hit_lookup: &mut HashMap<CoreHandle, usize>,
+        hit_lookup: &mut HashMap<RuntimeDrawableOccurrence, usize>,
         listener_group: RuntimeListenerGroupHandle,
         is_opaque: bool,
     ) {
@@ -2720,19 +2702,38 @@ impl StateMachineInstance {
             }
             return;
         }
-        if self.runtime.borrow_mut().component_is_shape(&target)
-            || self.runtime.borrow_mut().component_is_text_run(&target)
-        {
+        let Some(authored_target) = target.authored_handle() else {
+            return;
+        };
+        let (is_shape, is_text_run) = authored_target
+            .with(|target| {
+                (
+                    target.as_shape().is_some(),
+                    target.as_text_value_run().is_some(),
+                )
+            })
+            .expect("a hit target retains its authored owner");
+        if is_shape || is_text_run {
             let index = if let Some(&index) = hit_lookup.get(&target) {
                 index
             } else {
-                self.runtime.borrow_mut().component_mark_hit_path(&target);
-                let drawable = if self.runtime.borrow_mut().component_is_text_run(&target) {
-                    self.runtime
-                        .borrow_mut()
-                        .text_run_text_component(&target)
-                        .unwrap_or_else(|| target.clone())
+                let drawable = if is_text_run {
+                    let text = authored_target
+                        .with_mut(|target| {
+                            let run = target.as_text_value_run_mut()?;
+                            run.set_is_hit_target(true);
+                            run.text_component()
+                        })
+                        .flatten()
+                        .expect("a text run hit target retains its Text");
+                    text.with_mut(|text| text.component_add_dirt(ComponentDirt::PATH, true));
+                    RuntimeDrawableOccurrence::Authored(text)
                 } else {
+                    authored_target.with_mut(|target| {
+                        target.as_shape_mut().expect("a shape hit target retains its Shape")
+                            .add_flags(crate::mechanical_port::source::shapes::path_flags::PathFlags::NEVER_DEFER_UPDATE);
+                        target.component_add_dirt(ComponentDirt::PATH, true);
+                    });
                     target.clone()
                 };
                 let hit = HitDrawable::new(drawable, target.clone(), false, true, true);
@@ -2746,11 +2747,20 @@ impl StateMachineInstance {
             }
             return;
         }
-        if self.runtime.borrow_mut().component_is_container(&target) {
-            for child in self.runtime.borrow_mut().component_children(&target) {
-                let is_layout = self.runtime.borrow_mut().component_is_layout(&child);
+        if let Some(children) = authored_target
+            .with(|target| {
+                target
+                    .as_container_component()
+                    .map(|container| container.children().to_vec())
+            })
+            .flatten()
+        {
+            for child in children {
+                let is_layout = child
+                    .with(|child| child.as_layout_component().is_some())
+                    .unwrap_or(false);
                 self.add_to_hit_lookup(
-                    child,
+                    RuntimeDrawableOccurrence::Authored(child),
                     is_layout,
                     hit_lookup,
                     listener_group.clone(),
@@ -2867,26 +2877,44 @@ impl StateMachineInstance {
     }
 
     fn sort_hit_components(&mut self) {
-        let components: Vec<CoreHandle> = self
-            .hit_components
-            .iter()
-            .map(|component| component.component())
-            .collect();
-        let order = self
-            .runtime
-            .borrow_mut()
-            .artboard_ordered_hit_components(&self.artboard_instance, &components);
-        let mut old: Vec<Option<Box<dyn HitComponent>>> =
-            self.hit_components.drain(..).map(Some).collect();
-        for index in order {
-            if index < old.len() {
-                if let Some(component) = old[index].take() {
-                    self.hit_components.push(component);
-                }
+        let count = self.hit_components.len();
+        let mut sorted = 0;
+        for index in 0..count {
+            if self.hit_components[index].component().authored_handle().is_some_and(|handle|
+                handle.is_type_of(crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY)) {
+                self.hit_components.swap(sorted, index);
+                sorted += 1;
             }
         }
-        self.hit_components
-            .extend(old.into_iter().filter_map(|value| value));
+        let mut last = self
+            .artboard_instance
+            .with_artboard(|artboard| artboard.first_drawable())
+            .flatten();
+        while let Some(previous) = last.as_ref().and_then(|last| {
+            last.with(|drawable| {
+                drawable
+                    .prev
+                    .as_ref()
+                    .and_then(|previous| previous.upgrade())
+            })
+            .flatten()
+        }) {
+            last = Some(previous);
+        }
+        while let Some(drawable) = last {
+            for index in sorted..count {
+                if self.hit_components[index].component().ptr_eq(&drawable) {
+                    self.hit_components.swap(sorted, index);
+                    sorted += 1;
+                }
+            }
+            if sorted == count {
+                break;
+            }
+            last = drawable
+                .with(|drawable| drawable.next.as_ref().and_then(|next| next.upgrade()))
+                .flatten();
+        }
     }
 
     pub fn try_change_state(&mut self) -> bool {

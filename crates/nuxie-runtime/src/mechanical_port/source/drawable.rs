@@ -247,6 +247,65 @@ pub enum RuntimeDrawableWeakOccurrence {
 }
 
 impl RuntimeDrawableOccurrence {
+    pub fn with_component<R>(
+        &self,
+        use_component: impl FnOnce(&crate::mechanical_port::source::component::Component) -> R,
+    ) -> Option<R> {
+        match self {
+            Self::Authored(handle) => {
+                handle.with(|object| object.as_component().map(use_component))?
+            }
+            Self::RuntimeProxy(proxy) => Some(use_component(&proxy.borrow().base)),
+        }
+    }
+
+    pub fn with_component_mut<R>(
+        &self,
+        use_component: impl FnOnce(&mut crate::mechanical_port::source::component::Component) -> R,
+    ) -> Option<R> {
+        match self {
+            Self::Authored(handle) => {
+                handle.with_mut(|object| object.as_component_mut().map(use_component))?
+            }
+            Self::RuntimeProxy(proxy) => Some(use_component(&mut proxy.borrow_mut().base)),
+        }
+    }
+
+    pub fn hit_test_point(
+        &self,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with_mut(|object| {
+                    object.component_hit_test_point(position, skip_on_unclipped, is_primary_hit)
+                })
+                .flatten()
+                .unwrap_or(false),
+            Self::RuntimeProxy(proxy) => {
+                let owner = proxy.borrow().hittable_component();
+                owner
+                    .with_mut(|owner| {
+                        owner.component_hit_test_point(position, skip_on_unclipped, is_primary_hit)
+                    })
+                    .flatten()
+                    .unwrap_or(false)
+            }
+        }
+    }
+
+    pub fn is_target_opaque(&self) -> bool {
+        match self {
+            Self::Authored(handle) => handle
+                .with(|object| object.as_drawable().map(Drawable::is_target_opaque))
+                .flatten()
+                .unwrap_or(false),
+            Self::RuntimeProxy(proxy) => proxy.borrow_mut().is_target_opaque(),
+        }
+    }
+
     pub fn authored(handle: CoreHandle) -> Self {
         Self::Authored(handle)
     }
@@ -409,6 +468,28 @@ impl RuntimeDrawableOccurrence {
                 .with_mut(|object| object.drawable_empty_clip_count())
                 .unwrap_or_default(),
             Self::RuntimeProxy(proxy) => proxy.borrow_mut().empty_clip_count(),
+        }
+    }
+}
+
+impl PartialEq for RuntimeDrawableOccurrence {
+    fn eq(&self, other: &Self) -> bool {
+        self.ptr_eq(other)
+    }
+}
+impl Eq for RuntimeDrawableOccurrence {}
+impl std::hash::Hash for RuntimeDrawableOccurrence {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        use std::hash::Hash;
+        match self {
+            Self::Authored(handle) => {
+                0u8.hash(state);
+                handle.hash(state);
+            }
+            Self::RuntimeProxy(proxy) => {
+                1u8.hash(state);
+                Rc::as_ptr(proxy).hash(state);
+            }
         }
     }
 }

@@ -1,5 +1,8 @@
 use crate::mechanical_port::source::{
     animation::{
+        animation_reset::AnimationReset,
+        animation_reset_factory::AnimationResetFactory,
+        animation_state::AnimationState,
         linear_animation_instance::LinearAnimationInstance,
         listener_invocation::ListenerInvocation,
         state_instance::RuntimeStateInstanceHandle,
@@ -279,18 +282,6 @@ pub trait StateMachineInstanceRuntime {
         action: &CoreHandle,
         machine: &mut StateMachineInstance,
         invocation: &ListenerInvocation,
-    );
-    fn make_animation_reset(
-        &mut self,
-        from: Option<&RuntimeStateInstanceHandle>,
-        to: Option<&RuntimeStateInstanceHandle>,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
-    ) -> Object;
-    fn release_animation_reset(&mut self, reset: Object);
-    fn apply_animation_reset(
-        &mut self,
-        reset: Object,
-        artboard: &RuntimeArtboardInstanceWeakHandle,
     );
     fn animation_apply(
         &mut self,
@@ -703,7 +694,7 @@ pub struct StateMachineLayerInstance {
     state_from: Option<RuntimeStateInstanceHandle>,
     transition: Option<CoreHandle>,
     transition_duration_property: Option<CoreHandle>,
-    animation_reset: Object,
+    animation_reset: Option<AnimationReset>,
     transition_completed: bool,
     hold_animation_from: bool,
     mix: f32,
@@ -768,7 +759,7 @@ impl Default for StateMachineLayerInstance {
             state_from: None,
             transition: None,
             transition_duration_property: None,
-            animation_reset: RuntimeObjectHandle::NONE,
+            animation_reset: None,
             transition_completed: false,
             hold_animation_from: false,
             mix: 1.0,
@@ -1133,11 +1124,29 @@ impl StateMachineLayerInstance {
     }
 
     fn clear_animation_reset(&mut self) {
-        if self.animation_reset != 0 {
-            let reset = self.animation_reset;
-            self.runtime().release_animation_reset(reset);
-            self.animation_reset = RuntimeObjectHandle::NONE;
+        if let Some(reset) = self.animation_reset.take() {
+            AnimationResetFactory::release(reset);
         }
+    }
+
+    fn build_animation_reset_for_transition(&mut self) {
+        let animations = [self.state_from.as_ref(), self.current_state.as_ref()]
+            .into_iter()
+            .flatten()
+            .filter_map(|state| {
+                state
+                    .definition()
+                    .with_downcast::<AnimationState, _>(AnimationState::animation)
+                    .flatten()
+            })
+            .collect::<Vec<_>>();
+        self.animation_reset = Some(
+            self.artboard_instance
+                .with_artboard(|artboard| {
+                    AnimationResetFactory::from_animation_handles(&animations, artboard, false)
+                })
+                .expect("a state-machine layer retains its artboard instance"),
+        );
     }
 
     fn try_change_state_from(
@@ -1181,11 +1190,7 @@ impl StateMachineLayerInstance {
         }
         self.state_from = out_state;
         if !self.transition_completed {
-            self.animation_reset = self.runtime().make_animation_reset(
-                self.state_from.as_ref(),
-                self.current_state.as_ref(),
-                &self.artboard_instance,
-            );
+            self.build_animation_reset_for_transition();
         }
         if let Some(out_state) = self.state_from.clone()
             && self
@@ -1215,9 +1220,10 @@ impl StateMachineLayerInstance {
     }
 
     fn apply(&mut self) {
-        if self.animation_reset != 0 {
-            self.runtime()
-                .apply_animation_reset(self.animation_reset, &self.artboard_instance);
+        if let Some(animation_reset) = self.animation_reset.as_ref() {
+            self.artboard_instance
+                .with_artboard_mut(|artboard| animation_reset.apply(artboard))
+                .expect("a state-machine layer retains its artboard instance");
         }
         if let Some(hold_animation) = self.hold_animation.take() {
             self.runtime().animation_apply(

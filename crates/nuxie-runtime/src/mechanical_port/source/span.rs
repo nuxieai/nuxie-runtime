@@ -14,13 +14,27 @@ impl<'a, T> Span<'a, T> {
         Self { slice }
     }
 
+    /// Rebuild a borrowed span at an FFI boundary.
+    ///
+    /// # Safety
+    ///
+    /// For nonzero `size`, `pointer` must identify `size` initialized,
+    /// properly aligned `T` values in one allocation and they must remain live
+    /// for `'a`. A zero-length C++ span is normalized to Rust's canonical empty
+    /// slice without dereferencing its possibly-null pointer.
     pub unsafe fn from_raw_parts(pointer: *const T, size: usize) -> Self {
-        assert!(pointer.addr() <= pointer.wrapping_add(size).addr());
+        if size == 0 {
+            return Self::default();
+        }
+        assert!(!pointer.is_null());
         Self {
+            // SAFETY: upheld by this constructor's contract above.
             slice: unsafe { std::slice::from_raw_parts(pointer, size) },
         }
     }
 
+    /// Borrowed pointer view for call-scoped FFI; ownership remains with this
+    /// span's source slice.
     pub const fn data(&self) -> *const T {
         self.slice.as_ptr()
     }

@@ -1,4 +1,4 @@
-#[cfg(feature = "testing")]
+#[cfg(test)]
 pub mod testing {
     use std::sync::atomic::{AtomicI32, Ordering};
 
@@ -30,7 +30,7 @@ impl<T: Default> SimpleArray<T> {
         let mut values = Vec::new();
         if values.try_reserve_exact(size).is_ok() {
             values.resize_with(size, T::default);
-            #[cfg(feature = "testing")]
+            #[cfg(test)]
             testing::MALLOC_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         Self {
@@ -50,10 +50,14 @@ impl<T: Clone + Default> SimpleArray<T> {
 }
 
 impl<T> SimpleArray<T> {
+    /// Call-scoped FFI view of this array's contiguous storage. The returned
+    /// pointer never owns or outlives `self`; Rust consumers use `as_slice`.
     pub fn data(&self) -> *const T {
         self.values.as_ptr()
     }
 
+    /// Call-scoped mutable FFI view. Callers must not retain the pointer or
+    /// alias it with another mutable view; Rust consumers use `as_mut_slice`.
     pub fn data_mut(&mut self) -> *mut T {
         self.values.as_mut_ptr()
     }
@@ -111,7 +115,7 @@ impl<T> std::ops::IndexMut<usize> for SimpleArray<T> {
 
 impl<T> Drop for SimpleArray<T> {
     fn drop(&mut self) {
-        #[cfg(feature = "testing")]
+        #[cfg(test)]
         testing::FREE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 }
@@ -135,7 +139,7 @@ impl<T> SimpleArrayBuilder<T> {
         if self.values.len() == self.values.capacity() {
             let target = std::cmp::max(1, self.values.capacity() * 2);
             self.values.reserve_exact(target - self.values.len());
-            #[cfg(feature = "testing")]
+            #[cfg(test)]
             testing::REALLOC_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         self.values.push(value);

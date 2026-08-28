@@ -29,7 +29,7 @@ use crate::mechanical_port::source::{
     hit_result::HitResult,
     layout::{compute_alignment, Alignment},
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
-    renderer::{RenderImage, RenderImageRef},
+    renderer::RenderImageRef,
     semantic::semantic_snapshot::{SemanticsBoundsUpdate, SemanticsDiff, SemanticsDiffNode},
     text::font_hb::HbFont,
     text_engine::FontRef,
@@ -620,7 +620,11 @@ impl CommandServer {
                     let request_id: u64 = self.command_queue.read();
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
-                    if let Some(image) = self.factory().decode_image(&bytes) {
+                    let image = self
+                        .factory
+                        .with_factory_mut(|factory| factory.decode_image(&bytes));
+                    if let Ok(image) = image {
+                        let image: RenderImageRef = Rc::from(image);
                         self.assets.borrow_mut().images.insert(handle, image);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::ImageDecoded);
@@ -725,7 +729,7 @@ impl CommandServer {
                     let request_id: u64 = self.command_queue.read();
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
-                    if let Some(audio) = self.factory().decode_audio(&bytes) {
+                    if let Some(audio) = AudioSource::from_encoded(&bytes) {
                         self.assets.borrow_mut().audio_sources.insert(handle, audio);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::AudioDecoded);
@@ -784,7 +788,7 @@ impl CommandServer {
                     let request_id: u64 = self.command_queue.read();
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
-                    if let Some(font) = self.factory().decode_font(&bytes) {
+                    if let Some(font) = HbFont::decode(&bytes) {
                         self.assets.borrow_mut().fonts.insert(handle, font);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::FontDecoded);

@@ -5,14 +5,11 @@ use std::rc::Rc;
 
 use luaur_rt::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
-    Value,
+    Value, Vector as LuaVector,
 };
-use nuxie_render_api::RawPath;
-use nuxie_runtime::{
-    ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptNode,
-    ScriptPaint as RuntimeScriptPaint,
-};
+use nuxie_runtime::{ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptNode};
 
+use super::lua_mat2d::ScriptedMat2D;
 use super::lua_paint::ScriptedPaintData;
 use super::lua_path::{ScriptedPath, create_scripted_path};
 use super::lua_renderer::ScriptedRenderer;
@@ -59,6 +56,30 @@ impl UserData for ScriptedAnimation {
                 .advance_animation(&mut this.animation, seconds)
                 .map_err(|error| Error::runtime(error.to_string()))
         });
+        methods.add_method("bounds", |_, this, ()| {
+            let bounds = this.owner.artboard.borrow().bounds();
+            Ok((
+                LuaVector::new(bounds.min_x, bounds.min_y, 0.0),
+                LuaVector::new(bounds.max_x, bounds.max_y, 0.0),
+            ))
+        });
+        methods.add_method_mut(
+            "addToPath",
+            |_, this, (path, transform): (AnyUserData, Option<AnyUserData>)| {
+                let transform = transform
+                    .as_ref()
+                    .map(|transform| transform.borrow::<ScriptedMat2D>().map(|value| value.0))
+                    .transpose()?;
+                let mut path = path.borrow_mut::<ScriptedPath>()?;
+                this.owner
+                    .artboard
+                    .borrow_mut()
+                    .add_to_path(&mut path.raw_path, transform)
+                    .map_err(|error| Error::runtime(error.to_string()))?;
+                path.mark_dirty();
+                Ok(())
+            },
+        );
         for (name, mode) in [
             ("setTime", ScriptAnimationTime::Seconds),
             ("setTimeFrames", ScriptAnimationTime::Frames),
@@ -218,23 +239,99 @@ impl UserData for ScriptedArtboard {
 }
 
 pub(super) struct ScriptedNode {
-    path: Option<RawPath>,
-    paint: Option<RuntimeScriptPaint>,
+    node: ScriptNode,
 }
 
 impl ScriptedNode {
     pub(super) fn new(node: ScriptNode) -> Self {
-        Self {
-            path: node.path,
-            paint: node.paint,
-        }
+        Self { node }
     }
 }
 
 impl UserData for ScriptedNode {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("x", |_, this| Ok(this.node.x()));
+        fields.add_field_method_set("x", |_, this, value: f32| {
+            this.node.set_x(value);
+            Ok(())
+        });
+        fields.add_field_method_get("y", |_, this| Ok(this.node.y()));
+        fields.add_field_method_set("y", |_, this, value: f32| {
+            this.node.set_y(value);
+            Ok(())
+        });
+        fields.add_field_method_get("position", |_, this| {
+            Ok(LuaVector::new(this.node.x(), this.node.y(), 0.0))
+        });
+        fields.add_field_method_set("position", |_, this, value: LuaVector| {
+            this.node.set_x(value.x());
+            this.node.set_y(value.y());
+            Ok(())
+        });
+        fields.add_field_method_get("rotation", |_, this| Ok(this.node.rotation()));
+        fields.add_field_method_set("rotation", |_, this, value: f32| {
+            this.node.set_rotation(value);
+            Ok(())
+        });
+        fields.add_field_method_get("scale", |_, this| {
+            Ok(LuaVector::new(
+                this.node.scale_x(),
+                this.node.scale_y(),
+                0.0,
+            ))
+        });
+        fields.add_field_method_set("scale", |_, this, value: LuaVector| {
+            this.node.set_scale_x(value.x());
+            this.node.set_scale_y(value.y());
+            Ok(())
+        });
+        fields.add_field_method_get("scaleX", |_, this| Ok(this.node.scale_x()));
+        fields.add_field_method_set("scaleX", |_, this, value: f32| {
+            this.node.set_scale_x(value);
+            Ok(())
+        });
+        fields.add_field_method_get("scaleY", |_, this| Ok(this.node.scale_y()));
+        fields.add_field_method_set("scaleY", |_, this, value: f32| {
+            this.node.set_scale_y(value);
+            Ok(())
+        });
+        fields.add_field_method_get("worldTransform", |lua, this| {
+            lua.create_userdata(ScriptedMat2D(this.node.world_transform()))
+        });
+        fields.add_field_method_set("worldTransform", |_, this, value: AnyUserData| {
+            this.node
+                .set_world_transform(value.borrow::<ScriptedMat2D>()?.0);
+            Ok(())
+        });
+        fields.add_field_method_get("children", |lua, this| {
+            let children = this.node.children();
+            let table = lua.create_table_with_capacity(children.len(), 0)?;
+            for (index, child) in children.into_iter().enumerate() {
+                table.raw_set(index + 1, lua.create_userdata(Self::new(child))?)?;
+            }
+            Ok(table)
+        });
+        fields.add_field_method_get("parent", |lua, this| {
+            Ok(match this.node.parent() {
+                Some(parent) => Value::UserData(lua.create_userdata(Self::new(parent))?),
+                None => Value::Nil,
+            })
+        });
+        fields.add_field_method_get("paint", |lua, this| {
+            Ok(match this.node.paint() {
+                Some(paint) => Value::UserData(lua.create_userdata(ScriptedPaintData(paint))?),
+                None => Value::Nil,
+            })
+        });
+    }
+
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("decompose", |_, this, transform: AnyUserData| {
+            this.node.decompose(transform.borrow::<ScriptedMat2D>()?.0);
+            Ok(())
+        });
         methods.add_method("asPath", |lua, this, ()| {
-            Ok(match this.path.clone() {
+            Ok(match this.node.path() {
                 Some(path) => Value::UserData(create_scripted_path(
                     lua,
                     ScriptedPath::from_raw_path(path),
@@ -243,7 +340,7 @@ impl UserData for ScriptedNode {
             })
         });
         methods.add_method("asPaint", |lua, this, ()| {
-            Ok(match this.paint {
+            Ok(match this.node.paint() {
                 Some(paint) => Value::UserData(lua.create_userdata(ScriptedPaintData(paint))?),
                 None => Value::Nil,
             })

@@ -44,7 +44,7 @@ impl ScriptedPath {
         }
     }
 
-    fn mark_dirty(&mut self) {
+    pub(super) fn mark_dirty(&mut self) {
         self.dirty = true;
     }
 

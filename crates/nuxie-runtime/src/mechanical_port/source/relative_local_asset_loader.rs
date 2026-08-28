@@ -5,7 +5,8 @@ use std::{
 };
 
 use crate::mechanical_port::source::{
-    assets::file_asset::FileAsset, factory::Factory, file_asset_loader::FileAssetLoader,
+    core::CoreHandle, factory::RuntimeFactoryHandle, file_asset_loader::FileAssetLoader,
+    generated::core_registry::CoreCapabilities,
 };
 
 pub struct RelativeLocalAssetLoader {
@@ -24,11 +25,23 @@ impl RelativeLocalAssetLoader {
 impl FileAssetLoader for RelativeLocalAssetLoader {
     fn load_contents(
         &mut self,
-        asset: &mut FileAsset,
+        asset: CoreHandle,
         _in_band_bytes: &[u8],
-        factory: &mut Factory,
+        factory: &RuntimeFactoryHandle,
     ) -> bool {
-        let filename = format!("{}{}", self.path, asset.unique_filename());
+        let Some(unique_filename) = asset
+            .with(|asset| {
+                CoreCapabilities::as_file_asset(asset).map(|asset| {
+                    asset
+                        .file_asset_base()
+                        .unique_filename(asset.file_extension())
+                })
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        let filename = format!("{}{}", self.path, unique_filename);
         let path = Path::new(&filename);
         let Ok(mut file) = File::open(path) else {
             eprintln!("Failed to find file at {filename}");
@@ -42,7 +55,10 @@ impl FileAssetLoader for RelativeLocalAssetLoader {
         }
         let mut bytes = vec![0; length as usize];
         if file.read_exact(&mut bytes).is_ok() {
-            asset.decode(&mut bytes, factory);
+            asset.with_mut(|asset| {
+                CoreCapabilities::as_file_asset_mut(asset)
+                    .is_some_and(|asset| asset.file_asset_decode(&mut bytes, factory))
+            });
         }
         true
     }

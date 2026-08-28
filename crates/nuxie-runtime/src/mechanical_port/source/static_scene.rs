@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     animation::{keyed_callback_reporter::KeyedCallbackReporter, loop_::Loop},
-    artboard::ArtboardInstance,
+    artboard::RuntimeArtboardInstanceWeakHandle,
     core::field_types::core_callback_type::CallbackContext,
     scene::{Scene, SceneBehavior},
 };
@@ -10,18 +10,24 @@ pub struct StaticScene {
 }
 
 impl StaticScene {
-    pub fn new(artboard_instance: *mut ArtboardInstance) -> Self {
+    pub fn new(artboard_instance: RuntimeArtboardInstanceWeakHandle) -> Self {
         Self {
             scene: Scene::new(artboard_instance),
         }
     }
 
     pub fn is_translucent(&self) -> bool {
-        self.scene.artboard_instance().is_translucent()
+        self.scene
+            .artboard_instance()
+            .with_artboard(|artboard| artboard.is_translucent())
+            .expect("StaticScene outlived its ArtboardInstance")
     }
 
     pub fn name(&self) -> String {
-        self.scene.artboard_instance().name().to_owned()
+        self.scene
+            .artboard_instance()
+            .with_artboard(|artboard| artboard.name().to_owned())
+            .expect("StaticScene outlived its ArtboardInstance")
     }
 
     pub fn loop_(&self) -> Loop {
@@ -33,7 +39,10 @@ impl StaticScene {
     }
 
     pub fn advance_and_apply(&mut self, _seconds: f32) -> bool {
-        self.scene.artboard_instance_mut().advance(0.0);
+        self.scene
+            .artboard_instance()
+            .with_artboard_mut(|artboard| artboard.advance(0.0))
+            .expect("StaticScene outlived its ArtboardInstance");
         true
     }
 }

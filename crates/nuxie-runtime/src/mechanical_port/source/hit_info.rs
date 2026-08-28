@@ -1,6 +1,6 @@
-use crate::mechanical_port::source::{artboard::NestedArtboard, math::aabb::IAabb};
+use crate::mechanical_port::source::{core::CoreHandle, math::aabb::IAabb};
 
 pub struct HitInfo {
     pub area: IAabb,
-    pub mounts: Vec<*mut NestedArtboard>,
+    pub mounts: Vec<CoreHandle>,
 }

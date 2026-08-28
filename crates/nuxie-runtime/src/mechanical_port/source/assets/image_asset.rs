@@ -1,12 +1,14 @@
+use std::rc::Rc;
+
 use crate::mechanical_port::source::{
-    core::CoreHandle, core_context::CoreContext, factory::Factory,
-    generated::assets::image_asset_base::ImageAssetBase, renderer::RenderImageRef,
+    factory::RuntimeFactoryHandle, generated::assets::image_asset_base::ImageAssetBase,
+    renderer::RenderImageRef,
 };
 
 pub struct ImageAsset {
     pub base: ImageAssetBase,
     render_image: Option<RenderImageRef>,
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "tools"))]
     pub decoded_byte_size: usize,
 }
 
@@ -15,40 +17,35 @@ impl Default for ImageAsset {
         Self {
             base: ImageAssetBase::default(),
             render_image: None,
-            #[cfg(feature = "testing")]
+            #[cfg(any(test, feature = "tools"))]
             decoded_byte_size: 0,
         }
     }
 }
 
-impl Drop for ImageAsset {
-    fn drop(&mut self) {
-        #[cfg(feature = "emscripten")]
-        if let Some(render_image) = self.render_image.as_mut() {
-            render_image.set_delegate(None);
-        }
-    }
-}
-
 impl ImageAsset {
-    #[cfg(feature = "emscripten")]
-    pub fn decoded_async(&mut self, context: &mut CoreContext) {
-        self.notify_referencers(context);
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    pub fn decoded_async(&mut self) {
+        self.notify_referencers();
     }
 
-    pub fn decode(
-        &mut self,
-        this: CoreHandle,
-        data: &[u8],
-        factory: &mut Factory,
-        context: &mut CoreContext,
-    ) -> bool {
-        #[cfg(feature = "testing")]
+    pub fn decode(&mut self, data: &[u8], factory: &RuntimeFactoryHandle) -> bool {
+        #[cfg(any(test, feature = "tools"))]
         {
             self.decoded_byte_size = data.len();
         }
-        let render_image = factory.decode_image(data);
-        self.set_render_image(this, render_image, context);
+        let mut render_image = factory.with_factory_mut(|factory| factory.decode_image(data).ok());
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        if let (Some(render_image), Some(this)) = (
+            render_image.as_mut(),
+            self.base.file_asset().base.base.base.base.handle(),
+        ) {
+            render_image.set_decoded_async_callback(Some(Rc::new(move || {
+                let _ = this.with_downcast_mut::<ImageAsset, _>(ImageAsset::decoded_async);
+            })));
+        }
+        let render_image = render_image.map(Rc::from);
+        self.set_render_image(render_image);
         self.render_image.is_some()
     }
 
@@ -56,27 +53,18 @@ impl ImageAsset {
         self.render_image.as_ref()
     }
 
-    pub fn set_render_image(
-        &mut self,
-        this: CoreHandle,
-        render_image: Option<RenderImageRef>,
-        context: &mut CoreContext,
-    ) {
+    pub fn set_render_image(&mut self, render_image: Option<RenderImageRef>) {
         self.render_image = render_image;
-        #[cfg(feature = "emscripten")]
-        if let Some(render_image) = self.render_image.as_mut() {
-            render_image.set_delegate(Some(this));
-        }
-        self.notify_referencers(context);
+        self.notify_referencers();
     }
 
-    fn notify_referencers(&mut self, context: &mut CoreContext) {
+    fn notify_referencers(&mut self) {
         let referencers = self.base.file_asset().file_asset_referencers().to_vec();
         for referencer in referencers {
-            context
-                .file_asset_referencer_mut(referencer)
-                .expect("a retained FileAssetReferencer must remain live")
-                .asset_updated();
+            referencer
+                .with_mut(|referencer| referencer.file_asset_referencer_asset_updated())
+                .filter(|updated| *updated)
+                .expect("a retained FileAssetReferencer must remain live");
         }
     }
 

@@ -18,3 +18,17 @@ impl CustomPropertyStringBaseCallbacks for CustomPropertyString {
             .notify_property_changed(property_key);
     }
 }
+
+impl std::ops::Deref for CustomPropertyString {
+    type Target = CustomPropertyStringBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CustomPropertyString {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

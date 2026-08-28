@@ -18,3 +18,17 @@ impl CustomPropertyEnumBaseCallbacks for CustomPropertyEnum {
             .notify_property_changed(property_key);
     }
 }
+
+impl std::ops::Deref for CustomPropertyEnum {
+    type Target = CustomPropertyEnumBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CustomPropertyEnum {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

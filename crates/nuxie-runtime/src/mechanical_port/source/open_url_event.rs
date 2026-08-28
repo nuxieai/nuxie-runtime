@@ -22,3 +22,17 @@ impl OpenUrlEventBaseCallbacks for OpenUrlEvent {
             .notify_property_changed(property_key);
     }
 }
+
+impl std::ops::Deref for OpenUrlEvent {
+    type Target = OpenUrlEventBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for OpenUrlEvent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

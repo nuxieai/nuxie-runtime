@@ -18,3 +18,17 @@ impl CustomPropertyBooleanBaseCallbacks for CustomPropertyBoolean {
             .notify_property_changed(property_key);
     }
 }
+
+impl std::ops::Deref for CustomPropertyBoolean {
+    type Target = CustomPropertyBooleanBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CustomPropertyBoolean {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

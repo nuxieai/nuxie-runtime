@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    factory::Factory, generated::assets::blob_asset_base::BlobAssetBase,
+    factory::RuntimeFactoryHandle, generated::assets::blob_asset_base::BlobAssetBase,
 };
 
 pub struct BlobAsset {
@@ -17,7 +17,7 @@ impl Default for BlobAsset {
 }
 
 impl BlobAsset {
-    pub fn decode(&mut self, data: &mut Vec<u8>, _factory: &mut Factory) -> bool {
+    pub fn decode(&mut self, data: &mut Vec<u8>, _factory: &RuntimeFactoryHandle) -> bool {
         self.bytes = std::mem::take(data);
         true
     }

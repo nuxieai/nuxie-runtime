@@ -18,3 +18,17 @@ impl CustomPropertyContainer for CustomPropertyGroup {
         &mut self.container
     }
 }
+
+impl std::ops::Deref for CustomPropertyGroup {
+    type Target = CustomPropertyGroupBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CustomPropertyGroup {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

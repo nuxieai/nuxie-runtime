@@ -10,6 +10,8 @@ pub enum VirtualizedDirection {
 
 pub trait Virtualizable {
     fn virtualizable_component(&mut self) -> &mut Component;
+    fn layout_x(&self) -> f32;
+    fn layout_y(&self) -> f32;
 }
 
 pub trait VirtualizingComponent {

@@ -95,3 +95,17 @@ impl NestedArtboardLeafBaseCallbacks for NestedArtboardLeaf {
         NestedArtboardLeaf::fit_changed(self);
     }
 }
+
+impl std::ops::Deref for NestedArtboardLeaf {
+    type Target = NestedArtboardLeafBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NestedArtboardLeaf {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

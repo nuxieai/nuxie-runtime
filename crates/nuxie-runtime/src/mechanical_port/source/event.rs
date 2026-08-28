@@ -21,3 +21,17 @@ impl Event {
             .report_event(self, delay_seconds);
     }
 }
+
+impl std::ops::Deref for Event {
+    type Target = EventBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Event {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

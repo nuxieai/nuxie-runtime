@@ -1,27 +1,27 @@
 use std::collections::HashSet;
 
-use crate::mechanical_port::source::component::Component;
+use crate::mechanical_port::source::core::CoreHandle;
 
 #[derive(Default)]
 pub struct DependencySorter {
-    perm: HashSet<*mut Component>,
-    temp: HashSet<*mut Component>,
+    perm: HashSet<CoreHandle>,
+    temp: HashSet<CoreHandle>,
 }
 
 impl DependencySorter {
-    pub fn sort(&mut self, root: *mut Component, order: &mut Vec<*mut Component>) {
+    pub fn sort(&mut self, root: CoreHandle, order: &mut Vec<CoreHandle>) {
         order.clear();
         self.visit(root, order);
     }
 
-    pub fn sort_roots(&mut self, roots: Vec<*mut Component>, order: &mut Vec<*mut Component>) {
+    pub fn sort_roots(&mut self, roots: Vec<CoreHandle>, order: &mut Vec<CoreHandle>) {
         order.clear();
         for root in roots {
             self.visit(root, order);
         }
     }
 
-    pub fn visit(&mut self, component: *mut Component, order: &mut Vec<*mut Component>) -> bool {
+    pub fn visit(&mut self, component: CoreHandle, order: &mut Vec<CoreHandle>) -> bool {
         if self.perm.contains(&component) {
             return true;
         }
@@ -30,15 +30,22 @@ impl DependencySorter {
             return false;
         }
 
-        self.temp.insert(component);
+        self.temp.insert(component.clone());
 
-        let dependents = unsafe { &*component }.dependents().to_vec();
+        let dependents = component
+            .with(|component| {
+                component
+                    .as_component()
+                    .map(|component| component.dependents().to_vec())
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
         for dependent in dependents {
             if !self.visit(dependent, order) {
                 return false;
             }
         }
-        self.perm.insert(component);
+        self.perm.insert(component.clone());
         order.insert(0, component);
 
         true

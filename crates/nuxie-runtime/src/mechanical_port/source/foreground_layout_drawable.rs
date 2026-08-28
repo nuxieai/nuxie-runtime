@@ -2,7 +2,7 @@ use crate::mechanical_port::source::{
     artboard::Artboard,
     component::Component,
     component_dirt::ComponentDirt,
-    core::Core,
+    core::CoreHandle,
     generated::foreground_layout_drawable_base::ForegroundLayoutDrawableBase,
     hit_info::HitInfo,
     math::mat2d::Mat2D,
@@ -90,7 +90,7 @@ impl ForegroundLayoutDrawable {
         }
     }
 
-    pub fn hit_test(&mut self, _info: &mut HitInfo, _transform: &Mat2D) -> Option<&mut Core> {
+    pub fn hit_test(&mut self, _info: &mut HitInfo, _transform: &Mat2D) -> Option<CoreHandle> {
         None
     }
 
@@ -147,5 +147,19 @@ impl ForegroundLayoutDrawable {
             .parent_mut()?
             .as_layout_component_mut()?
             .local_clockwise_path()
+    }
+}
+
+impl std::ops::Deref for ForegroundLayoutDrawable {
+    type Target = ForegroundLayoutDrawableBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ForegroundLayoutDrawable {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

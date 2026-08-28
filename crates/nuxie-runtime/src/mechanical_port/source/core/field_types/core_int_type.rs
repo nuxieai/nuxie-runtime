@@ -7,10 +7,10 @@ impl CoreIntType {
     pub const ID: i32 = CoreUintType::ID;
 
     pub fn deserialize(reader: &mut BinaryReader) -> i32 {
-        Self::zigzag_decode(reader.read_var_uint_as_u32())
+        Self::zigzag_decode(reader.read_var_uint_as::<u32>())
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn deserialize_rev(reader: &mut BinaryReader) -> i32 {
         Self::deserialize(reader)
     }

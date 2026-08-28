@@ -100,7 +100,6 @@ impl Node {
         self.base.base.mark_transform_dirty();
     }
 
-    #[cfg(feature = "rive_layout")]
     pub fn mark_layout_node_dirty(&mut self) {
         let mut parent = self.base.base.parent_mut();
         while let Some(current) = parent {
@@ -169,5 +168,19 @@ impl NodeBaseCallbacks for Node {
     }
     fn computed_height(&mut self) -> f32 {
         Node::computed_height(self)
+    }
+}
+
+impl std::ops::Deref for Node {
+    type Target = NodeBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Node {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

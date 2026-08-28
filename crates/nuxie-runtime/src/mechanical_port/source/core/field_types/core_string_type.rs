@@ -9,9 +9,9 @@ impl CoreStringType {
         reader.read_string()
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn deserialize_rev(reader: &mut BinaryReader) -> String {
         let length = reader.length_in_bytes();
-        reader.read_string_with_length(length)
+        reader.read_string_length(length)
     }
 }

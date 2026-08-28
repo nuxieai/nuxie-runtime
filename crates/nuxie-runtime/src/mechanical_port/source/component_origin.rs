@@ -50,3 +50,17 @@ impl ComponentOriginBaseCallbacks for ComponentOrigin {
         ComponentOrigin::origin_y_changed(self);
     }
 }
+
+impl std::ops::Deref for ComponentOrigin {
+    type Target = ComponentOriginBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ComponentOrigin {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

@@ -18,3 +18,17 @@ impl CustomPropertyColorBaseCallbacks for CustomPropertyColor {
             .notify_property_changed(property_key);
     }
 }
+
+impl std::ops::Deref for CustomPropertyColor {
+    type Target = CustomPropertyColorBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CustomPropertyColor {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

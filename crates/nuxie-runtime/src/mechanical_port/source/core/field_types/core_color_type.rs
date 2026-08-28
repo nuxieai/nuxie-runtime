@@ -9,7 +9,7 @@ impl CoreColorType {
         reader.read_uint32() as i32
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn deserialize_rev(reader: &mut BinaryReader) -> i32 {
         reader.read_var_uint64() as i32
     }

@@ -9,7 +9,7 @@ impl CoreDoubleType {
         reader.read_float32()
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn deserialize_rev(reader: &mut BinaryReader) -> f32 {
         let length = reader.length_in_bytes();
         if length == 4 {

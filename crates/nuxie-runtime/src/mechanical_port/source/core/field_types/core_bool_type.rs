@@ -9,7 +9,7 @@ impl CoreBoolType {
         reader.read_byte() == 1
     }
 
-    #[cfg(feature = "rive_tools")]
+    #[cfg(feature = "tools")]
     pub fn deserialize_rev(reader: &mut BinaryReader) -> bool {
         Self::deserialize(reader)
     }

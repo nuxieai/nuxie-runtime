@@ -1,12 +1,51 @@
 use crate::mechanical_port::source::{
-    core::CoreHandle, generated::assets::file_asset_base::FileAssetBase,
-    importers::import_stack::ImportStack, status_code::StatusCode,
+    core::CoreHandle,
+    generated::assets::{
+        asset_base::AssetBaseCallbacks,
+        file_asset_base::{FileAssetBase, FileAssetBaseCallbacks},
+    },
+    importers::import_stack::ImportStack,
+    status_code::StatusCode,
 };
 
 pub struct FileAsset {
     pub base: FileAssetBase,
     cdn_uuid: Vec<u8>,
     file_asset_referencers: Vec<CoreHandle>,
+}
+
+impl AssetBaseCallbacks for FileAsset {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        AssetBaseCallbacks::notify_property_changed(&mut self.base.base, property_key);
+    }
+}
+
+impl FileAssetBaseCallbacks for FileAsset {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        AssetBaseCallbacks::notify_property_changed(self, property_key);
+    }
+
+    fn decode_cdn_uuid(&mut self, value: &[u8]) {
+        FileAsset::decode_cdn_uuid(self, value);
+    }
+
+    fn copy_cdn_uuid(&mut self, object: &FileAssetBase) {
+        FileAsset::copy_cdn_uuid(self, object);
+    }
+}
+
+impl std::ops::Deref for FileAsset {
+    type Target = FileAssetBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for FileAsset {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
 }
 
 impl Default for FileAsset {
@@ -20,6 +59,34 @@ impl Default for FileAsset {
 }
 
 impl FileAsset {
+    pub fn asset_id(&self) -> u32 {
+        self.base.asset_id()
+    }
+
+    pub fn set_asset_id(&mut self, value: u32) {
+        if self.base.set_asset_id_value(value) {
+            self.base
+                .base
+                .base
+                .base
+                .notify_property_changed(FileAssetBase::ASSET_ID_PROPERTY_KEY);
+        }
+    }
+
+    pub fn cdn_base_url(&self) -> &str {
+        self.base.cdn_base_url()
+    }
+
+    pub fn set_cdn_base_url(&mut self, value: String) {
+        if self.base.set_cdn_base_url_value(value) {
+            self.base
+                .base
+                .base
+                .base
+                .notify_property_changed(FileAssetBase::CDN_BASE_URL_PROPERTY_KEY);
+        }
+    }
+
     pub fn import(
         &mut self,
         this: CoreHandle,
@@ -82,8 +149,8 @@ impl FileAsset {
         self.file_asset_referencers.push(referencer);
     }
 
-    pub fn remove_file_asset_referencer(&mut self, referencer: CoreHandle) {
+    pub fn remove_file_asset_referencer(&mut self, referencer: &CoreHandle) {
         self.file_asset_referencers
-            .retain(|candidate| *candidate != referencer);
+            .retain(|candidate| candidate != referencer);
     }
 }

@@ -22,7 +22,7 @@ impl ArtboardListMapRuleBaseCallbacks for ArtboardListMapRule {
 }
 
 impl ArtboardListMapRule {
-    pub fn on_added_dirty(&mut self, context: &mut CoreContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
             return code;
@@ -32,5 +32,19 @@ impl ArtboardListMapRule {
         };
         parent.add_map_rule(self);
         StatusCode::Ok
+    }
+}
+
+impl std::ops::Deref for ArtboardListMapRule {
+    type Target = ArtboardListMapRuleBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ArtboardListMapRule {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

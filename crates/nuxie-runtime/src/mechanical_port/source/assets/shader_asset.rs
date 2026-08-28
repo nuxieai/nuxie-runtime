@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::mechanical_port::source::{
-    factory::Factory, generated::assets::shader_asset_base::ShaderAssetBase,
+    factory::RuntimeFactoryHandle, generated::assets::shader_asset_base::ShaderAssetBase,
     signed_content_header::SignedContentHeader,
 };
 
@@ -38,11 +38,11 @@ impl Default for ShaderAsset {
 }
 
 impl ShaderAsset {
-    pub fn decode_bytes(&mut self, data: &mut Vec<u8>, factory: &mut Factory) -> bool {
+    pub fn decode_bytes(&mut self, data: &mut Vec<u8>, factory: &RuntimeFactoryHandle) -> bool {
         self.decode(data.as_slice(), factory)
     }
 
-    pub fn decode(&mut self, data: &[u8], _factory: &mut Factory) -> bool {
+    pub fn decode(&mut self, data: &[u8], _factory: &RuntimeFactoryHandle) -> bool {
         let envelope = SignedContentHeader::new(data);
         if !envelope.is_valid() {
             return false;

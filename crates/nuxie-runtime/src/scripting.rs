@@ -1667,6 +1667,36 @@ impl ScriptViewModel {
         self.nested_view_models.get(name).cloned()
     }
 
+    /// Return only the currently linked nested ViewModel occurrence.
+    ///
+    /// The schema wrapper returned by [`Self::view_model`] remains available
+    /// while an authored ViewModel property is null. Pinned Lua property reads,
+    /// however, produce `nil` until that property links a concrete occurrence;
+    /// this accessor preserves that distinction without discarding the schema.
+    pub fn active_view_model(&self, name: &str) -> Option<Self> {
+        let property_index = self
+            .file
+            .view_model(self.view_model_index)?
+            .properties
+            .iter()
+            .position(|property| property.string_property("name") == Some(name))?;
+        let mut property_path = self.context.scope_path().to_vec();
+        property_path.push(property_index);
+        let concrete = self
+            .context
+            .root_handle()
+            .linked_view_model_by_property_path(&property_path)?;
+        let view_model_index = concrete.borrow().view_model_index();
+        build_script_view_model_shared_with_blob_assets_and_callbacks(
+            Rc::clone(&self.file),
+            view_model_index,
+            concrete,
+            self.ancestors.as_slice(),
+            Rc::clone(&self.blob_assets),
+            self.change_callbacks.clone(),
+        )
+    }
+
     /// Port of `ScriptedPropertyViewModel::setValue`: replace the actual
     /// retained child occurrence and synchronously notify/relink its parent.
     pub fn set_view_model(&self, name: &str, value: &ScriptViewModel) -> bool {

@@ -10,8 +10,8 @@ use crate::mechanical_port::source::{
     animation::state_machine_instance::StateMachineInstance,
     artboard::ArtboardInstance,
     assets::{
-        audio_asset::AudioAsset, blob_asset::BlobAsset, font_asset::FontAsset,
-        image_asset::ImageAsset, script_asset::ScriptAsset,
+        audio_asset::AudioAsset, font_asset::FontAsset, image_asset::ImageAsset,
+        script_asset::ScriptAsset,
     },
     audio::audio_source::{AudioSource, AudioSourceRef},
     bindable_artboard::BindableArtboard,
@@ -31,9 +31,11 @@ use crate::mechanical_port::source::{
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     renderer::{RenderImage, RenderImageRef},
     semantic::semantic_snapshot::{SemanticsBoundsUpdate, SemanticsDiff, SemanticsDiffNode},
-    text_engine::{Font, FontRef},
+    text::font_hb::HbFont,
+    text_engine::FontRef,
     viewmodel::runtime::viewmodel_instance_runtime::ViewModelInstanceRuntime,
 };
+use crate::RuntimeBlobAsset;
 
 pub struct Subscription {
     pub request_id: u64,
@@ -200,7 +202,7 @@ pub struct CommandServer {
     artboard_dependencies: HashMap<ArtboardHandle, Vec<StateMachineHandle>>,
     files: HashMap<FileHandle, Rc<File>>,
     assets: Rc<std::cell::RefCell<CommandAssetRegistry>>,
-    blobs: HashMap<BlobAssetHandle, Rc<BlobAsset>>,
+    blobs: HashMap<BlobAssetHandle, Arc<RuntimeBlobAsset>>,
     artboards: HashMap<ArtboardHandle, Rc<BindableArtboard>>,
     view_models: HashMap<ViewModelInstanceHandle, Rc<ViewModelInstanceRuntime>>,
     state_machines: Mutex<HashMap<StateMachineHandle, Arc<SynchronizedStateMachine>>>,
@@ -262,9 +264,9 @@ impl CommandServer {
         self.assets.borrow().fonts.get(&handle).cloned()
     }
 
-    pub fn get_blob(&self, handle: BlobAssetHandle) -> Option<&BlobAsset> {
+    pub fn get_blob(&self, handle: BlobAssetHandle) -> Option<Arc<RuntimeBlobAsset>> {
         self.assert_thread();
-        self.blobs.get(&handle).map(Rc::as_ref)
+        self.blobs.get(&handle).cloned()
     }
 
     pub fn get_artboard_instance(&self, handle: ArtboardHandle) -> Option<&mut ArtboardInstance> {
@@ -639,6 +641,8 @@ impl CommandServer {
                     let image = self.command_queue.pop_external_image();
                     lock.unlock();
                     if let Some(image) = image {
+                        let image: Rc<dyn nuxie_render_api::RenderImage + Send> = Rc::from(image);
+                        let image: RenderImageRef = image;
                         self.assets.borrow_mut().images.insert(handle, image);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::ImageDecoded);
@@ -677,21 +681,14 @@ impl CommandServer {
                     let request_id: u64 = self.command_queue.read();
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
-                    let mut blob = BlobAsset::default();
-                    if blob.decode(&bytes, self.factory()) {
-                        self.blobs.insert(handle, Rc::new(blob));
-                        let mut messages = self.command_queue.message_lock();
-                        messages.write(Message::BlobDecoded);
-                        messages.write(handle);
-                        messages.write(request_id);
-                    } else {
-                        self.error(
-                            handle,
-                            request_id,
-                            Message::BlobError,
-                            "Command Server failed to decode blob".into(),
-                        );
-                    }
+                    self.blobs.insert(
+                        handle,
+                        Arc::new(RuntimeBlobAsset::new("", Arc::from(bytes))),
+                    );
+                    let mut messages = self.command_queue.message_lock();
+                    messages.write(Message::BlobDecoded);
+                    messages.write(handle);
+                    messages.write(request_id);
                 }
                 Command::ExternalBlob => {
                     let handle: BlobAssetHandle = self.command_queue.read();
@@ -807,7 +804,7 @@ impl CommandServer {
                     let request_id: u64 = self.command_queue.read();
                     let font = self.command_queue.pop_external_font();
                     lock.unlock();
-                    if let Some(font) = font {
+                    if let Some(font) = font.as_ref().and_then(HbFont::from_raw_text) {
                         self.assets.borrow_mut().fonts.insert(handle, font);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::FontDecoded);

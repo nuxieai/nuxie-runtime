@@ -1076,9 +1076,7 @@ impl TransitionRuntime for DirectTransitionRuntime {
     }
 
     fn set_exit_instance_time(&self, from: &RuntimeStateInstanceHandle, time: f32) {
-        if let Some(blend) = self.exit_blend_animation.as_ref() {
-            from.animation_for_blend(blend, |animation| animation.set_time(time));
-        } else if from
+        if from
             .definition()
             .with_downcast::<AnimationState, _>(|_| ())
             .is_some()

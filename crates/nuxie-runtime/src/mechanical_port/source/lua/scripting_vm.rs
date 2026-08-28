@@ -38,6 +38,15 @@ impl RuntimeScriptingVmHandle {
         Ok(callback(vm.as_mut()))
     }
 
+    pub fn install_render_factory(
+        &self,
+        factory: &crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    ) -> Result<(), crate::scripting::ScriptError> {
+        self.with_vm_mut(|vm| {
+            factory.with_factory_mut(|factory| vm.install_render_factory(factory))
+        })
+    }
+
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.inner, &other.inner)
     }

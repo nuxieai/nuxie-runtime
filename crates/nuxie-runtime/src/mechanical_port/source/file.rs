@@ -295,6 +295,15 @@ impl File {
         asset_loader: Option<FileAssetLoaderRef>,
         scripting_vm: Option<RuntimeScriptingVmHandle>,
     ) -> Option<RuntimeFileHandle> {
+        if scripting_vm
+            .as_ref()
+            .is_some_and(|vm| vm.install_render_factory(&factory).is_err())
+        {
+            if let Some(result) = result.as_deref_mut() {
+                *result = ImportResult::Malformed;
+            }
+            return None;
+        }
         let mut reader = BinaryReader::new(bytes);
         let mut header = RuntimeHeader::default();
         if !RuntimeHeader::read(&mut reader, &mut header) {

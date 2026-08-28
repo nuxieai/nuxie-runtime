@@ -2168,6 +2168,13 @@ pub fn validate_executable_luau_bytecode(
 }
 
 impl RuntimeScriptingVm for ScriptVm {
+    fn install_render_factory(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<(), ScriptError> {
+        ScriptVm::install_render_factory(self, factory)
+    }
+
     fn install_rive_globals(&mut self) -> std::result::Result<(), ScriptError> {
         ScriptVm::install_rive_globals(self).map_err(|error| self.script_error(error))
     }

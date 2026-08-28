@@ -3410,6 +3410,13 @@ impl fmt::Debug for RuntimeScriptInstanceHandle {
 
 /// Runtime-owned VM seam implemented by concrete scripting backends.
 pub trait ScriptingVm {
+    /// Retain the one renderer factory identity before any imported script is
+    /// registered or executed.
+    fn install_render_factory(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+    ) -> Result<(), ScriptError>;
+
     fn install_rive_globals(&mut self) -> Result<(), ScriptError>;
 
     fn register_module(&mut self, name: &str, payload: &[u8]) -> Result<(), ScriptError>;

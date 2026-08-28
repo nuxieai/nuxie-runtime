@@ -104,17 +104,18 @@ impl ScrollPhysics {
     }
 
     pub fn accumulate(&mut self, delta: Vec2D, time_stamp: f32) {
-        let elapsed_seconds = if crate::math::random::runtime_deterministic_mode() {
-            let now = time_stamp;
-            let elapsed = now - self.last_time as f32;
-            self.last_time = now as i64;
-            elapsed
-        } else {
-            let now = high_resolution_clock_micros();
-            let elapsed = now.saturating_sub(self.last_time) as f32 / 1_000_000.0;
-            self.last_time = now;
-            elapsed
-        };
+        let elapsed_seconds =
+            if crate::mechanical_port::source::math::random::runtime_deterministic_mode() {
+                let now = time_stamp;
+                let elapsed = now - self.last_time as f32;
+                self.last_time = now as i64;
+                elapsed
+            } else {
+                let now = high_resolution_clock_micros();
+                let elapsed = now.saturating_sub(self.last_time) as f32 / 1_000_000.0;
+                self.last_time = now;
+                elapsed
+            };
         if elapsed_seconds > 0.0 {
             let last_speed = self.speed;
             self.speed = Vec2D::new(delta.x / elapsed_seconds, delta.y / elapsed_seconds);
@@ -131,11 +132,12 @@ impl ScrollPhysics {
     }
 
     pub fn reset_base(&mut self) {
-        self.last_time = if crate::math::random::runtime_deterministic_mode() {
-            0
-        } else {
-            high_resolution_clock_micros()
-        };
+        self.last_time =
+            if crate::mechanical_port::source::math::random::runtime_deterministic_mode() {
+                0
+            } else {
+                high_resolution_clock_micros()
+            };
         self.speed = Vec2D::default();
         self.acceleration = Vec2D::default();
         self.stop_base();

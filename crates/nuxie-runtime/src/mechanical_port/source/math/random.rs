@@ -1,5 +1,8 @@
 use std::collections::VecDeque;
-use std::sync::{LazyLock, Mutex, MutexGuard};
+use std::sync::{
+    LazyLock, Mutex, MutexGuard,
+    atomic::{AtomicBool, Ordering},
+};
 
 pub struct RandomProvider;
 
@@ -17,6 +20,20 @@ struct RandomState {
 
 static RANDOM_STATE: LazyLock<Mutex<RandomState>> =
     LazyLock::new(|| Mutex::new(RandomState::default()));
+static DETERMINISTIC_MODE: AtomicBool = AtomicBool::new(false);
+
+/// Set the process-wide deterministic flag owned by pinned `File`.
+///
+/// The Rust host exposes this through its runtime-services adapter, while
+/// owners without a services reference (notably scroll physics) read the same
+/// process-wide value as upstream `File::deterministicMode`.
+pub fn set_runtime_deterministic_mode(enabled: bool) {
+    DETERMINISTIC_MODE.store(enabled, Ordering::SeqCst);
+}
+
+pub(crate) fn runtime_deterministic_mode() -> bool {
+    DETERMINISTIC_MODE.load(Ordering::SeqCst)
+}
 
 impl RandomProvider {
     /// Enter the pinned `TESTING` FIFO mode and append a deterministic draw.

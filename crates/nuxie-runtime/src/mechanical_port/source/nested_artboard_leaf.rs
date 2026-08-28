@@ -35,17 +35,24 @@ impl NestedArtboardLeaf {
         if !value.contains(ComponentDirt::WORLD_TRANSFORM) {
             return;
         }
-        let Some(artboard) = self.base.base.artboard_instance_mut() else {
+        let Some(artboard) = self.base.base.artboard_instance_handle(0) else {
             return;
         };
 
         let bounds = self
             .base
             .base
-            .parent_mut()
-            .and_then(|parent| parent.as_layout_component_mut())
-            .map(|layout| layout.local_bounds())
-            .unwrap_or_else(|| artboard.bounds());
+            .parent_handle()
+            .and_then(|parent| {
+                parent
+                    .with(|parent| {
+                        parent
+                            .as_layout_component()
+                            .map(|layout| layout.local_bounds())
+                    })
+                    .flatten()
+            })
+            .unwrap_or_else(|| artboard.with_artboard(|artboard| artboard.bounds()));
 
         let fit = match self.base.fit() {
             0 => Fit::Fill,
@@ -59,15 +66,18 @@ impl NestedArtboardLeaf {
             value => panic!("invalid fit {value}"),
         };
         if fit == Fit::Layout {
-            let mut resized = false;
-            if artboard.width() != bounds.width() {
-                artboard.set_width(bounds.width());
-                resized = true;
-            }
-            if artboard.height() != bounds.height() {
-                artboard.set_height(bounds.height());
-                resized = true;
-            }
+            let resized = artboard.with_artboard_mut(|artboard| {
+                let mut resized = false;
+                if artboard.width() != bounds.width() {
+                    artboard.set_width(bounds.width());
+                    resized = true;
+                }
+                if artboard.height() != bounds.height() {
+                    artboard.set_height(bounds.height());
+                    resized = true;
+                }
+                resized
+            });
             if resized {
                 artboard.update_pass(false);
             }
@@ -77,7 +87,7 @@ impl NestedArtboardLeaf {
             fit,
             Alignment::new(self.base.alignment_x(), self.base.alignment_y()),
             &bounds,
-            &artboard.bounds(),
+            &artboard.with_artboard(|artboard| artboard.bounds()),
             1.0,
         );
         *self.base.base.mutable_world_transform() *= view_transform;

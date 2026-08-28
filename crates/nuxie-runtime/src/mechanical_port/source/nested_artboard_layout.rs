@@ -107,9 +107,7 @@ impl NestedArtboardLayout {
         self.base
             .base
             .artboard_instance_handle(0)
-            .is_some_and(|instance| {
-                instance.with_artboard_mut(|instance| instance.sync_style_changes())
-            })
+            .is_some_and(|instance| instance.sync_style_changes())
     }
 
     pub fn update_layout_bounds(&mut self, animate: bool) {

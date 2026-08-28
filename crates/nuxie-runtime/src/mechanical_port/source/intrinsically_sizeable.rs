@@ -30,16 +30,74 @@ pub trait IntrinsicallySizeable {
     }
 }
 
-pub fn from(component: &mut Component) -> Option<&mut dyn IntrinsicallySizeable> {
-    if component.is::<TransformComponent>() {
-        component
-            .as_transform_component_mut()
-            .map(|component| component as &mut dyn IntrinsicallySizeable)
-    } else if component.is::<Joystick>() {
-        component
-            .as_joystick_mut()
-            .map(|component| component as &mut dyn IntrinsicallySizeable)
-    } else {
-        None
+pub fn from(
+    component: &mut dyn crate::mechanical_port::source::core::CoreObject,
+) -> Option<&mut dyn IntrinsicallySizeable> {
+    component.as_intrinsically_sizeable_mut()
+}
+
+macro_rules! intrinsic_owner {
+    ($owner:path) => {
+        impl IntrinsicallySizeable for $owner {
+            fn measure_layout(
+                &mut self,
+                width: f32,
+                width_mode: LayoutMeasureMode,
+                height: f32,
+                height_mode: LayoutMeasureMode,
+            ) -> Vec2D {
+                <$owner>::measure_layout(self, width, width_mode, height, height_mode)
+            }
+            fn control_size(
+                &mut self,
+                size: Vec2D,
+                width: LayoutScaleType,
+                height: LayoutScaleType,
+                direction: LayoutDirection,
+            ) {
+                <$owner>::control_size(self, size, width, height, direction)
+            }
+        }
+    };
+}
+intrinsic_owner!(crate::mechanical_port::source::shapes::shape::Shape);
+intrinsic_owner!(crate::mechanical_port::source::shapes::image::Image);
+intrinsic_owner!(crate::mechanical_port::source::shapes::parametric_path::ParametricPath);
+intrinsic_owner!(crate::mechanical_port::source::text::text::Text);
+intrinsic_owner!(crate::mechanical_port::source::text::text_input::TextInput);
+intrinsic_owner!(crate::mechanical_port::source::nested_artboard::NestedArtboard);
+intrinsic_owner!(crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout);
+impl IntrinsicallySizeable for crate::mechanical_port::source::layout_component::LayoutComponent {
+    fn measure_layout(
+        &mut self,
+        width: f32,
+        width_mode: LayoutMeasureMode,
+        height: f32,
+        height_mode: LayoutMeasureMode,
+    ) -> Vec2D {
+        Self::measure_layout(self, width, width_mode, height, height_mode)
+    }
+}
+impl IntrinsicallySizeable for crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode {
+    fn measure_layout(
+        &mut self,
+        width: f32,
+        width_mode: LayoutMeasureMode,
+        height: f32,
+        height_mode: LayoutMeasureMode,
+    ) -> Vec2D {
+        Self::measure_layout(self, width, width_mode, height, height_mode)
+    }
+    fn control_size(
+        &mut self,
+        size: Vec2D,
+        width: LayoutScaleType,
+        height: LayoutScaleType,
+        direction: LayoutDirection,
+    ) {
+        Self::control_size(self, size, width, height, direction);
+    }
+    fn should_propagate_size_to_children(&self) -> bool {
+        false
     }
 }

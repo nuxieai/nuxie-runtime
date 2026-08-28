@@ -179,7 +179,7 @@ impl Joystick {
         self.handle_source.is_none()
     }
 
-    fn add_animation_dependents(&mut self, artboard: &mut Artboard, animation: CoreHandle) {
+    fn add_animation_dependents(&mut self, artboard: &dyn CoreContext, animation: CoreHandle) {
         let object_ids = animation
             .with_downcast::<LinearAnimation, _>(|animation| {
                 (0..animation.num_keyed_objects())
@@ -202,7 +202,7 @@ impl Joystick {
         }
     }
 
-    pub fn add_dependents(&mut self, artboard: &mut Artboard) {
+    pub fn add_dependents(&mut self, artboard: &dyn CoreContext) {
         if let Some(animation) = self.y_animation.clone() {
             self.add_animation_dependents(artboard, animation);
         }

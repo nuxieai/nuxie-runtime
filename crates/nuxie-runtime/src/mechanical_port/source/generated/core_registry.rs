@@ -38,16 +38,10 @@ pub fn advancing_component_advance_handle(
     {
         Some(crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::advance_occurrence(handle, elapsed_seconds, flags))
     } else if handle
-        .with(|owner| owner.as_artboard().is_some())
+        .with(|owner| owner.as_layout_component().is_some())
         .unwrap_or(false)
     {
-        Some(
-            crate::mechanical_port::source::artboard::Artboard::advance_internal_handle(
-                handle,
-                elapsed_seconds,
-                flags,
-            ),
-        )
+        Some(crate::mechanical_port::source::layout_component::LayoutComponent::advance_component_occurrence(handle, elapsed_seconds, flags))
     } else {
         handle
             .with_mut(|owner| owner.advancing_component_advance(elapsed_seconds, flags))
@@ -159,6 +153,13 @@ pub fn component_update_handle(
         });
     }
 
+    if dirt == ComponentDirt::FILTHY
+        && handle
+            .with(|owner| owner.as_layout_component().is_some())
+            .unwrap_or(false)
+    {
+        crate::mechanical_port::source::layout_component::LayoutComponent::interrupt_animation_occurrence(handle);
+    }
     let layout_constraints = handle
         .with_mut(|object| {
             let child_opacity = object.world_transform_child_opacity();
@@ -197,6 +198,14 @@ pub fn component_update_handle(
         }
         component_update_after_transform(object, dirt);
     });
+    if handle
+        .with(|owner| owner.as_artboard().is_some())
+        .unwrap_or(false)
+    {
+        crate::mechanical_port::source::artboard::Artboard::update_after_layout_super_handle(
+            handle, dirt,
+        );
+    }
     if handle
         .with(|owner| owner.as_scripted_drawable().is_some())
         .unwrap_or(false)
@@ -250,9 +259,6 @@ fn component_update_after_transform(
     }
     if let Some(text) = object.as_text_input_mut() {
         text.update_after_transform_super(dirt);
-    }
-    if let Some(artboard) = object.as_artboard_mut() {
-        artboard.update_after_layout_super(dirt);
     }
     if let Some(owner) = object.as_any_mut().downcast_mut::<NestedArtboardLayout>() {
         owner.base.base.update_after_transform_super(dirt);
@@ -1269,6 +1275,42 @@ pub trait DataConverterCapability {
 }
 
 pub trait CoreCapabilities: Any {
+    fn as_intrinsically_sizeable_mut(
+        &mut self,
+    ) -> Option<
+        &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable,
+    > {
+        if self.as_scripted_layout().is_some() {
+            return self.as_scripted_layout_mut().map(|value| value as &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable);
+        }
+        if self.as_layout_component().is_some() {
+            return self.as_layout_component_mut().map(|value| value as &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable);
+        }
+        if self.as_nested_artboard().is_some() {
+            return self.as_nested_artboard_mut().map(|value| value as &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable);
+        }
+        if self.as_shape().is_some() {
+            return self.as_shape_mut().map(|value| value as &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable);
+        }
+        if self.as_text().is_some() {
+            return self.as_text_mut().map(|value| value as &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable);
+        }
+        if self.as_text_input().is_some() {
+            return self.as_text_input_mut().map(|value| value as &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable);
+        }
+        if self.as_parametric_path().is_some() {
+            return self.as_parametric_path_mut().map(|value| value as &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable);
+        }
+        self.as_transform_component_mut().map(|value| value as &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable)
+    }
+    fn as_artboard(&self) -> Option<&crate::mechanical_port::source::artboard::Artboard> {
+        None
+    }
+    fn as_artboard_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::artboard::Artboard> {
+        None
+    }
     /// Some pinned clone overrides need the new authored identity before they
     /// can attach cloned child objects and data-bind targets.
     fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> {
@@ -1911,9 +1953,9 @@ pub trait CoreCapabilities: Any {
             if self_handle.as_ref() == Some(&artboard) {
                 self.artboard_on_component_dirty_at(graph_order);
             } else {
-                artboard.with_mut(|artboard| {
-                    artboard.artboard_on_component_dirty_at(graph_order);
-                });
+                if let Some(dirty) = artboard.artboard_dirty_handle() {
+                    dirty.on_component_dirty_at(graph_order);
+                }
             }
         }
         if recurse {
@@ -1943,9 +1985,9 @@ pub trait CoreCapabilities: Any {
             if self_handle.as_ref() == Some(&artboard) {
                 self.artboard_on_component_dirty_at(graph_order);
             } else {
-                artboard.with_mut(|artboard| {
-                    artboard.artboard_on_component_dirty_at(graph_order);
-                });
+                if let Some(dirty) = artboard.artboard_dirty_handle() {
+                    dirty.on_component_dirty_at(graph_order);
+                }
             }
         }
         for collapsable in collapsables {
@@ -3152,6 +3194,20 @@ pub trait CoreCapabilities: Any {
     }
     fn as_view_model_instance_value_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue>{
         None
+    }
+    fn view_model_instance_value_advanced(&mut self) -> bool {
+        if let Some(value) = self.as_view_model_instance_trigger_mut() {
+            value.advanced();
+        } else if let Some(value) = self.as_view_model_instance_list_mut() {
+            value.advanced();
+        } else if let Some(value) = self.as_view_model_instance_view_model_mut() {
+            value.advanced();
+        } else if let Some(value) = self.as_view_model_instance_value_mut() {
+            value.advanced();
+        } else {
+            return false;
+        }
+        true
     }
     fn as_view_model_instance_view_model(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel>{
         None
@@ -53038,6 +53094,13 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSli
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode {
+    fn as_intrinsically_sizeable_mut(
+        &mut self,
+    ) -> Option<
+        &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable,
+    > {
+        Some(self)
+    }
     fn semantic_provider_local_bounds(
         &self,
     ) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
@@ -58883,6 +58946,13 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
+    fn as_intrinsically_sizeable_mut(
+        &mut self,
+    ) -> Option<
+        &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable,
+    > {
+        Some(self)
+    }
     fn semantic_provider_local_bounds(
         &self,
     ) -> Option<crate::mechanical_port::source::math::aabb::Aabb> {
@@ -59803,6 +59873,14 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
+    fn as_artboard(&self) -> Option<&crate::mechanical_port::source::artboard::Artboard> {
+        Some(self)
+    }
+    fn as_artboard_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::artboard::Artboard> {
+        Some(self)
+    }
     fn as_shape_paint_container(
         &self,
     ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
@@ -59860,13 +59938,7 @@ impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
         self.on_component_dirty_at(graph_order);
         true
     }
-    fn drawable_draw(
-        &mut self,
-        renderer: &mut crate::mechanical_port::source::renderer::Renderer,
-    ) -> bool {
-        self.draw(renderer);
-        true
-    }
+
     fn as_layout_component(
         &self,
     ) -> Option<&crate::mechanical_port::source::layout_component::LayoutComponent> {
@@ -60068,6 +60140,13 @@ impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::joystick::Joystick {
+    fn as_intrinsically_sizeable_mut(
+        &mut self,
+    ) -> Option<
+        &mut dyn crate::mechanical_port::source::intrinsically_sizeable::IntrinsicallySizeable,
+    > {
+        Some(self)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::joystick::Joystick::build_dependencies(&mut self);
         true

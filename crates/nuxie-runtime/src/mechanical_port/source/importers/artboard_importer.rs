@@ -44,12 +44,10 @@ impl ArtboardImporter {
 
 impl ImportStackObject for ArtboardImporter {
     fn resolve(&mut self) -> StatusCode {
-        self.with_artboard(|artboard| {
-            if !artboard.validate_objects() {
-                return StatusCode::InvalidObject;
-            }
-            artboard.initialize()
-        })
+        if !self.with_artboard(Artboard::validate_objects) {
+            return StatusCode::InvalidObject;
+        }
+        Artboard::initialize_handle(&self.artboard)
     }
 
     fn read_null_object(&mut self) -> bool {

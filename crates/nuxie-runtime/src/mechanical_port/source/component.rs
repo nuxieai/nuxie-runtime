@@ -115,7 +115,9 @@ impl ComponentOccurrenceHandle {
         if let Some((Some(artboard), order)) =
             self.with_component(|component| (component.artboard_handle(), component.graph_order()))
         {
-            artboard.with_mut(|artboard| artboard.artboard_on_component_dirty_at(order));
+            if let Some(dirty) = artboard.artboard_dirty_handle() {
+                dirty.on_component_dirty_at(order);
+            }
         }
     }
     pub fn add_dirt(&self, value: ComponentDirt, recurse: bool) -> bool {
@@ -347,6 +349,9 @@ impl Component {
 
     pub fn set_graph_order(&mut self, value: u32) {
         self.graph_order = value;
+        if let Some(owner) = self.base.base.handle() {
+            owner.set_component_graph_order(value);
+        }
     }
 
     pub fn dirt(&self) -> ComponentDirt {

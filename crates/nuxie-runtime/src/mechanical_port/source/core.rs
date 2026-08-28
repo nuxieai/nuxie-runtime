@@ -85,7 +85,15 @@ struct CoreArenaSlot {
     generation: Cell<u64>,
     occupied: Cell<bool>,
     core_type: Cell<CoreTypeKey>,
+    component_graph_order: Cell<Option<u32>>,
+    artboard_dirty:
+        RefCell<Option<crate::mechanical_port::source::artboard::RuntimeArtboardDirtyHandle>>,
+    data_bind_container: RefCell<
+        Option<crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer>,
+    >,
     object: RefCell<Option<Box<dyn CoreObject>>>,
+    runtime_artboard:
+        RefCell<Option<Weak<RefCell<crate::mechanical_port::source::artboard::ArtboardInstance>>>>,
 }
 
 impl CoreArenaSlot {
@@ -94,7 +102,11 @@ impl CoreArenaSlot {
             generation: Cell::new(0),
             occupied: Cell::new(false),
             core_type: Cell::new(0),
+            component_graph_order: Cell::new(None),
+            artboard_dirty: RefCell::new(None),
+            data_bind_container: RefCell::new(None),
             object: RefCell::new(None),
+            runtime_artboard: RefCell::new(None),
         }
     }
 }
@@ -117,6 +129,32 @@ pub struct CoreArena {
 }
 
 impl CoreArena {
+    /// An instance's root is the same typed Artboard owned by its runtime
+    /// handle. The arena retains only a weak link, while that Artboard retains
+    /// the graph arena; registering its root therefore creates no owner cycle.
+    pub(crate) fn insert_runtime_artboard(
+        &self,
+        artboard: Weak<RefCell<crate::mechanical_port::source::artboard::ArtboardInstance>>,
+    ) -> CoreHandle {
+        let mut inner = self.inner.borrow_mut();
+        let index = inner.slots.len();
+        let slot = Rc::new(CoreArenaSlot::vacant());
+        slot.core_type
+            .set(crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY);
+        slot.occupied.set(true);
+        if let Some(root) = artboard.upgrade() {
+            let root = root.borrow();
+            slot.component_graph_order.set(Some(0));
+            *slot.artboard_dirty.borrow_mut() = Some(root.base.dirty_handle());
+        }
+        *slot.runtime_artboard.borrow_mut() = Some(artboard);
+        inner.slots.push(slot);
+        CoreHandle {
+            arena: Rc::downgrade(&self.inner),
+            index,
+            generation: 0,
+        }
+    }
     pub fn insert<T: CoreObject>(&self, value: T) -> CoreHandle {
         self.insert_boxed(Box::new(value))
     }
@@ -140,6 +178,13 @@ impl CoreArena {
             generation,
         };
         slot.core_type.set(value.core_type());
+        slot.component_graph_order.set(
+            value
+                .as_component()
+                .map(|component| component.graph_order()),
+        );
+        *slot.artboard_dirty.borrow_mut() =
+            value.as_artboard().map(|artboard| artboard.dirty_handle());
         value.set_core_handle(handle.clone());
         let previous = slot.object.replace(Some(value));
         slot.occupied.set(true);
@@ -163,6 +208,9 @@ impl CoreArena {
             return None;
         }
         let value = slot.object.borrow_mut().take()?;
+        slot.data_bind_container.borrow_mut().take();
+        slot.artboard_dirty.borrow_mut().take();
+        slot.component_graph_order.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
         self.inner.borrow_mut().free.push(handle.index);
@@ -196,6 +244,36 @@ pub struct CoreHandle {
 }
 
 impl CoreHandle {
+    pub fn identity_key(&self) -> (usize, usize, u64) {
+        (self.arena.as_ptr() as usize, self.index, self.generation)
+    }
+    pub fn component_graph_order(&self) -> Option<u32> {
+        self.slot()?.component_graph_order.get()
+    }
+    pub fn data_bind_container(
+        &self,
+    ) -> Option<crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer>
+    {
+        self.slot()?.data_bind_container.borrow().clone()
+    }
+    pub fn set_data_bind_container(
+        &self,
+        container: crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainer,
+    ) {
+        if let Some(slot) = self.slot() {
+            *slot.data_bind_container.borrow_mut() = Some(container);
+        }
+    }
+    pub(crate) fn set_component_graph_order(&self, order: u32) {
+        if let Some(slot) = self.slot() {
+            slot.component_graph_order.set(Some(order));
+        }
+    }
+    pub fn artboard_dirty_handle(
+        &self,
+    ) -> Option<crate::mechanical_port::source::artboard::RuntimeArtboardDirtyHandle> {
+        self.slot()?.artboard_dirty.borrow().clone()
+    }
     fn belongs_to(&self, arena: &CoreArena) -> bool {
         Weak::ptr_eq(&self.arena, &Rc::downgrade(&arena.inner))
     }
@@ -208,7 +286,14 @@ impl CoreHandle {
     }
 
     pub fn is_alive(&self) -> bool {
-        self.slot().is_some_and(|slot| slot.occupied.get())
+        self.slot().is_some_and(|slot| {
+            slot.occupied.get()
+                && slot
+                    .runtime_artboard
+                    .borrow()
+                    .as_ref()
+                    .is_none_or(|root| root.strong_count() > 0)
+        })
     }
 
     pub fn is_type_of(&self, type_key: CoreTypeKey) -> bool {
@@ -223,6 +308,10 @@ impl CoreHandle {
 
     pub fn with<R>(&self, f: impl FnOnce(&dyn CoreObject) -> R) -> Option<R> {
         let slot = self.slot()?;
+        if let Some(root) = slot.runtime_artboard.borrow().as_ref() {
+            let root = root.upgrade()?;
+            return Some(f(&root.borrow().base));
+        }
         let object = slot.object.borrow();
         let object = object.as_deref()?;
         Some(f(object))
@@ -230,6 +319,10 @@ impl CoreHandle {
 
     pub fn with_mut<R>(&self, f: impl FnOnce(&mut dyn CoreObject) -> R) -> Option<R> {
         let slot = self.slot()?;
+        if let Some(root) = slot.runtime_artboard.borrow().as_ref() {
+            let root = root.upgrade()?;
+            return Some(f(&mut root.borrow_mut().base));
+        }
         let mut object = slot.object.borrow_mut();
         let object = object.as_deref_mut()?;
         Some(f(object))

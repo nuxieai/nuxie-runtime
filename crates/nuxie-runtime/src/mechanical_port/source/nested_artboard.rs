@@ -528,7 +528,7 @@ impl NestedArtboard {
         }
         renderer.transform(&self.world_transform());
         if let Some(instance) = &self.instance {
-            instance.with_artboard_mut(|instance| instance.draw_internal(renderer));
+            instance.draw_internal(renderer);
         }
         if self.needs_save_operation() {
             renderer.restore();
@@ -676,7 +676,7 @@ impl NestedArtboard {
             || (self.base.is_paused()
                 && instance.with_artboard(|instance| instance.has_dirt(ComponentDirt::COMPONENTS)));
         if needs_update {
-            instance.with_artboard_mut(|instance| instance.update_pass(false));
+            instance.update_pass(false);
         }
     }
 
@@ -1003,9 +1003,7 @@ impl NestedArtboard {
 
         let advancing_flags = AdvanceFlags(flags.0 & !AdvanceFlags::IS_ROOT.0);
         if let Some(instance) = self.instance.as_ref() {
-            if instance.with_artboard_mut(|instance| {
-                instance.advance_internal(local_elapsed_seconds, advancing_flags)
-            }) {
+            if instance.advance_internal(local_elapsed_seconds, advancing_flags) {
                 keep_going = true;
             }
             if instance.with_artboard(|instance| instance.has_dirt(ComponentDirt::COMPONENTS)) {

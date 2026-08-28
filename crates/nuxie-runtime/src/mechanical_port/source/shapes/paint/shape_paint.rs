@@ -224,6 +224,36 @@ impl ShapePaint {
         needs_save_operation: bool,
         fill_rule: Option<u32>,
     ) {
+        let Some(factory) = self
+            .base
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
+        else {
+            return;
+        };
+        self.draw_with_factory(
+            renderer,
+            shape_paint_path,
+            transform,
+            use_path_fill_rule,
+            override_paint,
+            needs_save_operation,
+            fill_rule,
+            &factory,
+        );
+    }
+
+    pub fn draw_with_factory(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        shape_paint_path: &mut ShapePaintPath,
+        transform: Mat2D,
+        use_path_fill_rule: bool,
+        override_paint: Option<&mut dyn RenderPaint>,
+        needs_save_operation: bool,
+        fill_rule: Option<u32>,
+        factory: &crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    ) {
         let mut saved = !needs_save_operation;
         let feather = self.feather.as_ref().and_then(|feather| {
             feather.with_downcast::<Feather, _>(|feather| {
@@ -283,16 +313,10 @@ impl ShapePaint {
                         saved = true;
                         renderer.save();
                     }
-                    let factory = self
-                        .base
-                        .with_artboard(|artboard| artboard.factory())
-                        .flatten();
-                    if let Some(factory) = factory {
-                        if let Some(effect) = path_effect.as_ref() {
-                            renderer.clip_path(effect.borrow_mut().render_path(&factory));
-                        } else {
-                            renderer.clip_path(shape_paint_path.render_path(&factory));
-                        }
+                    if let Some(effect) = path_effect.as_ref() {
+                        renderer.clip_path(effect.borrow_mut().render_path(factory));
+                    } else {
+                        renderer.clip_path(shape_paint_path.render_path(factory));
                     }
                     Some(inner_path.clone())
                 });
@@ -309,15 +333,8 @@ impl ShapePaint {
             }
         }
 
-        let Some(factory) = self
-            .base
-            .with_artboard(|artboard| artboard.factory())
-            .flatten()
-        else {
-            return;
-        };
         let mut draw_path = |path: &mut ShapePaintPath| {
-            let render_path = path.render_path(&factory);
+            let render_path = path.render_path(factory);
             if !use_path_fill_rule {
                 if let Some(fill_rule) = fill_rule {
                     match fill_rule {

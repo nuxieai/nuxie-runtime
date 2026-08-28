@@ -338,6 +338,10 @@ impl ArtboardComponentList {
         self.compute_layout_bounds();
     }
 
+    pub(crate) fn finish_layout_bounds(&mut self) {
+        self.compute_layout_bounds();
+    }
+
     pub fn cascade_layout_style(
         &mut self,
         inherited_interpolation: LayoutStyleInterpolation,
@@ -377,7 +381,7 @@ impl ArtboardComponentList {
         let mut changed = false;
         for index in 0..self.artboard_count() as i32 {
             if let Some(artboard) = self.artboard_instance(index) {
-                if artboard.with_artboard_mut(Artboard::sync_style_changes) {
+                if artboard.sync_style_changes() {
                     changed = true;
                 }
             }
@@ -801,12 +805,9 @@ impl ArtboardComponentList {
                 }
             }
             if let Some(artboard) = self.artboard_instance(index) {
-                let (advanced, has_dirt) = artboard.with_artboard_mut(|artboard| {
-                    (
-                        artboard.advance_internal(elapsed_seconds, advancing_flags),
-                        artboard.base.has_dirt(ComponentDirt::COMPONENTS),
-                    )
-                });
+                let advanced = artboard.advance_internal(elapsed_seconds, advancing_flags);
+                let has_dirt = artboard
+                    .with_artboard(|artboard| artboard.base.has_dirt(ComponentDirt::COMPONENTS));
                 if advanced {
                     keep_going = true;
                 }
@@ -1088,7 +1089,7 @@ impl ArtboardComponentList {
                         renderer.save();
                         let transform = self.artboard_transforms[&item];
                         renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
-                        artboard.with_artboard_mut(|artboard| artboard.draw_internal(renderer));
+                        artboard.draw_internal(renderer);
                         renderer.restore();
                     }
                 }
@@ -1104,7 +1105,7 @@ impl ArtboardComponentList {
                     renderer.save();
                     let transform = self.artboard_transforms[&item];
                     renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
-                    artboard.with_artboard_mut(|artboard| artboard.draw_internal(renderer));
+                    artboard.draw_internal(renderer);
                     renderer.restore();
                 }
             }
@@ -1215,7 +1216,7 @@ impl ArtboardComponentList {
         if Component::has_dirt_in(value, ComponentDirt::COMPONENTS) {
             for index in 0..self.artboard_count() as i32 {
                 if let Some(artboard) = self.artboard_instance(index) {
-                    artboard.with_artboard_mut(|artboard| artboard.update_pass(false));
+                    artboard.update_pass(false);
                 }
             }
         }

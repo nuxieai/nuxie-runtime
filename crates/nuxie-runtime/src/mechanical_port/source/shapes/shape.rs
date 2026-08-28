@@ -515,11 +515,9 @@ impl Shape {
         }
         self.paths().iter().fold(Vec2D::default(), |size, path| {
             let measured = path
-                .with(|path| {
-                    path.as_path().map(|path| {
-                        path.base
-                            .measure_layout(width, width_mode, height, height_mode)
-                    })
+                .with_mut(|path| {
+                    path.as_intrinsically_sizeable_mut()
+                        .map(|path| path.measure_layout(width, width_mode, height, height_mode))
                 })
                 .flatten()
                 .unwrap_or_default();

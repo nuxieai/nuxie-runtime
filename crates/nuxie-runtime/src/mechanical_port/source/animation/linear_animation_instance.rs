@@ -2,10 +2,10 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter, linear_animation::LinearAnimation,
-        nested_animation::NestedEventNotifier, r#loop::Loop,
+        r#loop::Loop, nested_animation::NestedEventNotifier,
     },
     artboard::RuntimeArtboardInstanceWeakHandle,
-    core::{field_types::core_callback_type::CallbackContext, CoreHandle},
+    core::{CoreHandle, field_types::core_callback_type::CallbackContext},
     data_bind::{
         bindable_property_boolean::BindablePropertyBoolean,
         bindable_property_color::BindablePropertyColor,
@@ -362,8 +362,8 @@ impl LinearAnimationInstance {
         self.apply(1.0);
         if self
             .artboard
-            .with_artboard_mut(|artboard| artboard.base.advance_default(seconds))
-            .unwrap_or(false)
+            .upgrade()
+            .is_some_and(|artboard| artboard.advance_default(seconds))
         {
             more = true
         }

@@ -14323,10 +14323,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(self.clone_core())
     }
     fn deserialize(
         &mut self,
@@ -15781,7 +15778,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.base.clone_into()))
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -16229,7 +16226,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::scripted::scripted_layout_base::ScriptedLayoutBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.base.clone_into()))
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(
         &mut self,
@@ -44215,10 +44212,7 @@ impl crate::mechanical_port::source::core::CoreObject
         )
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(self.clone_value())
     }
     fn deserialize(
         &mut self,
@@ -44372,7 +44366,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::text::text_style_paint_base::TextStylePaintBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.base.clone_into()))
+        Some(self.clone_value())
     }
     fn deserialize(
         &mut self,
@@ -47977,10 +47971,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::script_input_artboard_base::ScriptInputArtboardBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(Box::new(self.clone()))
     }
     fn deserialize(
         &mut self,
@@ -50787,7 +50778,7 @@ impl CoreCapabilities
         &mut self,
         stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(crate::mechanical_port::source::animation::keyframe_interpolator::KeyFrameInterpolator::import(&mut self.base.base, stack))
+        Some(self.import(stack))
     }
 
     fn as_file_asset_referencer_mut(
@@ -52536,6 +52527,47 @@ impl CoreCapabilities
         self.perform(machine, invocation);
         true
     }
+    fn as_scripted_object(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::scripted::scripted_object::ScriptedObject> {
+        Some(&self.scripted)
+    }
+    fn as_scripted_object_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::scripted::scripted_object::ScriptedObject>
+    {
+        Some(&mut self.scripted)
+    }
+    fn scripted_object_add_property(&mut self, property: CoreHandle) -> bool {
+        self.add_property(property);
+        true
+    }
+    fn scripted_object_remove_property(&mut self, property: &CoreHandle) -> bool {
+        self.remove_property(property);
+        true
+    }
+    fn as_file_asset_referencer_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::assets::file_asset_referencer::FileAssetReferencer,
+    > {
+        Some(self.scripted.file_asset_referencer_mut())
+    }
+    fn file_asset_referencer_asset_id(&self) -> Option<u32> {
+        Some(self.asset_id())
+    }
+    fn file_asset_referencer_asset_updated(&mut self) -> bool {
+        self.scripted.file_asset_referencer_mut().asset_updated();
+        true
+    }
+    fn file_asset_referencer_set_asset(&mut self, asset: CoreHandle) -> bool {
+        let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return false;
+        };
+        self.scripted.set_asset(owner, Some(asset));
+        true
+    }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::keyed_object::KeyedObject {
     fn lifecycle_import(
@@ -53028,6 +53060,14 @@ impl CoreCapabilities
     ) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
     }
+    fn listener_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        invocation: &crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation,
+    ) -> bool {
+        self.perform(machine, invocation);
+        true
+    }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::scripted_transition_condition::ScriptedTransitionCondition {
     fn lifecycle_on_added_dirty(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
@@ -53053,6 +53093,18 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::scripted_tr
         layer: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
     ) -> bool {
         self.base.base.use_in_layer(machine, layer);
+        true
+    }
+    fn as_scripted_object(&self) -> Option<&crate::mechanical_port::source::scripted::scripted_object::ScriptedObject> { Some(&self.scripted) }
+    fn as_scripted_object_mut(&mut self) -> Option<&mut crate::mechanical_port::source::scripted::scripted_object::ScriptedObject> { Some(&mut self.scripted) }
+    fn scripted_object_add_property(&mut self, property: CoreHandle) -> bool { self.add_property(property); true }
+    fn scripted_object_remove_property(&mut self, property: &CoreHandle) -> bool { self.remove_property(property); true }
+    fn as_file_asset_referencer_mut(&mut self) -> Option<&mut crate::mechanical_port::source::assets::file_asset_referencer::FileAssetReferencer> { Some(self.scripted.file_asset_referencer_mut()) }
+    fn file_asset_referencer_asset_id(&self) -> Option<u32> { Some(self.asset_id()) }
+    fn file_asset_referencer_asset_updated(&mut self) -> bool { self.scripted.file_asset_referencer_mut().asset_updated(); true }
+    fn file_asset_referencer_set_asset(&mut self, asset: CoreHandle) -> bool {
+        let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle() else { return false; };
+        self.scripted.set_asset(owner, Some(asset));
         true
     }
 }
@@ -53106,6 +53158,11 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
         self.base.base.use_in_layer(machine, Some(layer));
         true
     }
+    fn transition_condition_allowed(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        layer: crate::mechanical_port::source::animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> Option<bool> { Some(self.evaluate(Some(machine), &layer)) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::transition_number_condition::TransitionNumberCondition {
     fn lifecycle_on_added_dirty(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
@@ -54155,6 +54212,14 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::listener_vi
 
     fn listener_action_matches(&self, occurrence: crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance) -> Option<bool> {
         Some(self.matches_scheduled_occurrence(occurrence))
+    }
+    fn listener_action_perform(
+        &mut self,
+        machine: &mut crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance,
+        invocation: &crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation,
+    ) -> bool {
+        self.perform(machine, invocation);
+        true
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::transition_value_number_comparator::TransitionValueNumberComparator {

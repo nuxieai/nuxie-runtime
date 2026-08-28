@@ -38,14 +38,13 @@ impl PodStream {
         self
     }
 
-    pub fn read<T: Copy + 'static>(&mut self, destination: &mut T) -> &mut Self {
+    pub fn read<T: Copy + 'static>(&mut self) -> T {
         let value = self
             .stream
             .pop_front()
             .expect("cannot read an empty PodStream")
             .downcast::<T>()
             .expect("PodStream producer and consumer types must match");
-        *destination = *value;
-        self
+        *value
     }
 }

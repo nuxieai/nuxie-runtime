@@ -177,6 +177,7 @@ pub struct ScriptedObject {
     disposed: bool,
     implemented_methods: u32,
     needs_update: bool,
+    callback_update_requested: bool,
 }
 impl Default for ScriptedObject {
     fn default() -> Self {
@@ -197,6 +198,7 @@ impl Default for ScriptedObject {
             disposed: false,
             implemented_methods: 0,
             needs_update: false,
+            callback_update_requested: false,
         }
     }
 }
@@ -801,18 +803,27 @@ impl ScriptedObject {
         self.mark_needs_update();
     }
     pub fn script_advance(&mut self, e: f32) -> bool {
-        if !self.advances() {
+        if !self.advances() || self.self_ref == 0 {
             return false;
         }
         if let Some(instance) = &self.runtime_instance {
-            return instance
+            let mut host = ScriptUpdateRequestHost::default();
+            let advanced = instance
                 .borrow_mut()
-                .call_advance_truthy(e, &mut NoopScriptHost)
+                .call_advance_truthy(e, &mut host)
                 .unwrap_or(false);
+            self.callback_update_requested |= host.take_requested();
+            return advanced;
         }
         self.runtime
             .as_mut()
             .is_some_and(|r| r.advance(self.self_ref, e))
+    }
+
+    /// The most-derived owner applies markNeedsUpdate after releasing the VM
+    /// borrow. This marker carries only callback effects, not authored dirt.
+    pub fn take_update_request(&mut self) -> bool {
+        std::mem::take(&mut self.callback_update_requested)
     }
     pub fn script_draw_canvas(&mut self) {
         if !self.draws_canvas() {
@@ -850,7 +861,7 @@ impl ScriptedObject {
         if self.disposed {
             return;
         }
-        if let Some(instance) = &self.runtime_instance {
+        if let Some(instance) = self.runtime_instance.take() {
             instance.borrow_mut().invalidate_for_init_retry();
         }
         if let Some(r) = &mut self.runtime {
@@ -868,6 +879,7 @@ impl ScriptedObject {
         self.tracked_properties.clear();
         self.runtime_vm = None;
         self.user_init_done = false;
+        self.callback_update_requested = false;
         self.disposed = true
     }
     pub fn reinit(&mut self) {
@@ -1069,7 +1081,7 @@ fn runtime_script_value(value: &ScriptValue) -> Option<RuntimeScriptValue> {
     match value {
         ScriptValue::Boolean(value) => Some(RuntimeScriptValue::Bool(*value)),
         ScriptValue::Color(value) => Some(RuntimeScriptValue::Color(*value)),
-        ScriptValue::Integer(value) => Some(RuntimeScriptValue::Number(f64::from(*value))),
+        ScriptValue::Integer(value) => Some(RuntimeScriptValue::Number(f64::from(*value as u32))),
         ScriptValue::Number(value) => Some(RuntimeScriptValue::Number(f64::from(*value))),
         ScriptValue::String(value) => Some(RuntimeScriptValue::String(value.clone())),
         ScriptValue::Artboard(_) | ScriptValue::ViewModel(_) | ScriptValue::Trigger => None,

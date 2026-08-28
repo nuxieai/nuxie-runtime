@@ -218,6 +218,8 @@ impl ScriptedDataConverter {
             return false;
         }
         let advanced = self.scripted.script_advance(elapsed);
+        // This non-component owner inherits the empty markNeedsUpdate.
+        self.scripted.take_update_request();
         if advanced {
             self.base.base.mark_converter_dirty();
         }

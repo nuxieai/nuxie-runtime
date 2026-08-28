@@ -134,54 +134,6 @@ impl DataBindContext {
             }
         }
     }
-    pub fn bind_from_context(&mut self, data_context: Option<RuntimeDataContextHandle>) {
-        let Some(data_context) = data_context else {
-            return;
-        };
-        self.resolve_path();
-        let source = if self.base.base.is_name_based() {
-            self.base
-                .base
-                .file()
-                .with_file(|file| {
-                    file.manifest()?
-                        .with_downcast::<ManifestAsset, _>(|resolver| {
-                            data_context.with_context(|context| {
-                                context.get_relative_view_model_property(
-                                    &self.base.source_path_ids_buffer,
-                                    Some(resolver),
-                                )
-                            })
-                        })
-                })
-                .flatten()
-                .flatten()
-        } else {
-            data_context.with_context(|context| {
-                context.get_view_model_property(&self.base.source_path_ids_buffer)
-            })
-        };
-        if self.base.base.source() != source {
-            if let Some(source) = source {
-                self.base.base.clear_source();
-                self.base.base.set_source(source);
-            } else {
-                self.base.base.unbind();
-            }
-        } else {
-            self.base
-                .base
-                .add_dirt(self.base.base.reconcile_dirt(), true);
-        }
-        if let (Some(converter), Some(data_bind)) = (
-            self.base.base.converter(),
-            self.base.base.base.base.handle(),
-        ) {
-            crate::mechanical_port::source::data_bind::converters::data_converter::bind_converter_context(
-                &converter, data_context, data_bind,
-            );
-        }
-    }
     pub fn source_path_ids(&self) -> &[u32] {
         &self.base.source_path_ids_buffer
     }

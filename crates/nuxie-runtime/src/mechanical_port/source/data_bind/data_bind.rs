@@ -56,53 +56,11 @@ const SUPPRESS_DIRT: u8 = 8;
 const OBSERVING: u8 = 16;
 const TARGET_ORIGIN: u8 = 32;
 
-pub trait BindTarget {
-    fn add_property_observer(&mut self, bind: CoreHandle);
-    fn remove_property_observer(&mut self, bind: &CoreHandle);
-    fn core_type(&self) -> u16 {
-        0
-    }
-    fn is_component(&self) -> bool;
-    fn is_collapsed(&self) -> bool;
-    fn add_collapsable(&mut self, bind: CoreHandle);
-    fn should_reset_instances(&mut self, value: bool);
-    fn script_input(&mut self) -> Option<&mut dyn BindScriptInput> {
-        None
-    }
-    fn add_data_bind_to_converter(&mut self, _bind: CoreHandle) -> bool {
-        false
-    }
-    fn add_data_bind_to_formula_token(&mut self, _bind: CoreHandle) -> bool {
-        false
-    }
-    fn add_data_bind_to_parent_artboard(&mut self, _bind: CoreHandle) -> bool {
-        false
-    }
-}
-
 pub trait BindScriptInput {
     fn scripted_object(&self) -> Option<CoreHandle>;
     fn set_scripted_object(&mut self, object: Option<CoreHandle>);
     fn data_bind(&self) -> Option<CoreHandle>;
     fn set_data_bind(&mut self, bind: Option<CoreHandle>, owns_data_bind: bool);
-}
-
-pub trait BindScriptedObject {
-    fn has_component(&self) -> bool;
-    fn add_data_bind_from_scripted_object(&mut self, bind: CoreHandle) -> bool;
-}
-
-pub trait DataBindAddedContext {
-    fn on_added_dirty_super(&mut self, bind: &mut DataBind) -> StatusCode;
-}
-
-pub trait DataBindImportStack {
-    fn backboard_file(&mut self) -> Option<RuntimeFileWeakHandle>;
-    fn add_data_converter_referencer(&mut self, bind: CoreHandle);
-    fn has_artboard_importer(&self) -> bool;
-    fn add_artboard_data_bind(&mut self, bind: CoreHandle);
-    fn add_state_machine_data_bind(&mut self, bind: CoreHandle) -> bool;
-    fn import_super(&mut self, bind: &mut DataBind) -> StatusCode;
 }
 
 pub trait BindSource {
@@ -159,14 +117,6 @@ impl RuntimeBindContextValue {
     }
 }
 
-pub trait ContextFactory {
-    fn create(
-        &mut self,
-        data_type: DataType,
-        bind: CoreHandle,
-    ) -> Option<Box<dyn BindContextValue>>;
-}
-
 pub trait BindContainer {
     fn add_dirty_data_bind(&mut self, bind: CoreHandle);
     fn rebuild_data_bind(&mut self, bind: CoreHandle);
@@ -218,6 +168,108 @@ impl Default for DataBind {
 }
 
 impl DataBind {
+    pub fn import_handle(
+        owner: &CoreHandle,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> StatusCode {
+        use crate::mechanical_port::source::{
+            generated::{
+                animation::state_machine_base::StateMachineBase, artboard_base::ArtboardBase,
+                backboard_base::BackboardBase,
+            },
+            importers::{
+                artboard_importer::ArtboardImporter, backboard_importer::BackboardImporter,
+                state_machine_importer::StateMachineImporter,
+            },
+            scripted::{
+                scripted_data_converter::ScriptedDataConverter, scripted_object::with_script_input,
+            },
+        };
+        let Some(backboard) = stack.latest::<BackboardImporter>(BackboardBase::TYPE_KEY) else {
+            return StatusCode::MissingObject;
+        };
+        let file = backboard
+            .file()
+            .expect("BackboardImporter retains its File");
+        owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_file(file));
+        backboard.add_data_converter_referencer(owner.clone());
+        if let Some(target) = owner
+            .with(|owner| owner.as_data_bind().unwrap().target())
+            .flatten()
+        {
+            owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().initialize());
+            if let Some(scripted_object) =
+                with_script_input(&target, |input| input.script_input().scripted_object())
+            {
+                let mut owns_data_bind = true;
+                if let Some(scripted_object) = scripted_object {
+                    let component = scripted_object
+                        .with(|object| object.as_component().is_some())
+                        .unwrap_or(false);
+                    if component {
+                        if let Some(artboard) =
+                            stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY)
+                        {
+                            owns_data_bind = false;
+                            artboard.add_data_bind(owner.clone());
+                        }
+                    } else if scripted_object
+                        .with_downcast::<ScriptedDataConverter, _>(|_| ())
+                        .is_some()
+                    {
+                        DataBindContainerOwner::Authored(scripted_object)
+                            .add_data_bind(owner.clone());
+                        owns_data_bind = false;
+                    }
+                }
+                with_script_input(&target, |input| {
+                    input
+                        .script_input_mut()
+                        .set_data_bind(Some(owner.clone()), owns_data_bind)
+                });
+            } else if target
+                .with(|target| target.as_data_converter().is_some())
+                .unwrap_or(false)
+            {
+                DataBindContainerOwner::Authored(target).add_data_bind(owner.clone());
+            } else if target
+                .with(|target| target.as_formula_token().is_some())
+                .unwrap_or(false)
+            {
+                target.with_mut(|target| {
+                    target
+                        .as_formula_token_mut()
+                        .unwrap()
+                        .add_data_bind(owner.clone())
+                });
+            } else if Self::state_machine_owned_type(target.core_type().unwrap_or_default()) {
+                if let Some(machine) =
+                    stack.latest::<StateMachineImporter>(StateMachineBase::TYPE_KEY)
+                {
+                    machine.add_data_bind(owner.clone());
+                }
+            } else {
+                let artboard = target
+                    .with(|target| {
+                        target
+                            .as_component()
+                            .and_then(|component| component.artboard_handle())
+                    })
+                    .flatten();
+                if let Some(artboard) = artboard {
+                    DataBindContainerOwner::Authored(artboard).add_data_bind(owner.clone());
+                } else if let Some(artboard) =
+                    stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY)
+                {
+                    artboard.add_data_bind(owner.clone());
+                }
+            }
+        }
+        owner
+            .with_mut(|owner| owner.core_mut().import(stack))
+            .unwrap_or(StatusCode::MissingObject)
+    }
+
     pub fn relink_handle(owner: &CoreHandle) {
         let container = owner
             .with(|owner| owner.as_data_bind().and_then(|bind| bind.container.clone()))
@@ -452,82 +504,6 @@ impl DataBind {
         }
     }
 
-    pub fn on_added_dirty(&mut self, context: &mut dyn DataBindAddedContext) -> StatusCode {
-        let code = context.on_added_dirty_super(self);
-        if code != StatusCode::Ok {
-            return code;
-        }
-        StatusCode::Ok
-    }
-
-    pub fn import(&mut self, import_stack: &mut dyn DataBindImportStack) -> StatusCode {
-        let Some(bind) = self.handle() else {
-            return StatusCode::MissingObject;
-        };
-        let Some(file) = import_stack.backboard_file() else {
-            return StatusCode::MissingObject;
-        };
-        self.set_file(file);
-        import_stack.add_data_converter_referencer(bind.clone());
-
-        let Some(target_handle) = self.target.clone() else {
-            return import_stack.import_super(self);
-        };
-        self.initialize();
-        let imported = target_handle.with_mut(|target| {
-            let Some(target) = target.as_bind_target_mut() else {
-                return false;
-            };
-            if let Some(input) = target.script_input() {
-                let mut owns_data_bind = true;
-                if let Some(scripted_object) = input.scripted_object() {
-                    let has_component = scripted_object
-                        .with_mut(|scripted_object| {
-                            scripted_object
-                                .as_bind_scripted_object_mut()
-                                .is_some_and(|scripted_object| scripted_object.has_component())
-                        })
-                        .unwrap_or(false);
-                    if has_component {
-                        if import_stack.has_artboard_importer() {
-                            owns_data_bind = false;
-                            import_stack.add_artboard_data_bind(bind.clone());
-                        }
-                    } else if scripted_object
-                        .with_mut(|scripted_object| {
-                            scripted_object.as_bind_scripted_object_mut().is_some_and(
-                                |scripted_object| {
-                                    scripted_object.add_data_bind_from_scripted_object(bind.clone())
-                                },
-                            )
-                        })
-                        .unwrap_or(false)
-                    {
-                        owns_data_bind = false;
-                    }
-                }
-                input.set_data_bind(Some(bind.clone()), owns_data_bind);
-            } else if target.add_data_bind_to_converter(bind.clone()) {
-            } else if target.add_data_bind_to_formula_token(bind.clone()) {
-            } else if Self::state_machine_owned_type(target.core_type()) {
-                return import_stack.add_state_machine_data_bind(bind.clone());
-            } else {
-                if target.is_component() && target.add_data_bind_to_parent_artboard(bind.clone()) {
-                    return true;
-                }
-                if import_stack.has_artboard_importer() {
-                    import_stack.add_artboard_data_bind(bind.clone());
-                    return true;
-                }
-            }
-            false
-        });
-        if imported == Some(true) {
-            return import_stack.import_super(self);
-        }
-        import_stack.import_super(self)
-    }
-
     fn state_machine_owned_type(type_key: u16) -> bool {
         matches!(
             type_key,
@@ -595,7 +571,7 @@ impl DataBind {
         self.source = Some(value);
         if let Some(target) = self.target.as_ref() {
             target.with_mut(|target| {
-                if let Some(target) = target.as_bind_target_mut() {
+                if let Some(target) = target.as_artboard_component_list_mut() {
                     target.should_reset_instances(is_number);
                 }
             });
@@ -617,44 +593,6 @@ impl DataBind {
         }
     }
 
-    pub fn bind(&mut self, factory: &mut dyn ContextFactory) {
-        let Some(bind) = self.handle() else {
-            return;
-        };
-        self.context_value = None;
-        self.context_value = factory
-            .create(self.output_type(), bind.clone())
-            .map(RuntimeBindContextValue::new);
-        if let Some(converter) = self.converter.as_ref() {
-            converter.with_mut(|converter| {
-                if let Some(converter) = converter.as_data_converter_capability_mut() {
-                    converter.reset();
-                }
-            });
-        }
-        if self.has_flag(OBSERVING) {
-            if let Some(target) = self.target.as_ref() {
-                target.with_mut(|target| {
-                    if let Some(target) = target.as_bind_target_mut() {
-                        target.remove_property_observer(&bind);
-                    }
-                });
-                self.set_flag(OBSERVING, false);
-            }
-        }
-        if self.to_source() && self.target_supports_push() {
-            if let Some(target) = self.target.as_ref() {
-                target.with_mut(|target| {
-                    if let Some(target) = target.as_bind_target_mut() {
-                        target.add_property_observer(bind.clone());
-                    }
-                });
-                self.set_flag(OBSERVING, true);
-            }
-        }
-        self.add_dirt(self.reconcile_dirt(), true);
-    }
-
     pub fn set_target(&mut self, value: Option<CoreHandle>) {
         if self.target == value {
             return;
@@ -663,9 +601,7 @@ impl DataBind {
         if self.has_flag(OBSERVING) {
             if let (Some(target), Some(bind)) = (self.target.as_ref(), bind.as_ref()) {
                 target.with_mut(|target| {
-                    if let Some(target) = target.as_bind_target_mut() {
-                        target.remove_property_observer(bind);
-                    }
+                    target.core_mut().remove_property_observer(bind);
                 });
                 self.set_flag(OBSERVING, false);
             }
@@ -674,9 +610,7 @@ impl DataBind {
         if self.to_source() && self.target_supports_push() {
             if let (Some(target), Some(bind)) = (self.target.as_ref(), bind) {
                 target.with_mut(|target| {
-                    if let Some(target) = target.as_bind_target_mut() {
-                        target.add_property_observer(bind.clone());
-                    }
+                    target.core_mut().add_property_observer(bind.clone());
                 });
                 self.set_flag(OBSERVING, true);
             }
@@ -701,9 +635,7 @@ impl DataBind {
         if self.has_flag(OBSERVING) {
             if let (Some(target), Some(bind)) = (self.target.as_ref(), bind.as_ref()) {
                 target.with_mut(|target| {
-                    if let Some(target) = target.as_bind_target_mut() {
-                        target.remove_property_observer(bind);
-                    }
+                    target.core_mut().remove_property_observer(bind);
                 });
                 self.set_flag(OBSERVING, false);
             }
@@ -758,11 +690,7 @@ impl DataBind {
         self.target
             .as_ref()
             .and_then(|target| {
-                target.with(|target| {
-                    target
-                        .as_bind_target()
-                        .map(|target| target.is_component() && target.is_collapsed())
-                })
+                target.with(|target| target.as_component().map(|target| target.is_collapsed()))
             })
             .flatten()
             .unwrap_or(false)
@@ -921,13 +849,16 @@ impl DataBind {
         if let Some(target) = self.target.as_ref()
             && let Some(bind) = self.handle()
         {
-            target.with_mut(|target| {
-                if let Some(target) = target.as_bind_target_mut()
-                    && target.is_component()
-                {
-                    target.add_collapsable(bind);
-                }
-            });
+            let collapsed = target
+                .with_mut(|target| {
+                    target
+                        .as_component_mut()
+                        .and_then(|target| target.register_collapsable(bind))
+                })
+                .flatten();
+            if let Some(collapsed) = collapsed {
+                self.collapse(collapsed);
+            }
         }
     }
 

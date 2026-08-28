@@ -327,14 +327,21 @@ impl Component {
     }
 
     pub fn add_collapsable(&mut self, collapsable: CoreHandle) {
-        if !self.collapsables.contains(&collapsable) {
-            self.collapsables.push(collapsable.clone());
+        if let Some(collapsed) = self.register_collapsable(collapsable.clone()) {
             collapsable.with_mut(|collapsable| {
                 if let Some(collapsable) = collapsable.as_data_bind_mut() {
-                    collapsable.collapse(self.is_collapsed());
+                    collapsable.collapse(collapsed);
                 }
             });
         }
+    }
+
+    pub(crate) fn register_collapsable(&mut self, collapsable: CoreHandle) -> Option<bool> {
+        if self.collapsables.contains(&collapsable) {
+            return None;
+        }
+        self.collapsables.push(collapsable);
+        Some(self.is_collapsed())
     }
 
     pub fn build_dependencies(&mut self) {}

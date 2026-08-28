@@ -50,21 +50,15 @@ impl FormulaToken {
             return StatusCode::MissingObject;
         };
         let formula = importer.formula();
-        formula.with_mut(|formula| {
-            if let Some(formula) = formula.as_data_converter_formula_mut() {
-                formula.add_token(token);
-            }
+        formula.with_downcast_mut::<crate::mechanical_port::source::data_bind::converters::data_converter_formula::DataConverterFormula, _>(|formula| {
+            DataConverterFormula::add_token(formula, token);
         });
         self.formula = Some(formula);
         self.base.base.import(stack)
     }
     pub fn add_data_bind(&mut self, data_bind: CoreHandle) {
         if let Some(formula) = self.formula.as_ref() {
-            formula.with_mut(|formula| {
-                if let Some(formula) = formula.as_data_converter_formula_mut() {
-                    formula.add_data_bind(data_bind);
-                }
-            });
+            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(formula.clone()).add_data_bind(data_bind);
         }
     }
 }

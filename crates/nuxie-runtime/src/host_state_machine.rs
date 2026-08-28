@@ -1,5 +1,11 @@
 //! Host projections over the translated state-machine occurrence.
 
+mod listener_invocation;
+pub use listener_invocation::{
+    ListenerInvocationKind, ScriptGamepadInputChange, ScriptGamepadMappingKind,
+    ScriptGamepadSnapshot, ScriptListenerInvocation, ScriptPointerEventKind,
+};
+
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     animation::{

@@ -172,7 +172,7 @@ impl Skin {
         StatusCode::Ok
     }
 
-    pub fn update(&mut self, _value: ComponentDirt, _context: &dyn CoreContext) {
+    pub fn update(&mut self, _value: ComponentDirt) {
         let bone_transforms = self
             .bone_transforms
             .as_mut()
@@ -187,9 +187,8 @@ impl Skin {
                 .expect("Tendon::onAddedDirty resolves its Bone before update");
             let (bone_world, inverse_bind) = (
                 bone_handle
-                    .with_downcast::<crate::mechanical_port::source::bones::bone::Bone, _>(|bone| {
-                        *bone.base.world_transform()
-                    })
+                    .with(|bone| bone.as_bone().map(|bone| *bone.base.world_transform()))
+                    .flatten()
                     .expect("a Tendon Bone handle must remain a Bone"),
                 tendon_handle
                     .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
@@ -205,7 +204,7 @@ impl Skin {
         }
     }
 
-    pub fn build_dependencies(&mut self, this: CoreHandle, _context: &mut dyn CoreContext) {
+    pub fn build_dependencies(&mut self, this: CoreHandle) {
         for tendon_handle in self.tendons.iter().cloned() {
             let bone_handle = tendon_handle
                 .with_downcast::<crate::mechanical_port::source::bones::tendon::Tendon, _>(
@@ -214,9 +213,8 @@ impl Skin {
                 .flatten()
                 .expect("Tendon::onAddedDirty resolves its Bone before dependency building");
             let peer_constraints = bone_handle
-                .with_downcast::<crate::mechanical_port::source::bones::bone::Bone, _>(|bone| {
-                    bone.peer_constraints().to_vec()
-                })
+                .with(|bone| bone.as_bone().map(|bone| bone.peer_constraints().to_vec()))
+                .flatten()
                 .expect("a Tendon Bone handle must remain a Bone");
             bone_handle
                 .with_mut(|bone| {

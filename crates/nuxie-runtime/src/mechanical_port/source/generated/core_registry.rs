@@ -2610,12 +2610,6 @@ pub trait CoreCapabilities: Any {
             source as &mut dyn crate::mechanical_port::source::data_bind::converters::data_converter_formula::FormulaSource
         })
     }
-    fn as_formula_data_bind(&self) -> Option<&dyn crate::mechanical_port::source::data_bind::converters::data_converter_formula::FormulaDataBind>{
-        None
-    }
-    fn as_formula_data_bind_mut(&mut self) -> Option<&mut dyn crate::mechanical_port::source::data_bind::converters::data_converter_formula::FormulaDataBind>{
-        None
-    }
     fn as_group_converter(&self) -> Option<&dyn crate::mechanical_port::source::data_bind::converters::data_converter_group::GroupConverter>{
         None
     }
@@ -39026,7 +39020,7 @@ impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port
     fn core_type(&self) -> u16 { crate::mechanical_port::source::generated::data_bind::converters::data_converter_number_to_list_base::DataConverterNumberToListBase::TYPE_KEY }
     fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::data_bind::converters::data_converter_number_to_list_base::DataConverterNumberToListBase::is_type_of(type_key) }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.clone_converter()))
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(&mut self, property_key: u16, reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>) -> bool {
         let mut base = std::mem::take(&mut self.base);
@@ -39107,7 +39101,7 @@ impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port
     fn core_type(&self) -> u16 { crate::mechanical_port::source::generated::data_bind::converters::data_converter_formula_base::DataConverterFormulaBase::TYPE_KEY }
     fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::data_bind::converters::data_converter_formula_base::DataConverterFormulaBase::is_type_of(type_key) }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.clone_formula()))
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(&mut self, property_key: u16, reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>) -> bool {
         let mut base = std::mem::take(&mut self.base);
@@ -39900,7 +39894,7 @@ impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port
     fn core_type(&self) -> u16 { crate::mechanical_port::source::generated::data_bind::converters::data_converter_group_item_base::DataConverterGroupItemBase::TYPE_KEY }
     fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::data_bind::converters::data_converter_group_item_base::DataConverterGroupItemBase::is_type_of(type_key) }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.clone_item()))
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(&mut self, property_key: u16, reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>) -> bool {
         let mut base = std::mem::take(&mut self.base);
@@ -39970,7 +39964,7 @@ impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port
     fn core_type(&self) -> u16 { crate::mechanical_port::source::generated::data_bind::converters::data_converter_group_base::DataConverterGroupBase::TYPE_KEY }
     fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::data_bind::converters::data_converter_group_base::DataConverterGroupBase::is_type_of(type_key) }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.clone_group()))
+        Some(Box::new(self.clone_definition()))
     }
     fn deserialize(&mut self, property_key: u16, reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>) -> bool {
         let mut base = std::mem::take(&mut self.base);
@@ -50268,6 +50262,13 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::follow_path_constraint::FollowPathConstraint
 {
+    fn component_update(
+        &mut self,
+        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        self.update(value);
+        true
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -50320,6 +50321,7 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::list_follow_path_constraint::ListFollowPathConstraint {
+    fn component_update(&mut self, value: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool { self.base.base.update(value); true }
     fn component_on_dirty(&mut self, dirt: crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool {
         crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(self, dirt);
         true
@@ -50485,6 +50487,16 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint
 {
+    fn is_advancing_component(&self) -> bool {
+        true
+    }
+    fn advancing_component_advance(
+        &mut self,
+        elapsed_seconds: f32,
+        flags: crate::mechanical_port::source::advance_flags::AdvanceFlags,
+    ) -> Option<bool> {
+        Some(self.advance_component(elapsed_seconds, flags))
+    }
     fn as_scroll_constraint(&self) -> Option<&crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint>{
         Some(&self)
     }
@@ -51844,6 +51856,21 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_data_converter::ScriptedDataConverter
 {
+    fn is_advancing_component(&self) -> bool {
+        true
+    }
+    fn advancing_component_advance(
+        &mut self,
+        elapsed_seconds: f32,
+        flags: crate::mechanical_port::source::advance_flags::AdvanceFlags,
+    ) -> Option<bool> {
+        Some(self.advance_component(
+            elapsed_seconds,
+            flags.contains(
+                crate::mechanical_port::source::advance_flags::AdvanceFlags::ADVANCE_NESTED,
+            ),
+        ))
+    }
     fn as_scripted_object(
         &self,
     ) -> Option<&crate::mechanical_port::source::scripted::scripted_object::ScriptedObject> {
@@ -52454,6 +52481,20 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_number::S
 impl CoreCapabilities
     for crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout
 {
+    fn is_advancing_component(&self) -> bool {
+        true
+    }
+    fn advancing_component_advance(
+        &mut self,
+        elapsed_seconds: f32,
+        flags: crate::mechanical_port::source::advance_flags::AdvanceFlags,
+    ) -> Option<bool> {
+        Some(
+            self.base
+                .base
+                .advance_component_impl(elapsed_seconds, flags),
+        )
+    }
     fn artboard_referencer_update_artboard(&mut self, value: Option<CoreHandle>) -> bool {
         self.update_artboard(value);
         true
@@ -60583,6 +60624,7 @@ impl CoreCapabilities
 {
 }
 impl CoreCapabilities for crate::mechanical_port::source::data_bind::converters::data_converter_number_to_list::DataConverterNumberToList {
+    fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> { Some(crate::mechanical_port::source::data_bind::converters::data_converter_number_to_list::DataConverterNumberToList::complete_clone) }
     fn as_data_converter_capability(&self) -> Option<&dyn DataConverterCapability> {
         Some(self)
     }
@@ -60594,6 +60636,7 @@ impl CoreCapabilities for crate::mechanical_port::source::data_bind::converters:
     fn as_data_converter_mut(&mut self) -> Option<&mut crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter> { Some(&mut self.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::data_bind::converters::data_converter_formula::DataConverterFormula {
+    fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> { Some(crate::mechanical_port::source::data_bind::converters::data_converter_formula::DataConverterFormula::complete_clone) }
     fn as_data_converter_capability(&self) -> Option<&dyn DataConverterCapability> {
         Some(self)
     }
@@ -60713,10 +60756,12 @@ impl CoreCapabilities for crate::mechanical_port::source::data_bind::converters:
     fn as_data_converter_mut(&mut self) -> Option<&mut crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter> { Some(&mut self.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::data_bind::converters::data_converter_group_item::DataConverterGroupItem {
+    fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> { Some(crate::mechanical_port::source::data_bind::converters::data_converter_group_item::DataConverterGroupItem::complete_clone) }
     fn as_data_converter_group_item(&self) -> Option<&crate::mechanical_port::source::data_bind::converters::data_converter_group_item::DataConverterGroupItem> { Some(&self) }
     fn as_data_converter_group_item_mut(&mut self) -> Option<&mut crate::mechanical_port::source::data_bind::converters::data_converter_group_item::DataConverterGroupItem> { Some(&mut self) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::data_bind::converters::data_converter_group::DataConverterGroup {
+    fn clone_completion_handler(&self) -> Option<fn(&CoreHandle, &CoreHandle) -> bool> { Some(crate::mechanical_port::source::data_bind::converters::data_converter_group::DataConverterGroup::complete_clone) }
     fn as_data_converter_capability(&self) -> Option<&dyn DataConverterCapability> {
         Some(self)
     }
@@ -60894,6 +60939,20 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::data_bind::bindable_property_viewmodel::BindablePropertyViewModel {
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf {
+    fn is_advancing_component(&self) -> bool {
+        true
+    }
+    fn advancing_component_advance(
+        &mut self,
+        elapsed_seconds: f32,
+        flags: crate::mechanical_port::source::advance_flags::AdvanceFlags,
+    ) -> Option<bool> {
+        Some(
+            self.base
+                .base
+                .advance_component_impl(elapsed_seconds, flags),
+        )
+    }
     fn as_nested_artboard(
         &self,
     ) -> Option<&crate::mechanical_port::source::nested_artboard::NestedArtboard> {
@@ -61422,6 +61481,20 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::root_bone::Root
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::skin::Skin {
+    fn component_update(
+        &mut self,
+        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        self.update(value);
+        true
+    }
+    fn component_build_dependencies(&mut self) -> bool {
+        let owner = crate::mechanical_port::source::core::CoreObject::core(self)
+            .handle()
+            .expect("live Skin");
+        self.build_dependencies(owner);
+        true
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -61444,12 +61517,10 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::skin::Skin {
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(
-            crate::mechanical_port::source::component::Component::on_added_dirty(
-                &mut self.base.base.base.base,
-                context,
-            ),
-        )
+        let owner = crate::mechanical_port::source::core::CoreObject::core(self)
+            .handle()
+            .expect("live Skin");
+        Some(self.on_added_dirty(owner, context))
     }
     fn lifecycle_import(
         &mut self,
@@ -61627,6 +61698,13 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_follow_path_modifier::TextFollowPathModifier
 {
+    fn component_update(
+        &mut self,
+        value: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        self.update(value);
+        true
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::text::text_follow_path_modifier::TextFollowPathModifier::build_dependencies(&mut self);
         true
@@ -62695,6 +62773,16 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input::TextInput {
+    fn is_advancing_component(&self) -> bool {
+        true
+    }
+    fn advancing_component_advance(
+        &mut self,
+        elapsed_seconds: f32,
+        flags: crate::mechanical_port::source::advance_flags::AdvanceFlags,
+    ) -> Option<bool> {
+        Some(self.advance_component(elapsed_seconds, flags))
+    }
     fn drawable_draw(
         &mut self,
         renderer: &mut crate::mechanical_port::source::renderer::Renderer,

@@ -4,7 +4,7 @@
 //! the exact occurrence handles owned by the translated runtime, and every
 //! write goes through the generated property callback path of that owner.
 
-use std::ops::Range;
+use std::{collections::HashSet, ops::Range};
 
 use nuxie_render_api::{Aabb, Mat2D, Vec2D};
 
@@ -16,7 +16,7 @@ use crate::{
             nested_state_machine::NestedStateMachine,
             state_machine_instance::RuntimeStateMachineInstanceHandle,
         },
-        artboard::{Artboard, RuntimeArtboardInstanceHandle},
+        artboard::{Artboard, RuntimeArtboardInstanceHandle, RuntimeArtboardInstanceWeakHandle},
         artboard_component_list::ArtboardComponentList,
         assets::image_asset::ImageAsset,
         constraints::scrolling::{scroll_constraint::ScrollConstraint, scroll_physics},
@@ -74,6 +74,180 @@ pub struct RuntimeLayoutBounds {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+}
+
+/// One currently retained child Artboard occurrence owned by an exact
+/// `NestedArtboard` or `ArtboardComponentList` host.
+///
+/// Cloning this value copies only weak occurrence identity and mount fences;
+/// it never extends the translated host's child lifetime, instantiates a
+/// fallback child, or copies scene state. Every observation and write
+/// revalidates the complete translated host path, so a detached nested child
+/// or a virtualized list row reused for another item fails closed.
+#[derive(Clone)]
+pub struct RuntimeNestedArtboardOccurrence {
+    native: RuntimeArtboardInstanceWeakHandle,
+    instance_identity: u64,
+    mounts: Vec<RuntimeNestedArtboardMount>,
+}
+
+#[derive(Clone)]
+struct RuntimeNestedArtboardMount {
+    parent: RuntimeArtboardInstanceWeakHandle,
+    host: CoreHandle,
+    list_item: Option<CoreHandle>,
+    child: RuntimeArtboardInstanceWeakHandle,
+}
+
+impl RuntimeNestedArtboardMount {
+    fn is_current(&self) -> bool {
+        let Some(parent) = self.parent.upgrade() else {
+            return false;
+        };
+        let host_is_mounted = parent.with_artboard(|parent| {
+            parent
+                .base
+                .objects()
+                .iter()
+                .flatten()
+                .any(|object| object == &self.host)
+        });
+        if !host_is_mounted {
+            return false;
+        }
+        let current = if let Some(expected_item) = self.list_item.as_ref() {
+            self.host
+                .with_downcast::<ArtboardComponentList, _>(|list| {
+                    (0..list.artboard_count()).find_map(|index| {
+                        (list.list_item(index as i32).as_ref() == Some(expected_item))
+                            .then(|| list.artboard_instance(index as i32))
+                            .flatten()
+                    })
+                })
+                .flatten()
+        } else {
+            self.host
+                .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+                .flatten()
+        };
+        current.is_some_and(|current| current.downgrade().ptr_eq(&self.child))
+    }
+}
+
+impl std::fmt::Debug for RuntimeNestedArtboardOccurrence {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RuntimeNestedArtboardOccurrence")
+            .field("instance_identity", &self.instance_identity())
+            .field("artboard_dimensions", &self.artboard_dimensions())
+            .finish()
+    }
+}
+
+impl RuntimeNestedArtboardOccurrence {
+    fn from_native(
+        native: RuntimeArtboardInstanceHandle,
+        mounts: Vec<RuntimeNestedArtboardMount>,
+    ) -> Self {
+        Self {
+            instance_identity: retained_occurrence_identity(&native.core_handle()),
+            native: native.downgrade(),
+            mounts,
+        }
+    }
+
+    /// Whether this exact child is still mounted at every retained host edge.
+    pub fn is_current(&self) -> bool {
+        self.native.upgrade().is_some()
+            && self
+                .mounts
+                .iter()
+                .all(RuntimeNestedArtboardMount::is_current)
+    }
+
+    fn current_native(&self) -> Option<RuntimeArtboardInstanceHandle> {
+        self.is_current().then(|| self.native.upgrade()).flatten()
+    }
+
+    fn object_handle(&self, local_id: usize) -> Option<CoreHandle> {
+        let native = self.current_native()?;
+        let local_id = u32::try_from(local_id).ok()?;
+        native.with_artboard(|artboard| artboard.base.resolve_handle(local_id))
+    }
+
+    /// Opaque identity of this exact retained occurrence.
+    pub fn instance_identity(&self) -> u64 {
+        self.instance_identity
+    }
+
+    pub fn artboard_dimensions(&self) -> Option<(f32, f32)> {
+        let native = self.current_native()?;
+        Some(native.with_artboard(|artboard| {
+            (artboard.base.layout_width(), artboard.base.layout_height())
+        }))
+    }
+
+    /// Set the translated Artboard's width and height through its generated
+    /// callbacks. The result reports whether either exact value changed.
+    pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
+        let Some(native) = self.current_native() else {
+            return false;
+        };
+        let (current_width, current_height) =
+            native.with_artboard(|artboard| (artboard.base.width(), artboard.base.height()));
+        let width_changed = current_width != width;
+        let height_changed = current_height != height;
+        // `set_size` uses the translated occurrence setter, which releases
+        // the Artboard borrow before synchronous root-layout callbacks re-enter
+        // this same owner.
+        native.set_size(width, height);
+        width_changed || height_changed
+    }
+
+    pub fn set_double_property(&mut self, local_id: usize, key: u16, value: f32) -> bool {
+        let Some(object) = self.object_handle(local_id) else {
+            return false;
+        };
+        let supported = object
+            .with(|object| CoreRegistry::object_supports_property(object, u32::from(key)))
+            .unwrap_or(false);
+        if !supported {
+            return false;
+        }
+        let Some(before) = CoreRegistry::get_double_handle(&object, i32::from(key)) else {
+            return false;
+        };
+        if before == value || !CoreRegistry::set_double_handle(&object, i32::from(key), value) {
+            return false;
+        }
+        CoreRegistry::get_double_handle(&object, i32::from(key))
+            .is_some_and(|after| after != before)
+    }
+
+    pub fn set_color_property(&mut self, local_id: usize, key: u16, value: u32) -> bool {
+        let Some(object) = self.object_handle(local_id) else {
+            return false;
+        };
+        let supported = object
+            .with(|object| CoreRegistry::object_supports_property(object, u32::from(key)))
+            .unwrap_or(false);
+        if !supported {
+            return false;
+        }
+        let value = value as i32;
+        let Some(before) = CoreRegistry::get_color_handle(&object, i32::from(key)) else {
+            return false;
+        };
+        if before == value || !CoreRegistry::set_color_handle(&object, i32::from(key), value) {
+            return false;
+        }
+        CoreRegistry::get_color_handle(&object, i32::from(key)).is_some_and(|after| after != before)
+    }
+
+    pub fn update_components(&mut self) -> bool {
+        self.current_native()
+            .is_some_and(|native| native.update_pass(true))
+    }
 }
 
 /// World-space endpoints of one caret in the exact settled Text occurrence.
@@ -195,6 +369,83 @@ fn retained_occurrence_identity(handle: &CoreHandle) -> u64 {
     value
 }
 
+fn source_artboard_name(artboard: &RuntimeArtboardInstanceHandle) -> Option<String> {
+    let source = artboard.with_artboard(|artboard| artboard.base.artboard_source_handle())?;
+    source.with_downcast::<Artboard, _>(|source| source.base.name().to_owned())
+}
+
+fn retained_child_artboards(
+    artboard: &RuntimeArtboardInstanceHandle,
+) -> Vec<RuntimeNestedArtboardMount> {
+    // The translated Artboard's private `artboard_hosts` vector is populated
+    // while walking this authored object array. Filter that same array instead
+    // of concatenating its type-specific caches, which would reorder an
+    // authored NestedArtboard/List/NestedArtboard sequence.
+    let hosts = artboard.with_artboard(|artboard| artboard.base.objects().to_vec());
+    let mut children = Vec::new();
+    for host in hosts.into_iter().flatten() {
+        if let Some(nested) = host
+            .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+            .flatten()
+        {
+            children.push(RuntimeNestedArtboardMount {
+                parent: artboard.downgrade(),
+                host,
+                list_item: None,
+                child: nested.downgrade(),
+            });
+            continue;
+        }
+        if let Some(retained) = host.with_downcast::<ArtboardComponentList, _>(|list| {
+            (0..list.artboard_count())
+                .filter_map(|index| {
+                    Some((
+                        list.list_item(index as i32)?,
+                        list.artboard_instance(index as i32)?,
+                    ))
+                })
+                .collect::<Vec<_>>()
+        }) {
+            children.extend(retained.into_iter().map(|(list_item, child)| {
+                RuntimeNestedArtboardMount {
+                    parent: artboard.downgrade(),
+                    host: host.clone(),
+                    list_item: Some(list_item),
+                    child: child.downgrade(),
+                }
+            }));
+        }
+    }
+    children
+}
+
+fn collect_nested_artboards_named(
+    artboard: &RuntimeArtboardInstanceHandle,
+    source_name: &str,
+    ancestors: &mut HashSet<(usize, usize, u64)>,
+    mounts: &mut Vec<RuntimeNestedArtboardMount>,
+    output: &mut Vec<RuntimeNestedArtboardOccurrence>,
+) {
+    for mount in retained_child_artboards(artboard) {
+        let Some(child) = mount.child.upgrade() else {
+            continue;
+        };
+        mounts.push(mount);
+        if source_artboard_name(&child).as_deref() == Some(source_name) {
+            output.push(RuntimeNestedArtboardOccurrence::from_native(
+                child.clone(),
+                mounts.clone(),
+            ));
+        }
+        let identity = child.core_handle().identity_key();
+        if ancestors.insert(identity) {
+            collect_nested_artboards_named(&child, source_name, ancestors, mounts, output);
+            ancestors.remove(&identity);
+        }
+        mounts.pop();
+    }
+}
+
 fn snapshot_scroll_constraint(
     artboard: &RuntimeArtboardInstanceHandle,
     constraint_local_id: usize,
@@ -242,6 +493,32 @@ fn scroll_snapshots(
 }
 
 impl ArtboardInstance {
+    /// Opaque identity of this exact retained root occurrence.
+    pub fn instance_identity(&self) -> u64 {
+        retained_occurrence_identity(&self.native_handle().core_handle())
+    }
+
+    /// Visit retained nested and component-list children in translated host
+    /// order, depth first, and return every occurrence whose exact source
+    /// Artboard has `source_artboard_name`.
+    pub fn nested_artboard_occurrences_named(
+        &self,
+        source_artboard_name: &str,
+    ) -> Vec<RuntimeNestedArtboardOccurrence> {
+        let root = self.native_handle();
+        let mut ancestors = HashSet::from([root.core_handle().identity_key()]);
+        let mut mounts = Vec::new();
+        let mut output = Vec::new();
+        collect_nested_artboards_named(
+            &root,
+            source_artboard_name,
+            &mut ancestors,
+            &mut mounts,
+            &mut output,
+        );
+        output
+    }
+
     pub fn scroll_constraint_occurrences(&self) -> Vec<RuntimeScrollConstraintSnapshot> {
         scroll_snapshots(&self.native_handle())
     }

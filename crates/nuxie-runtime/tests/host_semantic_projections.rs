@@ -4,9 +4,16 @@ use nuxie_render_api::{PersistentFactory, RecordingFactory, Vec2D};
 use nuxie_runtime::{
     ArtboardInstance, File, RuntimeArtboardOccurrenceSegment, RuntimeFactoryHandle,
     RuntimeLayoutBounds, RuntimeScrollConstraintSnapshot, StateMachineEventContext,
-    StateMachineInputKind, source::animation::nested_state_machine::NestedStateMachine,
+    StateMachineInputKind,
+    source::animation::nested_state_machine::NestedStateMachine,
+    source::artboard::Artboard,
     source::artboard_component_list::ArtboardComponentList,
-    source::assets::image_asset::ImageAsset, source::nested_artboard::NestedArtboard,
+    source::assets::image_asset::ImageAsset,
+    source::generated::{
+        core_registry::CoreRegistry, layout_component_base::LayoutComponentBase,
+        shapes::paint::solid_color_base::SolidColorBase,
+    },
+    source::nested_artboard::NestedArtboard,
     source::viewmodel::viewmodel_instance::ViewModelInstance,
     source::viewmodel::viewmodel_instance_boolean::ViewModelInstanceBoolean,
 };
@@ -255,6 +262,127 @@ fn nested_occurrence_input_writes_target_the_retained_machine() {
 }
 
 #[test]
+fn named_nested_artboard_projection_weakly_fences_and_mutates_the_exact_occurrence() {
+    let (_factory, mut artboard) = import_host_artboard("runtime_nested_inputs.riv");
+    let second = ArtboardInstance::from_native(artboard.native_file(), 0)
+        .expect("second root occurrence instantiates");
+    assert_ne!(artboard.instance_identity(), second.instance_identity());
+
+    artboard.advance(0.0).expect("initial advance");
+    let (nested_host, child) = artboard
+        .native_handle()
+        .with_artboard(|artboard| {
+            artboard
+                .base
+                .nested_artboards()
+                .into_iter()
+                .find_map(|host| {
+                    let child = host
+                        .with_downcast::<NestedArtboard, _>(
+                            NestedArtboard::artboard_instance_default,
+                        )
+                        .flatten()?;
+                    Some((host, child))
+                })
+        })
+        .expect("fixture has a retained nested occurrence");
+    let source_name = child
+        .with_artboard(|child| child.base.artboard_source_handle())
+        .and_then(|source| {
+            source.with_downcast::<Artboard, _>(|source| source.base.name().to_owned())
+        })
+        .expect("nested occurrence has an exact source Artboard");
+    let child_identity = occurrence_identity(&child.core_handle());
+    let outgoing_child = child.downgrade();
+
+    let mut occurrences = artboard.nested_artboard_occurrences_named(&source_name);
+    let occurrence = occurrences
+        .iter_mut()
+        .find(|occurrence| occurrence.instance_identity() == child_identity)
+        .expect("named projection fences the observed child");
+    assert!(!occurrence.set_double_property(0, u16::MAX, 1.0));
+    assert!(!occurrence.set_color_property(0, u16::MAX, 0xff00_00ff));
+
+    let authored_width = CoreRegistry::get_double_handle(
+        &child.core_handle(),
+        i32::from(LayoutComponentBase::WIDTH_PROPERTY_KEY),
+    )
+    .expect("child root exposes the authored width property");
+    assert!(occurrence.set_double_property(
+        0,
+        LayoutComponentBase::WIDTH_PROPERTY_KEY,
+        authored_width + 0.25,
+    ));
+    assert!(!occurrence.set_double_property(
+        0,
+        LayoutComponentBase::WIDTH_PROPERTY_KEY,
+        authored_width + 0.25,
+    ));
+
+    let (color_local_id, color_before) = child
+        .with_artboard(|child| {
+            child
+                .base
+                .objects()
+                .iter()
+                .enumerate()
+                .find_map(|(local_id, object)| {
+                    let object = object.as_ref()?;
+                    object.is_type_of(SolidColorBase::TYPE_KEY).then(|| {
+                        (
+                            local_id,
+                            CoreRegistry::get_color_handle(
+                                object,
+                                i32::from(SolidColorBase::COLOR_VALUE_PROPERTY_KEY),
+                            )
+                            .expect("SolidColor exposes its generated color property"),
+                        )
+                    })
+                })
+        })
+        .expect("nested fixture has a SolidColor occurrence");
+    let color_after = (color_before as u32) ^ 1;
+    assert!(occurrence.set_color_property(
+        color_local_id,
+        SolidColorBase::COLOR_VALUE_PROPERTY_KEY,
+        color_after,
+    ));
+    assert!(!occurrence.set_color_property(
+        color_local_id,
+        SolidColorBase::COLOR_VALUE_PROPERTY_KEY,
+        color_after,
+    ));
+
+    let (width, height) = occurrence
+        .artboard_dimensions()
+        .expect("retained child remains mounted");
+    assert!(occurrence.set_artboard_dimensions(width + 1.0, height + 2.0));
+    assert!(!occurrence.set_artboard_dimensions(width + 1.0, height + 2.0));
+    occurrence.update_components();
+    assert_eq!(
+        occurrence.artboard_dimensions(),
+        Some((width + 1.0, height + 2.0))
+    );
+
+    let source = child
+        .with_artboard(|child| child.base.artboard_source_handle())
+        .expect("nested child has a source Artboard");
+    let replacement = Artboard::nested_instance_from_handle(&source)
+        .expect("source creates a replacement nested occurrence");
+    nested_host.with_downcast_mut::<NestedArtboard, _>(|host| {
+        host.referenced_artboard_instance(replacement)
+    });
+    drop(child);
+    assert!(
+        outgoing_child.upgrade().is_none(),
+        "the host projection must not extend an outgoing child's lifetime"
+    );
+    assert!(!occurrence.is_current());
+    assert_eq!(occurrence.artboard_dimensions(), None);
+    assert!(!occurrence.set_artboard_dimensions(width, height));
+}
+
+#[test]
 fn component_list_occurrence_identity_fences_input_writes() {
     let (_factory, mut artboard) = import_host_artboard("component_list_1.riv");
     let view_model = artboard
@@ -360,6 +488,81 @@ fn component_list_occurrence_identity_fences_input_writes() {
         None
     );
     assert_eq!(artboard.occurrence_view_model_boolean(&stale, &[0]), None);
+}
+
+#[test]
+fn named_nested_projection_rejects_a_component_list_occurrence_recycled_for_another_item() {
+    let (_factory, mut artboard) = import_host_artboard("component_list_virtualized.riv");
+    let view_model = artboard
+        .native_file()
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(
+                artboard.native_handle().core_handle(),
+            )
+        })
+        .expect("fixture has default view model");
+    artboard.bind_native_view_model(Some(view_model));
+    artboard.advance(0.0).expect("initial advance");
+
+    let (host, first_index, second_index, first_child, source_name) = artboard
+        .native_handle()
+        .with_artboard(|artboard| {
+            artboard.base.objects().iter().flatten().find_map(|host| {
+                host.with_downcast::<ArtboardComponentList, _>(|list| {
+                    (0..list.artboard_count()).find_map(|first_index| {
+                        let first_child = list.artboard_instance(first_index as i32)?;
+                        let source = first_child
+                            .with_artboard(|child| child.base.artboard_source_handle())?;
+                        let second_index =
+                            (first_index + 1..list.artboard_count()).find(|&index| {
+                                list.artboard_instance(index as i32).is_some_and(|child| {
+                                    child
+                                        .with_artboard(|child| child.base.artboard_source_handle())
+                                        .as_ref()
+                                        == Some(&source)
+                                })
+                            })?;
+                        let source_name = source
+                            .with_downcast::<Artboard, _>(|source| source.base.name().to_owned())?;
+                        Some((
+                            host.clone(),
+                            first_index,
+                            second_index,
+                            first_child,
+                            source_name,
+                        ))
+                    })
+                })?
+            })
+        })
+        .expect("fixture has two virtualized rows backed by the same source Artboard");
+    let first_identity = occurrence_identity(&first_child.core_handle());
+    let mut occurrences = artboard.nested_artboard_occurrences_named(&source_name);
+    let occurrence = occurrences
+        .iter_mut()
+        .find(|occurrence| occurrence.instance_identity() == first_identity)
+        .expect("projection fences the first list-item occurrence");
+
+    // Pool row B first, then row A. Recreating B pops A's exact occurrence
+    // from the source-artboard pool and rebinds it to B's list item.
+    host.with_downcast_mut::<ArtboardComponentList, _>(|list| {
+        list.remove_virtualizable(second_index as i32);
+        list.remove_virtualizable(first_index as i32);
+    });
+    ArtboardComponentList::add_virtualizable_occurrence(&host, second_index as i32);
+    let rebound_identity = host
+        .with_downcast::<ArtboardComponentList, _>(|list| {
+            list.artboard_instance(second_index as i32)
+                .map(|child| occurrence_identity(&child.core_handle()))
+        })
+        .flatten()
+        .expect("second row is rebound from the pool");
+    assert_eq!(rebound_identity, first_identity, "fixture exercised reuse");
+    assert!(
+        !occurrence.is_current(),
+        "the old row-A fence must reject the same Artboard root rebound to row B"
+    );
+    assert!(!occurrence.set_double_property(0, LayoutComponentBase::WIDTH_PROPERTY_KEY, 1.0,));
 }
 
 #[test]

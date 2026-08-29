@@ -17,6 +17,7 @@ async = ["luau", "luaur-rt/async"]
 compiler = ["luau", "luaur-rt/compiler"]
 js-host-seed = ["nuxie-runtime/js-host-seed"]
 apple-authored-msl = ["luau", "dep:sha2"]
+android-authored-wgsl = ["luau", "dep:sha2"]
 # Cross-crate access to otherwise private observables needed by literal ports
 # of upstream unit tests. Shipping runtime consumers do not enable this.
 upstream-test-seams = ["luau"]

@@ -983,6 +983,235 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_allows_exact_android_product_data_import_boundary(self) -> None:
+        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        capi = self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-vulkan = ["dep:nuxie-project-data"]
+
+            [dependencies]
+            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            """,
+        )
+        (capi / "src/lib.rs").write_text(
+            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            "mod android_product_import;\n"
+        )
+        (capi / "src/android_product_import.rs").write_text(
+            "pub(crate) fn prepare_configured_import_runtime() {\n"
+            "    nuxie_project_data::install_runtime_adapter();\n"
+            "}\n"
+        )
+        (capi / "src/asset_hooks.rs").write_text(
+            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            "    super::android_product_import::prepare_configured_import_runtime();\n"
+        )
+        (capi / "tests").mkdir()
+        (capi / "tests/android_project_data_import.rs").write_text(
+            "use nuxie_project_data::{\n"
+            "    ProjectDataConverterCatalog, ProjectDataConverterDefinition, "
+            "ProjectDataConverterEasing,\n"
+            "    ProjectDataConverterKind, ProjectDataConverterOutputType, "
+            "ProjectDataConverterSpec,\n"
+            "};\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_android_product_import_without_scripting_gate(self) -> None:
+        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        capi = self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-vulkan = ["dep:nuxie-project-data"]
+
+            [dependencies]
+            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            """,
+        )
+        (capi / "src/lib.rs").write_text(
+            '#[cfg(feature = "android-vulkan")]\nmod android_product_import;\n'
+        )
+        (capi / "src/android_product_import.rs").write_text(
+            "pub(crate) fn prepare_configured_import_runtime() {\n"
+            "    nuxie_project_data::install_runtime_adapter();\n"
+            "}\n"
+        )
+        (capi / "src/asset_hooks.rs").write_text(
+            '#[cfg(feature = "android-vulkan")]\n'
+            "    super::android_product_import::prepare_configured_import_runtime();\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "must retain its exact android-vulkan + scripting configured-import boundary",
+            result.stderr,
+        )
+
+    def test_rejects_extra_android_product_data_symbol(self) -> None:
+        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        capi = self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-vulkan = ["dep:nuxie-project-data"]
+
+            [dependencies]
+            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            """,
+        )
+        (capi / "src/lib.rs").write_text(
+            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            "mod android_product_import;\n"
+        )
+        (capi / "src/android_product_import.rs").write_text(
+            "pub(crate) fn prepare_configured_import_runtime() {\n"
+            "    nuxie_project_data::install_runtime_adapter();\n"
+            "}\n"
+        )
+        (capi / "src/asset_hooks.rs").write_text(
+            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            "    super::android_product_import::prepare_configured_import_runtime();\n"
+            "nuxie_project_data::unexpected_product_call();\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("protected source imports a product/authoring module", result.stderr)
+
+    def test_rejects_extra_ungated_android_product_prepare_call(self) -> None:
+        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        capi = self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-vulkan = ["dep:nuxie-project-data"]
+
+            [dependencies]
+            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            """,
+        )
+        (capi / "src/lib.rs").write_text(
+            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            "mod android_product_import;\n"
+        )
+        (capi / "src/android_product_import.rs").write_text(
+            "pub(crate) fn prepare_configured_import_runtime() {\n"
+            "    nuxie_project_data::install_runtime_adapter();\n"
+            "}\n"
+        )
+        (capi / "src/asset_hooks.rs").write_text(
+            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            "    super::android_product_import::prepare_configured_import_runtime();\n"
+            "super::android_product_import::prepare_configured_import_runtime();\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "must retain its exact android-vulkan + scripting configured-import boundary",
+            result.stderr,
+        )
+
+    def test_rejects_extra_android_product_data_import_member(self) -> None:
+        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        capi = self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-vulkan = ["dep:nuxie-project-data"]
+
+            [dependencies]
+            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            """,
+        )
+        (capi / "src/lib.rs").write_text(
+            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            "mod android_product_import;\n"
+        )
+        (capi / "src/android_product_import.rs").write_text(
+            "pub(crate) fn prepare_configured_import_runtime() {\n"
+            "    nuxie_project_data::install_runtime_adapter();\n"
+            "}\n"
+        )
+        (capi / "src/asset_hooks.rs").write_text(
+            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            "    super::android_product_import::prepare_configured_import_runtime();\n"
+        )
+        (capi / "tests").mkdir()
+        (capi / "tests/android_project_data_import.rs").write_text(
+            "use nuxie_project_data::{\n"
+            "    ProjectDataConverterCatalog, ProjectDataConverterDefinition, "
+            "ProjectDataConverterEasing,\n"
+            "    ProjectDataConverterKind, ProjectDataConverterOutputType, "
+            "ProjectDataConverterSpec, RuntimeAdapter,\n"
+            "};\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "must retain its exact android-vulkan + scripting configured-import boundary",
+            result.stderr,
+        )
+
+    def test_rejects_android_product_data_activated_outside_vulkan_feature(self) -> None:
+        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            scripting = ["dep:nuxie-project-data"]
+
+            [dependencies]
+            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "optional nuxie-project-data must be activated only by feature "
+            "'android-vulkan'",
+            result.stderr,
+        )
+
+    def test_rejects_nonoptional_android_product_data_edge(self) -> None:
+        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-vulkan = ["dep:nuxie-project-data"]
+
+            [dependencies]
+            nuxie-project-data = { path = "../nuxie-project-data" }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Android product-data edge must remain optional", result.stderr)
+
     def test_authored_data_extension_cannot_own_renderer_or_platform_code(self) -> None:
         extension = self.create_package(
             "crates/nux-apple-product-extension",
@@ -1155,9 +1384,6 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         (package / "src/apple_metal.rs").write_text(
             "struct AppleSurface; // CAMetalDrawable is caller-borrowed.\n"
         )
-        (package / "src/apple_assets.rs").write_text(
-            "struct AppleAssetHooks; // Apple-only asset admission.\n"
-        )
         (package / "cbindgen.toml").write_text(
             '"apple-metal" = "NUX_CAPI_APPLE_METAL"\n'
         )
@@ -1212,7 +1438,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
     def test_allows_product_neutral_host_command_vocabulary(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/lib.rs").write_text("fn host_commands() {}\n")
-        (package / "src/apple_assets.rs").write_text(
+        (package / "src/asset_hooks.rs").write_text(
             "fn host_commands() {}\n"
         )
         tests = package / "tests"
@@ -1822,6 +2048,24 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_allows_exact_android_authored_wgsl_feature_forwarding(self) -> None:
+        self.create_portable_abi_facade()
+        self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-authored-wgsl = ["nuxie/android-authored-wgsl"]
+
+            [dependencies]
+            nuxie = { path = "../nuxie", default-features = false }
+            """,
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_rejects_android_vulkan_forwarding_under_an_alias(self) -> None:
         self.create_portable_abi_facade()
         self.create_package(
@@ -2089,7 +2333,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
     def test_allows_exact_apple_render_canvas_symbols(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
-        (package / "src/apple_assets.rs").write_text(
+        (package / "src/asset_hooks.rs").write_text(
             "use nuxie::{RenderCanvas, RenderCanvasError};\n"
         )
 
@@ -2099,7 +2343,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
     def test_rejects_apple_render_canvas_symbols_outside_exact_file(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
-        (package / "src/not_apple_assets.rs").write_text(
+        (package / "src/not_asset_hooks.rs").write_text(
             "use nuxie::{RenderCanvas, RenderCanvasError};\n"
         )
 
@@ -2608,7 +2852,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         scripting_tests = scripting / "tests"
         scripting_tests.mkdir()
         owners = (
-            capi / "src/apple_assets.rs",
+            capi / "src/asset_hooks.rs",
             capi / "src/lib.rs",
             capi_tests / "apple_metal.rs",
             facade / "src/lib.rs",

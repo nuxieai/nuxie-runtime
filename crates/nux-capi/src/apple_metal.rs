@@ -10,6 +10,8 @@ use super::{
     ffi_guard_with_handle_result, ffi_guard_with_result, publish_result, register_handle,
     remove_handle, struct_size_supports, write_caller_struct,
 };
+#[cfg(feature = "apple-authored-msl")]
+use super::{NuxFile, NuxFileImportConfig};
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
 #[cfg(feature = "apple-authored-msl")]
 use nuxie::ore_metal_gpu_canvas::{OreMetalGpuCanvas, OreMetalGpuCanvasImage};
@@ -35,6 +37,36 @@ use std::ptr::NonNull;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
+
+/// Rust-only trust seam for the upper-leaf product adapter. This is kept out
+/// of the product-neutral C ABI so a generic embedding cannot toggle native
+/// shader authority with a forgeable field.
+///
+/// # Safety
+///
+/// In addition to the configured-import pointer contract, the caller must
+/// establish that every native shader payload in the exact artifact was
+/// emitted by the trusted native-shader exporter.
+#[cfg(feature = "apple-authored-msl")]
+#[doc(hidden)]
+pub unsafe fn nux_file_import_configured_with_trusted_native_shaders(
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    unsafe {
+        super::asset_hooks::nux_file_import_configured_with_authority(
+            bytes,
+            len,
+            config,
+            out_file,
+            out_result,
+            super::NativeShaderImportAuthority::TrustedExporter,
+        )
+    }
+}
 
 pub type NuxRendererDisposition = u32;
 pub const NUX_RENDERER_DISPOSITION_NONE: NuxRendererDisposition = 0;
@@ -218,6 +250,20 @@ impl Deref for AppleMetalFactory {
 impl DerefMut for AppleMetalFactory {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
+    }
+}
+
+impl crate::asset_hooks::AssetUploadFactory for AppleMetalFactory {
+    fn upload_rgba8_premul_srgb(
+        &mut self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.inner
+            .upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
+            .map_err(|_| ImageDecodeError)
     }
 }
 
@@ -1184,7 +1230,7 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     (state.pixel_width, state.pixel_height),
                 )?);
             }
-            if let Some(assets) = player.artboard.apple_assets.as_ref() {
+            if let Some(assets) = player.artboard.asset_hooks.as_ref() {
                 let mut factory = assets.wrap_factory(&mut state.factory);
                 artboard.draw(&mut factory, &mut *frame).map_err(|error| {
                     ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
@@ -1297,7 +1343,7 @@ mod tests {
             pixel_height: 8,
             attached: true,
         };
-        let assets = crate::apple_assets::AppleAssetCatalog::default();
+        let assets = crate::asset_hooks::AssetCatalog::default();
         let wrapped = assets.wrap_factory(&mut state.factory);
 
         assert_eq!(

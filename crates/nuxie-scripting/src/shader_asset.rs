@@ -17,7 +17,11 @@ use nuxie_render_api::{
     GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureSamplerPair,
     GpuCanvasShaderTextureViewDimension, GpuCanvasWebGl2Shader,
 };
-#[cfg(any(feature = "apple-authored-msl", test))]
+#[cfg(any(
+    feature = "apple-authored-msl",
+    feature = "android-authored-wgsl",
+    test
+))]
 use sha2::{Digest, Sha256};
 
 use crate::envelope::SignedContent;
@@ -53,9 +57,17 @@ pub(crate) struct ShaderAsset {
     _standalone_arena: Option<nuxie_runtime::mechanical_port::source::core::CoreArena>,
     #[cfg(any(feature = "apple-authored-msl", test))]
     supplemental_reflection: Option<Vec<u8>>,
-    #[cfg(any(feature = "apple-authored-msl", test))]
+    #[cfg(any(
+        feature = "apple-authored-msl",
+        feature = "android-authored-wgsl",
+        test
+    ))]
     artifact_size: u64,
-    #[cfg(any(feature = "apple-authored-msl", test))]
+    #[cfg(any(
+        feature = "apple-authored-msl",
+        feature = "android-authored-wgsl",
+        test
+    ))]
     artifact_sha256: [u8; 32],
 }
 impl std::fmt::Debug for ShaderAsset {
@@ -131,10 +143,19 @@ impl ShaderAsset {
             _standalone_arena: None,
             #[cfg(any(feature = "apple-authored-msl", test))]
             supplemental_reflection,
-            #[cfg(any(feature = "apple-authored-msl", test))]
-            artifact_size: payload.len() as u64,
-            #[cfg(any(feature = "apple-authored-msl", test))]
-            artifact_sha256: Sha256::digest(&payload).into(),
+            #[cfg(any(
+                feature = "apple-authored-msl",
+                feature = "android-authored-wgsl",
+                test
+            ))]
+            artifact_size: u64::try_from(payload.len())
+                .map_err(|_| Error::runtime("ShaderAsset length does not fit in u64"))?,
+            #[cfg(any(
+                feature = "apple-authored-msl",
+                feature = "android-authored-wgsl",
+                test
+            ))]
+            artifact_sha256: Sha256::digest(payload).into(),
         })
     }
     pub(crate) fn decode_webgpu(&self, name: &str) -> Result<GpuCanvasShader> {
@@ -193,9 +214,19 @@ impl ShaderAsset {
         provenance: Option<GpuCanvasShaderProvenance>,
     ) -> Result<GpuCanvasShaderArtifact> {
         match profile {
-            GpuCanvasShaderProfile::WebGpu => self
-                .decode_webgpu(name)
-                .map(GpuCanvasShaderArtifact::WebGpu),
+            GpuCanvasShaderProfile::WebGpu => {
+                #[cfg(feature = "android-authored-wgsl")]
+                {
+                    self.decode_android_wgsl(name, provenance)
+                        .map(GpuCanvasShaderArtifact::WebGpu)
+                }
+                #[cfg(not(feature = "android-authored-wgsl"))]
+                {
+                    let _ = provenance;
+                    self.decode_webgpu(name)
+                        .map(GpuCanvasShaderArtifact::WebGpu)
+                }
+            }
             GpuCanvasShaderProfile::WebGl2 => self
                 .decode_webgl2(name)
                 .map(GpuCanvasShaderArtifact::WebGl2),
@@ -211,6 +242,25 @@ impl ShaderAsset {
                 )))
             }
         }
+    }
+
+    #[cfg(feature = "android-authored-wgsl")]
+    fn decode_android_wgsl(
+        &self,
+        name: &str,
+        provenance: Option<GpuCanvasShaderProvenance>,
+    ) -> Result<GpuCanvasShader> {
+        let provenance = provenance.ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no verified provenance for Android WGSL"
+            ))
+        })?;
+        if !provenance.authorizes_digest(self.artifact_size, &self.artifact_sha256) {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' Android WGSL provenance does not authorize this artifact"
+            )));
+        }
+        self.decode_webgpu(name)
     }
 
     #[cfg(any(feature = "apple-authored-msl", test))]
@@ -495,28 +545,6 @@ fn validate_gl_fixup(name: &str, stage: &str, bytes: &[u8]) -> Result<()> {
         )));
     }
     Ok(())
-}
-
-fn append_texture_sampler_pairs(bytes: &[u8], pairs: &mut Vec<GpuCanvasShaderTextureSamplerPair>) {
-    let Some((&count, payload)) = bytes.split_first() else {
-        return;
-    };
-    let count = usize::from(count);
-    let Some(required) = count.checked_mul(4) else {
-        return;
-    };
-    if payload.len() < required {
-        return;
-    }
-
-    for pair in payload[..required].chunks_exact(4) {
-        pairs.push(GpuCanvasShaderTextureSamplerPair {
-            texture_group: pair[0],
-            texture_binding: pair[1],
-            sampler_group: pair[2],
-            sampler_binding: pair[3],
-        });
-    }
 }
 
 fn decode_whole_module_source(
@@ -1146,6 +1174,38 @@ mod tests {
         ])
     }
 
+    #[cfg(feature = "android-authored-wgsl")]
+    #[test]
+    fn android_wgsl_requires_exact_unforgeable_provenance() {
+        let payload = imported_gpu_canvas_webgpu_payload();
+        let asset = ShaderAsset::decode("android", &payload).unwrap();
+        assert!(
+            asset
+                .decode_for_profile("android", GpuCanvasShaderProfile::WebGpu, None)
+                .is_err(),
+            "ordinary Android imports must not admit exporter-authored WGSL"
+        );
+
+        let other = [0u8; 8];
+        let error = asset
+            .decode_for_profile(
+                "android",
+                GpuCanvasShaderProfile::WebGpu,
+                Some(provenance(&other)),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("does not authorize"));
+
+        let artifact = asset
+            .decode_for_profile(
+                "android",
+                GpuCanvasShaderProfile::WebGpu,
+                Some(provenance(&payload)),
+            )
+            .expect("the trusted product proof admits exact WGSL exporter bytes");
+        assert!(matches!(artifact, GpuCanvasShaderArtifact::WebGpu(_)));
+    }
+
     #[test]
     fn decodes_pinned_cpp_webgpu_whole_module_and_binding_map() {
         let payload = imported_gpu_canvas_webgpu_payload();
@@ -1581,12 +1641,16 @@ mod tests {
     }
 
     #[test]
-    fn apple_metal_never_falls_back_to_webgpu_and_webgpu_default_is_unchanged() {
+    fn apple_metal_never_falls_back_and_webgpu_uses_its_profile_policy() {
         let web = imported_gpu_canvas_webgpu_payload();
         let asset = ShaderAsset::decode("web", &web).unwrap();
+        #[cfg(feature = "android-authored-wgsl")]
+        let web_provenance = Some(provenance(&web));
+        #[cfg(not(feature = "android-authored-wgsl"))]
+        let web_provenance = None;
         assert!(matches!(
             asset
-                .decode_for_profile("web", GpuCanvasShaderProfile::WebGpu, None)
+                .decode_for_profile("web", GpuCanvasShaderProfile::WebGpu, web_provenance)
                 .unwrap(),
             GpuCanvasShaderArtifact::WebGpu(_)
         ));
@@ -1601,9 +1665,17 @@ mod tests {
 
         let dual_profile = native_payload();
         let asset = ShaderAsset::decode("dual-profile", &dual_profile).unwrap();
+        #[cfg(feature = "android-authored-wgsl")]
+        let web_provenance = Some(provenance(&dual_profile));
+        #[cfg(not(feature = "android-authored-wgsl"))]
+        let web_provenance = None;
         assert!(matches!(
             asset
-                .decode_for_profile("dual-profile", GpuCanvasShaderProfile::WebGpu, None)
+                .decode_for_profile(
+                    "dual-profile",
+                    GpuCanvasShaderProfile::WebGpu,
+                    web_provenance,
+                )
                 .unwrap(),
             GpuCanvasShaderArtifact::WebGpu(_)
         ));
@@ -1876,13 +1948,26 @@ mod tests {
         out
     }
 
-    fn upstream_texture_sampler_pairs(
-        asset: &ShaderAsset,
-    ) -> Vec<nuxie_runtime::source::assets::shader_asset::TextureSamplerPair> {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct UpstreamTextureSamplerPair {
+        tex_group: u8,
+        tex_binding: u8,
+        samp_group: u8,
+        samp_binding: u8,
+    }
+
+    fn upstream_texture_sampler_pairs(asset: &ShaderAsset) -> Vec<UpstreamTextureSamplerPair> {
         asset
             .asset
             .with_downcast::<NativeShaderAsset, _>(|asset| asset.texture_sampler_pairs().to_vec())
             .expect("decoded native ShaderAsset")
+            .map(|pair| UpstreamTextureSamplerPair {
+                tex_group: pair.tex_group,
+                tex_binding: pair.tex_binding,
+                samp_group: pair.samp_group,
+                samp_binding: pair.samp_binding,
+            })
+            .collect()
     }
 
     fn make_upstream_tex_sampler_pairs_tag(pairs: &[[u8; 4]]) -> Vec<u8> {
@@ -1988,6 +2073,62 @@ mod tests {
         let blob = asset.variant(2).unwrap();
         assert_eq!(blob.len(), 1);
         assert_eq!(blob[0], 0xaa);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_texture_sampler_pairs_ignores_trailing_bytes() {
+        let mut pairs = make_upstream_tex_sampler_pairs_tag(&[[0, 1, 0, 2]]);
+        pairs.extend_from_slice(&[0xfe, 0xff]);
+        let data = upstream_envelope(&make_upstream_rstb(
+            4,
+            &[(2, vec![0xaa])],
+            &[(1, pairs)],
+            0x5253_5442,
+        ));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+
+        assert_eq!(
+            upstream_texture_sampler_pairs(&asset),
+            vec![UpstreamTextureSamplerPair {
+                tex_group: 0,
+                tex_binding: 1,
+                samp_group: 0,
+                samp_binding: 2,
+            }]
+        );
+        assert_eq!(asset.variant(2).unwrap(), [0xaa]);
+    }
+
+    #[test]
+    fn upstream_shader_asset_decode_appends_texture_sampler_pair_sections() {
+        let first = make_upstream_tex_sampler_pairs_tag(&[[0, 1, 0, 2]]);
+        let second = make_upstream_tex_sampler_pairs_tag(&[[1, 3, 1, 4]]);
+        let data = upstream_envelope(&make_upstream_rstb(
+            4,
+            &[(2, vec![0xaa])],
+            &[(1, first), (1, second)],
+            0x5253_5442,
+        ));
+        let asset = ShaderAsset::decode("asset", &data).unwrap();
+
+        assert_eq!(
+            upstream_texture_sampler_pairs(&asset),
+            vec![
+                UpstreamTextureSamplerPair {
+                    tex_group: 0,
+                    tex_binding: 1,
+                    samp_group: 0,
+                    samp_binding: 2,
+                },
+                UpstreamTextureSamplerPair {
+                    tex_group: 1,
+                    tex_binding: 3,
+                    samp_group: 1,
+                    samp_binding: 4,
+                },
+            ]
+        );
+        assert_eq!(asset.variant(2).unwrap(), [0xaa]);
     }
 
     #[test]

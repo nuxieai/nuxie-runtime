@@ -59,6 +59,7 @@
 
 # Orchestration scratch: worker reports and PR body files (session-local)
 *-report.md
+!/PIXEL-COVERAGE-REPORT.md
 .*-body.txt
 *.log
 

@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 #define NUX_ASSET_ID_NONE UINT32_MAX
 #endif
 
@@ -649,15 +649,15 @@ typedef struct NuxHostCommandImportConfig {
   size_t max_command_bytes_per_step;
 } NuxHostCommandImportConfig;
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 typedef uint32_t NuxAssetCallbackStatus;
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 typedef uint32_t NuxAssetKind;
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 typedef struct NuxExternalAssetRequest {
   uint32_t struct_size;
   NuxAssetKind kind;
@@ -668,7 +668,7 @@ typedef struct NuxExternalAssetRequest {
 } NuxExternalAssetRequest;
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 /**
  * Callback-produced bytes with an explicit borrowed-owner retain cycle.
  *
@@ -688,7 +688,7 @@ typedef struct NuxRetainedBytes {
 } NuxRetainedBytes;
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 typedef struct NuxImageDecodeRequest {
   uint32_t struct_size;
   /**
@@ -700,11 +700,11 @@ typedef struct NuxImageDecodeRequest {
 } NuxImageDecodeRequest;
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 typedef uint32_t NuxPixelFormat;
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 /**
  * Host-decoded image pixels. The only accepted format is RGBA8,
  * premultiplied-alpha, sRGB; Rust validates and tightly repacks each row before
@@ -720,13 +720,13 @@ typedef struct NuxDecodedImage {
 } NuxDecodedImage;
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 /**
- * One synchronous, versioned Apple asset import surface. The table and all
- * request views are borrowed only until `nux_file_import_with_apple_assets`
+ * One synchronous, versioned asset import surface. The table and all
+ * request views are borrowed only until `nux_file_import_with_assets`
  * returns; callback-owned outputs use `NuxRetainedBytes` instead.
  */
-typedef struct NuxAppleAssetHooks {
+typedef struct NuxAssetHooks {
   uint32_t struct_size;
   void *context;
   NuxAssetCallbackStatus (*lookup_external_asset)(void *context,
@@ -740,7 +740,7 @@ typedef struct NuxAppleAssetHooks {
   uint32_t maximum_image_dimension;
   size_t maximum_decoded_image_bytes;
   size_t maximum_total_decoded_image_bytes;
-} NuxAppleAssetHooks;
+} NuxAssetHooks;
 #endif
 
 /**
@@ -760,7 +760,7 @@ typedef struct NuxExpectedFileAssetDescriptor {
   uint32_t required_provider_flags;
 } NuxExpectedFileAssetDescriptor;
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 /**
  * One deep import surface. Each optional child is copied and validated in
  * full before file parsing or any platform callback. A null child pointer
@@ -769,7 +769,7 @@ typedef struct NuxExpectedFileAssetDescriptor {
 typedef struct NuxFileImportConfig {
   uint32_t struct_size;
   const struct NuxHostCommandImportConfig *host_commands;
-  const struct NuxAppleAssetHooks *apple_assets;
+  const struct NuxAssetHooks *asset_hooks;
   const struct NuxExpectedFileAssetDescriptor *expected_assets;
   size_t expected_asset_count;
 } NuxFileImportConfig;
@@ -1233,27 +1233,27 @@ typedef struct NuxViewModelSnapshotValueView {
 #define NUX_ANDROID_VULKAN_RENDERER_FIT_NONE 0
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 #define NUX_ASSET_CALLBACK_STATUS_FAILED 2
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 #define NUX_ASSET_CALLBACK_STATUS_NOT_FOUND 1
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 #define NUX_ASSET_CALLBACK_STATUS_OK 0
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 #define NUX_ASSET_KIND_AUDIO 3
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 #define NUX_ASSET_KIND_FONT 2
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 #define NUX_ASSET_KIND_IMAGE 1
 #endif
 
@@ -1269,7 +1269,7 @@ typedef struct NuxViewModelSnapshotValueView {
 #define NUX_METAL_DRAWABLE_STATE_TIMEOUT 1
 #endif
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 #define NUX_PIXEL_FORMAT_RGBA8_PREMULTIPLIED_SRGB 1
 #endif
 
@@ -1504,12 +1504,34 @@ NuxStatus nux_file_free(struct NuxFile *file);
 
 NuxStatus nux_file_import(const uint8_t *bytes, size_t len, struct NuxFile **out_file);
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 NuxStatus nux_file_import_configured(const uint8_t *bytes,
                                      size_t len,
                                      const struct NuxFileImportConfig *config,
                                      struct NuxFile **out_file,
                                      struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(NUX_CAPI_ANDROID_AUTHORED_WGSL))
+/**
+ * Import caller-authenticated product bytes after enabling the authored-data
+ * converter format and trusted WGSL-exporter authority.
+ *
+ * This function performs no package or signature verification. The Android
+ * product caller must verify the signed release envelope before selecting
+ * this entrypoint, and must establish that every shader payload came from the
+ * trusted exporter. A signature over arbitrary WGSL is insufficient.
+ *
+ * # Safety
+ *
+ * The pointers and lengths must satisfy the same contract as
+ * [`super::nux_file_import_configured`].
+ */
+NuxStatus nux_file_import_configured_with_trusted_wgsl(const uint8_t *bytes,
+                                                       size_t len,
+                                                       const struct NuxFileImportConfig *config,
+                                                       struct NuxFile **out_file,
+                                                       struct NuxCapiResult **out_result);
 #endif
 
 /**
@@ -1528,15 +1550,15 @@ NuxStatus nux_file_import_trusted_with_host_commands(const uint8_t *bytes,
                                                      struct NuxFile **out_file,
                                                      struct NuxCapiResult **out_result);
 
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 /**
- * Compatibility wrapper for the Apple-only import added in ABI v3.
+ * Convenience wrapper for importing a file with portable asset hooks.
  */
-NuxStatus nux_file_import_with_apple_assets(const uint8_t *bytes,
-                                            size_t len,
-                                            const struct NuxAppleAssetHooks *hooks,
-                                            struct NuxFile **out_file,
-                                            struct NuxCapiResult **out_result);
+NuxStatus nux_file_import_with_assets(const uint8_t *bytes,
+                                      size_t len,
+                                      const struct NuxAssetHooks *hooks,
+                                      struct NuxFile **out_file,
+                                      struct NuxCapiResult **out_result);
 #endif
 
 /**

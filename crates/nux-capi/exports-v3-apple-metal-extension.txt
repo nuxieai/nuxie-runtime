@@ -1,5 +1,5 @@
 nux_file_import_configured
-nux_file_import_with_apple_assets
+nux_file_import_with_assets
 nux_renderer_copy_metal_device
 nux_renderer_detach
 nux_renderer_free

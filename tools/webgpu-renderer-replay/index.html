@@ -88,7 +88,15 @@
           // capture depend on an expired surface texture.
           const capture = captureWebGpuPixels(sessionId);
           await waitForWebGpu(sessionId);
-          const png = await encodePng(await capture);
+          const captured = await capture;
+          const sampleOffset =
+            (Math.floor(captured.height / 2) * captured.width +
+              Math.floor(captured.width / 2)) *
+            4;
+          const sampledRgba = Array.from(
+            captured.pixels.subarray(sampleOffset, sampleOffset + 4),
+          );
+          const png = await encodePng(captured);
           const digest = await crypto.subtle.digest("SHA-256", png);
           const sha256 = Array.from(new Uint8Array(digest), (byte) =>
             byte.toString(16).padStart(2, "0"),
@@ -107,6 +115,7 @@
             pngBase64: btoa(binary),
             pngBytes: png.length,
             sha256,
+            sampledRgba,
           };
         } finally {
           result.free();

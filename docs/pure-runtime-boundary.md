@@ -15,7 +15,10 @@ Apple platform services -+            |
 
 Dependencies point toward the parity baseline. Baseline, portable-ABI, replay,
 oracle, fuzz, golden, and performance packages must not depend on shared
-product, authoring, browser, or Apple packages.
+product, authoring, browser, or Apple packages, except for the two shipping
+distribution-root composition seams enumerated below: the Apple product
+extension and the Android Vulkan distribution edge whose adapter installation
+is additionally gated by scripting.
 
 ### Parity baseline
 
@@ -53,9 +56,13 @@ authentication, product-specific host commands, and Apple application
 orchestration are no longer runtime crates. The Swift SDK owns those concepts
 on Apple platforms and consumes the raw C ABI. `nuxie-project-data` remains an
 authored-data conversion owner above the baseline. The distributed
-`nux-apple-product-extension` may install that converter through one explicit,
-product-named import entrypoint; `nux-capi` itself never depends on or installs
-the converter.
+`nux-apple-product-extension` installs that converter through one explicit,
+product-named import entrypoint. Android has no matching upper-leaf archive:
+its SDK consumes the portable configured-import symbols from `nux-capi`
+directly. Consequently, the optional Android distribution edge to
+`nuxie-project-data` is activated only by `android-vulkan`, and installation
+occurs only when `scripting` is also enabled. No baseline, Apple baseline,
+renderer-only Android, or portable scripting import installs the adapter.
 
 ### Editor authoring
 
@@ -95,8 +102,11 @@ the retired `NuxieRuntimeFFI` package.
 errors, callbacks, and buffer negotiation. Its Apple feature is a
 product-neutral platform extension. Product lifecycle operations remain
 absent; the separately owned authored-data leaf adds only converter
-installation plus configured import. Replay and oracle tools import the
-baseline directly so parity evidence cannot depend on product glue.
+installation plus configured import. Android's structurally narrower release
+uses the feature-intersection seam described above because the SDK calls
+`nux_file_import_configured` / `nux_file_import_with_assets` rather than a
+product-named extension symbol. Replay and oracle tools import the baseline
+directly so parity evidence cannot depend on product glue.
 
 The direct `nux-capi -> nuxie` dependency is a permanent, narrowly approved ABI
 edge rather than migration debt. It reaches only the audited baseline facade:

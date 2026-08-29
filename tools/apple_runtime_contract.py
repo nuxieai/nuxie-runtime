@@ -109,21 +109,32 @@ def validate_header_symbol_partitions(header: str, manifests: dict[str, str]) ->
 
     This intentionally does not apply the retired product-header identifier
     policy used by ``validate_symbols``: the mature C ABI has its own status
-    vocabulary and is compared only with its portable and Apple partitions.
+    vocabulary. Apple and Android extension manifests may share declarations
+    whose generated guards enable either mutually exclusive platform feature;
+    all other partition overlap remains invalid.
     """
     declared = set(HEADER_FUNCTION.findall(header))
     if not declared:
         raise ContractError("generated mature header declares no public nux_* functions")
     expected: set[str] = set()
+    owners: dict[str, str] = {}
+    platform_extensions = {"appleExtension", "androidExtension"}
     for name, encoded in manifests.items():
         lines = encoded.splitlines()
         if not lines or lines != sorted(set(lines)):
             raise ContractError(f"header symbol partition {name} is not unique and sorted")
         if any(re.fullmatch(r"nux_[a-z0-9_]+", symbol) is None for symbol in lines):
             raise ContractError(f"header symbol partition {name} has a malformed export")
-        overlap = expected.intersection(lines)
-        if overlap:
-            raise ContractError(f"header symbol partitions overlap: {sorted(overlap)}")
+        invalid_overlap = sorted(
+            symbol
+            for symbol in lines
+            if symbol in owners
+            and {owners[symbol], name} != platform_extensions
+        )
+        if invalid_overlap:
+            raise ContractError(f"header symbol partitions overlap: {invalid_overlap}")
+        for symbol in lines:
+            owners.setdefault(symbol, name)
         expected.update(lines)
     if declared != expected:
         missing = sorted(expected - declared)

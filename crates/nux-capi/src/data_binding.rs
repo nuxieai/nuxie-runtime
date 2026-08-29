@@ -1918,29 +1918,34 @@ fn apply_transaction_mutation(
         return false;
     };
     match mutation.kind {
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING => {
-            transaction.set_string(owner, &mutation.path, &mutation.bytes)
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING => transaction
+            .try_set_string(owner, &mutation.path, &mutation.bytes)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER => transaction
+            .try_set_number(owner, &mutation.path, mutation.number)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL => transaction
+            .try_set_boolean(owner, &mutation.path, mutation.boolean)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR => {
+            u32::try_from(mutation.integer).is_ok_and(|value| {
+                transaction
+                    .try_set_color(owner, &mutation.path, value)
+                    .is_some()
+            })
         }
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER => {
-            transaction.set_number(owner, &mutation.path, mutation.number)
-        }
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL => {
-            transaction.set_boolean(owner, &mutation.path, mutation.boolean)
-        }
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR => u32::try_from(mutation.integer)
-            .is_ok_and(|value| transaction.set_color(owner, &mutation.path, value)),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM => {
-            transaction.set_enum(owner, &mutation.path, mutation.integer)
-        }
-        NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER => {
-            transaction.fire_trigger(owner, &mutation.path)
-        }
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_LIST_INDEX => {
-            transaction.set_list_index(owner, &mutation.path, mutation.integer)
-        }
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_IMAGE => {
-            transaction.set_asset(owner, &mutation.path, mutation.integer)
-        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM => transaction
+            .try_set_enum(owner, &mutation.path, mutation.integer)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER => transaction
+            .try_fire_trigger(owner, &mutation.path)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_LIST_INDEX => transaction
+            .try_set_list_index(owner, &mutation.path, mutation.integer)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_IMAGE => transaction
+            .try_set_asset(owner, &mutation.path, mutation.integer)
+            .is_some(),
         NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL => {
             let Some(value) = mutation.related.and_then(|related| instances.get(&related)) else {
                 return false;

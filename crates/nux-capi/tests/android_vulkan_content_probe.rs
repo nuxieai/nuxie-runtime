@@ -1,7 +1,9 @@
 //! Session-local probe: does the android_vulkan capi arm render CONTENT?
 #![cfg(feature = "android-vulkan")]
 
+use std::ffi::c_void;
 use std::ptr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use nux_capi::*;
 
@@ -17,6 +19,272 @@ fn probe_fixture_path() -> Option<std::path::PathBuf> {
     let repository_fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/flow/data_binding_test.riv");
     repository_fixture.is_file().then_some(repository_fixture)
+}
+
+fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        bytes.push(byte);
+        if value == 0 {
+            break;
+        }
+    }
+}
+
+fn property_key(type_name: &str, property_name: &str) -> u16 {
+    let definition = nuxie_schema::definition_by_name(type_name).expect("fixture type");
+    definition
+        .properties
+        .iter()
+        .chain(definition.ancestors.iter().flat_map(|ancestor| {
+            nuxie_schema::definition_by_name(ancestor)
+                .expect("fixture ancestor")
+                .properties
+                .iter()
+        }))
+        .find(|property| property.name == property_name)
+        .expect("fixture property")
+        .key
+        .int
+}
+
+fn push_object(bytes: &mut Vec<u8>, type_name: &str, body: impl FnOnce(&mut Vec<u8>)) {
+    push_var_uint(
+        bytes,
+        u64::from(
+            nuxie_schema::definition_by_name(type_name)
+                .expect("fixture type")
+                .type_key
+                .int,
+        ),
+    );
+    body(bytes);
+    push_var_uint(bytes, 0);
+}
+
+fn push_uint(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: u64) {
+    push_var_uint(bytes, u64::from(property_key(type_name, property_name)));
+    push_var_uint(bytes, value);
+}
+
+fn push_f32(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: f32) {
+    push_var_uint(bytes, u64::from(property_key(type_name, property_name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+/// Repository-owned schema fixture with one external image used by one drawable.
+fn external_image_artboard() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 2, 26_520, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ImageAsset", |bytes| {
+        push_uint(bytes, "ImageAsset", "assetId", 7);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 64.0);
+        push_f32(bytes, "Artboard", "height", 64.0);
+    });
+    push_object(&mut bytes, "Image", |bytes| {
+        push_uint(bytes, "Image", "parentId", 0);
+        push_uint(bytes, "Image", "assetId", 0);
+    });
+    bytes
+}
+
+const ENCODED_IMAGE: &[u8] = include_bytes!("fixtures/external-image.png");
+const STUB_PIXEL: [u8; 4] = [0x12, 0x34, 0x56, 0xff];
+const DECODED_PIXELS: &[u8] = &[
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x12, 0x34, 0x56, 0xff, 0xff, 0xff, 0xff, 0xff,
+];
+
+#[derive(Default)]
+struct AssetHookProbe {
+    lookups: AtomicUsize,
+    decodes: AtomicUsize,
+    retains: AtomicUsize,
+    releases: AtomicUsize,
+}
+
+unsafe extern "C" fn retain_asset_bytes(owner: *mut c_void) {
+    unsafe { &*owner.cast::<AssetHookProbe>() }
+        .retains
+        .fetch_add(1, Ordering::Relaxed);
+}
+
+unsafe extern "C" fn release_asset_bytes(owner: *mut c_void) {
+    unsafe { &*owner.cast::<AssetHookProbe>() }
+        .releases
+        .fetch_add(1, Ordering::Relaxed);
+}
+
+fn retained_bytes(data: &'static [u8], owner: *mut c_void) -> NuxRetainedBytes {
+    NuxRetainedBytes {
+        data: data.as_ptr(),
+        len: data.len(),
+        owner,
+        retain: Some(retain_asset_bytes),
+        release: Some(release_asset_bytes),
+        ..NuxRetainedBytes::default()
+    }
+}
+
+unsafe extern "C" fn provide_external_image(
+    context: *mut c_void,
+    request: *const NuxExternalAssetRequest,
+    out_bytes: *mut NuxRetainedBytes,
+) -> NuxAssetCallbackStatus {
+    let request = unsafe { &*request };
+    assert_eq!(request.kind, NUX_ASSET_KIND_IMAGE);
+    unsafe { &*context.cast::<AssetHookProbe>() }
+        .lookups
+        .fetch_add(1, Ordering::Relaxed);
+    unsafe { *out_bytes = retained_bytes(ENCODED_IMAGE, context) };
+    NUX_ASSET_CALLBACK_STATUS_OK
+}
+
+unsafe extern "C" fn decode_external_image(
+    context: *mut c_void,
+    request: *const NuxImageDecodeRequest,
+    out_image: *mut NuxDecodedImage,
+) -> NuxAssetCallbackStatus {
+    let request = unsafe { &*request };
+    let encoded = unsafe { std::slice::from_raw_parts(request.encoded.data, request.encoded.len) };
+    assert_eq!(encoded, ENCODED_IMAGE);
+    unsafe { &*context.cast::<AssetHookProbe>() }
+        .decodes
+        .fetch_add(1, Ordering::Relaxed);
+    unsafe {
+        *out_image = NuxDecodedImage {
+            width: 4,
+            height: 2,
+            row_bytes: 16,
+            pixel_format: NUX_PIXEL_FORMAT_RGBA8_PREMULTIPLIED_SRGB,
+            pixels: retained_bytes(DECODED_PIXELS, context),
+            ..NuxDecodedImage::default()
+        };
+    }
+    NUX_ASSET_CALLBACK_STATUS_OK
+}
+
+unsafe fn frame_contains_pixel(frame: *const NuxAndroidVulkanFrame, expected: [u8; 4]) -> bool {
+    let len = unsafe { nux_android_vulkan_frame_len(frame) };
+    let pixels = unsafe { std::slice::from_raw_parts(nux_android_vulkan_frame_data(frame), len) };
+    pixels.chunks_exact(4).any(|pixel| pixel == expected)
+}
+
+#[test]
+fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
+    let rive = external_image_artboard();
+    let probe = AssetHookProbe::default();
+    let hooks = NuxAssetHooks {
+        context: std::ptr::from_ref(&probe).cast_mut().cast(),
+        lookup_external_asset: Some(provide_external_image),
+        decode_image: Some(decode_external_image),
+        ..NuxAssetHooks::default()
+    };
+
+    unsafe {
+        let mut file = ptr::null_mut();
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            nux_file_import_with_assets(rive.as_ptr(), rive.len(), &hooks, &mut file, &mut result),
+            NuxStatus::Ok
+        );
+        assert_eq!(probe.lookups.load(Ordering::Relaxed), 1);
+        assert_eq!(probe.decodes.load(Ordering::Relaxed), 1);
+        assert_eq!(probe.retains.load(Ordering::Relaxed), 2);
+        assert_eq!(probe.releases.load(Ordering::Relaxed), 2);
+        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        let mut player = ptr::null_mut();
+        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
+
+        let mut renderer = ptr::null_mut();
+        result = ptr::null_mut();
+        let create_status = nux_renderer_new_android_vulkan(64, 64, &mut renderer, &mut result);
+        if create_status != NuxStatus::Ok && !live_vulkan_test_required() {
+            assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+            assert_eq!(nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
+            assert_eq!(nux_file_free(file), NuxStatus::Ok);
+            return;
+        }
+        assert_eq!(create_status, NuxStatus::Ok);
+        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+
+        let mut frame = ptr::null_mut();
+        result = ptr::null_mut();
+        assert_eq!(
+            nux_renderer_android_vulkan_render_player(
+                renderer,
+                player,
+                0xff00_0000,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER,
+                &mut frame,
+                &mut result,
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(probe.lookups.load(Ordering::Relaxed), 1);
+        assert_eq!(probe.decodes.load(Ordering::Relaxed), 1);
+        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+
+        // This is the original pixel sanity check. The PNG's white texel is
+        // sampled by this tiny fixture while its red texel is not, so this
+        // observation intentionally does not claim to prove the wrapper.
+        assert!(frame_contains_pixel(frame, [0xff, 0xff, 0xff, 0xff]));
+        assert!(!frame_contains_pixel(frame, [0xff, 0x00, 0x00, 0xff]));
+        assert_eq!(nux_android_vulkan_frame_free(frame), NuxStatus::Ok);
+
+        result = ptr::null_mut();
+        assert_eq!(
+            nux_renderer_android_vulkan_reset_player_domain(renderer, player, &mut result),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+
+        frame = ptr::null_mut();
+        result = ptr::null_mut();
+        assert_eq!(
+            nux_renderer_android_vulkan_render_player(
+                renderer,
+                player,
+                0xff00_0000,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER,
+                &mut frame,
+                &mut result,
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(probe.lookups.load(Ordering::Relaxed), 1);
+        assert_eq!(probe.decodes.load(Ordering::Relaxed), 1);
+        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+        assert!(
+            frame_contains_pixel(frame, STUB_PIXEL),
+            "render after domain reset did not upload host-decoded pixels"
+        );
+        assert!(
+            !frame_contains_pixel(frame, [0xff, 0x80, 0x00, 0xff]),
+            "render after domain reset used the fixture PNG's native orange texel"
+        );
+        assert_eq!(nux_android_vulkan_frame_free(frame), NuxStatus::Ok);
+        assert_eq!(nux_renderer_android_vulkan_free(renderer), NuxStatus::Ok);
+        assert_eq!(nux_player_free(player), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
+        assert_eq!(nux_file_free(file), NuxStatus::Ok);
+    }
 }
 
 #[test]

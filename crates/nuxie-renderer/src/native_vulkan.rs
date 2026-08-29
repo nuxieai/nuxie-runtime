@@ -46,6 +46,19 @@ impl NativeVulkanFactory {
             .map(|core| NativeVulkanFrame { core })
     }
 
+    /// Uploads tightly packed, premultiplied RGBA8 through the exact Vulkan
+    /// image-texture constructor.
+    pub fn upload_canonical_rgba8_premul_srgb(
+        &self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, RendererError> {
+        self.core
+            .upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
+    }
+
     #[cfg(test)]
     fn fail_next_finish_for_test(&self) {
         self.core

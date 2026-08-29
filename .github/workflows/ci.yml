@@ -172,6 +172,18 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --no-self-update
           rustup target add --toolchain stable wasm32-unknown-unknown
+          rustup toolchain install 1.94.1 --profile minimal --no-self-update
+          rustup target add --toolchain 1.94.1 wasm32-unknown-unknown
+
+      - name: Install Node and pinned Chromium driver
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install pinned Chromium
+        run: |
+          npm ci --ignore-scripts --prefix tools/backend-port/browser-platform
+          npm exec --prefix tools/backend-port/browser-platform playwright -- install chromium
 
       - name: Install pinned ripgrep
         run: |
@@ -187,6 +199,13 @@ jobs:
 
       - name: Compile exact WebGPU browser artifact
         run: cargo check --locked -p webgpu-renderer-replay --target wasm32-unknown-unknown
+
+      - name: Require exact WebGPU solid-fill pixel content
+        env:
+          BROWSER_PLATFORM_CHROMIUM_CHANNEL: bundled
+        run: |
+          tools/webgpu-renderer-replay/build.sh
+          node tools/backend-port/webgpu-content-probe.cjs
 
       - name: Compile exact WebGL2 browser artifact
         run: cargo check --locked -p webgl2-renderer-replay --target wasm32-unknown-unknown

@@ -259,6 +259,11 @@ fn draw_checksum(artboard: *mut NuxArtboardInstance) -> f64 {
 
 #[test]
 fn product_configured_import_prepares_and_draws_authored_data_converter_scene() {
+    let payload = interpolation_payload();
+    assert!(
+        !nuxie_runtime::runtime_external_data_payload_is_claimed(&payload),
+        "the test process must begin without the product registry installed"
+    );
     let bytes = product_converter_scene();
     assert!(
         bytes.windows(8).any(|window| window == b"NUXPCV1\0"),
@@ -278,6 +283,10 @@ fn product_configured_import_prepares_and_draws_authored_data_converter_scene() 
         )
     };
     assert_eq!(status, NuxStatus::Ok, "{}", result_message(result));
+    assert!(
+        nuxie_runtime::runtime_external_data_payload_is_claimed(&payload),
+        "the Apple product import must install the project-data registry"
+    );
     unsafe { nux_capi_result_free(result) };
 
     let mut artboard = ptr::null_mut();

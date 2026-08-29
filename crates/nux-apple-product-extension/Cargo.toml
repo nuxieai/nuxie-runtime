@@ -1,6 +1,6 @@
 [package]
 name = "nux-apple-product-extension"
-version = "0.7.0"
+version = "0.8.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -21,6 +21,7 @@ nux-capi = { path = "../nux-capi", default-features = false }
 nuxie-project-data = { path = "../nuxie-project-data" }
 
 [dev-dependencies]
+nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 nuxie-schema = { path = "../nuxie-schema" }
 
 [lints]

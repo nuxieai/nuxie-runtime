@@ -189,5 +189,15 @@ jobs:
       - name: Fetch pinned test assets
         run: make fixtures
 
+      - name: Require Metal solid-fill pixel content
+        env:
+          MTL_DEBUG_LAYER: '1'
+          MTL_SHADER_VALIDATION: '1'
+          NUXIE_REQUIRE_LIVE_METAL_TESTS: '1'
+        run: >-
+          cargo test --locked -p nux-capi --no-default-features
+          --features apple-metal --test apple_metal
+          solid_fill_renders_authored_pixels_on_metal -- --nocapture --test-threads=1
+
       - name: Build and run C smoke test
         run: make capi-smoke

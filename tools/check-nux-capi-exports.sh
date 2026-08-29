@@ -30,6 +30,14 @@ case "$features" in
             LC_ALL=C sort -u > "$expected"
         feature_args="--features $features"
         ;;
+    android-vulkan,scripting,android-authored-wgsl)
+        cat \
+            "$repo_dir/crates/nux-capi/exports-v3-portable.txt" \
+            "$repo_dir/crates/nux-capi/exports-v3-android-vulkan-extension.txt" \
+            "$repo_dir/crates/nux-capi/exports-v3-android-authored-wgsl-extension.txt" | \
+            LC_ALL=C sort -u > "$expected"
+        feature_args="--features $features"
+        ;;
     *)
         echo "unsupported NUX_CAPI_FEATURES value: $features" >&2
         exit 2
@@ -65,17 +73,22 @@ grep -Eo 'nux_[A-Za-z0-9_]+[[:space:]]*\(' \
 # cbindgen retains every feature-gated declaration in the generated header.
 # Compare only the selected extension while keeping each family exact enough
 # that a new symbol fails its own feature inventory closed.
-apple_extension='^(nux_file_import_(configured|with_apple_assets)|nux_renderer_(copy_metal_device|detach|free|info|new_metal|reattach|render_player|reset_player_domain|resize))$'
+asset_hooks_extension='^nux_file_import_(configured|with_assets)$'
+apple_extension='^nux_renderer_(copy_metal_device|detach|free|info|new_metal|reattach|render_player|reset_player_domain|resize)$'
 android_extension='^(nux_android_vulkan_frame_|nux_renderer_(android_vulkan_|new_android_vulkan$))'
+android_authored_wgsl_extension='^nux_file_import_configured_with_trusted_wgsl$'
 case "$features" in
     apple-metal|apple-metal,scripting)
-        grep -Ev "$android_extension" "$header_actual" > "$work_dir/header-selected.txt"
+        grep -Ev "$android_extension|$android_authored_wgsl_extension" "$header_actual" > "$work_dir/header-selected.txt"
         ;;
     android-vulkan|android-vulkan,scripting)
+        grep -Ev "$apple_extension|$android_authored_wgsl_extension" "$header_actual" > "$work_dir/header-selected.txt"
+        ;;
+    android-vulkan,scripting,android-authored-wgsl)
         grep -Ev "$apple_extension" "$header_actual" > "$work_dir/header-selected.txt"
         ;;
     *)
-        grep -Ev "$apple_extension|$android_extension" \
+        grep -Ev "$asset_hooks_extension|$apple_extension|$android_extension|$android_authored_wgsl_extension" \
             "$header_actual" > "$work_dir/header-selected.txt"
         ;;
 esac

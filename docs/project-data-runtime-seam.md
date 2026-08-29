@@ -15,11 +15,14 @@ product crate owns durable identities, JSON, evaluation rules, and product
 errors. Neither side needs to know the other's internal graph or model.
 
 The process registry is empty until an authoring/product consumer calls
-`nuxie_project_data::install_runtime_adapter`. Baseline `nux-capi` does not
-install or depend on that adapter. The Apple distribution's upper-leaf
-`nux-apple-product-extension` installs it only through the explicit
+`nuxie_project_data::install_runtime_adapter`. The Apple distribution's
+upper-leaf `nux-apple-product-extension` installs it only through the explicit
 `nux_product_file_import_configured` entrypoint before delegating to baseline
-configured import.
+configured import. The Android distribution has no equivalent upper-leaf
+archive and ships `nux-capi`'s portable configured-import symbols directly, so
+the exact `android-vulkan` + `scripting` build installs the adapter at
+`nux_file_import_configured`; `nux_file_import_with_assets` reaches the same
+seam by delegation. Other `nux-capi` feature combinations do not install it.
 
 ## Prototype results
 
@@ -36,7 +39,10 @@ configured import.
 - `nuxie-runtime` and `nuxie` contain no ProjectData types, envelope magic,
   JSON schema, or product converter vocabulary.
 - `nuxie-project-data` depends downward on `nuxie-runtime`; the baseline never
-  depends upward on the product crate.
+  depends upward on the product crate. The sole distribution-root exception is
+  an optional `nux-capi` dependency activated only by `android-vulkan`, with
+  adapter installation compiled only at the `android-vulkan` + `scripting`
+  intersection.
 - Pure evaluator tests live with `nuxie-project-data`. Baseline seam tests use a
   deliberately unrelated fake registry and program.
 - Project-data tests own adapter registration and payload decode; baseline seam

@@ -125,7 +125,7 @@ func copiedString(_ view: NuxStringView) -> String {
 
 func importConfigured(
     bytes: Data,
-    hooks: inout NuxAppleAssetHooks,
+    hooks: inout NuxAssetHooks,
     composed: Bool,
     file: inout OpaquePointer?,
     result: inout OpaquePointer?
@@ -148,7 +148,7 @@ func importConfigured(
         return withUnsafePointer(to: &hooks) { hooksPointer in
             var config = NuxFileImportConfig()
             config.struct_size = UInt32(MemoryLayout<NuxFileImportConfig>.size)
-            config.apple_assets = hooksPointer
+            config.asset_hooks = hooksPointer
             return call(&config)
         }
     }
@@ -209,7 +209,7 @@ func importConfigured(
                                         MemoryLayout<NuxFileImportConfig>.size
                                     )
                                     config.host_commands = hostPointer
-                                    config.apple_assets = hooksPointer
+                                    config.asset_hooks = hooksPointer
                                     config.expected_assets = expectedBuffer.baseAddress
                                     config.expected_asset_count = expectedBuffer.count
                                     return call(&config)
@@ -234,8 +234,8 @@ let composed = CommandLine.arguments.count == 3
 let bytes = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
 var file: OpaquePointer?
 let decoder = DecodeBox()
-var hooks = NuxAppleAssetHooks()
-hooks.struct_size = UInt32(MemoryLayout<NuxAppleAssetHooks>.size)
+var hooks = NuxAssetHooks()
+hooks.struct_size = UInt32(MemoryLayout<NuxAssetHooks>.size)
 hooks.context = Unmanaged.passUnretained(decoder).toOpaque()
 hooks.decode_image = decodeImage
 hooks.maximum_external_asset_bytes = 64 * 1024 * 1024

@@ -78,6 +78,18 @@ class DistributionToolTests(unittest.TestCase):
             self.assertIn(manifest, self.builder)
         self.assertNotIn('exports-v3-legacy-migration.txt', self.builder)
 
+    def test_contract_fingerprint_covers_android_header_partitions(self) -> None:
+        for manifest in (
+            'exports-v3-android-vulkan-extension.txt',
+            'exports-v3-android-authored-wgsl-extension.txt',
+        ):
+            self.assertIn(manifest, self.builder)
+        self.assertIn(
+            'androidAuthoredWgslExtension=${repo_root}/crates/nux-capi/'
+            'exports-v3-android-authored-wgsl-extension.txt',
+            self.verifier,
+        )
+
     def test_build_packages_one_composed_nuxie_runtime_c_module(self) -> None:
         for header in (
             'nux_capi.h',

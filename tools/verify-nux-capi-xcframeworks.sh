@@ -118,6 +118,8 @@ python3 "${script_dir}/apple_runtime_contract.py" header-symbols \
     "${header_contract}" \
     "portable=${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
     "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
+    "androidExtension=${repo_root}/crates/nux-capi/exports-v3-android-vulkan-extension.txt" \
+    "androidAuthoredWgslExtension=${repo_root}/crates/nux-capi/exports-v3-android-authored-wgsl-extension.txt" \
     "productExtension=${repo_root}/crates/nux-apple-product-extension/exports-v1-product-extension.txt"
 
 for library in "${thin_libraries[@]}"; do

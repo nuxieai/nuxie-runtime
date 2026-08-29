@@ -325,10 +325,19 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: f32,
     ) -> bool {
-        self.0.capture(owner, path)
-            && owner
+        self.try_set_number(owner, path, value).unwrap_or(false)
+    }
+    pub fn try_set_number(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: f32,
+    ) -> Option<bool> {
+        self.0.capture(owner, path).then(|| {
+            owner
                 .borrow_mut()
                 .set_number_by_property_name_path(path, value)
+        })
     }
     pub fn set_boolean(
         &mut self,
@@ -336,10 +345,19 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: bool,
     ) -> bool {
-        self.0.capture(owner, path)
-            && owner
+        self.try_set_boolean(owner, path, value).unwrap_or(false)
+    }
+    pub fn try_set_boolean(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: bool,
+    ) -> Option<bool> {
+        self.0.capture(owner, path).then(|| {
+            owner
                 .borrow_mut()
                 .set_boolean_by_property_name_path(path, value)
+        })
     }
     pub fn set_string(
         &mut self,
@@ -347,10 +365,19 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: &[u8],
     ) -> bool {
-        self.0.capture(owner, path)
-            && owner
+        self.try_set_string(owner, path, value).unwrap_or(false)
+    }
+    pub fn try_set_string(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: &[u8],
+    ) -> Option<bool> {
+        self.0.capture(owner, path).then(|| {
+            owner
                 .borrow_mut()
                 .set_string_by_property_name_path(path, value)
+        })
     }
     pub fn set_color(
         &mut self,
@@ -358,10 +385,19 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: u32,
     ) -> bool {
-        self.0.capture(owner, path)
-            && owner
+        self.try_set_color(owner, path, value).unwrap_or(false)
+    }
+    pub fn try_set_color(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u32,
+    ) -> Option<bool> {
+        self.0.capture(owner, path).then(|| {
+            owner
                 .borrow_mut()
                 .set_color_by_property_name_path(path, value)
+        })
     }
     pub fn set_enum(
         &mut self,
@@ -369,13 +405,31 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: u64,
     ) -> bool {
-        self.0.capture(owner, path)
-            && owner
+        self.try_set_enum(owner, path, value).unwrap_or(false)
+    }
+    pub fn try_set_enum(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u64,
+    ) -> Option<bool> {
+        self.0.capture(owner, path).then(|| {
+            owner
                 .borrow_mut()
                 .set_enum_by_property_name_path(path, value)
+        })
     }
     pub fn fire_trigger(&mut self, owner: &RuntimeOwnedViewModelHandle, path: &str) -> bool {
-        self.0.capture(owner, path) && owner.borrow_mut().fire_trigger_by_property_name_path(path)
+        self.try_fire_trigger(owner, path).unwrap_or(false)
+    }
+    pub fn try_fire_trigger(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+    ) -> Option<bool> {
+        self.0
+            .capture(owner, path)
+            .then(|| owner.borrow_mut().fire_trigger_by_property_name_path(path))
     }
     pub fn set_list_index(
         &mut self,
@@ -383,10 +437,19 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: u64,
     ) -> bool {
-        self.0.capture(owner, path)
-            && owner
+        self.try_set_list_index(owner, path, value).unwrap_or(false)
+    }
+    pub fn try_set_list_index(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u64,
+    ) -> Option<bool> {
+        self.0.capture(owner, path).then(|| {
+            owner
                 .borrow_mut()
                 .set_symbol_list_index_by_property_name_path(path, value)
+        })
     }
     pub fn set_asset(
         &mut self,
@@ -394,10 +457,19 @@ impl RuntimeOwnedViewModelTransaction {
         path: &str,
         value: u64,
     ) -> bool {
-        self.0.capture(owner, path)
-            && owner
+        self.try_set_asset(owner, path, value).unwrap_or(false)
+    }
+    pub fn try_set_asset(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        value: u64,
+    ) -> Option<bool> {
+        self.0.capture(owner, path).then(|| {
+            owner
                 .borrow_mut()
                 .set_asset_by_property_name_path(path, value)
+        })
     }
     pub fn link_view_model(
         &mut self,

@@ -444,6 +444,7 @@ feature-compile-gate-portable:
 		"nuxie-ore-metal --features tools" "cargo test -p nuxie-ore-metal --features tools --lib" \
 		"nuxie-renderer exact Vulkan" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-vulkan" \
 		"nuxie-renderer exact WebGPU" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-webgpu" \
+		"nux-capi Android authored WGSL" "cargo check --locked -p nux-capi --no-default-features --features android-vulkan,scripting,android-authored-wgsl" \
 		"rust-golden-runner --features coverage-trace" "cargo check -p rust-golden-runner --features coverage-trace --all-targets" \
 		"nuxie-scripting --no-default-features" "cargo check -p nuxie-scripting --no-default-features --lib" \
 		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib" \

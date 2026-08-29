@@ -76,7 +76,15 @@
  *    module name are copied synchronously. It installs no foreign callback;
  *    scripts only enqueue bounded owned values for the active player step.
  *    Ordinary nux_file_import remains script-inert.
- * 12. On Apple, NuxRenderer owns the wgpu/Metal device domain; it never owns a
+ *    On Android, nux_file_import_configured_with_trusted_wgsl is a separate,
+ *    caller-asserted trust boundary for exporter-authored WGSL. It performs no
+ *    signature verification: the product caller must first authenticate the
+ *    signed release and establish that every shader came from the trusted
+ *    exporter. nux_file_import_configured and nux_file_import_with_assets never
+ *    grant shader authority. Android product consumers define both
+ *    NUX_CAPI_ANDROID_VULKAN and NUX_CAPI_ANDROID_AUTHORED_WGSL when compiling
+ *    against a library built with the matching Cargo features.
+ * 12. On Apple, NuxRenderer owns the exact Metal device domain; it never owns a
  *    CAMetalLayer or acquires a drawable. nux_renderer_copy_metal_device gives
  *    the caller Objective-C +1 ownership. A non-NULL AVAILABLE drawable is
  *    borrowed only for the synchronous render call. TIMEOUT and OCCLUDED are
@@ -107,7 +115,7 @@
  *    Observer callbacks run only during final publication and are individually
  *    panic-isolated; a panicking observer falls back to ordinary dirt delivery
  *    and does not change a successfully committed batch into a failure.
- * 16. Apple asset hooks are borrowed only for the synchronous import call.
+ * 16. Asset hooks are borrowed only for the synchronous import call.
  *    Request byte/string views expire when their callback returns and callbacks
  *    must not call back into any nux-capi export. Every successful callback
  *    output whose struct_size covers a complete retain/release pair transfers
@@ -236,6 +244,10 @@
 #define NUX_RENDERER_INFO_V3_MIN_SIZE                                     \
     (offsetof(NuxRendererInfo, generation) +                              \
      sizeof(((NuxRendererInfo*)0)->generation))
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && defined(__APPLE__)) ||              \
+    defined(NUX_CAPI_ANDROID_VULKAN)
 #define NUX_RETAINED_BYTES_V3_MIN_SIZE                                    \
     (offsetof(NuxRetainedBytes, release) +                                \
      sizeof(((NuxRetainedBytes*)0)->release))
@@ -248,9 +260,9 @@
 #define NUX_EXTERNAL_ASSET_REQUEST_V3_MIN_SIZE                            \
     (offsetof(NuxExternalAssetRequest, file_extension) +                  \
      sizeof(((NuxExternalAssetRequest*)0)->file_extension))
-#define NUX_APPLE_ASSET_HOOKS_V3_MIN_SIZE                                \
-    (offsetof(NuxAppleAssetHooks, maximum_total_decoded_image_bytes) +    \
-     sizeof(((NuxAppleAssetHooks*)0)->maximum_total_decoded_image_bytes))
+#define NUX_ASSET_HOOKS_V3_MIN_SIZE                                      \
+    (offsetof(NuxAssetHooks, maximum_total_decoded_image_bytes) +         \
+     sizeof(((NuxAssetHooks*)0)->maximum_total_decoded_image_bytes))
 #define NUX_FILE_IMPORT_CONFIG_V3_MIN_SIZE                                \
     (offsetof(NuxFileImportConfig, expected_asset_count) +                \
      sizeof(((NuxFileImportConfig*)0)->expected_asset_count))
@@ -263,7 +275,8 @@ static_assert(NUX_FILE_ASSET_DESCRIPTOR_VIEW_V3_MIN_SIZE <=
 static_assert(NUX_VIEW_MODEL_CHANGE_VIEW_V3_MIN_SIZE <=
               sizeof(NuxViewModelChangeView),
               "NuxViewModelChangeView v3 prefix exceeds its layout");
-#if defined(NUX_CAPI_APPLE_METAL) && defined(__APPLE__)
+#if (defined(NUX_CAPI_APPLE_METAL) && defined(__APPLE__)) ||              \
+    defined(NUX_CAPI_ANDROID_VULKAN)
 static_assert(NUX_FILE_IMPORT_CONFIG_V3_MIN_SIZE <=
               sizeof(NuxFileImportConfig),
               "NuxFileImportConfig v3 prefix exceeds its layout");
@@ -275,7 +288,8 @@ _Static_assert(NUX_FILE_ASSET_DESCRIPTOR_VIEW_V3_MIN_SIZE <=
 _Static_assert(NUX_VIEW_MODEL_CHANGE_VIEW_V3_MIN_SIZE <=
                sizeof(NuxViewModelChangeView),
                "NuxViewModelChangeView v3 prefix exceeds its layout");
-#if defined(NUX_CAPI_APPLE_METAL) && defined(__APPLE__)
+#if (defined(NUX_CAPI_APPLE_METAL) && defined(__APPLE__)) ||              \
+    defined(NUX_CAPI_ANDROID_VULKAN)
 _Static_assert(NUX_FILE_IMPORT_CONFIG_V3_MIN_SIZE <=
                sizeof(NuxFileImportConfig),
                "NuxFileImportConfig v3 prefix exceeds its layout");

@@ -21,7 +21,8 @@ use nuxie_render_api::{
 };
 use std::sync::Arc;
 
-use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
+use crate::mechanical_port::source::include::rive::gpu_texture_format_hpp::GPUTextureFormat;
+use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
 use crate::mechanical_port::source::include::rive::renderer_hpp::RendererContract;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas as SourceRenderCanvas;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
@@ -30,7 +31,9 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::{
     RenderResourceDomain, RiveRenderBufferHandle,
 };
-use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::{
+    RiveRenderImage, RiveRenderImageHandle,
+};
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::RiveRenderer;
 use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
@@ -344,6 +347,78 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
 
     pub(crate) fn resize(&self, width: u32, height: u32) -> Result<(), RendererError> {
         self.backend.borrow_mut().resize(width, height)
+    }
+
+    pub(crate) fn upload_rgba8_premul_srgb(
+        &self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, RendererError> {
+        let expected_row_bytes = width.checked_mul(4).ok_or_else(|| {
+            RendererError::InvalidImageUpload("RGBA8 row byte count overflow".into())
+        })?;
+        if row_bytes != expected_row_bytes {
+            return Err(RendererError::InvalidImageUpload(format!(
+                "RGBA8 row_bytes is {row_bytes}, expected {expected_row_bytes}"
+            )));
+        }
+        let expected_len = usize::try_from(row_bytes)
+            .ok()
+            .and_then(|row| row.checked_mul(height as usize))
+            .ok_or_else(|| {
+                RendererError::InvalidImageUpload("RGBA8 image byte count overflow".into())
+            })?;
+        if pixels.len() != expected_len {
+            return Err(RendererError::InvalidImageUpload(format!(
+                "RGBA8 upload contains {} bytes, expected {expected_len}",
+                pixels.len()
+            )));
+        }
+
+        let image = self.with_context(|context| {
+            let max_dimension = context
+                .m_impl
+                .contract()
+                .renderContextImpl()
+                .platformFeatures()
+                .maxTextureSize;
+            if width == 0 || height == 0 || width > max_dimension || height > max_dimension {
+                return Err(RendererError::InvalidTextureExtent {
+                    label: "RGBA8 image",
+                    width,
+                    height,
+                    max_dimension,
+                });
+            }
+            let texture = context.m_impl.contract_mut().makeImageTexture(
+                width,
+                height,
+                1,
+                GPUTextureFormat::rgba32,
+                pixels,
+                1,
+                1,
+                false,
+                false,
+            );
+            if texture.get().is_null() {
+                return Err(RendererError::InvalidImageUpload(
+                    "renderer rejected canonical RGBA8 pixels".into(),
+                ));
+            }
+            RiveRenderImageHandle::from_exact(make_rcp(|| unsafe { RiveRenderImage::new(texture) }))
+                .ok_or_else(|| {
+                    RendererError::InvalidImageUpload(
+                        "renderer did not publish the uploaded image".into(),
+                    )
+                })
+        })?;
+        Ok(Box::new(image.with_execution_domain(
+            self.resource_domain.clone(),
+            self.execution_anchor(),
+        )))
     }
 
     #[cfg(test)]

@@ -453,6 +453,12 @@ class PipelineContractTests(unittest.TestCase):
         ):
             self.assertIn(expected, plan.lower() if expected == "rust" else plan)
 
+    def test_builder_invokes_cargo_ndk_as_a_cargo_subcommand(self) -> None:
+        builder = (REPO_ROOT / "tools/build-nux-capi-android.sh").read_text()
+        self.assertIn('"${rust_cargo}" ndk --version', builder)
+        self.assertIn('"${rust_cargo}" ndk \\', builder)
+        self.assertNotIn('"${cargo_ndk}" --version', builder)
+
     def test_publisher_orders_draft_download_verify_before_publish(self) -> None:
         publisher = (REPO_ROOT / "tools/publish-nux-capi-android-release.sh").read_text()
         self.assertIn('expected_tag="android-runtime-v0.3.0"', publisher)

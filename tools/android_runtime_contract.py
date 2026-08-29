@@ -230,7 +230,7 @@ def build_input_document(
 
     rustc_version = command_output([str(rustc), "-vV"]).replace("\n", " ")
     cargo_version = command_output([str(cargo), "-Vv"]).replace("\n", " ")
-    cargo_ndk_version = command_output([str(cargo_ndk), "--version"])
+    cargo_ndk_version = command_output([str(cargo), "ndk", "--version"])
     if not rustc_version.startswith(f"rustc {RUST_TOOLCHAIN} "):
         raise ContractError(f"rustc must be {RUST_TOOLCHAIN}: {rustc_version}")
     if not cargo_version.startswith(f"cargo {RUST_TOOLCHAIN} "):

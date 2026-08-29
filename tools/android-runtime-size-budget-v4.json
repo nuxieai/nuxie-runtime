@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "releaseTag": "android-runtime-v0.3.0",
+  "maximums": {
+    "archiveBytes": 25165824,
+    "expandedBytes": 67108864,
+    "fileBytes": {
+      "include/nux_capi.generated.h": 524288,
+      "jniLibs/arm64-v8a/libc++_shared.so": 3145728,
+      "jniLibs/arm64-v8a/libnux_capi.so": 29360128,
+      "jniLibs/x86_64/libc++_shared.so": 3145728,
+      "jniLibs/x86_64/libnux_capi.so": 29360128
+    }
+  }
+}

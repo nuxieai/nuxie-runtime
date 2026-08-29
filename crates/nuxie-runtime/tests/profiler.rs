@@ -109,7 +109,7 @@ fn records_use_stable_string_ids_and_flush_in_capture_order() {
     assert_eq!(
         profile.string_table(),
         [
-            "Board", "Machine", "Layer", "Idle", "Run", "Child", "Rows", "Tap"
+            "Board", "Machine", "Layer", "Idle", "Run", "Rows", "Child", "Tap"
         ]
     );
     let transitions = transitions.lock().unwrap();
@@ -121,10 +121,10 @@ fn records_use_stable_string_ids_and_flush_in_capture_order() {
     assert_eq!(transitions[0].to_state_id, 4);
     assert_eq!(transitions[0].tick, 41);
     assert_eq!(transitions[0].path[0].segment_type, 0);
-    assert_eq!(transitions[0].path[0].name_id, 5);
+    assert_eq!(transitions[0].path[0].name_id, 6);
     assert_eq!(transitions[0].path[0].index, -1);
     assert_eq!(transitions[0].path[1].segment_type, 1);
-    assert_eq!(transitions[0].path[1].name_id, 6);
+    assert_eq!(transitions[0].path[1].name_id, 5);
     assert_eq!(transitions[0].path[1].index, 7);
     let listeners = listeners.lock().unwrap();
     assert_eq!(listeners.len(), 1);
@@ -237,7 +237,7 @@ fn capture_lifecycle_resets_session_state_and_only_flips_while_active() {
 fn profile_header_and_frame_payload_match_the_pinned_cpp_byte_format() {
     let mut frames = BTreeMap::new();
     frames.insert(
-        3,
+        4,
         ProfileCaptureFrame {
             frame_start_cpu: 100,
             next_frame_start_cpu: 140,
@@ -262,6 +262,7 @@ fn profile_header_and_frame_payload_match_the_pinned_cpp_byte_format() {
     };
     let mut profile = RiveProfile::new(Box::new(capture));
     profile.start();
+    profile.end_frame();
     profile.end_frame();
     profile.end_frame();
     let mut bytes = Vec::new();

@@ -2728,59 +2728,6 @@ fn withDetachedPixelLocalStorage<R>(
     detached.call(message, callback)
 }
 
-fn intersectScissor(a: gpu::AABBu16, b: gpu::AABBu16) -> gpu::AABBu16 {
-    let left = a.left.max(b.left);
-    let top = a.top.max(b.top);
-    let right = a.right.min(b.right);
-    let bottom = a.bottom.min(b.bottom);
-    if left >= right || top >= bottom {
-        gpu::AABBu16 {
-            left,
-            top,
-            right: left,
-            bottom: top,
-        }
-    } else {
-        gpu::AABBu16 {
-            left,
-            top,
-            right,
-            bottom,
-        }
-    }
-}
-
-fn boundsToU16(bounds: gpu::IAABB) -> gpu::AABBu16 {
-    gpu::AABBu16 {
-        left: u16::try_from(bounds.left).expect("update bound left is losslessly u16"),
-        top: u16::try_from(bounds.top).expect("update bound top is losslessly u16"),
-        right: u16::try_from(bounds.right).expect("update bound right is losslessly u16"),
-        bottom: u16::try_from(bounds.bottom).expect("update bound bottom is losslessly u16"),
-    }
-}
-
-fn makeWH(width: u32, height: u32) -> gpu::IAABB {
-    gpu::IAABB {
-        left: 0,
-        top: 0,
-        right: i32::try_from(width).expect("render target width fits i32"),
-        bottom: i32::try_from(height).expect("render target height fits i32"),
-    }
-}
-
-fn intersectBounds(a: gpu::IAABB, b: gpu::IAABB) -> gpu::IAABB {
-    let left = a.left.max(b.left);
-    let top = a.top.max(b.top);
-    let right = a.right.min(b.right);
-    let bottom = a.bottom.min(b.bottom);
-    gpu::IAABB {
-        left,
-        top,
-        right: right.max(left),
-        bottom: bottom.max(top),
-    }
-}
-
 pub(crate) fn unpackColorToRGBA32FPremul(color: u32) -> [f32; 4] {
     let alpha = ((color >> 24) & 0xff) as f32 * (1.0 / 255.0);
     [
@@ -3543,7 +3490,10 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             }
         }
 
-        let fullUpdateScissorRect = boundsToU16(desc.renderTargetUpdateBounds);
+        let fullUpdateScissorRect = desc
+            .renderTargetUpdateBounds
+            .lossless_numeric_cast::<u16>()
+            .expect("pinned lossless_numeric_cast requires update bounds to fit u16");
         let drawList = desc
             .drawList
             .expect("flush descriptor carries a draw list")
@@ -3654,7 +3604,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     context.m_state.borrow_mut().disableScissor();
                     if context.m_capabilities.avoidPartialFramebufferBlits {
                         glutils::BlitFramebuffer(
-                            makeWH(targetWidth, targetHeight),
+                            gpu::IAABB::MakeWH(targetWidth, targetHeight),
                             targetHeight,
                             GL_COLOR_BUFFER_BIT,
                         );
@@ -3665,10 +3615,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         while !draw.is_null() {
                             assert_ne!((*draw).blendMode(), nuxie_render_api::BlendMode::SrcOver);
                             glutils::BlitFramebuffer(
-                                intersectBounds(
-                                    desc.renderTargetUpdateBounds,
-                                    *(*draw).pixelBounds(),
-                                ),
+                                desc.renderTargetUpdateBounds
+                                    .intersect(*(*draw).pixelBounds()),
                                 targetHeight,
                                 GL_COLOR_BUFFER_BIT,
                             );
@@ -3681,7 +3629,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             }
 
             if let Some(scissor) = batch.scissorRect {
-                let scissor = intersectScissor(fullUpdateScissorRect, scissor);
+                let scissor = fullUpdateScissorRect.intersectOrEmpty(scissor);
                 let mut state = context.m_state.borrow_mut();
                 state.setPipelineState(&pipelineState, ScissorAction::ignore);
                 state.setScissorU16(scissor, targetHeight);

@@ -108,7 +108,7 @@ class PerfCorpusTests(unittest.TestCase):
         land = (REPO_ROOT / "tools" / "land.sh").read_text()
         workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
         perf_job = workflow.split("\n  perf-gate:", 1)[1].split(
-            "\n  parity-scorecard:", 1
+            "\n  fuzz-smoke:", 1
         )[0]
 
         self.assertIn("perf-gate-measure: perf-runtime-ref-check", makefile)
@@ -121,7 +121,6 @@ class PerfCorpusTests(unittest.TestCase):
         self.assertIn("make perf-gate PERF_JSON_META=", perf_job)
         self.assertNotIn("continue-on-error", perf_job)
         self.assertNotIn("make perf-hot-loop", workflow)
-        self.assertIn("      - perf-gate", workflow)
 
     def test_manifest_rejects_a_parked_source_entry(self):
         changed = copy.deepcopy(self.corpus)

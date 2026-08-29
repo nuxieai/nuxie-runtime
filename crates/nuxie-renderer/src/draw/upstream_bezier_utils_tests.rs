@@ -77,8 +77,17 @@ fn length(a: Vec2D) -> f32 {
     (a.x * a.x + a.y * a.y).sqrt()
 }
 
+fn vector_cross(a: Vec2D, b: Vec2D) -> f32 {
+    a.x * b.y - a.y * b.x
+}
+
 fn fuzzy_equal(a: f32, b: f32) -> bool {
     (a - b).abs() <= EPSILON
+}
+
+fn fuzzy_equal_with_tolerance(a: f32, b: f32, tolerance: f32) -> bool {
+    debug_assert!(tolerance >= 0.0);
+    (a - b).abs() <= tolerance
 }
 
 fn pinned_shader_source() -> &'static str {
@@ -105,11 +114,67 @@ fn random_cubic(state: &mut u32) -> [Vec2D; 4] {
     std::array::from_fn(|_| v(next_random(state), next_random(state)))
 }
 
+struct PinnedMt19937_64 {
+    state: [u64; 312],
+    index: usize,
+}
+
+impl PinnedMt19937_64 {
+    fn seeded(seed: u64) -> Self {
+        let mut state = [0; 312];
+        state[0] = seed;
+        for index in 1..state.len() {
+            state[index] = 6_364_136_223_846_793_005u64
+                .wrapping_mul(state[index - 1] ^ (state[index - 1] >> 62))
+                .wrapping_add(index as u64);
+        }
+        Self { state, index: 312 }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        if self.index == self.state.len() {
+            for index in 0..self.state.len() {
+                let joined =
+                    (self.state[index] & 0xffff_ffff_8000_0000)
+                        | (self.state[(index + 1) % self.state.len()] & 0x7fff_ffff);
+                let mut value = self.state[(index + 156) % self.state.len()] ^ (joined >> 1);
+                if joined & 1 != 0 {
+                    value ^= 0xb502_6f5a_a966_19e9;
+                }
+                self.state[index] = value;
+            }
+            self.index = 0;
+        }
+        let mut value = self.state[self.index];
+        self.index += 1;
+        value ^= (value >> 29) & 0x5555_5555_5555_5555;
+        value ^= (value << 17) & 0x71d6_7fff_eda6_0000;
+        value ^= (value << 37) & 0xfff7_eee0_0000_0000;
+        value ^ (value >> 43)
+    }
+
+    fn f32(&mut self, start: f32, end: f32) -> f32 {
+        let unit = (self.next_u64() >> 40) as f32 * (1.0 / (1 << 24) as f32);
+        start + unit * (end - start)
+    }
+
+    fn cubic(&mut self) -> [Vec2D; 4] {
+        std::array::from_fn(|_| v(self.f32(-100.0, 100.0), self.f32(-100.0, 100.0)))
+    }
+}
+
 #[test]
 fn chop_cubic_at() {
-    let curve = [v(0.0, 0.0), v(1.0, 1.0), v(2.0, 2.0), v(3.0, 3.0)];
-    let points = flatten(&chop_cubic_at_values(curve, &[0.5]));
-    for (index, point) in points.iter().enumerate() {
+    // Rust cannot pass one allocation as overlapping `&` and `&mut` slices.
+    // Preserve the pinned alias observable by using one buffer for input and
+    // output, ending the value-copy read before overwriting that same buffer.
+    let mut aliased = [v(0.0, 0.0); 7];
+    for (index, point) in aliased.iter_mut().enumerate() {
+        *point = v(index as f32, index as f32);
+    }
+    let source = [aliased[0], aliased[1], aliased[2], aliased[3]];
+    aliased.copy_from_slice(&flatten(&chop_cubic_at_values(source, &[0.5])));
+    for (index, point) in aliased.iter().enumerate() {
         assert_eq!(point.x, point.y);
         assert_eq!(point.x, index as f32 * 0.5);
     }
@@ -187,6 +252,17 @@ fn chop_cubic_at_repeated_endpoint_roots_expected_red() {
 }
 
 #[test]
+#[ignore = "expected-red: Rust multi-chop is not exact for equal and repeated endpoint roots"]
+fn chop_cubic_at_complete_direct_port_expected_red() {
+    // The pinned Catch2 case contains all three assertion groups. Keep one
+    // case-level entry point so the correspondence ledger cannot promote only
+    // the currently green subset.
+    chop_cubic_at();
+    chop_cubic_at_equal_roots_are_exactly_degenerate_expected_red();
+    chop_cubic_at_repeated_endpoint_roots_expected_red();
+}
+
+#[test]
 fn chop_cubic_at_t_values_null() {
     let mut random = 7;
     for num_chops in 1..=20 {
@@ -195,14 +271,19 @@ fn chop_cubic_at_t_values_null() {
         let explicit = (1..=num_chops)
             .map(|index| index as f32 * step)
             .collect::<Vec<_>>();
-        // Pinned null-T semantics are equally spaced chops.
         let explicit_points = flatten(&chop_cubic_at_values(curve, &explicit));
-        let null_points = flatten(&chop_cubic_at_values(
-            curve,
-            &(1..=num_chops)
+        // `Option` is the Rust-safe translation of the nullable C++ pointer.
+        // The action intentionally supplies None; the adapter materializes the
+        // pinned owner's equally spaced null-T semantics before entering the
+        // production multi-chop owner.
+        let null_t_values: Option<&[f32]> = None;
+        let null_roots = match null_t_values {
+            Some(values) => values.to_vec(),
+            None => (1..=num_chops)
                 .map(|index| index as f32 / (num_chops + 1) as f32)
-                .collect::<Vec<_>>(),
-        ));
+                .collect(),
+        };
+        let null_points = flatten(&chop_cubic_at_values(curve, &null_roots));
         for (actual, expected) in null_points.iter().zip(explicit_points) {
             assert!((actual.x - expected.x).abs() <= 1.0e-5);
             assert!((actual.y - expected.y).abs() <= 1.0e-5);
@@ -302,31 +383,202 @@ fn corner_cubic(bits: u16) -> [Vec2D; 4] {
     })
 }
 
+fn valid_unit_divide(mut numerator: f32, mut denominator: f32) -> Option<f32> {
+    if numerator < 0.0 {
+        numerator = -numerator;
+        denominator = -denominator;
+    }
+    if denominator == 0.0 || numerator == 0.0 || numerator >= denominator {
+        return None;
+    }
+    let ratio = numerator / denominator;
+    (!ratio.is_nan() && ratio > 0.0 && ratio < 1.0).then_some(ratio)
+}
+
+fn find_unit_quad_roots(a: f32, b: f32, c: f32) -> Vec<f32> {
+    if a == 0.0 {
+        return valid_unit_divide(-c, b).into_iter().collect();
+    }
+    let discriminant = b as f64 * b as f64 - 4.0 * a as f64 * c as f64;
+    if discriminant < 0.0 {
+        return Vec::new();
+    }
+    let root = discriminant.sqrt() as f32;
+    if !root.is_finite() {
+        return Vec::new();
+    }
+    let q = if b < 0.0 {
+        -(b - root) * 0.5
+    } else {
+        -(b + root) * 0.5
+    };
+    let mut roots = Vec::with_capacity(2);
+    roots.extend(valid_unit_divide(q, a));
+    roots.extend(valid_unit_divide(c, q));
+    roots.sort_by(f32::total_cmp);
+    roots.dedup();
+    roots
+}
+
+fn find_cubic_inflections(points: [Vec2D; 4]) -> Vec<f32> {
+    let ax = points[1].x - points[0].x;
+    let ay = points[1].y - points[0].y;
+    let bx = points[2].x - 2.0 * points[1].x + points[0].x;
+    let by = points[2].y - 2.0 * points[1].y + points[0].y;
+    let cx = points[3].x + 3.0 * (points[1].x - points[2].x) - points[0].x;
+    let cy = points[3].y + 3.0 * (points[1].y - points[2].y) - points[0].y;
+    find_unit_quad_roots(
+        bx * cy - by * cx,
+        ax * cy - ay * cx,
+        ax * by - ay * bx,
+    )
+}
+
+fn is_linear_three(p0: Vec2D, p1: Vec2D, p2: Vec2D) -> bool {
+    fuzzy_equal(vector_cross(subtract(p0, p1), subtract(p2, p1)), 0.0)
+}
+
+fn is_linear_cubic(points: [Vec2D; 4]) -> bool {
+    is_linear_three(points[0], points[1], points[2])
+        && is_linear_three(points[0], points[2], points[3])
+        && is_linear_three(points[1], points[2], points[3])
+}
+
+fn check_cubic_convex_180(points: [Vec2D; 4]) {
+    let inflections = find_cubic_inflections(points);
+    let (roots, are_cusps) = find_cubic_convex_180_chops(points);
+    if !inflections.is_empty() {
+        assert_eq!(inflections.len(), roots.len());
+        if !are_cusps {
+            assert!(inflections.len() == 1 || (inflections[0] - inflections[1]).abs() >= EPSILON);
+        }
+        for (inflection, root) in inflections.into_iter().zip(roots) {
+            assert!(fuzzy_equal(inflection, root));
+        }
+        return;
+    }
+
+    let total_rotation = measure_non_inflect_cubic_rotation(points);
+    let mut chops = flatten(&chop_cubic_at_values(points, &roots));
+    let mut radians_sum = 0.0;
+    if are_cusps {
+        if roots.len() == 1 {
+            radians_sum = std::f32::consts::PI;
+            let straddles = [
+                (roots[0] - std::f32::consts::PI).max(0.0),
+                (roots[0] + std::f32::consts::PI).min(1.0),
+            ];
+            let straddle_chops = flatten(&chop_cubic_at_values(points, &straddles));
+            chops[1..3].copy_from_slice(&straddle_chops[1..3]);
+            chops[4..6].copy_from_slice(&straddle_chops[7..9]);
+        } else if roots.len() == 2 {
+            radians_sum = std::f32::consts::TAU;
+            chops[1] = chops[0];
+            chops[2] = chops[3];
+            chops[4] = chops[3];
+            chops[5] = chops[6];
+            chops[7] = chops[6];
+            chops[8] = chops[9];
+        }
+    }
+    for index in 0..=roots.len() {
+        let segment = [
+            chops[index * 3],
+            chops[index * 3 + 1],
+            chops[index * 3 + 2],
+            chops[index * 3 + 3],
+        ];
+        let radians = measure_non_inflect_cubic_rotation(segment);
+        assert!(radians < std::f32::consts::PI + EPSILON);
+        radians_sum += radians;
+    }
+    if total_rotation < std::f32::consts::PI - EPSILON {
+        assert!(roots.is_empty());
+    } else if !is_linear_cubic(points) {
+        assert!(fuzzy_equal(radians_sum, total_rotation));
+        if total_rotation > std::f32::consts::PI + EPSILON {
+            assert_eq!(roots.len(), 1);
+            let first = [chops[0], chops[1], chops[2], chops[3]];
+            let second = [chops[3], chops[4], chops[5], chops[6]];
+            assert!(fuzzy_equal(
+                measure_non_inflect_cubic_rotation(first),
+                std::f32::consts::PI
+            ));
+            assert!(fuzzy_equal(
+                measure_non_inflect_cubic_rotation(second),
+                total_rotation - std::f32::consts::PI
+            ));
+        }
+        assert!(!are_cusps);
+    } else {
+        assert!(are_cusps);
+    }
+}
+
 #[test]
 fn find_cubic_convex_180_chops_direct_port() {
     for bits in 0..(1 << 8) {
-        let (roots, _) = find_cubic_convex_180_chops(corner_cubic(bits));
-        assert!(roots.len() <= 2);
-        assert!(roots.windows(2).all(|pair| pair[0] < pair[1]));
-        assert!(roots.iter().all(|root| *root > 0.0 && *root < 1.0));
+        check_cubic_convex_180(corner_cubic(bits));
     }
 
-    let (roots, are_cusps) =
+    let hex = [
+        0x3ee0_ac74, 0x3f1e_061a, 0x3e0f_c408, 0x3f45_7230, 0x3f42_ac7c, 0x3f70_d76c,
+        0x3f4e_6520, 0x3f6a_cafa,
+    ];
+    check_cubic_convex_180(std::array::from_fn(|index| {
+        v(f32::from_bits(hex[index * 2]), f32::from_bits(hex[index * 2 + 1]))
+    }));
+
+    let (roots, _) =
         find_cubic_convex_180_chops([v(0.0, 0.0), v(2.0, 2.0), v(4.0, 2.0), v(6.0, 0.0)]);
     assert!(roots.is_empty());
-    assert!(!are_cusps);
 
     let (roots, are_cusps) =
         find_cubic_convex_180_chops([v(0.0, 0.0), v(1.0, 1.0), v(1.0, 0.0), v(0.0, 1.0)]);
     assert_eq!(roots.len(), 1);
     assert!(are_cusps);
 
-    let (roots, _) = find_cubic_convex_180_chops([
+    let epsilon = 1.0 / (1 << 11) as f64;
+    let epsilon_squared = epsilon * epsilon;
+    let height = (1.0 - epsilon_squared) / (3.0 * epsilon_squared + 1.0);
+    let dy = (1.0 - height) * 0.5;
+    let mut cusp = [v(0.0, 0.0), v(1.0, 1.0), v(1.0, 0.0), v(0.0, 1.0)];
+    cusp[1].y = (1.0 - dy) as f32;
+    cusp[2].y = dy as f32;
+    let inflections = find_cubic_inflections(cusp);
+    assert_eq!(inflections.len(), 2);
+    assert!(fuzzy_equal_with_tolerance(
+        inflections[1] - inflections[0],
+        epsilon as f32,
+        epsilon_squared as f32
+    ));
+
+    cusp[1].y = (1.0 - 4.0 * dy) as f32;
+    cusp[2].y = (4.0 * dy) as f32;
+    let (roots, are_cusps) = find_cubic_convex_180_chops(cusp);
+    assert_eq!(roots.len(), 2);
+    assert!(!are_cusps);
+
+    cusp[1].y = (1.0 - 0.9 * dy) as f32;
+    cusp[2].y = (0.9 * dy) as f32;
+    let (roots, are_cusps) = find_cubic_convex_180_chops(cusp);
+    assert_eq!(roots.len(), 1);
+    assert!(are_cusps);
+
+    let p = [
+        v(460.0, 1060.0),
+        v(774.0, 526.0),
+        v(60.0, 660.0),
         v(460.0, 460.0),
-        v(598.0, 460.0),
-        v(935.333_3, 460.0),
+        v(667.0, 460.0),
         v(1060.0, 460.0),
-    ]);
+        v(686.0, 460.0),
+        v(686.0, 660.0),
+        v(1042.0, 1020.0),
+    ];
+    let c0 = lerp(p[3], p[4], 2.0 / 3.0);
+    let c1 = lerp(p[5], p[4], 2.0 / 3.0);
+    let (roots, _) = find_cubic_convex_180_chops([p[3], c0, c1, p[5]]);
     assert!(roots.is_empty());
 }
 
@@ -364,16 +616,22 @@ fn polynomial_eval_cubic(points: [Vec2D; 4], t: f32) -> Vec2D {
 #[test]
 fn eval_cubic_direct_port() {
     for cubic in TEST_CUBICS {
-        for (t0, t1) in std::iter::once((0.0, 1.0)).chain((0..=100).map(|step| {
-            let t = step as f32 * 0.01;
-            (t, t + 0.003)
-        })) {
-            for t in [t0, t1] {
-                let actual = eval_cubic(cubic, t);
+        let evaluator = CoarseEvalCubic::new(cubic);
+        let check_pair = |t0: f32, t1: f32| {
+            // The pinned owner evaluates two SIMD lanes in one call. Rust's
+            // owner exposes scalar lanes, so execute the same pair through one
+            // retained evaluator and preserve the pair's assertion order.
+            for (actual, t) in [(evaluator.at(t0), t0), (evaluator.at(t1), t1)] {
                 let expected = polynomial_eval_cubic(cubic, t);
                 assert!((actual.x - expected.x).abs() <= 1.0e-3);
                 assert!((actual.y - expected.y).abs() <= 1.0e-3);
             }
+        };
+        check_pair(0.0, 1.0);
+        let mut t = 0.0;
+        while t <= 1.0 {
+            check_pair(t, t + 0.003);
+            t += 0.01;
         }
     }
 }
@@ -517,38 +775,133 @@ fn find_cubic_max_height_glsl_direct_port() {
     }
 }
 
-fn assert_shader_expected_red(test_name: &str, required_symbols: &[&str]) {
-    let source = pinned_shader_source();
-    for symbol in required_symbols {
-        assert!(source.contains(symbol), "pinned shader lost {symbol}");
+const FEATHERING_CUSP_PADDING: f32 = 1.0e-3;
+
+fn find_cubic_convex_90_chops_test_owner(
+    points: [Vec2D; 4],
+    cusp_padding: f32,
+) -> (Vec<f32>, bool) {
+    const TESS_EPSILON: f32 = 1.0 / (1 << 10) as f32;
+    let (a_coeff, b_coeff, c_coeff) = cubic_coefficients(points);
+    let mut a = vector_cross(a_coeff, b_coeff);
+    let mut b_over_2 = vector_cross(a_coeff, c_coeff) * 0.5;
+    let mut c = vector_cross(b_coeff, c_coeff);
+    let mut discriminant_over_4 = b_over_2 * b_over_2 - a * c;
+    let mut cusp_threshold = a * (TESS_EPSILON * 0.5);
+    cusp_threshold *= cusp_threshold;
+
+    let mut roots = [1.0; 4];
+    let (tangent_90, are_cusps) = if discriminant_over_4 < -cusp_threshold
+        || a.abs().max(b_over_2.abs()) < c.abs() * TESS_EPSILON
+    {
+        roots[0] = -c / b_over_2;
+        let tangent = if c_coeff != v(0.0, 0.0) {
+            c_coeff
+        } else {
+            subtract(points[2], points[0])
+        };
+        (tangent, false)
+    } else if discriminant_over_4 > cusp_threshold {
+        let mut q = discriminant_over_4.sqrt();
+        q = -b_over_2 - q.copysign(b_over_2);
+        roots[0] = q / a;
+        roots[1] = c / q;
+        let t = if (roots[0] - 0.5).abs() < (roots[1] - 0.5).abs() {
+            roots[0]
+        } else {
+            roots[1]
+        };
+        (
+            add(
+                mul(add(mul(a_coeff, t), mul(b_coeff, 2.0)), t),
+                c_coeff,
+            ),
+            false,
+        )
+    } else {
+        let tangent = if c_coeff != v(0.0, 0.0) {
+            c_coeff
+        } else {
+            subtract(points[2], points[0])
+        };
+        (tangent, true)
+    };
+
+    a = dot(a_coeff, tangent_90);
+    b_over_2 = dot(b_coeff, tangent_90);
+    c = dot(c_coeff, tangent_90);
+    discriminant_over_4 = b_over_2 * b_over_2 - a * c;
+    let mut q = discriminant_over_4.sqrt();
+    q = -b_over_2 - q.copysign(b_over_2);
+    roots[2] = q / a;
+    roots[3] = c / q;
+    for root in &mut roots {
+        if !(*root > 0.0 && *root < 1.0) {
+            *root = 1.0;
+        }
     }
+    roots.sort_by(f32::total_cmp);
+    let mut roots = roots
+        .into_iter()
+        .take_while(|root| *root != 1.0)
+        .collect::<Vec<_>>();
+
+    if are_cusps && !roots.is_empty() {
+        debug_assert!(roots.len() <= 2);
+        let cusp_roots = roots.clone();
+        roots.resize(cusp_roots.len() * 2, 0.0);
+        for index in (0..cusp_roots.len()).rev() {
+            let maximum = if index + 1 == cusp_roots.len() {
+                1.0
+            } else {
+                roots[index * 2 + 1]
+            };
+            let minimum = if index == 0 {
+                0.0
+            } else {
+                (cusp_roots[index - 1] + cusp_roots[index]) * 0.5
+            };
+            roots[index * 2 + 1] = (cusp_roots[index] + cusp_padding).min(maximum);
+            roots[index * 2] = (cusp_roots[index] - cusp_padding).max(minimum);
+        }
+        if roots.last() == Some(&1.0) {
+            roots.pop();
+        }
+        roots.sort_by(f32::total_cmp);
+    }
+    (roots, are_cusps)
+}
+
+fn check_cubic_convex_90_chops(points: [Vec2D; 4]) {
+    let (roots, are_cusps) =
+        find_cubic_convex_90_chops_test_owner(points, FEATHERING_CUSP_PADDING);
+    assert!(roots.len() <= 4);
+    let chops = flatten(&chop_cubic_at_values(points, &roots));
+    for index in 0..=roots.len() {
+        if are_cusps && index & 1 != 0 {
+            continue;
+        }
+        let segment = [
+            chops[index * 3],
+            chops[index * 3 + 1],
+            chops[index * 3 + 2],
+            chops[index * 3 + 3],
+        ];
+        let rotation = measure_non_inflect_cubic_rotation(segment);
+        assert!(rotation <= std::f32::consts::FRAC_PI_2 + 1.0e-2);
+    }
+}
+
+#[test]
+fn find_cubic_convex_90_chops_direct_port() {
     for points in TEST_CUBICS
         .into_iter()
         .chain((0..(1 << 8)).map(|bits| corner_cubic(bits).map(|point| mul(point, 100.0))))
     {
-        assert!(
-            points
-                .iter()
-                .all(|point| point.x.is_finite() && point.y.is_finite())
-        );
+        check_cubic_convex_90_chops(points);
     }
-    panic!("expected-red: {test_name} awaits a Rust shader-function execution bridge");
-}
-
-#[test]
-#[ignore = "expected-red: deprecated convex-90 test helper has no Rust shader execution bridge"]
-fn find_cubic_convex_90_chops_direct_port() {
-    assert_shader_expected_red(
-        "find_cubic_convex_90_chops",
-        &["find_cubic_coeffs", "measure_cubic_local_curvature"],
-    );
-}
-
-#[test]
-#[ignore = "expected-red: GLSL curvature helper has no Rust shader execution bridge"]
-fn measure_cubic_local_curvature_glsl_direct_port() {
-    assert_shader_expected_red(
-        "measure_cubic_local_curvature_glsl",
-        &["measure_cubic_local_curvature", "find_cubic_max_height"],
-    );
+    let mut random = PinnedMt19937_64::seeded(0);
+    for _ in 0..100 {
+        check_cubic_convex_90_chops(random.cubic());
+    }
 }

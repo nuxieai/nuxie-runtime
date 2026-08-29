@@ -287,6 +287,20 @@ fn run() -> Result<(), String> {
                                                 entry.comparison_stream(&rust_stream);
                                             let cpp_comparison =
                                                 entry.comparison_stream(&cpp_stream);
+                                            if entry.semantic_divergence_signature.is_some() {
+                                                match verify_reviewed_semantic_divergence(
+                                                    entry,
+                                                    &rust_comparison,
+                                                    &cpp_comparison,
+                                                ) {
+                                                    Ok(()) => println!(
+                                                        "[exact] {}: reviewed semantic line signature verified; all other comparison lines exact",
+                                                        entry.id
+                                                    ),
+                                                    Err(error) => failures.push(error),
+                                                }
+                                                continue;
+                                            }
                                             if let Some(difference) = entry
                                                 .verification
                                                 .stream_difference(
@@ -540,6 +554,7 @@ struct CorpusEntry {
     rust_execute_scripts: bool,
     semantic_default_view_model: bool,
     semantic_side_channel_only: bool,
+    semantic_divergence_signature: Option<String>,
     samples: Vec<f32>,
     status: Status,
     verification: VerificationMode,
@@ -561,6 +576,7 @@ impl CorpusEntry {
             rust_execute_scripts: false,
             semantic_default_view_model: false,
             semantic_side_channel_only: false,
+            semantic_divergence_signature: None,
             samples: vec![0.0],
             status: Status::NotYet,
             verification: VerificationMode::Exact,
@@ -612,6 +628,22 @@ impl CorpusEntry {
                 "entry {} semantic-side-channel-only evidence must be exact with no filed side-channel divergence",
                 self.id
             ));
+        }
+        if let Some(signature) = self.semantic_divergence_signature.as_deref() {
+            if !self.semantic_side_channel_only
+                || self.status != Status::Exact
+                || self.verification != VerificationMode::Exact
+            {
+                return Err(format!(
+                    "entry {} reviewed semantic divergence requires semantic-side-channel-only exact evidence",
+                    self.id
+                ));
+            }
+            validate_divergence_signature(
+                &self.id,
+                "semantic_divergence_signature",
+                Some(signature),
+            )?;
         }
         if self.status == Status::Diverges {
             validate_divergence_signature(
@@ -912,6 +944,9 @@ fn parse_corpus(path: &Path) -> Result<Vec<CorpusEntry>, String> {
             "semantic_side_channel_only" => {
                 entry.semantic_side_channel_only = parse_bool(value, line_number)?
             }
+            "semantic_divergence_signature" => {
+                entry.semantic_divergence_signature = Some(parse_string(value, line_number)?)
+            }
             "samples" => entry.samples = parse_float_array(value, line_number)?,
             "status" => entry.status = Status::parse(&parse_string(value, line_number)?)?,
             "verification" => {
@@ -1108,6 +1143,90 @@ fn verify_known_divergence(
     } else {
         Err(format!(
             "{} divergence changed: recorded {recorded}; actual {actual}",
+            entry.id
+        ))
+    }
+}
+
+/// Verifies the one approved Yoga-to-Taffy semantic-bounds seam without
+/// weakening any other semantic or action observation. This mechanism is
+/// deliberately limited to one differing `semantics ` line on an otherwise
+/// exact semantic-side-channel projection.
+fn verify_reviewed_semantic_divergence(
+    entry: &CorpusEntry,
+    rust_stream: &str,
+    cpp_stream: &str,
+) -> Result<(), String> {
+    let recorded = entry
+        .semantic_divergence_signature
+        .as_deref()
+        .ok_or_else(|| format!("{} has no reviewed semantic signature", entry.id))?;
+
+    if rust_stream.ends_with('\n') != cpp_stream.ends_with('\n') {
+        return Err(format!(
+            "{} reviewed semantic divergence has an additional difference: stream newline termination differs (rust ends with newline: {}, c++ ends with newline: {})",
+            entry.id,
+            rust_stream.ends_with('\n'),
+            cpp_stream.ends_with('\n')
+        ));
+    }
+
+    let mut rust_lines = rust_stream.lines();
+    let mut cpp_lines = cpp_stream.lines();
+    let mut line_number = 1usize;
+    let mut actual = None::<String>;
+    loop {
+        match (rust_lines.next(), cpp_lines.next()) {
+            (Some(rust), Some(cpp)) if line_equivalent(rust, cpp, GOLDEN_FLOAT_EPSILON) => {}
+            (Some(rust), Some(cpp)) => {
+                let difference = format!(
+                    "line {line_number}: rust `{}` vs c++ `{}`",
+                    summarize_stream_line(rust),
+                    summarize_stream_line(cpp)
+                );
+                if !rust.starts_with("semantics ") || !cpp.starts_with("semantics ") {
+                    return Err(format!(
+                        "{} reviewed semantic divergence changed outside a semantics line: {difference}",
+                        entry.id
+                    ));
+                }
+                if actual.replace(difference.clone()).is_some() {
+                    return Err(format!(
+                        "{} reviewed semantic divergence has an additional difference: {difference}",
+                        entry.id
+                    ));
+                }
+            }
+            (Some(rust), None) => {
+                return Err(format!(
+                    "{} reviewed semantic divergence has an additional difference: line {line_number}: rust has extra `{}`",
+                    entry.id,
+                    summarize_stream_line(rust)
+                ));
+            }
+            (None, Some(cpp)) => {
+                return Err(format!(
+                    "{} reviewed semantic divergence has an additional difference: line {line_number}: c++ has extra `{}`",
+                    entry.id,
+                    summarize_stream_line(cpp)
+                ));
+            }
+            (None, None) => break,
+        }
+        line_number += 1;
+    }
+
+    let Some(actual) = actual else {
+        return Err(format!(
+            "{} semantic comparison is now exact; remove the reviewed signature explicitly",
+            entry.id
+        ));
+    };
+    if actual == recorded {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} semantic divergence changed: recorded {recorded}; actual {actual}",
             entry.id
         ))
     }
@@ -1455,6 +1574,79 @@ mod tests {
     }
 
     #[test]
+    fn reviewed_semantic_divergence_preserves_exactly_one_signed_semantics_line() {
+        let mut entry = CorpusEntry::new();
+        entry.id = "semantic-layout-seam".to_owned();
+        entry.path = "fixture.riv".to_owned();
+        entry.status = Status::Exact;
+        entry.semantic_side_channel_only = true;
+        entry.semantic_divergence_signature = Some(
+            "line 3: rust `semantics added bounds=(7,0,93,100)` vs c++ `semantics added bounds=(0,0,100,100)`"
+                .to_owned(),
+        );
+        let cpp = concat!(
+            "rive-golden-stream-v1\n",
+            "advance seconds=0 settled=false statesChanged=0\n",
+            "semantics added bounds=(0,0,100,100)\n",
+            "semantics updatedGeometry bounds=[]\n",
+            "semanticAction seconds=1 nodeId=1 action=tap outcome=dispatched\n",
+        );
+        let rust = cpp.replace(
+            "semantics added bounds=(0,0,100,100)",
+            "semantics added bounds=(7,0,93,100)",
+        );
+
+        assert_eq!(entry.validate(1), Ok(()));
+        assert_eq!(
+            verify_reviewed_semantic_divergence(&entry, &rust, cpp),
+            Ok(())
+        );
+
+        let second_semantic_difference = rust.replace(
+            "semantics updatedGeometry bounds=[]",
+            "semantics updatedGeometry bounds=[1]",
+        );
+        assert!(
+            verify_reviewed_semantic_divergence(&entry, &second_semantic_difference, cpp)
+                .unwrap_err()
+                .contains("additional difference")
+        );
+
+        let action_difference = rust.replace("outcome=dispatched", "outcome=ignored");
+        assert!(
+            verify_reviewed_semantic_divergence(&entry, &action_difference, cpp)
+                .unwrap_err()
+                .contains("outside a semantics line")
+        );
+    }
+
+    #[test]
+    fn reviewed_semantic_divergence_is_restricted_to_exact_semantic_projection() {
+        let mut entry = CorpusEntry::new();
+        entry.id = "semantic-layout-seam".to_owned();
+        entry.path = "fixture.riv".to_owned();
+        entry.status = Status::Exact;
+        entry.semantic_divergence_signature =
+            Some("line 2: rust `semantics value=2` vs c++ `semantics value=1`".to_owned());
+
+        assert!(
+            entry
+                .validate(1)
+                .unwrap_err()
+                .contains("requires semantic-side-channel-only exact evidence")
+        );
+        entry.semantic_side_channel_only = true;
+        assert_eq!(entry.validate(1), Ok(()));
+        entry.verification = VerificationMode::Tolerant(0.5);
+        assert!(
+            entry
+                .validate(1)
+                .unwrap_err()
+                .contains("semantic-side-channel-only evidence must be exact")
+        );
+    }
+
+    #[test]
     fn long_first_differences_keep_a_stable_distinguishing_fingerprint() {
         let prefix = "drawPath ".to_owned() + &"x".repeat(400);
         let left = summarize_stream_line(&(prefix.clone() + "left"));
@@ -1735,6 +1927,17 @@ mod tests {
             )
             .is_ok()
         );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Rust,
+                false,
+                Some(1),
+                "",
+                "rust-golden-runner error: native File import failed\n",
+                expected,
+            )
+            .is_ok()
+        );
 
         assert!(
             validate_malformed_rejection(
@@ -1755,6 +1958,17 @@ mod tests {
                 "",
                 rust_error,
                 "a-different-import-error",
+            )
+            .is_err()
+        );
+        assert!(
+            validate_malformed_rejection(
+                RunnerKind::Rust,
+                false,
+                Some(1),
+                "",
+                "rust-golden-runner error: failed to select an artboard\n",
+                expected,
             )
             .is_err()
         );
@@ -2055,8 +2269,15 @@ fn cpp_malformed_diagnostic_matches(stderr: &str) -> bool {
 }
 
 fn rust_malformed_diagnostic_matches(stderr: &str, expected_error: &str) -> bool {
-    stderr.contains("rust-golden-runner error:")
-        && stderr.contains("failed to import runtime file:")
+    if !stderr.contains("rust-golden-runner error:") {
+        return false;
+    }
+    // The native File port deliberately exposes C++'s success/failure import
+    // contract rather than the deleted Rust facade's structured diagnostic.
+    if stderr.contains("native File import failed") {
+        return true;
+    }
+    stderr.contains("failed to import runtime file:")
         && !expected_error.is_empty()
         && normalize_import_error(stderr)
             .to_ascii_lowercase()

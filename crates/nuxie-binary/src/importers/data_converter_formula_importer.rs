@@ -1,5 +1,38 @@
 use super::*;
 
+/// The converter index is the Rust equivalent of pinned
+/// `DataConverterFormula* m_dataConverterFormula`.
+///
+/// It is intentionally non-owning: the runtime file retains the formula and
+/// the importer only retains its occurrence coordinate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DataConverterFormulaImporter {
+    formula_index: usize,
+}
+
+impl DataConverterFormulaImporter {
+    /// Mechanical translation of the constructor: retain exactly the formula
+    /// supplied when the file creates this importer.
+    fn new(formula_index: usize) -> Self {
+        Self { formula_index }
+    }
+
+    /// Mechanical translation of the primary-header `formula()` inline.
+    fn formula(self) -> usize {
+        self.formula_index
+    }
+
+    /// Mechanical translation of `resolve`: calculate the retained formula's
+    /// output queue. Rust retains the imported objects rather than mutating an
+    /// owning C++ token vector, so the resolved queue is returned to its
+    /// caller; construction is infallible just like pinned `StatusCode::Ok`.
+    fn resolve<'a>(self, file: &'a RuntimeFile) -> Vec<RuntimeFormulaOutputToken<'a>> {
+        RuntimeFile::cpp_data_converter_formula_output_queue(
+            file.cpp_data_converter_formula_authored_tokens(self.formula()),
+        )
+    }
+}
+
 pub(super) fn dispatch_imports_successfully(
     object: &RuntimeObject,
     definition: &'static Definition,
@@ -53,9 +86,7 @@ impl RuntimeFile {
         &self,
         data_converter_index: usize,
     ) -> Vec<RuntimeFormulaOutputToken<'_>> {
-        Self::cpp_data_converter_formula_output_queue(
-            self.cpp_data_converter_formula_authored_tokens(data_converter_index),
-        )
+        DataConverterFormulaImporter::new(data_converter_index).resolve(self)
     }
 
     pub(crate) fn cpp_data_converter_formula_authored_tokens(
@@ -69,7 +100,7 @@ impl RuntimeFile {
             return Vec::new();
         }
 
-        let mut latest_formula_index = None;
+        let mut latest_formula_importer = None;
         let mut current_converter_index = 0usize;
         let mut tokens = Vec::new();
 
@@ -87,13 +118,16 @@ impl RuntimeFile {
 
             if definition.is_a("DataConverter") {
                 if definition.name == "DataConverterFormula" {
-                    latest_formula_index = Some(current_converter_index);
+                    latest_formula_importer =
+                        Some(DataConverterFormulaImporter::new(current_converter_index));
                 }
                 current_converter_index += 1;
                 continue;
             }
 
-            if definition.is_a("FormulaToken") && latest_formula_index == Some(data_converter_index)
+            if definition.is_a("FormulaToken")
+                && latest_formula_importer
+                    .is_some_and(|importer| importer.formula() == data_converter_index)
             {
                 tokens.push(object);
             }

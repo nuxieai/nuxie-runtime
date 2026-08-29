@@ -48,9 +48,17 @@ pub(super) struct ScriptedBlobAssets {
     // File order is significant: equal-rank matches keep the first authored
     // asset, exactly like C++'s linear `file->assets()` scan.
     assets: Rc<RefCell<Vec<Rc<ScriptedBlobData>>>>,
+    native_file:
+        Rc<RefCell<Option<nuxie_runtime::mechanical_port::source::file::RuntimeFileWeakHandle>>>,
 }
 
 impl ScriptedBlobAssets {
+    pub(super) fn set_native_file(
+        &self,
+        file: nuxie_runtime::mechanical_port::source::file::RuntimeFileWeakHandle,
+    ) {
+        *self.native_file.borrow_mut() = Some(file);
+    }
     pub(super) fn install(lua: &Lua) -> Self {
         let assets = Self::default();
         lua.set_app_data(assets.clone());
@@ -72,6 +80,20 @@ impl ScriptedBlobAssets {
         let reference = ScopedAssetReference::new(lua, name);
         let mut best_rank = 0;
         let mut asset = None;
+        if let Some(file) = assets
+            .native_file
+            .borrow()
+            .as_ref()
+            .and_then(|file| file.upgrade())
+        {
+            let candidates = file.with_file(|file| file.assets().to_vec());
+            for candidate in candidates {
+                if let Some((name, value)) = candidate.with_downcast::<nuxie_runtime::mechanical_port::source::assets::blob_asset::BlobAsset,_>(|blob| (blob.base.name().to_owned(), blob.script_asset())) {
+                    let rank = reference.rank(&name, value.name());
+                    if rank > best_rank && !value.bytes().is_empty() { best_rank=rank; asset=Some(value); }
+                }
+            }
+        }
         for candidate in assets.assets.borrow().iter() {
             let rank = reference.rank(&candidate.name, candidate.asset.name());
             if rank > best_rank && !candidate.asset.bytes().is_empty() {

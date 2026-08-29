@@ -1,3 +1,4 @@
+use crate::importers::{ImportContext, ImportStackKey};
 use crate::*;
 
 /// One dense, file-global FileAsset entry and the in-band contents imported
@@ -11,15 +12,45 @@ pub struct RuntimeFileAssetContents<'a> {
     pub has_contents_record: bool,
     /// Payload selected by the last imported contents record for this asset.
     pub contents: Option<&'a [u8]>,
+    /// Signature selected from the same imported contents record.
+    pub signature: Option<&'a [u8]>,
+    /// Aggregate signature result published by the scripting TextAsset
+    /// importer. Non-text and unsigned assets remain false.
+    pub verified: bool,
+}
+
+impl<'a> RuntimeFileAssetContents<'a> {
+    pub fn bytes(&self) -> Option<&'a [u8]> {
+        self.contents
+    }
+
+    pub fn signature(&self) -> Option<&'a [u8]> {
+        self.signature
+    }
+
+    pub fn verified(&self) -> bool {
+        self.verified
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
-enum ImportedFileAssetRecord<'a> {
+pub(crate) enum ImportedFileAssetRecord<'a> {
     Asset {
         asset: &'a RuntimeObject,
         creates_importer: bool,
     },
-    Contents(Option<&'a [u8]>),
+    Contents {
+        bytes: Option<&'a [u8]>,
+        signature: Option<&'a [u8]>,
+    },
+}
+
+/// Pinned `FileAssetContents::import` owner after Core/Super dispatch has
+/// established the current import stack. A missing latest FileAssetImporter
+/// is `MissingObject`; ownership transfer and Super import are represented by
+/// the imported object/status vectors retained by `RuntimeFile`.
+pub(crate) fn imports_successfully(context: &ImportContext) -> bool {
+    context.latest(ImportStackKey::FileAsset)
 }
 
 impl RuntimeFile {
@@ -53,6 +84,8 @@ impl RuntimeFile {
         &self,
         max_assets: usize,
     ) -> Option<Vec<RuntimeFileAssetContents<'_>>> {
+        let verified_text_assets =
+            crate::importers::text_asset_importer::verified_text_asset_ids(self);
         let mut assets = Vec::<RuntimeFileAssetContents<'_>>::new();
         let mut latest_ordinal = None;
         for record in self.imported_file_asset_records() {
@@ -70,16 +103,19 @@ impl RuntimeFile {
                         asset,
                         has_contents_record: false,
                         contents: None,
+                        signature: None,
+                        verified: verified_text_assets.contains(&asset.id),
                     });
                     if creates_importer {
                         latest_ordinal = Some(ordinal);
                     }
                 }
-                ImportedFileAssetRecord::Contents(contents) => {
+                ImportedFileAssetRecord::Contents { bytes, signature } => {
                     if let Some(entry) = latest_ordinal.and_then(|ordinal| assets.get_mut(ordinal))
                     {
                         entry.has_contents_record = true;
-                        entry.contents = contents;
+                        entry.contents = bytes;
+                        entry.signature = signature;
                     }
                 }
             }
@@ -109,18 +145,20 @@ impl RuntimeFile {
                     creates_importer: false,
                     ..
                 } => {}
-                ImportedFileAssetRecord::Contents(contents)
+                ImportedFileAssetRecord::Contents { bytes, .. }
                     if selected_asset_is_latest_importer =>
                 {
-                    selected_contents = contents;
+                    selected_contents = bytes;
                 }
-                ImportedFileAssetRecord::Contents(_) => {}
+                ImportedFileAssetRecord::Contents { .. } => {}
             }
         }
         selected_contents
     }
 
-    fn imported_file_asset_records(&self) -> impl Iterator<Item = ImportedFileAssetRecord<'_>> {
+    pub(crate) fn imported_file_asset_records(
+        &self,
+    ) -> impl Iterator<Item = ImportedFileAssetRecord<'_>> {
         self.objects
             .iter()
             .enumerate()
@@ -136,8 +174,12 @@ impl RuntimeFile {
                         creates_importer: file_asset_creates_importer(object.type_name, true),
                     });
                 }
-                (object.type_name == "FileAssetContents")
-                    .then(|| ImportedFileAssetRecord::Contents(object.bytes_property("bytes")))
+                (object.type_name == "FileAssetContents").then(|| {
+                    ImportedFileAssetRecord::Contents {
+                        bytes: object.bytes_property("bytes"),
+                        signature: object.bytes_property("signature"),
+                    }
+                })
             })
     }
 
@@ -145,12 +187,15 @@ impl RuntimeFile {
         &'a self,
         assets: Vec<&'a RuntimeObject>,
     ) -> Vec<RuntimeFileAssetContents<'a>> {
+        let verified_text_assets =
+            crate::importers::text_asset_importer::verified_text_asset_ids(self);
         let ordinals_by_global = assets
             .iter()
             .enumerate()
             .map(|(ordinal, asset)| (asset.id, ordinal))
             .collect::<BTreeMap<_, _>>();
         let mut contents = vec![None; assets.len()];
+        let mut signatures = vec![None; assets.len()];
         let mut has_contents_record = vec![false; assets.len()];
         let mut latest_ordinal = None;
 
@@ -170,13 +215,15 @@ impl RuntimeFile {
                     creates_importer: false,
                     ..
                 } => {}
-                ImportedFileAssetRecord::Contents(asset_contents) => {
+                ImportedFileAssetRecord::Contents { bytes, signature } => {
                     if let Some(ordinal) = latest_ordinal
                         && let Some(slot) = contents.get_mut(ordinal)
+                        && let Some(signature_slot) = signatures.get_mut(ordinal)
                         && let Some(has_record) = has_contents_record.get_mut(ordinal)
                     {
                         *has_record = true;
-                        *slot = asset_contents;
+                        *slot = bytes;
+                        *signature_slot = signature;
                     }
                 }
             }
@@ -190,6 +237,8 @@ impl RuntimeFile {
                 asset,
                 has_contents_record: has_contents_record.get(ordinal).copied().unwrap_or(false),
                 contents: contents.get(ordinal).copied().flatten(),
+                signature: signatures.get(ordinal).copied().flatten(),
+                verified: verified_text_assets.contains(&asset.id),
             })
             .collect()
     }

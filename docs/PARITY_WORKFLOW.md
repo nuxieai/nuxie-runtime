@@ -2,7 +2,9 @@
 
 This is the reusable operating model for ports whose authoritative
 implementation already exists. It applies to native Metal, a future WebGPU or
-Vulkan adapter, and unfinished parity work in the main runtime. Backend guides
+Vulkan adapter. The main runtime instead follows the direct mechanical process
+in `runtime-bun-style-source-port-plan.md`; it deliberately does not rebuild
+the retired runtime parity ledgers. Backend guides
 may add stricter requirements, but they should not redefine this workflow.
 
 The objective is not merely to produce Rust that looks like the upstream

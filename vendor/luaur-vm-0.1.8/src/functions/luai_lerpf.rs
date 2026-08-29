@@ -3,6 +3,6 @@ pub fn luai_lerpf(a: crate::type_aliases::lua_vector_type::LuaVectorType, b: cra
     if t == 1.0 {
         b
     } else {
-        a + (b - a) * t
+        (b - a).mul_add(t, a)
     }
 }

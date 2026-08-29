@@ -61,6 +61,7 @@ pub(crate) fn validate_cpp_import_resolution(
 
         validate_cpp_constraint_parentage(&slots, objects)?;
         validate_cpp_text_parentage(&slots, objects)?;
+        dash_importer::validate_cpp_parentage(&slots, objects)?;
         validate_cpp_paint_effects(&slots, objects)?;
 
         for (local_index, slot) in slots.iter().enumerate() {

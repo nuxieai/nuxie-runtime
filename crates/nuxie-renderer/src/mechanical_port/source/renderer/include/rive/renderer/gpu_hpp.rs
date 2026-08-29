@@ -2036,6 +2036,7 @@ use core::marker::PhantomData;
 use core::ops::{BitAnd, BitOr, Not};
 use core::ptr::NonNull;
 
+pub use nuxie_render_api::{AABBu16, IntegerAabb as IAABB};
 use nuxie_render_api::{Aabb as AABB, BlendMode, ColorInt, Mat2D, Vec2D};
 
 // Mapped source dependencies.  These aliases keep the upstream names visible
@@ -2048,48 +2049,6 @@ pub use crate::mechanical_port::source::renderer::include::rive::renderer::rende
 pub use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::RenderContextImpl;
 pub use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
 pub use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct AABBu16 {
-    pub left: u16,
-    pub top: u16,
-    pub right: u16,
-    pub bottom: u16,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct IAABB {
-    pub left: i32,
-    pub top: i32,
-    pub right: i32,
-    pub bottom: i32,
-}
-
-impl IAABB {
-    pub const fn empty(&self) -> bool {
-        self.left >= self.right || self.top >= self.bottom
-    }
-
-    pub const fn makeMaximal() -> Self {
-        Self {
-            left: i32::MIN,
-            top: i32::MIN,
-            right: i32::MAX,
-            bottom: i32::MAX,
-        }
-    }
-
-    pub const fn makeMaximallyNegative() -> Self {
-        Self {
-            left: i32::MAX,
-            top: i32::MAX,
-            right: i32::MIN,
-            bottom: i32::MIN,
-        }
-    }
-}
 
 pub enum GrInnerFanTriangulator {}
 

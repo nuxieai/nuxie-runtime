@@ -54,7 +54,7 @@ impl UserData for ScriptedPaintData {
         fields.add_field_method_get("cap", |_, this| Ok(cap_name(this.0.cap)));
         fields.add_field_method_get("thickness", |_, this| Ok(this.0.thickness));
         fields.add_field_method_get("blendMode", |_, this| {
-            Ok(blend_mode_name(this.0.blend_mode))
+            Ok(blend_mode_name(this.0.blend_mode()))
         });
         fields.add_field_method_get("feather", |_, this| Ok(this.0.feather));
         fields.add_field_method_get("color", |_, this| Ok(this.0.color));

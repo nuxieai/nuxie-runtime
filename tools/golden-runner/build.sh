@@ -102,7 +102,11 @@ if [[ "$runtime_mode" == "scripted" ]]; then
     echo "==== Building scripted rive_decoders ($config) ===="
     if [[ "$decoders_out" = /* ]]; then
         decoders_libdir="$decoders_out"
-        decoders_build_out="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$decoders_libdir" "$rive_runtime/decoders")"
+        # macOS exposes /tmp through /private/tmp. Premake resolves its working
+        # directory physically before joining --out, so compute the relative
+        # path from physical paths as well or ../../../Users becomes
+        # /private/Users instead of /Users.
+        decoders_build_out="$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$decoders_libdir" "$rive_runtime/decoders")"
     else
         decoders_libdir="$rive_runtime/decoders/$decoders_out"
         decoders_build_out="$decoders_out"

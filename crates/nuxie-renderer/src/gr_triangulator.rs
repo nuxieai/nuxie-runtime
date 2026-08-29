@@ -282,7 +282,7 @@ impl InnerFanTriangulator {
         direction: SweepDirection,
         fill_rule: FillRule,
     ) -> Self {
-        let determinant = view.0[0] * view.0[3] - view.0[2] * view.0[1];
+        let determinant = crate::draw::mat2d_determinant(view);
         let fill_rule = if fill_rule == FillRule::EvenOdd {
             FillRule::EvenOdd
         } else {
@@ -2072,6 +2072,26 @@ fn recursive_edge_intersection(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inner_fan_uses_pinned_contracted_view_winding() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(1.0, 0.0);
+        path.line_to(0.0, 1.0);
+        path.close();
+        let view = Mat2D([
+            f32::from_bits(0x26cd_29b3),
+            f32::from_bits(0x2533_fdc2),
+            f32::from_bits(0xd01a_d4bb),
+            f32::from_bits(0xce87_d5a9),
+            0.0,
+            0.0,
+        ]);
+        let triangulator =
+            InnerFanTriangulator::new(&path, view, SweepDirection::Horizontal, FillRule::NonZero);
+        assert!(triangulator.reverse_triangles);
+    }
 
     fn direct_grid_path() -> RawPath {
         let mut path = RawPath::new();

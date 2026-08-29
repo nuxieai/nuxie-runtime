@@ -1,6 +1,8 @@
 // Coarsely translated from:
 // /Users/levi/dev/oss/rive-runtime/include/rive/renderer.hpp
 // /Users/levi/dev/oss/rive-runtime/include/rive/factory.hpp
+// /Users/levi/dev/oss/rive-runtime/include/rive/math/vec2d.hpp
+// /Users/levi/dev/oss/rive-runtime/src/math/vec2d.cpp
 // /Users/levi/dev/rive-rust/tools/golden-runner/recording_renderer.cpp
 use std::any::Any;
 use std::cell::{Ref, RefCell, RefMut};
@@ -12,7 +14,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod aabb;
+mod factory;
 mod serializing;
+pub use aabb::{AABBi16, AABBu16, Aabb, AabbInteger, AabbScalarBounds, IntegerAabb, TypedAabb};
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
 pub use serializing::{SerializingFactory, SerializingRenderer};
 
@@ -44,49 +49,170 @@ impl Vec2D {
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
+
+    pub fn length_squared(self) -> f32 {
+        self.x.mul_add(self.x, self.y * self.y)
+    }
+
+    pub fn length(self) -> f32 {
+        self.length_squared().sqrt()
+    }
+
+    pub fn normalized(self) -> Self {
+        let length_squared = self.length_squared();
+        let scale = if length_squared > 0.0 {
+            1.0 / length_squared.sqrt()
+        } else {
+            1.0
+        };
+        self * scale
+    }
+
+    /// Normalize this vector and return its previous length.
+    pub fn normalize_length(&mut self) -> f32 {
+        let length = self.length();
+        if length > 0.0 {
+            self.x /= length;
+            self.y /= length;
+        }
+        length
+    }
+
+    pub fn lerp(a: Self, b: Self, factor: f32) -> Self {
+        a + (b - a) * factor
+    }
+
+    pub fn transform_dir(point: Self, matrix: Mat2D) -> Self {
+        let [xx, yx, xy, yy, _, _] = matrix.0;
+        Self::new(
+            xx.mul_add(point.x, xy * point.y),
+            yx.mul_add(point.x, yy * point.y),
+        )
+    }
+
+    pub fn transform_mat2d(point: Self, matrix: Mat2D) -> Self {
+        let [xx, yx, xy, yy, tx, ty] = matrix.0;
+        Self::new(
+            tx + xx.mul_add(point.x, xy * point.y),
+            ty + yx.mul_add(point.x, yy * point.y),
+        )
+    }
+
+    pub fn dot(a: Self, b: Self) -> f32 {
+        a.x.mul_add(b.x, a.y * b.y)
+    }
+
+    pub fn cross(a: Self, b: Self) -> f32 {
+        a.x.mul_add(b.y, -(a.y * b.x))
+    }
+
+    pub fn scale_and_add(a: Self, b: Self, scale: f32) -> Self {
+        Self::new(b.x.mul_add(scale, a.x), b.y.mul_add(scale, a.y))
+    }
+
+    pub fn distance(a: Self, b: Self) -> f32 {
+        (a - b).length()
+    }
+
+    pub fn distance_squared(a: Self, b: Self) -> f32 {
+        (a - b).length_squared()
+    }
 }
 
-/// Axis-aligned bounds in the same coordinate space as the queried geometry.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Aabb {
-    pub min_x: f32,
-    pub min_y: f32,
-    pub max_x: f32,
-    pub max_y: f32,
+impl std::ops::Neg for Vec2D {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self::new(-self.x, -self.y)
+    }
 }
 
-impl Aabb {
-    pub const fn new(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> Self {
-        Self {
-            min_x,
-            min_y,
-            max_x,
-            max_y,
+impl std::ops::MulAssign<f32> for Vec2D {
+    fn mul_assign(&mut self, scale: f32) {
+        self.x *= scale;
+        self.y *= scale;
+    }
+}
+
+impl std::ops::DivAssign<f32> for Vec2D {
+    fn div_assign(&mut self, scale: f32) {
+        self.x /= scale;
+        self.y /= scale;
+    }
+}
+
+impl std::ops::Sub for Vec2D {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self::new(self.x - rhs.x, self.y - rhs.y)
+    }
+}
+
+impl std::ops::AddAssign for Vec2D {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
+}
+
+impl std::ops::SubAssign for Vec2D {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+    }
+}
+
+impl std::ops::Mul<f32> for Vec2D {
+    type Output = Self;
+
+    fn mul(self, scale: f32) -> Self::Output {
+        Self::new(self.x * scale, self.y * scale)
+    }
+}
+
+impl std::ops::Mul<Vec2D> for f32 {
+    type Output = Vec2D;
+
+    fn mul(self, vector: Vec2D) -> Self::Output {
+        vector * self
+    }
+}
+
+impl std::ops::Div<f32> for Vec2D {
+    type Output = Self;
+
+    fn div(self, scale: f32) -> Self::Output {
+        Self::new(self.x / scale, self.y / scale)
+    }
+}
+
+impl std::ops::Add for Vec2D {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self::new(self.x + rhs.x, self.y + rhs.y)
+    }
+}
+
+impl std::ops::Index<usize> for Vec2D {
+    type Output = f32;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match index {
+            0 => &self.x,
+            1 => &self.y,
+            _ => unreachable!("Vec2D index is outside 0..2"),
         }
     }
+}
 
-    pub fn width(self) -> f32 {
-        self.max_x - self.min_x
-    }
-
-    pub fn height(self) -> f32 {
-        self.max_y - self.min_y
-    }
-
-    /// Inclusive containment, including points on the maximum edges.
-    pub fn contains(self, point: Vec2D) -> bool {
-        point.x >= self.min_x
-            && point.x <= self.max_x
-            && point.y >= self.min_y
-            && point.y <= self.max_y
-    }
-
-    /// Strict-edge overlap from pinned C++ `AABB::overlaps`.
-    pub fn overlaps(self, other: Self) -> bool {
-        self.min_x < other.max_x
-            && self.max_x > other.min_x
-            && self.min_y < other.max_y
-            && self.max_y > other.min_y
+impl std::hash::Hash for Vec2D {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // `std::hash<float>` must hash equal signed zeroes alike.
+        let bits = |value: f32| if value == 0.0 { 0 } else { value.to_bits() };
+        state.write_u32(bits(self.x));
+        state.write_u32(bits(self.y));
     }
 }
 
@@ -123,15 +249,182 @@ impl Fit {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Mat2D(pub [f32; 6]);
 
+#[inline(always)]
+fn map_points_fma(point_lane: f32, matrix_lane: f32, addend_lane: f32) -> f32 {
+    point_lane.mul_add(matrix_lane, addend_lane)
+}
+
 impl Mat2D {
     pub const IDENTITY: Self = Self([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 
     pub fn transform_point(self, point: Vec2D) -> Vec2D {
+        Vec2D::transform_mat2d(point, self)
+    }
+
+    /// Exact scalar owner for pinned `Mat2D::determinant`.
+    #[doc(hidden)]
+    pub fn determinant(self) -> f32 {
+        let [xx, yx, xy, yy, _, _] = self.0;
+        xx.mul_add(yy, -(xy * yx))
+    }
+
+    /// Safe-Rust form of pinned `Mat2D::invert(Mat2D*)`.
+    #[doc(hidden)]
+    pub fn invert(self) -> Option<Self> {
         let [xx, yx, xy, yy, tx, ty] = self.0;
-        Vec2D {
-            x: xx * point.x + xy * point.y + tx,
-            y: yx * point.x + yy * point.y + ty,
+        let determinant = self.determinant();
+        if determinant == 0.0 {
+            return None;
         }
+        let inverse_determinant = 1.0 / determinant;
+        Some(Self([
+            yy * inverse_determinant,
+            -yx * inverse_determinant,
+            -xy * inverse_determinant,
+            xx * inverse_determinant,
+            xy.mul_add(ty, -(yy * tx)) * inverse_determinant,
+            yx.mul_add(tx, -(xx * ty)) * inverse_determinant,
+        ]))
+    }
+
+    /// Exact out-of-line owner for pinned `Mat2D::mapPoints`.
+    ///
+    /// This is public only because the renderer's mechanically translated
+    /// source owners call the same C++ method across the crate boundary.
+    #[doc(hidden)]
+    #[inline(never)]
+    pub fn map_points(self, destination: &mut [Vec2D], source: &[Vec2D]) {
+        assert_eq!(destination.len(), source.len());
+        // SAFETY: both slices have the asserted common length and cannot
+        // overlap through safe references.
+        unsafe {
+            self.map_points_raw(destination.as_mut_ptr(), source.as_ptr(), source.len());
+        }
+    }
+
+    /// Exact in-place form used by pinned `RawPath::addPathBackwards`.
+    #[doc(hidden)]
+    #[inline(never)]
+    pub fn map_points_in_place(self, points: &mut [Vec2D]) {
+        // SAFETY: the raw owner loads each odd or pair batch before writing it.
+        unsafe { self.map_points_raw(points.as_mut_ptr(), points.as_ptr(), points.len()) };
+    }
+
+    #[inline(never)]
+    unsafe fn map_points_raw(self, destination: *mut Vec2D, source: *const Vec2D, count: usize) {
+        let [scale_x, skew_y, skew_x, scale_y, translate_x, translate_y] = self.0;
+        let no_skew = skew_y == 0.0 && skew_x == 0.0;
+        let map = |point: Vec2D| {
+            if no_skew {
+                Vec2D::new(
+                    map_points_fma(point.x, scale_x, translate_x),
+                    map_points_fma(point.y, scale_y, translate_y),
+                )
+            } else {
+                let skewed_x = map_points_fma(point.y, skew_x, translate_x);
+                let skewed_y = map_points_fma(point.x, skew_y, translate_y);
+                Vec2D::new(
+                    map_points_fma(point.x, scale_x, skewed_x),
+                    map_points_fma(point.y, scale_y, skewed_y),
+                )
+            }
+        };
+
+        let mut index = 0;
+        if count & 1 != 0 {
+            let point = unsafe { *source };
+            unsafe { *destination = map(point) };
+            index = 1;
+        }
+        while index < count {
+            let first = unsafe { *source.add(index) };
+            let second = unsafe { *source.add(index + 1) };
+            let mapped_first = map(first);
+            let mapped_second = map(second);
+            unsafe {
+                *destination.add(index) = mapped_first;
+                *destination.add(index + 1) = mapped_second;
+            }
+            index += 2;
+        }
+    }
+
+    /// Exact scalar translation of pinned
+    /// `Mat2D::mapBoundingBox(const Vec2D[], size_t)`.
+    ///
+    /// Pair-lane initialization/reduction, NaN selection, fused affine
+    /// grouping, and translation-after-extrema are all observable parts of
+    /// the source algorithm.
+    pub fn map_bounding_box(self, points: &[Vec2D]) -> Aabb {
+        let [xx, yx, xy, yy, tx, ty] = self.0;
+        let no_skew = yx == 0.0 && xy == 0.0;
+        let mut mins = [f32::INFINITY; 4];
+        let mut maxes = [f32::NEG_INFINITY; 4];
+        let mut index = 0;
+
+        if points.len() & 1 != 0 {
+            let point = points[0];
+            let mapped = if no_skew {
+                [xx * point.x, yy * point.y]
+            } else {
+                [
+                    xx.mul_add(point.x, xy * point.y),
+                    yy.mul_add(point.y, yx * point.x),
+                ]
+            };
+            mins[0] = mapped[0];
+            mins[1] = mapped[1];
+            maxes[0] = mapped[0];
+            maxes[1] = mapped[1];
+            index = 1;
+        }
+
+        while index < points.len() {
+            let first = points[index];
+            let second = points[index + 1];
+            let mapped = if no_skew {
+                [xx * first.x, yy * first.y, xx * second.x, yy * second.y]
+            } else {
+                [
+                    xx.mul_add(first.x, xy * first.y),
+                    yy.mul_add(first.y, yx * first.x),
+                    xx.mul_add(second.x, xy * second.y),
+                    yy.mul_add(second.y, yx * second.x),
+                ]
+            };
+            for lane in 0..4 {
+                // Source order is `simd::min(p, mins)`/`max(p, maxes)`.
+                mins[lane] = aabb::simd_min_f32(mapped[lane], mins[lane]);
+                maxes[lane] = aabb::simd_max_f32(mapped[lane], maxes[lane]);
+            }
+            index += 2;
+        }
+
+        let min_x = aabb::simd_min_f32(mins[0], mins[2]);
+        let min_y = aabb::simd_min_f32(mins[1], mins[3]);
+        let max_x = aabb::simd_max_f32(maxes[0], maxes[2]);
+        let max_y = aabb::simd_max_f32(maxes[1], maxes[3]);
+
+        // Source deliberately uses extent subtraction so equal infinities and
+        // every remaining NaN take the nonfinite/empty normalization branch.
+        let bounds = if !(max_x - min_x >= 0.0 && max_y - min_y >= 0.0) {
+            Aabb::default()
+        } else {
+            Aabb::new(min_x + tx, min_y + ty, max_x + tx, max_y + ty)
+        };
+        debug_assert!(bounds.width() >= 0.0);
+        debug_assert!(bounds.height() >= 0.0);
+        bounds
+    }
+
+    /// Four-corner overload of pinned `Mat2D::mapBoundingBox(const AABB&)`.
+    pub fn map_bounds(self, bounds: Aabb) -> Aabb {
+        self.map_bounding_box(&[
+            Vec2D::new(bounds.min_x, bounds.min_y),
+            Vec2D::new(bounds.max_x, bounds.min_y),
+            Vec2D::new(bounds.max_x, bounds.max_y),
+            Vec2D::new(bounds.min_x, bounds.max_y),
+        ])
     }
 }
 
@@ -402,6 +695,40 @@ impl PartialEq for RawPath {
     }
 }
 
+fn raw_path_simd_bounds(points: &[Vec2D]) -> Aabb {
+    let (mut mins, mut maxes, mut index) = if points.len() & 1 != 0 {
+        let first = points[0];
+        let lanes = [first.x, first.y, first.x, first.y];
+        (lanes, lanes, 1)
+    } else {
+        let lanes = [points[0].x, points[0].y, points[1].x, points[1].y];
+        (lanes, lanes, 2)
+    };
+
+    while index < points.len() {
+        let lanes = [
+            points[index].x,
+            points[index].y,
+            points[index + 1].x,
+            points[index + 1].y,
+        ];
+        for lane in 0..4 {
+            // RawPath's source order is `simd::min(mins, pts)` (the opposite
+            // argument order from Mat2D::mapBoundingBox's pair fold).
+            mins[lane] = aabb::simd_min_f32(mins[lane], lanes[lane]);
+            maxes[lane] = aabb::simd_max_f32(maxes[lane], lanes[lane]);
+        }
+        index += 2;
+    }
+
+    Aabb::new(
+        aabb::simd_min_f32(mins[0], mins[2]),
+        aabb::simd_min_f32(mins[1], mins[3]),
+        aabb::simd_max_f32(maxes[0], maxes[2]),
+        aabb::simd_max_f32(maxes[1], maxes[3]),
+    )
+}
+
 impl RawPath {
     pub fn new() -> Self {
         Self {
@@ -431,17 +758,7 @@ impl RawPath {
 
     /// Coarse control-point bounds, matching C++ `RawPath::bounds()`.
     pub fn bounds(&self) -> Option<Aabb> {
-        let first = *self.points.first()?;
-        Some(self.points.iter().copied().fold(
-            Aabb::new(first.x, first.y, first.x, first.y),
-            |mut bounds, point| {
-                bounds.min_x = bounds.min_x.min(point.x);
-                bounds.min_y = bounds.min_y.min(point.y);
-                bounds.max_x = bounds.max_x.max(point.x);
-                bounds.max_y = bounds.max_y.max(point.y);
-                bounds
-            },
-        ))
+        (!self.points.is_empty()).then(|| raw_path_simd_bounds(&self.points))
     }
 
     /// Exact Bézier extrema bounds, matching C++ `RawPath::preciseBounds()`.
@@ -686,12 +1003,12 @@ impl RawPath {
             // avoiding needless affine work, this preserves signed zero.
             self.points.extend_from_slice(&path.points);
         } else {
-            self.points.extend(
-                path.points
-                    .iter()
-                    .copied()
-                    .map(|point| map_raw_path_point(transform, point)),
+            let initial_point_count = self.points.len();
+            self.points.resize(
+                initial_point_count + path.points.len(),
+                Vec2D::new(0.0, 0.0),
             );
+            transform.map_points(&mut self.points[initial_point_count..], &path.points);
         }
     }
 
@@ -704,16 +1021,9 @@ impl RawPath {
         let initial_verb_count = self.verbs.len();
         let initial_point_count = self.points.len();
         self.points.reserve(path.points.len());
-        if transform == Mat2D::IDENTITY {
-            self.points.extend(path.points.iter().rev().copied());
-        } else {
-            self.points.extend(
-                path.points
-                    .iter()
-                    .rev()
-                    .copied()
-                    .map(|point| map_raw_path_point(transform, point)),
-            );
+        self.points.extend(path.points.iter().rev().copied());
+        if transform != Mat2D::IDENTITY {
+            transform.map_points_in_place(&mut self.points[initial_point_count..]);
         }
 
         // Reverse the verbs while moving each close from the end of its
@@ -847,13 +1157,12 @@ impl RawPath {
 
 fn include_raw_path_point(bounds: &mut Option<Aabb>, point: Vec2D) {
     match bounds {
-        Some(bounds) => {
-            bounds.min_x = bounds.min_x.min(point.x);
-            bounds.min_y = bounds.min_y.min(point.y);
-            bounds.max_x = bounds.max_x.max(point.x);
-            bounds.max_y = bounds.max_y.max(point.y);
+        Some(bounds) => bounds.expand_to(point),
+        None => {
+            let mut first = Aabb::for_expansion();
+            first.expand_to(point);
+            *bounds = Some(first);
         }
-        None => *bounds = Some(Aabb::new(point.x, point.y, point.x, point.y)),
     }
 }
 
@@ -898,17 +1207,6 @@ fn raw_path_cubic_value(start: f32, outer: f32, inner: f32, end: f32, t: f32) ->
         + 3.0 * one_minus_t * one_minus_t * t * outer
         + 3.0 * one_minus_t * t * t * inner
         + t * t * t * end
-}
-
-fn map_raw_path_point(transform: Mat2D, point: Vec2D) -> Vec2D {
-    let [xx, yx, xy, yy, tx, ty] = transform.0;
-    // C++ RawPath::addPath maps in batches through Mat2D::mapPoints. Its SIMD
-    // affine branch groups skew with translation before adding scale and uses
-    // fused multiply-adds on supported targets.
-    Vec2D {
-        x: xx.mul_add(point.x, xy.mul_add(point.y, tx)),
-        y: yy.mul_add(point.y, yx.mul_add(point.x, ty)),
-    }
 }
 
 impl Default for RawPath {
@@ -1062,6 +1360,13 @@ pub trait RenderImage: Any {
     fn height(&self) -> u32;
     fn uv_transform(&self) -> Mat2D {
         Mat2D::IDENTITY
+    }
+
+    /// Install the owner callback used by asynchronously decoded browser
+    /// images. Backends whose `decode_image` result is already complete keep
+    /// the default: there is no later completion event to report.
+    fn set_decoded_async_callback(&mut self, callback: Option<Rc<dyn Fn()>>) {
+        drop(callback);
     }
 }
 
@@ -1929,15 +2234,12 @@ impl std::error::Error for FontDecodeError {}
 /// Factories call this shared owner so renderer adapters do not duplicate the
 /// exact HarfRust validation and byte-retention behavior.
 pub fn decode_font_bytes(data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
-    harfrust::FontRef::new(data).map_err(|_| FontDecodeError)?;
-    Ok(DecodedFont {
-        bytes: Arc::from(data),
-    })
+    factory::decode_font(data)
 }
 
 /// Backend-independent implementation of pinned `Factory::decodeAudio`.
 pub fn decode_audio_bytes(data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
-    AudioSource::from_encoded(data.to_vec()).map(Arc::new)
+    factory::decode_audio(data)
 }
 
 pub trait RenderPaint: Any {
@@ -2179,9 +2481,7 @@ pub trait Factory {
     /// Direct port of `src/factory.cpp:15-20`; the default keeps the pinned
     /// nonvirtual behavior layered on the adapter-specific raw-path constructor.
     fn make_render_path_from_aabb(&mut self, bounds: Aabb) -> Box<dyn RenderPath> {
-        let mut raw_path = RawPath::new();
-        raw_path.add_rect(bounds);
-        self.make_render_path(raw_path, FillRule::NonZero)
+        factory::make_render_path_from_aabb(self, bounds)
     }
 
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath>;
@@ -2217,7 +2517,7 @@ pub trait Factory {
     /// HarfRust is the project's verified HarfBuzz port, and the owned byte
     /// snapshot supplies the backend views that C++ retains through `HBFont`.
     fn decode_font(&mut self, data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
-        decode_font_bytes(data)
+        factory::decode_font(data)
     }
 
     /// Validate and take ownership of encoded audio bytes.
@@ -2225,7 +2525,7 @@ pub trait Factory {
     /// This is the Rust counterpart of C++ `Factory::decodeAudio`: a
     /// non-renderer-specific helper on the Factory seam, not a backend hook.
     fn decode_audio(&mut self, data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
-        decode_audio_bytes(data)
+        factory::decode_audio(data)
     }
 
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
@@ -2314,6 +2614,123 @@ pub trait Factory {
         };
         let fragment = pipeline.fragment.as_ref().unwrap_or(&pipeline.vertex);
         self.make_gpu_canvas_image(&pipeline.vertex, fragment, plan)
+    }
+}
+
+// A type-erased proxy borrows the concrete factory for each operation, not for
+// the surrounding script callback. That callback can enter an artboard which
+// retains this same factory identity without manufacturing an aliasing &mut.
+impl Factory for PersistentFactoryContext {
+    fn persistent_context(&self) -> Option<PersistentFactoryContext> {
+        Some(self.clone())
+    }
+    fn make_render_buffer(
+        &mut self,
+        kind: RenderBufferType,
+        flags: RenderBufferFlags,
+        size: usize,
+    ) -> Box<dyn RenderBuffer> {
+        self.with_factory(|factory| factory.make_render_buffer(kind, flags, size))
+    }
+    fn make_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.with_factory(|factory| factory.make_linear_gradient(sx, sy, ex, ey, colors, stops))
+    }
+    fn make_radial_gradient(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.with_factory(|factory| factory.make_radial_gradient(cx, cy, radius, colors, stops))
+    }
+    fn make_render_path(&mut self, path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
+        self.with_factory(|factory| factory.make_render_path(path, fill_rule))
+    }
+    fn make_render_path_from_aabb(&mut self, bounds: Aabb) -> Box<dyn RenderPath> {
+        self.with_factory(|factory| factory.make_render_path_from_aabb(bounds))
+    }
+    fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+        self.with_factory(|factory| factory.make_empty_render_path())
+    }
+    fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+        self.with_factory(|factory| factory.make_render_paint())
+    }
+    fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.with_factory(|factory| factory.decode_image(data))
+    }
+    fn decode_font(&mut self, data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
+        self.with_factory(|factory| factory.decode_font(data))
+    }
+    fn decode_audio(&mut self, data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
+        self.with_factory(|factory| factory.decode_audio(data))
+    }
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.with_factory(|factory| factory.make_render_canvas(width, height))
+    }
+    fn make_gpu_canvas_image_view(
+        &mut self,
+        image: Rc<dyn RenderImage>,
+    ) -> Result<Rc<dyn RenderImage>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_image_view(image))
+    }
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        self.with_factory(|factory| factory.gpu_canvas_shader_profile())
+    }
+    fn make_gpu_canvas_shader(
+        &mut self,
+        shader: &GpuCanvasShader,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_shader(shader))
+    }
+    fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
+        self.with_factory(|factory| factory.load_gpu_canvas_shader(shader))
+    }
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_shader_artifact(shader))
+    }
+    fn load_gpu_canvas_shader_artifact(
+        &mut self,
+        shader: &GpuCanvasShaderArtifact,
+    ) -> GpuCanvasShaderLoad {
+        self.with_factory(|factory| factory.load_gpu_canvas_shader_artifact(shader))
+    }
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_shader_occurrence(prepared))
+    }
+    fn make_gpu_canvas_image(
+        &mut self,
+        vertex: &Arc<dyn RenderGpuCanvasShader>,
+        fragment: &Arc<dyn RenderGpuCanvasShader>,
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_image(vertex, fragment, plan))
+    }
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
+        self.with_factory(|factory| factory.make_gpu_canvas_image_with_pipelines(pipelines, plan))
     }
 }
 
@@ -4541,6 +4958,57 @@ mod tests {
     use super::*;
 
     #[test]
+    fn mat2d_point_transform_preserves_pinned_cpp_operator_contraction_bits() {
+        // Literal outputs from the pinned arm64 C++ matrix-vector operator,
+        // compiled with `-O3 -ffp-contract=on`.
+        let contraction = Mat2D([1.000_000_1, 1.000_000_1, 1.000_000_1, 1.000_000_1, 0.0, 0.0]);
+        let transformed =
+            contraction.transform_point(Vec2D::new(std::f32::consts::PI, -2.718_281_7));
+        assert_eq!(
+            [transformed.x.to_bits(), transformed.y.to_bits()],
+            [0x3ed8_bc3d, 0x3ed8_bc3d]
+        );
+
+        // This oracle also proves translation remains a separate final add,
+        // rather than using RawPath/Mat2D::mapPoints' nested FMA grouping.
+        let translation_grouping = Mat2D([
+            f32::from_bits(0xbf18_5aa5),
+            f32::from_bits(0xbf18_5aa5),
+            f32::from_bits(0x3f5b_24a3),
+            f32::from_bits(0x3f5b_24a3),
+            f32::from_bits(0x3f20_f4c4),
+            f32::from_bits(0x3f20_f4c4),
+        ]);
+        let transformed = translation_grouping.transform_point(Vec2D::new(
+            f32::from_bits(0xbf33_ac98),
+            f32::from_bits(0x3f3a_0788),
+        ));
+        assert_eq!(
+            [transformed.x.to_bits(), transformed.y.to_bits()],
+            [0x3fd5_90f7, 0x3fd5_90f7]
+        );
+
+        // ARM64's final fadd preserves its left operand's qNaN payload. The
+        // pinned operator places translation on that side of the final add.
+        let linear_nan = f32::from_bits(0x7fc0_aaaa);
+        let translation_nan = f32::from_bits(0x7fc0_bbbb);
+        let transformed = Mat2D([
+            linear_nan,
+            linear_nan,
+            0.0,
+            0.0,
+            translation_nan,
+            translation_nan,
+        ])
+        .transform_point(Vec2D::new(1.0, 1.0));
+        assert_eq!(
+            [transformed.x.to_bits(), transformed.y.to_bits()],
+            [0x7fc0_bbbb, 0x7fc0_bbbb],
+            "expected qNaN payload bits captured from pinned ARM64 C++"
+        );
+    }
+
+    #[test]
     fn encoded_image_metadata_reports_supported_raster_identity() {
         let mut png = vec![0; 24];
         png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
@@ -4578,6 +5046,166 @@ mod tests {
         distinct_object.renew_mutation_id();
         assert_eq!(distinct_object, snapshot);
         assert_ne!(distinct_object.mutation_id(), snapshot.mutation_id());
+    }
+
+    #[test]
+    fn raw_path_bounds_use_the_shared_pinned_aabb_extrema_contracts() {
+        let mut signed_zero = RawPath::new();
+        signed_zero.move_to(0.0, 0.0);
+        signed_zero.line_to(-0.0, -0.0);
+        let bounds = signed_zero.bounds().expect("nonempty path has bounds");
+        assert_eq!(bounds.min_x.to_bits(), (-0.0_f32).to_bits());
+        assert_eq!(bounds.min_y.to_bits(), (-0.0_f32).to_bits());
+        assert_eq!(bounds.max_x.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(bounds.max_y.to_bits(), 0.0_f32.to_bits());
+
+        let mut first_nan = RawPath::new();
+        first_nan.move_to(f32::NAN, f32::NAN);
+        first_nan.line_to(2.0, 3.0);
+        let bounds = first_nan.bounds().expect("nonempty path has bounds");
+        assert_eq!(bounds, Aabb::new(2.0, 3.0, 2.0, 3.0));
+
+        let mut second_nan = RawPath::new();
+        second_nan.move_to(2.0, 3.0);
+        second_nan.line_to(f32::NAN, f32::NAN);
+        assert_eq!(second_nan.bounds(), Some(Aabb::new(2.0, 3.0, 2.0, 3.0)));
+
+        // Odd point counts seed duplicated lanes from point zero, then fold
+        // pairs. This catches replacing the source lane algorithm with a
+        // scalar point-at-a-time reduction.
+        let mut odd = RawPath::new();
+        odd.move_to(f32::from_bits(0x7fc0_1111), -0.0);
+        odd.line_to(4.0, 0.0);
+        odd.line_to(2.0, 8.0);
+        let bounds = odd.bounds().expect("odd path bounds");
+        assert_eq!(
+            [
+                bounds.min_x.to_bits(),
+                bounds.min_y.to_bits(),
+                bounds.max_x.to_bits(),
+                bounds.max_y.to_bits(),
+            ],
+            [
+                2.0_f32.to_bits(),
+                (-0.0_f32).to_bits(),
+                4.0_f32.to_bits(),
+                8.0_f32.to_bits()
+            ]
+        );
+
+        let mut reversed_zero = RawPath::new();
+        reversed_zero.move_to(-0.0, -0.0);
+        reversed_zero.line_to(0.0, 0.0);
+        let bounds = reversed_zero.bounds().expect("two-point zero bounds");
+        assert_eq!(
+            [
+                bounds.min_x.to_bits(),
+                bounds.min_y.to_bits(),
+                bounds.max_x.to_bits(),
+                bounds.max_y.to_bits(),
+            ],
+            [
+                (-0.0_f32).to_bits(),
+                (-0.0_f32).to_bits(),
+                0.0_f32.to_bits(),
+                0.0_f32.to_bits(),
+            ]
+        );
+
+        let mut infinities = RawPath::new();
+        infinities.move_to(f32::NEG_INFINITY, f32::INFINITY);
+        infinities.line_to(f32::INFINITY, f32::NEG_INFINITY);
+        let bounds = infinities.bounds().expect("infinite bounds");
+        assert_eq!(
+            [
+                bounds.min_x.to_bits(),
+                bounds.min_y.to_bits(),
+                bounds.max_x.to_bits(),
+                bounds.max_y.to_bits(),
+            ],
+            [
+                f32::NEG_INFINITY.to_bits(),
+                f32::NEG_INFINITY.to_bits(),
+                f32::INFINITY.to_bits(),
+                f32::INFINITY.to_bits(),
+            ]
+        );
+
+        let mut precise_nan = RawPath::new();
+        precise_nan.move_to(f32::NAN, f32::NAN);
+        assert_eq!(precise_nan.precise_bounds(), Some(Aabb::for_expansion()),);
+    }
+
+    #[test]
+    fn map_bounding_box_preserves_pinned_pair_lanes_and_nonfinite_normalization() {
+        let signed_zero_translation = Mat2D([1.0, 0.0, 0.0, 1.0, -0.0, -0.0]);
+        let forward = signed_zero_translation
+            .map_bounding_box(&[Vec2D::new(0.0, 0.0), Vec2D::new(-0.0, -0.0)]);
+        assert_eq!(
+            [
+                forward.min_x.to_bits(),
+                forward.min_y.to_bits(),
+                forward.max_x.to_bits(),
+                forward.max_y.to_bits(),
+            ],
+            [
+                (-0.0_f32).to_bits(),
+                (-0.0_f32).to_bits(),
+                0.0_f32.to_bits(),
+                0.0_f32.to_bits(),
+            ]
+        );
+
+        let reverse = signed_zero_translation
+            .map_bounding_box(&[Vec2D::new(-0.0, -0.0), Vec2D::new(0.0, 0.0)]);
+        assert_eq!(
+            [
+                reverse.min_x.to_bits(),
+                reverse.min_y.to_bits(),
+                reverse.max_x.to_bits(),
+                reverse.max_y.to_bits(),
+            ],
+            [
+                (-0.0_f32).to_bits(),
+                (-0.0_f32).to_bits(),
+                0.0_f32.to_bits(),
+                0.0_f32.to_bits(),
+            ]
+        );
+
+        let infinite_x = Mat2D([f32::INFINITY, 0.0, 0.0, 1.0, 19.0, 23.0])
+            .map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0));
+        assert_eq!(
+            [
+                infinite_x.min_x.to_bits(),
+                infinite_x.min_y.to_bits(),
+                infinite_x.max_x.to_bits(),
+                infinite_x.max_y.to_bits(),
+            ],
+            [0; 4],
+            "pinned source normalizes the nonfinite linear result before translation"
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic]
+    fn map_bounding_box_retains_pinned_post_translation_extent_assertions() {
+        Mat2D([1.0, 0.0, 0.0, 1.0, f32::INFINITY, 0.0])
+            .map_bounding_box(&[Vec2D::new(0.0, 0.0), Vec2D::new(1.0, 1.0)]);
+    }
+
+    #[test]
+    fn float_aabb_repr_c_runtime_layout_matches_four_contiguous_floats() {
+        let bounds = Aabb::new(1.25, -2.5, 3.75, -4.5);
+        assert_eq!(std::mem::size_of::<Aabb>(), 4 * std::mem::size_of::<f32>());
+        assert_eq!(std::mem::align_of::<Aabb>(), std::mem::align_of::<f32>());
+        assert_eq!(std::mem::offset_of!(Aabb, min_x), 0);
+        assert_eq!(std::mem::offset_of!(Aabb, min_y), 4);
+        assert_eq!(std::mem::offset_of!(Aabb, max_x), 8);
+        assert_eq!(std::mem::offset_of!(Aabb, max_y), 12);
+        let floats = unsafe { std::slice::from_raw_parts((&raw const bounds).cast::<f32>(), 4) };
+        assert_eq!(floats, &[1.25, -2.5, 3.75, -4.5]);
     }
 
     #[test]
@@ -4684,6 +5312,37 @@ mod tests {
 
         assert_eq!(transformed.points()[0].x.to_bits(), 0x42e9_56cc);
         assert_eq!(transformed.points()[0].y.to_bits(), 0xc044_f68f);
+
+        #[cfg(target_arch = "aarch64")]
+        let zero_skew_matrix = std::hint::black_box(Mat2D([
+            f32::from_bits(0x007f_ffff),
+            f32::from_bits(0x8000_0000),
+            f32::from_bits(0x8000_0000),
+            f32::from_bits(0x007f_ffff),
+            f32::from_bits(0x7fa0_1234),
+            f32::from_bits(0x7f80_0000),
+        ]));
+        #[cfg(target_arch = "aarch64")]
+        let mut exceptional = RawPath::new();
+        #[cfg(target_arch = "aarch64")]
+        exceptional.move_to(f32::from_bits(0x7f80_0000), f32::from_bits(0x8000_0000));
+        #[cfg(target_arch = "aarch64")]
+        let mut forward = RawPath::new();
+        #[cfg(target_arch = "aarch64")]
+        forward.add_path(&exceptional, zero_skew_matrix);
+        #[cfg(target_arch = "aarch64")]
+        assert!(forward.points()[0].x.is_nan());
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(forward.points()[0].y.to_bits(), 0x7f80_0000);
+
+        #[cfg(target_arch = "aarch64")]
+        let mut backwards = RawPath::new();
+        #[cfg(target_arch = "aarch64")]
+        backwards.add_path_backwards(&exceptional, zero_skew_matrix);
+        #[cfg(target_arch = "aarch64")]
+        assert!(backwards.points()[0].x.is_nan());
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(backwards.points()[0].y.to_bits(), 0x7f80_0000);
     }
 
     fn assert_backwards_round_trip(path: &RawPath) {

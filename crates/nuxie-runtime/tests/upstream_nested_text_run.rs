@@ -3,9 +3,14 @@
 
 use std::path::PathBuf;
 
-use nuxie_binary::read_runtime_file;
-use nuxie_graph::GraphFile;
-use nuxie_runtime::ArtboardInstance;
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::source::{
+    generated::{core_registry::CoreRegistry, text::text_value_run_base::TextValueRunBase},
+    text::text_value_run::TextValueRun,
+};
+use nuxie_runtime::{
+    Artboard, File, ImportResult, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle,
+};
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -17,29 +22,53 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
 }
 
-fn nested_text_run(_artboard: &mut ArtboardInstance, _run: &str, _path: &str) -> Vec<u8> {
-    panic!("Rust has no named nested TextValueRun path lookup owner")
+fn nested_text_run(artboard: &mut RuntimeArtboardInstanceHandle, run: &str, path: &str) -> Vec<u8> {
+    let run = artboard
+        .with_artboard(|artboard| artboard.get_text_run(run, path))
+        .expect("nested TextValueRun");
+    assert!(run.is_type_of(TextValueRunBase::TYPE_KEY));
+    run.with_downcast::<TextValueRun, _>(|run| run.base.text().as_bytes().to_vec())
+        .unwrap()
 }
 
-fn set_nested_text_run(_artboard: &mut ArtboardInstance, _run: &str, _path: &str, _value: &[u8]) {
-    panic!("Rust has no named nested TextValueRun path mutation owner")
+fn set_nested_text_run(
+    artboard: &mut RuntimeArtboardInstanceHandle,
+    run: &str,
+    path: &str,
+    value: &[u8],
+) {
+    let run = artboard
+        .with_artboard(|artboard| artboard.get_text_run(run, path))
+        .expect("nested TextValueRun");
+    assert!(CoreRegistry::set_string_handle(
+        &run,
+        i32::from(TextValueRunBase::TEXT_PROPERTY_KEY),
+        std::str::from_utf8(value).unwrap().to_owned()
+    ));
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no getTextRun(run, nested_path) equivalent"]
 fn validate_nested_text_get_set() {
-    let file = read_runtime_file(&pinned_fixture("runtime_nested_text_runs.riv"))
-        .expect("runtime_nested_text_runs.riv imports");
-    let graphs =
-        GraphFile::from_runtime_file(&file).expect("runtime_nested_text_runs.riv graph builds");
-    let graph = graphs
-        .artboards
-        .iter()
-        .find(|artboard| artboard.name.as_deref() == Some("ArtboardA"))
-        .expect("ArtboardA graph");
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("ArtboardA instantiates");
-    assert_eq!(artboard.state_machines().len(), 1);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let mut result = ImportResult::Malformed;
+    let file = File::import(
+        &pinned_fixture("runtime_nested_text_runs.riv"),
+        retained,
+        Some(&mut result),
+        None,
+        None,
+    )
+    .expect("runtime_nested_text_runs.riv imports");
+    assert_eq!(result, ImportResult::Success);
+    let source = file
+        .with_file(|file| file.artboard_named_source("ArtboardA"))
+        .expect("ArtboardA");
+    let mut artboard = Artboard::instance_from_handle(&source).expect("ArtboardA instantiates");
+    assert_eq!(
+        artboard.with_artboard(|artboard| artboard.state_machine_count()),
+        1
+    );
 
     assert_eq!(
         nested_text_run(&mut artboard, "ArtboardBRun", "ArtboardB-1"),

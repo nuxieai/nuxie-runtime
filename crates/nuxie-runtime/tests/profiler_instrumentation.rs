@@ -1,8 +1,7 @@
-use nuxie_binary::read_runtime_file;
-use nuxie_graph::GraphFile;
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::{
-    ArtboardInstance, ProfileCapture, ProfileCaptureFrame, ProfileCaptureMetadata,
-    TransitionRecord, with_rive_profile,
+    File, ProfileCapture, ProfileCaptureFrame, ProfileCaptureMetadata,
+    RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, TransitionRecord, with_rive_profile,
 };
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -46,11 +45,13 @@ fn fixture(relative: &str) -> PathBuf {
         .join(relative)
 }
 
-fn artboard_instance(relative: &str) -> ArtboardInstance {
+fn artboard_instance(relative: &str) -> RuntimeArtboardInstanceHandle {
     let bytes = std::fs::read(fixture(relative)).expect("read profiler hook fixture");
-    let file = read_runtime_file(&bytes).expect("import profiler hook fixture");
-    let graph = GraphFile::from_runtime_file(&file).expect("build profiler hook graph");
-    ArtboardInstance::from_graph_with_artboards(&file, &graph.artboards[0], &graph.artboards)
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file =
+        File::import(&bytes, factory, None, None, None).expect("import profiler hook fixture");
+    file.with_file(File::artboard_default)
         .expect("instantiate profiler hook artboard")
 }
 
@@ -73,9 +74,11 @@ fn production_transition_hook_emits_runtime_names_and_root_path() {
         profile.start();
     });
 
-    let mut artboard = artboard_instance("fixtures/animation/state_machine_transition.riv");
-    let mut machine = artboard.state_machine_instance(0).expect("state machine");
-    artboard.advance_state_machine_instance(&mut machine, 0.0);
+    let artboard = artboard_instance("fixtures/animation/state_machine_transition.riv");
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("state machine");
+    machine.advance_and_apply(0.0);
 
     let strings = with_rive_profile(|profile| {
         profile.flush_transition_records();

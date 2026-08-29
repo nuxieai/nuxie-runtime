@@ -28,6 +28,10 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 struct EmptyScriptArtboard;
 
 impl ScriptArtboard for EmptyScriptArtboard {
+    fn retained_handle(&self) -> Box<dyn ScriptArtboard> {
+        Box::new(Self)
+    }
+
     fn width(&self) -> f32 {
         0.0
     }
@@ -45,6 +49,26 @@ impl ScriptArtboard for EmptyScriptArtboard {
     fn set_height(&mut self, _height: f32) {}
 
     fn set_frame_origin(&mut self, _frame_origin: bool) {}
+
+    fn bounds(&self) -> nuxie_render_api::Aabb {
+        nuxie_render_api::Aabb::new(0.0, 0.0, 0.0, 0.0)
+    }
+
+    fn add_to_path(
+        &mut self,
+        _path: &mut nuxie_render_api::RawPath,
+        _transform: Option<nuxie_render_api::Mat2D>,
+    ) -> Result<(), ScriptError> {
+        Ok(())
+    }
+
+    fn dispatch_input(
+        &mut self,
+        _method: ScriptMethod,
+        _invocation: &nuxie_runtime::ScriptListenerInvocation,
+    ) -> Result<u32, ScriptError> {
+        Ok(0)
+    }
 
     fn instance(
         &self,

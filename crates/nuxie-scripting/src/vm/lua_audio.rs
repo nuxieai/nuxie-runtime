@@ -1,11 +1,13 @@
 //! Direct owner for pinned `src/lua/lua_audio.cpp`.
 
+#[cfg(feature = "tools")]
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use luaur_rt::{Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
+use luaur_rt::{Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_runtime::{AudioEngine, AudioSound, AudioSource, RuntimeAudioAssetOwners};
 
 struct ScriptedAudioSource(Arc<AudioSource>);
@@ -17,6 +19,30 @@ impl UserData for ScriptedAudioSource {
 }
 
 struct ScriptedAudioSound(AudioSound);
+
+#[cfg(feature = "tools")]
+#[derive(Clone, Default)]
+pub(super) struct ScriptedAudioToolsState {
+    is_playing: Rc<Cell<bool>>,
+}
+
+#[cfg(feature = "tools")]
+impl ScriptedAudioToolsState {
+    pub(super) fn install(lua: &Lua) -> Self {
+        let state = Self::default();
+        lua.set_app_data(state.clone());
+        state
+    }
+
+    pub(super) fn set_is_playing(&self, value: bool) {
+        self.is_playing.set(value);
+    }
+
+    fn allows_playback(lua: &Lua) -> bool {
+        lua.app_data_ref::<Self>()
+            .map_or(true, |state| state.is_playing.get())
+    }
+}
 
 impl UserData for ScriptedAudioSound {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
@@ -151,10 +177,10 @@ fn install_play_method(
 ) -> Result<()> {
     let function = lua.create_function(move |lua, arguments: luaur_rt::MultiValue| {
         let Some(Value::UserData(source)) = arguments.front() else {
-            return Ok(Value::Nil);
+            return Ok(MultiValue::from_vec(vec![Value::Nil]));
         };
         let Ok(source) = source.borrow::<ScriptedAudioSource>() else {
-            return Ok(Value::Nil);
+            return Ok(MultiValue::from_vec(vec![Value::Nil]));
         };
         let source = Arc::clone(&source.0);
         let time = if has_time {
@@ -176,7 +202,12 @@ fn play_source(
     time: f64,
     frames: bool,
     relative: bool,
-) -> Result<Value> {
+) -> Result<MultiValue> {
+    #[cfg(feature = "tools")]
+    if !ScriptedAudioToolsState::allows_playback(lua) {
+        return Ok(MultiValue::new());
+    }
+
     let engine = AudioEngine::runtime_engine();
     let sound = if frames {
         let mut start = number_to_frame(time);
@@ -194,8 +225,8 @@ fn play_source(
     match sound {
         Some(sound) => lua
             .create_userdata(ScriptedAudioSound(sound))
-            .map(Value::UserData),
-        None => Ok(Value::Nil),
+            .map(|sound| MultiValue::from_vec(vec![Value::UserData(sound)])),
+        None => Ok(MultiValue::new()),
     }
 }
 
@@ -212,9 +243,13 @@ fn number_to_frame(value: f64) -> u64 {
 #[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static AUDIO_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn audio_source_sound_and_static_queries_match_the_pinned_lua_surface() {
+        let _guard = AUDIO_TEST_LOCK.lock().expect("audio test lock");
         let lua = Lua::new();
         let assets = ScriptedAudioAssets::install(&lua);
         install_audio_global(&lua).expect("Audio global");
@@ -247,5 +282,53 @@ mod tests {
         assert!(seek);
         assert_eq!(frame, 0.0);
         assert_eq!(engine.playing_sound_count(), 1);
+    }
+
+    #[cfg(feature = "tools")]
+    #[test]
+    fn tools_play_methods_require_the_vm_playing_context() {
+        let _guard = AUDIO_TEST_LOCK.lock().expect("audio test lock");
+        let lua = Lua::new();
+        let assets = ScriptedAudioAssets::install(&lua);
+        let tools = ScriptedAudioToolsState::install(&lua);
+        install_audio_global(&lua).expect("Audio global");
+        let engine = AudioEngine::make_and_store(1, 4).expect("runtime engine");
+        assets.register(
+            "tone",
+            Arc::new(AudioSource::from_buffered(vec![0.25, 0.5, 0.75, 1.0], 1, 4).expect("source")),
+        );
+        lua.globals()
+            .set(
+                "source",
+                match ScriptedAudioAssets::lookup(&lua, "tone").expect("lookup") {
+                    Value::UserData(source) => source,
+                    _ => panic!("audio source userdata"),
+                },
+            )
+            .expect("source global");
+
+        let counts: (i64, i64, i64, i64, i64) = lua
+            .load(
+                "return select('#', Audio.play(source)),\n\
+                 select('#', Audio.playAtTime(source, 0)),\n\
+                 select('#', Audio.playInTime(source, 0)),\n\
+                 select('#', Audio.playAtFrame(source, 0)),\n\
+                 select('#', Audio.playInFrame(source, 0))",
+            )
+            .eval()
+            .expect("tools-disabled calls");
+        assert_eq!(counts, (0, 0, 0, 0, 0));
+        assert_eq!(engine.playing_sound_count(), 0);
+
+        tools.set_is_playing(true);
+        let enabled: (bool, bool) = lua
+            .load(
+                "return Audio.playAtTime(source, 0) ~= nil,\n\
+                 Audio.playAtFrame(source, 0) ~= nil",
+            )
+            .eval()
+            .expect("tools-enabled calls");
+        assert_eq!(enabled, (true, true));
+        assert_eq!(engine.playing_sound_count(), 2);
     }
 }

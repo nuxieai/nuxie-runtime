@@ -1,9 +1,10 @@
 //! One-for-one ports of `tests/unit_tests/runtime/scripting/scripting_vector_test.cpp`.
 #![cfg(feature = "luau")]
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use luaur_rt::Lua;
 use nuxie_scripting::vm::ScriptVm;
 
 mod support;
@@ -24,8 +25,10 @@ fn eval_bool(source: &str) -> bool {
 }
 
 fn assert_approx(actual: f64, expected: f64) {
+    let expected = expected as f32;
+    let scale = f64::from(f32::EPSILON) * 100.0 * f64::from(expected.abs());
     assert!(
-        (actual - expected).abs() <= 1e-6,
+        (actual - f64::from(expected)).abs() <= scale,
         "expected approximately {expected}, got {actual}"
     );
 }
@@ -108,6 +111,96 @@ fn vector_static_cross_scale_and_add_scale_and_sub_work() {
         eval_number("return Vector.scaleAndSub(Vector.xy(7,10),Vector.xy(3,4),2).y"),
         2.0
     );
+}
+
+#[test]
+fn vector_arithmetic_preserves_pinned_finite_operation_boundaries() {
+    let result: (f64, f64, f64, f64, f64, f64) = rive_vm()
+        .eval(
+            r#"
+            local function f32(bits)
+                local bytes = buffer.create(4)
+                buffer.writeu32(bytes, 0, bits)
+                return buffer.readf32(bytes, 0)
+            end
+            local a = Vector.xy(f32(0x26cd29b3), f32(0xd01ad4bb))
+            local b = Vector.xy(f32(0x2533fdc2), f32(0xce87d5a9))
+            local dotA = Vector.xy(a.x, -a.y)
+            local dotB = Vector.xy(b.y, b.x)
+            local add = Vector.scaleAndAdd(
+                Vector.xy(f32(0x3c3a6d8a), 0),
+                Vector.xy(f32(0x657c889f), 0),
+                f32(0x1b04ab9a))
+            local sub = Vector.scaleAndSub(
+                Vector.xy(f32(0xe57cdbac), 0),
+                Vector.xy(f32(0x274eb337), 0),
+                f32(0xfeb9d18b))
+            local dot3 = Vector.dot(
+                Vector.xyz(f32(0x9df19f7b), f32(0x798a0a05), f32(0x6f23eac1)),
+                Vector.xyz(f32(0xce8f7739), f32(0x83afb59e), f32(0x0e2d7815)))
+            local cross3 = Vector.cross3(
+                Vector.xyz(0, a.x, a.y),
+                Vector.xyz(0, b.x, b.y))
+            return Vector.cross(a, b), Vector.dot(dotA, dotB), add.x, sub.x, dot3, cross3.x
+            "#,
+        )
+        .unwrap();
+
+    assert_eq!((result.0 as f32).to_bits(), 0xa7ee_c560);
+    assert_eq!((result.1 as f32).to_bits(), 0xa7ee_c560);
+    assert_eq!((result.2 as f32).to_bits(), 0x4103_0e55);
+    assert_eq!((result.3 as f32).to_bits(), 0x666c_da7c);
+    assert_eq!((result.4 as f32).to_bits(), 0x3c82_9e03);
+    assert_eq!((result.5 as f32).to_bits(), 0xa7ee_c560);
+
+    let indirect: (f64, f64, f64, f64) = rive_vm()
+        .eval(
+            r#"
+            local function f32(bits)
+                local bytes = buffer.create(4)
+                buffer.writeu32(bytes, 0, bits)
+                return buffer.readf32(bytes, 0)
+            end
+            local functions = {
+                Vector.cross,
+                Vector.dot,
+                Vector.scaleAndAdd,
+                Vector.scaleAndSub,
+            }
+            local a = Vector.xy(f32(0x26cd29b3), f32(0xd01ad4bb))
+            local b = Vector.xy(f32(0x2533fdc2), f32(0xce87d5a9))
+            local dotA = Vector.xy(a.x, -a.y)
+            local dotB = Vector.xy(b.y, b.x)
+            local add = functions[3](
+                Vector.xy(f32(0x3c3a6d8a), 0),
+                Vector.xy(f32(0x657c889f), 0),
+                f32(0x1b04ab9a))
+            local sub = functions[4](
+                Vector.xy(f32(0xe57cdbac), 0),
+                Vector.xy(f32(0x274eb337), 0),
+                f32(0xfeb9d18b))
+            return functions[1](a, b), functions[2](dotA, dotB), add.x, sub.x
+            "#,
+        )
+        .unwrap();
+    assert_eq!((indirect.0 as f32).to_bits(), 0xa7ee_c560);
+    assert_eq!((indirect.1 as f32).to_bits(), 0xa7ee_c560);
+    assert_eq!((indirect.2 as f32).to_bits(), 0x4103_0e55);
+    assert_eq!((indirect.3 as f32).to_bits(), 0x666c_da7c);
+
+    let lerp = eval_number(
+        r#"
+        local bytes = buffer.create(12)
+        buffer.writeu32(bytes, 0, 0x3c3a6d8a)
+        buffer.writeu32(bytes, 4, 0x657c889f)
+        buffer.writeu32(bytes, 8, 0x1b04ab9a)
+        return Vector.lerp(
+            Vector.xy(buffer.readf32(bytes, 0), 0),
+            Vector.xy(buffer.readf32(bytes, 4), 0),
+            buffer.readf32(bytes, 8)).x
+        "#,
+    );
+    assert_eq!((lerp as f32).to_bits(), 0x4103_0e55);
 }
 
 #[test]
@@ -343,10 +436,15 @@ fn vector_meta_methods_work() {
 
 #[test]
 fn closure_test() {
-    let lua = Lua::new();
+    let vm = rive_vm();
+    let lua = vm.lua();
+    let observed = Rc::new(Cell::new(None));
+    let callback_observed = Rc::clone(&observed);
+    let index = 222_u32;
     let callback = lua
-        .create_function(|_, ()| {
-            eprintln!("index from callback upvalue is: {}", 222_u32);
+        .create_function(move |_, ()| {
+            callback_observed.set(Some(index));
+            eprintln!("index from callback upvalue is: {index}");
             Ok(())
         })
         .unwrap();
@@ -356,6 +454,7 @@ fn closure_test() {
         .set_name("test_source")
         .exec()
         .unwrap();
+    assert_eq!(observed.get(), Some(222));
 }
 
 fn best_run(source: &str, warmup: usize, runs: usize) -> Duration {
@@ -372,7 +471,7 @@ fn best_run(source: &str, warmup: usize, runs: usize) -> Duration {
 }
 
 #[test]
-#[ignore = "upstream performance benchmark; run explicitly in a stable benchmark environment"]
+#[ignore = "expected-red: exact N=1,000,000 benchmark exceeds the production 100,000-script-safepoint quota"]
 fn vector_fast_function_benchmark() {
     const N: usize = 1_000_000;
     const WARMUP: usize = 3;

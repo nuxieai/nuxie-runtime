@@ -1,6 +1,14 @@
 use anyhow::{Context, Result, bail};
+mod artboard_list_map_rule;
 mod binary_data_reader;
 mod binary_writer;
+mod runtime_file_writer;
+mod runtime_metadata;
+
+pub use runtime_file_writer::encode_runtime_file;
+pub use runtime_metadata::{
+    DecodedRuntimeMetadata, read_runtime_metadata, validate_manifest_payload_budget,
+};
 
 #[cfg(feature = "test-support")]
 mod legacy_test_support;
@@ -27,15 +35,16 @@ use std::{
 mod assets;
 
 pub use assets::{RuntimeFileAssetContents, RuntimeManifest};
-use assets::{
-    cpp_file_assets_contains, normalize_file_asset_ids, validate_cpp_manifest_assets_with_budget,
-};
+use assets::{cpp_file_assets_contains, validate_cpp_manifest_assets_with_budget};
 #[cfg(test)]
 use assets::{
     cpp_manifest_key, cpp_manifest_resolver_key, validate_cpp_manifest_asset_with_budget,
 };
 
 mod core;
+
+mod viewmodel;
+pub use viewmodel::RuntimeViewModelPropertyDirection;
 
 use core::{
     binary_reader::BinaryReader,
@@ -637,24 +646,6 @@ impl RuntimeFile {
         })
     }
 
-    pub fn resolved_artboard_for_referencer(&self, object_id: usize) -> Option<&RuntimeObject> {
-        let referencer = self.object(object_id)?;
-        self.resolved_artboard_for_referencer_object(referencer)
-    }
-
-    pub fn resolved_artboard_for_referencer_object(
-        &self,
-        referencer: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(referencer.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-
-        let artboard_index = usize::try_from(cpp_artboard_referencer_index(referencer)?).ok()?;
-        self.artboard(artboard_index)
-    }
-
     pub fn resolved_handle_source_for_joystick(
         &self,
         joystick_id: usize,
@@ -710,60 +701,6 @@ impl RuntimeFile {
         self.resolved_axis_animation_for_joystick_object(joystick, "yId")
     }
 
-    pub fn artboard_component_list_map_rules(
-        &self,
-        list_id: usize,
-    ) -> Vec<RuntimeArtboardListMapRule<'_>> {
-        let Some(list) = self.object(list_id) else {
-            return Vec::new();
-        };
-
-        self.artboard_component_list_map_rules_for_object(list)
-    }
-
-    pub fn artboard_component_list_map_rules_for_object(
-        &self,
-        list: &RuntimeObject,
-    ) -> Vec<RuntimeArtboardListMapRule<'_>> {
-        if list.type_name != "ArtboardComponentList" {
-            return Vec::new();
-        }
-
-        let Some((_, range, slots, list_local_index)) =
-            self.cpp_artboard_local_context_for_object(list)
-        else {
-            return Vec::new();
-        };
-
-        self.objects[range.0..range.1]
-            .iter()
-            .enumerate()
-            .filter_map(|(offset, object)| {
-                let file_index = range.0 + offset;
-                if self.import_status(file_index) != Some(RuntimeImportStatus::Imported) {
-                    return None;
-                }
-
-                let object = object.as_ref()?;
-                if object.type_name != "ArtboardListMapRule" {
-                    return None;
-                }
-                if !slots.iter().any(|slot| *slot == Some(file_index)) {
-                    return None;
-                }
-                if object.uint_property("parentId") != Some(list_local_index as u64) {
-                    return None;
-                }
-
-                Some(RuntimeArtboardListMapRule {
-                    object,
-                    view_model_id: object.uint_property("viewModelId")?,
-                    artboard_id: object.uint_property("artboardId")?,
-                })
-            })
-            .collect()
-    }
-
     pub fn resolved_artboard_for_artboard_component_list_item(
         &self,
         list_id: usize,
@@ -793,9 +730,8 @@ impl RuntimeFile {
         let view_model_id = referenced_instance.object.uint_property("viewModelId")?;
 
         if let Some(rule) = self
-            .artboard_component_list_map_rules_for_object(list)
+            .registered_artboard_component_list_map_rules_for_object(list)
             .into_iter()
-            .rev()
             .find(|rule| rule.view_model_id == view_model_id)
             && let Ok(artboard_index) = usize::try_from(rule.artboard_id)
             && let Some(object) = self.artboard(artboard_index)
@@ -2505,92 +2441,6 @@ impl RuntimeFile {
         self.view_model(view_model_index)
     }
 
-    pub fn scroll_physics(&self) -> Vec<&RuntimeObject> {
-        self.cpp_scroll_physics().collect()
-    }
-
-    pub fn scroll_physics_object(&self, index: usize) -> Option<&RuntimeObject> {
-        self.cpp_scroll_physics().nth(index)
-    }
-
-    pub fn resolved_scroll_physics_for_constraint(
-        &self,
-        scroll_constraint_id: usize,
-    ) -> Option<&RuntimeObject> {
-        let scroll_constraint = self.object(scroll_constraint_id)?;
-        self.resolved_scroll_physics_for_constraint_object(scroll_constraint)
-    }
-
-    pub fn resolved_scroll_physics_for_constraint_object(
-        &self,
-        scroll_constraint: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(scroll_constraint.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-        if scroll_constraint.type_name != "ScrollConstraint" {
-            return None;
-        }
-
-        let physics_index = usize::try_from(scroll_constraint.uint_property("physicsId")?).ok()?;
-        self.scroll_physics_object(physics_index)
-    }
-
-    pub fn resolved_interpolator_for_data_converter(
-        &self,
-        data_converter_id: usize,
-    ) -> Option<&RuntimeObject> {
-        let data_converter = self.object(data_converter_id)?;
-        self.resolved_interpolator_for_data_converter_object(data_converter)
-    }
-
-    pub fn resolved_interpolator_for_data_converter_object(
-        &self,
-        data_converter: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(data_converter.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-        if !matches!(
-            data_converter.type_name,
-            "DataConverterRangeMapper" | "DataConverterInterpolator"
-        ) {
-            return None;
-        }
-
-        let interpolator_index =
-            usize::try_from(data_converter.uint_property("interpolatorId")?).ok()?;
-        self.data_converter_interpolator(interpolator_index)
-    }
-
-    pub fn resolved_data_converter_for_data_bind(
-        &self,
-        data_bind_id: usize,
-    ) -> Option<&RuntimeObject> {
-        let data_bind = self.object(data_bind_id)?;
-        self.resolved_data_converter_for_data_bind_object(data_bind)
-    }
-
-    pub fn resolved_data_converter_for_data_bind_object(
-        &self,
-        data_bind: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(data_bind.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-
-        let definition = definition_by_type_key(data_bind.type_key)?;
-        if !definition.is_a("DataBind") {
-            return None;
-        }
-
-        let converter_index = usize::try_from(data_bind.uint_property("converterId")?).ok()?;
-        self.data_converter(converter_index)
-    }
-
     pub fn data_bind_source_output_type(&self, data_bind_id: usize) -> Option<RuntimeDataType> {
         let data_bind = self.object(data_bind_id)?;
         self.data_bind_source_output_type_for_object(data_bind)
@@ -3700,30 +3550,6 @@ impl RuntimeFile {
             .nth(item_index)
     }
 
-    pub fn resolved_data_converter_for_group_item(
-        &self,
-        group_item_id: usize,
-    ) -> Option<&RuntimeObject> {
-        let group_item = self.object(group_item_id)?;
-        self.resolved_data_converter_for_group_item_object(group_item)
-    }
-
-    pub fn resolved_data_converter_for_group_item_object(
-        &self,
-        group_item: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let object_id = usize::try_from(group_item.id).ok()?;
-        if self.import_status(object_id) != Some(RuntimeImportStatus::Imported) {
-            return None;
-        }
-        if group_item.type_name != "DataConverterGroupItem" {
-            return None;
-        }
-
-        let converter_index = usize::try_from(group_item.uint_property("converterId")?).ok()?;
-        self.data_converter(converter_index)
-    }
-
     pub fn view_models(&self) -> Vec<RuntimeViewModel<'_>> {
         self.cpp_view_models()
     }
@@ -3773,7 +3599,7 @@ impl RuntimeFile {
     ) -> Option<&RuntimeObject> {
         let view_model = self.view_model(view_model_index)?;
         view_model.properties.into_iter().find(|property| {
-            property.uint_property("symbolTypeValue") == Some(u64::from(symbol_type))
+            property.uint_property("symbolTypeValue").unwrap_or(0) == u64::from(symbol_type)
         })
     }
 
@@ -4372,7 +4198,7 @@ impl RuntimeFile {
 
     pub fn view_model_instance_value_name_for_object(&self, value: &RuntimeObject) -> Option<&str> {
         self.view_model_property_for_instance_value_object(value)?
-            .string_property("name")
+            .view_model_property_const_name()
     }
 
     pub fn view_model_instance_value_data_type(&self, value_id: usize) -> Option<RuntimeDataType> {
@@ -4814,71 +4640,6 @@ impl RuntimeFile {
         Some(enum_data.name)
     }
 
-    pub fn view_model_instance_asset_file_assets(&self, value_id: usize) -> Vec<&RuntimeObject> {
-        let Some(value) = self.object(value_id) else {
-            return Vec::new();
-        };
-
-        self.view_model_instance_asset_file_assets_for_object(value)
-    }
-
-    pub fn view_model_instance_asset_file_assets_for_object(
-        &self,
-        value: &RuntimeObject,
-    ) -> Vec<&RuntimeObject> {
-        self.cpp_view_model_instance_asset_file_assets(value)
-    }
-
-    pub fn resolved_file_asset_for_view_model_instance_asset(
-        &self,
-        value_id: usize,
-    ) -> Option<&RuntimeObject> {
-        let value = self.object(value_id)?;
-        self.resolved_file_asset_for_view_model_instance_asset_object(value)
-    }
-
-    pub fn resolved_file_asset_for_view_model_instance_asset_object(
-        &self,
-        value: &RuntimeObject,
-    ) -> Option<&RuntimeObject> {
-        let asset_index = usize::try_from(value.uint_property("propertyValue")?).ok()?;
-        self.cpp_view_model_instance_asset_file_assets(value)
-            .into_iter()
-            .nth(asset_index)
-    }
-
-    fn cpp_view_model_instance_asset_file_assets<'a>(
-        &'a self,
-        value: &RuntimeObject,
-    ) -> Vec<&'a RuntimeObject> {
-        let Some(definition) = definition_by_type_key(value.type_key) else {
-            return Vec::new();
-        };
-        if !definition.is_a("ViewModelInstanceAsset") {
-            return Vec::new();
-        }
-
-        let Ok(value_index) = usize::try_from(value.id) else {
-            return Vec::new();
-        };
-        if self.import_status(value_index) != Some(RuntimeImportStatus::Imported) {
-            return Vec::new();
-        }
-
-        self.objects
-            .iter()
-            .take(value_index)
-            .enumerate()
-            .filter_map(|(index, object)| {
-                if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                    return None;
-                }
-
-                let object = object.as_ref()?;
-                cpp_file_assets_contains(object).then_some(object)
-            })
-            .collect()
-    }
     fn cpp_artboard_data_binds(&self, artboard_index: usize) -> Vec<RuntimeDataBind<'_>> {
         if self.artboard(artboard_index).is_none() {
             return Vec::new();
@@ -5112,33 +4873,11 @@ impl RuntimeFile {
         &'a self,
         condition: &RuntimeObject,
     ) -> RuntimeTransitionViewModelConditionComparators<'a> {
-        let Some(object_id) = usize::try_from(condition.id).ok() else {
-            return RuntimeTransitionViewModelConditionComparators::default();
-        };
-        let mut comparators = RuntimeTransitionViewModelConditionComparators::default();
-        for candidate in self.objects.iter().skip(object_id + 1).flatten() {
-            let Some(candidate_id) = usize::try_from(candidate.id).ok() else {
-                continue;
-            };
-            if self.import_status(candidate_id) != Some(RuntimeImportStatus::Imported) {
-                continue;
-            }
-            let Some(definition) = definition_by_type_key(candidate.type_key) else {
-                continue;
-            };
-            if definition.is_a("TransitionViewModelCondition") {
-                break;
-            }
-            if !definition.is_a("TransitionComparator") {
-                continue;
-            }
-            if comparators.left.is_none() {
-                comparators.left = Some(candidate);
-            } else {
-                comparators.right = Some(candidate);
-            }
-        }
-        comparators
+        importers::transition_viewmodel_condition_importer::comparators_for_condition(
+            &self.objects,
+            &self.import_statuses,
+            condition,
+        )
     }
 
     fn cpp_data_converter_output_type(
@@ -5224,12 +4963,12 @@ impl RuntimeFile {
                 }
                 value
             }
-            "DataConverterBooleanNegate" => {
-                RuntimeConvertedDataValue::Boolean(!input.as_boolean().unwrap_or(false))
-            }
-            "DataConverterListToLength" => {
-                RuntimeConvertedDataValue::Number(input.list_len().unwrap_or(0) as f32)
-            }
+            "DataConverterBooleanNegate" => RuntimeConvertedDataValue::Boolean(
+                data_converter_boolean_negate_value(input.as_boolean()),
+            ),
+            "DataConverterListToLength" => RuntimeConvertedDataValue::Number(
+                data_converter_list_to_length_value(input.list_len()),
+            ),
             "DataConverterNumberToList" => match input {
                 RuntimeConvertedDataValue::List(_)
                 | RuntimeConvertedDataValue::GeneratedList(_) => input.clone(),
@@ -5254,30 +4993,17 @@ impl RuntimeFile {
                     .map(|value| u64::from(value.wrapping_add(1)))
                     .unwrap_or(0),
             ),
-            "DataConverterToNumber" => RuntimeConvertedDataValue::Number(match input {
-                RuntimeConvertedDataValue::String(value) => cpp_atof_f32(value),
-                RuntimeConvertedDataValue::Enum { value, .. } => *value as f32,
-                RuntimeConvertedDataValue::Number(value) => *value,
-                RuntimeConvertedDataValue::Color(value) => (*value as i32) as f32,
-                RuntimeConvertedDataValue::Boolean(value) => {
-                    if *value {
-                        1.0
-                    } else {
-                        0.0
-                    }
-                }
-                RuntimeConvertedDataValue::SymbolListIndex(value) => *value as f32,
-                _ => 0.0,
-            }),
+            "DataConverterToNumber" => {
+                RuntimeConvertedDataValue::Number(data_converter_to_number_value(input, 0.0))
+            }
             "DataConverterToString" => RuntimeConvertedDataValue::String(
                 self.cpp_data_converter_to_string(data_converter, input)?,
             ),
             "DataConverterRounder" => RuntimeConvertedDataValue::Number(match input {
-                RuntimeConvertedDataValue::Number(value) => {
-                    let decimals = data_converter.uint_property("decimals").unwrap_or(0) as f32;
-                    let rounder = 10.0_f32.powf(decimals);
-                    (value * rounder).round() / rounder
-                }
+                RuntimeConvertedDataValue::Number(value) => data_converter_rounder_value(
+                    *value,
+                    data_converter.uint_property("decimals").unwrap_or(0),
+                ),
                 _ => 0.0,
             }),
             "DataConverterRangeMapper" => RuntimeConvertedDataValue::Number(
@@ -5395,9 +5121,9 @@ impl RuntimeFile {
                 }
                 value
             }
-            "DataConverterBooleanNegate" => {
-                RuntimeConvertedDataValue::Boolean(!input.as_boolean().unwrap_or(false))
-            }
+            "DataConverterBooleanNegate" => RuntimeConvertedDataValue::Boolean(
+                data_converter_boolean_negate_value(input.as_boolean()),
+            ),
             "DataConverterOperationValue" => {
                 RuntimeConvertedDataValue::Number(cpp_reverse_convert_operation_value(
                     input,
@@ -5500,6 +5226,11 @@ impl RuntimeFile {
             "DataConverterInterpolator" => state
                 .interpolator_state(data_converter.id)
                 .convert_converted(data_converter, input),
+            "DataConverterToNumber" if !reverse => {
+                let output = state.to_number_output(data_converter.id);
+                *output = data_converter_to_number_value(input, *output);
+                Some(RuntimeConvertedDataValue::Number(*output))
+            }
             _ if reverse => self.cpp_data_converter_reverse_convert(
                 data_converter,
                 input,
@@ -5860,51 +5591,6 @@ impl RuntimeFile {
             _ => Some(Vec::new()),
         }
     }
-
-    fn cpp_data_converter_interpolators(&self) -> Vec<&RuntimeObject> {
-        let mut latest_artboard_importer = false;
-        let mut interpolators = Vec::new();
-
-        for (index, object) in self.objects.iter().enumerate() {
-            if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                continue;
-            }
-
-            let Some(object) = object.as_ref() else {
-                continue;
-            };
-            let Some(definition) = definition_by_type_key(object.type_key) else {
-                continue;
-            };
-
-            if definition.name == "Artboard" {
-                latest_artboard_importer = true;
-                continue;
-            }
-
-            if definition.is_a("KeyFrameInterpolator") && !latest_artboard_importer {
-                interpolators.push(object);
-            }
-        }
-
-        interpolators
-    }
-
-    fn cpp_scroll_physics(&self) -> impl Iterator<Item = &RuntimeObject> {
-        self.objects
-            .iter()
-            .enumerate()
-            .filter_map(|(index, object)| {
-                if self.import_status(index) != Some(RuntimeImportStatus::Imported) {
-                    return None;
-                }
-
-                let object = object.as_ref()?;
-                definition_by_type_key(object.type_key)
-                    .is_some_and(|definition| definition.is_a("ScrollPhysics"))
-                    .then_some(object)
-            })
-    }
 }
 
 fn cpp_bindable_property_transfer_reached(
@@ -5953,22 +5639,6 @@ fn resolve_runtime_state_machine_transition_targets(
                 .collect::<Vec<_>>();
 
             for state in &mut layer.states {
-                let state_is_blend = state.object.is_some_and(|object| {
-                    definition_by_type_key(object.type_key)
-                        .is_some_and(|definition| definition.is_a("BlendState"))
-                });
-                let blend_animations = state
-                    .blend_animations
-                    .iter()
-                    .map(|animation| {
-                        (
-                            animation.object,
-                            animation.animation_index,
-                            animation.animation,
-                        )
-                    })
-                    .collect::<Vec<_>>();
-
                 for transition in &mut state.transitions {
                     // StateMachineLayerImporter resolves only the transitions
                     // present when it is replaced (or at EOF). A transition
@@ -5989,45 +5659,9 @@ fn resolve_runtime_state_machine_transition_targets(
                         .flatten();
                     transition.state_to_index = state_to_index;
                     transition.state_to = state_to_index.and_then(|index| state_objects[index]);
-
-                    let transition_is_blend = definition_by_type_key(transition.object.type_key)
-                        .is_some_and(|definition| definition.is_a("BlendStateTransition"));
-                    if !state_is_blend || !transition_is_blend {
-                        continue;
-                    }
-
-                    let exit_blend_animation_index = usize::try_from(
-                        transition
-                            .object
-                            .uint_property("exitBlendAnimationId")
-                            .unwrap_or(u64::MAX),
-                    )
-                    .ok()
-                    .filter(|index| *index < blend_animations.len());
-                    if let Some(index) = exit_blend_animation_index {
-                        let (blend_animation, animation_index, animation) = blend_animations[index];
-                        transition.exit_blend_animation_index = Some(index);
-                        transition.exit_blend_animation = Some(blend_animation);
-                        transition.exit_animation_index = animation_index;
-                        transition.exit_animation = animation;
-                    }
                 }
             }
         }
-    }
-}
-
-fn cpp_runtime_state_machine_fire_action<'a>(
-    object: &'a RuntimeObject,
-    artboard_local_slots: &[Option<usize>],
-    objects: &'a [Option<RuntimeObject>],
-) -> RuntimeStateMachineFireAction<'a> {
-    let (event_local_index, event) =
-        cpp_resolved_action_event(object, artboard_local_slots, objects);
-    RuntimeStateMachineFireAction {
-        object,
-        event_local_index,
-        event,
     }
 }
 
@@ -6520,6 +6154,7 @@ pub enum RuntimeConvertedDataValue<'a> {
 #[derive(Debug, Clone, Default)]
 pub struct RuntimeDataConverterState {
     interpolators: BTreeMap<u32, RuntimeDataConverterInterpolatorState>,
+    to_number_outputs: BTreeMap<u32, f32>,
 }
 
 impl RuntimeDataConverterState {
@@ -6529,6 +6164,8 @@ impl RuntimeDataConverterState {
 
     pub fn reset(&mut self) {
         self.interpolators.clear();
+        // Pinned `DataConverterToNumber` inherits `DataConverter::reset`,
+        // which is a no-op; its retained `m_output` survives group resets.
     }
 
     fn interpolator_state(
@@ -6536,6 +6173,10 @@ impl RuntimeDataConverterState {
         data_converter_id: u32,
     ) -> &mut RuntimeDataConverterInterpolatorState {
         self.interpolators.entry(data_converter_id).or_default()
+    }
+
+    fn to_number_output(&mut self, data_converter_id: u32) -> &mut f32 {
+        self.to_number_outputs.entry(data_converter_id).or_default()
     }
 }
 
@@ -7049,6 +6690,9 @@ pub struct RuntimeScriptedObject<'a> {
 #[derive(Debug, Clone)]
 pub struct RuntimeStateMachineLayer<'a> {
     pub object: &'a RuntimeObject,
+    /// Whether the owning Artboard reached this layer during its one-time
+    /// StateMachine dirty/clean lifecycle.
+    pub lifecycle_applied: bool,
     pub state_count: usize,
     pub states: Vec<RuntimeLayerState<'a>>,
 }
@@ -7287,6 +6931,13 @@ pub struct RuntimeKeyedObject<'a> {
 pub struct RuntimeKeyedProperty<'a> {
     pub object: &'a RuntimeObject,
     pub first_key_frame: Option<&'a RuntimeObject>,
+    pub key_frames: Vec<RuntimeImportedKeyFrame<'a>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RuntimeImportedKeyFrame<'a> {
+    pub object: &'a RuntimeObject,
+    pub seconds: f32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -8197,13 +7848,6 @@ use importers::{
     CppDataBindTarget, ImportContext, ImportStackKey, NullObjectConsumer, StateMachineInputKind,
     compute_import_statuses, replay_import_stack_make_latest,
 };
-
-fn cpp_artboard_referencer_index(object: &RuntimeObject) -> Option<u64> {
-    let definition = definition_by_type_key(object.type_key)?;
-    (definition.is_a("NestedArtboard") || definition.name == "ScriptInputArtboard")
-        .then(|| object.uint_property("artboardId"))
-        .flatten()
-}
 
 fn cpp_data_bind_is_name_based(object: &RuntimeObject) -> bool {
     const DATA_BIND_NAME_BASED_FLAG: u64 = 1 << 4;
@@ -9181,18 +8825,18 @@ fn cpp_data_converter_direct_output_type(
     }
 
     Some(match data_converter.type_name {
-        "DataConverterBooleanNegate" => RuntimeDataType::Boolean,
+        "DataConverterBooleanNegate" => data_converter_boolean_negate_output_type(),
         "DataConverterFormula" => RuntimeDataType::Number,
         "DataConverterInterpolator" => RuntimeDataType::Input,
-        "DataConverterListToLength" => RuntimeDataType::Number,
+        "DataConverterListToLength" => data_converter_list_to_length_output_type(),
         "DataConverterNumberToList" => RuntimeDataType::List,
         "DataConverterRangeMapper" => RuntimeDataType::Number,
-        "DataConverterRounder" => RuntimeDataType::Number,
+        "DataConverterRounder" => data_converter_rounder_output_type(),
         "DataConverterStringPad" => RuntimeDataType::String,
         "DataConverterStringRemoveZeros" => RuntimeDataType::String,
         "DataConverterStringTrim" => RuntimeDataType::String,
         "ScriptedDataConverter" => RuntimeDataType::Any,
-        "DataConverterToNumber" => RuntimeDataType::Number,
+        "DataConverterToNumber" => data_converter_to_number_output_type(),
         "DataConverterToString" => RuntimeDataType::String,
         "DataConverterTrigger" => RuntimeDataType::Trigger,
         _ => RuntimeDataType::None,
@@ -9472,11 +9116,89 @@ fn cpp_pad_string(value: &[u8], length: u64, text: &[u8], pad_type: u64) -> Vec<
     output
 }
 
-pub fn data_converter_to_number_string_value(value: &[u8]) -> f32 {
-    cpp_atof_f32(value)
+/// Pinned `DataConverterToNumber::convertString`. C++ leaves its retained
+/// output unchanged when `atof` reports a range error.
+pub fn data_converter_to_number_string_value(value: &[u8], previous_output: f32) -> f32 {
+    let parsed = cpp_atof_f32(value);
+    if parsed.range_error {
+        previous_output
+    } else {
+        parsed.value
+    }
 }
 
-fn cpp_atof_f32(value: &[u8]) -> f32 {
+fn data_converter_to_number_value(
+    input: &RuntimeConvertedDataValue<'_>,
+    previous_output: f32,
+) -> f32 {
+    match input {
+        RuntimeConvertedDataValue::String(value) => {
+            data_converter_to_number_string_value(value, previous_output)
+        }
+        RuntimeConvertedDataValue::Enum { value, .. } => (*value as u32) as f32,
+        RuntimeConvertedDataValue::Number(value) => *value,
+        // DataValueColor stores these serialized bits in a signed C++ `int`.
+        RuntimeConvertedDataValue::Color(value) => (*value as i32) as f32,
+        RuntimeConvertedDataValue::Boolean(value) => {
+            if *value {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        RuntimeConvertedDataValue::SymbolListIndex(value) => (*value as u32) as f32,
+        _ => 0.0,
+    }
+}
+
+/// Pinned primary-header `DataConverterToNumber::outputType()` inline.
+pub fn data_converter_to_number_output_type() -> RuntimeDataType {
+    RuntimeDataType::Number
+}
+
+/// Pinned `DataConverterBooleanNegate::convert` value branch and non-boolean
+/// default branch. `None` represents any non-`DataValueBoolean` input.
+pub fn data_converter_boolean_negate_value(value: Option<bool>) -> bool {
+    value.map(|value| !value).unwrap_or(false)
+}
+
+/// Pinned primary-header `DataConverterBooleanNegate::outputType()` inline.
+pub fn data_converter_boolean_negate_output_type() -> RuntimeDataType {
+    RuntimeDataType::Boolean
+}
+
+/// Pinned `DataConverterListToLength::convert` list branch and non-list
+/// default branch. `None` represents any non-`DataValueList` input.
+pub fn data_converter_list_to_length_value(item_count: Option<usize>) -> f32 {
+    item_count.unwrap_or(0) as f32
+}
+
+/// Pinned primary-header `DataConverterListToLength::outputType()` inline.
+pub fn data_converter_list_to_length_output_type() -> RuntimeDataType {
+    RuntimeDataType::Number
+}
+
+/// Pinned `DataConverterRounder::convert` numeric branch. `decimals` is a
+/// generated CoreUint (`uint32_t`) even though the generic binary property
+/// representation is `u64`.
+pub fn data_converter_rounder_value(value: f32, decimals: u64) -> f32 {
+    let number_of_places = decimals as u32;
+    let rounder = 10.0_f32.powf(number_of_places as f32);
+    (value * rounder).round() / rounder
+}
+
+/// Pinned primary-header `DataConverterRounder::outputType()` inline.
+pub fn data_converter_rounder_output_type() -> RuntimeDataType {
+    RuntimeDataType::Number
+}
+
+#[derive(Clone, Copy)]
+struct CppAtofF32 {
+    value: f32,
+    range_error: bool,
+}
+
+fn cpp_atof_f32(value: &[u8]) -> CppAtofF32 {
     let mut start = 0usize;
     while start < value.len() && value[start].is_ascii_whitespace() {
         start += 1;
@@ -9502,6 +9224,29 @@ fn cpp_atof_f32(value: &[u8]) -> f32 {
         return cpp_atof_hex_f32(value, number_start, sign);
     }
 
+    let keyword = &value[number_start..];
+    if keyword
+        .get(..8)
+        .is_some_and(|value| value.eq_ignore_ascii_case(b"infinity"))
+        || keyword
+            .get(..3)
+            .is_some_and(|value| value.eq_ignore_ascii_case(b"inf"))
+    {
+        return CppAtofF32 {
+            value: (sign as f32) * f32::INFINITY,
+            range_error: false,
+        };
+    }
+    if keyword
+        .get(..3)
+        .is_some_and(|value| value.eq_ignore_ascii_case(b"nan"))
+    {
+        return CppAtofF32 {
+            value: f32::NAN.copysign(sign as f32),
+            range_error: false,
+        };
+    }
+
     let mut end = number_start;
     if value
         .get(end)
@@ -9511,7 +9256,9 @@ fn cpp_atof_f32(value: &[u8]) -> f32 {
     }
 
     let mut digits = 0usize;
+    let mut nonzero_digit = false;
     while value.get(end).is_some_and(u8::is_ascii_digit) {
+        nonzero_digit |= value[end] != b'0';
         end += 1;
         digits += 1;
     }
@@ -9519,13 +9266,17 @@ fn cpp_atof_f32(value: &[u8]) -> f32 {
     if value.get(end) == Some(&b'.') {
         end += 1;
         while value.get(end).is_some_and(u8::is_ascii_digit) {
+            nonzero_digit |= value[end] != b'0';
             end += 1;
             digits += 1;
         }
     }
 
     if digits == 0 {
-        return 0.0;
+        return CppAtofF32 {
+            value: 0.0,
+            range_error: false,
+        };
     }
 
     let mantissa_end = end;
@@ -9553,42 +9304,71 @@ fn cpp_atof_f32(value: &[u8]) -> f32 {
         .expect("numeric prefix is ASCII")
         .parse::<f64>()
     else {
-        return 0.0;
+        return CppAtofF32 {
+            value: 0.0,
+            range_error: true,
+        };
     };
 
-    if parsed.is_finite() {
-        parsed as f32
-    } else {
-        0.0
+    CppAtofF32 {
+        value: parsed as f32,
+        range_error: !parsed.is_finite()
+            || (nonzero_digit && parsed == 0.0)
+            || (parsed != 0.0 && parsed.abs() < f64::MIN_POSITIVE),
     }
 }
 
-fn cpp_atof_hex_f32(value: &[u8], number_start: usize, sign: f64) -> f32 {
+fn cpp_atof_hex_f32(value: &[u8], number_start: usize, sign: f64) -> CppAtofF32 {
     let mut end = number_start + 2;
-    let mut mantissa = 0.0f64;
     let mut digits = 0usize;
-    while let Some(digit) = value.get(end).and_then(|byte| ascii_hex_digit_value(*byte)) {
-        mantissa = mantissa * 16.0 + f64::from(digit);
-        end += 1;
-        digits += 1;
-    }
+    let mut fraction_digits = 0usize;
+    let mut after_point = false;
+    let mut significant_bits = 0usize;
+    let mut prefix = 0u64;
+    let mut prefix_bits = 0usize;
+    let mut tail_nonzero = false;
 
-    if value.get(end) == Some(&b'.') {
-        end += 1;
-        let mut place = 1.0 / 16.0;
-        while let Some(digit) = value.get(end).and_then(|byte| ascii_hex_digit_value(*byte)) {
-            mantissa += f64::from(digit) * place;
-            place /= 16.0;
+    loop {
+        if !after_point && value.get(end) == Some(&b'.') {
+            after_point = true;
             end += 1;
-            digits += 1;
+            continue;
+        }
+        let Some(digit) = value.get(end).and_then(|byte| ascii_hex_digit_value(*byte)) else {
+            break;
+        };
+        digits += 1;
+        fraction_digits += usize::from(after_point);
+        end += 1;
+
+        let width = if significant_bits == 0 {
+            if digit == 0 {
+                continue;
+            }
+            (u8::BITS - digit.leading_zeros()) as usize
+        } else {
+            4
+        };
+        significant_bits += width;
+        for shift in (0..width).rev() {
+            let bit = (digit >> shift) & 1;
+            if prefix_bits < u64::BITS as usize {
+                prefix = (prefix << 1) | u64::from(bit);
+                prefix_bits += 1;
+            } else {
+                tail_nonzero |= bit != 0;
+            }
         }
     }
 
-    if digits == 0 {
-        return 0.0;
+    if digits == 0 || significant_bits == 0 {
+        return CppAtofF32 {
+            value: 0.0f32.copysign(sign as f32),
+            range_error: false,
+        };
     }
 
-    let mut exponent = 0i32;
+    let mut exponent = 0i128;
     if value
         .get(end)
         .is_some_and(|byte| matches!(*byte, b'p' | b'P'))
@@ -9606,25 +9386,82 @@ fn cpp_atof_hex_f32(value: &[u8], number_start: usize, sign: f64) -> f32 {
             _ => 1,
         };
         let exponent_start = end;
-        let mut exponent_value = 0i32;
+        let mut exponent_value = 0i128;
         while let Some(digit) = value
             .get(end)
             .filter(|byte| byte.is_ascii_digit())
-            .map(|byte| i32::from(*byte - b'0'))
+            .map(|byte| i128::from(*byte - b'0'))
         {
             exponent_value = exponent_value.saturating_mul(10).saturating_add(digit);
             end += 1;
         }
         if exponent_start != end {
-            exponent = exponent_sign * exponent_value;
+            exponent = i128::from(exponent_sign) * exponent_value;
         }
     }
 
-    let parsed = sign * mantissa * 2.0f64.powi(exponent);
-    if parsed.is_finite() {
-        parsed as f32
+    if prefix_bits < u64::BITS as usize {
+        prefix <<= u64::BITS as usize - prefix_bits;
+    }
+
+    let mut unbiased_exponent = exponent
+        .saturating_add(significant_bits as i128 - 1)
+        .saturating_sub((fraction_digits as i128).saturating_mul(4));
+    if unbiased_exponent > 1023 {
+        return CppAtofF32 {
+            value: (sign as f32) * f32::INFINITY,
+            range_error: true,
+        };
+    }
+
+    let retained_bits = if unbiased_exponent >= -1022 {
+        53
     } else {
-        0.0
+        unbiased_exponent + 1075
+    };
+    if retained_bits < 0 || retained_bits == 0 && prefix == 1u64 << 63 && !tail_nonzero {
+        return CppAtofF32 {
+            value: 0.0f32.copysign(sign as f32),
+            range_error: true,
+        };
+    }
+
+    let retained_bits = retained_bits as usize;
+    let mut retained = if retained_bits == 0 {
+        0
+    } else {
+        prefix >> (u64::BITS as usize - retained_bits)
+    };
+    let guard = (prefix >> (u64::BITS as usize - retained_bits - 1)) & 1 != 0;
+    let remaining_prefix_bits = u64::BITS as usize - retained_bits - 1;
+    let remaining_nonzero = remaining_prefix_bits != 0
+        && prefix & ((1u64 << remaining_prefix_bits) - 1) != 0
+        || tail_nonzero;
+    if guard && (remaining_nonzero || retained & 1 != 0) {
+        retained += 1;
+    }
+
+    if unbiased_exponent >= -1022 && retained == 1u64 << 53 {
+        retained >>= 1;
+        unbiased_exponent += 1;
+        if unbiased_exponent > 1023 {
+            return CppAtofF32 {
+                value: (sign as f32) * f32::INFINITY,
+                range_error: true,
+            };
+        }
+    }
+
+    let sign_bit = u64::from(sign.is_sign_negative()) << 63;
+    let bits = if unbiased_exponent >= -1022 {
+        sign_bit | ((unbiased_exponent as u64 + 1023) << 52) | (retained & ((1u64 << 52) - 1))
+    } else {
+        sign_bit | retained
+    };
+    let parsed = f64::from_bits(bits);
+    CppAtofF32 {
+        value: parsed as f32,
+        range_error: bits & (0x7ffu64 << 52) == 0,
     }
 }
 
@@ -9637,6 +9474,43 @@ fn ascii_hex_digit_value(byte: u8) -> Option<u8> {
     }
 }
 
+#[cfg(test)]
+mod data_converter_to_number_tests {
+    use super::*;
+
+    #[test]
+    fn compensating_hex_exponents_match_host_atof_without_range_error() {
+        let mut large_integer = b"0x".to_vec();
+        large_integer.extend(std::iter::repeat_n(b'f', 400));
+        large_integer.extend_from_slice(b"p-1600");
+        assert_eq!(
+            data_converter_to_number_string_value(&large_integer, 7.0),
+            1.0
+        );
+
+        let mut small_fraction = b"0x0.".to_vec();
+        small_fraction.extend(std::iter::repeat_n(b'0', 399));
+        small_fraction.extend_from_slice(b"1p1600");
+        assert_eq!(
+            data_converter_to_number_string_value(&small_fraction, 7.0),
+            1.0
+        );
+    }
+
+    #[test]
+    fn range_error_retains_output_and_integer_subclasses_use_u32_payloads() {
+        assert_eq!(data_converter_to_number_string_value(b"1e309", 7.0), 7.0);
+        assert!(data_converter_to_number_string_value(b"-0x0.0p0", 7.0).is_sign_negative());
+        assert_eq!(
+            data_converter_to_number_value(
+                &RuntimeConvertedDataValue::SymbolListIndex(0x1_0000_0000),
+                7.0,
+            ),
+            0.0
+        );
+    }
+}
+
 fn cpp_convert_operation_value(
     input: &RuntimeConvertedDataValue<'_>,
     operation_type: u64,
@@ -9644,7 +9518,7 @@ fn cpp_convert_operation_value(
 ) -> f32 {
     let Some(input_value) = (match input {
         RuntimeConvertedDataValue::Number(value) => Some(*value),
-        RuntimeConvertedDataValue::SymbolListIndex(value) => Some(*value as f32),
+        RuntimeConvertedDataValue::SymbolListIndex(value) => Some((*value as u32) as f32),
         _ => None,
     }) else {
         return 0.0;
@@ -10259,10 +10133,16 @@ fn blend_input_is_invalid(
         let Some(input_id) = object.uint_property("inputId") else {
             return false;
         };
-        if input_id == u64::from(u32::MAX) {
+        // Generated `BlendState1DInputBase::m_InputId` is a `uint32_t`.
+        // Pinned `readVarUintAs<unsigned int>` rejects an oversized value
+        // before the concrete owner's empty-id, range, and input-kind checks.
+        let Ok(input_id) = u32::try_from(input_id) else {
+            return true;
+        };
+        if input_id == u32::MAX {
             return false;
         }
-        return state_machine_input_is_not_number(context, input_id);
+        return state_machine_input_is_not_number(context, u64::from(input_id));
     }
 
     if definition.name == "BlendAnimationDirect" && object.uint_property("blendSource") == Some(0) {
@@ -10470,17 +10350,6 @@ fn validate_cpp_paint_effects(
             continue;
         };
 
-        if definition.name == "Dash" {
-            let Some(parent) =
-                local_object_reference(slots, objects, object.uint_property("parentId"))
-            else {
-                continue;
-            };
-            if !runtime_object_is_cpp_dash_path(parent) {
-                bail!("dash object {} has parent that is not DashPath", object.id);
-            }
-        }
-
         if cpp_stroke_effect_requires_effects_container(definition) {
             let Some(parent) =
                 local_object_reference(slots, objects, object.uint_property("parentId"))
@@ -10516,7 +10385,11 @@ fn validate_cpp_paint_effects(
                 continue;
             };
             if !runtime_object_is_cpp_shape_paint(parent) {
-                continue;
+                bail!(
+                    "shape paint mutator object {} ({}) has parent that is not ShapePaint",
+                    object.id,
+                    object.type_name
+                );
             }
             if !paint_mutators.insert(parent_local_index) {
                 bail!(
@@ -11321,11 +11194,7 @@ fn cpp_artboard_local_slot_is_valid(
     }
 
     if definition.name == "ArtboardListMapRule" {
-        let Some(parent) = local_object_reference(slots, objects, object.uint_property("parentId"))
-        else {
-            return false;
-        };
-        return runtime_object_is_cpp_artboard_component_list(parent);
+        return artboard_list_map_rule::on_added_dirty_parent_is_valid(object, slots, objects);
     }
 
     true
@@ -11468,10 +11337,6 @@ fn runtime_object_is_cpp_nested_artboard(object: &RuntimeObject) -> bool {
         .is_some_and(|definition| definition.is_a("NestedArtboard"))
 }
 
-fn runtime_object_is_cpp_dash_path(object: &RuntimeObject) -> bool {
-    definition_by_type_key(object.type_key).is_some_and(|definition| definition.name == "DashPath")
-}
-
 fn runtime_object_is_cpp_effects_container(object: &RuntimeObject) -> bool {
     definition_by_type_key(object.type_key)
         .is_some_and(|definition| definition.is_a("ShapePaint") || definition.name == "GroupEffect")
@@ -11582,7 +11447,7 @@ fn apply_cpp_import_mutations(
     objects: &mut [Option<RuntimeObject>],
     import_statuses: &[RuntimeImportStatus],
 ) {
-    normalize_file_asset_ids(objects, import_statuses);
+    importers::backboard_importer::normalize_file_asset_ids(objects, import_statuses);
 }
 
 fn read_runtime_object(
@@ -12495,6 +12360,24 @@ mod file_global_state_machine_import_tests {
             "{error:#}",
         );
     }
+
+    #[test]
+    fn shape_paint_mutator_rejects_a_non_shape_paint_parent() {
+        let error = RuntimeFile::from_fixture_records(vec![
+            record("Backboard"),
+            record("Artboard"),
+            uint_record("Node", "parentId", 0),
+            uint_record("SolidColor", "parentId", 1),
+        ])
+        .expect_err("ShapePaintMutator::initPaintMutator rejects a non-ShapePaint parent");
+
+        assert!(
+            error
+                .to_string()
+                .contains("has parent that is not ShapePaint"),
+            "{error:#}",
+        );
+    }
 }
 
 #[cfg(test)]
@@ -12847,11 +12730,12 @@ mod manifest_key_tests {
     }
 
     #[test]
-    fn manifest_known_sections_do_not_read_past_their_declared_size() {
-        // A path-section count starts in the one declared section byte but
-        // finishes in the following bytes. Known sections must never consume
-        // those trailing bytes, even though they form one otherwise-valid
-        // path entry when decoded as an unbounded stream.
+    fn manifest_known_sections_keep_cpp_partial_mutation_before_size_mismatch() {
+        // Pinned ManifestAsset::decodePaths reads known sections through the
+        // shared file reader and inserts each decoded path before decode()
+        // checks bytesRead against sectionSize. FileAssetImporter::resolve
+        // ignores decode()'s boolean result, so this malformed section keeps
+        // the path assembled from the trailing bytes.
         let malformed_manifest = vec![1, 1, 0x81, 0x00, 7, 2, 10, 11];
         let runtime = RuntimeFile::from_fixture_records(vec![
             FixtureRecord {
@@ -12880,10 +12764,10 @@ mod manifest_key_tests {
             .expect("ManifestAsset remains discoverable");
         assert_eq!(
             manifest.resolve_path(7),
-            None,
-            "the lazy decoder must not recover a path from bytes outside section_size",
+            Some([10, 11].as_slice()),
+            "the lazy decoder must preserve pinned C++'s pre-check mutation",
         );
-        assert!(manifest.paths.is_empty());
+        assert_eq!(manifest.paths.len(), 1);
     }
 
     #[test]

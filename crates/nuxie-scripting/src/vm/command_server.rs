@@ -64,11 +64,11 @@ impl PersistentRenderContext {
         f: impl FnOnce(&mut dyn RenderFactory) -> Result<R>,
     ) -> Result<R> {
         let context = self.context.borrow().clone();
-        let Some(context) = context else {
+        let Some(mut context) = context else {
             return Err(Error::runtime(
                 "renderer resource allocation requires the VM's persistent render context",
             ));
         };
-        context.with_factory(f)
+        f(&mut context)
     }
 }

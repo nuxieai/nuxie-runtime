@@ -3,6 +3,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+const DECODER_STATIC_LIBS: [&str; 5] = ["rive_decoders", "libwebp", "libpng", "zlib", "libjpeg"];
+
 fn main() {
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.cpp");
     println!("cargo:rerun-if-changed=cpp/rive_renderer_ffi.h");
@@ -31,6 +33,7 @@ fn main() {
     let has_vulkan = env::var_os("CARGO_FEATURE_VULKAN").is_some();
     let has_webgl2 = env::var_os("CARGO_FEATURE_WEBGL2").is_some();
     let has_perf_counters = env::var_os("CARGO_FEATURE_PERF_COUNTERS").is_some();
+    let has_decode_oracle = env::var_os("CARGO_FEATURE_DECODE_ORACLE").is_some();
 
     if [has_dawn, has_vulkan, has_webgl2]
         .into_iter()
@@ -370,6 +373,24 @@ fn main() {
             ]
             .map(|file| runtime_dir.join("renderer/src").join(file)),
         );
+        if has_decode_oracle {
+            let missing_archives = renderer_static_libs
+                .iter()
+                .filter(|(name, _)| DECODER_STATIC_LIBS.contains(name))
+                .filter_map(|(_, archive)| {
+                    (!archive.exists()).then(|| archive.display().to_string())
+                })
+                .collect::<Vec<_>>();
+            if !missing_archives.is_empty() {
+                panic!(
+                    "missing decoder dependency archives:\n{}\nbuild them with `cd {}/renderer && PATH=\"{}/build:$PATH\" build_rive.sh {} -- rive_decoders libpng zlib libjpeg libwebp`",
+                    missing_archives.join("\n"),
+                    runtime_dir.display(),
+                    runtime_dir.display(),
+                    profile,
+                );
+            }
+        }
     } else {
         let missing_archives = renderer_static_libs
             .iter()
@@ -385,7 +406,7 @@ fn main() {
             );
         }
     }
-    if env::var_os("CARGO_FEATURE_DECODE_ORACLE").is_some() {
+    if has_decode_oracle {
         build.define("RIVE_FFI_DECODE_ORACLE", None);
     }
 
@@ -420,14 +441,10 @@ fn main() {
     println!("cargo:rustc-link-search=native={}", root_lib_dir.display());
     println!("cargo:rustc-link-lib=static=nuxie_renderer_ffi");
     if renderer_lib.exists() {
-        for lib in [
-            "rive_pls_renderer",
-            "rive_decoders",
-            "libwebp",
-            "libpng",
-            "zlib",
-            "libjpeg",
-        ] {
+        println!("cargo:rustc-link-lib=static=rive_pls_renderer");
+    }
+    if renderer_lib.exists() || has_decode_oracle {
+        for lib in DECODER_STATIC_LIBS {
             println!("cargo:rustc-link-lib=static={lib}");
         }
     }

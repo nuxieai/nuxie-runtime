@@ -29,6 +29,7 @@ mod lua_mesh;
 mod lua_promise;
 mod lua_rive_base;
 mod lua_vec2d;
+mod native_registration;
 mod renderer;
 
 mod lua_artboards;
@@ -45,10 +46,11 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub use bytecode::BytecodeValidationError;
 use bytecode::validate_luau_bytecode;
-use logging_scripting_context::LoggingScriptingContext;
+use logging_scripting_context::{LoggingScriptingContext, LoggingScriptingContextLua};
 use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
 use luaur_rt::ffi::lua_error;
@@ -67,13 +69,18 @@ use luaur_vm::macros::lua_l_checkstring::luaL_checkstring;
 use luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
-    ScriptArtboard, ScriptCoreString, ScriptDataConverterMethod, ScriptDataConverterOptionalCall,
-    ScriptError, ScriptHost, ScriptInstance, ScriptInterpolatorMethod, ScriptListenerActionMethod,
-    ScriptListenerInvocation, ScriptMethod, ScriptOptionalMethodResult, ScriptOptionalNumberResult,
-    ScriptValue, ScriptViewModel, ScriptingVm as RuntimeScriptingVm,
+    PreparedScriptArtboard, RuntimeScriptProgram, ScriptArtboard, ScriptAssetRegistration,
+    ScriptAssetRegistrationResult, ScriptCoreString, ScriptDataConverterMethod,
+    ScriptDataConverterOptionalCall, ScriptError, ScriptHost, ScriptInstance,
+    ScriptInterpolatorMethod, ScriptListenerActionMethod, ScriptListenerInvocation, ScriptMethod,
+    ScriptOptionalMethodResult, ScriptOptionalNumberResult, ScriptValue, ScriptViewModel,
+    ScriptingVm as RuntimeScriptingVm,
 };
 pub(crate) use renderer::RendererBindings;
-use view_model::{ScriptViewModelFrameContext, ScriptedContext, create_scripted_view_model};
+use view_model::{
+    ScriptViewModelFrameContext, ScriptedContext, ScriptedPropertyListenerOwner,
+    create_scripted_view_model,
+};
 
 use crate::envelope::SignedContent;
 use crate::gpu_canvas::{
@@ -101,6 +108,33 @@ const MODULE_CACHE_KEY: &str = "_MODULES";
 unsafe fn lua_require_registered_module(
     state: *mut luaur_vm::records::lua_state::lua_State,
 ) -> core::ffi::c_int {
+    let mut debug = std::mem::MaybeUninit::<luaur_vm::records::lua_debug::LuaDebug>::zeroed();
+    let mut level = 1;
+    let requiring = loop {
+        if unsafe {
+            luaur_vm::functions::lua_getinfo::lua_getinfo(
+                state,
+                level,
+                c"s".as_ptr(),
+                debug.as_mut_ptr(),
+            )
+        } == 0
+        {
+            unsafe {
+                lua_l_error_l(
+                    state,
+                    c"require is not supported in this context".as_ptr(),
+                    format_args!("require is not supported in this context"),
+                )
+            };
+            return 0;
+        }
+        level += 1;
+        let debug = unsafe { debug.assume_init_ref() };
+        if unsafe { *debug.what } != b'C' as core::ffi::c_char {
+            break debug.source;
+        }
+    };
     unsafe { lua_settop(state, 1) };
     let path = luaL_checkstring!(state, 1);
     unsafe { lua_getfield(state, LUA_REGISTRYINDEX, c"_MODULES".as_ptr()) };
@@ -108,6 +142,26 @@ unsafe fn lua_require_registered_module(
     if unsafe { lua_type(state, -1) }
         == luaur_vm::enums::lua_type::lua_Type::LUA_TNIL as core::ffi::c_int
     {
+        // This registry table is installed only for File's registration pass.
+        // Index by the actual requiring Lua chunk, matching recordMissingDependency.
+        unsafe {
+            lua_getfield(
+                state,
+                LUA_REGISTRYINDEX,
+                c"_RIVE_REGISTRATION_DEPENDENCIES".as_ptr(),
+            )
+        };
+        if unsafe { lua_type(state, -1) }
+            == luaur_vm::enums::lua_type::lua_Type::LUA_TTABLE as core::ffi::c_int
+        {
+            unsafe { lua_getfield(state, -1, requiring) };
+            if unsafe { lua_type(state, -1) }
+                == luaur_vm::enums::lua_type::lua_Type::LUA_TTABLE as core::ffi::c_int
+            {
+                unsafe { luaur_vm::functions::lua_pushboolean::lua_pushboolean(state, 1) };
+                unsafe { luaur_vm::functions::lua_setfield::lua_setfield(state, -2, path) };
+            }
+        }
         unsafe { lua_settop(state, 1) };
         let path = unsafe { std::ffi::CStr::from_ptr(path) }.to_string_lossy();
         unsafe {
@@ -604,6 +658,8 @@ impl ScriptExecutionBudget {
 /// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
 /// [`ScriptVm::lua`] exposes the full mlua-style API for binding work.
 pub struct ScriptVm {
+    runtime_identity: Rc<()>,
+    initializes_data_global_externally: Cell<bool>,
     lua: Lua,
     initialization_error: Option<String>,
     execution_budget: Option<ScriptExecutionBudget>,
@@ -618,7 +674,11 @@ pub struct ScriptVm {
     resource_limits: resource_limits::ResourceLimitTracker,
     blob_assets: lua_blob::ScriptedBlobAssets,
     audio_assets: lua_audio::ScriptedAudioAssets,
+    #[cfg(feature = "tools")]
+    audio_tools_state: lua_audio::ScriptedAudioToolsState,
     gpu_canvas_shaders: ImportedGpuCanvasShaderAssets,
+    native_shader_authorities:
+        RefCell<Vec<(Arc<[u8]>, nuxie_render_api::GpuCanvasShaderProvenance)>>,
     logging: LoggingScriptingContext,
 }
 
@@ -641,6 +701,24 @@ impl DetachedViewModelFrame {
 #[derive(Clone)]
 pub struct ScriptProgram {
     generator: Function,
+}
+
+#[cfg(any(test, feature = "upstream-test-seams"))]
+impl ScriptProgram {
+    /// Read a numeric getter from the script chunk's own private environment.
+    ///
+    /// This exists only for literal upstream ports whose assertions use Lua's
+    /// module globals. It observes the script-owned value without mirroring it
+    /// in the Rust host or exposing the environment to runtime consumers.
+    #[doc(hidden)]
+    pub fn upstream_test_module_i32_getter(&self, getter: &str) -> Result<i32> {
+        let environment = self
+            .generator
+            .environment()
+            .ok_or_else(|| Error::runtime("script generator has no Lua environment"))?;
+        let getter: Function = environment.get(getter)?;
+        getter.call(())
+    }
 }
 
 impl std::fmt::Debug for ScriptProgram {
@@ -679,6 +757,7 @@ pub struct LuaScriptInstance {
     gpu_canvas: Option<ImportedGpuCanvasInstance>,
     gpu_canvas_context: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     logging: LoggingScriptingContext,
+    property_listener_owner: ScriptedPropertyListenerOwner,
 }
 
 impl LuaScriptInstance {
@@ -705,6 +784,7 @@ impl LuaScriptInstance {
             gpu_canvas: None,
             gpu_canvas_context: None,
             logging: LoggingScriptingContext::default(),
+            property_listener_owner: ScriptedPropertyListenerOwner::default(),
         }
     }
 
@@ -731,6 +811,11 @@ impl LuaScriptInstance {
             .and_then(|context| context.borrow::<ScriptedContext>().ok())
             .map(|context| context.mark_needs_update_requested())
             .unwrap_or_else(|| Rc::new(Cell::new(false)));
+        let property_listener_owner = context
+            .as_ref()
+            .and_then(|context| context.borrow::<ScriptedContext>().ok())
+            .map(|context| context.listener_owner())
+            .unwrap_or_default();
         Self {
             table: Some(table),
             execution_budget,
@@ -752,6 +837,7 @@ impl LuaScriptInstance {
             gpu_canvas,
             gpu_canvas_context,
             logging,
+            property_listener_owner,
         }
     }
 
@@ -836,7 +922,36 @@ impl LuaScriptInstance {
             .map_err(|error| self.script_error(error))
     }
 
+    /// Resolve and invoke `ScriptedObject::scriptAdvance` as one VM operation.
+    ///
+    /// The pinned owner accepts every Lua truthy result, treats a missing or
+    /// non-function `advance` field as false, and consumes an ordinary
+    /// protected-call failure as false (`scripted_object.cpp:178-203`). Keep
+    /// those semantics out of the narrower [`ScriptValue`] bridge, which
+    /// cannot represent every truthy Lua value.
+    fn call_scripted_object_advance_truthy(
+        &mut self,
+        args: &[ScriptValue],
+    ) -> std::result::Result<bool, ScriptError> {
+        self.reset_execution_budget();
+        let Some(table) = self.table.clone() else {
+            return Ok(false);
+        };
+        let lua = table.lua();
+        let mut call_args = MultiValue::with_capacity(args.len() + 1);
+        call_args.push_back(Value::Table(table.clone()));
+        for arg in args {
+            call_args.push_back(script_value_to_lua(&lua, arg));
+        }
+        table
+            .call_function_truthy(ScriptMethod::Advance.as_str(), call_args)
+            .map_err(|error| self.script_error(error))
+    }
+
     fn dispose_script_lifetime(&mut self) {
+        // Pinned `ScriptedObject::scriptDispose` disposes tracked properties
+        // in their registration order before releasing `m_self` and Context.
+        self.property_listener_owner.dispose();
         // Pinned `tryLuaUserInit` drops `m_self` before disposing the Context
         // (`scripted_object.cpp:277-303`). Taking the registry-backed Table
         // here immediately releases the failed occurrence and its captures.
@@ -963,6 +1078,12 @@ impl LuaScriptInstance {
             .and_then(|context| context.borrow::<ScriptedContext>().ok())
             .map(|context| context.mark_needs_update_requested())
             .unwrap_or_else(|| Rc::new(Cell::new(false)));
+        self.property_listener_owner = self
+            .context
+            .as_ref()
+            .and_then(|context| context.borrow::<ScriptedContext>().ok())
+            .map(|context| context.listener_owner())
+            .unwrap_or_default();
         self.context_alive = Some(context_alive);
         self.context_missing_requested_data = missing_requested_data;
         self.user_init_done = false;
@@ -1138,6 +1259,8 @@ impl ScriptVm {
             Some(factory),
             context_view_model_value,
             context_parent_view_models,
+            None,
+            None,
         )
     }
 
@@ -1150,18 +1273,34 @@ impl ScriptVm {
         program: &ScriptProgram,
         factory: &mut dyn RenderFactory,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        self.instantiate_registered_script_with_factory_and_context_async(
+            program,
+            factory,
+            self.default_context_view_model.clone(),
+            self.default_context_parent_view_models.clone(),
+        )
+        .await
+    }
+
+    /// Asynchronous renderer preparation followed by generator invocation
+    /// with the concrete occurrence DataContext already installed.
+    pub async fn instantiate_registered_script_with_factory_and_context_async(
+        &self,
+        program: &ScriptProgram,
+        factory: &mut dyn RenderFactory,
+        context_view_model_value: Option<ScriptViewModel>,
+        context_parent_view_models: Vec<Option<ScriptViewModel>>,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         bindings
             .verify_render_context(factory)
             .map_err(|error| self.script_error(error))?;
         let context_alive = Rc::new(Cell::new(true));
         let context_present = Rc::new(Cell::new(
-            self.default_context_view_model.is_some()
-                || !self.default_context_parent_view_models.is_empty(),
+            context_view_model_value.is_some() || !context_parent_view_models.is_empty(),
         ));
-        let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
+        let context_view_model = Rc::new(RefCell::new(context_view_model_value));
         let context_missing_requested_data = Rc::new(Cell::new(false));
-        let context_parent_view_models = self.default_context_parent_view_models.clone();
         let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
             Rc::clone(&self.gpu_canvas_shaders),
             self.renderer_bindings.clone(),
@@ -1224,6 +1363,8 @@ impl ScriptVm {
             None,
             context_view_model_value,
             context_parent_view_models,
+            None,
+            None,
         )
     }
 
@@ -1240,6 +1381,8 @@ impl ScriptVm {
             None,
             self.default_context_view_model.clone(),
             self.default_context_parent_view_models.clone(),
+            None,
+            None,
         )
     }
 
@@ -1249,16 +1392,18 @@ impl ScriptVm {
         factory: Option<&mut dyn RenderFactory>,
         context_view_model_value: Option<ScriptViewModel>,
         context_parent_view_models: Vec<Option<ScriptViewModel>>,
+        explicit_context_present: Option<bool>,
+        mut host: Option<&mut dyn ScriptHost>,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         let context_alive = Rc::new(Cell::new(true));
-        let instantiate = || {
+        let mut instantiate = || {
             // A retained parent slot proves that the DataContext exists even
             // when its own main ViewModel is null. Pinned C++ pushes the
             // DataContext userdata independently from mainViewModelInstance.
-            let context_present = Rc::new(Cell::new(
+            let context_present = Rc::new(Cell::new(explicit_context_present.unwrap_or(
                 context_view_model_value.is_some() || !context_parent_view_models.is_empty(),
-            ));
+            )));
             let context_view_model = Rc::new(RefCell::new(context_view_model_value));
             let context_missing_requested_data = Rc::new(Cell::new(false));
             let (gpu_canvas, gpu_canvas_context) = ImportedGpuCanvasInstance::new(
@@ -1277,9 +1422,19 @@ impl ScriptVm {
                 ))
                 .map_err(|error| self.script_error(error))?;
             self.reset_execution_budget();
-            let instance: Table = self
-                .track_resource_result(program.generator.call(context.clone()))
-                .map_err(|error| self.script_error(error))?;
+            let generated =
+                self.track_resource_result(program.generator.call::<Table>(context.clone()));
+            let requested = context
+                .borrow::<ScriptedContext>()
+                .map_err(|error| self.script_error(error))?
+                .mark_needs_update_requested()
+                .replace(false);
+            if requested {
+                if let Some(host) = host.as_deref_mut() {
+                    host.mark_script_update();
+                }
+            }
+            let instance = generated.map_err(|error| self.script_error(error))?;
             Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
                 instance,
                 self.renderer_bindings.clone(),
@@ -1323,6 +1478,8 @@ impl ScriptVm {
         lua.set_app_data(view_model_frame_context.clone());
         let blob_assets = lua_blob::ScriptedBlobAssets::install(&lua);
         let audio_assets = lua_audio::ScriptedAudioAssets::install(&lua);
+        #[cfg(feature = "tools")]
+        let audio_tools_state = lua_audio::ScriptedAudioToolsState::install(&lua);
         let initialization_error = lua
             .set_memory_limit(SCRIPT_VM_MEMORY_LIMIT_BYTES)
             .err()
@@ -1342,6 +1499,8 @@ impl ScriptVm {
         });
         Self {
             lua,
+            runtime_identity: Rc::new(()),
+            initializes_data_global_externally: Cell::new(false),
             initialization_error,
             execution_budget: None,
             rive_globals_installed: Cell::new(false),
@@ -1355,7 +1514,10 @@ impl ScriptVm {
             resource_limits,
             blob_assets,
             audio_assets,
+            #[cfg(feature = "tools")]
+            audio_tools_state,
             gpu_canvas_shaders: Rc::new(RefCell::new(Vec::new())),
+            native_shader_authorities: RefCell::new(Vec::new()),
             logging: LoggingScriptingContext::default(),
         }
     }
@@ -1365,6 +1527,12 @@ impl ScriptVm {
         let vm = Self::new();
         vm.set_log_sink(sink);
         vm
+    }
+
+    /// Set the tools playback state used by the pinned `ScriptingContext`.
+    #[cfg(feature = "tools")]
+    pub fn set_is_playing(&self, value: bool) {
+        self.audio_tools_state.set_is_playing(value);
     }
 
     /// Route future complete script log lines to a host-provided sink.
@@ -1416,9 +1584,6 @@ impl ScriptVm {
     }
 
     fn reset_execution_budget(&self) {
-        if let Err(error) = lua_image_decode::poll_completed(&self.lua) {
-            self.logging.log_error(&error);
-        }
         // File/Artboard facade callbacks do not all have an explicit flow
         // operation around them. Treat each such callback as its own bounded
         // cycle so the cumulative main-VM ceiling cannot poison an otherwise
@@ -1602,10 +1767,23 @@ impl ScriptVm {
         }
     }
 
+    pub fn set_initializes_data_global_externally(&self, value: bool) {
+        self.initializes_data_global_externally.set(value);
+    }
+
     /// Attach the importing file's image identities independently from its
     /// optional DataContext, matching `ScriptAsset::file()` ownership in C++.
     pub fn set_image_assets(&self, assets: nuxie_runtime::ScriptImageAssets) {
         lua_image::set_script_image_assets(&self.lua, assets);
+    }
+
+    /// Install proof for exact original bytes before native File import.
+    /// The catalog never grants authority from an asset name or a trust flag.
+    pub fn set_native_shader_authorities(
+        &self,
+        entries: Vec<(Arc<[u8]>, nuxie_render_api::GpuCanvasShaderProvenance)>,
+    ) {
+        *self.native_shader_authorities.borrow_mut() = entries;
     }
 
     pub fn set_default_context_view_model(&mut self, view_model: Option<ScriptViewModel>) {
@@ -2087,15 +2265,71 @@ pub fn validate_executable_luau_bytecode(
 }
 
 impl RuntimeScriptingVm for ScriptVm {
-    fn install_rive_globals(&mut self) -> std::result::Result<(), ScriptError> {
+    fn install_native_file_assets(
+        &self,
+        file: nuxie_runtime::mechanical_port::source::file::RuntimeFileWeakHandle,
+    ) -> std::result::Result<(), ScriptError> {
+        self.set_image_asset_owners(Arc::new(
+            nuxie_runtime::RuntimeImageAssetOwners::from_native_file(file.clone()),
+        ));
+        self.set_font_asset_owners(Arc::new(
+            nuxie_runtime::RuntimeFontAssetOwners::from_native_file(file.clone()),
+        ));
+        self.set_audio_asset_owners(Arc::new(
+            nuxie_runtime::RuntimeAudioAssetOwners::from_native_file(file.clone()),
+        ));
+        self.blob_assets.set_native_file(file.clone());
+        if let Some(file) = file.upgrade() {
+            self.set_image_assets(nuxie_runtime::script_image_assets(&file));
+            let assets = file.with_file(|file| file.assets().to_vec());
+            for asset in assets {
+                if let Some((name, short_name, payload)) = asset.with_downcast::<nuxie_runtime::mechanical_port::source::assets::shader_asset::ShaderAsset,_>(|asset| {
+                    let short_name = asset.base.name().to_owned();
+                    let folder_path = asset.base.folder_path();
+                    let name = if folder_path.is_empty() {
+                        short_name.clone()
+                    } else {
+                        format!("{folder_path}/{short_name}")
+                    };
+                    (name, short_name, asset.encoded_payload().to_vec())
+                }) {
+                    let provenance = self.native_shader_authorities.borrow().iter().find(|(bytes,_)|bytes.as_ref()==payload.as_slice()).map(|(_,proof)|proof.clone());
+                    self.gpu_canvas_shaders.borrow_mut().push(ImportedGpuCanvasShaderAssetEntry {
+                        name, short_name,
+                        owner:Rc::new(RefCell::new(RegisteredGpuCanvasShaderAsset::from_native(asset.clone(),provenance))),
+                    });
+                }
+                if let Some((name,id)) = asset.with_downcast::<nuxie_runtime::mechanical_port::source::assets::audio_asset::AudioAsset,_>(|asset|(asset.base.name().to_owned(),asset.base.asset_id())) {
+                    self.register_audio_asset_identity(&name,id);
+                }
+            }
+        }
+        Ok(())
+    }
+    fn initializes_data_global_externally(&self) -> bool {
+        self.initializes_data_global_externally.get()
+    }
+    fn initialize_data_global(
+        &self,
+        models: BTreeMap<String, ScriptViewModel>,
+    ) -> std::result::Result<(), ScriptError> {
+        self.install_rive_globals()
+            .map_err(|error| self.script_error(error))?;
+        view_model::install_data_global(&self.lua, &models)
+            .map_err(|error| self.script_error(error))
+    }
+    fn install_render_factory(
+        &self,
+        factory: &mut dyn RenderFactory,
+    ) -> std::result::Result<(), ScriptError> {
+        ScriptVm::install_render_factory(self, factory)
+    }
+
+    fn install_rive_globals(&self) -> std::result::Result<(), ScriptError> {
         ScriptVm::install_rive_globals(self).map_err(|error| self.script_error(error))
     }
 
-    fn register_module(
-        &mut self,
-        name: &str,
-        payload: &[u8],
-    ) -> std::result::Result<(), ScriptError> {
+    fn register_module(&self, name: &str, payload: &[u8]) -> std::result::Result<(), ScriptError> {
         ScriptVm::install_rive_globals(self).map_err(|error| self.script_error(error))?;
         ScriptVm::register_module(self, name, payload)
             .map(|_| ())
@@ -2103,7 +2337,7 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn instantiate_script(
-        &mut self,
+        &self,
         name: &str,
         payload: &[u8],
         _host: &mut dyn ScriptHost,
@@ -2174,8 +2408,51 @@ impl RuntimeScriptingVm for ScriptVm {
         )))
     }
 
-    fn advance_detached_view_models(&mut self) -> bool {
+    fn poll_async_work(&self) -> std::result::Result<bool, ScriptError> {
+        match lua_image_decode::poll_completed(&self.lua) {
+            Ok(settled) => Ok(settled),
+            Err(error) => {
+                self.logging.log_error(&error);
+                Err(self.script_error(error))
+            }
+        }
+    }
+
+    fn advance_detached_view_models(&self) -> bool {
         ScriptVm::advance_detached_view_models(self)
+    }
+
+    fn register_script_assets(
+        &self,
+        scripts: &[ScriptAssetRegistration<'_>],
+    ) -> Vec<ScriptAssetRegistrationResult> {
+        native_registration::register(self, scripts)
+    }
+
+    fn instantiate_program(
+        &self,
+        program: &RuntimeScriptProgram,
+        context_present: bool,
+        view_model: Option<ScriptViewModel>,
+        parent_view_models: Vec<Option<ScriptViewModel>>,
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        let program = program
+            .backend::<native_registration::RegisteredProtocolProgram>()
+            .ok_or_else(|| ScriptError::new("script generator belongs to a different backend"))?;
+        if !Rc::ptr_eq(&program.vm, &self.runtime_identity) {
+            return Err(ScriptError::new(
+                "script generator belongs to a different VM",
+            ));
+        }
+        self.instantiate_registered_script_with_optional_factory_and_context(
+            &program.program,
+            None,
+            view_model,
+            parent_view_models,
+            Some(context_present),
+            Some(host),
+        )
     }
 }
 
@@ -2186,6 +2463,36 @@ impl Drop for LuaScriptInstance {
 }
 
 impl ScriptInstance for LuaScriptInstance {
+    fn script_artboard_input_context_live(&self) -> bool {
+        // `table` is the concrete `m_self`/live-table owner. A retained
+        // generator is the Rust occurrence's resolved ScriptAsset authority.
+        // The Lua state itself is owned by either value and cannot be null
+        // while both guards hold.
+        self.table.is_some() && self.generator.is_some()
+    }
+
+    fn set_prepared_artboard_input_core(
+        &mut self,
+        name: &ScriptCoreString,
+        recipe: Box<dyn PreparedScriptArtboard>,
+    ) -> std::result::Result<(), ScriptError> {
+        self.reset_execution_budget();
+        if !self.script_artboard_input_context_live() {
+            return Ok(());
+        }
+        let table = self.live_table()?;
+        let lua = table.lua();
+        let key = lua.create_string(name.as_c_str_bytes());
+        let artboard = recipe.construct()?;
+        let artboard = self
+            .renderer_bindings
+            .create_scripted_artboard(&lua, artboard)
+            .map_err(|error| self.script_error(error))?;
+        table
+            .set(key, artboard)
+            .map_err(|error| self.script_error(error))
+    }
+
     fn poll_async_work(&mut self) -> std::result::Result<bool, ScriptError> {
         let Some(lua) = self
             .table
@@ -2257,9 +2564,22 @@ impl ScriptInstance for LuaScriptInstance {
         host: &mut dyn ScriptHost,
     ) -> std::result::Result<ScriptValue, ScriptError> {
         self.context_mark_needs_update_requested.set(false);
-        let result = self.call_method_value(method, args).and_then(|value| {
-            script_value_from_lua(value).map_err(|error| self.script_error(error))
-        });
+        let result = if method == ScriptMethod::Advance {
+            match self.call_scripted_object_advance_truthy(args) {
+                Ok(value) => Ok(ScriptValue::Bool(value)),
+                Err(error)
+                    if error.resource_code().is_none()
+                        && !host.requires_atomic_script_callbacks() =>
+                {
+                    Ok(ScriptValue::Bool(false))
+                }
+                Err(error) => Err(error),
+            }
+        } else {
+            self.call_method_value(method, args).and_then(|value| {
+                script_value_from_lua(value).map_err(|error| self.script_error(error))
+            })
+        };
         let requested = self.context_mark_needs_update_requested.replace(false);
         if requested && (result.is_ok() || !host.requires_atomic_script_callbacks()) {
             host.mark_script_update();
@@ -2332,18 +2652,25 @@ impl ScriptInstance for LuaScriptInstance {
     fn call_advance_truthy(
         &mut self,
         elapsed_seconds: f32,
-        _host: &mut dyn ScriptHost,
+        host: &mut dyn ScriptHost,
     ) -> std::result::Result<bool, ScriptError> {
-        self.reset_execution_budget();
-        let Some(table) = self.table.clone() else {
-            return Ok(false);
+        self.context_mark_needs_update_requested.set(false);
+        let result = match self
+            .call_scripted_object_advance_truthy(&[ScriptValue::Number(f64::from(elapsed_seconds))])
+        {
+            Ok(value) => Ok(value),
+            Err(error)
+                if error.resource_code().is_none() && !host.requires_atomic_script_callbacks() =>
+            {
+                Ok(false)
+            }
+            Err(error) => Err(error),
         };
-        table
-            .call_function_truthy(
-                ScriptMethod::Advance.as_str(),
-                (table.clone(), f64::from(elapsed_seconds)),
-            )
-            .map_err(|error| self.script_error(error))
+        let requested = self.context_mark_needs_update_requested.replace(false);
+        if requested && (result.is_ok() || !host.requires_atomic_script_callbacks()) {
+            host.mark_script_update();
+        }
+        result
     }
 
     fn call_method_with_factory(
@@ -2663,7 +2990,10 @@ impl ScriptInstance for LuaScriptInstance {
     ) -> std::result::Result<nuxie_render_api::RawPath, ScriptError> {
         self.reset_execution_budget();
         if self.table.is_none() {
-            return Ok(source);
+            // ScriptedPathEffect rewinds its retained output before checking
+            // for a live Lua state. A missing state therefore exposes an
+            // empty effect path, not the input path.
+            return Ok(nuxie_render_api::RawPath::new());
         }
         let table = self.live_table()?;
         renderer::call_path_effect_update(&table, source, node)
@@ -2681,9 +3011,19 @@ impl ScriptInstance for LuaScriptInstance {
         }
         let table = self.live_table()?;
         self.reset_execution_budget();
-        self.renderer_bindings
-            .call_draw(&table, factory, renderer)
-            .map_err(|error| self.script_error(error))
+        match self.renderer_bindings.call_draw(&table, factory, renderer) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                let error = self.script_error(error);
+                if error.resource_code().is_some() {
+                    Err(error)
+                } else {
+                    // C++ contains an ordinary protected-call failure and
+                    // continues after balancing ScriptedRenderer.
+                    Ok(())
+                }
+            }
+        }
     }
 
     fn call_draw_canvas(
@@ -2934,6 +3274,36 @@ mod context_init_tests {
 
     impl UserData for TruthyUserData {}
 
+    #[derive(Debug)]
+    struct FailingPreparedArtboard {
+        constructions: Rc<Cell<usize>>,
+    }
+
+    impl PreparedScriptArtboard for FailingPreparedArtboard {
+        fn construct(self: Box<Self>) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
+            self.constructions.set(self.constructions.get() + 1);
+            Err(ScriptError::new("Artboard construction must stay guarded"))
+        }
+    }
+
+    #[test]
+    fn artboard_setter_checks_script_asset_before_running_prepared_constructor() {
+        let lua = Lua::new();
+        let table = lua.create_table();
+        let mut instance = LuaScriptInstance::new(table);
+        let constructions = Rc::new(Cell::new(0));
+
+        instance
+            .set_prepared_artboard_input_core(
+                &ScriptCoreString::from("panel"),
+                Box::new(FailingPreparedArtboard {
+                    constructions: Rc::clone(&constructions),
+                }),
+            )
+            .expect("a live table without ScriptAsset authority is inert");
+        assert_eq!(constructions.get(), 0);
+    }
+
     #[test]
     fn compile_time_atom_table_resolves_every_upstream_name_and_exact_id() {
         assert!(RIVE_LUA_ATOMS.len() < RIVE_LUA_ATOM_SLOT_COUNT);
@@ -3015,6 +3385,50 @@ mod context_init_tests {
                 "{label} is the false side of Lua truthiness"
             );
         }
+    }
+
+    #[test]
+    fn scripted_object_advance_preserves_native_truthiness_and_consumes_ordinary_failures() {
+        let lua = Lua::new();
+        let table = lua.create_table();
+        let mut instance = LuaScriptInstance::new(table.clone());
+        let mut host = NoopScriptHost;
+
+        for (label, source, expected) in [
+            ("table", "return function() return {} end", true),
+            ("nil", "return function() return nil end", false),
+            (
+                "error",
+                "return function() error('advance failed') end",
+                false,
+            ),
+        ] {
+            let advance: Function = lua.load(source).eval().expect(label);
+            table.set("advance", advance).expect(label);
+            assert_eq!(
+                instance
+                    .call_method(
+                        ScriptMethod::Advance,
+                        &[ScriptValue::Number(0.25)],
+                        &mut host,
+                    )
+                    .expect(label),
+                ScriptValue::Bool(expected),
+                "ScriptedObject::scriptAdvance applies Lua truthiness and turns an ordinary protected-call failure into false"
+            );
+        }
+
+        table.set("advance", 17).expect("non-function advance");
+        assert_eq!(
+            instance
+                .call_method(
+                    ScriptMethod::Advance,
+                    &[ScriptValue::Number(0.25)],
+                    &mut host,
+                )
+                .expect("non-function advance"),
+            ScriptValue::Bool(false)
+        );
     }
 
     #[test]

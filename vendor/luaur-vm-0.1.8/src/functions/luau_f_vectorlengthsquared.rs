@@ -17,12 +17,11 @@ pub unsafe fn luau_f_vectorlengthsquared(
 ) -> core::ffi::c_int {
     if nparams >= 1 && nresults <= 1 && ttisvector!(arg0) {
         let v = vvalue!(arg0).as_ptr();
-        setnvalue!(
-            res,
-            (v.add(0).read() * v.add(0).read()
-                + v.add(1).read() * v.add(1).read()
-                + v.add(2).read() * v.add(2).read()) as f64
-        );
+        let xy = v
+            .add(0)
+            .read()
+            .mul_add(v.add(0).read(), v.add(1).read() * v.add(1).read());
+        setnvalue!(res, v.add(2).read().mul_add(v.add(2).read(), xy) as f64);
         return 1;
     }
 

@@ -12,7 +12,10 @@
 //! is accepted only while the ScriptAsset bytes re-extracted from the .riv
 //! hash-match it.
 
-use nuxie::{File, PersistentFactory, RecordingFactory};
+use nuxie::{
+    File, FileImportLimits, PersistentFactory, RecordingFactory, ScriptExecutionLimits,
+    import_unsigned_scripted, runtime::assets::script_asset::ScriptAsset,
+};
 use sha2::{Digest as _, Sha256};
 
 const EDITOR_SCRIPTED_VECTOR_V7: &[u8] =
@@ -28,31 +31,37 @@ const EMITTED_BYTECODE_VERSION: u8 = 7;
 
 #[test]
 fn editor_v7_row_script_asset_bytes_hash_match_the_compiler_output() {
-    let file = File::import_with_unsigned_scripts(EDITOR_SCRIPTED_VECTOR_V7)
-        .expect("editor-published scripted .riv must import");
-
-    let script_assets = file
-        .runtime()
-        .scripting_file_assets_with_contents()
-        .into_iter()
-        .filter(|entry| entry.asset.type_name == "ScriptAsset")
-        .collect::<Vec<_>>();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let scripted = import_unsigned_scripted(
+        EDITOR_SCRIPTED_VECTOR_V7,
+        &mut factory,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .expect("editor-published scripted .riv must import");
+    let file = scripted.native_file();
+    let script_assets = file.with_file(|file| {
+        (0..)
+            .map_while(|index| file.asset(index))
+            .filter(|asset| {
+                asset
+                    .with_downcast::<ScriptAsset, _>(|_| true)
+                    .unwrap_or(false)
+            })
+            .collect::<Vec<_>>()
+    });
     let [script_asset] = script_assets.as_slice() else {
         panic!(
             "the matrix fixture embeds exactly one ScriptAsset, found {}",
             script_assets.len()
         );
     };
-
-    let contents = script_asset
-        .contents
-        .expect("ScriptAsset carries in-band FileAssetContents");
-    let (header, bytecode) = contents
-        .split_first()
-        .expect("contents carry the SignedContentHeader flags byte");
-    assert_eq!(*header, 0, "editor publish emits the unsigned header");
+    let bytecode = script_asset
+        .with_downcast::<ScriptAsset, _>(|script| script.module_bytecode().to_vec())
+        .expect("actual ScriptAsset");
     assert_eq!(
-        format!("{:x}", Sha256::digest(bytecode)),
+        format!("{:x}", Sha256::digest(&bytecode)),
         EMITTED_BYTECODE_SHA256,
         "re-extracted ScriptAsset bytes must hash-match the compiler output",
     );
@@ -71,18 +80,22 @@ fn editor_v7_row_script_asset_bytes_hash_match_the_compiler_output() {
 
 #[test]
 fn editor_v7_row_script_paints_through_this_runtime() {
-    let file = File::import_with_unsigned_scripts(EDITOR_SCRIPTED_VECTOR_V7)
-        .expect("editor-published scripted .riv must import");
-    let mut artboard = file
-        .default_artboard()
-        .expect("published scripted artboard")
-        .instantiate()
-        .expect("artboard instantiates");
     let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let scripted = import_unsigned_scripted(
+        EDITOR_SCRIPTED_VECTOR_V7,
+        &mut factory,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .expect("editor-published scripted .riv must import");
+    let file = scripted.native_file();
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("published scripted artboard");
+    artboard.advance_default(0.0);
     let mut renderer = factory.borrow().make_renderer();
-    artboard
-        .draw(&mut factory, &mut renderer)
-        .expect("scripted draw succeeds");
+    artboard.draw(&mut renderer);
     let stream = factory.borrow().stream();
     assert!(stream.contains("color=0xff7f33cc"), "{stream}");
     assert!(stream.contains("drawPath "), "{stream}");

@@ -1,9 +1,19 @@
-//! Direct ports of the single-case rotation, scale, transform, and translation
-//! constraint tests from pinned `tests/unit_tests/runtime`.
+//! Direct ports of the pinned constraint tests in `tests/unit_tests/runtime`.
 
 use std::path::PathBuf;
 
-use nuxie::{File, Mat2D};
+use nuxie::{
+    CoreHandle, File, Mat2D, PersistentFactory, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle,
+};
+use nuxie_render_api::SerializingFactory;
+use nuxie_runtime::source::{
+    bones::{bone::Bone, skin::Skin},
+    constraints::{distance_constraint::DistanceConstraint, ik_constraint::IKConstraint},
+    core::CoreType,
+    generated::{core_registry::CoreRegistry, node_base::NodeBase},
+    shapes::shape::Shape,
+    transform_component::TransformComponent,
+};
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -15,210 +25,173 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
 }
 
-fn named_local(file: &File, name: &str) -> usize {
-    file.default_artboard()
-        .expect("default artboard")
-        .graph()
-        .component_named(name)
+fn fixture(
+    name: &str,
+) -> (
+    PersistentFactory<SerializingFactory>,
+    RuntimeArtboardInstanceHandle,
+) {
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    let file = File::import(
+        &pinned_fixture(name),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("import fixture");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    (factory, artboard)
+}
+
+fn named<T: CoreType>(artboard: &RuntimeArtboardInstanceHandle, name: &str) -> CoreHandle {
+    artboard
+        .with_artboard(|artboard| artboard.base.find_handle::<T>(name))
         .unwrap_or_else(|| panic!("component {name}"))
-        .local_id
 }
 
-fn property_key(type_name: &str, property_name: &str) -> u16 {
-    let definition = nuxie_schema::definition_by_name(type_name).expect("schema definition");
-    definition
-        .properties
-        .iter()
-        .chain(definition.ancestors.iter().flat_map(|ancestor| {
-            nuxie_schema::definition_by_name(ancestor)
-                .expect("ancestor definition")
-                .properties
-                .iter()
-        }))
-        .find(|property| property.name == property_name)
-        .unwrap_or_else(|| panic!("property {type_name}.{property_name}"))
-        .key
-        .int
+fn world_transform(owner: &CoreHandle) -> Mat2D {
+    owner
+        .with(|owner| {
+            owner
+                .as_world_transform_component()
+                .map(|owner| *owner.world_transform())
+        })
+        .flatten()
+        .expect("WorldTransformComponent")
 }
 
-fn decompose(matrix: Mat2D) -> (f32, f32, f32, f32, f32) {
-    let [m0, m1, m2, m3, x, y] = matrix.0;
-    let rotation = m1.atan2(m0);
-    let scale_x = (m0 * m0 + m1 * m1).sqrt();
-    let scale_y = if scale_x == 0.0 {
-        0.0
-    } else {
-        (m0 * m3 - m2 * m1) / scale_x
-    };
-    (x, y, scale_x, scale_y, rotation)
+fn graph_order(owner: &CoreHandle) -> u32 {
+    owner
+        .with(|owner| owner.as_component().expect("Component").graph_order())
+        .expect("live component")
 }
 
 #[test]
 fn rotation_constraint_updates_world_transform() {
-    let file = File::import(&pinned_fixture("rotation_constraint.riv")).expect("import fixture");
-    let target = named_local(&file, "target");
-    let rectangle = named_local(&file, "rect");
-    let mut artboard = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate artboard");
+    let (_factory, artboard) = fixture("rotation_constraint.riv");
+    let target = named::<TransformComponent>(&artboard, "target");
+    let rectangle = named::<TransformComponent>(&artboard, "rect");
 
-    artboard.advance(0.0);
-    let (_, _, _, _, target_rotation) =
-        decompose(artboard.world_transform(target).expect("target transform"));
-    let (_, _, _, _, rectangle_rotation) = decompose(
-        artboard
-            .world_transform(rectangle)
-            .expect("rectangle transform"),
+    artboard.advance_default(0.0);
+    let target_components = world_transform(&target).decompose();
+    let rectangle_components = world_transform(&rectangle).decompose();
+
+    assert_eq!(
+        target_components.rotation(),
+        rectangle_components.rotation()
     );
-
-    assert_eq!(target_rotation, rectangle_rotation);
 }
 
 #[test]
 fn scale_constraint_updates_world_transform() {
-    let file = File::import(&pinned_fixture("scale_constraint.riv")).expect("import fixture");
-    let target = named_local(&file, "target");
-    let rectangle = named_local(&file, "rect");
-    let mut artboard = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate artboard");
+    let (_factory, artboard) = fixture("scale_constraint.riv");
+    let target = named::<TransformComponent>(&artboard, "target");
+    let rectangle = named::<TransformComponent>(&artboard, "rect");
 
-    artboard.advance(0.0);
-    let (_, _, target_scale_x, target_scale_y, _) =
-        decompose(artboard.world_transform(target).expect("target transform"));
-    let (_, _, rectangle_scale_x, rectangle_scale_y, _) = decompose(
-        artboard
-            .world_transform(rectangle)
-            .expect("rectangle transform"),
-    );
+    artboard.advance_default(0.0);
+    let target_components = world_transform(&target).decompose();
+    let rectangle_components = world_transform(&rectangle).decompose();
 
-    assert_eq!(target_scale_x, rectangle_scale_x);
-    assert_eq!(target_scale_y, rectangle_scale_y);
+    assert_eq!(target_components.scale_x(), rectangle_components.scale_x());
+    assert_eq!(target_components.scale_y(), rectangle_components.scale_y());
 }
 
 #[test]
 fn transform_constraint_updates_world_transform() {
-    let file = File::import(&pinned_fixture("transform_constraint.riv")).expect("import fixture");
-    let target = named_local(&file, "Target");
-    let rectangle = named_local(&file, "Rectangle");
-    let mut artboard = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate artboard");
+    let (_factory, artboard) = fixture("transform_constraint.riv");
+    let target = named::<TransformComponent>(&artboard, "Target");
+    let rectangle = named::<TransformComponent>(&artboard, "Rectangle");
 
-    artboard.advance(0.0);
-    let target_transform = artboard.world_transform(target).expect("target transform");
-    let rectangle_transform = artboard
-        .world_transform(rectangle)
-        .expect("rectangle transform");
+    artboard.advance_default(0.0);
+    let target_transform = world_transform(&target);
+    let rectangle_transform = world_transform(&rectangle);
 
     assert!(
         target_transform
-            .0
+            .values()
             .iter()
-            .zip(rectangle_transform.0)
+            .zip(rectangle_transform.values())
             .all(|(target, rectangle)| (target - rectangle).abs() <= 0.0001)
     );
 }
 
 #[test]
 fn translation_constraint_updates_world_transform() {
-    let file = File::import(&pinned_fixture("translation_constraint.riv")).expect("import fixture");
-    let target = named_local(&file, "target");
-    let rectangle = named_local(&file, "rect");
-    let mut artboard = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate artboard");
+    let (_factory, artboard) = fixture("translation_constraint.riv");
+    let target = named::<TransformComponent>(&artboard, "target");
+    let rectangle = named::<TransformComponent>(&artboard, "rect");
 
-    artboard.advance(0.0);
-    let (target_x, target_y, _, _, _) =
-        decompose(artboard.world_transform(target).expect("target transform"));
-    let (rectangle_x, rectangle_y, _, _, _) = decompose(
-        artboard
-            .world_transform(rectangle)
-            .expect("rectangle transform"),
-    );
+    artboard.advance_default(0.0);
+    let target_components = world_transform(&target).decompose();
+    let rectangle_components = world_transform(&rectangle).decompose();
 
-    assert_eq!(target_x, rectangle_x);
-    assert_eq!(target_y, rectangle_y);
+    assert_eq!(target_components.x(), rectangle_components.x());
+    assert_eq!(target_components.y(), rectangle_components.y());
 }
 
 #[test]
 fn ik_with_skinned_bones_orders_correctly() {
-    let file = File::import(&pinned_fixture("complex_ik_dependency.riv")).expect("import fixture");
-    let graph = file.default_artboard().expect("default artboard").graph();
-    let one = graph.component_named("One").expect("bone One");
-    assert_eq!(one.type_name, "Bone");
-    let two = graph.component_named("Two").expect("bone Two");
-    assert_eq!(two.type_name, "Bone");
-    let skin = graph
-        .components
-        .iter()
-        .find(|component| component.type_name == "Skin")
-        .expect("skin");
-    let first_constraint = two.constraint_locals.first().expect("Two constraint");
-    let constraint = graph
-        .components
-        .iter()
-        .find(|component| component.local_id == *first_constraint)
-        .expect("Two constraint component");
+    let (_factory, artboard) = fixture("complex_ik_dependency.riv");
+    let one = named::<Bone>(&artboard, "One");
+    let two = named::<Bone>(&artboard, "Two");
+    let skin = artboard
+        .with_artboard(|artboard| {
+            artboard
+                .base
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(Skin::TYPE_KEY))
+                .cloned()
+        })
+        .expect("Skin");
+    let first_constraint = two
+        .with(|two| {
+            two.as_transform_component()
+                .expect("Bone transform")
+                .constraints()[0]
+                .clone()
+        })
+        .expect("live bone");
 
-    assert_eq!(constraint.type_name, "IKConstraint");
-    assert!(
-        skin.graph_order.expect("skin graph order") > one.graph_order.expect("One graph order")
-    );
-    assert!(
-        skin.graph_order.expect("skin graph order") > two.graph_order.expect("Two graph order")
-    );
+    assert!(first_constraint.is_type_of(IKConstraint::TYPE_KEY));
+    assert!(graph_order(&skin) > graph_order(&one));
+    assert!(graph_order(&skin) > graph_order(&two));
 }
 
 #[test]
 fn distance_constraints_move_items_as_expected() {
-    let file = File::import(&pinned_fixture("distance_constraint.riv")).expect("import fixture");
-    let graph = file.default_artboard().expect("default artboard").graph();
-    let a = graph.component_named("A").expect("shape A");
-    assert_eq!(a.type_name, "Shape");
-    let b = graph.component_named("B").expect("shape B");
-    assert_eq!(b.type_name, "Shape");
-    assert_eq!(a.constraint_locals.len(), 1);
-    let constraint = graph
-        .components
-        .iter()
-        .find(|component| component.local_id == a.constraint_locals[0])
-        .expect("A constraint");
-    assert_eq!(constraint.type_name, "DistanceConstraint");
+    let (_factory, artboard) = fixture("distance_constraint.riv");
+    let a = named::<Shape>(&artboard, "A");
+    let b = named::<Shape>(&artboard, "B");
+    let constraints = a
+        .with_downcast::<Shape, _>(|shape| shape.base.constraints().to_vec())
+        .expect("Shape A");
+
+    assert_eq!(constraints.len(), 1);
+    assert!(constraints[0].is_type_of(DistanceConstraint::TYPE_KEY));
     assert_eq!(
-        file.runtime()
-            .object(constraint.global_id as usize)
-            .and_then(|object| object.uint_property("modeValue")),
+        constraints[0]
+            .with_downcast::<DistanceConstraint, _>(|constraint| constraint.base.mode_value()),
         Some(1)
     );
-    let mut artboard = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate artboard");
 
-    assert!(
-        artboard
-            .raw_mut()
-            .set_double_property(b.local_id, property_key("Node", "x"), 259.31)
-    );
-    assert!(
-        artboard
-            .raw_mut()
-            .set_double_property(b.local_id, property_key("Node", "y"), 137.87)
-    );
-    artboard.advance(0.0);
+    assert!(CoreRegistry::set_double_handle(
+        &b,
+        NodeBase::X_PROPERTY_KEY.into(),
+        259.31,
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &b,
+        NodeBase::Y_PROPERTY_KEY.into(),
+        137.87,
+    ));
+    artboard.advance_default(0.0);
 
-    let [_, _, _, _, x, y] = artboard.world_transform(a.local_id).expect("A transform").0;
+    let [_, _, _, _, x, y] = *world_transform(&a).values();
     let expected_x = 259.280_88;
     let expected_y = 62.870_003;
     assert!(((x - expected_x).powi(2) + (y - expected_y).powi(2)).sqrt() < 0.001);

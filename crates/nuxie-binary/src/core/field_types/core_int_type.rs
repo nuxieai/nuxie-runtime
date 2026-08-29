@@ -2,6 +2,17 @@ use crate::core::binary_reader::BinaryReader;
 use anyhow::{Context, Result};
 use nuxie_schema::IntStorage;
 
+/// Header-defined `CoreIntType::zigzagEncode`.
+#[allow(dead_code)]
+pub(super) const fn zigzag_encode(value: i32) -> u32 {
+    ((value as u32) << 1) ^ ((value >> 31) as u32)
+}
+
+/// Header-defined `CoreIntType::zigzagDecode`.
+pub(super) const fn zigzag_decode(value: u32) -> i32 {
+    ((value >> 1) as i32) ^ -((value & 1) as i32)
+}
+
 pub(super) fn deserialize(
     reader: &mut BinaryReader<'_>,
     storage: IntStorage,
@@ -9,7 +20,7 @@ pub(super) fn deserialize(
 ) -> Result<i32> {
     let encoded = u32::try_from(reader.read_var_uint()?)
         .with_context(|| format!("{label} zigzag value does not fit in u32"))?;
-    let value = ((encoded >> 1) as i32) ^ -((encoded & 1) as i32);
+    let value = zigzag_decode(encoded);
     if storage == IntStorage::Int16 {
         i16::try_from(value)
             .map(i32::from)

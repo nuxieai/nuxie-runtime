@@ -121,10 +121,8 @@ TEST_CASE("renders selected board", "[silver]")
             if producer.producer_class == "layout-scroll-dynamic"
         ]
         self.assertEqual(len(scroll), 6)
-        self.assertTrue(all(producer.status == "diverges" for producer in scroll))
-        self.assertTrue(
-            all("first difference:" in producer.note for producer in scroll)
-        )
+        self.assertTrue(all(producer.status == "exact" for producer in scroll))
+        self.assertTrue(all("operation-exact" in producer.note for producer in scroll))
 
     def test_carousel_scroll_actions_preserve_the_complete_cpp_swipe(self):
         actions = generate_manifest.p1q_round2_actions(
@@ -174,6 +172,41 @@ TEST_CASE("renders selected board", "[silver]")
                 {"kind": "draw"},
             ),
         )
+
+    def test_cpp_float_frame_counts_round_before_integer_truncation(self):
+        self.assertEqual(generate_manifest.cpp_float_division_to_int("4.0", "0.016"), 249)
+        self.assertEqual(generate_manifest.cpp_float_division_to_int("2.0", "0.016"), 124)
+        self.assertEqual(generate_manifest.cpp_float_division_to_int("1.0", "0.016"), 62)
+
+    def test_formula_random_actions_replay_the_testing_fifo_and_full_loop(self):
+        expected_calls = {
+            "formula_random-source_change": 2,
+            "formula_random-once": 1,
+            "formula_random-always": 64,
+        }
+        for silver_id, final_count in expected_calls.items():
+            actions = generate_manifest.p1q_round2_actions(silver_id)
+            self.assertEqual(actions[0], {"kind": "clear-randoms"})
+            self.assertEqual(actions[1], {"kind": "assert-random-calls", "count": 0})
+            self.assertEqual(actions[2], {"kind": "add-random-value", "value": 0.0})
+            self.assertEqual(
+                actions[-3],
+                {"kind": "advance-draw-frames", "frames": 62, "seconds": 0.016},
+            )
+            self.assertEqual(
+                actions[-2],
+                {"kind": "assert-random-calls", "count": final_count},
+            )
+            self.assertEqual(actions[-1], {"kind": "clear-randoms"})
+            self.assertEqual(
+                sum(action["kind"] == "add-random-value" for action in actions),
+                1 if silver_id == "formula_random-always" else 2,
+            )
+
+    def test_juice_replays_the_source_derived_sixty_two_frames(self):
+        actions = generate_manifest.p1q_round2_actions("juice")
+        self.assertEqual(len(actions), 188)
+        self.assertEqual(sum(action["kind"] == "frame" for action in actions), 62)
 
     def test_expands_literal_cpp_frame_count(self):
         actions, blocker = generate_manifest.executable_actions(

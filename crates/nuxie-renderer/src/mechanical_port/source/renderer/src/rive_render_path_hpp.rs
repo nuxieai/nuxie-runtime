@@ -176,8 +176,7 @@ impl RiveRenderPath {
     }
     pub fn isClockwiseDominant(&self, view: Mat2D) -> bool {
         let a = self.getCoarseArea();
-        let m = view.0;
-        a * (m[0] * m[3] - m[2] * m[1]) >= 0.0
+        a * crate::draw::mat2d_determinant(view) >= 0.0
     }
     pub fn getRawPathMutationID(&self) -> u64 {
         static UNIQUE_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -373,6 +372,33 @@ impl ApiRenderPath for RiveRenderPath {
     }
     fn close(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(test)]
+mod mat2d_caller_tests {
+    use super::{FillRule, Mat2D, RawPath, RiveRenderPath};
+
+    #[test]
+    fn clockwise_dominance_uses_pinned_contracted_view_determinant() {
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(0.0, 0.0);
+        raw_path.line_to(1.0, 0.0);
+        raw_path.line_to(1.0, 1.0);
+        raw_path.close();
+        let path = RiveRenderPath::new_with_raw_path(FillRule::Clockwise, &mut raw_path);
+        assert!(path.getCoarseArea() > 0.0);
+
+        let view = Mat2D([
+            f32::from_bits(0x26cd_29b3),
+            f32::from_bits(0x2533_fdc2),
+            f32::from_bits(0xd01a_d4bb),
+            f32::from_bits(0xce87_d5a9),
+            0.0,
+            0.0,
+        ]);
+        assert_eq!(crate::draw::mat2d_determinant(view).to_bits(), 0xa7ee_c560);
+        assert!(!path.isClockwiseDominant(view));
     }
 }
 

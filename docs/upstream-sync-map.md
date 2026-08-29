@@ -42,7 +42,7 @@ Triage is one report assembled through as many passes as the span requires.
    candidate SHA, and clone any vendored dependency revisions needed to build
    the candidate or its oracles. Keep the normal pinned checkout untouched.
 2. **Sandboxed scout pass.** Scouts inventory commits and path signatures,
-   inspect source and dependency changes, run the manifest check and available
+   inspect source and dependency changes, run direct pinned-source inventory and available
    pin-bump probes, and return citable evidence. A scout reports a blocked
    fetch, missing candidate worktree, or missing dependency clone immediately;
    the orchestrator supplies it and completes any network-blocked probe rather
@@ -54,12 +54,10 @@ Triage is one report assembled through as many passes as the span requires.
    attribution, version-skew evidence, priority, and deferred staleness in
    place. A top-up is not a second report or a second deferral-age increment.
 
-Every pass runs
-`RIVE_RUNTIME_DIR=<clean-candidate-worktree> make port-manifest-check` before
-classification. Any missing or stale non-generated `src/**/*.cpp` row
-(`src/generated/**` is schema/codegen-owned) is inventory evidence that must
-appear in the report; do not regenerate or reclassify the manifest before the
-approval gate.
+Every pass compares the candidate source tree directly against the translated
+owners described by `runtime-bun-style-source-port-plan.md` before
+classification. Any unmatched non-generated source owner (`src/generated/**`
+is schema/codegen-owned) is inventory evidence that must appear in the report.
 
 Bucket every commit by path signature:
 
@@ -270,30 +268,6 @@ worker may act on that category.
   - `tools/generate-renderer-shaders.sh`
   - `tools/golden-runner/runtime-provenance.sh`
   - `tools/renderer-dawn-live-reference-bootstrap.sh`
-  - `tools/runtime-frame-loop-port/build-trace-runners.sh
-- `port-manifest.toml` `upstream_ref` (missed in the S4 close; found stale at the S3 cut)`
-  - `tools/runtime-frame-loop-port/capture_trace.py`
-  - `docs/runtime-drawing-gaps.toml` `upstream_ref`
-  - `docs/runtime-drawing-ownership.toml` `upstream_ref`
-  - `docs/runtime-frame-loop-gaps.toml` `upstream_ref`
-  - `docs/runtime-frame-loop-ownership.toml` `upstream_ref`
-  - `tools/runtime-frame-loop-port/README.md` trace-runner checkout contract
-  - `file-correspondence-manifest.toml` `upstream_ref` (not
-    `audit_upstream_ref`)
-  - `test-correspondence-manifest.toml` `upstream_ref`
-  - `docs/parity-gap-register.md` current upstream-reference statement
-  - `tools/parity-scorecard/test_parity_scorecard.py` current-pin assertion
-- Port-manifest inventory registry (advance these entries together whenever an
-  approved manifest classification update changes its upstream cut; never
-  strand CI and the generated manifest at different revisions):
-  - `.github/workflows/ci.yml` top-level `PORT_MANIFEST_RIVE_RUNTIME_REF`
-  - `port-manifest.toml` `upstream_ref`
-  - `runtime-behavior-inventory.json` `upstream_ref` (regenerate only after
-    reviewing every member/item delta at the new pin)
-- Historical parity-evidence registry (do not advance during a normal sync;
-  regenerate the complete registry only after all enrolled proofs are reviewed
-  and recaptured):
-  - `parity-evidence-proofs.json` capture refs
 - Historical Phase R oracle registry (do not advance during a runtime sync;
   regenerate and review the reference artifacts first):
   - `.github/workflows/ci.yml` `renderer-golden` override

@@ -49,9 +49,10 @@ seam by delegation. Other `nux-capi` feature combinations do not install it.
   tests own output application and retained state through an unrelated fake.
 - `serde` and `serde_json` are no longer production dependencies of
   `nuxie-runtime`; they remain dev dependencies for C++ oracle tests.
-- `serde_json` is also absent from the default `nuxie-binary` and
-  `nuxie-graph` library closures. Their JSON inspector binaries opt into the
-  non-default `inspect` feature, while differential tests retain a dev-only
-  dependency.
+- `serde_json` is absent from the default `nuxie-binary` library closure. Its
+  wire-format inspector opts into the non-default `inspect` feature, while
+  differential tests retain a dev-only dependency. The native runtime imports
+  directly into source-shaped `File`/`CoreArena` owners; the legacy graph
+  projection is not part of the product architecture or dependency closure.
 - `make size-report` ratchets the renderer-on, scripting-off SDK dependency
   closure against `nuxie-project-data`, `serde_json`, and `zmij` regressions.

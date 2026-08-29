@@ -964,6 +964,22 @@ enum RegisteredGpuCanvasShaderAssetState {
 }
 
 impl RegisteredGpuCanvasShaderAsset {
+    pub(crate) fn from_native(
+        asset: nuxie_runtime::mechanical_port::source::core::CoreHandle,
+        provenance: Option<GpuCanvasShaderProvenance>,
+    ) -> Self {
+        let asset = match ShaderAsset::from_native(asset) {
+            Ok(asset) => RegisteredGpuCanvasShaderAssetState::Valid(asset),
+            Err(error) => RegisteredGpuCanvasShaderAssetState::Invalid(error.to_string()),
+        };
+        Self {
+            asset,
+            provenance,
+            decoded: None,
+            prepared_module: None,
+            module_prepared: false,
+        }
+    }
     pub(crate) fn new(
         name: &str,
         payload: &[u8],

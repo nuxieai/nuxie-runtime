@@ -58,21 +58,30 @@ impl RuntimeFile {
 
 impl RuntimeManifest {
     pub fn resolve_name(&self, id: u32) -> Option<&str> {
-        self.names
-            .get(&cpp_manifest_resolver_key(id))
-            .and_then(StringValue::as_str)
+        Some(
+            self.names
+                .get(&cpp_manifest_resolver_key(id))
+                .and_then(StringValue::as_str)
+                .unwrap_or_default(),
+        )
     }
 
     pub fn resolve_name_bytes(&self, id: u32) -> Option<&[u8]> {
-        self.names
-            .get(&cpp_manifest_resolver_key(id))
-            .map(StringValue::as_bytes)
+        Some(
+            self.names
+                .get(&cpp_manifest_resolver_key(id))
+                .map(StringValue::as_bytes)
+                .unwrap_or_default(),
+        )
     }
 
     pub fn resolve_path(&self, id: u32) -> Option<&[u32]> {
-        self.paths
-            .get(&cpp_manifest_resolver_key(id))
-            .map(Vec::as_slice)
+        Some(
+            self.paths
+                .get(&cpp_manifest_resolver_key(id))
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+        )
     }
 }
 
@@ -192,31 +201,31 @@ fn parse_cpp_manifest_asset(bytes: &[u8]) -> RuntimeManifest {
         let Ok(section) = reader.read_var_uint() else {
             return manifest;
         };
-        let section_size = match reader
-            .read_var_uint()
-            .ok()
-            .and_then(|value| usize::try_from(value).ok())
-        {
-            Some(value) => value,
-            None => return manifest,
+        let Ok(section_size) = reader.read_var_uint() else {
+            return manifest;
         };
-        let section_bytes = match reader.read_bytes_exact(section_size) {
-            Ok(bytes) => bytes,
-            Err(_) => return manifest,
-        };
-        let mut section_reader = BinaryReader::new(section_bytes);
+        let section_start = reader.offset;
 
         let decoded = match section {
-            0 => decode_cpp_manifest_names(&mut section_reader, &mut manifest),
-            1 => decode_cpp_manifest_paths(&mut section_reader, &mut manifest),
-            _ => continue,
+            0 => decode_cpp_manifest_names(&mut reader, &mut manifest),
+            1 => decode_cpp_manifest_paths(&mut reader, &mut manifest),
+            _ => {
+                let Some(section_size) = usize::try_from(section_size).ok() else {
+                    return manifest;
+                };
+                if reader.read_bytes_exact(section_size).is_err() {
+                    return manifest;
+                }
+                continue;
+            }
         };
 
         if decoded.is_err() {
             return manifest;
         }
 
-        if !section_reader.reached_end() {
+        let bytes_read = reader.offset - section_start;
+        if u64::try_from(bytes_read).ok() != Some(section_size) {
             return manifest;
         }
     }
@@ -244,7 +253,12 @@ fn decode_cpp_manifest_paths(
     let count = reader.read_var_uint()?;
     for _ in 0..count {
         let id = cpp_manifest_key(reader.read_var_uint()?);
-        let path_len = reader.read_var_uint()?;
+        // C++ stores this var-uint in an `int` before comparing it with the
+        // unsigned loop counter. Values outside the positive `int` range can
+        // request effectively unbounded work after integer promotion; reject
+        // that malformed representation at the Rust allocation boundary.
+        let path_len = i32::try_from(reader.read_var_uint()?)
+            .map_err(|_| anyhow::anyhow!("manifest path length does not fit in C++ int"))?;
         let mut path = Vec::new();
         for _ in 0..path_len {
             path.push(read_cpp_manifest_path_id(reader));

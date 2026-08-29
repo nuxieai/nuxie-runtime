@@ -1,7 +1,15 @@
-use std::path::PathBuf;
+use std::{cell::Cell, path::PathBuf, rc::Rc};
 
-use nuxie::{AudioEngine, Factory, File, RuntimeFileAssetKind};
-use nuxie_render_api::NullFactory;
+use nuxie::{
+    Factory, File, FileAssetLoader, FileAssetLoaderRef, PersistentFactory, RuntimeFactoryHandle,
+    RuntimeFileHandle,
+    runtime::{
+        assets::audio_asset::AudioAsset,
+        audio::{audio_engine::AudioEngine as NativeAudioEngine, audio_format::AudioFormat},
+        audio_event::AudioEvent,
+    },
+};
+use nuxie_render_api::{NullFactory, RecordingFactory};
 
 fn pinned_fixture(relative: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -11,6 +19,39 @@ fn pinned_fixture(relative: &str) -> Vec<u8> {
         .join(relative);
     std::fs::read(&path)
         .unwrap_or_else(|error| panic!("read pinned audio fixture {}: {error}", path.display()))
+}
+
+fn import(relative: &str, loader: Option<FileAssetLoaderRef>) -> RuntimeFileHandle {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    File::import(&pinned_fixture(relative), factory, None, loader, None)
+        .unwrap_or_else(|| panic!("{relative} imports"))
+}
+
+struct AudioLoader {
+    saw_audio: Rc<Cell<bool>>,
+    format: Option<AudioFormat>,
+}
+
+impl FileAssetLoader for AudioLoader {
+    fn load_contents(
+        &mut self,
+        asset: nuxie::CoreHandle,
+        in_band_bytes: &[u8],
+        factory: &RuntimeFactoryHandle,
+    ) -> bool {
+        asset
+            .with_downcast_mut::<AudioAsset, _>(|asset| {
+                self.saw_audio.set(true);
+                assert!(!in_band_bytes.is_empty());
+                assert!(asset.decode(&mut in_band_bytes.to_vec(), factory));
+                let source = asset.audio_source().expect("embedded audio decodes");
+                if let Some(format) = self.format {
+                    assert_eq!(source.format(), format);
+                }
+            })
+            .is_some()
+    }
 }
 
 #[test]
@@ -26,124 +67,98 @@ fn factory_decode_audio_owns_and_decodes_the_pinned_wav() {
 
 #[test]
 fn sound_fixture_loads_embedded_audio_and_host_loader_gets_first_refusal() {
-    let bytes = pinned_fixture("sound.riv");
-    let embedded = File::import(&bytes).expect("sound.riv imports");
-    let source = embedded
-        .audio_asset_source(52_054)
-        .expect("embedded AudioAsset source");
-    assert!(!source.bytes().is_empty());
+    let embedded = import("sound.riv", None);
+    let embedded_asset = embedded
+        .with_file(|file| file.asset(0))
+        .expect("embedded AudioAsset");
+    assert!(
+        embedded_asset
+            .with_downcast::<AudioAsset, _>(AudioAsset::has_audio_source)
+            .unwrap_or(false)
+    );
 
-    let mut factory = NullFactory::new();
-    let mut saw_audio = false;
-    let mut loader =
-        |asset: &nuxie::RuntimeFileAsset, in_band: &[u8], factory: &mut dyn Factory| {
-            if asset.kind() != RuntimeFileAssetKind::Audio {
-                return false;
-            }
-            saw_audio = true;
-            assert!(!in_band.is_empty());
-            assert!(asset.decode(in_band, factory));
-            assert!(asset.audio_source().is_some());
-            true
-        };
-    let loaded = File::import_with_asset_loader(&bytes, &mut factory, &mut loader)
-        .expect("loader import succeeds");
-    assert!(saw_audio);
-    assert!(loaded.audio_asset_source(52_054).is_some());
+    let saw_audio = Rc::new(Cell::new(false));
+    let loader = FileAssetLoaderRef::new(Box::new(AudioLoader {
+        saw_audio: saw_audio.clone(),
+        format: None,
+    }));
+    let loaded = import("sound.riv", Some(loader));
+    assert!(saw_audio.get());
+    assert!(
+        loaded
+            .with_file(|file| file.asset(0))
+            .and_then(|asset| asset.with_downcast::<AudioAsset, _>(AudioAsset::audio_source))
+            .flatten()
+            .is_some()
+    );
 }
 
 #[test]
 fn sound2_fixture_decodes_its_embedded_flac() {
-    let bytes = pinned_fixture("sound2.riv");
-    let mut factory = NullFactory::new();
-    let mut decoded_flac = false;
-    let mut loader =
-        |asset: &nuxie::RuntimeFileAsset, in_band: &[u8], factory: &mut dyn Factory| {
-            if asset.kind() != RuntimeFileAssetKind::Audio {
-                return false;
-            }
-            assert!(asset.decode(in_band, factory));
-            let source = asset.audio_source().expect("embedded FLAC decodes");
-            assert_eq!(source.format(), nuxie::AudioFormat::Flac);
-            decoded_flac = true;
-            true
-        };
-    File::import_with_asset_loader(&bytes, &mut factory, &mut loader).expect("sound2.riv imports");
-    assert!(decoded_flac);
+    let decoded_flac = Rc::new(Cell::new(false));
+    let loader = FileAssetLoaderRef::new(Box::new(AudioLoader {
+        saw_audio: decoded_flac.clone(),
+        format: Some(AudioFormat::Flac),
+    }));
+    let _file = import("sound2.riv", Some(loader));
+    assert!(decoded_flac.get());
 }
 
 #[test]
 fn sound_fixtures_match_direct_nested_and_no_audio_queries() {
-    let sound = File::import(&pinned_fixture("sound.riv")).expect("sound.riv imports");
-    assert!(
-        sound
-            .default_artboard()
-            .expect("default artboard")
-            .instantiate()
-            .expect("sound artboard instance")
-            .has_audio()
-    );
+    let sound = import("sound.riv", None);
+    let sound_artboard = sound
+        .with_file(|file| file.artboard_default())
+        .expect("sound artboard instance");
+    assert!(sound_artboard.with_artboard_mut(|artboard| artboard.has_audio()));
 
-    let sound2 = File::import(&pinned_fixture("sound2.riv")).expect("sound2.riv imports");
+    let sound2 = import("sound2.riv", None);
     for (name, expected) in [("child", true), ("grand-parent", true), ("no-audio", false)] {
         let instance = sound2
-            .artboard_named(name)
-            .unwrap_or_else(|| panic!("missing {name} artboard"))
-            .instantiate()
-            .unwrap_or_else(|error| panic!("instantiate {name}: {error:#}"));
-        assert_eq!(instance.has_audio(), expected, "{name} hasAudio");
+            .with_file(|file| file.artboard_named(name))
+            .unwrap_or_else(|| panic!("missing {name} artboard"));
+        assert_eq!(
+            instance.with_artboard_mut(|artboard| artboard.has_audio()),
+            expected,
+            "{name} hasAudio"
+        );
     }
 }
 
 #[test]
 fn audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard() {
-    let file = File::import(&pinned_fixture("sound.riv")).expect("sound.riv imports");
-    let engine = AudioEngine::new(2, 44_100).expect("headless engine");
-    let mut first = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
+    let file = import("sound.riv", None);
+    let engine = NativeAudioEngine::make(2, 44_100).expect("headless engine");
+    let first = file
+        .with_file(|file| file.artboard_default())
         .expect("first artboard instance");
-    let mut second = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
+    let second = file
+        .with_file(|file| file.artboard_default())
         .expect("second artboard instance");
-    first.set_audio_engine(Some(engine.clone()));
-    second.set_audio_engine(Some(engine.clone()));
-    first.set_volume(0.25);
+    first.with_artboard_mut(|artboard| {
+        artboard.set_audio_engine(Some(engine.clone()));
+        artboard.set_volume(0.25);
+    });
+    second.with_artboard_mut(|artboard| artboard.set_audio_engine(Some(engine.clone())));
     let first_event = first
-        .raw()
-        .components()
-        .iter()
-        .find(|component| component.type_name == "AudioEvent")
-        .expect("first AudioEvent")
-        .local_id;
+        .with_artboard(|artboard| artboard.object_handle_at::<AudioEvent>(0))
+        .expect("first AudioEvent");
     let second_event = second
-        .raw()
-        .components()
-        .iter()
-        .find(|component| component.type_name == "AudioEvent")
-        .expect("second AudioEvent")
-        .local_id;
+        .with_artboard(|artboard| artboard.object_handle_at::<AudioEvent>(0))
+        .expect("second AudioEvent");
 
-    let first_sound = first
-        .play_audio_event(first_event)
-        .expect("dense asset ordinal resolves and plays");
+    first_event
+        .with_downcast_mut::<AudioEvent, _>(AudioEvent::play)
+        .expect("actual first AudioEvent");
+    let first_sound = engine.playing_sounds_head().expect("first sound plays");
     assert_eq!(first_sound.volume(), 0.25);
-    first
-        .play_audio_event(first_event)
-        .expect("second first sound");
-    second
-        .play_audio_event(second_event)
-        .expect("second artboard sound");
-    first
-        .play_audio_event(first_event)
-        .expect("third first sound");
+    first_event.with_downcast_mut::<AudioEvent, _>(AudioEvent::play);
+    second_event.with_downcast_mut::<AudioEvent, _>(AudioEvent::play);
+    first_event.with_downcast_mut::<AudioEvent, _>(AudioEvent::play);
     assert_eq!(engine.playing_sound_count(), 4);
 
-    first.set_volume(0.0);
-    assert!(first.play_audio_event(first_event).is_none());
+    first.with_artboard_mut(|artboard| artboard.set_volume(0.0));
+    first_event.with_downcast_mut::<AudioEvent, _>(AudioEvent::play);
     assert_eq!(engine.playing_sound_count(), 4);
     drop(first);
     assert_eq!(engine.playing_sound_count(), 1);
@@ -153,29 +168,23 @@ fn audio_event_playback_multiplies_artboard_volume_and_stops_with_its_artboard()
 
 #[test]
 fn audio_event_artboard_clone_retains_its_asset_and_stops_independently() {
-    let file = File::import(&pinned_fixture("sound.riv")).expect("sound.riv imports");
-    let engine = AudioEngine::new(2, 44_100).expect("headless engine");
-    let mut original = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
+    let file = import("sound.riv", None);
+    let engine = NativeAudioEngine::make(2, 44_100).expect("headless engine");
+    let original = file
+        .with_file(|file| file.artboard_default())
         .expect("original artboard instance");
-    original.set_audio_engine(Some(engine.clone()));
-    let event_local = original
-        .raw()
-        .components()
-        .iter()
-        .find(|component| component.type_name == "AudioEvent")
-        .expect("AudioEvent")
-        .local_id;
-    let cloned = original.raw().clone();
+    original.with_artboard_mut(|artboard| artboard.set_audio_engine(Some(engine.clone())));
+    let cloned = original.instance().expect("clone artboard instance");
+    cloned.with_artboard_mut(|artboard| artboard.set_audio_engine(Some(engine.clone())));
+    let original_event = original
+        .with_artboard(|artboard| artboard.object_handle_at::<AudioEvent>(0))
+        .expect("original AudioEvent");
+    let cloned_event = cloned
+        .with_artboard(|artboard| artboard.object_handle_at::<AudioEvent>(0))
+        .expect("cloned AudioEvent");
 
-    original
-        .play_audio_event(event_local)
-        .expect("original retains AudioAsset");
-    cloned
-        .play_audio_event(event_local)
-        .expect("clone retains AudioAsset");
+    original_event.with_downcast_mut::<AudioEvent, _>(AudioEvent::play);
+    cloned_event.with_downcast_mut::<AudioEvent, _>(AudioEvent::play);
     assert_eq!(engine.playing_sound_count(), 2);
 
     drop(original);
@@ -187,89 +196,56 @@ fn audio_event_artboard_clone_retains_its_asset_and_stops_independently() {
 #[cfg(feature = "scripting")]
 #[test]
 fn scripted_audio_plays_and_updates_volume_from_the_pinned_fixture() {
-    use std::sync::Arc;
+    use nuxie::{
+        FileImportLimits, ScriptExecutionLimits, Vec2D, ViewModelInstanceRuntime,
+        import_unsigned_scripted,
+    };
 
-    use nuxie::{OwnedArtboardInstance, PersistentFactory, RecordingFactory};
-
-    let engine = AudioEngine::make_and_store(2, 44_100).expect("runtime audio engine");
-    let file = Arc::new(
-        File::import_with_unsigned_scripts(&pinned_fixture("audio_script.riv"))
-            .expect("audio_script.riv imports with trusted scripts"),
-    );
-    let mut instance =
-        OwnedArtboardInstance::instantiate_default(file).expect("default artboard instance");
-    instance.set_audio_engine(Some(engine.clone()));
-    let mut machine = instance
-        .default_state_machine_instance()
-        .expect("default state machine");
-    let mut view_model = instance
-        .instantiate_default_view_model_instance()
-        .or_else(|| instance.instantiate_view_model())
-        .expect("audio script view model");
+    let engine = NativeAudioEngine::make_and_store(2, 44_100).expect("runtime audio engine");
     let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let scripted = import_unsigned_scripted(
+        &pinned_fixture("audio_script.riv"),
+        &mut factory,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .expect("audio_script.riv imports with trusted scripts");
+    scripted.vm().set_is_playing(true);
+    let file = scripted.native_file();
+    let instance = file
+        .with_file(|file| file.artboard_default())
+        .expect("default artboard instance");
+    instance.with_artboard_mut(|artboard| artboard.set_audio_engine(Some(engine.clone())));
+    let machine = instance
+        .default_state_machine_handle()
+        .expect("default state machine");
+    let view_model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(instance.core_handle())
+                .or_else(|| file.create_view_model_instance_for_artboard(instance.core_handle()))
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
+        .expect("audio script view model");
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(view_model.instance()));
+    instance.bind_view_model_instance(Some(view_model.instance()));
 
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut machine),
-            0.016,
-            &mut view_model,
-            &mut factory,
-        )
-        .expect("initialize audio script");
+    machine.advance_and_apply(0.016);
     assert_eq!(engine.playing_sound_count(), 0);
 
-    {
-        let mut context = view_model.raw_mut();
-        assert!(machine.pointer_down_with_owned_view_model_context(
-            instance.raw_mut(),
-            25.0,
-            25.0,
-            1,
-            &mut context,
-        ));
-        assert!(machine.pointer_up_with_owned_view_model_context(
-            instance.raw_mut(),
-            25.0,
-            25.0,
-            1,
-            &mut context,
-        ));
-    }
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut machine),
-            0.016,
-            &mut view_model,
-            &mut factory,
-        )
-        .expect("run scripted play callback");
+    machine.with_instance_mut(|machine| {
+        machine.pointer_down(Vec2D::new(25.0, 25.0), 1);
+        machine.pointer_up(Vec2D::new(25.0, 25.0), 1);
+    });
+    machine.advance_and_apply(0.016);
     assert_eq!(engine.playing_sound_count(), 1);
 
-    {
-        let mut context = view_model.raw_mut();
-        machine.pointer_down_with_owned_view_model_context(
-            instance.raw_mut(),
-            200.0,
-            200.0,
-            2,
-            &mut context,
-        );
-        machine.pointer_up_with_owned_view_model_context(
-            instance.raw_mut(),
-            200.0,
-            200.0,
-            2,
-            &mut context,
-        );
-    }
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut machine),
-            0.016,
-            &mut view_model,
-            &mut factory,
-        )
-        .expect("run scripted volume callback");
+    machine.with_instance_mut(|machine| {
+        machine.pointer_down(Vec2D::new(200.0, 200.0), 2);
+        machine.pointer_up(Vec2D::new(200.0, 200.0), 2);
+    });
+    machine.advance_and_apply(0.016);
     assert_eq!(
         engine
             .playing_sounds_head()

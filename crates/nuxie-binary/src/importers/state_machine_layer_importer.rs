@@ -65,6 +65,7 @@ pub(super) fn validate_cpp_state_machine_layers(
     let artboard_ranges = runtime_artboard_ranges(objects, import_statuses);
     let artboard_indices = runtime_artboard_indices_by_file_index(objects, import_statuses);
     let mut current_artboard_index = None;
+    let mut current_state_machine_owner_artboard_range = None;
     let mut current_state_machine_owner_artboard_boundary = None;
     let mut layers = Vec::<CppStateMachineLayerResolution>::new();
     let mut current_layer: Option<usize> = None;
@@ -98,9 +99,11 @@ pub(super) fn validate_cpp_state_machine_layers(
         }
 
         if definition.name == "StateMachine" {
-            current_state_machine_owner_artboard_boundary = current_artboard_index
+            current_state_machine_owner_artboard_range = current_artboard_index
                 .and_then(|index| artboard_ranges.get(index))
-                .map(|(_, end)| *end);
+                .copied();
+            current_state_machine_owner_artboard_boundary =
+                current_state_machine_owner_artboard_range.map(|(_, end)| end);
             continue;
         }
 
@@ -163,6 +166,13 @@ pub(super) fn validate_cpp_state_machine_layers(
 fn validate_cpp_state_machine_layer_transitions(
     layer: &CppStateMachineLayerResolution,
 ) -> Result<()> {
+    // StateTransition::onAddedDirty returns MissingObject for an absent or
+    // wrong-kind interpolator. Artboard::canContinue deliberately tolerates
+    // every lifecycle status except InvalidObject, so the transition remains
+    // imported with a null interpolator pointer.
+
+    // StateMachineLayer checks its required system-state pointers only after
+    // every retained state's dirty lifecycle has completed.
     if (layer.object_id as usize) < layer.owner_artboard_resolve_boundary
         && (!layer.has_any_state || !layer.has_entry_state || !layer.has_exit_state)
     {
@@ -233,7 +243,7 @@ impl RuntimeFile {
         let mut state_machines = Vec::<RuntimeStateMachine<'_>>::new();
         let mut state_machine_artboard_owners = Vec::new();
         let mut layer_importer_resolve_boundaries = Vec::<Vec<usize>>::new();
-        let mut current_state_machine: Option<usize> = None;
+        let mut current_state_machine = None::<state_machine_importer::StateMachineImporter>;
         // StateMachineLayerImporter captures the latest Artboard at the
         // instant the layer is constructed. That identity survives later
         // Artboard and StateMachine importers (`file.cpp:435-447`;
@@ -242,22 +252,29 @@ impl RuntimeFile {
         // These two cursors mirror the distinct ImportStack keys. A transition
         // does not replace the latest LayerState, and a new StateMachine does
         // not replace either key.
-        let mut current_layer_state: Option<(usize, usize, usize, Option<usize>)> = None;
-        let mut current_transition: Option<(usize, usize, usize, usize)> = None;
+        let mut current_layer_state = None::<layer_state_importer::LayerStateImporter>;
+        let mut current_transition: Option<state_transition_importer::StateTransitionImporter> =
+            None;
         // ImportStack retains the latest importer independently for every
         // type key. Listener and ListenerInputType ownership therefore
         // survives unrelated records, layer/state changes, and even a later
         // StateMachine importer until the same importer key is replaced
         // (`import_stack.hpp:23-68`; `listener_action.cpp:14-45`;
         // `listener_input_type.cpp:10-22`).
-        let mut current_listener: Option<RuntimeStateMachineListenerOwner> = None;
+        let mut current_listener: Option<
+            state_machine_listener_importer::StateMachineListenerImporter,
+        > = None;
         let mut current_keyboard_input_type: Option<RuntimeStateMachineListenerInputTypeOwner> =
             None;
-        let mut current_gamepad_input_type: Option<RuntimeStateMachineListenerInputTypeOwner> =
-            None;
-        let mut current_semantic_input_type: Option<RuntimeStateMachineListenerInputTypeOwner> =
-            None;
-        let mut current_layer_component: Option<RuntimeStateMachineLayerComponentOwner> = None;
+        let mut current_gamepad_input_type: Option<
+            listener_input_type_gamepad_importer::ListenerInputTypeGamepadImporter,
+        > = None;
+        let mut current_semantic_input_type: Option<
+            listener_input_type_semantic_importer::ListenerInputTypeSemanticImporter,
+        > = None;
+        let mut current_layer_component: Option<
+            state_machine_layer_component_importer::StateMachineLayerComponentImporter,
+        > = None;
         let mut current_state_machine_scripted_object: Option<
             RuntimeStateMachineScriptedObjectOwner,
         > = None;
@@ -288,11 +305,13 @@ impl RuntimeFile {
                             }
                         }
                         Some(NullObjectConsumer::StateMachine) => {
-                            if let Some(state_machine_index) = current_state_machine {
+                            if let Some(state_machine_importer) = current_state_machine {
                                 // `StateMachineImporter::readNullObject` appends
                                 // a null input occurrence. Keep the slot so
                                 // every later `inputId` retains its C++ index.
-                                state_machines[state_machine_index].inputs.push(None);
+                                let consumed =
+                                    state_machine_importer.read_null_object(&mut state_machines);
+                                debug_assert!(consumed);
                             }
                         }
                         _ => {}
@@ -323,13 +342,19 @@ impl RuntimeFile {
                 });
                 state_machine_artboard_owners.push(current_artboard_index);
                 layer_importer_resolve_boundaries.push(Vec::new());
-                current_state_machine = Some(state_machines.len() - 1);
+                let next_state_machine_importer =
+                    state_machine_importer::StateMachineImporter::new(state_machines.len() - 1);
+                if let Some(previous_state_machine_importer) = current_state_machine.take() {
+                    previous_state_machine_importer.resolve();
+                }
+                current_state_machine = Some(next_state_machine_importer);
                 continue;
             }
 
-            let Some(state_machine_index) = current_state_machine else {
+            let Some(state_machine_importer) = current_state_machine else {
                 continue;
             };
+            let state_machine_index = state_machine_importer.state_machine();
 
             if matches!(
                 definition.name,
@@ -337,8 +362,10 @@ impl RuntimeFile {
             ) {
                 let owner = match definition.name {
                     "KeyboardInput" => current_keyboard_input_type,
-                    "GamepadInput" => current_gamepad_input_type,
-                    "SemanticInput" => current_semantic_input_type,
+                    "GamepadInput" => current_gamepad_input_type
+                        .map(|importer| importer.listener_input_type_gamepad()),
+                    "SemanticInput" => current_semantic_input_type
+                        .map(|importer| importer.listener_input_type_semantic()),
                     _ => unreachable!("the enclosing match filters concrete listener inputs"),
                 };
                 if let Some(owner) = owner
@@ -355,19 +382,12 @@ impl RuntimeFile {
             }
 
             if definition_adds_cpp_state_machine_scripted_object(definition) {
-                state_machines[state_machine_index]
-                    .scripted_objects
-                    .push(RuntimeScriptedObject {
-                        object,
-                        inputs: Vec::new(),
-                    });
+                let scripted_object_index =
+                    state_machine_importer.add_scripted_object(&mut state_machines, object);
                 current_state_machine_scripted_object =
                     Some(RuntimeStateMachineScriptedObjectOwner {
                         state_machine_index,
-                        scripted_object_index: state_machines[state_machine_index]
-                            .scripted_objects
-                            .len()
-                            - 1,
+                        scripted_object_index,
                     });
             } else if definition_is_cpp_scripted_object(definition) {
                 current_state_machine_scripted_object = None;
@@ -384,24 +404,27 @@ impl RuntimeFile {
             }
 
             if definition.name == "StateMachineLayer" {
+                // StateMachineLayer::import appends through the retained
+                // StateMachineImporter before File replaces/resolves the
+                // previous StateMachineLayerImporter.
+                let lifecycle_applied = state_machine_artboard_owners
+                    .get(state_machine_index)
+                    .copied()
+                    .flatten()
+                    .and_then(|index| artboard_ranges.get(index))
+                    .is_some_and(|(_, end)| file_index < *end);
+                let layer_index = state_machine_importer.add_layer(
+                    &mut state_machines,
+                    object,
+                    lifecycle_applied,
+                );
                 if let Some((previous_state_machine_index, previous_layer_index, _)) = current_layer
                 {
                     layer_importer_resolve_boundaries[previous_state_machine_index]
                         [previous_layer_index] = file_index;
                 }
-                state_machines[state_machine_index]
-                    .layers
-                    .push(RuntimeStateMachineLayer {
-                        object,
-                        state_count: 0,
-                        states: Vec::new(),
-                    });
                 layer_importer_resolve_boundaries[state_machine_index].push(self.objects.len());
-                current_layer = Some((
-                    state_machine_index,
-                    state_machines[state_machine_index].layers.len() - 1,
-                    current_artboard_index,
-                ));
+                current_layer = Some((state_machine_index, layer_index, current_artboard_index));
                 continue;
             }
 
@@ -430,26 +453,35 @@ impl RuntimeFile {
                         .states
                         .len()
                         - 1;
-                    current_layer_state = Some((
+                    let next_layer_state_importer = layer_state_importer::LayerStateImporter::new(
                         owner_state_machine_index,
                         layer_index,
                         state_index,
-                        layer_artboard_index,
-                    ));
-                    current_layer_component = Some(RuntimeStateMachineLayerComponentOwner::State {
-                        state_machine_index: owner_state_machine_index,
-                        layer_index,
-                        state_index,
-                    });
+                    );
+                    // File installs the new importer only after LayerState::import
+                    // has appended the new state, so replacement resolves the
+                    // previously retained state at this exact point.
+                    if let Some(previous_layer_state_importer) =
+                        current_layer_state.replace(next_layer_state_importer)
+                    {
+                        previous_layer_state_importer.resolve(&mut state_machines);
+                    }
+                    current_layer_component = Some(
+                        state_machine_layer_component_importer::StateMachineLayerComponentImporter::new(
+                            RuntimeStateMachineLayerComponentOwner::State {
+                                state_machine_index: owner_state_machine_index,
+                                layer_index,
+                                state_index,
+                            },
+                        ),
+                    );
                     state_machines[owner_state_machine_index].layers[layer_index].state_count += 1;
                 }
                 continue;
             }
 
             if definition.is_a("BlendAnimation") {
-                if let Some((owner_state_machine_index, layer_index, state_index, _)) =
-                    current_layer_state
-                {
+                if let Some(layer_state_importer) = current_layer_state {
                     // BlendAnimation::import resolves against the Artboard
                     // importer that is latest for this record, unlike the
                     // enclosing layer's deferred AnimationState resolution
@@ -465,22 +497,24 @@ impl RuntimeFile {
                     let animation = animation_index
                         .and_then(|index| current_artboard_animations.get(index))
                         .copied();
-                    state_machines[owner_state_machine_index].layers[layer_index].states
-                        [state_index]
-                        .blend_animations
-                        .push(RuntimeBlendAnimation {
+                    let accepted = layer_state_importer.add_blend_animation(
+                        &mut state_machines,
+                        RuntimeBlendAnimation {
                             object,
                             animation_index,
                             animation,
-                        });
+                        },
+                    );
+                    debug_assert!(accepted);
                 }
                 continue;
             }
 
             if definition.is_a("StateTransition") {
-                if let Some((owner_state_machine_index, layer_index, state_index, _)) =
-                    current_layer_state
-                {
+                if let Some(layer_state_importer) = current_layer_state {
+                    let owner_state_machine_index = layer_state_importer.state_machine_index;
+                    let layer_index = layer_state_importer.layer_index;
+                    let state_index = layer_state_importer.state_index;
                     let owner_artboard_range = state_machine_artboard_owners
                         .get(owner_state_machine_index)
                         .copied()
@@ -504,10 +538,9 @@ impl RuntimeFile {
                             )
                         });
 
-                    state_machines[owner_state_machine_index].layers[layer_index].states
-                        [state_index]
-                        .transitions
-                        .push(RuntimeStateTransition {
+                    let transition_index = layer_state_importer.add_transition(
+                        &mut state_machines,
+                        RuntimeStateTransition {
                             object,
                             state_to_index: None,
                             state_to: None,
@@ -519,125 +552,84 @@ impl RuntimeFile {
                             fire_actions: Vec::new(),
                             listener_actions: Vec::new(),
                             conditions: Vec::new(),
-                        });
-                    let transition_index = state_machines[owner_state_machine_index].layers
-                        [layer_index]
-                        .states[state_index]
-                        .transitions
-                        .len()
-                        - 1;
-                    current_transition = Some((
-                        owner_state_machine_index,
-                        layer_index,
-                        state_index,
-                        transition_index,
-                    ));
-                    current_layer_component =
-                        Some(RuntimeStateMachineLayerComponentOwner::Transition {
-                            state_machine_index: owner_state_machine_index,
+                        },
+                    );
+                    let next_transition_importer =
+                        state_transition_importer::StateTransitionImporter::new(
+                            owner_state_machine_index,
                             layer_index,
                             state_index,
                             transition_index,
-                        });
+                        );
+                    if let Some(previous_transition_importer) = current_transition.take() {
+                        previous_transition_importer.resolve();
+                    }
+                    current_transition = Some(next_transition_importer);
+                    current_layer_component = Some(
+                        state_machine_layer_component_importer::StateMachineLayerComponentImporter::new(
+                            RuntimeStateMachineLayerComponentOwner::Transition {
+                                state_machine_index: owner_state_machine_index,
+                                layer_index,
+                                state_index,
+                                transition_index,
+                            },
+                        ),
+                    );
                 }
                 continue;
             }
 
             if definition.is_a("StateMachineFireAction") {
-                if let Some(owner) = current_layer_component {
-                    match owner {
-                        RuntimeStateMachineLayerComponentOwner::State {
-                            state_machine_index,
-                            layer_index,
-                            state_index,
-                        } => {
-                            let owner_artboard_slots = state_machine_artboard_owners
-                                .get(state_machine_index)
-                                .copied()
-                                .flatten()
-                                .and_then(|index| artboard_local_slots_by_index.get(index))
-                                .map(Vec::as_slice)
-                                .unwrap_or_default();
-                            state_machines[state_machine_index].layers[layer_index].states
-                                [state_index]
-                                .fire_actions
-                                .push(cpp_runtime_state_machine_fire_action(
-                                    object,
-                                    owner_artboard_slots,
-                                    &self.objects,
-                                ));
-                        }
-                        RuntimeStateMachineLayerComponentOwner::Transition {
-                            state_machine_index,
-                            layer_index,
-                            state_index,
-                            transition_index,
-                        } => {
-                            let owner_artboard_slots = state_machine_artboard_owners
-                                .get(state_machine_index)
-                                .copied()
-                                .flatten()
-                                .and_then(|index| artboard_local_slots_by_index.get(index))
-                                .map(Vec::as_slice)
-                                .unwrap_or_default();
-                            state_machines[state_machine_index].layers[layer_index].states
-                                [state_index]
-                                .transitions[transition_index]
-                                .fire_actions
-                                .push(cpp_runtime_state_machine_fire_action(
-                                    object,
-                                    owner_artboard_slots,
-                                    &self.objects,
-                                ));
-                        }
-                    }
+                if let Some(importer) = current_layer_component {
+                    let state_machine_index = importer.state_machine_index();
+                    let owner_artboard_slots = state_machine_artboard_owners
+                        .get(state_machine_index)
+                        .copied()
+                        .flatten()
+                        .and_then(|index| artboard_local_slots_by_index.get(index))
+                        .map(Vec::as_slice)
+                        .unwrap_or_default();
+                    importer.add_fire_event(
+                        &mut state_machines,
+                        object,
+                        owner_artboard_slots,
+                        &self.objects,
+                    );
                 }
                 continue;
             }
 
             if definition.is_a("TransitionCondition") {
-                if let Some((
-                    owner_state_machine_index,
-                    layer_index,
-                    state_index,
-                    transition_index,
-                )) = current_transition
-                {
-                    state_machines[owner_state_machine_index].layers[layer_index].states
-                        [state_index]
-                        .transitions[transition_index]
-                        .conditions
-                        .push(object);
+                if let Some(transition_importer) = current_transition.as_ref() {
+                    transition_importer.add_condition(&mut state_machines, object);
                 }
                 continue;
             }
 
             if definition.is_a("StateMachineInput") {
-                state_machines[state_machine_index]
-                    .inputs
-                    .push(Some(object));
+                state_machine_importer.add_input(&mut state_machines, object);
                 continue;
             }
 
             if definition.is_a("StateMachineListener") {
-                state_machines[state_machine_index]
-                    .listeners
-                    .push(RuntimeStateMachineListener {
-                        object,
-                        actions: Vec::new(),
-                        listener_input_types: Vec::new(),
-                        listener_input_type_inputs: Vec::new(),
-                    });
-                current_listener = Some(RuntimeStateMachineListenerOwner {
-                    state_machine_index,
-                    listener_index: state_machines[state_machine_index].listeners.len() - 1,
-                });
+                let listener_index =
+                    state_machine_importer.add_listener(&mut state_machines, object);
+                let next = state_machine_listener_importer::StateMachineListenerImporter::new(
+                    RuntimeStateMachineListenerOwner {
+                        state_machine_index,
+                        listener_index,
+                    },
+                );
+                if let Some(previous) = current_listener.replace(next) {
+                    previous.resolve();
+                }
                 continue;
             }
 
             if definition.is_a("ListenerAction") {
                 if listener_action_parent_kind_is_listener(object) {
-                    if let Some(owner) = current_listener {
+                    if let Some(importer) = current_listener {
+                        let owner = importer.state_machine_listener();
                         let owner_artboard_slots = state_machine_artboard_owners
                             .get(owner.state_machine_index)
                             .copied()
@@ -645,94 +637,70 @@ impl RuntimeFile {
                             .and_then(|index| artboard_local_slots_by_index.get(index))
                             .map(Vec::as_slice)
                             .unwrap_or_default();
-                        state_machines[owner.state_machine_index].listeners[owner.listener_index]
-                            .actions
-                            .push(cpp_runtime_listener_action(
+                        importer.add_action(
+                            &mut state_machines,
+                            cpp_runtime_listener_action(
                                 object,
                                 owner_artboard_slots,
                                 &self.objects,
                                 (object.type_name == "ListenerViewModelChange")
                                     .then(|| self.latest_bindable_property_for_object(object))
                                     .flatten(),
-                            ));
+                            ),
+                        );
                     }
-                } else if let Some(owner) = current_layer_component {
-                    match owner {
-                        RuntimeStateMachineLayerComponentOwner::State {
-                            state_machine_index,
-                            layer_index,
-                            state_index,
-                        } => {
-                            let owner_artboard_slots = state_machine_artboard_owners
-                                .get(state_machine_index)
-                                .copied()
-                                .flatten()
-                                .and_then(|index| artboard_local_slots_by_index.get(index))
-                                .map(Vec::as_slice)
-                                .unwrap_or_default();
-                            state_machines[state_machine_index].layers[layer_index].states
-                                [state_index]
-                                .listener_actions
-                                .push(cpp_runtime_listener_action(
-                                    object,
-                                    owner_artboard_slots,
-                                    &self.objects,
-                                    (object.type_name == "ListenerViewModelChange")
-                                        .then(|| self.latest_bindable_property_for_object(object))
-                                        .flatten(),
-                                ));
-                        }
-                        RuntimeStateMachineLayerComponentOwner::Transition {
-                            state_machine_index,
-                            layer_index,
-                            state_index,
-                            transition_index,
-                        } => {
-                            let owner_artboard_slots = state_machine_artboard_owners
-                                .get(state_machine_index)
-                                .copied()
-                                .flatten()
-                                .and_then(|index| artboard_local_slots_by_index.get(index))
-                                .map(Vec::as_slice)
-                                .unwrap_or_default();
-                            state_machines[state_machine_index].layers[layer_index].states
-                                [state_index]
-                                .transitions[transition_index]
-                                .listener_actions
-                                .push(cpp_runtime_listener_action(
-                                    object,
-                                    owner_artboard_slots,
-                                    &self.objects,
-                                    (object.type_name == "ListenerViewModelChange")
-                                        .then(|| self.latest_bindable_property_for_object(object))
-                                        .flatten(),
-                                ));
-                        }
-                    }
+                } else if let Some(importer) = current_layer_component {
+                    let state_machine_index = importer.state_machine_index();
+                    let owner_artboard_slots = state_machine_artboard_owners
+                        .get(state_machine_index)
+                        .copied()
+                        .flatten()
+                        .and_then(|index| artboard_local_slots_by_index.get(index))
+                        .map(Vec::as_slice)
+                        .unwrap_or_default();
+                    importer.add_listener_action(
+                        &mut state_machines,
+                        cpp_runtime_listener_action(
+                            object,
+                            owner_artboard_slots,
+                            &self.objects,
+                            (object.type_name == "ListenerViewModelChange")
+                                .then(|| self.latest_bindable_property_for_object(object))
+                                .flatten(),
+                        ),
+                    );
                 }
                 continue;
             }
 
             if definition.is_a("ListenerInputType") {
-                if let Some(owner) = current_listener {
-                    let listener = &mut state_machines[owner.state_machine_index].listeners
-                        [owner.listener_index];
-                    listener.listener_input_types.push(object);
-                    listener.listener_input_type_inputs.push(Vec::new());
-                    let input_owner = Some(RuntimeStateMachineListenerInputTypeOwner {
-                        state_machine_index: owner.state_machine_index,
-                        listener_index: owner.listener_index,
-                        input_type_index: listener.listener_input_types.len() - 1,
-                    });
+                if let Some(importer) = current_listener {
+                    let input_owner = Some(listener_input_type::import(
+                        &mut state_machines,
+                        importer,
+                        object,
+                    ));
                     match definition.name {
                         "ListenerInputTypeKeyboard" => {
                             current_keyboard_input_type = input_owner;
                         }
                         "ListenerInputTypeGamepad" => {
-                            current_gamepad_input_type = input_owner;
+                            if let Some(input_owner) = input_owner {
+                                let next = listener_input_type_gamepad_importer::
+                                    ListenerInputTypeGamepadImporter::new(input_owner);
+                                if let Some(previous) = current_gamepad_input_type.replace(next) {
+                                    let _ = previous.resolve();
+                                }
+                            }
                         }
                         "ListenerInputTypeSemantic" => {
-                            current_semantic_input_type = input_owner;
+                            if let Some(input_owner) = input_owner {
+                                let next = listener_input_type_semantic_importer::
+                                    ListenerInputTypeSemanticImporter::new(input_owner);
+                                if let Some(previous) = current_semantic_input_type.replace(next) {
+                                    let _ = previous.resolve();
+                                }
+                            }
                         }
                         _ => {}
                     }
@@ -745,8 +713,27 @@ impl RuntimeFile {
                     data_bind_targets[file_index].map(|target| target.object),
                 )
             {
-                state_machines[state_machine_index].data_binds.push(object);
+                state_machine_importer.add_data_bind(&mut state_machines, object);
             }
+        }
+
+        if let Some(state_machine_importer) = current_state_machine {
+            state_machine_importer.resolve();
+        }
+        if let Some(listener_importer) = current_listener {
+            listener_importer.resolve();
+        }
+        if let Some(transition_importer) = current_transition {
+            transition_importer.resolve();
+        }
+        if let Some(layer_state_importer) = current_layer_state {
+            layer_state_importer.resolve(&mut state_machines);
+        }
+        if let Some(gamepad_importer) = current_gamepad_input_type {
+            let _ = gamepad_importer.resolve();
+        }
+        if let Some(semantic_importer) = current_semantic_input_type {
+            let _ = semantic_importer.resolve();
         }
 
         resolve_runtime_state_machine_transition_targets(

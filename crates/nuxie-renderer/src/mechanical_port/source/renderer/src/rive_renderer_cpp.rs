@@ -860,18 +860,24 @@ fn mul(a: Mat2D, b: Mat2D) -> Mat2D {
     let [a0, a1, a2, a3, a4, a5] = a.0;
     let [b0, b1, b2, b3, b4, b5] = b.0;
     Mat2D([
-        a0 * b0 + a2 * b1,
-        a1 * b0 + a3 * b1,
-        a0 * b2 + a2 * b3,
-        a1 * b2 + a3 * b3,
-        a0 * b4 + a2 * b5 + a4,
-        a1 * b4 + a3 * b5 + a5,
+        a0.mul_add(b0, a2 * b1),
+        a1.mul_add(b0, a3 * b1),
+        a0.mul_add(b2, a2 * b3),
+        a1.mul_add(b2, a3 * b3),
+        a0.mul_add(b4, a2 * b5) + a4,
+        a1.mul_add(b4, a3 * b5) + a5,
     ])
 }
-fn inverse(m: Mat2D) -> Option<Mat2D> {
+
+fn determinant(m: Mat2D) -> f32 {
+    let [a, b, c, d, _, _] = m.0;
+    a.mul_add(d, -(c * b))
+}
+
+fn invert(m: Mat2D) -> Option<Mat2D> {
     let [a, b, c, d, tx, ty] = m.0;
-    let det = a * d - b * c;
-    if det == 0.0 || !det.is_finite() {
+    let det = determinant(m);
+    if det == 0.0 {
         return None;
     }
     let inv = 1.0 / det;
@@ -880,30 +886,113 @@ fn inverse(m: Mat2D) -> Option<Mat2D> {
         -b * inv,
         -c * inv,
         a * inv,
-        (c * ty - d * tx) * inv,
-        (b * tx - a * ty) * inv,
+        c.mul_add(ty, -(d * tx)) * inv,
+        b.mul_add(tx, -(a * ty)) * inv,
     ]))
 }
-fn map_bounds(m: Mat2D, b: Aabb) -> Aabb {
-    let p = [
-        m.transform_point(Vec2D::new(b.min_x, b.min_y)),
-        m.transform_point(Vec2D::new(b.max_x, b.min_y)),
-        m.transform_point(Vec2D::new(b.max_x, b.max_y)),
-        m.transform_point(Vec2D::new(b.min_x, b.max_y)),
-    ];
-    Aabb::new(
-        p.iter().map(|v| v.x).fold(f32::INFINITY, f32::min),
-        p.iter().map(|v| v.y).fold(f32::INFINITY, f32::min),
-        p.iter().map(|v| v.x).fold(f32::NEG_INFINITY, f32::max),
-        p.iter().map(|v| v.y).fold(f32::NEG_INFINITY, f32::max),
-    )
-}
-fn round_bounds(b: Aabb) -> gpu::IAABB {
-    gpu::IAABB {
-        left: b.min_x.floor() as i32,
-        top: b.min_y.floor() as i32,
-        right: b.max_x.ceil() as i32,
-        bottom: b.max_y.ceil() as i32,
+
+#[cfg(test)]
+mod renderer_mat2d_owner_tests {
+    use super::{Mat2D, RendererContract, RiveRenderer, determinant, invert, max_scale, mul};
+
+    fn from_bits(bits: [u32; 6]) -> Mat2D {
+        Mat2D(bits.map(f32::from_bits))
+    }
+
+    fn bits(matrix: Mat2D) -> [u32; 6] {
+        matrix.0.map(f32::to_bits)
+    }
+
+    #[test]
+    fn renderer_inverse_preserves_pinned_finite_cancellation_and_nonfinite_determinants() {
+        let cancellation = from_bits([
+            0x26cd_29b3,
+            0x2533_fdc2,
+            0xd01a_d4bb,
+            0xce87_d5a9,
+            0,
+            0,
+        ]);
+        assert_eq!(determinant(cancellation).to_bits(), 0xa7ee_c560);
+        assert_eq!(
+            bits(invert(cancellation).expect("pinned finite determinant is nonzero")),
+            [
+                0x6611_a2d3,
+                0x3cc0_fa97,
+                0xe7a6_00cd,
+                0xbe5b_f782,
+                0x8000_0000,
+                0x8000_0000,
+            ],
+        );
+
+        let max_diagonal = Mat2D([f32::MAX, 0.0, 0.0, f32::MAX, 0.0, 0.0]);
+        assert_eq!(determinant(max_diagonal), f32::INFINITY);
+        assert_eq!(
+            bits(invert(max_diagonal).expect("pinned invert accepts an infinite determinant")),
+            [
+                0x0000_0000,
+                0x8000_0000,
+                0x8000_0000,
+                0x0000_0000,
+                0x0000_0000,
+                0x0000_0000,
+            ],
+        );
+
+        let nan_determinant = Mat2D([f32::NAN, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert!(invert(nan_determinant).is_some());
+    }
+
+    #[test]
+    fn renderer_transform_concatenates_with_pinned_mat2d_multiply() {
+        let current = from_bits([
+            0x9422_bf8a,
+            0x9788_280a,
+            0xd2ec_7e6e,
+            0x4d52_6674,
+            0xe887_c79b,
+            0x4bce_95e3,
+        ]);
+        let next = from_bits([
+            0xb12b_6d28,
+            0x2f8c_b036,
+            0xdeb1_8044,
+            0x4f30_2db7,
+            0x155f_c859,
+            0x4858_db48,
+        ]);
+        let expected = [
+            0xc301_f7ed,
+            0x3d67_41b5,
+            0xe2a2_c127,
+            0x5d10_cc02,
+            0xe887_c79b,
+            0x5632_3ab1,
+        ];
+        assert_eq!(bits(mul(current, next)), expected);
+
+        // This consumer is the mechanically translated
+        // `RiveRenderer::transform`, not a parallel test-only calculation.
+        let mut renderer = unsafe { RiveRenderer::new(core::ptr::null_mut()) };
+        renderer.current_state_mut().matrix = current;
+        RendererContract::transform(&mut renderer, &next);
+        assert_eq!(bits(renderer.current_state().matrix), expected);
+    }
+
+    #[test]
+    fn feather_path_uses_pinned_find_max_scale_bits() {
+        let matrix = from_bits([
+            0xc32d_8148,
+            0xc2d1_a0c5,
+            0x42d9_3be7,
+            0x4345_c7ae,
+            0,
+            0,
+        ]);
+        let matrix_max_scale = max_scale(matrix);
+        assert_eq!(matrix_max_scale.to_bits(), 0x4392_8724);
+        assert!(100.0 * matrix_max_scale > 1.0);
     }
 }
 fn max_scale(m: Mat2D) -> f32 {
@@ -913,60 +1002,26 @@ fn max_scale(m: Mat2D) -> f32 {
         let y = yy.abs();
         return if x < y { y } else { x };
     }
-    let a = xx * xx + xy * xy;
-    let b = xx * yx + yy * xy;
-    let c = yx * yx + yy * yy;
+    let a = xx.mul_add(xx, xy * xy);
+    let b = xx.mul_add(yx, yy * xy);
+    let c = yx.mul_add(yx, yy * yy);
     let b_squared = b * b;
     let mut result = if b_squared <= MATH_EPSILON * MATH_EPSILON {
         a.max(c)
     } else {
         let a_minus_c = a - c;
-        (a + c) * 0.5 + (a_minus_c * a_minus_c + 4.0 * b_squared).sqrt() * 0.5
+        (a + c) * 0.5
+            + a_minus_c
+                .mul_add(a_minus_c, 4.0 * b_squared)
+                .sqrt()
+                * 0.5
     };
     if !result.is_finite() {
         result = 0.0;
     }
     result.max(0.0).sqrt()
 }
-fn intersect(a: gpu::IAABB, b: gpu::IAABB) -> gpu::IAABB {
-    gpu::IAABB {
-        left: a.left.max(b.left),
-        top: a.top.max(b.top),
-        right: a.right.min(b.right),
-        bottom: a.bottom.min(b.bottom),
-    }
-}
-fn intersect_u16(a: AABBu16, b: gpu::IAABB) -> AABBu16 {
-    AABBu16 {
-        left: (a.left as i32).max(b.left).max(0) as u16,
-        top: (a.top as i32).max(b.top).max(0) as u16,
-        right: (a.right as i32).min(b.right).max(0) as u16,
-        bottom: (a.bottom as i32).min(b.bottom).max(0) as u16,
-    }
-}
 const MATH_EPSILON: f32 = 1.0 / 4096.0;
-fn aabb_empty_or_nan(b: Aabb) -> bool {
-    b.min_x >= b.max_x
-        || b.min_y >= b.max_y
-        || !b.min_x.is_finite()
-        || !b.min_y.is_finite()
-        || !b.max_x.is_finite()
-        || !b.max_y.is_finite()
-}
-fn map_path_bounds(m: Mat2D, path: &RawPath) -> Option<Aabb> {
-    let mut iter = path.points().iter().copied();
-    let first = iter.next()?;
-    let first = m.transform_point(first);
-    let mut out = Aabb::new(first.x, first.y, first.x, first.y);
-    for point in iter {
-        let p = m.transform_point(point);
-        out.min_x = out.min_x.min(p.x);
-        out.min_y = out.min_y.min(p.y);
-        out.max_x = out.max_x.max(p.x);
-        out.max_y = out.max_y.max(p.y);
-    }
-    Some(out)
-}
 fn own_path(
     mut owner: Box<crate::mechanical_port::source::renderer::src::draw_cpp::PathDrawAllocation>,
 ) -> DrawUniquePtr {
@@ -1004,16 +1059,16 @@ fn invert_clockwise_path(
     let inverse = make_rcp(RiveRenderPath::default);
     let owner = unsafe { &mut *inverse.get() };
     owner.m_fillRule = FillRule::Clockwise;
-    if let Some(inv) = inverse_matrix(matrix) {
-        let corners = [
+    if let Some(inv) = invert(matrix) {
+        let mut corners = [
             Vec2D::new(bounds.left as f32, bounds.top as f32),
             Vec2D::new(bounds.right as f32, bounds.top as f32),
             Vec2D::new(bounds.right as f32, bounds.bottom as f32),
             Vec2D::new(bounds.left as f32, bounds.bottom as f32),
-        ]
-        .map(|p| inv.transform_point(p));
+        ];
+        inv.map_points_in_place(&mut corners);
         owner.move_to(corners[0].x, corners[0].y);
-        let det = matrix.0[0] * matrix.0[3] - matrix.0[2] * matrix.0[1];
+        let det = determinant(matrix);
         let order = if det >= 0.0 { [1, 2, 3] } else { [3, 2, 1] };
         for i in order {
             owner.line_to(corners[i].x, corners[i].y);
@@ -1026,8 +1081,207 @@ fn invert_clockwise_path(
     }
     inverse
 }
-fn inverse_matrix(m: Mat2D) -> Option<Mat2D> {
-    inverse(m)
+
+#[cfg(test)]
+mod map_points_caller_tests {
+    use super::{
+        FillRule, Mat2D, RiveRenderPath, determinant, gpu, invert_clockwise_path,
+    };
+
+    #[test]
+    fn inverse_clockwise_path_uses_pinned_four_point_in_place_batch() {
+        let view_matrix = std::hint::black_box(Mat2D([
+            f32::from_bits(0xbf80_0000),
+            f32::from_bits(0x8000_0000),
+            f32::from_bits(0x0000_0000),
+            f32::from_bits(0x337f_fffe),
+            f32::from_bits(0x3f00_0000),
+            f32::from_bits(0x3f80_0001),
+        ]));
+        let path = RiveRenderPath::default();
+        let inverse = invert_clockwise_path(
+            &path,
+            FillRule::Clockwise,
+            view_matrix,
+            gpu::IAABB::new(-1, 1, 16_777_217, 16_777_215),
+        );
+        let points = unsafe { (&*inverse.get()).getRawPath().points() };
+
+        // The negative determinant orders corner 2 at path point 2. Pinned
+        // mapPoints' scale/translation FMLA rounds its y lane to 0x57800000;
+        // the former scalar transform_point substitute produced 0x577fffff.
+        assert_eq!(points[2].y.to_bits(), 0x5780_0000);
+    }
+
+    #[test]
+    fn inverse_clockwise_path_uses_pinned_contracted_winding_determinant() {
+        let view_matrix = Mat2D(
+            [
+                0x26cd_29b3,
+                0x2533_fdc2,
+                0xd01a_d4bb,
+                0xce87_d5a9,
+                0,
+                0,
+            ]
+            .map(f32::from_bits),
+        );
+        assert_eq!(determinant(view_matrix).to_bits(), 0xa7ee_c560);
+
+        let path = RiveRenderPath::default();
+        let inverse = invert_clockwise_path(
+            &path,
+            FillRule::Clockwise,
+            view_matrix,
+            gpu::IAABB::new(-1, -2, 3, 4),
+        );
+        let points = unsafe { (&*inverse.get()).getRawPath().points() };
+
+        // Pinned determinant is negative, so corner 3 follows corner 0.
+        // The former uncontracted determinant rounded to +0 and selected
+        // corner 1 (and its inverse rejected this matrix outright).
+        assert_eq!(points[1].x.to_bits(), 0xe8aa_8de4);
+        assert_eq!(points[1].y.to_bits(), 0xbf61_ff57);
+    }
+}
+
+fn simd_min(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() | second.to_bits())
+    } else if second < first {
+        second
+    } else {
+        first
+    }
+}
+
+fn simd_max(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        f32::from_bits(first.to_bits() & second.to_bits())
+    } else if first < second {
+        second
+    } else {
+        first
+    }
+}
+
+fn transform_rect_to_new_space(
+    rect: &mut Aabb,
+    current_matrix: Mat2D,
+    new_matrix: Mat2D,
+) -> bool {
+    if current_matrix == new_matrix {
+        return true;
+    }
+    let Some(mut current_to_new) = invert(new_matrix) else {
+        return false;
+    };
+    current_to_new = mul(current_to_new, current_matrix);
+    let max_skew = current_to_new.0[2]
+        .abs()
+        .max(current_to_new.0[1].abs());
+    let max_scale = current_to_new.0[0]
+        .abs()
+        .max(current_to_new.0[3].abs());
+    if max_skew > MATH_EPSILON && max_scale > MATH_EPSILON {
+        return false;
+    }
+    let mut points = [
+        Vec2D::new(rect.min_x, rect.min_y),
+        Vec2D::new(rect.max_x, rect.max_y),
+    ];
+    current_to_new.map_points_in_place(&mut points);
+    *rect = Aabb::new(
+        simd_min(points[0].x, points[1].x),
+        simd_min(points[0].y, points[1].y),
+        simd_max(points[0].x, points[1].x),
+        simd_max(points[0].y, points[1].y),
+    );
+    true
+}
+
+#[cfg(test)]
+mod transform_rect_to_new_space_tests {
+    use super::{Aabb, Mat2D, transform_rect_to_new_space};
+
+    #[test]
+    fn tiny_skew_maps_only_the_pinned_diagonal_points() {
+        let mut rect = Aabb::new(0.0, 0.0, 1.0, 1.0);
+        let admitted_tiny_skew = Mat2D([1.0, 0.0, -0.00001, 1.0, 0.0, 0.0]);
+        assert!(transform_rect_to_new_space(
+            &mut rect,
+            admitted_tiny_skew,
+            Mat2D::IDENTITY,
+        ));
+        assert_eq!(
+            [
+                rect.min_x.to_bits(),
+                rect.min_y.to_bits(),
+                rect.max_x.to_bits(),
+                rect.max_y.to_bits(),
+            ],
+            [0x0000_0000, 0x0000_0000, 0x3f7f_ff58, 0x3f80_0000],
+        );
+
+        let four_corner_substitute =
+            admitted_tiny_skew.map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0));
+        assert_eq!(four_corner_substitute.min_x.to_bits(), 0xb727_c5ac);
+        assert_ne!(rect, four_corner_substitute);
+    }
+
+    #[test]
+    fn finite_clip_rect_uses_pinned_inverse_and_composition_bits() {
+        let current_matrix = Mat2D(
+            [
+                0x9422_bf8a,
+                0x9788_280a,
+                0xd2ec_7e6e,
+                0x4d52_6674,
+                0xe887_c79b,
+                0x4bce_95e3,
+            ]
+            .map(f32::from_bits),
+        );
+        let new_matrix = Mat2D(
+            [
+                0xb12b_6d28,
+                0x2f8c_b036,
+                0xdeb1_8044,
+                0x4f30_2db7,
+                0x155f_c859,
+                0x4858_db48,
+            ]
+            .map(f32::from_bits),
+        );
+        let mut rect = Aabb::new(
+            f32::from_bits(0xdaea_f96f),
+            f32::from_bits(0xa4ee_fdb1),
+            f32::from_bits(0x1c3a_27c6),
+            f32::from_bits(0x2b86_6340),
+        );
+        assert!(transform_rect_to_new_space(
+            &mut rect,
+            current_matrix,
+            new_matrix,
+        ));
+        assert_eq!(
+            [
+                rect.min_x.to_bits(),
+                rect.min_y.to_bits(),
+                rect.max_x.to_bits(),
+                rect.max_y.to_bits(),
+            ],
+            [0xe8f5_3a36, 0x4943_d3df, 0xe8f5_3a36, 0x4943_d3df],
+        );
+    }
 }
 
 impl RiveRenderer {
@@ -1036,22 +1290,15 @@ impl RiveRenderer {
     }
     pub unsafe fn clipRectImplSource(&mut self, mut rect: Aabb, original_path: &RiveRenderPath) {
         let state = self.current_state().clone();
-        if aabb_empty_or_nan(rect) {
+        if rect.is_empty_or_nan() {
             self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
             return;
         }
         if !state.clipRectInverseMatrix.is_null() {
-            let Some(to_new) = inverse(state.clipRectMatrix).map(|i| mul(i, state.matrix)) else {
-                unsafe { self.clipPathImplSource(original_path) };
-                return;
-            };
-            let skew = to_new.0[2].abs().max(to_new.0[1].abs());
-            let scale = to_new.0[0].abs().max(to_new.0[3].abs());
-            if skew > MATH_EPSILON && scale > MATH_EPSILON {
+            if !transform_rect_to_new_space(&mut rect, state.matrix, state.clipRectMatrix) {
                 unsafe { self.clipPathImplSource(original_path) };
                 return;
             }
-            rect = map_bounds(to_new, rect);
         }
         let matrix = if state.clipRectInverseMatrix.is_null() {
             state.matrix
@@ -1068,7 +1315,7 @@ impl RiveRenderer {
                 state.clipRect.max_y.min(rect.max_y),
             )
         };
-        let pixel = round_bounds(map_bounds(matrix, combined));
+        let pixel = matrix.map_bounds(combined).round_out();
         let inverse_ptr = unsafe {
             (&mut *self.m_context).make(gpu::ClipRectInverseMatrix::default())
                 as *const gpu::ClipRectInverseMatrix
@@ -1080,22 +1327,21 @@ impl RiveRenderer {
         current.clipRect = combined;
         current.clipRectMatrix = matrix;
         current.clipRectPixelBounds = pixel;
-        current.overallClipPixelBounds = intersect(current.overallClipPixelBounds, pixel);
+        current.overallClipPixelBounds = current.overallClipPixelBounds.intersect(pixel);
         current.clipRectInverseMatrix = inverse_ptr;
     }
     pub unsafe fn clipPathImplSource(&mut self, path: &RiveRenderPath) {
-        if aabb_empty_or_nan(path.getBounds()) {
+        if path.getBounds().is_empty_or_nan() {
             self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
             return;
         }
         let state = self.current_state().clone();
-        let Some(mapped) = map_path_bounds(state.matrix, path.getRawPath()) else {
-            self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
-            return;
-        };
-        let pixel = round_bounds(mapped);
-        let combined = intersect(state.overallClipPixelBounds, pixel);
-        if combined.left >= combined.right || combined.top >= combined.bottom {
+        let mapped = state
+            .matrix
+            .map_bounding_box(path.getRawPath().points());
+        let pixel = mapped.round_out();
+        let combined = state.overallClipPixelBounds.intersect(pixel);
+        if combined.empty() {
             self.current_state_mut().overallClipPixelBounds = combined;
             return;
         }
@@ -1240,7 +1486,7 @@ impl RiveRenderer {
                     },
                 }
             };
-            let tightened = intersect_u16(outer, draw_bounds);
+            let tightened = outer.intersect(draw_bounds);
             let id = unsafe {
                 (&mut *self.m_context).generateClipIDExecutable(draw_bounds, current, tightened)
             };
@@ -1310,10 +1556,7 @@ impl RendererContract for RiveRenderer {
         }
         if q.getIsStroked() && !(q.getThickness() > 0.0)
             || !(q.getFeather() >= 0.0)
-            || self.current_state().overallClipPixelBounds.left
-                >= self.current_state().overallClipPixelBounds.right
-            || self.current_state().overallClipPixelBounds.top
-                >= self.current_state().overallClipPixelBounds.bottom
+            || self.current_state().overallClipPixelBounds.empty()
         {
             return;
         }
@@ -1362,11 +1605,7 @@ impl RendererContract for RiveRenderer {
             return;
         }
         let p = unsafe { &*(path.cast::<RiveRenderPath>()) };
-        if self.current_state().overallClipPixelBounds.left
-            >= self.current_state().overallClipPixelBounds.right
-            || self.current_state().overallClipPixelBounds.top
-                >= self.current_state().overallClipPixelBounds.bottom
-        {
+        if self.current_state().overallClipPixelBounds.empty() {
             return;
         }
         if p.getRawPath().points().is_empty() {
@@ -1409,14 +1648,15 @@ impl RendererContract for RiveRenderer {
         ]));
         if !unsafe { (&*self.m_context).frameSupportsImagePaintForPathsExecutable() } {
             let clip_bounds = self.current_state().overallClipPixelBounds;
-            if clip_bounds.left >= clip_bounds.right || clip_bounds.top >= clip_bounds.bottom {
+            if clip_bounds.empty() {
                 self.restore();
                 return;
             }
-            let b = round_bounds(map_bounds(
-                self.current_state().matrix,
-                Aabb::new(0.0, 0.0, 1.0, 1.0),
-            ));
+            let b = self
+                .current_state()
+                .matrix
+                .map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0))
+            .round_out();
             self.clipAndPushDrawSource(own_image_rect(unsafe {
                 make_image_rect_draw(
                     b,
@@ -1469,10 +1709,7 @@ impl RendererContract for RiveRenderer {
             || vertices.get().is_null()
             || uv.get().is_null()
             || indices.get().is_null()
-            || self.current_state().overallClipPixelBounds.left
-                >= self.current_state().overallClipPixelBounds.right
-            || self.current_state().overallClipPixelBounds.top
-                >= self.current_state().overallClipPixelBounds.bottom
+            || self.current_state().overallClipPixelBounds.empty()
         {
             return;
         }

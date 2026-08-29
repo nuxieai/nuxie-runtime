@@ -4,15 +4,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use luaur_rt::{
-    AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
-    Value,
+    AnyUserData, Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value,
+    Vector as LuaVector,
 };
-use nuxie_render_api::RawPath;
 use nuxie_runtime::{
-    ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptNode,
-    ScriptPaint as RuntimeScriptPaint,
+    ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptMethod, ScriptNode,
 };
 
+use super::lua_mat2d::ScriptedMat2D;
 use super::lua_paint::ScriptedPaintData;
 use super::lua_path::{ScriptedPath, create_scripted_path};
 use super::lua_renderer::ScriptedRenderer;
@@ -32,13 +31,14 @@ impl RendererBindings {
 }
 
 struct ScriptedArtboardOwner {
-    artboard: RefCell<Box<dyn ScriptArtboard>>,
     _registration: Option<ScriptViewModelRegistration>,
+    artboard: Box<dyn ScriptArtboard>,
 }
 
 struct ScriptedArtboard {
     owner: Rc<ScriptedArtboardOwner>,
     bindings: RendererBindings,
+    data: RefCell<Option<Value>>,
 }
 
 struct ScriptedAnimation {
@@ -52,11 +52,12 @@ impl UserData for ScriptedAnimation {
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("advance", |_, this, seconds: f32| {
+        methods.add_method("advance", |_, this, seconds: f32| {
+            let mut animation = this.animation.clone();
             this.owner
                 .artboard
-                .borrow_mut()
-                .advance_animation(&mut this.animation, seconds)
+                .retained_handle()
+                .advance_animation(&mut animation, seconds)
                 .map_err(|error| Error::runtime(error.to_string()))
         });
         for (name, mode) in [
@@ -64,11 +65,12 @@ impl UserData for ScriptedAnimation {
             ("setTimeFrames", ScriptAnimationTime::Frames),
             ("setTimePercentage", ScriptAnimationTime::Percentage),
         ] {
-            methods.add_method_mut(name, move |_, this, value: f32| {
+            methods.add_method(name, move |_, this, value: f32| {
+                let mut animation = this.animation.clone();
                 this.owner
                     .artboard
-                    .borrow_mut()
-                    .set_animation_time(&mut this.animation, value, mode)
+                    .retained_handle()
+                    .set_animation_time(&mut animation, value, mode)
                     .map_err(|error| Error::runtime(error.to_string()))
             });
         }
@@ -83,59 +85,110 @@ impl ScriptedArtboard {
             .map(|model| bindings.view_model_frame_context.register(model));
         Self {
             owner: Rc::new(ScriptedArtboardOwner {
-                artboard: RefCell::new(artboard),
+                artboard,
                 _registration: registration,
             }),
             bindings,
+            data: RefCell::new(None),
         }
     }
 }
 
 impl UserData for ScriptedArtboard {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("width", |_, this| Ok(this.owner.artboard.borrow().width()));
+        fields.add_field_method_get("width", |_, this| Ok(this.owner.artboard.width()));
         fields.add_field_method_set("width", |_, this, value: f32| {
-            this.owner.artboard.borrow_mut().set_width(value);
+            this.owner.artboard.retained_handle().set_width(value);
             Ok(())
         });
-        fields.add_field_method_get("height", |_, this| {
-            Ok(this.owner.artboard.borrow().height())
-        });
+        fields.add_field_method_get("height", |_, this| Ok(this.owner.artboard.height()));
         fields.add_field_method_set("height", |_, this, value: f32| {
-            this.owner.artboard.borrow_mut().set_height(value);
+            this.owner.artboard.retained_handle().set_height(value);
             Ok(())
         });
         fields.add_field_method_get("frameOrigin", |_, this| {
-            Ok(this.owner.artboard.borrow().frame_origin())
+            Ok(this.owner.artboard.frame_origin())
         });
         fields.add_field_method_set("frameOrigin", |_, this, value: bool| {
-            this.owner.artboard.borrow_mut().set_frame_origin(value);
+            this.owner
+                .artboard
+                .retained_handle()
+                .set_frame_origin(value);
             Ok(())
         });
         fields.add_field_method_get("data", |lua, this| {
-            Ok(match this.owner.artboard.borrow().data() {
+            if let Some(data) = this.data.borrow().as_ref() {
+                return Ok(data.clone());
+            }
+            let data = match this.owner.artboard.data() {
                 Some(model) => Value::Table(create_scripted_view_model(lua, model)?),
                 None => Value::Nil,
-            })
+            };
+            *this.data.borrow_mut() = Some(data.clone());
+            Ok(data)
         });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("bounds", |_, this, ()| {
+            let bounds = this.owner.artboard.bounds();
+            Ok((
+                LuaVector::new(bounds.min_x, bounds.min_y, 0.0),
+                LuaVector::new(bounds.max_x, bounds.max_y, 0.0),
+            ))
+        });
+        methods.add_method(
+            "addToPath",
+            |_, this, (path, transform): (AnyUserData, Option<AnyUserData>)| {
+                let transform = transform
+                    .as_ref()
+                    .map(|transform| transform.borrow::<ScriptedMat2D>().map(|value| value.0))
+                    .transpose()?;
+                let mut path = path.borrow_mut::<ScriptedPath>()?;
+                path.with_render_raw_path_mut(|raw_path| {
+                    this.owner
+                        .artboard
+                        .retained_handle()
+                        .add_to_path(raw_path, transform)
+                })
+                .map_err(|error| Error::runtime(error.to_string()))?;
+                path.mark_dirty();
+                Ok(())
+            },
+        );
+        for method in [
+            ScriptMethod::PointerDown,
+            ScriptMethod::PointerMove,
+            ScriptMethod::PointerUp,
+            ScriptMethod::PointerExit,
+            ScriptMethod::GamepadConnected,
+            ScriptMethod::GamepadEvent,
+            ScriptMethod::GamepadDisconnected,
+        ] {
+            methods.add_method(method.as_str(), move |_, this, event: AnyUserData| {
+                let invocation =
+                    super::listener_invocation::artboard_input_invocation(method, &event)?;
+                this.owner
+                    .artboard
+                    .retained_handle()
+                    .dispatch_input(method, &invocation)
+                    .map_err(|error| Error::runtime(error.to_string()))
+            });
+        }
         methods.add_method("instance", |lua, this, view_model: Option<Table>| {
             let view_model = view_model.as_ref().map(model_from_table).transpose()?;
             let instance = this.bindings.with_factory(|factory| {
                 this.owner
                     .artboard
-                    .borrow()
                     .instance_with_factory(view_model, factory)
                     .map_err(|error| Error::runtime(error.to_string()))
             })?;
             lua.create_userdata(ScriptedArtboard::new(instance, this.bindings.clone()))
         });
-        methods.add_method_mut("advance", |_, this, seconds: f32| {
+        methods.add_method("advance", |_, this, seconds: f32| {
             this.owner
                 .artboard
-                .borrow_mut()
+                .retained_handle()
                 .advance(seconds)
                 .map_err(|error| Error::runtime(error.to_string()))
         });
@@ -143,7 +196,6 @@ impl UserData for ScriptedArtboard {
             let animation = this
                 .owner
                 .artboard
-                .borrow()
                 .animation(&name)
                 .map_err(|error| Error::runtime(error.to_string()))?;
             Ok(match animation {
@@ -158,57 +210,33 @@ impl UserData for ScriptedArtboard {
             let node = this
                 .owner
                 .artboard
-                .borrow()
                 .node(&name)
                 .map_err(|error| Error::runtime(error.to_string()))?;
             Ok(match node {
-                Some(node) => Value::UserData(lua.create_userdata(ScriptedNode::new(node))?),
+                Some(node) => Value::UserData(lua.create_userdata(ScriptedNode {
+                    node,
+                    owner: Some(this.owner.clone()),
+                })?),
                 None => Value::Nil,
             })
         });
-        methods.add_method_mut("draw", |_, this, args: MultiValue| {
-            let arg_types = args
-                .iter()
-                .map(|value| match value {
-                    Value::UserData(userdata) if userdata.borrow::<ScriptedRenderer>().is_ok() => {
-                        "Renderer"
-                    }
-                    Value::UserData(userdata) if userdata.borrow::<ScriptedArtboard>().is_ok() => {
-                        "ScriptedArtboard"
-                    }
-                    other => other.type_name(),
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            let renderer = args
-                .into_iter()
-                .filter_map(|value| match value {
-                    Value::UserData(userdata) if userdata.borrow::<ScriptedRenderer>().is_ok() => {
-                        Some(userdata)
-                    }
-                    _ => None,
-                })
-                .next()
-                .ok_or_else(|| {
-                    Error::runtime(format!(
-                        "ScriptedArtboard.draw expected Renderer userdata, got [{arg_types}]"
-                    ))
-                })?;
+        methods.add_method("draw", |_, this, renderer: AnyUserData| {
             let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
             scripted_renderer.bindings.with_factory(|factory| {
-                let mut renderer_ref = scripted_renderer.renderer_mut()?;
-                this.owner
-                    .artboard
-                    .borrow_mut()
-                    .draw(factory, unsafe { renderer_ref.as_mut() })
-                    .map_err(|error| Error::runtime(error.to_string()))
+                scripted_renderer.with_renderer_mut(|renderer| {
+                    this.owner
+                        .artboard
+                        .retained_handle()
+                        .draw(factory, renderer)
+                        .map_err(|error| Error::runtime(error.to_string()))
+                })
             })
         });
-        methods.add_method_mut("drawCanvas", |_, this, ()| {
+        methods.add_method("drawCanvas", |_, this, ()| {
             this.bindings.with_factory(|factory| {
                 this.owner
                     .artboard
-                    .borrow_mut()
+                    .retained_handle()
                     .draw_canvas(factory)
                     .map_err(|error| Error::runtime(error.to_string()))
             })
@@ -217,32 +245,118 @@ impl UserData for ScriptedArtboard {
 }
 
 pub(super) struct ScriptedNode {
-    path: Option<RawPath>,
-    paint: Option<RuntimeScriptPaint>,
+    node: ScriptNode,
+    owner: Option<Rc<ScriptedArtboardOwner>>,
 }
 
 impl ScriptedNode {
     pub(super) fn new(node: ScriptNode) -> Self {
-        Self {
-            path: node.path,
-            paint: node.paint,
-        }
+        Self { node, owner: None }
     }
 }
 
 impl UserData for ScriptedNode {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("x", |_, this| Ok(this.node.x()));
+        fields.add_field_method_set("x", |_, this, value: f32| {
+            this.node.set_x(value);
+            Ok(())
+        });
+        fields.add_field_method_get("y", |_, this| Ok(this.node.y()));
+        fields.add_field_method_set("y", |_, this, value: f32| {
+            this.node.set_y(value);
+            Ok(())
+        });
+        fields.add_field_method_get("position", |_, this| {
+            Ok(LuaVector::new(this.node.x(), this.node.y(), 0.0))
+        });
+        fields.add_field_method_set("position", |_, this, value: LuaVector| {
+            this.node.set_x(value.x());
+            this.node.set_y(value.y());
+            Ok(())
+        });
+        fields.add_field_method_get("rotation", |_, this| Ok(this.node.rotation()));
+        fields.add_field_method_set("rotation", |_, this, value: f32| {
+            this.node.set_rotation(value);
+            Ok(())
+        });
+        fields.add_field_method_get("scale", |_, this| {
+            Ok(LuaVector::new(
+                this.node.scale_x(),
+                this.node.scale_y(),
+                0.0,
+            ))
+        });
+        fields.add_field_method_set("scale", |_, this, value: LuaVector| {
+            this.node.set_scale_x(value.x());
+            this.node.set_scale_y(value.y());
+            Ok(())
+        });
+        fields.add_field_method_get("scaleX", |_, this| Ok(this.node.scale_x()));
+        fields.add_field_method_set("scaleX", |_, this, value: f32| {
+            this.node.set_scale_x(value);
+            Ok(())
+        });
+        fields.add_field_method_get("scaleY", |_, this| Ok(this.node.scale_y()));
+        fields.add_field_method_set("scaleY", |_, this, value: f32| {
+            this.node.set_scale_y(value);
+            Ok(())
+        });
+        fields.add_field_method_get("worldTransform", |lua, this| {
+            lua.create_userdata(ScriptedMat2D(this.node.world_transform()))
+        });
+        fields.add_field_method_set("worldTransform", |_, this, value: AnyUserData| {
+            this.node
+                .set_world_transform(value.borrow::<ScriptedMat2D>()?.0);
+            Ok(())
+        });
+        fields.add_field_method_get("children", |lua, this| {
+            let children = this.node.children();
+            let table = lua.create_table();
+            for (index, child) in children.into_iter().enumerate() {
+                table.raw_set(
+                    index + 1,
+                    lua.create_userdata(Self {
+                        node: child,
+                        owner: this.owner.clone(),
+                    })?,
+                )?;
+            }
+            Ok(table)
+        });
+        fields.add_field_method_get("parent", |lua, this| {
+            Ok(match this.node.parent() {
+                Some(parent) => Value::UserData(lua.create_userdata(Self {
+                    node: parent,
+                    owner: this.owner.clone(),
+                })?),
+                None => Value::Nil,
+            })
+        });
+        fields.add_field_method_get("paint", |lua, this| {
+            Ok(match this.node.paint() {
+                Some(paint) => Value::UserData(lua.create_userdata(ScriptedPaintData(paint))?),
+                None => Value::Nil,
+            })
+        });
+    }
+
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("decompose", |_, this, transform: AnyUserData| {
+            this.node.decompose(transform.borrow::<ScriptedMat2D>()?.0);
+            Ok(())
+        });
         methods.add_method("asPath", |lua, this, ()| {
-            Ok(match this.path.clone() {
+            Ok(match this.node.path() {
                 Some(path) => Value::UserData(create_scripted_path(
                     lua,
-                    ScriptedPath::from_raw_path(path),
+                    ScriptedPath::from_render_raw_path(path),
                 )?),
                 None => Value::Nil,
             })
         });
         methods.add_method("asPaint", |lua, this, ()| {
-            Ok(match this.paint {
+            Ok(match this.node.paint() {
                 Some(paint) => Value::UserData(lua.create_userdata(ScriptedPaintData(paint))?),
                 None => Value::Nil,
             })
@@ -254,61 +368,42 @@ impl UserData for ScriptedNode {
 mod artboard_owner_tests {
     use super::*;
     use crate::vm::ScriptViewModelFrameContext;
-    use nuxie_render_api::{Factory as RenderFactory, Renderer};
-    use nuxie_runtime::{ScriptError, ScriptViewModel, ScriptViewModelProperty};
+    use crate::vm::ScriptVm;
+    use nuxie_render_api::{
+        Factory as RenderFactory, PersistentFactory, RecordingFactory, SerializingFactory,
+    };
+    use nuxie_runtime::{
+        File, RuntimeFactoryHandle, RuntimeFileHandle, RuntimeScriptingVmHandle, ScriptViewModel,
+        ScriptViewModelProperty, native_script_artboard,
+    };
 
-    struct TestScriptArtboard {
-        model: ScriptViewModel,
-    }
+    use nuxie_sriv as sriv;
 
-    impl ScriptArtboard for TestScriptArtboard {
-        fn width(&self) -> f32 {
-            0.0
-        }
-
-        fn height(&self) -> f32 {
-            0.0
-        }
-
-        fn frame_origin(&self) -> bool {
-            false
-        }
-
-        fn set_width(&mut self, _width: f32) {}
-
-        fn set_height(&mut self, _height: f32) {}
-
-        fn set_frame_origin(&mut self, _frame_origin: bool) {}
-
-        fn data(&self) -> Option<ScriptViewModel> {
-            Some(self.model.clone())
-        }
-
-        fn instance(
-            &self,
-            _view_model: Option<ScriptViewModel>,
-        ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
-            Err(ScriptError::new("not used by owner-lifetime test"))
-        }
-
-        fn draw(
-            &mut self,
-            _factory: &mut dyn RenderFactory,
-            _renderer: &mut dyn Renderer,
-        ) -> std::result::Result<(), ScriptError> {
-            Ok(())
-        }
-    }
-
-    fn trigger_model() -> (ScriptViewModel, String) {
+    fn fixture_bytes(name: &str) -> Vec<u8> {
         let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
-            .join("tests/unit_tests/assets/script_create_viewmodel_instance.riv");
-        let bytes = std::fs::read(&fixture)
-            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
-        let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
-        nuxie_runtime::script_view_models(&file)
+            .join("tests/unit_tests/assets")
+            .join(name);
+        std::fs::read(&fixture)
+            .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()))
+    }
+
+    fn import_fixture(name: &str, factory: &mut dyn RenderFactory) -> RuntimeFileHandle {
+        File::import(
+            &fixture_bytes(name),
+            RuntimeFactoryHandle::from_factory(factory).expect("retained factory"),
+            None,
+            None,
+            Some(RuntimeScriptingVmHandle::new(Box::new(ScriptVm::new()))),
+        )
+        .expect("pinned native fixture import")
+    }
+
+    fn trigger_artboard() -> (ScriptViewModel, String, Box<dyn ScriptArtboard>) {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = import_fixture("script_create_viewmodel_instance.riv", &mut factory);
+        let (model, trigger) = nuxie_runtime::script_view_models(&file)
             .into_values()
             .find_map(|model| {
                 let trigger = model.properties().iter().find_map(|(name, kind)| {
@@ -316,19 +411,19 @@ mod artboard_owner_tests {
                 })?;
                 Some((model.named_instance(None)?, trigger))
             })
-            .expect("fixture has a trigger model")
+            .expect("fixture has a trigger model");
+        let source = file.with_file(|file| file.artboard_handle(0)).unwrap();
+        let instance = nuxie_runtime::Artboard::instance_from_handle(&source).unwrap();
+        let artboard = native_script_artboard(file, instance, model.native_instance(), None)
+            .expect("native owner binds the actual trigger instance");
+        (model, trigger, artboard)
     }
 
     #[test]
     fn scripted_artboard_keeps_its_bound_instance_registered_for_its_lifetime() {
-        let (model, trigger) = trigger_model();
+        let (model, trigger, native) = trigger_artboard();
         let context = ScriptViewModelFrameContext::default();
-        let artboard = ScriptedArtboard::new(
-            Box::new(TestScriptArtboard {
-                model: model.clone(),
-            }),
-            RendererBindings::new(context.clone()),
-        );
+        let artboard = ScriptedArtboard::new(native, RendererBindings::new(context.clone()));
 
         assert!(model.fire_trigger(&trigger));
         assert!(context.advance_detached());
@@ -342,14 +437,9 @@ mod artboard_owner_tests {
 
     #[test]
     fn scripted_child_artboard_advance_does_not_consume_detached_view_models() {
-        let (model, trigger) = trigger_model();
+        let (model, trigger, native) = trigger_artboard();
         let context = ScriptViewModelFrameContext::default();
-        let artboard = ScriptedArtboard::new(
-            Box::new(TestScriptArtboard {
-                model: model.clone(),
-            }),
-            RendererBindings::new(context.clone()),
-        );
+        let artboard = ScriptedArtboard::new(native, RendererBindings::new(context.clone()));
         let lua = Lua::new();
         let userdata = lua
             .create_userdata(artboard)
@@ -368,81 +458,39 @@ mod artboard_owner_tests {
         assert_eq!(model.trigger(&trigger), Some(0));
     }
 
-    struct DimensionsArtboard {
-        width: f32,
-        height: f32,
-    }
-
-    impl ScriptArtboard for DimensionsArtboard {
-        fn width(&self) -> f32 {
-            self.width
-        }
-
-        fn height(&self) -> f32 {
-            self.height
-        }
-
-        fn frame_origin(&self) -> bool {
-            false
-        }
-
-        fn set_width(&mut self, width: f32) {
-            self.width = width;
-        }
-
-        fn set_height(&mut self, height: f32) {
-            self.height = height;
-        }
-
-        fn set_frame_origin(&mut self, _frame_origin: bool) {}
-
-        fn instance(
-            &self,
-            _view_model: Option<ScriptViewModel>,
-        ) -> std::result::Result<Box<dyn ScriptArtboard>, ScriptError> {
-            Ok(Box::new(Self {
-                width: self.width,
-                height: self.height,
-            }))
-        }
-
-        fn node(&self, name: &str) -> std::result::Result<Option<ScriptNode>, ScriptError> {
-            Ok(
-                (name == "muzzle" || name == "Weapon").then_some(ScriptNode {
-                    path: None,
-                    paint: None,
-                }),
-            )
-        }
-
-        fn draw(
-            &mut self,
-            _factory: &mut dyn RenderFactory,
-            _renderer: &mut dyn Renderer,
-        ) -> std::result::Result<(), ScriptError> {
-            Ok(())
-        }
-    }
-
-    fn dimensions_userdata(lua: &Lua) -> AnyUserData {
+    fn fixture_userdata(lua: &Lua, fixture: &str, artboard_name: Option<&str>) -> AnyUserData {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = import_fixture(fixture, &mut factory);
+        let source = file
+            .with_file(|file| match artboard_name {
+                Some(name) => file.artboard_named_source(name),
+                None => file.artboard_handle(0),
+            })
+            .expect("pinned source artboard");
+        let bindings = RendererBindings::new(ScriptViewModelFrameContext::default());
+        bindings.bootstrap_render_context(&mut factory).unwrap();
+        bindings.install(lua).unwrap();
         lua.create_userdata(ScriptedArtboard::new(
-            Box::new(DimensionsArtboard {
-                width: 92.0,
-                height: 92.0,
-            }),
-            RendererBindings::new(ScriptViewModelFrameContext::default()),
+            native_script_artboard(
+                file,
+                nuxie_runtime::Artboard::instance_from_handle(&source).unwrap(),
+                None,
+                None,
+            )
+            .expect("native scripted artboard"),
+            bindings,
         ))
         .expect("scripted artboard")
     }
 
-    /// Direct ports of the six non-silver cases in pinned
+    /// Direct ports of the artboard owner cases in pinned
     /// `scripting_artboard_test.cpp`. The PointerEvent case is retained in
     /// `listener_invocation::tests::pointer_hit_propagates_the_cpp_tristate_out_of_the_lua_callback`.
     #[test]
     fn upstream_can_access_artboard_width_and_height() {
         let lua = Lua::new();
         lua.globals()
-            .set("artboard", dimensions_userdata(&lua))
+            .set("artboard", fixture_userdata(&lua, "coin.riv", None))
             .unwrap();
         let values: Table = lua
             .load(
@@ -472,11 +520,10 @@ mod artboard_owner_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: ScriptedArtboard has no pinned bounds() method"]
     fn upstream_can_access_artboard_bounds() {
         let lua = Lua::new();
         lua.globals()
-            .set("artboard", dimensions_userdata(&lua))
+            .set("artboard", fixture_userdata(&lua, "coin.riv", None))
             .unwrap();
         let values: Table = lua
             .load(
@@ -494,12 +541,26 @@ mod artboard_owner_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: exact coin.riv scripted renderer loop requires the public file-backed artboard owner"]
     fn upstream_can_render_an_artboard_via_the_scripting_engine() {
         let lua = Lua::new();
-        lua.globals()
-            .set("artboard", dimensions_userdata(&lua))
+        let mut factory = PersistentFactory::new(SerializingFactory::new());
+        let file = import_fixture("coin.riv", &mut factory);
+        let source = file.with_file(|file| file.artboard_handle(0)).unwrap();
+        let artboard = native_script_artboard(
+            file,
+            nuxie_runtime::Artboard::instance_from_handle(&source).unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
+        let (width, height) = (artboard.width(), artboard.height());
+        let bindings = RendererBindings::new(ScriptViewModelFrameContext::default());
+        bindings.bootstrap_render_context(&mut factory).unwrap();
+        bindings.install(&lua).unwrap();
+        let userdata = lua
+            .create_userdata(ScriptedArtboard::new(artboard, bindings.clone()))
             .unwrap();
+        lua.globals().set("artboard", userdata.clone()).unwrap();
         lua.load(
             r#"
             function render(artboard, renderer)
@@ -511,25 +572,46 @@ mod artboard_owner_tests {
         )
         .exec()
         .unwrap();
-        for _ in 0..10 {
-            let renderer = Value::Nil;
+        for frame in 0..10 {
+            if frame != 0 {
+                factory.borrow_mut().add_frame();
+            }
+            factory.borrow_mut().frame_size(width as u32, height as u32);
+            let mut renderer = factory.borrow().make_renderer();
+            let (scripted_renderer, _scope) = ScriptedRenderer::create_call_scoped_userdata(
+                &lua,
+                &mut renderer,
+                bindings.clone(),
+            )
+            .unwrap();
             lua.globals()
                 .get::<luaur_rt::Function>("render")
                 .unwrap()
-                .call::<()>((
-                    lua.globals().get::<AnyUserData>("artboard").unwrap(),
-                    renderer,
-                ))
+                .call::<()>((userdata.clone(), scripted_renderer.clone()))
                 .expect("pinned renderer userdata and Vertical model");
+            assert!(
+                scripted_renderer
+                    .borrow::<ScriptedRenderer>()
+                    .unwrap()
+                    .end()
+            );
         }
+        let expected = fixture_bytes("../silvers/scripted_artboard_render.sriv");
+        sriv::compare_sriv(
+            &sriv::parse_sriv(&expected).unwrap(),
+            &sriv::parse_sriv(&factory.borrow().bytes()).unwrap(),
+        )
+        .expect("pinned scripted_artboard_render silver");
     }
 
     #[test]
-    #[ignore = "expected-red: ScriptedNode lacks pinned transform, children, parent, and decompose fields"]
     fn upstream_can_access_nodes_from_artboards() {
         let lua = Lua::new();
         lua.globals()
-            .set("artboard", dimensions_userdata(&lua))
+            .set(
+                "artboard",
+                fixture_userdata(&lua, "joel_v3.riv", Some("Character")),
+            )
             .unwrap();
         let values: Table = lua
             .load(
@@ -563,11 +645,13 @@ mod artboard_owner_tests {
     }
 
     #[test]
-    #[ignore = "expected-red: ScriptedArtboard has no pinned addToPath method"]
     fn upstream_can_add_artboard_to_path() {
         let lua = Lua::new();
         lua.globals()
-            .set("artboard", dimensions_userdata(&lua))
+            .set(
+                "artboard",
+                fixture_userdata(&lua, "joel_v3.riv", Some("Character")),
+            )
             .unwrap();
         lua.load(
             r#"

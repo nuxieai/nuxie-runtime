@@ -13,7 +13,7 @@
 //! [`decode_image_rgba_unbounded`] entry point exists only for pinned low-level
 //! runtime compatibility and must not be used for untrusted product admission.
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 use std::ffi::c_void;
 use std::io::Cursor;
 
@@ -71,6 +71,209 @@ pub struct DecodedImageRgba {
     pub width: u32,
     pub height: u32,
     pub pixels: Vec<u8>,
+}
+
+/// Pixels returned by the native decoder before renderer color conversion.
+/// These low-level entry points do not apply product admission limits; callers
+/// importing untrusted content must retain the normal admission boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BitmapPixelFormat {
+    Rgb,
+    Rgba,
+    RgbaPremul,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedBitmap {
+    pub width: u32,
+    pub height: u32,
+    pub pixel_format: BitmapPixelFormat,
+    pub pixels: Vec<u8>,
+}
+
+/// The PNG host boundary used by the translated DecodePng owner. Preserve
+/// native RGB/RGBA channels; ICC conversion and premultiplication belong to
+/// other callers, not this source decoder.
+pub fn decode_png_bitmap(data: &[u8]) -> Option<DecodedBitmap> {
+    let mut reader = png_decoder_with_limit(data, None).read_info().ok()?;
+    let mut decoded = zeroed_buffer(reader.output_buffer_size()?)?;
+    let info = reader.next_frame(&mut decoded).ok()?;
+    decoded.truncate(info.buffer_size());
+    if info.bit_depth != png::BitDepth::Eight {
+        return None;
+    }
+    let (pixel_format, pixels) = match info.color_type {
+        png::ColorType::Rgb => (BitmapPixelFormat::Rgb, decoded),
+        png::ColorType::Rgba => (BitmapPixelFormat::Rgba, decoded),
+        png::ColorType::Grayscale => {
+            let mut pixels = zeroed_buffer(decoded_sample_len(info.width, info.height, 3)?)?;
+            for (out, value) in pixels.chunks_exact_mut(3).zip(decoded) {
+                out.fill(value);
+            }
+            (BitmapPixelFormat::Rgb, pixels)
+        }
+        png::ColorType::GrayscaleAlpha => {
+            let mut pixels = zeroed_buffer(decoded_sample_len(info.width, info.height, 4)?)?;
+            for (out, value) in pixels.chunks_exact_mut(4).zip(decoded.chunks_exact(2)) {
+                out.copy_from_slice(&[value[0], value[0], value[0], value[1]]);
+            }
+            (BitmapPixelFormat::Rgba, pixels)
+        }
+        png::ColorType::Indexed => return None,
+    };
+    Some(DecodedBitmap {
+        width: info.width,
+        height: info.height,
+        pixel_format,
+        pixels,
+    })
+}
+
+/// The JPEG host boundary used by DecodeJpeg: eight-bit RGB, without the
+/// renderer's optional ICC-to-sRGB conversion or added alpha channel.
+pub fn decode_jpeg_bitmap(data: &[u8]) -> Option<DecodedBitmap> {
+    let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(data));
+    decoder.set_max_decoding_buffer_size(usize::MAX);
+    decoder.read_info().ok()?;
+    let header = decoder.info()?;
+    // Pinned v9f rejects lossless SOFs and cannot convert CMYK/YCCK to the
+    // requested JCS_RGB output. Do not inherit the renderer's CMYK conversion.
+    if header.coding_process == jpeg_decoder::CodingProcess::Lossless
+        || matches!(
+            header.pixel_format,
+            jpeg_decoder::PixelFormat::CMYK32 | jpeg_decoder::PixelFormat::L16
+        )
+    {
+        return None;
+    }
+    let decoded = decoder.decode().ok()?;
+    let info = decoder.info()?;
+    let width = u32::from(info.width);
+    let height = u32::from(info.height);
+    let expected_size = decoded_sample_len(width, height, 3)?;
+    let pixels = if info.pixel_format == jpeg_decoder::PixelFormat::RGB24 {
+        decoded
+    } else {
+        let mut pixels = zeroed_buffer(expected_size)?;
+        match info.pixel_format {
+            jpeg_decoder::PixelFormat::L8 => {
+                for (out, value) in pixels.chunks_exact_mut(3).zip(decoded) {
+                    out.fill(value);
+                }
+            }
+            jpeg_decoder::PixelFormat::L16 | jpeg_decoder::PixelFormat::CMYK32 => return None,
+            jpeg_decoder::PixelFormat::RGB24 => unreachable!(),
+        }
+        pixels
+    };
+    if pixels.len() != expected_size {
+        return None;
+    }
+    Some(DecodedBitmap {
+        width,
+        height,
+        pixel_format: BitmapPixelFormat::Rgb,
+        pixels,
+    })
+}
+
+/// Decode the first WebP frame into RGBA at the start of the canvas, matching
+/// WebPDemuxGetFrame(1) + WebPDecode(fragment) rather than animation composition.
+pub fn decode_webp_bitmap(data: &[u8]) -> Option<DecodedBitmap> {
+    let mut decoder = image_webp::WebPDecoder::new(Cursor::new(data)).ok()?;
+    decoder.set_memory_limit(usize::MAX);
+    let (width, height) = decoder.dimensions();
+    let fragment;
+    if decoder.is_animated() {
+        fragment = first_webp_frame_container(data)?;
+        decoder = image_webp::WebPDecoder::new(Cursor::new(fragment.as_slice())).ok()?;
+        decoder.set_memory_limit(usize::MAX);
+    }
+    let (frame_width, frame_height) = decoder.dimensions();
+    if frame_width > width || frame_height > height {
+        return None;
+    }
+    let channels = if decoder.has_alpha() { 4 } else { 3 };
+    let mut frame = zeroed_buffer(decoder.output_buffer_size()?)?;
+    decoder.read_image(&mut frame).ok()?;
+    let mut pixels = zeroed_buffer(decoded_sample_len(width, height, 4)?)?;
+    let source_stride = usize::try_from(frame_width).ok()?.checked_mul(channels)?;
+    let target_stride = usize::try_from(width).ok()?.checked_mul(4)?;
+    for (source, target) in frame
+        .chunks_exact(source_stride)
+        .zip(pixels.chunks_exact_mut(target_stride))
+    {
+        for (source, target) in source
+            .chunks_exact(channels)
+            .zip(target.chunks_exact_mut(4))
+        {
+            target[..3].copy_from_slice(&source[..3]);
+            target[3] = if channels == 4 { source[3] } else { 255 };
+        }
+    }
+    Some(DecodedBitmap {
+        width,
+        height,
+        pixel_format: BitmapPixelFormat::Rgba,
+        pixels,
+    })
+}
+
+// image-webp accepts a RIFF container rather than libwebp's bare first-frame
+// fragment. Keep its encoded VP8/VP8L/ALPH payload unchanged and add only the
+// container metadata needed by that host API; do not composite frame offsets.
+fn first_webp_frame_container(data: &[u8]) -> Option<Vec<u8>> {
+    let declared = usize::try_from(u32::from_le_bytes(data.get(4..8)?.try_into().ok()?))
+        .ok()?
+        .checked_add(8)?;
+    let data = data.get(..declared)?;
+    let mut offset = 12usize;
+    while offset.checked_add(8)? <= data.len() {
+        let size = usize::try_from(u32::from_le_bytes(
+            data.get(offset + 4..offset + 8)?.try_into().ok()?,
+        ))
+        .ok()?;
+        let start = offset.checked_add(8)?;
+        let end = start.checked_add(size)?;
+        let payload = data.get(start..end)?;
+        if data.get(offset..offset + 4)? == b"ANMF" {
+            let header = payload.get(..16)?;
+            let frame = payload.get(16..)?;
+            let alpha = match frame.get(..4)? {
+                b"ALPH" => true,
+                b"VP8L" => frame.get(12)? & 0x10 != 0,
+                b"VP8 " => false,
+                _ => return None,
+            };
+            let total = 30usize.checked_add(frame.len())?;
+            let mut result = Vec::new();
+            result.try_reserve_exact(total).ok()?;
+            result.extend_from_slice(b"RIFF");
+            result.extend_from_slice(&u32::try_from(total.checked_sub(8)?).ok()?.to_le_bytes());
+            result.extend_from_slice(b"WEBPVP8X");
+            result.extend_from_slice(&10u32.to_le_bytes());
+            result.extend_from_slice(&[if alpha { 0x10 } else { 0 }, 0, 0, 0]);
+            result.extend_from_slice(&header[6..9]);
+            result.extend_from_slice(&header[9..12]);
+            result.extend_from_slice(frame);
+            return Some(result);
+        }
+        offset = end.checked_add(size & 1)?;
+    }
+    None
+}
+
+/// Direct ImageIO decode, as selected by Bitmap::decode on Apple. Deliberately
+/// no PNG/JPEG/WebP recognizer or portable-header preflight precedes ImageIO.
+#[cfg(target_vendor = "apple")]
+pub fn decode_apple_bitmap(data: &[u8]) -> Option<DecodedBitmap> {
+    let (width, height, pixels) = decode_macos_image_rgba(data, None)?;
+    Some(DecodedBitmap {
+        width,
+        height,
+        pixel_format: BitmapPixelFormat::RgbaPremul,
+        pixels,
+    })
 }
 
 /// Fully decode a supported encoded image into the same canonical pixel
@@ -266,7 +469,7 @@ fn decode_png_rgba(data: &[u8], max_decoded_bytes: Option<usize>) -> Option<(u32
     Some((info.width, info.height, pixels))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CoreGraphicsPoint {
@@ -274,7 +477,7 @@ struct CoreGraphicsPoint {
     y: f64,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CoreGraphicsSize {
@@ -282,7 +485,7 @@ struct CoreGraphicsSize {
     height: f64,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CoreGraphicsRect {
@@ -290,7 +493,7 @@ struct CoreGraphicsRect {
     size: CoreGraphicsSize,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 #[link(name = "CoreFoundation", kind = "framework")]
 #[link(name = "CoreGraphics", kind = "framework")]
 #[link(name = "ImageIO", kind = "framework")]
@@ -322,7 +525,7 @@ unsafe extern "C" {
     fn CGContextRelease(context: *mut c_void);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn decode_macos_image_rgba(
     data: &[u8],
     max_decoded_bytes: Option<usize>,

@@ -36,7 +36,9 @@ pub(super) fn imports_successfully(
     context: &ImportContext,
 ) -> Option<bool> {
     if definition.name == "FileAssetContents" {
-        return Some(context.latest(ImportStackKey::FileAsset));
+        return Some(crate::assets::file_asset_contents::imports_successfully(
+            context,
+        ));
     }
     definition
         .is_a("FileAsset")

@@ -10,19 +10,15 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
     vector.set(
         "distance",
         lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
-            let x = lhs.x() - rhs.x();
-            let y = lhs.y() - rhs.y();
-            let z = lhs.z() - rhs.z();
-            Ok((x * x + y * y + z * z).sqrt())
+            let delta = LuaVector::new(rhs.x() - lhs.x(), rhs.y() - lhs.y(), rhs.z() - lhs.z());
+            Ok(vector_dot3(delta, delta).sqrt())
         })?,
     )?;
     vector.set(
         "distanceSquared",
         lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
-            let x = lhs.x() - rhs.x();
-            let y = lhs.y() - rhs.y();
-            let z = lhs.z() - rhs.z();
-            Ok(x * x + y * y + z * z)
+            let delta = LuaVector::new(rhs.x() - lhs.x(), rhs.y() - lhs.y(), rhs.z() - lhs.z());
+            Ok(vector_dot3(delta, delta))
         })?,
     )?;
     vector.set(
@@ -32,16 +28,16 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
     vector.set(
         "cross",
         lua.create_function(|_, (lhs, rhs): (LuaVector, LuaVector)| {
-            Ok(lhs.x() * rhs.y() - lhs.y() * rhs.x())
+            Ok(lhs.x().mul_add(rhs.y(), -(lhs.y() * rhs.x())))
         })?,
     )?;
     vector.set(
         "cross3",
         lua.create_function(|_, (a, b): (LuaVector, LuaVector)| {
             Ok(LuaVector::new(
-                a.y() * b.z() - a.z() * b.y(),
-                a.z() * b.x() - a.x() * b.z(),
-                a.x() * b.y() - a.y() * b.x(),
+                a.y().mul_add(b.z(), -(a.z() * b.y())),
+                a.z().mul_add(b.x(), -(a.x() * b.z())),
+                a.x().mul_add(b.y(), -(a.y() * b.x())),
             ))
         })?,
     )?;
@@ -49,9 +45,9 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
         "scaleAndAdd",
         lua.create_function(|_, (a, b, scale): (LuaVector, LuaVector, f32)| {
             Ok(LuaVector::new(
-                a.x() + b.x() * scale,
-                a.y() + b.y() * scale,
-                a.z() + b.z() * scale,
+                b.x().mul_add(scale, a.x()),
+                b.y().mul_add(scale, a.y()),
+                b.z().mul_add(scale, a.z()),
             ))
         })?,
     )?;
@@ -59,9 +55,9 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
         "scaleAndSub",
         lua.create_function(|_, (a, b, scale): (LuaVector, LuaVector, f32)| {
             Ok(LuaVector::new(
-                a.x() - b.x() * scale,
-                a.y() - b.y() * scale,
-                a.z() - b.z() * scale,
+                b.x().mul_add(-scale, a.x()),
+                b.y().mul_add(-scale, a.y()),
+                b.z().mul_add(-scale, a.z()),
             ))
         })?,
     )?;
@@ -197,7 +193,8 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
 
 #[inline]
 fn vector_dot3(lhs: LuaVector, rhs: LuaVector) -> f32 {
-    lhs.x() * rhs.x() + lhs.y() * rhs.y() + lhs.z() * rhs.z()
+    let xy = lhs.x().mul_add(rhs.x(), lhs.y() * rhs.y());
+    lhs.z().mul_add(rhs.z(), xy)
 }
 
 #[inline]
@@ -205,7 +202,7 @@ fn vector_lerp_component(a: f32, b: f32, factor: f32) -> f32 {
     if factor == 1.0 {
         b
     } else {
-        a + (b - a) * factor
+        (b - a).mul_add(factor, a)
     }
 }
 

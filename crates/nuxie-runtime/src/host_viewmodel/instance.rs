@@ -609,12 +609,10 @@ impl RuntimeOwnedViewModelInstance {
         self.set_number_by_source_handle(&handle, value)
     }
     pub fn set_number_by_property_index(&mut self, index: usize, value: f32) -> bool {
-        self.set_number_by_source_handle(
-            &RuntimeOwnedViewModelNumberSourceHandle {
-                property_path: vec![index],
-            },
-            value,
-        )
+        let Some(property) = self.property_by_path(std::slice::from_ref(&index)) else {
+            return false;
+        };
+        Self::set_number_property(property, value)
     }
     pub fn set_number_by_source_handle(
         &mut self,
@@ -624,6 +622,9 @@ impl RuntimeOwnedViewModelInstance {
         let Some(property) = self.property_by_path(handle.path()) else {
             return false;
         };
+        Self::set_number_property(property, value)
+    }
+    fn set_number_property(property: CoreHandle, value: f32) -> bool {
         let Some(previous) =
             property.with_downcast::<ViewModelInstanceNumber, _>(|value| value.value())
         else {
@@ -929,9 +930,8 @@ impl RuntimeOwnedViewModelInstance {
             .with_downcast::<ViewModelInstanceNumber, _>(|_| index)
     }
     pub fn number_value_by_slot(&self, index: usize) -> Option<f32> {
-        self.number_value_by_source_handle(&RuntimeOwnedViewModelNumberSourceHandle {
-            property_path: vec![index],
-        })
+        self.property_by_path(std::slice::from_ref(&index))?
+            .with_downcast::<ViewModelInstanceNumber, _>(|value| value.value())
     }
     pub fn set_number_by_slot(&mut self, index: usize, value: f32) -> bool {
         self.set_number_by_property_index(index, value)

@@ -56,14 +56,25 @@ class SlimRuntimeSourceTests(unittest.TestCase):
         self.assertIn("feature-set: apple-runtime", plan)
         self.assertNotIn("legacy", plan.lower())
 
-    def test_builder_gives_bindgen_each_target_sdk_sysroot(self) -> None:
+    def test_builder_gives_bindgen_each_target_clang_target_and_sdk_sysroot(
+        self,
+    ) -> None:
         builder = (REPO_ROOT / "tools/build-nux-capi-xcframeworks.sh").read_text()
         for sdk in ("iphoneos", "iphonesimulator", "macosx"):
             self.assertIn(f'xcrun --sdk {sdk} --show-sdk-path', builder)
-        self.assertIn('aarch64-apple-ios-sim|x86_64-apple-ios)', builder)
-        self.assertIn('aarch64-apple-darwin|x86_64-apple-darwin)', builder)
+        for clang_target in (
+            "arm64-apple-ios${deployment_target}",
+            "arm64-apple-ios${deployment_target}-simulator",
+            "x86_64-apple-ios${deployment_target}-simulator",
+            "arm64-apple-macos${macos_deployment_target}",
+            "x86_64-apple-macos${macos_deployment_target}",
+        ):
+            self.assertIn(f'clang_target="{clang_target}"', builder)
         self.assertIn('SDKROOT="${sdk_path}"', builder)
-        self.assertIn('BINDGEN_EXTRA_CLANG_ARGS="--sysroot=${sdk_path}"', builder)
+        self.assertIn(
+            'BINDGEN_EXTRA_CLANG_ARGS="--target=${clang_target} --sysroot=${sdk_path}"',
+            builder,
+        )
 
     def test_distribution_exposes_one_module_and_platform_symbol_partitions(self) -> None:
         extension_root = REPO_ROOT / "crates/nux-apple-product-extension"

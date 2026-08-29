@@ -157,12 +157,23 @@ for target in "${targets[@]}"; do
     case "${target}" in
         aarch64-apple-ios)
             sdk_path="${iphoneos_sdk_path}"
+            clang_target="arm64-apple-ios${deployment_target}"
             ;;
-        aarch64-apple-ios-sim|x86_64-apple-ios)
+        aarch64-apple-ios-sim)
             sdk_path="${iphonesimulator_sdk_path}"
+            clang_target="arm64-apple-ios${deployment_target}-simulator"
             ;;
-        aarch64-apple-darwin|x86_64-apple-darwin)
+        x86_64-apple-ios)
+            sdk_path="${iphonesimulator_sdk_path}"
+            clang_target="x86_64-apple-ios${deployment_target}-simulator"
+            ;;
+        aarch64-apple-darwin)
             sdk_path="${macos_sdk_path}"
+            clang_target="arm64-apple-macos${macos_deployment_target}"
+            ;;
+        x86_64-apple-darwin)
+            sdk_path="${macos_sdk_path}"
+            clang_target="x86_64-apple-macos${macos_deployment_target}"
             ;;
         *)
             echo "unsupported Apple release target: ${target}" >&2
@@ -172,7 +183,7 @@ for target in "${targets[@]}"; do
     IPHONEOS_DEPLOYMENT_TARGET="${deployment_target}" \
     MACOSX_DEPLOYMENT_TARGET="${macos_deployment_target}" \
     SDKROOT="${sdk_path}" \
-    BINDGEN_EXTRA_CLANG_ARGS="--sysroot=${sdk_path}" \
+    BINDGEN_EXTRA_CLANG_ARGS="--target=${clang_target} --sysroot=${sdk_path}" \
     NUX_RUNTIME_BUILD_INPUTS_HASH="${build_inputs_hash}" \
     NUX_RUNTIME_BUILD_PROFILE="${profile}" \
     NUX_RUNTIME_CONTRACT_FINGERPRINT="${contract_fingerprint}" \

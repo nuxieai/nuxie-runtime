@@ -1,9 +1,42 @@
 //! Host ownership and naming adapters for the translated animation instance.
 
+use crate::host_state_machine::StateMachineReportedEvent;
 use crate::mechanical_port::source::{
-    animation::linear_animation_instance::LinearAnimationInstance as NativeAnimation,
-    artboard::RuntimeArtboardInstanceHandle, file::RuntimeFileHandle,
+    animation::{
+        keyed_callback_reporter::KeyedCallbackReporter,
+        linear_animation_instance::LinearAnimationInstance as NativeAnimation,
+        state_machine_instance::EventReport,
+    },
+    artboard::RuntimeArtboardInstanceHandle,
+    file::RuntimeFileHandle,
+    generated::event_base::EventBase,
 };
+
+#[derive(Clone, Debug)]
+pub struct RuntimeLinearAnimationAdvanceResult {
+    pub changed: bool,
+    pub keep_going: bool,
+    pub reported_events: Vec<StateMachineReportedEvent>,
+}
+
+#[derive(Default)]
+struct PendingKeyedCallbacks(Vec<(u32, u32, f32)>);
+
+impl KeyedCallbackReporter for PendingKeyedCallbacks {
+    fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32) {
+        self.0.push((object_id, property_key, elapsed_seconds));
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct AnimationStateObservation {
+    time: u32,
+    direction: u32,
+    total_time: u32,
+    last_total_time: u32,
+    spilled_time: u32,
+    did_loop: bool,
+}
 
 pub struct LinearAnimationInstance {
     native: Box<NativeAnimation>,
@@ -123,5 +156,82 @@ impl LinearAnimationInstance {
     }
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
         self.native.advance_and_apply(seconds)
+    }
+
+    fn state_observation(&self) -> AnimationStateObservation {
+        AnimationStateObservation {
+            time: self.native.time().to_bits(),
+            direction: self.native.direction().to_bits(),
+            total_time: self.native.total_time().to_bits(),
+            last_total_time: self.native.last_total_time().to_bits(),
+            spilled_time: self.native.spilled_time().to_bits(),
+            did_loop: self.native.did_loop(),
+        }
+    }
+
+    /// Host adaptation of pinned `LinearAnimationInstance::advanceAndApply`.
+    ///
+    /// The translated owner cannot borrow itself as the keyed callback reporter
+    /// while it advances, so callbacks are retained in source order and replayed
+    /// immediately afterward. Event observations are taken from that exact
+    /// reporter stream before the callback is replayed through the native
+    /// instance, which preserves nested event notification and other callback
+    /// side effects.
+    pub(crate) fn advance_and_apply_with_observed_events(
+        &mut self,
+        seconds: f32,
+    ) -> RuntimeLinearAnimationAdvanceResult {
+        let before = self.state_observation();
+        let mut callbacks = PendingKeyedCallbacks::default();
+        let animation_more = self.native.advance(seconds, Some(&mut callbacks));
+        let mut reported_events = Vec::new();
+
+        for (object_id, property_key, elapsed_seconds) in callbacks.0 {
+            let target = self
+                .artboard
+                .with_artboard(|artboard| artboard.base.resolve_handle(object_id));
+            if property_key == u32::from(EventBase::TRIGGER_PROPERTY_KEY)
+                && let Some(event) = target.as_ref()
+                && event.is_type_of(EventBase::TYPE_KEY)
+                && let Some(report) = StateMachineReportedEvent::from_native(
+                    EventReport {
+                        event: Some(event.clone()),
+                        seconds_delay: elapsed_seconds,
+                    },
+                    &self.artboard,
+                    None,
+                )
+            {
+                reported_events.push(report);
+            }
+
+            KeyedCallbackReporter::report_keyed_callback(
+                &mut *self.native,
+                object_id,
+                property_key,
+                elapsed_seconds,
+            );
+        }
+
+        self.native.apply(1.0);
+        let artboard_changed = self.artboard.advance_default(seconds);
+        let keep_going = animation_more || artboard_changed || self.native.keep_going();
+        let changed =
+            before != self.state_observation() || artboard_changed || !reported_events.is_empty();
+
+        RuntimeLinearAnimationAdvanceResult {
+            changed,
+            keep_going,
+            reported_events,
+        }
+    }
+
+    pub(crate) fn apply_at_and_settle(&mut self, time: f32, mix: f32) -> bool {
+        let before = self.state_observation();
+        self.native.set_time(time);
+        self.native.apply(mix);
+        let animation_changed = before != self.state_observation();
+        let components_changed = self.artboard.update_pass(true);
+        animation_changed || components_changed
     }
 }

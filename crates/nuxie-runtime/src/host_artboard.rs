@@ -11,7 +11,10 @@ use crate::mechanical_port::source::{
     file::RuntimeFileHandle,
     generated::{component_base::ComponentBase, core_registry::CoreRegistry},
 };
-use crate::{host_animation::LinearAnimationInstance, host_state_machine::StateMachineInstance};
+use crate::{
+    host_animation::{LinearAnimationInstance, RuntimeLinearAnimationAdvanceResult},
+    host_state_machine::StateMachineInstance,
+};
 
 pub struct ArtboardInstance {
     native: RuntimeArtboardInstanceHandle,
@@ -255,13 +258,24 @@ impl ArtboardInstance {
         &mut self,
         animation: &mut LinearAnimationInstance,
         seconds: f32,
-    ) -> bool {
-        assert_eq!(
-            self.native.core_handle(),
-            animation.native_artboard().core_handle(),
+    ) -> Result<RuntimeLinearAnimationAdvanceResult> {
+        ensure!(
+            self.native.core_handle() == animation.native_artboard().core_handle(),
             "animation belongs to another Artboard"
         );
-        animation.advance_and_apply(seconds)
+        Ok(animation.advance_and_apply_with_observed_events(seconds))
+    }
+    pub fn apply_linear_animation_instance_at(
+        &mut self,
+        animation: &mut LinearAnimationInstance,
+        time: f32,
+        mix: f32,
+    ) -> Result<bool> {
+        ensure!(
+            self.native.core_handle() == animation.native_artboard().core_handle(),
+            "animation belongs to another Artboard"
+        );
+        Ok(animation.apply_at_and_settle(time, mix))
     }
     pub fn advance_state_machine_instance(
         &mut self,

@@ -194,7 +194,7 @@ pub struct StateMachineReportedEvent {
 }
 
 impl StateMachineReportedEvent {
-    fn from_native(
+    pub(crate) fn from_native(
         report: EventReport,
         artboard: &RuntimeArtboardInstanceHandle,
         context: Option<StateMachineEventContext>,

@@ -121,6 +121,9 @@ xcode_build="$(xcodebuild -version | sed -n 's/^Build version //p')"
 iphoneos_sdk="$(xcrun --sdk iphoneos --show-sdk-version) ($(xcrun --sdk iphoneos --show-sdk-build-version))"
 iphonesimulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-version) ($(xcrun --sdk iphonesimulator --show-sdk-build-version))"
 macos_sdk="$(xcrun --sdk macosx --show-sdk-version) ($(xcrun --sdk macosx --show-sdk-build-version))"
+iphoneos_sdk_path="$(xcrun --sdk iphoneos --show-sdk-path)"
+iphonesimulator_sdk_path="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+macos_sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
 
 build_inputs_hash="$(
     python3 "${script_dir}/apple_runtime_input_digest.py" \
@@ -151,8 +154,25 @@ build_inputs_hash="$(
 )"
 
 for target in "${targets[@]}"; do
+    case "${target}" in
+        aarch64-apple-ios)
+            sdk_path="${iphoneos_sdk_path}"
+            ;;
+        aarch64-apple-ios-sim|x86_64-apple-ios)
+            sdk_path="${iphonesimulator_sdk_path}"
+            ;;
+        aarch64-apple-darwin|x86_64-apple-darwin)
+            sdk_path="${macos_sdk_path}"
+            ;;
+        *)
+            echo "unsupported Apple release target: ${target}" >&2
+            exit 3
+            ;;
+    esac
     IPHONEOS_DEPLOYMENT_TARGET="${deployment_target}" \
     MACOSX_DEPLOYMENT_TARGET="${macos_deployment_target}" \
+    SDKROOT="${sdk_path}" \
+    BINDGEN_EXTRA_CLANG_ARGS="--sysroot=${sdk_path}" \
     NUX_RUNTIME_BUILD_INPUTS_HASH="${build_inputs_hash}" \
     NUX_RUNTIME_BUILD_PROFILE="${profile}" \
     NUX_RUNTIME_CONTRACT_FINGERPRINT="${contract_fingerprint}" \

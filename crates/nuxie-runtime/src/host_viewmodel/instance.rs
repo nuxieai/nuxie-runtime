@@ -9,6 +9,8 @@ use crate::mechanical_port::source::viewmodel::{
     viewmodel_instance_string::ViewModelInstanceString,
     viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex,
     viewmodel_instance_trigger::ViewModelInstanceTrigger,
+    viewmodel_property_boolean::ViewModelPropertyBoolean,
+    viewmodel_property_string::ViewModelPropertyString,
 };
 use crate::view_model_cell::RuntimeHostMutationNotifications;
 impl RuntimeOwnedViewModelInstance {
@@ -434,6 +436,42 @@ impl RuntimeOwnedViewModelInstance {
                 .with(|property| property.as_view_model_property().unwrap().const_name() == name)
                 == Some(true)
         })
+    }
+    fn unique_property_index_by_name(&self, name: &str) -> Option<usize> {
+        let properties = self
+            .model()
+            .with(|model| model.as_view_model().unwrap().properties())?;
+        let mut matches = properties
+            .iter()
+            .enumerate()
+            .filter_map(|(index, property)| {
+                (property.with(|property| {
+                    property
+                        .as_view_model_property()
+                        .is_some_and(|property| property.base.name() == name)
+                }) == Some(true))
+                .then_some(index)
+            });
+        let index = matches.next()?;
+        matches.next().is_none().then_some(index)
+    }
+    fn unique_string_property_index_by_name(&self, name: &str) -> Option<usize> {
+        let index = self.unique_property_index_by_name(name)?;
+        self.model()
+            .with(|model| model.as_view_model().unwrap().property_at(index))??
+            .with_downcast::<ViewModelPropertyString, _>(|_| ())?;
+        self.property_by_path(&[index])?
+            .with_downcast::<ViewModelInstanceString, _>(|_| ())?;
+        Some(index)
+    }
+    fn unique_boolean_property_index_by_name(&self, name: &str) -> Option<usize> {
+        let index = self.unique_property_index_by_name(name)?;
+        self.model()
+            .with(|model| model.as_view_model().unwrap().property_at(index))??
+            .with_downcast::<ViewModelPropertyBoolean, _>(|_| ())?;
+        self.property_by_path(&[index])?
+            .with_downcast::<ViewModelInstanceBoolean, _>(|_| ())?;
+        Some(index)
     }
     pub(super) fn property_by_path(&self, path: &[usize]) -> Option<CoreHandle> {
         let mut instance = self.instance.clone();
@@ -896,6 +934,17 @@ impl RuntimeOwnedViewModelInstance {
                 Arc::from(value.value().into_bytes())
             })
     }
+    pub fn can_set_string_by_source_handle(
+        &self,
+        handle: &RuntimeOwnedViewModelStringSourceHandle,
+    ) -> bool {
+        self.string_value_by_source_handle(handle).is_some()
+    }
+    pub fn can_set_string_by_property_index(&self, index: usize) -> bool {
+        self.property_by_path(&[index])
+            .and_then(|property| property.with_downcast::<ViewModelInstanceString, _>(|_| ()))
+            .is_some()
+    }
     pub fn set_string_by_property_name(&mut self, name: &str, value: &[u8]) -> bool {
         self.set_string_by_property_name_path(name, value)
     }
@@ -1001,6 +1050,97 @@ impl RuntimeOwnedViewModelInstance {
         let path = self.path_named(name)?;
         self.property_by_path(&path)?
             .with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().len())
+    }
+    fn list_string_match_boolean_items(
+        &self,
+        handle: &RuntimeOwnedViewModelListStringMatchBooleanHandle,
+    ) -> Option<Vec<RuntimeOwnedViewModelInstance>> {
+        let items = self
+            .property_by_path(&handle.list_property_path)?
+            .with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().to_vec())?;
+        if items.is_empty() {
+            return None;
+        }
+        let mut instances = Vec::with_capacity(items.len());
+        for item in items {
+            let instance = item
+                .with_downcast::<ViewModelInstanceListItem, _>(
+                    ViewModelInstanceListItem::view_model_instance,
+                )
+                .flatten()?;
+            let instance = RuntimeOwnedViewModelInstance::from_native(self.file.clone(), instance)?;
+            if instance.view_model_index != handle.item_view_model_index
+                || instance
+                    .property_by_path(&[handle.string_property_index])?
+                    .with_downcast::<ViewModelInstanceString, _>(|_| ())
+                    .is_none()
+                || instance
+                    .property_by_path(&[handle.boolean_property_index])?
+                    .with_downcast::<ViewModelInstanceBoolean, _>(|_| ())
+                    .is_none()
+            {
+                return None;
+            }
+            instances.push(instance);
+        }
+        Some(instances)
+    }
+    pub fn list_string_match_boolean_handle_by_property_name_path(
+        &self,
+        list_path: &str,
+        string_property_name: &str,
+        boolean_property_name: &str,
+    ) -> Option<RuntimeOwnedViewModelListStringMatchBooleanHandle> {
+        if string_property_name.is_empty()
+            || string_property_name.contains('/')
+            || boolean_property_name.is_empty()
+            || boolean_property_name.contains('/')
+        {
+            return None;
+        }
+        let list_property_path = self.path_named(list_path)?;
+        let items = self
+            .property_by_path(&list_property_path)?
+            .with_downcast::<ViewModelInstanceList, _>(|list| list.list_items().to_vec())?;
+        let first = items
+            .first()?
+            .with_downcast::<ViewModelInstanceListItem, _>(
+                ViewModelInstanceListItem::view_model_instance,
+            )??;
+        let first = RuntimeOwnedViewModelInstance::from_native(self.file.clone(), first)?;
+        let handle = RuntimeOwnedViewModelListStringMatchBooleanHandle {
+            list_property_path,
+            item_view_model_index: first.view_model_index,
+            string_property_index: first
+                .unique_string_property_index_by_name(string_property_name)?,
+            boolean_property_index: first
+                .unique_boolean_property_index_by_name(boolean_property_name)?,
+        };
+        self.list_string_match_boolean_items(&handle)?;
+        Some(handle)
+    }
+    pub fn can_apply_list_string_match_boolean(
+        &self,
+        handle: &RuntimeOwnedViewModelListStringMatchBooleanHandle,
+    ) -> bool {
+        self.list_string_match_boolean_items(handle).is_some()
+    }
+    pub fn apply_list_string_match_boolean(
+        &mut self,
+        handle: &RuntimeOwnedViewModelListStringMatchBooleanHandle,
+        selected: &[u8],
+    ) -> Option<bool> {
+        let mut items = self.list_string_match_boolean_items(handle)?;
+        let mut changed = false;
+        for item in &mut items {
+            let matches = item
+                .string_value_by_source_handle(&RuntimeOwnedViewModelStringSourceHandle {
+                    property_path: vec![handle.string_property_index],
+                })
+                .is_some_and(|value| value.as_ref() == selected);
+            changed |= item.set_boolean_by_property_index(handle.boolean_property_index, matches);
+        }
+        Some(changed)
     }
 }
 #[derive(Clone, Debug)]

@@ -515,6 +515,20 @@ impl RuntimeOwnedViewModelListSourceHandle {
     }
 }
 
+/// A pre-resolved relation between one string and one boolean on every item
+/// of an owned view-model list.
+///
+/// Resolution records the exact list path and item schema. Applying the
+/// relation revalidates the current list before mutating any item, so a handle
+/// fails closed after an incompatible list replacement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeOwnedViewModelListStringMatchBooleanHandle {
+    pub(super) list_property_path: Vec<usize>,
+    pub(super) item_view_model_index: usize,
+    pub(super) string_property_index: usize,
+    pub(super) boolean_property_index: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeOwnedViewModelViewModelSourceHandle {
     pub(super) property_path: Vec<usize>,

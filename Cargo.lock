@@ -1114,7 +1114,6 @@ dependencies = [
 name = "nuxie-project-data"
 version = "0.1.0"
 dependencies = [
- "nuxie-runtime",
  "serde",
  "serde_json",
 ]

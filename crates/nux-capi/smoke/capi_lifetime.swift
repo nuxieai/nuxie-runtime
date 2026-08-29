@@ -20,6 +20,7 @@ let importStatus = bytes!.withUnsafeBytes { raw in
     nux_file_import_with_result(
         raw.bindMemory(to: UInt8.self).baseAddress,
         raw.count,
+        nil,
         &file,
         &importResult
     )

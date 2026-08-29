@@ -158,7 +158,7 @@ int main(int argc, char** argv)
 
     NuxFile* file = NULL;
     NuxCapiResult* import_result = NULL;
-    CHECK(nux_file_import_with_result(bytes, len, &file, &import_result) ==
+    CHECK(nux_file_import_with_result(bytes, len, NULL, &file, &import_result) ==
           NUX_STATUS_OK);
     CHECK(file != NULL);
     CHECK(import_result != NULL);

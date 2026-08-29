@@ -5,7 +5,8 @@
 int main(void) {
   NuxFile *file = NULL;
   NuxCapiResult *result = NULL;
-  NuxStatus status = nux_file_import_with_result(NULL, 0, &file, &result);
+  NuxStatus status =
+      nux_file_import_with_result(NULL, 0, NULL, &file, &result);
   if (status == NUX_STATUS_OK || file != NULL) {
     return 1;
   }

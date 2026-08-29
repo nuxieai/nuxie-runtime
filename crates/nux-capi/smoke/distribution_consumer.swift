@@ -5,7 +5,7 @@ enum DistributionConsumer {
     static func main() {
         var file: OpaquePointer?
         var result: OpaquePointer?
-        let status = nux_file_import_with_result(nil, 0, &file, &result)
+        let status = nux_file_import_with_result(nil, 0, nil, &file, &result)
         precondition(status != 0)
         precondition(file == nil)
         if let result {

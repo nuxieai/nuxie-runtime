@@ -2,6 +2,23 @@ use crate::mechanical_port::source::{
     generated::layout::layout_node_style_base::LayoutNodeStyleBase, layout::layout_node_provider,
 };
 
+impl std::ops::Deref for LayoutNodeStyle {
+    type Target = LayoutNodeStyleBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LayoutNodeStyle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl LayoutNodeStyle {
+    pub const TYPE_KEY: u16 = LayoutNodeStyleBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct LayoutNodeStyle {
     pub base: LayoutNodeStyleBase,

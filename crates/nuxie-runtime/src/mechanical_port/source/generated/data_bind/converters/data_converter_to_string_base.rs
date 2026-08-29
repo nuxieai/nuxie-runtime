@@ -52,7 +52,10 @@ impl DataConverterToStringBase {
             return;
         }
         callbacks.flags_changed();
-        callbacks.notify_property_changed(Self::FLAGS_PROPERTY_KEY);
+        DataConverterToStringBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FLAGS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_flags_value(&mut self, value: u32) -> bool {
@@ -74,7 +77,10 @@ impl DataConverterToStringBase {
             return;
         }
         callbacks.decimals_changed();
-        callbacks.notify_property_changed(Self::DECIMALS_PROPERTY_KEY);
+        DataConverterToStringBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DECIMALS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_decimals_value(&mut self, value: u32) -> bool {
@@ -96,7 +102,10 @@ impl DataConverterToStringBase {
             return;
         }
         callbacks.color_format_changed();
-        callbacks.notify_property_changed(Self::COLOR_FORMAT_PROPERTY_KEY);
+        DataConverterToStringBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::COLOR_FORMAT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_color_format_value(&mut self, value: String) -> bool {
@@ -118,7 +127,7 @@ impl DataConverterToStringBase {
         self.flags = object.flags;
         self.decimals = object.decimals;
         self.color_format.clone_from(&object.color_format);
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,

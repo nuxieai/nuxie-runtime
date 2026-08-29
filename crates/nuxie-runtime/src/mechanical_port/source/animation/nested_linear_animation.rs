@@ -57,8 +57,20 @@ impl NestedAnimationBehavior for NestedLinearAnimation {
         false
     }
 
-    fn initialize_animation(&mut self, artboard: RuntimeArtboardInstanceWeakHandle) {
-        Self::initialize_animation(self, artboard);
+    fn animation_initializer(
+        &self,
+    ) -> crate::mechanical_port::source::animation::nested_animation::NestedAnimationInitializer
+    {
+        |owner, artboard| {
+            owner
+                .with_mut(|owner| {
+                    owner
+                        .as_nested_linear_animation_mut()
+                        .expect("NestedLinearAnimation owner")
+                        .initialize_animation(artboard)
+                })
+                .expect("live nested animation");
+        }
     }
 
     fn release_dependencies(&mut self) {
@@ -70,6 +82,14 @@ impl std::ops::Deref for NestedLinearAnimation {
     type Target = NestedLinearAnimationBase;
     fn deref(&self) -> &Self::Target {
         &self.base
+    }
+}
+
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+    for NestedLinearAnimation
+{
+    fn notify_property_changed(&mut self, key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(&mut self.base, key);
     }
 }
 

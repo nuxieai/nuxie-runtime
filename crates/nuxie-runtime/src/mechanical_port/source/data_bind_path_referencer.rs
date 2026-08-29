@@ -37,7 +37,7 @@ impl DataBindPathReferencer {
 
     pub fn copy_data_bind_path(&mut self, source: &DataBindPathReferencer) {
         let Some(cloned) = source.with_data_bind_path(|data_bind_path| {
-            let mut cloned = data_bind_path.clone();
+            let mut cloned = data_bind_path.clone_core();
             cloned.set_file(data_bind_path.file());
             DataBindPathOccurrence::Runtime(Rc::new(RefCell::new(cloned)))
         }) else {

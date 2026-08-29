@@ -1,24 +1,109 @@
 use crate::mechanical_port::source::{
+    constraints::layout_constraint::LayoutConstraint,
     core::CoreHandle,
-    layout::{
-        layout_enums::{LayoutDirection, LayoutStyleInterpolation},
-        layout_participant::LayoutParticipant,
+    generated::{
+        artboard_component_list_base::ArtboardComponentListBase,
+        layout_component_base::LayoutComponentBase,
+        nested_artboard_layout_base::NestedArtboardLayoutBase,
+        shapes::{image_base::ImageBase, shape_base::ShapeBase},
+        text::text_base::TextBase,
     },
+    layout::layout_enums::{LayoutDirection, LayoutStyleInterpolation},
     math::aabb::Aabb,
 };
+use std::{cell::RefCell, rc::Rc};
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct LayoutNodeKey {
     pub provider: CoreHandle,
     pub index: usize,
+    pub owner: Rc<RefCell<Option<CoreHandle>>>,
+}
+
+impl PartialEq for LayoutNodeKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.provider == other.provider && self.index == other.index
+    }
+}
+impl Eq for LayoutNodeKey {}
+
+pub fn layout_node_for(provider: &CoreHandle, index: usize) -> Option<LayoutNodeKey> {
+    provider
+        .with(|object| {
+            if let Some(layout) = object.as_layout_component() {
+                layout.layout_node_key(index)
+            } else if let Some(nested) = object
+                .as_any()
+                .downcast_ref::<crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout>()
+            {
+                nested.layout_node(index as i32)
+            } else if let Some(list) = object
+                .as_any()
+                .downcast_ref::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>()
+            {
+                list.layout_node(index as i32)
+            } else {
+                let participant = object
+                    .as_any()
+                    .downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()
+                    .expect("a native layout provider owns a layout node");
+                participant.layout_node_key(index)
+            }
+        })
+        .flatten()
+}
+
+/// Resolve the native node represented by a provider occurrence. Hosted
+/// artboards expose their root layout node through the host provider rather
+/// than through the root LayoutComponent itself.
+pub fn layout_node_owner_for(key: &LayoutNodeKey) -> Option<CoreHandle> {
+    key.provider
+        .with(|object| {
+            if object.as_layout_component().is_some()
+                || object.as_any().is::<
+                    crate::mechanical_port::source::layout::layout_participant::LayoutParticipant,
+                >()
+            {
+                assert_eq!(key.index, 0);
+                Some(key.provider.clone())
+            } else if let Some(nested) = object.as_any().downcast_ref::<
+                crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout,
+            >() {
+                nested
+                    .base
+                    .base
+                    .artboard_instance_handle(key.index as i32)
+                    .map(|instance| instance.core_handle())
+            } else if let Some(list) = object.as_any().downcast_ref::<
+                crate::mechanical_port::source::artboard_component_list::ArtboardComponentList,
+            >() {
+                list.item(key.index as i32)
+                    .map(|instance| instance.core_handle())
+            } else {
+                None
+            }
+        })
+        .flatten()
 }
 
 #[derive(Default)]
 pub struct LayoutNodeProviderState {
     layout_constraints: Option<Box<Vec<CoreHandle>>>,
+    node_owners: RefCell<Vec<Rc<RefCell<Option<CoreHandle>>>>>,
 }
 
 impl LayoutNodeProviderState {
+    pub fn node_key(&self, provider: CoreHandle, index: usize) -> LayoutNodeKey {
+        let mut owners = self.node_owners.borrow_mut();
+        while owners.len() <= index {
+            owners.push(Rc::new(RefCell::new(None)));
+        }
+        LayoutNodeKey {
+            provider,
+            index,
+            owner: owners[index].clone(),
+        }
+    }
     pub fn layout_constraints(&self) -> &[CoreHandle] {
         self.layout_constraints
             .as_deref()
@@ -53,7 +138,7 @@ pub trait LayoutNodeProvider {
         false
     }
 
-    fn add_layout_constraint(&mut self, constraint: CoreHandle) {
+    fn add_layout_constraint(&mut self, constraint: &mut dyn LayoutConstraint) {
         let child = self
             .provider_handle()
             .expect("arena-installed layout node provider");
@@ -61,11 +146,22 @@ pub trait LayoutNodeProvider {
         let constraints = state
             .layout_constraints
             .get_or_insert_with(|| Box::new(Vec::new()));
-        assert!(!constraints.contains(&constraint));
-        constraints.push(constraint.clone());
-        constraint.with_mut(|constraint| {
-            constraint.layout_constraint_add_child(child);
-        });
+        let constraint_handle = constraint.constraint_handle();
+        assert!(!constraints.contains(&constraint_handle));
+        constraints.push(constraint_handle);
+        constraint.add_layout_child(child);
+    }
+}
+
+pub fn from_component(component: &CoreHandle) -> Option<CoreHandle> {
+    match component.core_type()? {
+        LayoutComponentBase::TYPE_KEY
+        | NestedArtboardLayoutBase::TYPE_KEY
+        | ArtboardComponentListBase::TYPE_KEY => Some(component.clone()),
+        TextBase::TYPE_KEY | ImageBase::TYPE_KEY | ShapeBase::TYPE_KEY => {
+            component.with(|component| component.layout_provider_handle())?
+        }
+        _ => None,
     }
 }
 
@@ -73,7 +169,7 @@ pub fn with_mut<R>(
     component: &CoreHandle,
     f: impl FnOnce(&mut dyn LayoutNodeProvider) -> R,
 ) -> Option<R> {
-    let provider = component.with(|component| component.layout_provider_handle())??;
+    let provider = from_component(component)?;
     provider
         .with_mut(|provider| provider.as_layout_node_provider_mut().map(f))
         .flatten()

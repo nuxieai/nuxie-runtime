@@ -13,6 +13,16 @@ pub struct SolidColor {
     mutator: ShapePaintMutatorState,
 }
 impl SolidColor {
+    pub fn set_color_value(&mut self, value: i32) {
+        if !self.base.set_color_value_value(value) {
+            return;
+        }
+        self.color_value_changed();
+        self.base
+            .base
+            .notify_property_changed(SolidColorBase::COLOR_VALUE_PROPERTY_KEY);
+    }
+
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let mut code = self.base.on_added_dirty(context);
         if code != StatusCode::Ok {
@@ -21,7 +31,12 @@ impl SolidColor {
         let Some(this) = self.base.handle() else {
             return StatusCode::MissingObject;
         };
-        code = self.init_paint_mutator(this, self.base.parent_handle());
+        let factory = self
+            .base
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
+            .expect("initialized paint mutator has its artboard factory");
+        code = self.init_paint_mutator(this, self.base.parent_handle(), &factory);
         if code == StatusCode::Ok {
             self.render_opacity_changed();
         }
@@ -40,7 +55,11 @@ impl SolidColor {
         } else if opacity < 1.0 {
             self.mutator.flags |= MutatorFlags::TRANSLUCENT;
         }
-        self.base.with_artboard_mut(|artboard| artboard.changed());
+        if let Some(artboard) = self.base.artboard_handle() {
+            if let Some(dirty) = artboard.artboard_dirty_handle() {
+                dirty.changed();
+            }
+        }
     }
     pub fn apply_to(&self, paint: &mut RenderPaint, opacity_modifier: f32) {
         paint.color(color_modulate_opacity(

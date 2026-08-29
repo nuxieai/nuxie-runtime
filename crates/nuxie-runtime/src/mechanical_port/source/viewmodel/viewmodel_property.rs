@@ -62,8 +62,8 @@ impl ViewModelProperty {
     }
 
     pub fn is_symbol_list_index(&self) -> bool {
-        self.base.is_type(
-            crate::mechanical_port::source::generated::viewmodel::viewmodel_property_symbol_list_index_base::ViewModelPropertySymbolListIndexBase::TYPE_KEY,
-        )
+        self.base.handle().is_some_and(|owner| {
+            owner.core_type() == Some(crate::mechanical_port::source::generated::viewmodel::viewmodel_property_symbol_list_index_base::ViewModelPropertySymbolListIndexBase::TYPE_KEY)
+        })
     }
 }

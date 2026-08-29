@@ -41,14 +41,14 @@ impl EvalCubic {
         }
     }
     pub fn at(self, t: f32) -> Vec2D {
-        let value = Vec2D::scale_and_add(self.b, self.a, t);
-        let value = Vec2D::scale_and_add(self.c, value, t);
-        Vec2D::scale_and_add(self.d, value, t)
+        let value = self.a * t + self.b;
+        let value = value * t + self.c;
+        value * t + self.d
     }
 }
 
 fn lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
-    Vec2D::new(a.x.mul_add(1.0 - t, b.x * t), a.y.mul_add(1.0 - t, b.y * t))
+    Vec2D::new(a.x * (1.0 - t) + b.x * t, a.y * (1.0 - t) + b.y * t)
 }
 
 pub fn quad_subdivide(src: &[Vec2D; 3], t: f32, dst: &mut [Vec2D; 5]) {
@@ -117,5 +117,25 @@ pub fn cubic_extract(src: &[Vec2D; 4], start_t: f32, end_t: f32, dst: &mut [Vec2
         let mut tmp2 = [Vec2D::default(); 7];
         cubic_subdivide((&tmp[..4]).try_into().unwrap(), start_t / end_t, &mut tmp2);
         dst.copy_from_slice(&tmp2[3..7]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EvalCubic, Vec2D};
+
+    #[test]
+    fn eval_cubic_matches_pinned_separate_horner_rounding() {
+        let eval = EvalCubic {
+            a: Vec2D::new(f32::from_bits(0x41f8_8ca6), f32::from_bits(0x40a4_76e4)),
+            b: Vec2D::new(f32::from_bits(0xc25e_3f48), f32::from_bits(0xc2a1_7e32)),
+            c: Vec2D::new(f32::from_bits(0x418f_572e), f32::from_bits(0x4312_130c)),
+            d: Vec2D::new(f32::from_bits(0xc282_e595), f32::from_bits(0xc150_3912)),
+        };
+
+        let result = eval.at(f32::from_bits(0x3f40_0000));
+
+        assert_eq!(result.x.to_bits(), 0xc28c_5033);
+        assert_eq!(result.y.to_bits(), 0x4255_292e);
     }
 }

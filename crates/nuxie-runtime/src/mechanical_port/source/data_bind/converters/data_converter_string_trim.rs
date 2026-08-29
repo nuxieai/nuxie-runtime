@@ -31,19 +31,22 @@ impl Default for DataConverterStringTrim {
 impl DataConverterStringTrim {
     pub fn new(trim_type: TrimType) -> Self {
         let mut converter = Self::default();
-        converter.base.set_trim_type(
-            trim_type as u32,
-            &mut DataConverterStringTrimInitializationCallbacks,
-        );
+        if converter.base.set_trim_type_value(trim_type as u32) {
+            DataConverterStringTrimBaseCallbacks::trim_type_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterStringTrimBase::TRIM_TYPE_PROPERTY_KEY);
+        }
         converter
     }
     fn ltrim(value: &mut String) {
         *value = value
-            .trim_start_matches(char::is_ascii_whitespace)
+            .trim_start_matches(|value: char| value.is_ascii_whitespace())
             .to_owned()
     }
     fn rtrim(value: &mut String) {
-        *value = value.trim_end_matches(char::is_ascii_whitespace).to_owned()
+        *value = value
+            .trim_end_matches(|value: char| value.is_ascii_whitespace())
+            .to_owned()
     }
     fn trim(value: &mut String) {
         Self::rtrim(value);
@@ -85,12 +88,6 @@ impl DataConverterStringTrimBaseCallbacks for DataConverterStringTrim {
     fn trim_type_changed(&mut self) {
         Self::trim_type_changed(self);
     }
-}
-
-struct DataConverterStringTrimInitializationCallbacks;
-
-impl DataConverterStringTrimBaseCallbacks for DataConverterStringTrimInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }
 
 crate::impl_data_converter_capability_forward!(DataConverterStringTrim, base.base);

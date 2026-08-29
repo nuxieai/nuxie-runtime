@@ -27,7 +27,9 @@ impl ViewModelInstanceAssetFontBase {
     }
     pub fn clone_into(&self) -> ViewModelInstanceAssetFont {
         let mut cloned = ViewModelInstanceAssetFont::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

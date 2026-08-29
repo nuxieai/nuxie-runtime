@@ -40,7 +40,10 @@ impl NestedRemapAnimationBase {
             return;
         }
         callbacks.time_changed();
-        callbacks.notify_property_changed(Self::TIME_PROPERTY_KEY);
+        NestedRemapAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TIME_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_time_value(&mut self, value: f32) -> bool {

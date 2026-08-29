@@ -55,7 +55,7 @@ impl DrawableAssetBase {
             return;
         }
         callbacks.height_changed();
-        callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::HEIGHT_PROPERTY_KEY);
     }
     pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
         if self.height == value {
@@ -74,7 +74,7 @@ impl DrawableAssetBase {
             return;
         }
         callbacks.width_changed();
-        callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::WIDTH_PROPERTY_KEY);
     }
     pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
         if self.width == value {

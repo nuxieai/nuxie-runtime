@@ -2,6 +2,24 @@ use crate::mechanical_port::source::{
     core_context::CoreContext, generated::text::text_modifier_base::TextModifierBase,
     status_code::StatusCode,
 };
+impl std::ops::Deref for TextModifier {
+    type Target = TextModifierBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextModifier {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextModifier {
+    pub const TYPE_KEY: u16 = TextModifierBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct TextModifier {
     pub base: TextModifierBase,
 }

@@ -5,6 +5,7 @@ use crate::mechanical_port::source::{
         state_machine_instance::{
             RuntimeStateMachineLayerInstanceWeakHandle, StateMachineInstance,
         },
+        state_transition_flags::StateTransitionFlags,
     },
     core::CoreHandle,
     core_context::CoreContext,
@@ -94,8 +95,7 @@ impl StateTransition {
         }
         for condition in self.conditions.iter().cloned() {
             let code = condition
-                .with_mut(|condition| condition.transition_condition_on_added_dirty(context))
-                .flatten()
+                .with_mut(|condition| condition.on_added_dirty(context))
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
@@ -106,8 +106,7 @@ impl StateTransition {
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         for condition in self.conditions.iter().cloned() {
             let code = condition
-                .with_mut(|condition| condition.transition_condition_on_added_clean(context))
-                .flatten()
+                .with_mut(|condition| condition.on_added_clean(context))
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
@@ -126,19 +125,22 @@ impl StateTransition {
         self.base.base.base.base.import(stack)
     }
     pub fn is_disabled(&self) -> bool {
-        self.flags() & 1 != 0
+        self.flags() & u32::from(StateTransitionFlags::DISABLED.0) != 0
     }
     pub fn pause_on_exit(&self) -> bool {
-        self.flags() & 2 != 0
+        self.flags() & u32::from(StateTransitionFlags::PAUSE_ON_EXIT.0) != 0
     }
     pub fn enable_exit_time(&self) -> bool {
-        self.flags() & 4 != 0
+        self.flags() & u32::from(StateTransitionFlags::ENABLE_EXIT_TIME.0) != 0
     }
     pub fn enable_early_exit(&self) -> bool {
-        self.flags() & 8 != 0
+        self.flags() & u32::from(StateTransitionFlags::ENABLE_EARLY_EXIT.0) != 0
     }
     pub fn duration_is_percentage(&self) -> bool {
-        self.flags() & 16 != 0
+        self.flags() & u32::from(StateTransitionFlags::DURATION_IS_PERCENTAGE.0) != 0
+    }
+    pub fn exit_time_is_percentage(&self) -> bool {
+        self.flags() & u32::from(StateTransitionFlags::EXIT_TIME_IS_PERCENTAGE.0) != 0
     }
     pub fn condition_count(&self) -> usize {
         self.conditions.len()
@@ -162,7 +164,7 @@ impl StateTransition {
         absolute: bool,
         r: &dyn TransitionRuntime,
     ) -> f32 {
-        if self.flags() & 32 != 0 {
+        if self.exit_time_is_percentage() {
             let (start, duration) = r.exit_animation(from).unwrap_or((0.0, 0.0));
             (if absolute { start } else { 0.0 }) + self.base.exit_time() as f32 / 100.0 * duration
         } else {
@@ -186,7 +188,7 @@ impl StateTransition {
         }
         if self.enable_exit_time() {
             if let Some((last, total, duration, loop_value)) = r.exit_instance_times(from) {
-                let mut exit = if self.flags() & 32 != 0 {
+                let mut exit = if self.exit_time_is_percentage() {
                     self.base.exit_time() as f32 / 100.0 * duration
                 } else {
                     self.base.exit_time() as f32 / 1000.0

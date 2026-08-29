@@ -49,7 +49,10 @@ impl ScrollBarConstraintBase {
             return;
         }
         callbacks.scroll_constraint_id_changed();
-        callbacks.notify_property_changed(Self::SCROLL_CONSTRAINT_ID_PROPERTY_KEY);
+        ScrollBarConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SCROLL_CONSTRAINT_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_scroll_constraint_id_value(&mut self, value: u32) -> bool {
@@ -71,7 +74,10 @@ impl ScrollBarConstraintBase {
             return;
         }
         callbacks.auto_size_changed();
-        callbacks.notify_property_changed(Self::AUTO_SIZE_PROPERTY_KEY);
+        ScrollBarConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::AUTO_SIZE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_auto_size_value(&mut self, value: bool) -> bool {

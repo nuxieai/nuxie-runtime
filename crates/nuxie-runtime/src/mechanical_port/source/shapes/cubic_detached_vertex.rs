@@ -6,6 +6,23 @@ use crate::mechanical_port::source::{
         vertex::{Vertex, VertexBehavior},
     },
 };
+impl std::ops::Deref for CubicDetachedVertex {
+    type Target = CubicDetachedVertexBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicDetachedVertex {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl CubicDetachedVertex {
+    pub const TYPE_KEY: u16 = CubicDetachedVertexBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct CubicDetachedVertex {
     pub base: CubicDetachedVertexBase,
@@ -40,6 +57,18 @@ impl CubicVertexBehavior for CubicDetachedVertex {
 impl CubicDetachedVertex {
     fn point(&self) -> Vec2D {
         Vec2D::new(self.base.x(), self.base.y())
+    }
+    pub fn set_x(&mut self, value: f32) {
+        if self.vertex_mut().base.set_x_value(value) {
+            CubicVertexBehavior::x_changed(self);
+            self.vertex_mut().notify_property_changed(crate::mechanical_port::source::generated::shapes::vertex_base::VertexBase::X_PROPERTY_KEY);
+        }
+    }
+    pub fn set_y(&mut self, value: f32) {
+        if self.vertex_mut().base.set_y_value(value) {
+            CubicVertexBehavior::y_changed(self);
+            self.vertex_mut().notify_property_changed(crate::mechanical_port::source::generated::shapes::vertex_base::VertexBase::Y_PROPERTY_KEY);
+        }
     }
     fn in_vector(&self) -> Vec2D {
         Vec2D::new(

@@ -11,13 +11,13 @@ use super::{
     import_stack::ImportStackObject,
 };
 
-#[cfg(any(test, feature = "tools"))]
+#[cfg(feature = "test-script-signature")]
 pub const SCRIPT_VERIFICATION_PUBLIC_KEY: [u8; 32] = [
     180, 113, 86, 235, 225, 24, 110, 236, 105, 86, 201, 6, 73, 5, 203, 102, 81, 179, 12, 240, 226,
     55, 103, 134, 227, 94, 82, 187, 51, 178, 96, 46,
 ];
 
-#[cfg(not(any(test, feature = "tools")))]
+#[cfg(not(feature = "test-script-signature"))]
 pub const SCRIPT_VERIFICATION_PUBLIC_KEY: [u8; 32] = [
     159, 202, 90, 135, 12, 153, 157, 21, 112, 103, 62, 130, 59, 196, 187, 236, 103, 210, 239, 227,
     175, 97, 222, 254, 70, 53, 212, 18, 191, 143, 101, 108,
@@ -57,6 +57,14 @@ impl TextAssetImporter {
 
     pub fn text_asset(&self) -> CoreHandle {
         self.base.file_asset.clone()
+    }
+
+    pub fn with_admission(
+        mut self,
+        admission: Option<crate::mechanical_port::source::file::ImportAdmissionRef>,
+    ) -> Self {
+        self.base = self.base.with_admission(admission);
+        self
     }
 
     fn retain_text_asset_contents(&mut self, contents: CoreHandle) {

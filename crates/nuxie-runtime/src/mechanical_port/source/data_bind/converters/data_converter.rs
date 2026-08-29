@@ -430,7 +430,10 @@ impl DataConverter {
     pub fn copy(&mut self, object: &Self) {
         self.initialize_container_owner();
         let target = self.handle();
-        for source in object.data_binds.data_binds() {
+        // Clone construction has not acquired its arena identity yet. The
+        // inherited complete_clone hook installs these same owned bindings
+        // against the real clone after insertion, never against a null target.
+        for source in target.iter().flat_map(|_| object.data_binds.data_binds()) {
             let Some(cloned) = source.clone_occurrence() else {
                 continue;
             };

@@ -8,7 +8,9 @@ pub struct ConstrainableListState {
 pub trait ConstrainableList {
     fn constrainable_list_state(&mut self) -> &mut ConstrainableListState;
     fn list_transform(&self) -> &Mat2D;
-    fn list_item_transforms<'a>(&'a mut self, transforms: &mut Vec<&'a mut Mat2D>);
+    // Visit the same ordered mutable occurrences without manufacturing
+    // simultaneous Rust references into the list's transform map.
+    fn for_each_list_item_transform(&mut self, use_transform: &mut dyn FnMut(&mut Mat2D));
 
     fn add_list_constraint(&mut self, constraint: CoreHandle) {
         let constraints = &mut self.constrainable_list_state().list_constraints;

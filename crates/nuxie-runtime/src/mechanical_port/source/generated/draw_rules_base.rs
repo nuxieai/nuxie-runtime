@@ -42,7 +42,10 @@ impl DrawRulesBase {
             return;
         }
         callbacks.draw_target_id_changed();
-        callbacks.notify_property_changed(Self::DRAW_TARGET_ID_PROPERTY_KEY);
+        DrawRulesBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DRAW_TARGET_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_draw_target_id_value(&mut self, value: u32) -> bool {

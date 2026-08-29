@@ -28,8 +28,7 @@ pub(super) fn imports_successfully(
     definition: &'static Definition,
     context: &ImportContext,
 ) -> Option<bool> {
-    (definition.name == "KeyedObject")
-        .then(|| context.latest(ImportStackKey::LinearAnimation))
+    (definition.name == "KeyedObject").then(|| context.latest(ImportStackKey::LinearAnimation))
 }
 
 pub(super) fn update_context(definition: &'static Definition, context: &mut ImportContext) {

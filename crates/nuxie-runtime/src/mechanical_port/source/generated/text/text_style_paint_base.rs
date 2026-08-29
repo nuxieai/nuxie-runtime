@@ -26,7 +26,9 @@ impl TextStylePaintBase {
     }
     pub fn clone_into(&self) -> TextStylePaint {
         let mut cloned = TextStylePaint::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

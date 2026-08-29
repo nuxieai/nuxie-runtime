@@ -41,7 +41,7 @@ impl AdvanceableStateBase {
             return;
         }
         callbacks.speed_changed();
-        callbacks.notify_property_changed(Self::SPEED_PROPERTY_KEY);
+        AdvanceableStateBaseCallbacks::notify_property_changed(callbacks, Self::SPEED_PROPERTY_KEY);
     }
 
     pub(crate) fn set_speed_value(&mut self, value: f32) -> bool {

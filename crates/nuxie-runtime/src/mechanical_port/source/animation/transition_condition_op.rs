@@ -8,3 +8,17 @@ pub enum TransitionConditionOp {
     LessThan = 4,
     GreaterThan = 5,
 }
+
+impl TransitionConditionOp {
+    pub fn from_u32(value: u32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Equal),
+            1 => Some(Self::NotEqual),
+            2 => Some(Self::LessThanOrEqual),
+            3 => Some(Self::GreaterThanOrEqual),
+            4 => Some(Self::LessThan),
+            5 => Some(Self::GreaterThan),
+            _ => None,
+        }
+    }
+}

@@ -26,7 +26,9 @@ impl StateMachineLayerBase {
     }
     pub fn clone_into(&self) -> StateMachineLayer {
         let mut cloned = StateMachineLayer::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

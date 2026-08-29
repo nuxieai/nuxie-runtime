@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell, RefMut};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::{error::Error, fmt};
@@ -13,7 +13,7 @@ use crate::view_model_cell::{
     RuntimeBlobAsset, RuntimeCellDirtSink, RuntimeHostMutationNotifications,
 };
 mod native_artboard;
-pub(crate) use native_artboard::native_script_artboard;
+pub use native_artboard::native_script_artboard;
 #[cfg(test)]
 #[path = "scripting/pending_native_hydration.rs"]
 mod pending_native_hydration;
@@ -791,16 +791,22 @@ pub struct ScriptPaint {
     pub join: StrokeJoin,
     pub cap: StrokeCap,
     pub feather: f32,
-    pub blend_mode: BlendMode,
+    pub blend_mode: u8,
 }
 
 impl ScriptPaint {
+    pub fn blend_mode(&self) -> BlendMode {
+        // ScriptedPaintData stores the fixed-underlying C++ enum verbatim;
+        // upstream checks its named values only in pushBlendMode, on Lua read.
+        script_blend_mode(self.blend_mode)
+    }
+
     pub(crate) fn from_fresh(
         paint: &crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaint,
         stroke: Option<(f32, u32, u32)>,
     ) -> Self {
-        use crate::mechanical_port::source::shapes::{
-            paint::solid_color::SolidColor, stroke_cap::StrokeCap as RiveCap,
+        use crate::mechanical_port::source::shapes::paint::{
+            solid_color::SolidColor, stroke_cap::StrokeCap as RiveCap,
             stroke_join::StrokeJoin as RiveJoin,
         };
         let mut result = Self {
@@ -810,7 +816,7 @@ impl ScriptPaint {
             join: StrokeJoin::Miter,
             cap: StrokeCap::Butt,
             feather: 0.0,
-            blend_mode: script_blend_mode(paint.blend_mode_value()),
+            blend_mode: paint.blend_mode_value() as u8,
         };
         if let Some((thickness, cap, join)) = stroke {
             result.style = RenderPaintStyle::Stroke;
@@ -828,7 +834,7 @@ impl ScriptPaint {
                 })
                 .flatten()
             {
-                result.color = color;
+                result.color = color as u32;
                 break;
             }
         }
@@ -836,6 +842,28 @@ impl ScriptPaint {
             result.feather = strength;
         }
         result
+    }
+}
+
+fn script_blend_mode(value: u8) -> BlendMode {
+    match value {
+        3 => BlendMode::SrcOver,
+        14 => BlendMode::Screen,
+        15 => BlendMode::Overlay,
+        16 => BlendMode::Darken,
+        17 => BlendMode::Lighten,
+        18 => BlendMode::ColorDodge,
+        19 => BlendMode::ColorBurn,
+        20 => BlendMode::HardLight,
+        21 => BlendMode::SoftLight,
+        22 => BlendMode::Difference,
+        23 => BlendMode::Exclusion,
+        24 => BlendMode::Multiply,
+        25 => BlendMode::Hue,
+        26 => BlendMode::Saturation,
+        27 => BlendMode::Color,
+        28 => BlendMode::Luminosity,
+        _ => panic!("invalid ScriptedPaintData blend mode: {value}"),
     }
 }
 
@@ -860,6 +888,7 @@ struct ScriptViewModelChangeCallbacks {
     callbacks: Rc<RefCell<BTreeMap<Vec<usize>, Vec<ScriptViewModelChangeCallbackEntry>>>>,
     next_id: Rc<Cell<u64>>,
     suppressed: Rc<Cell<usize>>,
+    pending: Rc<RefCell<Vec<Vec<usize>>>>,
 }
 
 impl std::fmt::Debug for ScriptViewModelChangeCallbacks {
@@ -868,6 +897,7 @@ impl std::fmt::Debug for ScriptViewModelChangeCallbacks {
             .debug_struct("ScriptViewModelChangeCallbacks")
             .field("property_count", &self.callbacks.borrow().len())
             .field("suppressed", &self.suppressed.get())
+            .field("pending", &self.pending.borrow().len())
             .finish()
     }
 }
@@ -1025,6 +1055,14 @@ impl ScriptViewModel {
         instance: Option<crate::mechanical_port::source::core::CoreHandle>,
         file: crate::mechanical_port::source::file::RuntimeFileHandle,
     ) -> Self {
+        Self::from_native_parts(Some(model), instance, file)
+    }
+
+    fn from_native_parts(
+        model: Option<crate::mechanical_port::source::core::CoreHandle>,
+        instance: Option<crate::mechanical_port::source::core::CoreHandle>,
+        file: crate::mechanical_port::source::file::RuntimeFileHandle,
+    ) -> Self {
         let native = NativeScriptViewModel {
             instance,
             model,
@@ -1055,14 +1093,17 @@ impl ScriptViewModel {
         self.native().instance.clone()
     }
 
+    pub fn native_model(&self) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.native().model.clone()
+    }
+
     /// Exact identity for VM userdata caches and owner-counted registrations.
     pub fn identity_key(&self) -> (u8, usize, usize, u64) {
         let native = self.native();
-        let (arena, slot, generation) = native
-            .instance
-            .as_ref()
-            .unwrap_or(&native.model)
-            .identity_key();
+        let Some(handle) = native.instance.as_ref().or(native.model.as_ref()) else {
+            return (0, 0, 0, 0);
+        };
+        let (arena, slot, generation) = handle.identity_key();
         return (
             if native.instance.is_some() { 1 } else { 2 },
             arena,
@@ -1071,15 +1112,8 @@ impl ScriptViewModel {
         );
     }
 
-    pub fn advance_script_models(models: &[Self]) -> bool {
-        let mut seen = BTreeSet::new();
-        let mut changed = false;
-        for model in models {
-            if seen.insert(model.identity_key()) {
-                changed |= model.native().advance();
-            }
-        }
-        changed
+    pub fn advanced(&self) -> bool {
+        self.native().advance()
     }
 
     /// Read the retained runtime's structural parent topology.
@@ -1189,8 +1223,16 @@ impl ScriptViewModel {
 
     fn notify_property_change(&self, path: &[usize]) {
         if self.change_callbacks.suppressed.get() != 0 {
+            self.change_callbacks
+                .pending
+                .borrow_mut()
+                .push(path.to_vec());
             return;
         }
+        self.dispatch_property_change(path);
+    }
+
+    fn dispatch_property_change(&self, path: &[usize]) {
         let callbacks = self
             .change_callbacks
             .callbacks
@@ -1200,6 +1242,20 @@ impl ScriptViewModel {
             .unwrap_or_default();
         for (_, callback) in callbacks {
             callback();
+        }
+    }
+
+    /// Dispatch mutations deferred until a VM-owned userdata borrow ended.
+    /// Paths remain FIFO and retain duplicates, matching delegate invocation
+    /// order for repeated writes.
+    #[doc(hidden)]
+    pub fn flush_property_change_callbacks(&self) {
+        if self.change_callbacks.suppressed.get() != 0 {
+            return;
+        }
+        let pending = std::mem::take(&mut *self.change_callbacks.pending.borrow_mut());
+        for path in pending {
+            self.dispatch_property_change(&path);
         }
     }
 
@@ -1404,12 +1460,24 @@ impl ScriptViewModel {
     /// Return only the currently linked nested ViewModel occurrence.
     ///
     /// The schema wrapper returned by [`Self::view_model`] remains available
-    /// while an authored ViewModel property is null. Pinned Lua property reads,
-    /// however, produce `nil` until that property links a concrete occurrence;
-    /// this accessor preserves that distinction without discarding the schema.
+    /// while an authored ViewModel property is null. This accessor only returns
+    /// a linked occurrence; Lua's non-nil, possibly null-reference value wrapper
+    /// is constructed by [`Self::referenced_view_model_value`].
     pub fn active_view_model(&self, name: &str) -> Option<Self> {
         let native = self.native();
         return native.view_model(name, true);
+    }
+
+    /// The exact Lua property value: current referenced type/instance, or the
+    /// property's creation-time type paired with a null instance. The fallback
+    /// type can itself be null; it is never inferred from the owner's schema.
+    pub fn referenced_view_model_value(
+        &self,
+        name: &str,
+        creation_time_model: Option<crate::mechanical_port::source::core::CoreHandle>,
+    ) -> Self {
+        self.native()
+            .referenced_view_model_value(name, creation_time_model)
     }
 
     /// Port of `ScriptedPropertyViewModel::setValue`: replace the actual
@@ -1505,27 +1573,14 @@ pub enum ScriptViewModelProperty {
     SymbolListIndex,
 }
 
-/// A native File source. Descriptor input is only a construction adapter for
-/// authored metadata and tests; the imported native graph remains the owner.
+/// An already-imported native File. Scripting never reimports descriptors or
+/// creates an implicit renderer factory.
 pub trait ScriptFileSource {
     fn script_file(&self) -> crate::mechanical_port::source::file::RuntimeFileHandle;
 }
 impl ScriptFileSource for crate::mechanical_port::source::file::RuntimeFileHandle {
     fn script_file(&self) -> crate::mechanical_port::source::file::RuntimeFileHandle {
         self.clone()
-    }
-}
-impl ScriptFileSource for nuxie_binary::RuntimeFile {
-    fn script_file(&self) -> crate::mechanical_port::source::file::RuntimeFileHandle {
-        let bytes = nuxie_binary::encode_runtime_file(self).expect("scripting fixture must encode");
-        let mut factory =
-            nuxie_render_api::PersistentFactory::new(nuxie_render_api::NullFactory::new());
-        let factory = crate::mechanical_port::source::factory::RuntimeFactoryHandle::from_factory(
-            &mut factory,
-        )
-        .expect("persistent fixture factory");
-        crate::mechanical_port::source::file::File::import(&bytes, factory, None, None, None)
-            .expect("authored scripting fixture must be a valid native File")
     }
 }
 impl<T: ScriptFileSource> ScriptFileSource for Rc<T> {
@@ -1550,7 +1605,11 @@ pub fn script_view_models(source: &impl ScriptFileSource) -> BTreeMap<String, Sc
         .into_iter()
         .filter_map(|model| {
             let name = model
-                .with(|owner| owner.as_view_model().map(|model| model.name().to_owned()))
+                .with(|owner| {
+                    owner
+                        .as_view_model()
+                        .map(|model| model.base.name().to_owned())
+                })
                 .flatten()?;
             Some((
                 name,
@@ -2291,6 +2350,9 @@ impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
     ) -> Result<Box<dyn ScriptInstance>, ScriptError> {
         (**self).instantiate_script(name, payload, host)
     }
+    fn poll_async_work(&self) -> Result<bool, ScriptError> {
+        (**self).poll_async_work()
+    }
     fn advance_detached_view_models(&self) -> bool {
         (**self).advance_detached_view_models()
     }
@@ -2341,6 +2403,12 @@ pub trait ScriptingVm {
         payload: &[u8],
         host: &mut dyn ScriptHost,
     ) -> Result<Box<dyn ScriptInstance>, ScriptError>;
+
+    /// Settle backend-owned async completions after the shared work-pool poll
+    /// and before any root-frame script callbacks run.
+    fn poll_async_work(&self) -> Result<bool, ScriptError> {
+        Ok(false)
+    }
 
     /// Consume detached script-created view-model instances once at the end
     /// of a root host frame. Child/script-driven artboard advances must not

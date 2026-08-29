@@ -59,7 +59,6 @@ fn wave_b1_bidirectional_stateful_property() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 1 op 255 expects rewind but Rust emits drawPath"]
 fn wave_b1_computed_root_transform_list() {
     replay("computed_root_transform-list");
 }
@@ -85,13 +84,11 @@ fn wave_b1_data_bind_font_test() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 4 op 159 expects save but Rust emits restore"]
 fn wave_b1_data_bind_keyframes_test() {
     replay("data_bind_keyframes_test");
 }
 
 #[test]
-#[ignore = "expected-red: frame 0 op 81 addRawPath has 752 pinned fields but Rust emits 669"]
 fn wave_b1_data_bind_solo_solos_to_values() {
     replay("data_bind_solo-solos-to-values");
 }
@@ -102,7 +99,6 @@ fn wave_b1_data_bind_solo_values_to_solos() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 1 op 30 expects save but Rust emits color"]
 fn wave_b1_data_converter_interpolator_reset() {
     replay("data_converter_interpolator_reset");
 }
@@ -123,7 +119,6 @@ fn wave_b1_format_number_with_commas() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 2 op 115 transform tx is -197.96802 instead of 462.03198"]
 fn wave_b1_image_fit_alignment() {
     replay("image_fit_alignment");
 }
@@ -144,7 +139,6 @@ fn wave_b1_image_fit_alignment_updated_test() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 1 op 38 transform tx is 200 instead of 0"]
 fn wave_b1_interpolation_zero_duration() {
     replay("interpolation_zero_duration");
 }
@@ -170,19 +164,16 @@ fn wave_b1_relative_data_bind_path() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 1 op 48 expects color but Rust emits save"]
 fn wave_b1_relative_data_bind_path_fire_trigger() {
     replay("relative_data_bind_path-fire-trigger");
 }
 
 #[test]
-#[ignore = "expected-red: frame 1 op 72 expects makeRenderPath but Rust emits drawPath"]
 fn wave_b1_relative_data_bind_path_listener() {
     replay("relative_data_bind_path-listener");
 }
 
 #[test]
-#[ignore = "expected-red: frame 0 op 39 transform tx is 250 instead of 115.56351"]
 fn wave_b1_relative_data_bind_path_scripted_input() {
     replay("relative_data_bind_path-scripted-input");
 }
@@ -198,7 +189,6 @@ fn wave_b1_state_transition_fire_trigger() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 1 op 65 transform tx is 250.29443 instead of 250.07309"]
 fn wave_b1_time_based_interpolation() {
     replay("time_based_interpolation");
 }
@@ -214,7 +204,6 @@ fn wave_b1_trigger_fires_single_change() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 0 op 10 expects save but Rust emits color"]
 fn wave_b1_unbound_stateful_component() {
     replay("unbound_stateful_component");
 }

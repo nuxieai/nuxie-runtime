@@ -44,7 +44,10 @@ impl StateMachineFireEventBase {
             return;
         }
         callbacks.event_id_changed();
-        callbacks.notify_property_changed(Self::EVENT_ID_PROPERTY_KEY);
+        StateMachineFireEventBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::EVENT_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_event_id_value(&mut self, value: u32) -> bool {

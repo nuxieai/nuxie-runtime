@@ -49,7 +49,10 @@ impl ListFollowPathConstraintBase {
             return;
         }
         callbacks.distance_end_changed();
-        callbacks.notify_property_changed(Self::DISTANCE_END_PROPERTY_KEY);
+        ListFollowPathConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DISTANCE_END_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_distance_end_value(&mut self, value: f32) -> bool {
@@ -71,7 +74,10 @@ impl ListFollowPathConstraintBase {
             return;
         }
         callbacks.distance_offset_changed();
-        callbacks.notify_property_changed(Self::DISTANCE_OFFSET_PROPERTY_KEY);
+        ListFollowPathConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DISTANCE_OFFSET_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_distance_offset_value(&mut self, value: f32) -> bool {

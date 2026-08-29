@@ -34,11 +34,6 @@ env:
   # overrides this with the historical renderer-port oracle revision that
   # produced its checked-in reference artifacts.
   RIVE_RUNTIME_REF: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
-  # Read-only inventory reference for port-manifest completeness. MUST equal
-  # `upstream_ref` in port-manifest.toml -- the check compares them and fails
-  # on any mismatch. Advance both together: b647c854 moved the manifest to
-  # 4ac7b327 and left this at the old b73bc675 seed, which failed the job.
-  PORT_MANIFEST_RIVE_RUNTIME_REF: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
   RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime
   RIVE_PREMAKE_TAG: v5.0.0-beta7
   DEPOT_TOOLS_REF: 1709e20d5ca2afe97bfa726168719c3b77eb9883
@@ -58,8 +53,8 @@ jobs:
     with:
       force_hosted: ${{ github.ref != 'refs/heads/main' }}
 
-  port-manifest:
-    name: Upstream C++ port manifest
+  runtime-source-correspondence:
+    name: Runtime source and test correspondence
     if: ${{ inputs.backend_port_browser_closeout != true }}
     runs-on: ubuntu-latest
     defaults:
@@ -69,37 +64,21 @@ jobs:
     steps:
       - name: Checkout rive-rust
         uses: actions/checkout@v4
+        with:
+          # The status ratchet checks the correspondence manifest's history.
+          fetch-depth: 0
 
       - name: Checkout reference rive-runtime
         uses: actions/checkout@v4
         with:
           repository: rive-app/rive-runtime
-          ref: ${{ env.PORT_MANIFEST_RIVE_RUNTIME_REF }}
+          ref: ${{ env.RIVE_RUNTIME_REF }}
           path: rive-runtime
 
       - name: Install Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      # Each -gate target runs the tool's unit tests AND the check it performs,
-      # reporting both verdicts. They used to be one target where the tests
-      # were a prerequisite, so a red suite meant the check never ran and any
-      # real drift underneath stayed hidden.
-      - name: Verify upstream C++ port manifest
-        run: make port-manifest-gate
-
-      # if: always() so a port-manifest failure above cannot hide an
-      # attribution failure here -- they are independent verdicts.
-      - name: Verify Rust attribution coverage
-        if: ${{ !cancelled() }}
-        run: make rust-attribution-gate
-
-      # File-level correspondence cannot detect a new inline setter, callback,
-      # lifecycle hook, or handwritten item inside an already-known source.
-      - name: Verify runtime behavior member and item inventory
-        if: ${{ !cancelled() }}
-        run: make runtime-behavior-inventory
 
       # The boundary test and live workspace check are independent verdicts. This
       # runs on Ubuntu because it parses every declared dependency table,
@@ -134,73 +113,10 @@ jobs:
       - name: Verify report and stale-runner guards
         run: make runtime-differential-report-test rust-runner-provenance-test
 
-  # Pure-Python ledger checks over checked-in correspondence manifests. These
-  # rotted while nothing ran them (see docs/README.md migration cleanup); this
-  # job is what keeps them green. Each -gate target runs the tool's unit tests
-  # AND its check as independent verdicts.
-  port-ledgers:
-    name: Runtime port ledger gates
-    if: ${{ inputs.backend_port_browser_closeout != true }}
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Checkout rive-rust
-        uses: actions/checkout@v4
-        with:
-          # The test-correspondence status ratchet walks the manifest's full
-          # git history; a shallow clone fails it closed.
-          fetch-depth: 0
-
-      - name: Checkout reference rive-runtime
-        uses: actions/checkout@v4
-        with:
-          repository: rive-app/rive-runtime
-          ref: ${{ env.RIVE_RUNTIME_REF }}
-          path: rive-runtime
-          fetch-depth: 0
-
-      - name: Install Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Runtime drawing port gate
-        run: make runtime-drawing-port-gate
-
-      # if: !cancelled() so a drawing-ledger failure cannot hide frame-loop
-      # drift -- they are independent verdicts over separate ledgers.
-      - name: Runtime frame loop port gate
-        if: ${{ !cancelled() }}
-        run: make runtime-frame-loop-port-gate
-
-      - name: Freshness-aware parity evidence gate
-        if: ${{ !cancelled() }}
-        run: make parity-evidence-freshness
-
-      - name: Proof-aware parity scorecard gate
-        if: ${{ !cancelled() }}
-        run: make parity-scorecard
-
-      - name: Clustered runtime drift queue gate
-        if: ${{ !cancelled() }}
-        run: make runtime-drift-queue
-
-      - name: Upload parity evidence freshness report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-evidence-freshness-${{ github.run_attempt }}
-          path: target/parity-evidence-freshness/*
-          if-no-files-found: warn
-          retention-days: 30
-
   # The reusable trusted workflow owns the oracle floor (golden compare,
-  # scripted golden, workspace tests, C ABI smoke) and records its own
-  # scorecard evidence, so this job no longer re-runs that floor on a second
-  # hosted runner. During the exact-renderer cutover it carries only the
+  # scripted golden, workspace tests, C ABI smoke), so this job does not
+  # re-run that floor on a second hosted runner. During the exact-renderer
+  # cutover it carries only the
   # Apple-target compile gates; legacy renderer size/probe CI is tracked in
   # UNIV-2635.
   parity-runtime-evidence:
@@ -726,84 +642,6 @@ jobs:
           path: rive-rust/target/perf-gate.json
           if-no-files-found: ignore
 
-  parity-scorecard:
-    name: Five-tier parity scorecard
-    # Push-only alongside the heavy evidence jobs it aggregates; on PRs the
-    # golden/renderer/perf evidence deliberately does not exist.
-    # Legacy renderer/size evidence producers were retired with Rust-WGPU.
-    # Re-enable the aggregate only after UNIV-2635 defines the
-    # exact-renderer evidence set.
-    if: ${{ false }}
-    needs:
-      # trusted-macos-ci uploads the oracle floor and C ABI evidence.
-      - trusted-macos-ci
-      - parity-runtime-evidence
-      - browser-renderer
-      - renderer-golden
-      - perf-gate
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Checkout rive-rust
-        uses: actions/checkout@v4
-
-      - name: Install Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Download required floor evidence
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          pattern: parity-scorecard-evidence-*-${{ github.run_attempt }}
-          path: target/parity-scorecard/evidence
-          merge-multiple: true
-
-      - name: Download blocking perf-gate evidence
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: perf-gate-json
-          path: target
-
-      - name: Publish and check parity scorecard
-        run: |
-          mkdir -p target/parity-scorecard/evidence
-          set +e
-          python3 tools/parity-scorecard/parity_scorecard.py check \
-            --repo-root "${GITHUB_WORKSPACE}" \
-            --evidence-dir target/parity-scorecard/evidence \
-            --json target/parity-scorecard/scorecard.json \
-            > target/parity-scorecard/scorecard.md
-          scorecard_status=$?
-          set -e
-          cat target/parity-scorecard/scorecard.md
-          cat target/parity-scorecard/scorecard.md >> "${GITHUB_STEP_SUMMARY}"
-          exit "${scorecard_status}"
-
-      - name: Upload parity scorecard
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-scorecard-${{ github.run_attempt }}
-          path: |
-            target/parity-scorecard/scorecard.json
-            target/parity-scorecard/scorecard.md
-          if-no-files-found: warn
-          retention-days: 30
-
-  # Negative-input fuzz smoke gate. This is additive and self-contained: it
-  # fetches its pinned upstream seed corpus before running and needs no built
-  # C++ reference runtime. cargo-fuzz requires the nightly
-  # toolchain (libFuzzer + `-Z sanitizer`), selected per job through
-  # `RUSTUP_TOOLCHAIN`. The time budget is deliberately short -- this proves
-  # the harness builds and runs, it is not a fuzzing campaign. If the nightly
-  # install ever becomes disproportionate, drop the `make fuzz-smoke` step to
-  # `make fuzz-build` for a build-only gate.
   fuzz-smoke:
     name: Fuzz smoke gate
     if: ${{ inputs.backend_port_browser_closeout != true }}

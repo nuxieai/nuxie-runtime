@@ -300,6 +300,9 @@ impl Key {
     }
 }
 pub trait Focusable {
+    fn focusable_artboard(&self) -> Option<CoreHandle> {
+        None
+    }
     fn key_input(
         &mut self,
         key: Key,

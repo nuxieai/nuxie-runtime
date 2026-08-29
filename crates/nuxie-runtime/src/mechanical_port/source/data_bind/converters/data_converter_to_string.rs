@@ -135,14 +135,38 @@ impl Default for DataConverterToString {
 }
 
 impl DataConverterToString {
+    fn cpp_to_string(value: f32) -> String {
+        if value.is_nan() {
+            // Pinned std::to_string(float) delegates to the C `%f`
+            // conversion, which spells both positive and negative NaNs as
+            // lowercase `nan` on the pinned macOS validation host.
+            "nan".to_owned()
+        } else if value == f32::INFINITY {
+            "inf".to_owned()
+        } else if value == f32::NEG_INFINITY {
+            "-inf".to_owned()
+        } else {
+            format!("{value:.6}")
+        }
+    }
+
     pub fn new(decimals: usize, color_format: String, flags: u32) -> Self {
         let mut converter = Self::default();
-        let mut callbacks = DataConverterToStringInitializationCallbacks;
-        converter.base.set_decimals(decimals as u32, &mut callbacks);
-        converter
-            .base
-            .set_color_format(color_format, &mut callbacks);
-        converter.base.set_flags(flags, &mut callbacks);
+        if converter.base.set_decimals_value(decimals as u32) {
+            DataConverterToStringBaseCallbacks::decimals_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterToStringBase::DECIMALS_PROPERTY_KEY);
+        }
+        if converter.base.set_color_format_value(color_format) {
+            DataConverterToStringBaseCallbacks::color_format_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterToStringBase::COLOR_FORMAT_PROPERTY_KEY);
+        }
+        if converter.base.set_flags_value(flags) {
+            DataConverterToStringBaseCallbacks::flags_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterToStringBase::FLAGS_PROPERTY_KEY);
+        }
         converter
     }
 
@@ -169,7 +193,7 @@ impl DataConverterToString {
         let mut output = if self.base.flags() & ROUND == ROUND {
             format!("{:.*}", self.base.decimals() as usize, value)
         } else {
-            format!("{value:.6}")
+            Self::cpp_to_string(value)
         };
         if self.base.flags() & TRAILING_ZEROS == TRAILING_ZEROS {
             output = DataConverterStringRemoveZeros::remove_zeros(output);
@@ -271,10 +295,24 @@ impl DataConverterToStringBaseCallbacks for DataConverterToString {
     }
 }
 
-struct DataConverterToStringInitializationCallbacks;
-
-impl DataConverterToStringBaseCallbacks for DataConverterToStringInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
-}
-
 crate::impl_data_converter_capability_forward!(DataConverterToString, base.base);
+
+#[cfg(test)]
+mod tests {
+    use super::DataConverterToString;
+
+    #[test]
+    fn unrounded_non_finite_numbers_match_pinned_std_to_string() {
+        assert_eq!(DataConverterToString::cpp_to_string(f32::NAN), "nan");
+        assert_eq!(
+            DataConverterToString::cpp_to_string(f32::from_bits(0xffc0_0000)),
+            "nan"
+        );
+        assert_eq!(DataConverterToString::cpp_to_string(f32::INFINITY), "inf");
+        assert_eq!(
+            DataConverterToString::cpp_to_string(f32::NEG_INFINITY),
+            "-inf"
+        );
+        assert_eq!(DataConverterToString::cpp_to_string(-0.0), "-0.000000");
+    }
+}

@@ -1,8 +1,10 @@
 use crate::mechanical_port::source::{
-    animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
-    artboard::RuntimeArtboardInstanceWeakHandle, core::CoreHandle, core_context::CoreContext,
-    event_report::EventReport, generated::nested_animation_base::NestedAnimationBase,
-    nested_artboard::NestedArtboard, status_code::StatusCode,
+    animation::state_machine_instance::{EventReport, RuntimeStateMachineInstanceWeakHandle},
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    core::CoreHandle,
+    core_context::CoreContext,
+    generated::nested_animation_base::NestedAnimationBase,
+    status_code::StatusCode,
 };
 
 #[derive(Clone)]
@@ -49,7 +51,10 @@ impl NestedEventNotifier {
         let event_reports: Vec<_> = events
             .iter()
             .cloned()
-            .map(|event| EventReport::new(event, 0.0))
+            .map(|event| EventReport {
+                event: Some(event),
+                seconds_delay: 0.0,
+            })
             .collect();
         let nested_artboard = self.nested_artboard.clone();
         self.nested_event_listeners
@@ -76,8 +81,18 @@ pub struct NestedAnimation {
 
 pub trait NestedAnimationBehavior {
     fn advance(&mut self, elapsed_seconds: f32, new_frame: bool) -> bool;
-    fn initialize_animation(&mut self, artboard_instance: RuntimeArtboardInstanceWeakHandle);
+    fn animation_initializer(&self) -> NestedAnimationInitializer;
     fn release_dependencies(&mut self);
+}
+
+pub type NestedAnimationInitializer = fn(&CoreHandle, RuntimeArtboardInstanceWeakHandle);
+
+pub fn initialize_animation(owner: &CoreHandle, artboard: RuntimeArtboardInstanceWeakHandle) {
+    let initialize = owner
+        .with(|owner| owner.nested_animation_initializer())
+        .flatten()
+        .expect("nested animation exposes its concrete initializer");
+    initialize(owner, artboard);
 }
 
 impl NestedAnimation {
@@ -87,7 +102,7 @@ impl NestedAnimation {
         }
         context
             .resolve(self.base.base.parent_id())
-            .is_some_and(|parent| parent.with_downcast::<NestedArtboard, _>(|_| ()).is_some())
+            .is_some_and(|parent| parent.is_type_of(crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY))
     }
 
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
@@ -96,8 +111,11 @@ impl NestedAnimation {
             let animation = self.base.handle();
             let parent = context.resolve(self.base.base.parent_id());
             if let (Some(animation), Some(parent)) = (animation, parent) {
-                parent.with_downcast_mut::<NestedArtboard, _>(|parent| {
-                    parent.add_nested_animation_handle(animation);
+                parent.with_mut(|parent| {
+                    parent
+                        .as_nested_artboard_mut()
+                        .expect("validated NestedArtboard parent")
+                        .add_nested_animation_handle(animation);
                 });
             }
         }
@@ -120,5 +138,13 @@ impl crate::mechanical_port::source::generated::nested_animation_base::NestedAni
 {
     fn notify_property_changed(&mut self, key: u16) {
         self.base.notify_property_changed(key);
+    }
+}
+
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+    for NestedAnimation
+{
+    fn notify_property_changed(&mut self, key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(&mut self.base, key);
     }
 }

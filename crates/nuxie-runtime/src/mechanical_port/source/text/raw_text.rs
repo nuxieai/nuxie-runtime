@@ -1,4 +1,4 @@
-use super::text::Text;
+use super::text::{StyledText, Text};
 use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
@@ -8,8 +8,8 @@ use crate::mechanical_port::source::{
     shapes::paint::color::ColorInt,
     shapes::paint::shape_paint_path::ShapePaintPath,
     text_engine::{
-        FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, StyledText, TextAlign, TextOrigin,
-        TextOverflow, TextSizing, TextWrap,
+        FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin, TextOverflow,
+        TextSizing, TextWrap,
     },
 };
 use nuxie_render_api::{FillRule, RenderPaint, RenderPaintStyle, Renderer};
@@ -215,7 +215,11 @@ impl RawText {
             return;
         }
         let runs = self.styled.runs();
-        self.shape = runs[0].font.shape_text(self.styled.unichars(), runs);
+        self.shape = runs[0]
+            .font
+            .as_ref()
+            .expect("shaped text retains its font")
+            .shape_text(self.styled.unichars(), runs, -1);
         self.lines = Text::break_lines(
             &self.shape,
             if self.sizing == TextSizing::AutoWidth {
@@ -307,9 +311,8 @@ impl RawText {
                     render_y,
                 ));
                 let mut x = line.start_x;
-                for glyph in self.ordered_lines.last().unwrap().iter() {
-                    let run = glyph.run;
-                    let i = glyph.glyph_index as usize;
+                for (run, glyph_index) in self.ordered_lines.last().unwrap() {
+                    let i = glyph_index as usize;
                     let transform = Mat2D::new(
                         run.size,
                         0.0,
@@ -320,18 +323,31 @@ impl RawText {
                     );
                     x += run.advances[i];
                     let style = run.style_id as usize;
-                    if run.font.is_color_glyph(run.glyphs[i]) {
+                    if run
+                        .font
+                        .as_ref()
+                        .expect("shaped text retains its font")
+                        .is_color_glyph(run.glyphs[i])
+                    {
                         self.draw_commands.push(DrawCommand::Color {
-                            font: run.font.clone(),
+                            font: run
+                                .font
+                                .as_ref()
+                                .expect("shaped text retains its font")
+                                .clone(),
                             glyph_id: run.glyphs[i],
                             transform,
                             foreground_color: self.styles[style].foreground_color,
                         });
                     } else {
-                        let path = run.font.get_path(run.glyphs[i]);
+                        let path = run
+                            .font
+                            .as_ref()
+                            .expect("shaped text retains its font")
+                            .get_path(run.glyphs[i]);
                         self.styles[style]
                             .path
-                            .add_path_clockwise_with_transform(&path, &transform);
+                            .add_path_clockwise(&path, Some(&transform));
                         if self.styles[style].is_empty {
                             self.styles[style].is_empty = false;
                             self.render_styles.push(style);
@@ -381,6 +397,7 @@ impl RawText {
                     if let Some(paint) = override_paint
                         .as_ref()
                         .or(self.styles[*index].paint.as_ref())
+                        .cloned()
                     {
                         let paint = paint.borrow();
                         renderer.draw_path(

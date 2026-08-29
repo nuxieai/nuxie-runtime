@@ -35,9 +35,9 @@ impl ViewModelInstanceArtboardRuntime {
                 property
                     .as_view_model_instance_artboard()
                     .and_then(|property| {
-                        property
-                            .asset()
-                            .map(|asset| asset.with_artboard(|artboard| artboard.name().to_owned()))
+                        property.asset().map(|asset| {
+                            asset.with_artboard(|artboard| artboard.base.base.name().to_owned())
+                        })
                     })
             })
             .flatten()

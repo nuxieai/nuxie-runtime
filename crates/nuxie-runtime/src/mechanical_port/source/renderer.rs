@@ -17,7 +17,7 @@ pub type RenderBuffer = dyn nuxie_render_api::RenderBuffer;
 pub type RenderImage = dyn nuxie_render_api::RenderImage;
 pub type RenderPaint = dyn nuxie_render_api::RenderPaint;
 pub type RenderPath = dyn nuxie_render_api::RenderPath;
-pub type Renderer = dyn nuxie_render_api::Renderer;
+pub type Renderer<'a> = dyn nuxie_render_api::Renderer + 'a;
 pub type RenderShader = dyn nuxie_render_api::RenderShader;
 
 /// Shared renderer-owned image occurrence used at the runtime/host seam.

@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
+use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
 
 pub trait ListenerActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);

@@ -6975,6 +6975,14 @@ pub mod source_execution {
 
 #[cfg(test)]
 mod source_owner_regressions {
+    static OWNER_STREAM_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn owner_stream_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        OWNER_STREAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
     use super::source_execution::{
         canonical_metallib, image_mesh_buffer_handles, precompiled_name, shader_key_for_test, BufferRingLock, ColorRampPipeline,
         DrawPipeline, DrawType, Handle,
@@ -7170,6 +7178,7 @@ mod source_owner_regressions {
 
     #[test]
     fn flush_descriptor_and_draw_batch_are_exact_gpu_owners() {
+        let _owner_guard = owner_stream_test_guard();
         fn first_linked_batch<'a>(desc: &'a gpu::FlushDescriptor) -> Option<&'a gpu::DrawBatch> {
             desc.drawList
                 .map(|list| unsafe { list.as_ref() })
@@ -7194,6 +7203,7 @@ mod source_owner_regressions {
 
     #[test]
     fn flush_uses_three_node_source_list_in_authored_order() {
+        let _owner_guard = owner_stream_test_guard();
         let mut list = gpu::BlockAllocatedLinkedList::<gpu::DrawBatch>::default();
         for (base, draw_type) in [
             (11_u32, gpu::DrawType::midpointFanPatches),
@@ -7241,6 +7251,7 @@ mod source_owner_regressions {
 
     #[test]
     fn ring_slot_is_an_independent_lock_handoff() {
+        let _owner_guard = owner_stream_test_guard();
         let first = SourceMutex::new();
         let second = SourceMutex::new();
         first.lock();
@@ -7259,6 +7270,7 @@ mod source_owner_regressions {
 
     #[test]
     fn fourth_ring_reuse_waits_for_completion_unlock() {
+        let _owner_guard = owner_stream_test_guard();
         use std::sync::{Arc, mpsc};
         use std::time::Duration;
 
@@ -7293,6 +7305,7 @@ mod source_owner_regressions {
 
     #[test]
     fn image_mesh_cast_helper_fails_before_native_mesh_buffer_binds() {
+        let _owner_guard = owner_stream_test_guard();
         let mut metal = RecordingMetal::default();
         let device = metal.device_handle();
         let owner = Box::new(RenderBufferMetal::new(
@@ -7325,6 +7338,7 @@ mod source_owner_regressions {
 
     #[test]
     fn image_mesh_preflight_keeps_valid_metal_nil_submitted_buffers() {
+        let _owner_guard = owner_stream_test_guard();
         let mut metal = RecordingMetal::default();
         let device = metal.device_handle();
         let mut owner = Box::new(RenderBufferMetal::new(
@@ -7348,6 +7362,7 @@ mod source_owner_regressions {
 
     #[test]
     fn post_flush_install_failure_unlocks_ring_and_publishes_error() {
+        let _owner_guard = owner_stream_test_guard();
         use std::sync::{Arc, Mutex};
 
         let mut metal = RecordingMetal::default();
@@ -7401,6 +7416,7 @@ mod source_owner_regressions {
 
     #[test]
     fn post_flush_copies_invokes_and_releases_distinct_completion_block() {
+        let _owner_guard = owner_stream_test_guard();
         use std::sync::{Arc, Mutex};
 
         let mut metal = RecordingMetal::default();
@@ -7486,6 +7502,7 @@ mod source_owner_regressions {
 
     #[test]
     fn post_flush_installed_callback_error_unlocks_before_publishing_and_releases_copy() {
+        let _owner_guard = owner_stream_test_guard();
         use std::sync::{Arc, Mutex};
 
         let mut metal = RecordingMetal::default();
@@ -7545,6 +7562,7 @@ mod source_owner_regressions {
 
     #[test]
     fn post_flush_command_clone_failure_is_exact_and_does_not_strand_the_ring() {
+        let _owner_guard = owner_stream_test_guard();
         use std::sync::{Arc, Mutex};
 
         let mut metal = RecordingMetal::default();
@@ -7578,6 +7596,7 @@ mod source_owner_regressions {
 
     #[test]
     fn command_buffer_bridge_lifecycle_preserves_one_opaque_owner_through_commit() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |fail_commit: bool| {
             let mut metal = RecordingMetal::default();
             let device = metal.device_handle();
@@ -7719,6 +7738,7 @@ mod source_owner_regressions {
 
     #[test]
     fn flush_command_strong_local_clones_the_opaque_owner_for_the_complete_flush_scope() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |fail_clone: bool| {
             let mut metal = RecordingMetal::default();
             let device = metal.device_handle();
@@ -7812,6 +7832,7 @@ mod source_owner_regressions {
 
     #[test]
     fn gradient_and_tessellation_pipeline_locals_span_encoder_and_pass_teardown() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |gradient: bool, fail_clone: bool| {
             let (mut metal, mut context, mut target) = recording_flush_fixture(false);
             let source = if gradient {
@@ -7880,6 +7901,7 @@ mod source_owner_regressions {
 
     #[test]
     fn gradient_and_tessellation_pass_expressions_are_distinct_and_failure_exact() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |gradient: bool, fail_selector: Option<(&'static str, usize)>| {
             let (mut metal, mut context, mut target) = recording_flush_fixture(false);
             if let Some((selector, offset)) = fail_selector {
@@ -8013,6 +8035,7 @@ mod source_owner_regressions {
 
     #[test]
     fn attachment_collection_getters_are_scoped_parent_tied_and_failure_exact() {
+        let _owner_guard = owner_stream_test_guard();
         let run_pipeline = |fail: Option<(&'static str, usize)>| {
             let mut metal = RecordingMetal::default();
             metal.fail_exact = fail;
@@ -8223,6 +8246,7 @@ mod source_owner_regressions {
 
     #[test]
     fn main_pass_attachment_expressions_and_copy_encoder_are_source_exact() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |load_action: gpu::LoadAction,
                    fail: Option<(&'static str, usize)>| {
             let (mut metal, mut context, mut target) = recording_flush_fixture(false);
@@ -8524,6 +8548,7 @@ mod source_owner_regressions {
 
     #[test]
     fn main_encoder_helper_handoff_and_pass_break_replacement_are_source_exact() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |break_count: usize, fail: Option<(&'static str, usize)>| {
             let (mut metal, mut context, mut target) = recording_flush_fixture(false);
             context.set_atomic_barrier_for_test(
@@ -8852,6 +8877,7 @@ mod source_owner_regressions {
 
     #[test]
     fn atlas_pipeline_locals_cover_fill_only_combined_reverse_drop_and_clone_failures() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |fill_count: usize, stroke_count: usize, fail_clone: Option<usize>| {
             let (mut metal, mut context, mut target) = recording_flush_fixture(true);
             let (fill_source, stroke_source) = context.feather_pipeline_states_for_test();
@@ -9015,6 +9041,7 @@ mod source_owner_regressions {
 
     #[test]
     fn atlas_pass_attachment_and_encoder_follow_parent_scope_and_exact_failures() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |fill_count: usize,
                    stroke_count: usize,
                    fail_selector: Option<(&'static str, usize)>| {
@@ -9188,6 +9215,7 @@ mod source_owner_regressions {
 
     #[test]
     fn per_batch_pipeline_local_releases_before_the_next_batch_and_on_mesh_cast_break() {
+        let _owner_guard = owner_stream_test_guard();
         let run_path_batches = |fail_clone: Option<usize>| {
             let (mut metal, mut context, mut target) = recording_flush_fixture(false);
             let device = metal.device_handle();
@@ -9368,6 +9396,7 @@ mod source_owner_regressions {
 
     #[test]
     fn canonical_constructor_sweeps_each_actual_selector_failpoint() {
+        let _owner_guard = owner_stream_test_guard();
         use std::collections::BTreeSet;
 
         // First collect selectors from the real source constructor. The
@@ -9495,6 +9524,7 @@ mod source_owner_regressions {
 
     #[test]
     fn color_and_tess_scenarios_bind_exact_owner_rows_and_failure_ordinals() {
+        let _owner_guard = owner_stream_test_guard();
         fn run_color() -> RecordingMetal {
             let mut metal = RecordingMetal::default();
             let device = metal.device_handle();
@@ -9707,6 +9737,7 @@ mod source_owner_regressions {
 
     #[test]
     fn pipeline_result_scenario_covers_every_object_error_outcome_and_member_drop() {
+        let _owner_guard = owner_stream_test_guard();
         for (object, error) in [(true, false), (true, true), (false, true), (false, false)] {
             let metal = run_color_pipeline_result_scenario(object, error);
             let states = row_events(&metal.owner_events, "RC-STATE-PIPE");
@@ -9856,6 +9887,7 @@ mod source_owner_regressions {
 
     #[test]
     fn feather_pair_scenario_binds_multiplicity_parent_order_and_each_failure_ordinal() {
+        let _owner_guard = owner_stream_test_guard();
         let metal = run_feather_pair(None);
         let events = &metal.owner_events;
         for (id, count, opening) in [
@@ -10070,6 +10102,7 @@ mod source_owner_regressions {
 
     #[test]
     fn static_nsstring_literals_have_an_exact_owner_free_source_census() {
+        let _owner_guard = owner_stream_test_guard();
         let assert_scenario = |metal: &RecordingMetal| {
             let names = metal
                 .calls
@@ -10120,6 +10153,7 @@ mod source_owner_regressions {
 
     #[test]
     fn objective_c_parameters_remain_caller_owned_across_representative_source_calls() {
+        let _owner_guard = owner_stream_test_guard();
         let mut metal = RecordingMetal::default();
         let device = metal.device_handle();
         let library = Handle::new(20, MetalObjectKind::Library);
@@ -10176,6 +10210,7 @@ mod source_owner_regressions {
 
     #[test]
     fn cpp_owners_are_bound_to_the_intrusive_box_and_raw_pointer_ledger() {
+        let _owner_guard = owner_stream_test_guard();
         use core::any::type_name;
         use core::pin::Pin;
 
@@ -10258,6 +10293,7 @@ mod source_owner_regressions {
 
     #[test]
     fn draw_pipeline_scenario_binds_names_clone_aliases_order_and_failure_ordinals() {
+        let _owner_guard = owner_stream_test_guard();
         let metal = run_draw_pipeline_scenario(None, None);
         let events = &metal.owner_events;
         for id in ["RC-NS-FUNCTION-NAME-V", "RC-NS-FUNCTION-NAME-F"] {
@@ -10888,6 +10924,7 @@ mod source_owner_regressions {
 
     #[test]
     fn resource_scenarios_bind_descriptor_spans_nil_paths_and_failure_ordinals() {
+        let _owner_guard = owner_stream_test_guard();
         for id in [
             "RC-TD-GRAD-RESIZE",
             "RC-TD-TESS-RESIZE",
@@ -11334,6 +11371,7 @@ mod source_owner_regressions {
 
     #[test]
     fn gaussian_constructor_descriptor_spans_all_later_members_and_exact_failures() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |fail: Option<(&'static str, usize)>| {
             let mut metal = RecordingMetal::default();
             metal.fail_exact = fail;
@@ -11461,6 +11499,7 @@ mod source_owner_regressions {
 
     #[test]
     fn constructor_sampler_dispatch_and_metallib_outcomes_bind_exact_source_scopes() {
+        let _owner_guard = owner_stream_test_guard();
         let (metal, context) = run_constructor_creation_outcome(true, false);
         let samplers = row_events(&metal.owner_events, "RC-SD-IMAGE-X18");
         assert_eq!(samplers.len(), 18 * 3);
@@ -11594,6 +11633,7 @@ mod source_owner_regressions {
     #[cfg(feature = "native-ore-metal-experimental")]
     #[test]
     fn canvas_source_scenario_binds_three_retain_ladder_and_nil_allocation() {
+        let _owner_guard = owner_stream_test_guard();
         let run = |fail_selector: Option<&'static str>| {
             let mut metal = RecordingMetal::default();
             let device = metal.device_handle();
@@ -12020,6 +12060,7 @@ mod source_owner_regressions {
             use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::{
                 self as background, BackgroundCompileJob,
             };
+            let _owner_guard = background::owner_event_test_guard();
             let device = objc2_metal::MTLCreateSystemDefaultDevice()
                 .expect("required live Metal device for native owner evidence");
             let _ = background::take_owner_events();
@@ -12082,6 +12123,7 @@ mod source_owner_regressions {
             use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::{
                 self as background, BackgroundCompileJob,
             };
+            let _owner_guard = background::owner_event_test_guard();
             let device = objc2_metal::MTLCreateSystemDefaultDevice()
                 .expect("required live Metal device for native owner evidence");
             let _ = background::take_owner_events();
@@ -12254,6 +12296,7 @@ mod source_owner_regressions {
     #[cfg(target_vendor = "apple")]
     #[test]
     fn native_background_owner_stream_uses_real_compiler_path() {
+        let _owner_guard = owner_stream_test_guard();
         let events = collect_native_background_owner_events();
         assert!(!events.is_empty(), "native compiler emitted no owner events");
         validate_native_background_owner_events(&events);
@@ -12262,6 +12305,7 @@ mod source_owner_regressions {
     #[cfg(target_vendor = "apple")]
     #[test]
     fn native_background_compile_failure_matches_source_assert_boundary() {
+        let _owner_guard = owner_stream_test_guard();
         const CHILD: &str = "NATIVE_BG_FAILURE_CHILD";
         if std::env::var_os(CHILD).is_none() {
             let status = std::process::Command::new(std::env::current_exe().unwrap())
@@ -12288,6 +12332,7 @@ mod source_owner_regressions {
 
     #[test]
     fn exhaustive_local_owner_ledger_is_bound_to_actual_boundaries_and_failpoints() {
+        let _owner_guard = owner_stream_test_guard();
         use std::collections::{BTreeMap, BTreeSet};
 
         let inventory: BTreeSet<&str> = LOCAL_OWNER_LEDGER_IDS.iter().copied().collect();

@@ -28,7 +28,7 @@ impl std::ops::DerefMut for ViewModelInstanceAsset {
 impl ViewModelInstanceAsset {
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let Some(importer) = import_stack.latest::<BackboardImporter>(
-            crate::mechanical_port::source::backboard::Backboard::TYPE_KEY,
+            crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
         ) else {
             return StatusCode::MissingObject;
         };

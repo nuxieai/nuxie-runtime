@@ -1,6 +1,5 @@
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
-    advancing_component::AdvancingComponent,
     animation::{
         listener_invocation::ListenerInvocation, nested_state_machine::NestedStateMachine,
     },
@@ -14,7 +13,7 @@ use crate::mechanical_port::source::{
     component_origin::ComponentOrigin,
     core::{Core, CoreHandle},
     core_context::CoreContext,
-    data_bind::{data_bind::DataBind, data_context::RuntimeDataContextHandle},
+    data_bind::data_context::RuntimeDataContextHandle,
     data_bind_path_referencer::DataBindPathReferencer,
     file::RuntimeFileWeakHandle,
     focus_data::FocusData,
@@ -173,73 +172,239 @@ impl NestedArtboard {
             return;
         }
 
-        nested_instance.with_artboard_mut(|instance| instance.cleanup_focus_tree());
+        nested_instance.cleanup_focus_tree();
         let parent = self.focus_scope.clone().or(fallback_parent);
-        nested_instance.with_artboard_mut(|instance| {
-            instance.build_focus_tree(Some(parent_focus_manager), parent)
-        });
+        nested_instance.build_focus_tree(Some(parent_focus_manager), parent);
     }
 
     pub fn sync_nested_focus_tree_default(&mut self, fallback_parent: Option<FocusNodeRef>) {
         self.sync_nested_focus_tree(fallback_parent, false, true);
     }
 
+    pub fn sync_nested_focus_tree_occurrence(
+        owner: &CoreHandle,
+        fallback_parent: Option<FocusNodeRef>,
+        place_scope: bool,
+        force_rebuild: bool,
+    ) {
+        let parent_artboard = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .and_then(Self::parent_artboard_handle)
+            })
+            .flatten();
+        let Some(parent_focus_manager) = parent_artboard.and_then(|parent| {
+            parent
+                .with_downcast::<Artboard, _>(Artboard::focus_manager_handle)
+                .flatten()
+        }) else {
+            return;
+        };
+        owner
+            .with_mut(|owner| {
+                owner
+                    .as_nested_artboard_mut()
+                    .expect("NestedArtboard owner")
+                    .register_focus_scope(
+                        parent_focus_manager.clone(),
+                        fallback_parent.clone(),
+                        place_scope,
+                    )
+            })
+            .expect("live NestedArtboard");
+        let Some(nested_instance) = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .and_then(Self::artboard_instance_default)
+            })
+            .flatten()
+        else {
+            return;
+        };
+        let already_shared = nested_instance.with_artboard(|instance| {
+            instance
+                .focus_manager_handle()
+                .is_some_and(|manager| manager.ptr_eq(&parent_focus_manager))
+        });
+        if !force_rebuild && already_shared {
+            return;
+        }
+        nested_instance.cleanup_focus_tree();
+        let scope = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .expect("NestedArtboard owner")
+                    .focus_scope
+                    .clone()
+            })
+            .expect("live NestedArtboard");
+        nested_instance.build_focus_tree(Some(parent_focus_manager), scope.or(fallback_parent));
+    }
+
     pub fn clone_core(&self) -> Box<NestedArtboard> {
         let mut nested_artboard = Box::new(NestedArtboard::default());
-        nested_artboard
-            .data_bind_path_referencer
-            .copy_data_bind_path(&self.data_bind_path_referencer);
         // NestedArtboardBase::clone copies the generated base before this
         // owner restores its host-specific state.
-        nested_artboard.base.copy_from_source(&self.base);
+        let mut base = std::mem::take(&mut nested_artboard.base);
+        base.copy(self, &mut *nested_artboard);
+        nested_artboard.base = base;
         nested_artboard.file = self.file.clone();
         if self.is_artboard_data_bound() {
             nested_artboard.set_host_flag(NestedArtboardHostFlags::ARTBOARD_DATA_BOUND);
         }
-        let Some(referenced) = self.artboard_referencer.referenced_artboard() else {
+        let Some(referenced) = self
+            .instance
+            .as_ref()
+            .map(|instance| instance.core_handle())
+            .or_else(|| self.artboard_referencer.referenced_artboard())
+        else {
             return nested_artboard;
         };
-        nested_artboard.referenced_artboard(Some(referenced));
+        if let Some(instance) = Artboard::nested_instance_from_handle(&referenced) {
+            nested_artboard.referenced_artboard_instance(instance);
+        }
         nested_artboard
     }
 
     fn nest(&mut self, artboard: CoreHandle) {
         self.artboard_referencer
             .set_referenced_artboard(Some(artboard.clone()));
-        let instance = Artboard::nested_instance_from_handle(&artboard);
-        let Some(instance) = instance else {
+        // Upstream nest only records authored source artboards at import. A
+        // supplied instance is mounted directly; cloning belongs to clone().
+        let Some(instance) = artboard.runtime_artboard_instance() else {
             return;
         };
+        self.nest_instance(instance);
+    }
+
+    fn nest_instance(&mut self, instance: RuntimeArtboardInstanceHandle) {
+        self.artboard_referencer
+            .set_referenced_artboard(Some(instance.core_handle()));
         let host = crate::mechanical_port::source::core::CoreObject::core(self).handle();
         let opacity = self.render_opacity();
+        let parent = self.parent_artboard_handle();
         instance.with_artboard_mut(|instance| {
             instance.set_frame_origin(false);
             instance.set_host_opacity(opacity);
             let volume = instance.volume();
             instance.set_volume(volume);
-            instance.set_host_handle(host);
         });
-        self.instance = Some(instance);
+        self.instance = Some(instance.clone());
+        instance.with_artboard_mut(|instance| instance.set_host_with_parent(host, parent));
         self.apply_origin_override();
     }
 
-    pub fn apply_origin_override(&mut self) {
-        let Some(instance) = self.instance.clone() else {
+    fn nest_instance_occurrence(owner: &CoreHandle, instance: RuntimeArtboardInstanceHandle) {
+        owner.with_mut(|owner| {
+            owner
+                .as_nested_artboard_mut()
+                .expect("NestedArtboard host")
+                .artboard_referencer
+                .set_referenced_artboard(Some(instance.core_handle()));
+        });
+        instance.with_artboard_mut(|instance| instance.set_frame_origin(false));
+        let opacity = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .expect("NestedArtboard host")
+                    .render_opacity()
+            })
+            .expect("live NestedArtboard");
+        instance.with_artboard_mut(|instance| {
+            instance.set_host_opacity(opacity);
+            let volume = instance.volume();
+            instance.set_volume(volume);
+        });
+        // The source destroys the outgoing owned instance and takes ownership
+        // of the new one before host() can enumerate this provider's nodes.
+        let previous = owner
+            .with_mut(|owner| {
+                owner
+                    .as_nested_artboard_mut()
+                    .expect("NestedArtboard host")
+                    .instance
+                    .take()
+            })
+            .expect("live NestedArtboard");
+        drop(previous);
+        let parent = owner
+            .with_mut(|owner| {
+                let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
+                nested.instance = Some(instance.clone());
+                nested.parent_artboard_handle()
+            })
+            .expect("live NestedArtboard");
+        Artboard::set_host_occurrence(&instance.core_handle(), Some(owner.clone()), parent);
+        Self::apply_origin_override_occurrence(owner);
+    }
+
+    fn origin_override_child(&self) -> Option<CoreHandle> {
+        self.children().into_iter().find(|child| {
+            child.is_type_of(crate::mechanical_port::source::generated::component_origin_base::ComponentOriginBase::TYPE_KEY)
+        })
+    }
+
+    // nest() already owns the host. Pass that same owner to the child's dirty
+    // callback, just as markLayoutDirty does for an already-borrowed host.
+    fn apply_origin_override(&mut self) {
+        if self.instance.is_none() {
+            return;
+        }
+        let Some(origin) = self.origin_override_child() else {
             return;
         };
-        for child in self.children() {
-            if let Some((origin_x, origin_y)) =
-                child.with_downcast::<ComponentOrigin, _>(|origin| {
-                    (origin.base.origin_x(), origin.base.origin_y())
-                })
-            {
-                instance.with_artboard_mut(|instance| {
-                    instance.set_origin_x(origin_x);
-                    instance.set_origin_y(origin_y);
-                });
-                return;
-            }
-        }
+        let origin_x = origin
+            .with_downcast::<ComponentOrigin, _>(|origin| origin.base.origin_x())
+            .unwrap();
+        let instance = self
+            .instance
+            .clone()
+            .expect("mounted origin override owner");
+        instance
+            .with_artboard_mut(|instance| instance.set_origin_x_with_borrowed_host(origin_x, self));
+        // The source reads originY after originX's setter and its callbacks.
+        let origin_y = origin
+            .with_downcast::<ComponentOrigin, _>(|origin| origin.base.origin_y())
+            .unwrap();
+        let instance = self
+            .instance
+            .clone()
+            .expect("mounted origin override owner");
+        instance
+            .with_artboard_mut(|instance| instance.set_origin_y_with_borrowed_host(origin_y, self));
+    }
+
+    pub fn apply_origin_override_occurrence(owner: &CoreHandle) {
+        let origin = owner
+            .with(|owner| {
+                let nested = owner.as_nested_artboard().expect("NestedArtboard owner");
+                nested.instance.as_ref()?;
+                nested.origin_override_child()
+            })
+            .flatten();
+        let Some(origin) = origin else {
+            return;
+        };
+        let origin_x = origin
+            .with_downcast::<ComponentOrigin, _>(|origin| origin.base.origin_x())
+            .unwrap();
+        let instance = owner
+            .with(|owner| owner.as_nested_artboard().unwrap().instance.clone())
+            .flatten()
+            .expect("mounted origin override owner");
+        instance.with_artboard_mut(|instance| instance.set_origin_x(origin_x));
+        let origin_y = origin
+            .with_downcast::<ComponentOrigin, _>(|origin| origin.base.origin_y())
+            .unwrap();
+        let instance = owner
+            .with(|owner| owner.as_nested_artboard().unwrap().instance.clone())
+            .flatten()
+            .expect("mounted origin override owner");
+        instance.with_artboard_mut(|instance| instance.set_origin_y(origin_y));
     }
 
     fn try_schedule_bind_stateful(&mut self) -> bool {
@@ -298,6 +463,37 @@ impl NestedArtboard {
     }
 
     pub fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>) {
+        if let Some((artboard, instance)) =
+            self.prepare_artboard_update(view_model_instance_artboard.clone())
+        {
+            self.referenced_artboard_instance(instance);
+            self.finish_artboard_update(artboard, view_model_instance_artboard);
+        }
+    }
+
+    pub(crate) fn update_artboard_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
+        let prepared = owner
+            .with_mut(|owner| {
+                owner
+                    .as_nested_artboard_mut()
+                    .expect("NestedArtboard host")
+                    .prepare_artboard_update(value.clone())
+            })
+            .expect("live NestedArtboard");
+        if let Some((artboard, instance)) = prepared {
+            Self::nest_instance_occurrence(owner, instance);
+            owner.with_mut(|owner| {
+                let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
+                nested.try_schedule_bind_stateful();
+                nested.finish_artboard_update(artboard, value);
+            });
+        }
+    }
+
+    fn prepare_artboard_update(
+        &mut self,
+        view_model_instance_artboard: Option<CoreHandle>,
+    ) -> Option<(CoreHandle, RuntimeArtboardInstanceHandle)> {
         self.set_host_flag(NestedArtboardHostFlags::ARTBOARD_DATA_BOUND);
 
         let explicit_null = view_model_instance_artboard
@@ -308,7 +504,8 @@ impl NestedArtboard {
                         property
                             .as_view_model_instance_artboard()
                             .is_some_and(|property| {
-                                property.asset().is_none() && property.base.property_value() == -1
+                                property.asset().is_none()
+                                    && property.base.property_value() == u32::MAX
                             })
                     })
                     .unwrap_or(false)
@@ -324,24 +521,28 @@ impl NestedArtboard {
             )
         };
         if !explicit_null && artboard.is_none() {
-            return;
+            return None;
         }
 
         if let Some(instance) = self.artboard_instance_handle(0) {
-            instance.with_artboard_mut(|instance| instance.cleanup_focus_tree());
+            instance.cleanup_focus_tree();
         }
         self.clear_data_context();
         self.clear_nested_animations();
         self.bound_nested_state_machine = None;
 
         if explicit_null {
-            if let Some(instance) = self.instance.as_ref() {
-                instance.with_artboard_mut(|instance| instance.set_host_handle(None));
+            if self.instance.is_none() {
+                if let Some(referenced) = self.artboard_referencer.referenced_artboard() {
+                    referenced.with_downcast_mut::<Artboard, _>(|artboard| {
+                        artboard.set_host_handle(None)
+                    });
+                }
             }
             self.artboard_referencer.set_referenced_artboard(None);
             self.instance = None;
             self.set_active_view_model_instance(None, false);
-            return;
+            return None;
         }
 
         if let Some(artboard) = artboard {
@@ -355,109 +556,110 @@ impl NestedArtboard {
                 && let Some(nested_state_machine) =
                     owner.insert_sibling(NestedStateMachine::default())
             {
-                nested_state_machine.with_downcast_mut::<NestedStateMachine, _>(|machine| {
-                    machine.base.set_animation_id(0)
-                });
+                crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_uint_handle(
+                    &nested_state_machine,
+                    crate::mechanical_port::source::generated::nested_animation_base::NestedAnimationBase::ANIMATION_ID_PROPERTY_KEY as i32,
+                    0,
+                );
                 if let Some(instance) = artboard_instance.as_ref() {
-                    nested_state_machine.with_mut(|machine| {
-                        machine.nested_animation_initialize(instance.downgrade());
-                    });
+                    crate::mechanical_port::source::animation::nested_animation::initialize_animation(&nested_state_machine, instance.downgrade());
                 }
                 self.add_nested_animation_handle(nested_state_machine.clone());
                 self.bound_nested_state_machine = Some(nested_state_machine);
             }
-            self.instance = artboard_instance;
-            self.artboard_referencer
-                .set_referenced_artboard(Some(artboard.clone()));
-
-            if self.base.is_stateful() {
-                let stateful_child = self.find_stateful_child_vmi();
-                let artboard_view_model_id = artboard
-                    .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id())
-                    .unwrap_or_default();
-                let same_view_model = |instance: &CoreHandle| {
-                    instance
-                        .with(|instance| {
-                            instance.as_view_model_instance().is_some_and(|instance| {
-                                instance.base.view_model_id() == artboard_view_model_id
-                            })
-                        })
-                        .unwrap_or(false)
-                };
-                if stateful_child.as_ref().is_some_and(&same_view_model) {
-                    self.set_active_view_model_instance(stateful_child, false);
-                } else if self.owns_active_vmi
-                    && self
-                        .active_view_model_instance
-                        .as_ref()
-                        .is_some_and(&same_view_model)
-                {
-                    // Reuse the already-owned binding for the same ViewModel.
-                } else {
-                    let bound = self
-                        .file
-                        .with_file(|file| {
-                            file.default_artboard_view_model(Some(artboard.clone()))
-                                .map(|model| model.create_default_instance().instance())
-                        })
-                        .flatten()
-                        .flatten();
-                    self.set_active_view_model_instance(bound.clone(), bound.is_some());
-                    if let Some(bound) = bound {
-                        self.file
-                            .with_file(|file| file.complete_view_model_properties(&bound));
-                    }
-                }
-            } else {
-                self.set_active_view_model_instance(None, false);
-            }
-
-            let bound = view_model_instance_artboard.as_ref().and_then(|property| {
-                property
-                    .with(|property| {
-                        property
-                            .as_view_model_instance_artboard()
-                            .and_then(|property| property.bound_view_model_instance())
-                    })
-                    .flatten()
-            });
-            if let Some(bound) = bound {
-                self.bind_view_model_instance(Some(bound), self.data_context.clone());
-            } else if self.try_schedule_bind_stateful() {
-                self.bind_stateful();
-            } else if self.data_context.is_some() && self.view_model_instance.is_none() {
-                self.internal_data_context(self.data_context.clone());
-            } else if self.view_model_instance.is_some() {
-                self.bind_view_model_instance(
-                    self.view_model_instance.clone(),
-                    self.data_context.clone(),
-                );
-            }
-            // Upstream marks the host fully dirty after a runtime swap.
-            self.add_dirt(ComponentDirt::FILTHY);
-
-            let parent_focus_manager = self.parent_artboard_handle().and_then(|parent| {
-                parent
-                    .with_downcast::<Artboard, _>(Artboard::focus_manager_handle)
-                    .flatten()
-            });
-            if let (Some(parent_focus_manager), Some(state_machine)) = (
-                parent_focus_manager,
-                self.bound_nested_state_machine.as_ref(),
-            ) {
-                state_machine.with_downcast_mut::<NestedStateMachine, _>(|state_machine| {
-                    if let Some(instance) = state_machine.state_machine_instance() {
-                        instance.with_instance_mut(|instance| {
-                            instance.set_external_focus_manager_handle(parent_focus_manager)
-                        });
-                    }
-                });
-            }
-            let fallback = crate::mechanical_port::source::core::CoreObject::core(self)
-                .handle()
-                .and_then(FocusData::find_closest_focus_node_handle);
-            self.sync_nested_focus_tree(fallback, false, true);
+            return artboard_instance.map(|instance| (artboard, instance));
         }
+        None
+    }
+
+    fn finish_artboard_update(
+        &mut self,
+        artboard: CoreHandle,
+        view_model_instance_artboard: Option<CoreHandle>,
+    ) {
+        if self.base.is_stateful() {
+            let stateful_child = self.find_stateful_child_vmi();
+            let artboard_view_model_id = artboard
+                .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id())
+                .unwrap_or_default();
+            let same_view_model = |instance: &CoreHandle| {
+                instance
+                    .with(|instance| {
+                        instance.as_view_model_instance().is_some_and(|instance| {
+                            instance.base.view_model_id() == artboard_view_model_id
+                        })
+                    })
+                    .unwrap_or(false)
+            };
+            if stateful_child.as_ref().is_some_and(&same_view_model) {
+                self.set_active_view_model_instance(stateful_child, false);
+            } else if self.owns_active_vmi
+                && self
+                    .active_view_model_instance
+                    .as_ref()
+                    .is_some_and(&same_view_model)
+            {
+                // Reuse the already-owned binding for the same ViewModel.
+            } else {
+                let bound = self
+                    .file
+                    .with_file_mut(|file| {
+                        let model = file.view_model(artboard_view_model_id as usize)?;
+                        file.create_default_view_model_instance(model)
+                    })
+                    .flatten();
+                self.set_active_view_model_instance(bound.clone(), bound.is_some());
+                if let Some(bound) = bound {
+                    self.file.complete_view_model_properties(&bound);
+                }
+            }
+        } else {
+            self.set_active_view_model_instance(None, false);
+        }
+
+        let bound = view_model_instance_artboard.as_ref().and_then(|property| {
+            property
+                .with(|property| {
+                    property
+                        .as_view_model_instance_artboard()
+                        .and_then(|property| property.bound_view_model_instance())
+                })
+                .flatten()
+        });
+        if let Some(bound) = bound {
+            self.bind_view_model_instance(Some(bound), self.data_context.clone());
+        } else if self.try_schedule_bind_stateful() {
+            self.bind_stateful();
+        } else if self.data_context.is_some() && self.view_model_instance.is_none() {
+            self.internal_data_context(self.data_context.clone());
+        } else if self.view_model_instance.is_some() {
+            self.bind_view_model_instance(
+                self.view_model_instance.clone(),
+                self.data_context.clone(),
+            );
+        }
+        // Upstream marks the host fully dirty after a runtime swap.
+        self.add_dirt(ComponentDirt::FILTHY);
+
+        let parent_focus_manager = self.parent_artboard_handle().and_then(|parent| {
+            parent
+                .with_downcast::<Artboard, _>(Artboard::focus_manager_handle)
+                .flatten()
+        });
+        if let (Some(parent_focus_manager), Some(state_machine)) = (
+            parent_focus_manager,
+            self.bound_nested_state_machine.as_ref(),
+        ) {
+            state_machine.with_downcast_mut::<NestedStateMachine, _>(|state_machine| {
+                if let Some(instance) = state_machine.state_machine_instance() {
+                    instance.with_instance_mut(|instance| {
+                        instance.set_external_focus_manager_handle(parent_focus_manager)
+                    });
+                }
+            });
+        }
+        let fallback = FocusData::find_closest_focus_node_from_parent(self.parent_handle());
+        self.sync_nested_focus_tree(fallback, false, true);
     }
 
     fn detect_artboard_data_binding(&mut self) {
@@ -476,7 +678,8 @@ impl NestedArtboard {
             .unwrap_or_default();
         for data_bind in data_binds {
             let matches = data_bind
-                .with_downcast::<DataBind, _>(|data_bind| {
+                .with(|data_bind| {
+                    let data_bind = data_bind.as_data_bind().expect("DataBind-derived owner");
                     data_bind.target().as_ref() == Some(&owner)
                         && data_bind.base.property_key()
                             == NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY as u32
@@ -513,14 +716,14 @@ impl NestedArtboard {
         if let Some(previous) = self.focus_scope_manager.replace(focus_manager.clone()) {
             previous.with_focus_manager_mut(|manager| manager.remove_child(&scope));
         }
-        focus_manager.with_focus_manager_mut(|manager| manager.add_child(parent_node, scope));
+        focus_manager.with_focus_manager_mut(|manager| manager.add_child(parent_node, scope, None));
     }
 
-    pub fn draw(&mut self, renderer: &mut dyn Renderer) {
+    pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.needs_save_operation() {
             renderer.save();
         }
-        renderer.transform(&self.world_transform());
+        renderer.transform(nuxie_render_api::Mat2D(*self.world_transform().values()));
         if let Some(instance) = &self.instance {
             instance.draw_internal(renderer);
         }
@@ -539,7 +742,7 @@ impl NestedArtboard {
             .handle()
             .expect("arena-owned NestedArtboard");
         hit_info.mounts.push(mounted);
-        let mounted_translation = instance.with_artboard(make_translate);
+        let mounted_translation = instance.with_artboard(|instance| make_translate(&instance.base));
         let mounted_transform = *transform * self.world_transform() * mounted_translation;
         if let Some(component) = instance
             .with_artboard_mut(|instance| instance.hit_test_handle(hit_info, &mounted_transform))
@@ -559,11 +762,10 @@ impl NestedArtboard {
         let mounted_position = self.world_transform() * *position;
         self.parent().is_some_and(|parent| {
             parent
-                .with(|parent| {
-                    parent.as_container_component().is_some_and(|parent| {
-                        parent.hit_test_point(&mounted_position, skip_on_unclipped, false)
-                    })
+                .with_mut(|parent| {
+                    parent.component_hit_test_point(&mounted_position, skip_on_unclipped, false)
                 })
+                .flatten()
                 .unwrap_or(false)
         })
     }
@@ -573,10 +775,10 @@ impl NestedArtboard {
         point: &Vec2D,
         _artboard_instance: RuntimeArtboardInstanceWeakHandle,
     ) -> Vec2D {
-        let local = Vec2D::transform_mat2d(*point, self.world_transform());
+        let local = Vec2D::transform_mat2d(*point, &self.world_transform());
         self.parent_artboard_handle()
             .and_then(|artboard| {
-                artboard.with_downcast::<Artboard, _>(|artboard| artboard.root_transform(local))
+                artboard.with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(local))
             })
             .unwrap_or(local)
     }
@@ -591,9 +793,9 @@ impl NestedArtboard {
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         self.data_bind_path_referencer
             .import_data_bind_path(import_stack);
-        let Some(backboard_importer) =
-            import_stack.latest::<BackboardImporter>(BackboardImporter::TYPE_KEY)
-        else {
+        let Some(backboard_importer) = import_stack.latest::<BackboardImporter>(
+            crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
+        ) else {
             return StatusCode::MissingObject;
         };
         let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
@@ -608,92 +810,200 @@ impl NestedArtboard {
         self.nested_animations.push(nested_animation);
     }
 
-    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        if let Some(instance) = self.instance.clone() {
-            let weak = instance.downgrade();
-            for animation in &self.nested_animations {
-                animation.with_mut(|animation| {
-                    animation.nested_animation_initialize(weak.clone());
-                });
+    pub fn on_added_clean_occurrence(
+        owner: &CoreHandle,
+        context: &mut dyn CoreContext,
+    ) -> StatusCode {
+        let has_instance = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .expect("NestedArtboard owner")
+                    .instance
+                    .is_some()
+            })
+            .expect("live NestedArtboard");
+        if has_instance {
+            let animations = owner
+                .with(|owner| {
+                    owner
+                        .as_nested_artboard()
+                        .expect("NestedArtboard owner")
+                        .nested_animations
+                        .clone()
+                })
+                .expect("live NestedArtboard");
+            for animation in animations {
+                let instance = owner
+                    .with(|owner| {
+                        owner
+                            .as_nested_artboard()
+                            .expect("NestedArtboard owner")
+                            .instance
+                            .clone()
+                    })
+                    .expect("live NestedArtboard")
+                    .expect("mounted nested instance");
+                crate::mechanical_port::source::animation::nested_animation::initialize_animation(
+                    &animation,
+                    instance.downgrade(),
+                );
             }
-            let host = crate::mechanical_port::source::core::CoreObject::core(self).handle();
-            instance.with_artboard_mut(|instance| instance.set_host_handle(host));
-            self.apply_origin_override();
+            let (instance, parent) = owner
+                .with(|owner| {
+                    let nested = owner.as_nested_artboard().expect("NestedArtboard owner");
+                    (
+                        nested.instance.clone().expect("mounted nested instance"),
+                        nested.parent_artboard_handle(),
+                    )
+                })
+                .expect("live NestedArtboard");
+            // host() synchronously rebuilds the parent's layout children, which
+            // visits this same NestedArtboard and the newly hosted child.
+            Artboard::set_host_occurrence(&instance.core_handle(), Some(owner.clone()), parent);
+            Self::apply_origin_override_occurrence(owner);
         }
-
-        for child in self.children() {
-            let Some(view_model) = child
+        let children = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .expect("NestedArtboard owner")
+                    .children()
+                    .to_vec()
+            })
+            .expect("live NestedArtboard");
+        for child in children {
+            if !child.is_type_of(crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase::TYPE_KEY) { continue; }
+            let view_model = child
                 .with(|child| {
                     child
                         .as_view_model_instance()
                         .and_then(|instance| instance.get_view_model())
                 })
-                .flatten()
-            else {
-                continue;
-            };
+                .flatten();
             let view_model_type = view_model
-                .with(|view_model| {
-                    view_model.as_view_model().and_then(|view_model| {
-                        ViewModelType::from_u32(view_model.base.view_model_type())
-                    })
+                .and_then(|view_model| {
+                    view_model
+                        .with(|view_model| {
+                            view_model
+                                .as_view_model()
+                                .map(|view_model| view_model.base.view_model_type())
+                        })
+                        .flatten()
                 })
-                .flatten()
-                .unwrap_or(ViewModelType::Standard);
-            self.file
-                .with_file(|file| file.complete_view_model_properties(&child));
-            if view_model_type == ViewModelType::Global {
-                self.global_view_model_instances.push(child);
-            } else if self.active_view_model_instance.is_none() {
-                self.active_view_model_instance = Some(child);
-                self.owns_active_vmi = false;
-            }
+                .unwrap_or(ViewModelType::Standard as u32);
+            let file = owner
+                .with(|owner| {
+                    owner
+                        .as_nested_artboard()
+                        .expect("NestedArtboard owner")
+                        .file
+                        .clone()
+                })
+                .expect("live NestedArtboard");
+            file.complete_view_model_properties(&child);
+            owner
+                .with_mut(|owner| {
+                    let nested = owner
+                        .as_nested_artboard_mut()
+                        .expect("NestedArtboard owner");
+                    if view_model_type == ViewModelType::Global as u32 {
+                        nested.global_view_model_instances.push(child);
+                    } else if nested.active_view_model_instance.is_none() {
+                        nested.active_view_model_instance = Some(child);
+                        nested.owns_active_vmi = false;
+                    }
+                })
+                .expect("live NestedArtboard");
         }
-        self.try_schedule_bind_stateful();
-        self.detect_artboard_data_binding();
+        owner
+            .with_mut(|owner| {
+                let nested = owner
+                    .as_nested_artboard_mut()
+                    .expect("NestedArtboard owner");
+                nested.try_schedule_bind_stateful();
+                nested.detect_artboard_data_binding();
+            })
+            .expect("live NestedArtboard");
+        owner
+            .with_mut(|owner| owner.on_added_clean(context))
+            .expect("live NestedArtboard")
+    }
 
+    pub(crate) fn on_added_clean_after_animation_initialization(
+        &mut self,
+        context: &mut dyn CoreContext,
+    ) -> StatusCode {
         self.base.base.on_added_clean(context)
     }
 
-    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
-        let Some(instance) = self.instance.clone() else {
+    pub(crate) fn update_after_transform_occurrence(owner: &CoreHandle, value: ComponentDirt) {
+        let Some((referenced, instance)) = owner
+            .with(|owner| {
+                let nested = owner.as_nested_artboard()?;
+                Some((nested.source_artboard()?, nested.instance.clone()))
+            })
+            .flatten()
+        else {
             return;
         };
-        if value.contains(ComponentDirt::WORLD_TRANSFORM) {
-            instance.with_artboard_mut(ArtboardInstance::mark_semantic_boundary_transform_dirty);
+        if value.contains(ComponentDirt::WORLD_TRANSFORM)
+            && let Some(instance) = instance
+        {
+            instance
+                .with_artboard_mut(|instance| instance.mark_semantic_boundary_transform_dirty());
         }
         if value.contains(ComponentDirt::RENDER_OPACITY) {
-            let opacity = self.render_opacity();
-            instance.with_artboard_mut(|instance| instance.set_host_opacity(opacity));
+            let opacity = owner
+                .with(|owner| {
+                    owner
+                        .as_nested_artboard()
+                        .expect("NestedArtboard owner")
+                        .render_opacity()
+                })
+                .expect("live NestedArtboard");
+            referenced
+                .with_downcast_mut::<Artboard, _>(|artboard| artboard.set_host_opacity(opacity));
         }
         let needs_update = value.contains(ComponentDirt::COMPONENTS)
-            || (self.base.is_paused()
-                && instance.with_artboard(|instance| instance.has_dirt(ComponentDirt::COMPONENTS)));
+            || (owner
+                .with(|owner| {
+                    owner
+                        .as_nested_artboard()
+                        .expect("NestedArtboard owner")
+                        .base
+                        .is_paused()
+                })
+                .expect("live NestedArtboard")
+                && referenced
+                    .with_downcast::<Artboard, _>(Artboard::has_component_dirt)
+                    .expect("referenced Artboard"));
         if needs_update {
-            instance.update_pass(false);
+            // Child layout may synchronously dirty this host. Keep the host's
+            // slot available, as the upstream pointer call does.
+            Artboard::update_pass_handle(&referenced, false);
         }
     }
 
-    pub fn collapse(&mut self, value: bool) -> bool {
-        if !self.base.base.collapse(value) {
-            return false;
+    pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle, value: bool) {
+        let instance = owner
+            .with(|object| {
+                object
+                    .as_nested_artboard()
+                    .expect("NestedArtboard collapse owner")
+                    .instance
+                    .clone()
+            })
+            .expect("live NestedArtboard collapse owner");
+        if let Some(instance) = instance {
+            instance.collapse_semantic_boundary(value);
         }
-        self.collapse_after_super(value);
-        true
-    }
-
-    pub(crate) fn collapse_after_super(&mut self, value: bool) {
-        let Some(instance) = self.instance.as_ref() else {
-            return;
-        };
-        instance.with_artboard_mut(|instance| instance.collapse_semantic_boundary(value));
     }
 
     pub fn has_nested_state_machines(&self) -> bool {
         self.nested_animations.iter().any(|animation| {
             animation
-                .with_downcast::<NestedStateMachine, _>(|_| ())
-                .is_some()
+                .is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY)
         })
     }
 
@@ -761,9 +1071,10 @@ impl NestedArtboard {
         if self.artboard_referencer.referenced_artboard().is_none() {
             return false;
         }
-        let Some(inverse) = self.world_transform().invert() else {
+        let mut inverse = Mat2D::default();
+        if !self.world_transform().invert(&mut inverse) {
             return false;
-        };
+        }
         *local = inverse * world;
         true
     }
@@ -787,10 +1098,10 @@ impl NestedArtboard {
         };
         Vec2D::new(
             maximum_width.min(self.instance.as_ref().map_or(0.0, |instance| {
-                instance.with_artboard(ArtboardInstance::width)
+                instance.with_artboard(|instance| instance.width())
             })),
             maximum_height.min(self.instance.as_ref().map_or(0.0, |instance| {
-                instance.with_artboard(ArtboardInstance::height)
+                instance.with_artboard(|instance| instance.height())
             })),
         )
     }
@@ -806,6 +1117,11 @@ impl NestedArtboard {
 
     pub fn decode_data_bind_path_ids(&mut self, value: &[u8]) {
         self.data_bind_path_referencer.decode_data_bind_path(value);
+    }
+
+    pub fn copy_data_bind_path_ids(&mut self, object: &NestedArtboard) {
+        self.data_bind_path_referencer
+            .copy_data_bind_path(&object.data_bind_path_referencer);
     }
 
     pub fn internal_data_context(&mut self, value: Option<RuntimeDataContextHandle>) {
@@ -845,16 +1161,24 @@ impl NestedArtboard {
         }
     }
 
-    pub fn relink_data_context(&mut self, view_model_instance: CoreHandle) {
-        self.view_model_instance = Some(view_model_instance.clone());
+    pub fn relink_data_context(&mut self, view_model_instance: Option<CoreHandle>) {
+        self.view_model_instance = view_model_instance.clone();
         if self.base.is_stateful() {
             return;
         }
         let Some(instance) = self.instance.as_ref() else {
             return;
         };
-        let parent = self.data_context.clone();
-        instance.bind_view_model_instance_with_parent(Some(view_model_instance), parent);
+        if let Some(context) = instance.data_context() {
+            if context.with_context(|context| context.main_view_model_instance())
+                != view_model_instance
+            {
+                context.with_context_mut(|context| {
+                    context.set_view_model_instance(view_model_instance)
+                });
+            }
+        }
+        instance.relink_data_context();
     }
 
     pub fn clear_data_context(&mut self) {
@@ -876,6 +1200,18 @@ impl NestedArtboard {
             if let Some(instance) = self.instance.as_ref() {
                 instance.update_data_binds(true);
             }
+        }
+    }
+
+    pub(crate) fn update_data_binds_occurrence(owner: &CoreHandle) {
+        let instance = owner
+            .with(|owner| {
+                let nested = owner.as_nested_artboard().expect("NestedArtboard host");
+                nested.instance.clone().filter(|_| !nested.base.is_paused())
+            })
+            .flatten();
+        if let Some(instance) = instance {
+            instance.update_data_binds(true);
         }
     }
 
@@ -937,50 +1273,82 @@ impl NestedArtboard {
         local_elapsed_seconds
     }
 
-    pub fn advance_component_impl(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
-        if self.artboard_referencer.referenced_artboard().is_none()
-            || self.is_collapsed()
-            || self.base.is_paused()
-        {
+    pub fn advance_component_occurrence(
+        owner: &CoreHandle,
+        elapsed_seconds: f32,
+        flags: AdvanceFlags,
+    ) -> bool {
+        let stopped = owner
+            .with(|owner| {
+                let owner = owner.as_nested_artboard().expect("NestedArtboard owner");
+                owner.artboard_referencer.referenced_artboard().is_none()
+                    || owner.is_collapsed()
+                    || owner.base.is_paused()
+            })
+            .expect("live NestedArtboard owner");
+        if stopped {
             return false;
         }
-        if self.has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING) {
-            self.bind_stateful();
-        }
+        owner.with_mut(|owner| {
+            let owner = owner
+                .as_nested_artboard_mut()
+                .expect("NestedArtboard owner");
+            if owner.has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING) {
+                owner.bind_stateful();
+            }
+        });
         let mut keep_going = false;
         let advance_nested =
             flags.0 & AdvanceFlags::ADVANCE_NESTED.0 == AdvanceFlags::ADVANCE_NESTED.0;
-        let local_elapsed_seconds = self.calculate_local_elapsed_seconds(elapsed_seconds);
+        let (local_elapsed_seconds, quantize) = owner
+            .with_mut(|owner| {
+                let owner = owner
+                    .as_nested_artboard_mut()
+                    .expect("NestedArtboard owner");
+                (
+                    owner.calculate_local_elapsed_seconds(elapsed_seconds),
+                    owner.base.quantize(),
+                )
+            })
+            .expect("live NestedArtboard owner");
         let new_frame = flags.0 & AdvanceFlags::NEW_FRAME.0 == AdvanceFlags::NEW_FRAME.0;
-        if local_elapsed_seconds == 0.0 && self.base.quantize() >= 0.0 && new_frame {
+        if local_elapsed_seconds == 0.0 && quantize >= 0.0 && new_frame {
             return true;
         }
         if advance_nested {
-            for animation in &self.nested_animations {
+            let animation_count = owner
+                .with(|owner| {
+                    owner
+                        .as_nested_artboard()
+                        .expect("NestedArtboard owner")
+                        .nested_animations
+                        .len()
+                })
+                .expect("live NestedArtboard owner");
+            for index in 0..animation_count {
+                let animation = owner
+                    .with(|owner| {
+                        owner
+                            .as_nested_artboard()
+                            .expect("NestedArtboard owner")
+                            .nested_animations
+                            .get(index)
+                            .cloned()
+                    })
+                    .flatten()
+                    .expect("nested animation array remains stable during advance");
                 if !new_frame {
-                    let changed = animation
-                        .with_downcast_mut::<NestedStateMachine, _>(
-                            NestedStateMachine::try_change_state,
-                        )
-                        .unwrap_or(false);
+                    let changed = animation.with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
+                        .flatten().is_some_and(|machine| machine.with_instance_mut(
+                            crate::mechanical_port::source::animation::state_machine_instance::StateMachineInstance::try_change_state));
                     if changed
-                        && animation
-                            .with_mut(|animation| {
-                                animation
-                                    .nested_animation_advance(local_elapsed_seconds, new_frame)
-                                    .unwrap_or(false)
-                            })
-                            .unwrap_or(false)
+                        && crate::mechanical_port::source::generated::core_registry::nested_animation_advance_handle(
+                            &animation, local_elapsed_seconds, new_frame).unwrap_or(false)
                     {
                         keep_going = true;
                     }
-                } else if animation
-                    .with_mut(|animation| {
-                        animation
-                            .nested_animation_advance(local_elapsed_seconds, new_frame)
-                            .unwrap_or(false)
-                    })
-                    .unwrap_or(false)
+                } else if crate::mechanical_port::source::generated::core_registry::nested_animation_advance_handle(
+                    &animation, local_elapsed_seconds, new_frame).unwrap_or(false)
                 {
                     keep_going = true;
                 }
@@ -988,12 +1356,26 @@ impl NestedArtboard {
         }
 
         let advancing_flags = AdvanceFlags(flags.0 & !AdvanceFlags::IS_ROOT.0);
-        if let Some(instance) = self.instance.as_ref() {
+        let instance = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .expect("NestedArtboard owner")
+                    .instance
+                    .clone()
+            })
+            .flatten();
+        if let Some(instance) = instance {
             if instance.advance_internal(local_elapsed_seconds, advancing_flags) {
                 keep_going = true;
             }
-            if instance.with_artboard(|instance| instance.has_dirt(ComponentDirt::COMPONENTS)) {
-                self.add_dirt(ComponentDirt::COMPONENTS);
+            if instance.with_artboard(|instance| instance.has_component_dirt()) {
+                owner.with_mut(|owner| {
+                    owner
+                        .as_nested_artboard_mut()
+                        .expect("NestedArtboard owner")
+                        .add_dirt(ComponentDirt::COMPONENTS)
+                });
             }
         }
         keep_going
@@ -1001,7 +1383,7 @@ impl NestedArtboard {
 
     pub fn reset_impl(&mut self) {
         if let Some(instance) = self.instance.as_ref() {
-            instance.with_artboard_mut(ArtboardInstance::reset);
+            instance.with_artboard_mut(|instance| instance.reset());
         }
         if let Some(active) = self.active_view_model_instance.as_ref() {
             active.with_mut(|active| {
@@ -1030,6 +1412,11 @@ impl NestedArtboard {
         self.try_schedule_bind_stateful();
     }
 
+    pub fn referenced_artboard_instance(&mut self, instance: RuntimeArtboardInstanceHandle) {
+        self.nest_instance(instance);
+        self.try_schedule_bind_stateful();
+    }
+
     pub fn artboard_count(&self) -> usize {
         1
     }
@@ -1046,19 +1433,12 @@ impl NestedArtboard {
         self.artboard_instance_handle(0)
     }
 
-    pub fn advance_component_default(&mut self, elapsed_seconds: f32) -> bool {
-        self.advance_component_impl(
-            elapsed_seconds,
-            AdvanceFlags(AdvanceFlags::ANIMATE.0 | AdvanceFlags::NEW_FRAME.0),
-        )
-    }
-
     pub fn source_artboard(&self) -> Option<CoreHandle> {
         self.artboard_referencer.referenced_artboard()
     }
 
     pub fn parent_artboard_handle(&self) -> Option<CoreHandle> {
-        self.base.base.as_component().artboard_handle()
+        self.base.base.artboard_handle()
     }
 
     pub fn mark_host_transform_dirty(&mut self) {
@@ -1108,7 +1488,7 @@ impl NestedArtboard {
     }
 
     fn parent(&self) -> Option<CoreHandle> {
-        self.base.base.as_component().parent_handle()
+        self.base.base.parent_handle()
     }
 
     fn children(&self) -> Vec<CoreHandle> {
@@ -1120,7 +1500,7 @@ impl NestedArtboard {
     }
 
     fn world_transform(&self) -> Mat2D {
-        self.base.base.world_transform()
+        *self.base.base.world_transform()
     }
 
     fn needs_save_operation(&self) -> bool {
@@ -1128,7 +1508,7 @@ impl NestedArtboard {
     }
 
     fn add_dirt(&mut self, dirt: ComponentDirt) {
-        self.base.base.base.add_dirt(dirt);
+        self.base.base.base.add_dirt(dirt, false);
     }
 
     fn is_collapsed(&self) -> bool {
@@ -1140,12 +1520,6 @@ impl NestedArtboard {
     }
 }
 
-impl AdvancingComponent for NestedArtboard {
-    fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
-        self.advance_component_impl(elapsed_seconds, flags)
-    }
-}
-
 impl crate::mechanical_port::source::resetting_component::ResettingComponent for NestedArtboard {
     fn reset(&mut self) {
         self.reset_impl();
@@ -1153,6 +1527,10 @@ impl crate::mechanical_port::source::resetting_component::ResettingComponent for
 }
 
 impl ArtboardHost for NestedArtboard {
+    fn data_bind_path_referencer(&self) -> &DataBindPathReferencer {
+        &self.data_bind_path_referencer
+    }
+
     fn artboard_count(&self) -> usize {
         NestedArtboard::artboard_count(self)
     }
@@ -1232,7 +1610,7 @@ impl ArtboardHost for NestedArtboard {
         crate::mechanical_port::source::core::CoreObject::core(self).handle()
     }
 
-    fn relink_data_context(&mut self, view_model_instance: CoreHandle) {
+    fn relink_data_context(&mut self, view_model_instance: Option<CoreHandle>) {
         NestedArtboard::relink_data_context(self, view_model_instance);
     }
 
@@ -1270,6 +1648,10 @@ impl CoreArtboardReferencer for NestedArtboard {
 }
 
 impl Focusable for NestedArtboard {
+    fn focusable_artboard(&self) -> Option<CoreHandle> {
+        NestedArtboard::focusable_artboard(self)
+    }
+
     fn key_input(
         &mut self,
         key: Key,
@@ -1284,7 +1666,11 @@ impl Focusable for NestedArtboard {
         NestedArtboard::text_input(self, text)
     }
 
-    fn gamepad_dispatch(&mut self, _invocation: &dyn core::any::Any) -> bool {
+    fn gamepad_dispatch(
+        &mut self,
+        _invocation: &crate::mechanical_port::source::animation::listener_invocation::ListenerInvocation,
+        _out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
+    ) -> bool {
         false
     }
 
@@ -1305,13 +1691,17 @@ impl NestedArtboardBaseCallbacks for NestedArtboard {
     fn decode_data_bind_path_ids(&mut self, value: &[u8]) {
         NestedArtboard::decode_data_bind_path_ids(self, value);
     }
+
+    fn copy_data_bind_path_ids(&mut self, object: &NestedArtboard) {
+        NestedArtboard::copy_data_bind_path_ids(self, object);
+    }
 }
 
 fn make_translate(artboard: &Artboard) -> Mat2D {
-    Mat2D::from_translate(Vec2D::new(
+    Mat2D::from_translate(
         -artboard.base.origin_x() * artboard.base.width(),
         -artboard.base.origin_y() * artboard.base.height(),
-    ))
+    )
 }
 
 impl std::ops::Deref for NestedArtboard {

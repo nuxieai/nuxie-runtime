@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::core::{
-    binary_reader::BinaryReader, field_types::core_string_type::CoreStringType, Core,
+    Core, binary_reader::BinaryReader, field_types::core_string_type::CoreStringType,
 };
 
 pub trait AssetBaseCallbacks {

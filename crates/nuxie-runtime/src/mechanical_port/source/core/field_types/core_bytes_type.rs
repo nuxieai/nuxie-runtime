@@ -7,12 +7,12 @@ impl CoreBytesType {
     pub const ID: i32 = 1;
 
     pub fn deserialize<'a>(reader: &'a mut BinaryReader) -> Span<'a, u8> {
-        reader.read_bytes()
+        Span::new(reader.read_bytes())
     }
 
     #[cfg(feature = "tools")]
     pub fn deserialize_rev<'a>(reader: &'a mut BinaryReader) -> Span<'a, u8> {
         let length = reader.length_in_bytes();
-        reader.read_bytes_length(length)
+        Span::new(reader.read_bytes_length(length))
     }
 }

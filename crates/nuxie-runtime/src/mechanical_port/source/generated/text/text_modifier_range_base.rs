@@ -86,7 +86,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.modify_from_changed();
-        callbacks.notify_property_changed(Self::MODIFY_FROM_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MODIFY_FROM_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_modify_from_value(&mut self, value: f32) -> bool {
@@ -108,7 +111,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.modify_to_changed();
-        callbacks.notify_property_changed(Self::MODIFY_TO_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MODIFY_TO_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_modify_to_value(&mut self, value: f32) -> bool {
@@ -130,7 +136,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.strength_changed();
-        callbacks.notify_property_changed(Self::STRENGTH_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::STRENGTH_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_strength_value(&mut self, value: f32) -> bool {
@@ -152,7 +161,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.units_value_changed();
-        callbacks.notify_property_changed(Self::UNITS_VALUE_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::UNITS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_units_value_value(&mut self, value: u32) -> bool {
@@ -174,7 +186,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.type_value_changed();
-        callbacks.notify_property_changed(Self::TYPE_VALUE_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TYPE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_type_value_value(&mut self, value: u32) -> bool {
@@ -196,7 +211,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.mode_value_changed();
-        callbacks.notify_property_changed(Self::MODE_VALUE_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MODE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_mode_value_value(&mut self, value: u32) -> bool {
@@ -214,7 +232,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.clamp_changed();
-        callbacks.notify_property_changed(Self::CLAMP_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::CLAMP_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_clamp_value(&mut self, value: bool) -> bool {
@@ -236,7 +257,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.falloff_from_changed();
-        callbacks.notify_property_changed(Self::FALLOFF_FROM_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FALLOFF_FROM_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_falloff_from_value(&mut self, value: f32) -> bool {
@@ -258,7 +282,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.falloff_to_changed();
-        callbacks.notify_property_changed(Self::FALLOFF_TO_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FALLOFF_TO_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_falloff_to_value(&mut self, value: f32) -> bool {
@@ -276,7 +303,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.offset_changed();
-        callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OFFSET_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_offset_value(&mut self, value: f32) -> bool {
@@ -294,7 +324,10 @@ impl TextModifierRangeBase {
             return;
         }
         callbacks.run_id_changed();
-        callbacks.notify_property_changed(Self::RUN_ID_PROPERTY_KEY);
+        TextModifierRangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::RUN_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_run_id_value(&mut self, value: u32) -> bool {

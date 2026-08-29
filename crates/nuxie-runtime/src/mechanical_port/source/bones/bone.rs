@@ -2,21 +2,29 @@ use crate::mechanical_port::source::{
     component::Component,
     core::CoreHandle,
     core_context::CoreContext,
-    generated::bones::bone_base::{BoneBase, BoneBaseCallbacks},
+    generated::{bones::bone_base::BoneBase, core_registry::CoreCapabilities},
     math::vec2d::Vec2D,
     status_code::StatusCode,
     transform_component::TransformComponent,
 };
 
-struct SilentBoneCallbacks;
-impl BoneBaseCallbacks for SilentBoneCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
-}
-
 pub struct Bone {
     pub base: BoneBase,
     child_bones: Vec<CoreHandle>,
     peer_constraints: Vec<CoreHandle>,
+}
+
+impl std::ops::Deref for Bone {
+    type Target = BoneBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Bone {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
 }
 
 impl Default for Bone {
@@ -73,7 +81,12 @@ impl Bone {
             return StatusCode::MissingObject;
         }
         parent
-            .with_downcast_mut::<Bone, _>(|bone| bone.add_child_bone(this))
+            .with_mut(|parent| {
+                parent
+                    .as_bone_mut()
+                    .map(|parent| parent.add_child_bone(this))
+            })
+            .flatten()
             .map_or(StatusCode::MissingObject, |_| StatusCode::Ok)
     }
 
@@ -82,11 +95,9 @@ impl Bone {
     }
 
     pub fn set_length(&mut self, value: f32) {
-        if self.base.length() == value {
+        if !self.base.set_length_value(value) {
             return;
         }
-        let mut callbacks = SilentBoneCallbacks;
-        self.base.set_length(value, &mut callbacks);
         self.length_changed();
         self.core_mut()
             .notify_property_changed(BoneBase::LENGTH_PROPERTY_KEY);
@@ -116,11 +127,8 @@ impl Bone {
     }
 
     pub fn tip_world_translation(&self) -> Vec2D {
-        self.transform_component()
-            .base
-            .base
-            .world_transform()
-            .transform_point(Vec2D::new(self.base.length(), 0.0))
+        *self.transform_component().base.base.world_transform()
+            * Vec2D::new(self.base.length(), 0.0)
     }
 
     pub fn add_peer_constraint(&mut self, peer: CoreHandle) {
@@ -135,5 +143,82 @@ impl Bone {
 impl crate::mechanical_port::source::generated::bones::bone_base::BoneBaseCallbacks for Bone {
     fn notify_property_changed(&mut self, key: u16) {
         self.base.notify_property_changed(key);
+    }
+    fn length_changed(&mut self) {
+        Bone::length_changed(self);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        bones::root_bone::RootBone, component_dirt::ComponentDirt, core::CoreArena,
+        generated::core_registry::CoreRegistry,
+    };
+
+    struct TestContext {
+        arena: CoreArena,
+        handles: Vec<CoreHandle>,
+    }
+
+    impl CoreContext for TestContext {
+        fn core_arena(&self) -> &CoreArena {
+            &self.arena
+        }
+
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+            self.handles.get(id as usize).cloned()
+        }
+    }
+
+    #[test]
+    fn root_bone_child_registration_propagates_length_dirt() {
+        let arena = CoreArena::default();
+        let root = arena.insert(RootBone::default());
+        let child = arena.insert(Bone::default());
+        let mut context = TestContext {
+            arena: arena.clone(),
+            handles: vec![root.clone(), child.clone()],
+        };
+
+        let status = child
+            .with_mut(|child| {
+                child
+                    .lifecycle_on_added_clean(&mut context)
+                    .expect("Bone supplies its lifecycle owner")
+            })
+            .expect("child Bone remains live");
+        assert_eq!(status, StatusCode::Ok);
+        assert!(
+            root.with(|root| {
+                root.as_bone()
+                    .expect("RootBone has a Bone base view")
+                    .child_bones()
+                    .contains(&child)
+            })
+            .expect("RootBone remains live")
+        );
+
+        child
+            .with_mut(|child| {
+                child
+                    .as_component_mut()
+                    .expect("Bone is a Component")
+                    .set_dirt(ComponentDirt::NONE)
+            })
+            .expect("child Bone remains live");
+        assert!(CoreRegistry::set_double_handle(
+            &root,
+            BoneBase::LENGTH_PROPERTY_KEY.into(),
+            16.43033,
+        ));
+        child
+            .with(|child| {
+                let child = child.as_component().expect("Bone is a Component");
+                assert!(child.has_dirt(ComponentDirt::TRANSFORM));
+                assert!(child.has_dirt(ComponentDirt::WORLD_TRANSFORM));
+            })
+            .expect("child Bone remains live");
     }
 }

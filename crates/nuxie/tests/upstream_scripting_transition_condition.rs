@@ -4,7 +4,10 @@
 
 use std::path::PathBuf;
 
-use nuxie::{File, PersistentFactory};
+use nuxie::{
+    File, FileImportLimits, PersistentFactory, ScriptExecutionLimits, ViewModelInstanceRuntime,
+    import_unsigned_scripted,
+};
 use nuxie_render_api::SerializingFactory;
 use silver_corpus::{compare_sriv, parse_sriv};
 
@@ -19,68 +22,56 @@ fn pinned_bytes(directory: &str, name: &str) -> Vec<u8> {
 }
 
 #[test]
-#[ignore = "expected-red: frame 1 operation 30 expects color but live scripted transition emits save"]
 fn scripted_transition_condition() {
-    let file = File::import_with_unsigned_scripts(&pinned_bytes(
-        "assets",
-        "scripted_transition_condition.riv",
-    ))
-    .expect("scripted_transition_condition.riv imports with trusted scripts");
-    let artboard = file.default_artboard().expect("default artboard");
-    let mut instance = artboard
-        .instantiate()
-        .expect("default artboard instantiates");
-    let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = instance
-        .instantiate_view_model()
-        .expect("artboard ViewModel instance");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
-    instance
-        .initialize_renderer(&mut silver)
-        .expect("renderer and File script VM initialize");
-    let (width, height) = instance.artboard_dimensions();
+    let scripted = import_unsigned_scripted(
+        &pinned_bytes("assets", "scripted_transition_condition.riv"),
+        &mut silver,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .expect("scripted_transition_condition.riv imports with trusted scripts");
+    let file = scripted.native_file();
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let state_machine = artboard.state_machine_at(0).expect("state machine 0");
+    let view_model = file
+        .with_file(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+                .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
+        .expect("artboard ViewModel instance");
+    state_machine
+        .with_instance_mut(|machine| machine.bind_view_model_instance(view_model.instance()));
+    artboard.bind_view_model_instance(Some(view_model.instance()));
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
     silver.borrow_mut().frame_size(width as u32, height as u32);
 
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("initial scripted advance");
+    state_machine.advance_and_apply(0.1);
     let mut renderer = silver.borrow().make_renderer();
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("initial draw");
+    artboard.draw(&mut renderer);
 
     silver.borrow_mut().add_frame();
-    assert!(view_model.set_bool("timelineBool", true));
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.016,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("timeline transition advance");
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("timeline transition draw");
+    let timeline = view_model
+        .property_boolean("timelineBool")
+        .expect("timelineBool property");
+    timeline.set_value(true);
+    assert!(timeline.value());
+    state_machine.advance_and_apply(0.016);
+    artboard.draw(&mut renderer);
 
     silver.borrow_mut().add_frame();
-    assert!(view_model.set_bool("anyStateBool", true));
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.016,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("any-state transition advance");
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("any-state transition draw");
+    let any_state = view_model
+        .property_boolean("anyStateBool")
+        .expect("anyStateBool property");
+    any_state.set_value(true);
+    assert!(any_state.value());
+    state_machine.advance_and_apply(0.016);
+    artboard.draw(&mut renderer);
 
     let actual = parse_sriv(&silver.borrow().bytes()).expect("valid Rust SRIV stream");
     let expected = parse_sriv(&pinned_bytes(

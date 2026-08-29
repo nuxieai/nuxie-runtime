@@ -1,11 +1,12 @@
 use crate::mechanical_port::source::{
     constraints::constraint::get_parent_world,
     generated::{
-        constraints::rotation_constraint_base::{RotationConstraintBase, TransformSpace},
+        constraints::rotation_constraint_base::RotationConstraintBase,
         core_registry::CoreCapabilities,
     },
     math::{mat2d::Mat2D, math_types, transform_components::TransformComponents},
     transform_component::TransformComponent,
+    transform_space::TransformSpace,
 };
 
 #[derive(Default)]
@@ -48,9 +49,10 @@ impl RotationConstraint {
             let (_, target_world, target_parent_world) = target_state.unwrap();
             transform_b = target_world;
             if self.base.source_space() == TransformSpace::Local {
-                let Some(inverse) = target_parent_world.inverted() else {
+                let mut inverse = Mat2D::default();
+                if !target_parent_world.invert(&mut inverse) {
                     return;
-                };
+                }
                 transform_b = inverse * transform_b;
             }
             self.components_b = transform_b.decompose();
@@ -71,17 +73,18 @@ impl RotationConstraint {
                 }
             }
             if self.base.dest_space() == TransformSpace::Local {
-                transform_b = Mat2D::compose(self.components_b);
+                transform_b = Mat2D::compose(&self.components_b);
                 transform_b = get_parent_world(component) * transform_b;
                 self.components_b = transform_b.decompose();
             }
         }
         let clamp_local = self.base.min_max_space() == TransformSpace::Local;
         if clamp_local {
-            transform_b = Mat2D::compose(self.components_b);
-            let Some(inverse) = get_parent_world(component).inverted() else {
+            transform_b = Mat2D::compose(&self.components_b);
+            let mut inverse = Mat2D::default();
+            if !get_parent_world(component).invert(&mut inverse) {
                 return;
-            };
+            }
             self.components_b = (inverse * transform_b).decompose();
         }
         if self.base.max() && self.components_b.rotation() > self.base.max_value() {
@@ -91,7 +94,7 @@ impl RotationConstraint {
             self.components_b.set_rotation(self.base.min_value());
         }
         if clamp_local {
-            transform_b = Mat2D::compose(self.components_b);
+            transform_b = Mat2D::compose(&self.components_b);
             transform_b = get_parent_world(component) * transform_b;
             self.components_b = transform_b.decompose();
         }
@@ -110,6 +113,6 @@ impl RotationConstraint {
         self.components_b.set_scale_x(self.components_a.scale_x());
         self.components_b.set_scale_y(self.components_a.scale_y());
         self.components_b.set_skew(self.components_a.skew());
-        *component.mutable_world_transform() = Mat2D::compose(self.components_b);
+        *component.mutable_world_transform() = Mat2D::compose(&self.components_b);
     }
 }

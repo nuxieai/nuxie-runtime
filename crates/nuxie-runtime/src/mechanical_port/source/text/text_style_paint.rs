@@ -67,7 +67,9 @@ impl TextStylePaint {
         world: &Mat2D,
         blend: nuxie_render_api::BlendMode,
     ) {
-        for handle in self.paints.shape_paints().to_vec() {
+        let mut paint_index = 0;
+        while let Some(handle) = self.paints.shape_paints().get(paint_index).cloned() {
+            paint_index += 1;
             handle.with_mut(|object| {
                 let Some(paint) = object.as_shape_paint_behavior_mut() else {
                     return;

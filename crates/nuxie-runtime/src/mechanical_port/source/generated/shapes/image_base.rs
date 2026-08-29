@@ -61,7 +61,7 @@ impl ImageBase {
             return;
         }
         callbacks.asset_id_changed();
-        callbacks.notify_property_changed(Self::ASSET_ID_PROPERTY_KEY);
+        ImageBaseCallbacks::notify_property_changed(callbacks, Self::ASSET_ID_PROPERTY_KEY);
     }
 
     pub(crate) fn set_asset_id_value(&mut self, value: u32) -> bool {
@@ -79,7 +79,7 @@ impl ImageBase {
             return;
         }
         callbacks.origin_x_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+        ImageBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
@@ -97,7 +97,7 @@ impl ImageBase {
             return;
         }
         callbacks.origin_y_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+        ImageBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
@@ -115,7 +115,7 @@ impl ImageBase {
             return;
         }
         callbacks.fit_changed();
-        callbacks.notify_property_changed(Self::FIT_PROPERTY_KEY);
+        ImageBaseCallbacks::notify_property_changed(callbacks, Self::FIT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_fit_value(&mut self, value: u32) -> bool {
@@ -133,7 +133,7 @@ impl ImageBase {
             return;
         }
         callbacks.alignment_x_changed();
-        callbacks.notify_property_changed(Self::ALIGNMENT_X_PROPERTY_KEY);
+        ImageBaseCallbacks::notify_property_changed(callbacks, Self::ALIGNMENT_X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_alignment_x_value(&mut self, value: f32) -> bool {
@@ -151,7 +151,7 @@ impl ImageBase {
             return;
         }
         callbacks.alignment_y_changed();
-        callbacks.notify_property_changed(Self::ALIGNMENT_Y_PROPERTY_KEY);
+        ImageBaseCallbacks::notify_property_changed(callbacks, Self::ALIGNMENT_Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_alignment_y_value(&mut self, value: f32) -> bool {

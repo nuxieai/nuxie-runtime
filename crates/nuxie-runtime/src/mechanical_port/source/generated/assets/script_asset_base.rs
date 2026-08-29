@@ -58,7 +58,7 @@ impl ScriptAssetBase {
             return;
         }
         callbacks.generator_function_ref_changed();
-        callbacks.notify_property_changed(Self::GENERATOR_FUNCTION_REF_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::GENERATOR_FUNCTION_REF_PROPERTY_KEY);
     }
     pub(crate) fn set_generator_function_ref_value(&mut self, value: u32) -> bool {
         if self.generator_function_ref == value {
@@ -77,7 +77,7 @@ impl ScriptAssetBase {
             return;
         }
         callbacks.is_module_changed();
-        callbacks.notify_property_changed(Self::IS_MODULE_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::IS_MODULE_PROPERTY_KEY);
     }
     pub(crate) fn set_is_module_value(&mut self, value: bool) -> bool {
         if self.is_module == value {
@@ -100,7 +100,7 @@ impl ScriptAssetBase {
             return;
         }
         callbacks.serialized_implemented_methods_changed();
-        callbacks.notify_property_changed(Self::SERIALIZED_IMPLEMENTED_METHODS_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::SERIALIZED_IMPLEMENTED_METHODS_PROPERTY_KEY);
     }
     pub(crate) fn set_serialized_implemented_methods_value(&mut self, value: u32) -> bool {
         if self.serialized_implemented_methods == value {

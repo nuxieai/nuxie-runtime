@@ -44,7 +44,10 @@ impl DataConverterOperationBase {
             return;
         }
         callbacks.operation_type_changed();
-        callbacks.notify_property_changed(Self::OPERATION_TYPE_PROPERTY_KEY);
+        DataConverterOperationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OPERATION_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_operation_type_value(&mut self, value: u32) -> bool {
@@ -68,7 +71,7 @@ impl DataConverterOperationBase {
         callbacks: &mut impl DataConverterOperationBaseCallbacks,
     ) {
         self.operation_type = object.operation_type;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,

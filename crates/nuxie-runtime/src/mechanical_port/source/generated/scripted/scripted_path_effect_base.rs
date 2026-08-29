@@ -46,7 +46,10 @@ impl ScriptedPathEffectBase {
             return;
         }
         c.script_asset_id_changed();
-        c.notify_property_changed(Self::SCRIPT_ASSET_ID_PROPERTY_KEY);
+        ScriptedPathEffectBaseCallbacks::notify_property_changed(
+            c,
+            Self::SCRIPT_ASSET_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_script_asset_id_value(&mut self, value: u32) -> bool {

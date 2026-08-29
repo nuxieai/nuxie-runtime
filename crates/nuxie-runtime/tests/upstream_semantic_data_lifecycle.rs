@@ -3,9 +3,12 @@
 
 use std::path::PathBuf;
 
-use nuxie_binary::read_runtime_file;
-use nuxie_graph::GraphFile;
-use nuxie_runtime::{ArtboardInstance, SemanticActionType, SemanticState, has_semantic_state};
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::source::{
+    animation::semantic_listener_group::SemanticActionType,
+    semantic::semantic_state::{SemanticState, has_semantic_state},
+};
+use nuxie_runtime::{File, RuntimeFactoryHandle};
 
 const DROPDOWN_LABEL: &str = "Select a fandom";
 
@@ -21,26 +24,37 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 
 #[test]
 fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
-    let file = read_runtime_file(&pinned_fixture("data_binding_lists.riv"))
-        .expect("data_binding_lists imports");
-    let graphs = GraphFile::from_runtime_file(&file).expect("data_binding_lists graph builds");
-    let graph = graphs.artboards.first().expect("default artboard graph");
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("default artboard instantiates");
-    let mut state_machine = artboard
-        .state_machine_instance(0)
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(
+        &pinned_fixture("data_binding_lists.riv"),
+        factory,
+        None,
+        None,
+        None,
+    )
+    .expect("data_binding_lists imports");
+    let artboard = file
+        .with_file(|file| file.artboard_default())
+        .expect("default artboard");
+    let state_machine = artboard
+        .state_machine_instance_handle(0)
         .expect("state machine zero");
-    state_machine.enable_semantics();
-    let _ = state_machine.bind_default_view_model_context_on_artboard(&mut artboard);
+    state_machine.with_instance_mut(|machine| machine.enable_semantics());
+    if let Some(instance) = file.with_file_mut(|file| {
+        file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+    }) {
+        artboard.bind_view_model_instance(Some(instance.clone()));
+        state_machine.with_instance_mut(|machine| machine.bind_view_model_instance(instance));
+    }
     for _ in 0..10 {
-        state_machine
-            .advance_and_apply(&mut artboard, 0.1)
-            .expect("semantic fixture settles");
+        state_machine.advance_and_apply(0.1);
     }
 
-    let initial = state_machine
-        .drain_semantics_diff(&mut artboard)
-        .expect("initial semantic diff");
+    let manager = state_machine
+        .with_instance(|machine| machine.semantic_manager())
+        .expect("semantic manager");
+    let initial = manager.with_semantic_manager_mut(|manager| manager.drain_diff());
     let initial_button = initial
         .added
         .iter()
@@ -52,15 +66,11 @@ fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
     ));
     let button_id = initial_button.id;
 
-    state_machine.fire_semantic_action(button_id, SemanticActionType::Tap as u32);
+    state_machine.fire_semantic_action(button_id, SemanticActionType::Tap as u8);
     for _ in 0..10 {
-        state_machine
-            .advance_and_apply(&mut artboard, 0.1)
-            .expect("semantic fixture settles after tap");
+        state_machine.advance_and_apply(0.1);
     }
-    let follow = state_machine
-        .drain_semantics_diff(&mut artboard)
-        .expect("follow-up semantic diff");
+    let follow = manager.with_semantic_manager_mut(|manager| manager.drain_diff());
 
     let updated = follow
         .updated_semantic

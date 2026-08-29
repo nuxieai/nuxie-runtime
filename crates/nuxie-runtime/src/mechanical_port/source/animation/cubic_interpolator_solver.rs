@@ -14,11 +14,17 @@ pub struct CubicInterpolatorSolver {
 
 impl CubicInterpolatorSolver {
     pub fn calc_bezier(t: f32, a1: f32, a2: f32) -> f32 {
-        (((1.0 - 3.0 * a2 + 3.0 * a1) * t + (3.0 * a2 - 6.0 * a1)) * t + 3.0 * a1) * t
+        let coefficient_a = 3.0_f32.mul_add(a1, (-3.0_f32).mul_add(a2, 1.0));
+        let coefficient_b = 3.0_f32.mul_add(a2, -(6.0 * a1));
+        coefficient_a.mul_add(t, coefficient_b).mul_add(t, 3.0 * a1) * t
     }
 
     fn slope(t: f32, a1: f32, a2: f32) -> f32 {
-        3.0 * (1.0 - 3.0 * a2 + 3.0 * a1) * t * t + 2.0 * (3.0 * a2 - 6.0 * a1) * t + 3.0 * a1
+        let coefficient_a = 3.0_f32.mul_add(a1, (-3.0_f32).mul_add(a2, 1.0));
+        let coefficient_b = 3.0_f32.mul_add(a2, -(6.0 * a1));
+        (2.0 * coefficient_b)
+            .mul_add(t, 3.0 * coefficient_a * t * t)
+            .mul_add(1.0, 3.0 * a1)
     }
 
     pub fn build(&mut self, x1: f32, x2: f32) {
@@ -72,5 +78,57 @@ impl CubicInterpolatorSolver {
             }
             current_t
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CubicInterpolatorSolver, SAMPLE_STEP_SIZE};
+
+    const X1: f32 = f32::from_bits(0x3ed7_0a3d);
+    const X2: f32 = f32::from_bits(0x3f14_7ae1);
+
+    #[test]
+    fn calc_bezier_matches_pinned_fused_horner_bits() {
+        let t = 3.0 * SAMPLE_STEP_SIZE;
+        assert_eq!(
+            CubicInterpolatorSolver::calc_bezier(t, X1, X2).to_bits(),
+            0x3ea4_c836
+        );
+    }
+
+    #[test]
+    fn slope_matches_pinned_fused_polynomial_bits() {
+        let t = f32::from_bits(0x3f40_6f8a);
+        assert_eq!(
+            CubicInterpolatorSolver::slope(t, X1, X2).to_bits(),
+            0x3f78_055e
+        );
+    }
+
+    #[test]
+    fn solver_table_and_newton_result_match_pinned_bits() {
+        let mut solver = CubicInterpolatorSolver::default();
+        solver.build(X1, X2);
+        assert_eq!(
+            solver.values.map(f32::to_bits),
+            [
+                0x0000_0000,
+                0x3df3_2378,
+                0x3e66_5bea,
+                0x3ea4_c836,
+                0x3ed3_3093,
+                0x3f00_0000,
+                0x3f16_67b6,
+                0x3f2d_9be4,
+                0x3f46_6905,
+                0x3f61_9b91,
+                0x3f7f_ffff,
+            ]
+        );
+        assert_eq!(
+            solver.get_t(f32::from_bits(0x3f3a_2e8c)).to_bits(),
+            0x3f40_6f8a
+        );
     }
 }

@@ -2,9 +2,12 @@
 
 use std::path::PathBuf;
 
-use nuxie_binary::read_runtime_file;
-use nuxie_graph::GraphFile;
-use nuxie_runtime::ArtboardInstance;
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::source::{
+    animation::state_machine_instance::StateMachineInstance, math::vec2d::Vec2D,
+    shapes::shape::Shape,
+};
+use nuxie_runtime::{Artboard, File, ImportResult, RuntimeFactoryHandle};
 
 fn run_case(artboard_name: &str, expected_y: f32) {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -13,51 +16,56 @@ fn run_case(artboard_name: &str, expected_y: f32) {
     let path = root.join("tests/unit_tests/assets/align_target.riv");
     let bytes = std::fs::read(&path)
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()));
-    let runtime = read_runtime_file(&bytes).expect("import align_target.riv");
-    let graphs = GraphFile::from_runtime_file(&runtime).expect("build align_target graph");
-    let graph = graphs
-        .artboards
-        .iter()
-        .find(|graph| graph.name.as_deref() == Some(artboard_name))
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained =
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("explicit retained factory");
+    let mut result = ImportResult::Malformed;
+    let file = File::import(&bytes, retained, Some(&mut result), None, None)
+        .unwrap_or_else(|| panic!("align_target.riv imports: {result:?}"));
+    assert_eq!(result, ImportResult::Success);
+    let source = file
+        .with_file(|file| file.artboard_named_source(artboard_name))
         .unwrap_or_else(|| panic!("missing artboard {artboard_name}"));
-    let circle = graph
-        .local_objects
-        .iter()
-        .find(|object| {
-            object.type_name == Some("Shape") && object.name.as_deref() == Some("circle")
-        })
-        .expect("circle Shape")
-        .local_id;
-    assert_eq!(graph.state_machines.len(), 1);
+    let artboard = Artboard::instance_from_handle(&source).expect("artboard instance");
     assert_eq!(
-        graph.state_machines[0].name.as_deref(),
-        Some("align-state-machine")
+        artboard.with_artboard(|artboard| artboard.state_machine_count()),
+        1
+    );
+    let definition = source
+        .with_downcast::<Artboard, _>(|artboard| {
+            artboard.state_machine_named("align-state-machine")
+        })
+        .flatten()
+        .expect("align-state-machine definition");
+    let state_machine = StateMachineInstance::new(definition, artboard.downgrade());
+    assert_eq!(
+        state_machine.with_instance(StateMachineInstance::name),
+        "align-state-machine"
     );
 
-    let mut artboard =
-        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
-            .unwrap_or_else(|error| panic!("instantiate {artboard_name}: {error:#}"));
-    let mut state_machine = artboard
-        .state_machine_instance(0)
-        .expect("align-state-machine instance");
+    artboard.advance_default(0.0);
+    state_machine.advance_and_apply(0.0);
+    state_machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
+    let circle = artboard
+        .with_artboard(|artboard| artboard.find_handle::<Shape>("circle"))
+        .expect("circle Shape");
+    state_machine.with_instance_mut(|machine| {
+        machine.pointer_move(Vec2D::new(100.0, 50.0), 0.0, 0);
+        machine.pointer_move(Vec2D::new(100.0, 51.0), 0.0, 0);
+    });
+    state_machine.advance_and_apply(1.0);
+    state_machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
 
-    artboard.advance(0.0).expect("Artboard::advance(0)");
-    let _ = state_machine
-        .advance_and_apply(&mut artboard, 0.0)
-        .expect("StateMachineInstance::advanceAndApply(0)");
-    let _ = artboard.advance_state_machine_instance(&mut state_machine, 0.0);
-    let _ = state_machine.pointer_move(&mut artboard, 100.0, 50.0, 0.0, 0);
-    let _ = state_machine.pointer_move(&mut artboard, 100.0, 51.0, 0.0, 0);
-    let _ = state_machine
-        .advance_and_apply(&mut artboard, 1.0)
-        .expect("StateMachineInstance::advanceAndApply(1)");
-    let _ = artboard.advance_state_machine_instance(&mut state_machine, 0.0);
-
-    let transform = artboard
-        .component_world_transform_with_scroll(circle)
-        .expect("circle world transform");
-    assert_eq!(transform.tx(), 100.0);
-    assert_eq!(transform.ty(), expected_y);
+    circle
+        .with_downcast::<Shape, _>(|circle| {
+            // The pinned test checks authored x/y, not only the world transform.
+            assert_eq!(circle.base.x(), 100.0);
+            assert_eq!(circle.base.y(), expected_y);
+            // Keep the prior Rust port's additional world-space assertions too.
+            assert_eq!(circle.world_transform()[4], 100.0);
+            assert_eq!(circle.world_transform()[5], expected_y);
+        })
+        .expect("live circle Shape");
 }
 
 #[test]

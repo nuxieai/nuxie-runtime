@@ -21,7 +21,9 @@ impl ForegroundLayoutDrawableBase {
         Self::TYPE_KEY
     }
     pub fn copy(&mut self, object: &Self) {
-        self.base.base.copy(&object.base.base);
+        let mut base = std::mem::take(&mut self.base.base);
+        base.copy(&object.base.base, &mut self.base);
+        self.base.base = base;
     }
     pub fn clone_into(&self) -> ForegroundLayoutDrawable {
         let mut cloned = ForegroundLayoutDrawable::default();

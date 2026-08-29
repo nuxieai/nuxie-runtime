@@ -10,7 +10,7 @@ use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
     core::{Core, CoreHandle},
     dirtyable::Dirtyable,
-    generated::text::text_base::TextBase,
+    generated::{core_registry::CoreCapabilities, text::text_base::TextBase},
     hit_info::HitInfo,
     layout::{
         layout_enums::{LayoutDirection, LayoutScaleType},
@@ -119,7 +119,7 @@ impl TextValueRunHandle {
         }
     }
 
-    fn with_mut<R>(&self, use_run: impl FnOnce(&mut TextValueRun) -> R) -> Option<R> {
+    pub(super) fn with_mut<R>(&self, use_run: impl FnOnce(&mut TextValueRun) -> R) -> Option<R> {
         match self {
             Self::Core(run) => run
                 .with_mut(|run| run.as_text_value_run_mut().map(use_run))
@@ -155,6 +155,10 @@ impl TextValueRunProperty {
     }
 
     fn write_value(&mut self) {
+        self.write_value_with_text(None);
+    }
+
+    fn write_value_with_text(&mut self, mut text: Option<&mut Text>) {
         // The symbol lookup above guarantees the same concrete string value
         // that the upstream as<ViewModelInstanceString>() cast requires.
         let Some(value) = self
@@ -167,16 +171,27 @@ impl TextValueRunProperty {
         };
         match self.symbol_type {
             SymbolType::TextContent => {
-                self.text_value_run
-                    .with_mut(|run| run.set_bound_text(value));
+                if let Some(text) = text.as_deref_mut() {
+                    self.text_value_run
+                        .with_mut(|run| run.set_bound_text_with_borrowed_text(value, text));
+                } else {
+                    self.text_value_run
+                        .with_mut(|run| run.set_bound_text(value));
+                }
             }
             SymbolType::TextStyle => {
-                let style_paints = self
-                    .text
-                    .with(|text| text.as_text().map(|text| text.text_style_paints().to_vec()))
-                    .flatten()
-                    .unwrap_or_default();
-                for (index, style_paint) in style_paints.into_iter().enumerate() {
+                let owned_style_paints;
+                let style_paints = if let Some(text) = text.as_deref() {
+                    text.text_style_paints()
+                } else {
+                    owned_style_paints = self
+                        .text
+                        .with(|text| text.as_text().map(|text| text.text_style_paints().to_vec()))
+                        .flatten()
+                        .unwrap_or_default();
+                    &owned_style_paints
+                };
+                for (index, style_paint) in style_paints.iter().enumerate() {
                     let matches = style_paint
                         .with(|style| {
                             style
@@ -221,7 +236,12 @@ pub struct TextValueRunListener {
 }
 
 impl TextValueRunListener {
-    fn new(text_value_run: TextValueRun, instance: CoreHandle, text: CoreHandle) -> Box<Self> {
+    fn new(
+        text_value_run: TextValueRun,
+        instance: CoreHandle,
+        text: CoreHandle,
+        text_owner: &mut Text,
+    ) -> Box<Self> {
         let text_value_run = Rc::new(RefCell::new(text_value_run));
         text_value_run.borrow_mut().set_text_component(text.clone());
         let mut listener = Box::new(Self {
@@ -230,7 +250,7 @@ impl TextValueRunListener {
             text,
             properties: Vec::new(),
         });
-        listener.create_properties();
+        listener.create_properties_with_text(Some(text_owner));
         listener
     }
 
@@ -246,18 +266,18 @@ impl TextValueRunListener {
         TextValueRunHandle::Runtime(Rc::clone(&self.text_value_run))
     }
 
-    fn remap(&mut self, instance: CoreHandle) {
+    fn remap(&mut self, instance: CoreHandle, text: &mut Text) {
         if self.instance != instance {
             self.properties.clear();
             self.instance = instance;
-            self.create_properties();
+            self.create_properties_with_text(Some(text));
         }
     }
 
-    fn create_properties(&mut self) {
+    fn create_properties_with_text(&mut self, mut text: Option<&mut Text>) {
         self.properties.clear();
-        self.create_property_listener(SymbolType::TextStyle);
-        self.create_property_listener(SymbolType::TextContent);
+        self.create_property_listener(SymbolType::TextStyle, text.as_deref_mut());
+        self.create_property_listener(SymbolType::TextContent, text.as_deref_mut());
     }
 
     fn create_single_property_listener(
@@ -290,13 +310,13 @@ impl TextValueRunListener {
         ))
     }
 
-    fn create_property_listener(&mut self, symbol_type: SymbolType) {
+    fn create_property_listener(&mut self, symbol_type: SymbolType, text: Option<&mut Text>) {
         let Some(listener) = self.create_single_property_listener(symbol_type) else {
             return;
         };
         let instance_value = listener.instance_value.clone();
         let listener = Rc::new(RefCell::new(listener));
-        listener.borrow_mut().write_value();
+        listener.borrow_mut().write_value_with_text(text);
         let dependent: Rc<RefCell<dyn ViewModelValueDependent>> = listener;
         instance_value.with_mut(|instance_value| {
             if let Some(instance_value) = instance_value.as_view_model_instance_value_mut() {
@@ -336,7 +356,11 @@ fn compute_vertical_trim(
             let mut edge_px = 0.0f32;
             for run_index in first_line.start_run_index..=first_line.end_run_index {
                 let run = &first_paragraph.runs[run_index as usize];
-                let metrics = run.font.line_metrics();
+                let metrics = run
+                    .font
+                    .as_ref()
+                    .expect("shaped text retains its font")
+                    .line_metrics();
                 let edge = if trim_top == TextTrimTop::Cap {
                     metrics.cap_height
                 } else {
@@ -361,7 +385,14 @@ fn compute_vertical_trim(
                 let mut descent_px = 0.0f32;
                 for run_index in last_line.start_run_index..=last_line.end_run_index {
                     let run = &paragraph.runs[run_index as usize];
-                    descent_px = descent_px.max(run.font.line_metrics().descent * run.size);
+                    descent_px = descent_px.max(
+                        run.font
+                            .as_ref()
+                            .expect("shaped text retains its font")
+                            .line_metrics()
+                            .descent
+                            * run.size,
+                    );
                 }
                 bottom_trim = (descent_band - descent_px).max(0.0);
             }
@@ -369,6 +400,23 @@ fn compute_vertical_trim(
         }
     }
     (top_trim, bottom_trim)
+}
+
+impl std::ops::Deref for Text {
+    type Target = TextBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Text {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Text {
+    pub const TYPE_KEY: u16 = TextBase::TYPE_KEY;
 }
 
 pub struct Text {
@@ -418,7 +466,7 @@ impl Default for Text {
             ordered_lines: Vec::new(),
             ellipsis_run: GlyphRun::default(),
             clip_rect: RawPath::default(),
-            clip_path: ShapePaintPath::clockwise(),
+            clip_path: ShapePaintPath::default(),
             bounds: Aabb::default(),
             modifier_groups: Vec::new(),
             styled_text: StyledText::default(),
@@ -438,11 +486,19 @@ impl Default for Text {
 }
 
 impl Text {
+    pub fn internal_transform(&self) -> Mat2D {
+        self.internal_transform
+    }
+
+    pub fn shape_world_transform(&self) -> &Mat2D {
+        &self.shape_world_transform
+    }
+
     pub fn mark_shape_dirty(&mut self) {
         self.mark_shape_dirty_layout(true);
     }
     pub fn mark_shape_dirty_layout(&mut self, send_to_layout: bool) {
-        self.base.add_dirt(ComponentDirt::PATH);
+        CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
         for group in &mut self.modifier_groups {
             group.with_mut(|group| {
                 if let Some(group) = group.as_text_modifier_group_mut() {
@@ -450,16 +506,37 @@ impl Text {
                 }
             });
         }
-        self.base.mark_world_transform_dirty();
+        CoreCapabilities::world_transform_mark_dirty(self);
         if send_to_layout {
-            self.base.mark_layout_dirty();
+            self.base.mark_layout_node_dirty();
+        }
+    }
+    pub(crate) fn mark_shape_dirty_occurrence(owner: &CoreHandle, send_to_layout: bool) {
+        owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
+        let groups = owner
+            .with_downcast::<Text, _>(|text| text.modifier_groups.clone())
+            .expect("live Text");
+        for group in groups {
+            group.with_mut(|object| {
+                object
+                    .as_text_modifier_group_mut()
+                    .expect("TextModifierGroup")
+                    .clear_range_maps();
+            });
+        }
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+            owner.clone(),
+        )
+        .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+        if send_to_layout {
+            owner.with_downcast_mut::<Text, _>(|text| text.base.mark_layout_node_dirty());
         }
     }
     pub fn mark_paint_dirty(&mut self) {
-        self.base.add_dirt(ComponentDirt::PAINT);
+        CoreCapabilities::component_add_dirt(self, ComponentDirt::PAINT, false);
     }
     pub fn modifier_shape_dirty(&mut self) {
-        self.base.add_dirt(ComponentDirt::PATH);
+        CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
     }
     pub fn add_run(&mut self, run: CoreHandle) {
         self.runs.push(run.clone());
@@ -636,7 +713,6 @@ impl Text {
                     ))
                 })
                 .flatten()
-                .flatten()
             else {
                 continue;
             };
@@ -714,10 +790,10 @@ impl Text {
     pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
         if value.intersects(ComponentDirt::PATH) {
             let precompute_modifier_coverage = self.modifier_ranges_need_shape();
-            let parent_is_layout_not_artboard = self.base.parent().is_some_and(|parent| {
-                crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::is_type_of(parent.core_type())
+            let parent_is_layout_not_artboard = self.base.parent_handle().is_some_and(|parent| {
+                parent.is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)
                     && parent.core_type()
-                        != crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY
+                        != Some(crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY)
             });
             let font_scale = if self.overflow() == TextOverflow::FitFontSize {
                 self.fit_font_scale()
@@ -729,7 +805,11 @@ impl Text {
                 let mut styled = std::mem::take(&mut self.modifier_styled_text);
                 if self.make_styled(&mut styled, false, font_scale) {
                     let runs = styled.runs();
-                    self.modifier_shape = runs[0].font.shape_text(styled.unichars(), runs, 0);
+                    self.modifier_shape = runs[0]
+                        .font
+                        .as_ref()
+                        .expect("shaped text retains its font")
+                        .shape_text(styled.unichars(), runs, 0);
                     self.modifier_lines = Self::break_lines(
                         &self.modifier_shape,
                         if self.effective_sizing() == TextSizing::AutoWidth
@@ -749,6 +829,7 @@ impl Text {
                         group.with_mut(|group| {
                             if let Some(group) = group.as_text_modifier_group_mut() {
                                 group.compute_range_map(
+                                    self,
                                     styled.unichars(),
                                     &self.modifier_shape,
                                     &self.modifier_lines,
@@ -765,7 +846,11 @@ impl Text {
             let mut styled = std::mem::take(&mut self.styled_text);
             if self.make_styled(&mut styled, true, font_scale) {
                 let runs = styled.runs();
-                self.shape = runs[0].font.shape_text(styled.unichars(), runs, 0);
+                self.shape = runs[0]
+                    .font
+                    .as_ref()
+                    .expect("shaped text retains its font")
+                    .shape_text(styled.unichars(), runs, 0);
                 self.lines = Self::break_lines(
                     &self.shape,
                     if self.effective_sizing() == TextSizing::AutoWidth
@@ -785,6 +870,7 @@ impl Text {
                         group.with_mut(|group| {
                             if let Some(group) = group.as_text_modifier_group_mut() {
                                 group.compute_range_map(
+                                    self,
                                     styled.unichars(),
                                     &self.shape,
                                     &self.lines,
@@ -986,7 +1072,11 @@ impl Text {
                 return true;
             }
             let runs = styled.runs();
-            let shape = runs[0].font.shape_text(styled.unichars(), runs, 0);
+            let shape = runs[0]
+                .font
+                .as_ref()
+                .expect("shaped text retains its font")
+                .shape_text(styled.unichars(), runs, 0);
             let lines = Text::break_lines(&shape, box_width, this.align(), this.wrap());
             let mut measured_width = 0.0f32;
             let mut y = 0.0f32;
@@ -1083,7 +1173,7 @@ impl Text {
                 group.with_mut(|group| {
                     if let Some(group) = group.as_text_modifier_group_mut() {
                         group.compute_coverage(text_size);
-                        group.reset_text_follow_path();
+                        group.reset_text_follow_path(self);
                     }
                 });
             }
@@ -1214,19 +1304,33 @@ impl Text {
                         .with(TextValueRun::style)
                         .flatten()
                         .expect("TextValueRun style");
-                    if run.font.is_color_glyph(glyph_id) {
+                    if run
+                        .font
+                        .as_ref()
+                        .expect("shaped text retains its font")
+                        .is_color_glyph(glyph_id)
+                    {
                         let foreground_color = style
                             .with_downcast::<TextStylePaint, _>(TextStylePaint::foreground_color)
                             .unwrap_or(0xff000000);
                         self.draw_commands.push(TextDrawCommand::ColorGlyph {
-                            font: run.font.clone(),
+                            font: run
+                                .font
+                                .as_ref()
+                                .expect("shaped text retains its font")
+                                .clone(),
                             glyph_id,
                             transform: path_transform,
                             foreground_color,
                             opacity,
                         });
                     } else {
-                        let path = run.font.get_path(glyph_id).transform(path_transform);
+                        let path = run
+                            .font
+                            .as_ref()
+                            .expect("shaped text retains its font")
+                            .get_path(glyph_id)
+                            .transform(path_transform);
                         let first_path = style
                             .with_downcast_mut::<TextStylePaint, _>(|style| {
                                 style.add_path(&path, opacity)
@@ -1312,7 +1416,7 @@ impl Text {
         }
         self.internal_transform =
             Mat2D::from_scale_and_translation(scale, scale, x_offset, y_offset);
-        self.base.mark_layout_dirty();
+        self.base.mark_layout_node_dirty();
         for run in &mut self.all_runs {
             run.with_mut(|run| {
                 if run.is_hit_target() {
@@ -1382,8 +1486,8 @@ impl Text {
         }
         let factory = self
             .base
-            .artboard()
-            .factory()
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
             .expect("Text requires its Artboard renderer factory");
         renderer.save();
         renderer.transform(nuxie_render_api::Mat2D(
@@ -1475,12 +1579,8 @@ impl Text {
     }
     pub fn on_dirty(&mut self, value: ComponentDirt) {
         if value.intersects(ComponentDirt::WORLD_TRANSFORM) {
-            for group in &mut self.modifier_groups {
-                group.with_mut(|group| {
-                    if let Some(group) = group.as_text_modifier_group_mut() {
-                        group.on_text_world_transform_dirty();
-                    }
-                });
+            for group in self.modifier_groups.clone() {
+                TextModifierGroup::on_text_world_transform_dirty(&group, self);
             }
         }
         if value.intersects(ComponentDirt::PATH | ComponentDirt::PAINT) {
@@ -1521,18 +1621,22 @@ impl Text {
                 left + self.base.origin_x() * width,
                 top + self.base.origin_y() * height,
             ));
+            let transform = *self.base.transform();
             self.base
-                .set_world_transform(parent_world * base * *self.base.transform());
+                .set_world_transform(parent_world * base * transform);
             return true;
         }
         false
     }
 
-    pub fn layout_participant(&self) -> Option<&LayoutParticipant> {
+    pub fn layout_participant(&self) -> Option<CoreHandle> {
         self.base
             .children()
             .iter()
-            .find_map(crate::mechanical_port::source::core::Core::as_layout_participant)
+            .find(|child| {
+                child.is_type_of(crate::mechanical_port::source::generated::layout::layout_participant_base::LayoutParticipantBase::TYPE_KEY)
+            })
+            .cloned()
     }
     pub fn is_participating_in_layout(&self) -> bool {
         self.layout_participant().is_some()
@@ -1587,7 +1691,11 @@ impl Text {
         }
         let paragraph_space = self.base.paragraph_spacing();
         let runs = styled.runs();
-        let shape = runs[0].font.shape_text(styled.unichars(), runs, 0);
+        let shape = runs[0]
+            .font
+            .as_ref()
+            .expect("shaped text retains its font")
+            .shape_text(styled.unichars(), runs, 0);
         let measuring_width = match self.effective_sizing() {
             TextSizing::AutoHeight | TextSizing::Fixed => self.base.width(),
             TextSizing::AutoWidth => f32::MAX,
@@ -1685,15 +1793,15 @@ impl Text {
     }
     pub fn origin_value_changed(&mut self) {
         self.mark_paint_dirty();
-        self.base.mark_world_transform_dirty();
+        CoreCapabilities::world_transform_mark_dirty(self);
     }
     pub fn origin_x_changed(&mut self) {
         self.mark_paint_dirty();
-        self.base.mark_world_transform_dirty();
+        CoreCapabilities::world_transform_mark_dirty(self);
     }
     pub fn origin_y_changed(&mut self) {
         self.mark_paint_dirty();
-        self.base.mark_world_transform_dirty();
+        CoreCapabilities::world_transform_mark_dirty(self);
     }
     pub fn vertical_trim_value_changed(&mut self) {
         self.mark_shape_dirty();
@@ -1707,7 +1815,8 @@ impl Text {
             self.all_runs.clear();
             self.all_runs
                 .extend(self.runs.iter().cloned().map(TextValueRunHandle::Core));
-            let current_size = self.value_run_listeners.len();
+            let mut value_run_listeners = std::mem::take(&mut self.value_run_listeners);
+            let current_size = value_run_listeners.len();
             let mut index = 0usize;
             let Some(text) = self.base.handle() else {
                 return;
@@ -1723,26 +1832,31 @@ impl Text {
                     continue;
                 };
                 let text_run = if index < current_size {
-                    let listener = &mut self.value_run_listeners[index];
-                    listener.remap(instance);
+                    let listener = &mut value_run_listeners[index];
+                    listener.remap(instance, self);
                     listener.text_value_run()
                 } else {
-                    let listener =
-                        TextValueRunListener::new(TextValueRun::default(), instance, text.clone());
-                    self.value_run_listeners.push(listener);
-                    self.value_run_listeners[index].text_value_run()
+                    let listener = TextValueRunListener::new(
+                        TextValueRun::default(),
+                        instance,
+                        text.clone(),
+                        self,
+                    );
+                    value_run_listeners.push(listener);
+                    value_run_listeners[index].text_value_run()
                 };
                 self.all_runs.push(text_run);
                 index += 1;
             }
-            self.value_run_listeners.truncate(index);
+            value_run_listeners.truncate(index);
+            self.value_run_listeners = value_run_listeners;
             self.mark_shape_dirty();
         }
     }
     pub fn build_text_style_paints(&mut self) {
         if self.text_style_paints.is_empty() {
             for child in self.base.children() {
-                if child.with_downcast::<TextStylePaint, _>(|_| ()).is_some() {
+                if child.core_type() == Some(crate::mechanical_port::source::generated::text::text_style_paint_base::TextStylePaintBase::TYPE_KEY) {
                     self.text_style_paints.push(child.clone());
                 }
             }

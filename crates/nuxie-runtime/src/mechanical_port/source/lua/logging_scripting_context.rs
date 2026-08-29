@@ -1,61 +1,63 @@
-use crate::mechanical_port::source::{
-    command_queue::ScriptingContextFactory,
-    factory::Factory,
-    lua::rive_lua_libs::{CPPRuntimeScriptingContext, LuaState, ScriptingContext},
-};
+//! Context-owned logging state from `src/lua/logging_scripting_context.cpp`.
+//!
+//! The Rust VM owns this state directly. Lua stack/error extraction
+//! and VM construction stay at the `nuxie-scripting` backend boundary.
 
-#[repr(i32)]
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ScriptingLogLevel {
-    Info = 0,
-    Warn = 1,
-    Error = 2,
-}
+use std::{cell::RefCell, rc::Rc};
 
-pub type ScriptingLogSink = Box<dyn FnMut(ScriptingLogLevel, &[u8])>;
+use crate::mechanical_port::source::logging_scripting_context::ScriptingLogLevel;
 
+// VM-local callbacks need not cross threads. The public factory sink does;
+// the backend moves it onto the server thread before installing this callback.
+type LocalLogSink = Rc<dyn Fn(ScriptingLogLevel, &[u8])>;
+
+/// Clones refer to the same context, including its single reentrant line buffer.
+#[derive(Clone, Default)]
 pub struct LoggingScriptingContext {
-    pub base: CPPRuntimeScriptingContext,
-    sink: ScriptingLogSink,
-    line: Vec<u8>,
+    sink: Rc<RefCell<Option<LocalLogSink>>>,
+    line: Rc<RefCell<Vec<u8>>>,
 }
 
 impl LoggingScriptingContext {
-    pub fn new(factory: &mut Factory, sink: ScriptingLogSink) -> Self {
-        Self {
-            base: CPPRuntimeScriptingContext::new(factory),
-            sink,
-            line: Vec::new(),
+    pub fn set_sink(&self, sink: Rc<dyn Fn(ScriptingLogLevel, &[u8])>) {
+        *self.sink.borrow_mut() = Some(sink);
+    }
+
+    pub fn clear_sink(&self) {
+        self.sink.borrow_mut().take();
+    }
+
+    pub fn begin_line(&self) {
+        self.line.borrow_mut().clear();
+    }
+
+    pub fn append(&self, data: &[u8]) {
+        self.line.borrow_mut().extend_from_slice(data);
+    }
+
+    pub fn end_line(&self) {
+        // Release the actual line borrow before invoking host code. The clear
+        // remains after the callback, matching the pinned context's ordering.
+        let line = self.line.borrow().clone();
+        self.log(ScriptingLogLevel::Info, &line);
+        self.line.borrow_mut().clear();
+    }
+
+    pub fn print_error(&self, error: Option<&[u8]>) {
+        if let Some(error) = error {
+            // lua_tostring + strlen, unlike print's length-bearing Span.
+            let length = error
+                .iter()
+                .position(|byte| *byte == 0)
+                .unwrap_or(error.len());
+            self.log(ScriptingLogLevel::Error, &error[..length]);
         }
     }
-}
 
-impl ScriptingContext for LoggingScriptingContext {
-    fn print_begin_line(&mut self, _state: &mut LuaState) {
-        self.line.clear();
-    }
-
-    fn print(&mut self, data: &[u8]) {
-        self.line.extend_from_slice(data);
-    }
-
-    fn print_end_line(&mut self) {
-        (self.sink)(ScriptingLogLevel::Info, &self.line);
-        self.line.clear();
-    }
-
-    fn print_error(&mut self, state: &mut LuaState) {
-        if let Some(error) = state.to_string(-1) {
-            (self.sink)(ScriptingLogLevel::Error, error.as_bytes());
+    fn log(&self, level: ScriptingLogLevel, line: &[u8]) {
+        let sink = self.sink.borrow().clone();
+        if let Some(sink) = sink {
+            sink(level, line);
         }
     }
-}
-
-pub fn make_logging_scripting_context_factory(
-    sink: Option<ScriptingLogSink>,
-) -> Option<ScriptingContextFactory> {
-    let sink = sink?;
-    Some(Box::new(move |factory| {
-        Box::new(LoggingScriptingContext::new(factory, sink))
-    }))
 }

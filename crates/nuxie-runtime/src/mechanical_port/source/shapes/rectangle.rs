@@ -3,6 +3,23 @@ use crate::mechanical_port::source::{
     generated::shapes::rectangle_base::RectangleBase,
     shapes::straight_vertex::StraightVertex,
 };
+impl std::ops::Deref for Rectangle {
+    type Target = RectangleBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Rectangle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Rectangle {
+    pub const TYPE_KEY: u16 = RectangleBase::TYPE_KEY;
+}
+
 pub struct Rectangle {
     pub base: RectangleBase,
     vertices: [Rc<RefCell<StraightVertex>>; 4],
@@ -16,16 +33,16 @@ impl Rectangle {
         Self { base, vertices }
     }
     pub fn corner_radius_tl_changed(&mut self) {
-        self.base.mark_path_dirty();
+        self.base.mark_path_dirty(true);
     }
     pub fn corner_radius_tr_changed(&mut self) {
-        self.base.mark_path_dirty();
+        self.base.mark_path_dirty(true);
     }
     pub fn corner_radius_bl_changed(&mut self) {
-        self.base.mark_path_dirty();
+        self.base.mark_path_dirty(true);
     }
     pub fn corner_radius_br_changed(&mut self) {
-        self.base.mark_path_dirty();
+        self.base.mark_path_dirty(true);
     }
     pub(crate) fn update_before_path_super(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::PATH) {
@@ -37,15 +54,15 @@ impl Rectangle {
             let h = self.base.height();
             {
                 let mut vertex = self.vertices[0].borrow_mut();
-                vertex.base.set_x(ox);
-                vertex.base.set_y(oy);
-                vertex.base.set_radius(radius);
+                vertex.set_x(ox);
+                vertex.set_y(oy);
+                vertex.set_radius(radius);
             }
             {
                 let mut vertex = self.vertices[1].borrow_mut();
-                vertex.base.set_x(ox + w);
-                vertex.base.set_y(oy);
-                vertex.base.set_radius(if link {
+                vertex.set_x(ox + w);
+                vertex.set_y(oy);
+                vertex.set_radius(if link {
                     radius
                 } else {
                     self.base.corner_radius_tr()
@@ -53,9 +70,9 @@ impl Rectangle {
             }
             {
                 let mut vertex = self.vertices[2].borrow_mut();
-                vertex.base.set_x(ox + w);
-                vertex.base.set_y(oy + h);
-                vertex.base.set_radius(if link {
+                vertex.set_x(ox + w);
+                vertex.set_y(oy + h);
+                vertex.set_radius(if link {
                     radius
                 } else {
                     self.base.corner_radius_br()
@@ -63,9 +80,9 @@ impl Rectangle {
             }
             {
                 let mut vertex = self.vertices[3].borrow_mut();
-                vertex.base.set_x(ox);
-                vertex.base.set_y(oy + h);
-                vertex.base.set_radius(if link {
+                vertex.set_x(ox);
+                vertex.set_y(oy + h);
+                vertex.set_radius(if link {
                     radius
                 } else {
                     self.base.corner_radius_bl()
@@ -75,3 +92,9 @@ impl Rectangle {
     }
 }
 use std::{cell::RefCell, rc::Rc};
+
+impl Default for Rectangle {
+    fn default() -> Self {
+        Self::new(RectangleBase::default())
+    }
+}

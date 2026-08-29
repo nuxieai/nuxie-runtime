@@ -53,7 +53,7 @@ impl TrimPathBase {
             return;
         }
         callbacks.start_changed();
-        callbacks.notify_property_changed(Self::START_PROPERTY_KEY);
+        TrimPathBaseCallbacks::notify_property_changed(callbacks, Self::START_PROPERTY_KEY);
     }
 
     pub(crate) fn set_start_value(&mut self, value: f32) -> bool {
@@ -71,7 +71,7 @@ impl TrimPathBase {
             return;
         }
         callbacks.end_changed();
-        callbacks.notify_property_changed(Self::END_PROPERTY_KEY);
+        TrimPathBaseCallbacks::notify_property_changed(callbacks, Self::END_PROPERTY_KEY);
     }
 
     pub(crate) fn set_end_value(&mut self, value: f32) -> bool {
@@ -89,7 +89,7 @@ impl TrimPathBase {
             return;
         }
         callbacks.offset_changed();
-        callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+        TrimPathBaseCallbacks::notify_property_changed(callbacks, Self::OFFSET_PROPERTY_KEY);
     }
 
     pub(crate) fn set_offset_value(&mut self, value: f32) -> bool {
@@ -107,7 +107,7 @@ impl TrimPathBase {
             return;
         }
         callbacks.mode_value_changed();
-        callbacks.notify_property_changed(Self::MODE_VALUE_PROPERTY_KEY);
+        TrimPathBaseCallbacks::notify_property_changed(callbacks, Self::MODE_VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_mode_value_value(&mut self, value: u32) -> bool {

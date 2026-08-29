@@ -27,7 +27,9 @@ impl TransitionValueEnumComparatorBase {
     }
     pub fn clone_into(&self) -> TransitionValueEnumComparator {
         let mut cloned = TransitionValueEnumComparator::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

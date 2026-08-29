@@ -8,6 +8,23 @@ use crate::mechanical_port::source::{
 pub struct PolygonState {
     pub vertices: Vec<Rc<RefCell<StraightVertex>>>,
 }
+impl std::ops::Deref for Polygon {
+    type Target = PolygonBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Polygon {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Polygon {
+    pub const TYPE_KEY: u16 = PolygonBase::TYPE_KEY;
+}
+
 pub struct Polygon {
     pub base: PolygonBase,
     pub polygon: PolygonState,
@@ -20,10 +37,10 @@ impl Polygon {
         }
     }
     pub fn corner_radius_changed(&mut self) {
-        self.base.mark_path_dirty();
+        self.base.mark_path_dirty(true);
     }
     pub fn points_changed(&mut self) {
-        self.base.mark_path_dirty();
+        self.base.mark_path_dirty(true);
     }
     pub fn vertex_count(&self) -> usize {
         self.base.points() as usize
@@ -34,12 +51,12 @@ impl Polygon {
         let ox = -self.base.origin_x() * self.base.width() + half_width;
         let oy = -self.base.origin_y() * self.base.height() + half_height;
         let mut angle = -math_types::PI / 2.0;
-        let increment = 2.0 * math_types::PI / self.base.points();
+        let increment = 2.0 * math_types::PI / self.base.points() as f32;
         for vertex in &self.polygon.vertices {
             let mut vertex = vertex.borrow_mut();
-            vertex.base.set_x(ox + angle.cos() * half_width);
-            vertex.base.set_y(oy + angle.sin() * half_height);
-            vertex.base.set_radius(self.base.corner_radius());
+            vertex.set_x(ox + angle.cos() * half_width);
+            vertex.set_y(oy + angle.sin() * half_height);
+            vertex.set_radius(self.base.corner_radius());
             angle += increment;
         }
     }
@@ -60,3 +77,9 @@ impl Polygon {
     }
 }
 use std::{cell::RefCell, rc::Rc};
+
+impl Default for Polygon {
+    fn default() -> Self {
+        Self::new(PolygonBase::default())
+    }
+}

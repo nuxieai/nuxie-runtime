@@ -193,8 +193,7 @@ impl Joystick {
         for object_id in object_ids {
             let Some(dependent) = artboard.resolve_handle(object_id).filter(|object| {
                 object
-                    .with_downcast::<NestedRemapAnimation, _>(|_| ())
-                    .is_some()
+                    .is_type_of(crate::mechanical_port::source::generated::animation::nested_remap_animation_base::NestedRemapAnimationBase::TYPE_KEY)
             }) else {
                 continue;
             };

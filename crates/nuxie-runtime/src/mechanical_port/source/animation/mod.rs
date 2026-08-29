@@ -85,7 +85,7 @@ pub mod state_machine;
 pub mod state_machine_bool;
 pub mod state_machine_component;
 pub mod state_machine_fire_action;
-pub mod state_machine_fire_event;
+pub use super::generated::animation::state_machine_fire_event;
 pub mod state_machine_fire_trigger;
 pub mod state_machine_input;
 pub mod state_machine_input_instance;

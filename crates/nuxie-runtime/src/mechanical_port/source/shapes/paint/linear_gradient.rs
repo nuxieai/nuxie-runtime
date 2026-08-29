@@ -41,7 +41,12 @@ impl LinearGradient {
         let Some(this) = self.base.handle() else {
             return StatusCode::MissingObject;
         };
-        self.init_paint_mutator(this, self.base.parent_handle())
+        let factory = self
+            .base
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
+            .expect("initialized paint mutator has its artboard factory");
+        self.init_paint_mutator(this, self.base.parent_handle(), &factory)
     }
 
     pub fn build_dependencies(&mut self) {
@@ -91,6 +96,12 @@ impl LinearGradient {
 
     pub fn add_stop(&mut self, stop: CoreHandle) {
         self.stops.push(stop);
+    }
+
+    /// Tool observation of the retained, source-ordered gradient stops.
+    #[cfg(feature = "tools")]
+    pub fn stops(&self) -> &[CoreHandle] {
+        &self.stops
     }
 
     fn paints_in_world_space(&self) -> bool {

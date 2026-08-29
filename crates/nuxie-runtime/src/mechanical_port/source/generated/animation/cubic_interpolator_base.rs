@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, animation::keyframe_interpolator::KeyFrameInterpolator,
+    animation::keyframe_interpolator::KeyFrameInterpolator, core::binary_reader::BinaryReader,
 };
 
 pub trait CubicInterpolatorBaseCallbacks {

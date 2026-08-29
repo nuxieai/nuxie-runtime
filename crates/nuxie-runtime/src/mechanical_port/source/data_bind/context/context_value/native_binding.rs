@@ -37,7 +37,7 @@ use crate::mechanical_port::source::{
     solo::Solo,
     text_engine::FontRef,
     viewmodel::{
-        data_enum::DataEnum, viewmodel_instance::ViewModelInstance,
+        viewmodel_instance::ViewModelInstance,
         viewmodel_instance_artboard::ViewModelInstanceArtboard,
         viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob,
         viewmodel_instance_asset_font::ViewModelInstanceAssetFont,
@@ -464,9 +464,12 @@ impl TargetBinding for CoreBinding {
             .expect("Solo")
     }
     fn enum_index_for_name(&self, name: &str) -> Option<u32> {
-        let index = self
-            .source_enum()?
-            .with_downcast::<DataEnum, _>(|data_enum| data_enum.value_index_by_name(name))?;
+        let index = self.source_enum()?.with(|data_enum| {
+            data_enum
+                .as_data_enum()
+                .expect("authored enum")
+                .value_index_by_name(name)
+        })?;
         Some(index as u32)
     }
     fn image_value(&self) -> Option<Rc<dyn RenderImage>> {
@@ -533,20 +536,16 @@ impl ContextApplyBinding for CoreBinding {
         self.target_kind() == TargetKind::Solo
     }
     fn solo_update_by_index(&mut self, index: usize) {
-        self.target
-            .as_ref()
-            .expect("Solo target")
-            .with_downcast_mut::<Solo, _>(|solo| solo.update_by_index(index));
+        Solo::update_by_index_occurrence(self.target.as_ref().expect("Solo target"), index);
     }
     fn solo_update_by_name(&mut self, name: String) {
-        self.target
-            .as_ref()
-            .expect("Solo target")
-            .with_downcast_mut::<Solo, _>(|solo| solo.update_by_name(&name));
+        Solo::update_by_name_occurrence(self.target.as_ref().expect("Solo target"), &name);
     }
     fn update_list(&mut self, items: &[CoreHandle]) {
         if let Some(target) = &self.target {
-            mutate(|| target.with_mut(|target| target.data_bind_update_list(items)));
+            mutate(|| {
+                crate::mechanical_port::source::generated::core_registry::data_bind_update_list_handle(target, items)
+            });
         }
     }
     fn update_view_model(&mut self, value: Option<CoreHandle>) {
@@ -603,7 +602,7 @@ impl ContextApplyBinding for CoreBinding {
     }
     fn update_artboard(&mut self, source: Option<CoreHandle>) {
         if let Some(target) = &self.target {
-            target.with_mut(|target| target.artboard_referencer_update_artboard(source));
+            crate::mechanical_port::source::generated::core_registry::artboard_referencer_update_artboard_handle(target, source);
         }
     }
     fn resolved_image_asset(&self) -> Option<CoreHandle> {
@@ -646,15 +645,10 @@ impl ContextApplyBinding for CoreBinding {
         Image::set_asset_occurrence(self.target.as_ref().expect("Image target"), Some(asset));
     }
     fn set_target_font_asset(&mut self, asset: CoreHandle) {
-        self.target
-            .as_ref()
-            .expect("TextStyle target")
-            .with_mut(|target| {
-                target
-                    .as_text_style_mut()
-                    .expect("TextStyle")
-                    .set_asset(Some(asset))
-            });
+        crate::mechanical_port::source::text::text_style::TextStyle::set_asset_occurrence(
+            self.target.as_ref().expect("TextStyle target"),
+            Some(asset),
+        );
     }
     fn set_bindable_image(&mut self, image: Option<Rc<dyn RenderImage>>) {
         self.target

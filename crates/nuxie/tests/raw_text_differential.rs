@@ -1,11 +1,23 @@
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::Arc;
+use std::{
+    cell::RefCell,
+    path::{Path, PathBuf},
+    process::Command,
+    rc::Rc,
+};
 
-use nuxie::{
-    RawText, RawTextFont, RecordingFactory, Renderer, TextAlign, TextOverflow, TextSizing,
+use nuxie::{PersistentFactory, RecordingFactory, RenderPaint, Renderer};
+use nuxie_runtime::source::{
+    factory::RuntimeFactoryHandle,
+    math::aabb::Aabb,
+    text::{font_hb::HbFont, raw_text::RawText},
+    text_engine::{
+        ColorGlyphPaintType, Font, FontRef, TextAlign, TextOverflow, TextSizing,
+        with_host_fallback_proc,
+    },
 };
 use serde_json::Value;
+
+type PaintHandle = Rc<RefCell<Box<dyn RenderPaint>>>;
 
 // Live matrix ownership: D-RT-API, D-RT-COLOR-188, D-RT-COLOR-402,
 // D-RT-COLOR-423, D-RT-COLOR-457, D-RT-COLOR-474.
@@ -94,11 +106,74 @@ fn asset(name: &str) -> PathBuf {
         .join(name)
 }
 
-fn font(path: &Path) -> RawTextFont {
-    RawTextFont::decode(Arc::<[u8]>::from(
-        std::fs::read(path).expect("read differential font"),
+fn font(path: &Path) -> FontRef {
+    let bytes = std::fs::read(path).expect("read differential font");
+    HbFont::decode(&bytes).expect("decode differential font")
+}
+
+fn raw_text(factory: &mut PersistentFactory<RecordingFactory>) -> (RawText, RuntimeFactoryHandle) {
+    let factory = RuntimeFactoryHandle::from_factory(factory).expect("retained recording factory");
+    (RawText::new(factory.clone()), factory)
+}
+
+fn paint(factory: &RuntimeFactoryHandle) -> PaintHandle {
+    Rc::new(RefCell::new(
+        factory.with_factory_mut(|factory| factory.make_render_paint()),
     ))
-    .expect("decode differential font")
+}
+
+fn append_default(raw: &mut RawText, text: &str, paint: Option<PaintHandle>, font: &FontRef) {
+    raw.append(text, paint, font.clone(), 16.0, -1.0, 0.0, 0xff00_0000);
+}
+
+fn sizing_value(value: TextSizing) -> u32 {
+    match value {
+        TextSizing::AutoWidth => 0,
+        TextSizing::AutoHeight => 1,
+        TextSizing::Fixed => 2,
+        TextSizing::Unknown(value) => value,
+    }
+}
+
+fn overflow_value(value: TextOverflow) -> u32 {
+    match value {
+        TextOverflow::Visible => 0,
+        TextOverflow::Hidden => 1,
+        TextOverflow::Clipped => 2,
+        TextOverflow::Ellipsis => 3,
+        TextOverflow::Fit => 4,
+        TextOverflow::FitFontSize => 5,
+        TextOverflow::Unknown(value) => value,
+    }
+}
+
+fn align_value(value: TextAlign) -> u32 {
+    match value {
+        TextAlign::Left => 0,
+        TextAlign::Right => 1,
+        TextAlign::Center => 2,
+        TextAlign::Unknown(value) => value,
+    }
+}
+
+fn with_fallback<R>(font: FontRef, work: impl FnOnce() -> R) -> R {
+    thread_local! {
+        static FALLBACK: RefCell<Option<FontRef>> = const { RefCell::new(None) };
+    }
+    fn pick(_: u32, index: u32, _: &dyn Font) -> Option<FontRef> {
+        if index > 0 {
+            return None;
+        }
+        FALLBACK.with(|font| font.borrow().clone())
+    }
+    struct Restore(Option<FontRef>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            FALLBACK.with(|font| *font.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(FALLBACK.with(|slot| slot.replace(Some(font))));
+    with_host_fallback_proc(pick, work)
 }
 
 fn raster_font_asset() -> PathBuf {
@@ -122,7 +197,7 @@ fn cpp_report() -> Option<Value> {
     Some(serde_json::from_slice(&output.stdout).expect("C++ RawText JSON"))
 }
 
-fn bounds_array(bounds: nuxie::Aabb) -> [f32; 4] {
+fn bounds_array(bounds: Aabb) -> [f32; 4] {
     [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
 }
 
@@ -137,7 +212,7 @@ fn assert_bounds_close(actual: [f32; 4], expected: &Value, tolerance: f32) {
     }
 }
 
-fn assert_observation(raw: &mut RawText<'_>, renderer: &mut dyn Renderer, expected: &Value) {
+fn assert_observation(raw: &mut RawText, renderer: &mut dyn Renderer, expected: &Value) {
     assert_bounds_close(bounds_array(raw.bounds()), &expected["bounds"], 0.08);
     let order = raw.debug_command_kinds();
     let expected_order = expected["order"]
@@ -181,26 +256,29 @@ fn d_rt_api_live_cpp_table() {
     };
     let regular = font(&asset("RobotoFlex.ttf"));
 
-    let mut factory = RecordingFactory::new();
-    let mut raw = RawText::new(&mut factory);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let (mut raw, _factory_handle) = raw_text(&mut factory);
     let defaults = &cpp["api"]["defaults"];
     assert_eq!(raw.empty(), defaults["empty"].as_bool().unwrap());
     assert_eq!(raw.debug_dirty(), defaults["dirty"].as_bool().unwrap());
     assert_eq!(
-        raw.sizing() as u8,
-        defaults["sizing"].as_u64().unwrap() as u8
+        sizing_value(raw.sizing()),
+        defaults["sizing"].as_u64().unwrap() as u32
     );
     assert_eq!(
-        raw.overflow() as u8,
-        defaults["overflow"].as_u64().unwrap() as u8
+        overflow_value(raw.overflow()),
+        defaults["overflow"].as_u64().unwrap() as u32
     );
-    assert_eq!(raw.align() as u8, defaults["align"].as_u64().unwrap() as u8);
+    assert_eq!(
+        align_value(raw.align()),
+        defaults["align"].as_u64().unwrap() as u32
+    );
     assert_bounds_close(bounds_array(raw.bounds()), &defaults["bounds"], 0.0);
     drop(raw);
 
-    let mut factory = RecordingFactory::new();
-    let mut empty = RawText::new(&mut factory);
-    empty.append_default("", None, &regular);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let (mut empty, _factory_handle) = raw_text(&mut factory);
+    append_default(&mut empty, "", None, &regular);
     assert_eq!(
         !empty.empty(),
         cpp["api"]["append"]["emptyRunMakesNonempty"]
@@ -208,20 +286,29 @@ fn d_rt_api_live_cpp_table() {
     assert_eq!(empty.debug_dirty(), cpp["api"]["append"]["emptyRunDirty"]);
     drop(empty);
 
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
-    let mut raw = RawText::new(&mut factory);
-    let paint = raw.make_paint();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let mut renderer = factory.borrow().make_renderer();
+    let (mut raw, factory_handle) = raw_text(&mut factory);
+    let run_paint = paint(&factory_handle);
     raw.append(
-        "A\0ignored",
-        Some(paint.clone()),
-        &regular,
+        // The pinned const-char literal constructs a std::string ending at NUL.
+        "A",
+        Some(run_paint.clone()),
+        regular.clone(),
         24.0,
         -1.0,
         0.0,
         0xff12_3456,
     );
-    raw.append("B", Some(paint), &regular, 12.0, 40.0, 3.0, 0xffab_cdef);
+    raw.append(
+        "B",
+        Some(run_paint),
+        regular.clone(),
+        12.0,
+        40.0,
+        3.0,
+        0xffab_cdef,
+    );
     let populated = raw.bounds();
     let append = &cpp["api"]["append"];
     assert_eq!(
@@ -290,19 +377,24 @@ fn d_rt_api_live_cpp_table() {
             5 => TextOverflow::FitFontSize,
             value => panic!("unexpected C++ overflow {value}"),
         };
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
-        let mut value = RawText::new(&mut factory);
-        let paint = value.make_paint();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let mut renderer = factory.borrow().make_renderer();
+        let (mut value, factory_handle) = raw_text(&mut factory);
+        let paint = paint(&factory_handle);
         value.set_max_width(70.0);
         value.set_max_height(22.0);
         value.set_paragraph_spacing(7.0);
         value.set_sizing(sizing);
         value.set_overflow(overflow);
-        value.append_default("one two three\nfour five", Some(paint), &regular);
+        append_default(
+            &mut value,
+            "one two three\nfour five",
+            Some(paint),
+            &regular,
+        );
         assert_observation(&mut value, &mut renderer, &expected["value"]);
         drop(value);
-        assert_recording_counts(&factory.stream(), &expected["value"]);
+        assert_recording_counts(&factory.borrow().stream(), &expected["value"]);
     }
 
     for expected in cpp["api"]["align"].as_array().expect("align matrix") {
@@ -312,17 +404,25 @@ fn d_rt_api_live_cpp_table() {
             2 => TextAlign::Center,
             value => panic!("unexpected C++ align {value}"),
         };
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
-        let mut value = RawText::new(&mut factory);
-        let paint = value.make_paint();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let mut renderer = factory.borrow().make_renderer();
+        let (mut value, factory_handle) = raw_text(&mut factory);
+        let paint = paint(&factory_handle);
         value.set_max_width(160.0);
         value.set_sizing(TextSizing::AutoHeight);
         value.set_align(align);
-        value.append("ABC", Some(paint), &regular, 20.0, -1.0, 0.0, 0xff00_0000);
+        value.append(
+            "ABC",
+            Some(paint),
+            regular.clone(),
+            20.0,
+            -1.0,
+            0.0,
+            0xff00_0000,
+        );
         assert_observation(&mut value, &mut renderer, &expected["value"]);
         drop(value);
-        assert_recording_counts(&factory.stream(), &expected["value"]);
+        assert_recording_counts(&factory.borrow().stream(), &expected["value"]);
     }
 
     for (key, text, width, height, overflow) in [
@@ -335,10 +435,10 @@ fn d_rt_api_live_cpp_table() {
             TextOverflow::Ellipsis,
         ),
     ] {
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
-        let mut value = RawText::new(&mut factory);
-        let paint = value.make_paint();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let mut renderer = factory.borrow().make_renderer();
+        let (mut value, factory_handle) = raw_text(&mut factory);
+        let paint = paint(&factory_handle);
         value.set_max_width(width);
         value.set_max_height(height);
         value.set_sizing(if key == "ellipsis" {
@@ -350,7 +450,7 @@ fn d_rt_api_live_cpp_table() {
         value.append(
             text,
             Some(paint),
-            &regular,
+            regular.clone(),
             if key == "bidi" { 20.0 } else { 16.0 },
             -1.0,
             0.0,
@@ -358,53 +458,69 @@ fn d_rt_api_live_cpp_table() {
         );
         assert_observation(&mut value, &mut renderer, &cpp["api"][key]);
         drop(value);
-        assert_recording_counts(&factory.stream(), &cpp["api"][key]);
+        assert_recording_counts(&factory.borrow().stream(), &cpp["api"][key]);
     }
 
     for (key, override_enabled) in [("plain", false), ("override", true)] {
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
-        let mut value = RawText::new(&mut factory);
-        let override_paint = value.make_paint();
-        value.append_default("A", None, &regular);
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let mut renderer = factory.borrow().make_renderer();
+        let (mut value, factory_handle) = raw_text(&mut factory);
+        let override_paint = paint(&factory_handle);
+        append_default(&mut value, "A", None, &regular);
         let expected = &cpp["api"]["nullPaint"][key];
         assert_bounds_close(bounds_array(value.bounds()), &expected["bounds"], 0.08);
         assert_eq!(value.debug_command_kinds(), vec!["style"]);
-        value.render(&mut renderer, override_enabled.then_some(&override_paint));
+        value.render(&mut renderer, override_enabled.then_some(override_paint));
         drop(value);
-        assert_recording_counts(&factory.stream(), expected);
+        assert_recording_counts(&factory.borrow().stream(), expected);
     }
 
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
-    let mut value = RawText::new(&mut factory);
-    let first = value.make_paint();
-    let second = value.make_paint();
-    value.append_default("A", Some(first.clone()), &regular);
-    value.append("B", Some(second), &regular, 20.0, -1.0, 0.0, 0xff00_0000);
-    value.append("C", Some(first), &regular, 12.0, -1.0, 0.0, 0xff00_0000);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let mut renderer = factory.borrow().make_renderer();
+    let (mut value, factory_handle) = raw_text(&mut factory);
+    let first = paint(&factory_handle);
+    let second = paint(&factory_handle);
+    append_default(&mut value, "A", Some(first.clone()), &regular);
+    value.append(
+        "B",
+        Some(second),
+        regular.clone(),
+        20.0,
+        -1.0,
+        0.0,
+        0xff00_0000,
+    );
+    value.append(
+        "C",
+        Some(first),
+        regular.clone(),
+        12.0,
+        -1.0,
+        0.0,
+        0xff00_0000,
+    );
     assert_observation(&mut value, &mut renderer, &cpp["api"]["coalescing"]);
     drop(value);
-    assert_recording_counts(&factory.stream(), &cpp["api"]["coalescing"]);
+    assert_recording_counts(&factory.borrow().stream(), &cpp["api"]["coalescing"]);
 
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
-    let mut value = RawText::new(&mut factory);
-    let paint = value.make_paint();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let mut renderer = factory.borrow().make_renderer();
+    let (mut value, factory_handle) = raw_text(&mut factory);
+    let paint = paint(&factory_handle);
     value.set_max_width(50.0);
     value.set_max_height(20.0);
     value.set_sizing(TextSizing::Fixed);
     value.set_overflow(TextOverflow::Clipped);
-    value.append_default("A", Some(paint), &regular);
+    append_default(&mut value, "A", Some(paint), &regular);
     let _ = value.bounds();
     value.clear();
     assert_observation(&mut value, &mut renderer, &cpp["api"]["emptyClipRetained"]);
     drop(value);
-    assert_recording_counts(&factory.stream(), &cpp["api"]["emptyClipRetained"]);
+    assert_recording_counts(&factory.borrow().stream(), &cpp["api"]["emptyClipRetained"]);
 
     let stored = &cpp["api"]["stored"];
-    let mut factory = RecordingFactory::new();
-    let mut value = RawText::new(&mut factory);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let (mut value, _factory_handle) = raw_text(&mut factory);
     value.set_sizing(TextSizing::Fixed);
     value.set_overflow(TextOverflow::FitFontSize);
     value.set_align(TextAlign::Center);
@@ -412,14 +528,17 @@ fn d_rt_api_live_cpp_table() {
     value.set_max_height(-17.0);
     value.set_paragraph_spacing(-19.0);
     assert_eq!(
-        value.sizing() as u8,
-        stored["sizing"].as_u64().unwrap() as u8
+        sizing_value(value.sizing()),
+        stored["sizing"].as_u64().unwrap() as u32
     );
     assert_eq!(
-        value.overflow() as u8,
-        stored["overflow"].as_u64().unwrap() as u8
+        overflow_value(value.overflow()),
+        stored["overflow"].as_u64().unwrap() as u32
     );
-    assert_eq!(value.align() as u8, stored["align"].as_u64().unwrap() as u8);
+    assert_eq!(
+        align_value(value.align()),
+        stored["align"].as_u64().unwrap() as u32
+    );
     assert_eq!(
         value.max_width(),
         stored["maxWidth"].as_f64().unwrap() as f32
@@ -445,7 +564,7 @@ fn d_rt_color_188_402_423_457_474_live_cpp() {
         return;
     };
     let emoji = font(&asset("TwemojiMozilla.subset.ttf"));
-    let regular = font(&asset("RobotoFlex.ttf")).with_fallbacks([emoji.clone()]);
+    let regular = font(&asset("RobotoFlex.ttf"));
     let cases = [
         ("A", &emoji, 32.0, 200.0),
         ("❤❤❤", &emoji, 32.0, 400.0),
@@ -453,43 +572,45 @@ fn d_rt_color_188_402_423_457_474_live_cpp() {
         ("❤", &emoji, 1.0, 100.0),
         ("❤", &emoji, 200.0, 2000.0),
     ];
-    for (index, (text, font, size, width)) in cases.into_iter().enumerate() {
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
-        let mut raw = RawText::new(&mut factory);
-        raw.set_max_width(width);
-        raw.set_sizing(TextSizing::AutoHeight);
-        raw.append(text, None, font, size, -1.0, 0.0, 0xff00_0000);
-        let bounds = raw.bounds();
-        raw.render(&mut renderer, None);
-        let kinds = raw.debug_command_kinds();
-        drop(raw);
+    with_fallback(emoji.clone(), || {
+        for (index, (text, font, size, width)) in cases.into_iter().enumerate() {
+            let mut factory = PersistentFactory::new(RecordingFactory::new());
+            let mut renderer = factory.borrow().make_renderer();
+            let (mut raw, _factory_handle) = raw_text(&mut factory);
+            raw.set_max_width(width);
+            raw.set_sizing(TextSizing::AutoHeight);
+            raw.append(text, None, font.clone(), size, -1.0, 0.0, 0xff00_0000);
+            let bounds = raw.bounds();
+            raw.render(&mut renderer, None);
+            let kinds = raw.debug_command_kinds();
+            drop(raw);
 
-        let expected = &cpp["colors"][index];
-        assert_bounds_close(bounds_array(bounds), &expected["bounds"], 0.1);
-        assert_eq!(
-            kinds.len(),
-            expected["commands"].as_u64().unwrap() as usize,
-            "D-RT-COLOR case {index} command coalescing"
-        );
-        assert_eq!(
-            kinds.iter().filter(|kind| **kind == "color").count(),
-            expected["colorCommands"].as_u64().unwrap() as usize
-        );
-        assert_eq!(
-            kinds.iter().filter(|kind| **kind == "style").count(),
-            expected["styleCommands"].as_u64().unwrap() as usize
-        );
-        let stream = factory.stream();
-        assert_eq!(
-            stream.matches("drawPath ").count(),
-            expected["drawPaths"].as_u64().unwrap() as usize
-        );
-        assert_eq!(
-            stream.matches("drawImage ").count(),
-            expected["drawImages"].as_u64().unwrap() as usize
-        );
-    }
+            let expected = &cpp["colors"][index];
+            assert_bounds_close(bounds_array(bounds), &expected["bounds"], 0.1);
+            assert_eq!(
+                kinds.len(),
+                expected["commands"].as_u64().unwrap() as usize,
+                "D-RT-COLOR case {index} command coalescing"
+            );
+            assert_eq!(
+                kinds.iter().filter(|kind| **kind == "color").count(),
+                expected["colorCommands"].as_u64().unwrap() as usize
+            );
+            assert_eq!(
+                kinds.iter().filter(|kind| **kind == "style").count(),
+                expected["styleCommands"].as_u64().unwrap() as usize
+            );
+            let stream = factory.borrow().stream();
+            assert_eq!(
+                stream.matches("drawPath ").count(),
+                expected["drawPaths"].as_u64().unwrap() as usize
+            );
+            assert_eq!(
+                stream.matches("drawImage ").count(),
+                expected["drawImages"].as_u64().unwrap() as usize
+            );
+        }
+    });
 }
 
 #[test]
@@ -514,10 +635,8 @@ fn d_rt_engine_live_cpp_classification_and_layer_metadata() {
     ];
     for (name, bytes) in fonts {
         let expected = &cpp["engine"][name];
-        let found = (0..65536).find(|glyph| {
-            nuxie_runtime::runtime_classify_color_glyph(&bytes, *glyph)
-                != nuxie_runtime::RuntimeColorGlyphClassification::Monochrome
-        });
+        let font = HbFont::decode(&bytes).expect("engine font decodes");
+        let found = (0..=u16::MAX).find(|glyph| font.is_color_glyph(*glyph));
         assert_eq!(
             found.is_some(),
             expected["found"].as_bool().unwrap(),
@@ -525,35 +644,30 @@ fn d_rt_engine_live_cpp_classification_and_layer_metadata() {
         );
         let glyph_id = found.unwrap_or(0);
         assert_eq!(
-            glyph_id,
+            u32::from(glyph_id),
             expected["glyphId"].as_u64().unwrap() as u32,
             "{name}"
         );
-        let layers =
-            nuxie_runtime::runtime_extract_color_glyph_layers(&bytes, glyph_id, 0xff12_3456);
+        let mut layers = Vec::new();
+        font.get_color_layers(glyph_id, &mut layers, 0xff12_3456);
         let solids = layers
             .iter()
-            .filter(|layer| {
-                matches!(
-                    layer.paint,
-                    nuxie_runtime::RuntimeColorGlyphPaint::Solid { .. }
-                )
-            })
+            .filter(|layer| layer.paint_type == ColorGlyphPaintType::Solid)
             .count();
         let gradients = layers
             .iter()
             .filter(|layer| {
                 matches!(
-                    layer.paint,
-                    nuxie_runtime::RuntimeColorGlyphPaint::LinearGradient { .. }
-                        | nuxie_runtime::RuntimeColorGlyphPaint::RadialGradient { .. }
-                        | nuxie_runtime::RuntimeColorGlyphPaint::SweepGradient { .. }
+                    layer.paint_type,
+                    ColorGlyphPaintType::LinearGradient
+                        | ColorGlyphPaintType::RadialGradient
+                        | ColorGlyphPaintType::SweepGradient
                 )
             })
             .count();
         let (images, image_bytes) = layers.iter().fold((0usize, 0usize), |counts, layer| {
-            if let nuxie_runtime::RuntimeColorGlyphPaint::Image { ref bytes, .. } = layer.paint {
-                (counts.0 + 1, counts.1 + bytes.len())
+            if layer.paint_type == ColorGlyphPaintType::Image {
+                (counts.0 + 1, counts.1 + layer.image_bytes.len())
             } else {
                 counts
             }

@@ -90,7 +90,7 @@ impl AudioEvent {
     pub fn set_asset(&mut self, asset: Option<CoreHandle>) {
         if asset
             .as_ref()
-            .is_some_and(|asset| asset.is_type_of(AudioAsset::TYPE_KEY))
+            .is_some_and(|asset| asset.is_type_of(crate::mechanical_port::source::generated::assets::audio_asset_base::AudioAssetBase::TYPE_KEY))
         {
             let Some(this) = self.core_handle() else {
                 return;
@@ -101,8 +101,9 @@ impl AudioEvent {
 
     pub fn clone_event(&self) -> Self {
         let mut cloned = Self::default();
-        let mut callbacks = AudioEventCloneCallbacks;
-        cloned.base = self.base.clone_into(&mut callbacks).base;
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(&self.base, &mut cloned);
+        cloned.base = base;
         if let Some(asset) = self.file_asset_referencer.asset() {
             cloned
                 .file_asset_referencer
@@ -118,12 +119,6 @@ impl AudioEvent {
     fn core_handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.base.base.base.base.base.handle()
     }
-}
-
-struct AudioEventCloneCallbacks;
-
-impl AudioEventBaseCallbacks for AudioEventCloneCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }
 
 impl AudioEventBaseCallbacks for AudioEvent {

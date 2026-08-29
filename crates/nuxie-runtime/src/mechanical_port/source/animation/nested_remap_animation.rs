@@ -14,8 +14,15 @@ impl NestedAnimationBehavior for NestedRemapAnimation {
         Self::advance(self, elapsed_seconds, new_frame)
     }
 
-    fn initialize_animation(&mut self, artboard: RuntimeArtboardInstanceWeakHandle) {
-        Self::initialize_animation(self, artboard);
+    fn animation_initializer(
+        &self,
+    ) -> crate::mechanical_port::source::animation::nested_animation::NestedAnimationInitializer
+    {
+        |owner, artboard| {
+            owner
+                .with_downcast_mut::<Self, _>(|owner| owner.initialize_animation(artboard))
+                .expect("live NestedRemapAnimation");
+        }
     }
 
     fn release_dependencies(&mut self) {

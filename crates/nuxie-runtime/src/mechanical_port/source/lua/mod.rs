@@ -1,3 +1,4 @@
 // The approved Rust-native VM implements the Lua API in nuxie-scripting.
-// Only the runtime-neutral VM ownership seam is compiled here.
+// Runtime-neutral VM ownership and shared context state remain mirrored here.
+pub mod logging_scripting_context;
 pub mod scripting_vm;

@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem;
 
-use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
+use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
 
 pub trait ViewModelInstanceListItemBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);

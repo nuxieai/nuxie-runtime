@@ -1,7 +1,8 @@
-//! Exact Rust-language ports of pinned `runtime/enums_test.cpp`.
+//! Native enum-owner ports of pinned `runtime/enums_test.cpp`.
 
+use nuxie_runtime::source::enums::{self, FlagEnum, ScopedEnum};
 use std::fmt::Debug;
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
+use std::ops::{BitAnd, BitOr, BitXor, Not, Sub};
 
 const SEED: u64 = 0x0f93_4929;
 
@@ -62,6 +63,8 @@ trait Underlying:
     + Debug
     + Eq
     + Not<Output = Self>
+    + Sub<Output = Self>
+    + From<u8>
 {
     fn from_random(value: u64) -> Self;
     fn zero() -> Self;
@@ -134,44 +137,31 @@ impl_underlying!(u64, u64::MAX);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Flag<U>(U);
 
-impl<U: BitOr<Output = U>> BitOr for Flag<U> {
-    type Output = Self;
-    fn bitor(self, rhs: Self) -> Self {
-        Self(self.0 | rhs.0)
+// These are the pinned test's Flags/Flags64 declarations, not implementations
+// of the enum operations under test. Arbitrary bit patterns require a newtype
+// rather than a Rust enum with invalid discriminants.
+impl<U: Underlying> ScopedEnum for Flag<U> {
+    type Repr = U;
+
+    fn underlying_value(self) -> U {
+        self.0
+    }
+    fn from_underlying(value: U) -> Self {
+        Self(value)
+    }
+    fn increment_underlying(value: U) -> U {
+        value.wrapping_add_one()
+    }
+    fn decrement_underlying(value: U) -> U {
+        value.wrapping_sub_one()
     }
 }
-impl<U: BitAnd<Output = U>> BitAnd for Flag<U> {
-    type Output = Self;
-    fn bitand(self, rhs: Self) -> Self {
-        Self(self.0 & rhs.0)
-    }
+
+impl FlagEnum for Flag<i32> {
+    const NONE: Self = Self(0);
 }
-impl<U: BitXor<Output = U>> BitXor for Flag<U> {
-    type Output = Self;
-    fn bitxor(self, rhs: Self) -> Self {
-        Self(self.0 ^ rhs.0)
-    }
-}
-impl<U: Not<Output = U>> Not for Flag<U> {
-    type Output = Self;
-    fn not(self) -> Self {
-        Self(!self.0)
-    }
-}
-impl<U: BitOrAssign> BitOrAssign for Flag<U> {
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.0 |= rhs.0;
-    }
-}
-impl<U: BitAndAssign> BitAndAssign for Flag<U> {
-    fn bitand_assign(&mut self, rhs: Self) {
-        self.0 &= rhs.0;
-    }
-}
-impl<U: BitXorAssign> BitXorAssign for Flag<U> {
-    fn bitxor_assign(&mut self, rhs: Self) {
-        self.0 ^= rhs.0;
-    }
+impl FlagEnum for Flag<u64> {
+    const NONE: Self = Self(0);
 }
 
 fn unary_values<U: Underlying>() -> Vec<U> {
@@ -251,29 +241,29 @@ fn wave_b2_flag_operator_or() {
         fixture_fingerprint, 0xbd69_e87b_0d18_76de,
         "1,000-value std::mt19937_64 fixture fingerprint from pinned C++",
     );
-    binary_enum::<i32>(|a, b| a | b, |a, b| a | b);
+    binary_enum::<i32>(enums::bit_or, |a, b| a | b);
 }
 
 #[test]
 fn wave_b2_flag_operator_and() {
-    binary_enum::<i32>(|a, b| a & b, |a, b| a & b);
+    binary_enum::<i32>(enums::bit_and, |a, b| a & b);
 }
 
 #[test]
 fn wave_b2_flag_operator_xor() {
-    binary_enum::<i32>(|a, b| a ^ b, |a, b| a ^ b);
+    binary_enum::<i32>(enums::bit_xor, |a, b| a ^ b);
 }
 
 #[test]
 fn wave_b2_flag_operator_not() {
-    unary_enum::<i32>(|a| !a, |a| !a);
+    unary_enum::<i32>(enums::bit_not, |a| !a);
 }
 
 #[test]
 fn wave_b2_flag_operator_or_assign() {
     binary_enum::<i32>(
         |mut a, b| {
-            a |= b;
+            a = enums::bit_or(a, b);
             a
         },
         |mut a, b| {
@@ -287,7 +277,7 @@ fn wave_b2_flag_operator_or_assign() {
 fn wave_b2_flag_operator_and_assign() {
     binary_enum::<i32>(
         |mut a, b| {
-            a &= b;
+            a = enums::bit_and(a, b);
             a
         },
         |mut a, b| {
@@ -301,7 +291,7 @@ fn wave_b2_flag_operator_and_assign() {
 fn wave_b2_flag_operator_xor_assign() {
     binary_enum::<i32>(
         |mut a, b| {
-            a ^= b;
+            a = enums::bit_xor(a, b);
             a
         },
         |mut a, b| {
@@ -311,41 +301,39 @@ fn wave_b2_flag_operator_xor_assign() {
     );
 }
 
-fn single<U: Underlying>(flag: Flag<U>) -> bool {
-    flag.0.count_ones() == 1
-}
-
 #[test]
 fn wave_b2_is_single_flag() {
-    assert!(!single(Flag(0_i32)));
-    assert!(!single(Flag(0_u64)));
+    assert!(!enums::is_single_flag(Flag(0_i32)));
+    assert!(!enums::is_single_flag(Flag(0_u64)));
     for bit in 0..i32::BITS {
-        assert!(single(Flag(i32::single_bit(bit))));
+        assert!(enums::is_single_flag(Flag(i32::single_bit(bit))));
     }
     for bit in 0..u64::BITS {
-        assert!(single(Flag(u64::single_bit(bit))));
+        assert!(enums::is_single_flag(Flag(u64::single_bit(bit))));
     }
-    unary_scalar::<i32, bool>(single, |value| value.count_ones() == 1);
-    unary_scalar::<u64, bool>(single, |value| value.count_ones() == 1);
+    unary_scalar::<i32, bool>(enums::is_single_flag, |value| value.count_ones() == 1);
+    unary_scalar::<u64, bool>(enums::is_single_flag, |value| value.count_ones() == 1);
 }
 
-fn flag_set<U: Underlying>(flags: Flag<U>, mask: Flag<U>) -> bool {
-    flags.0 & mask.0 != U::zero()
-}
-
-fn check_flag_set<U: Underlying>() {
-    assert!(!flag_set(Flag(U::zero()), Flag(U::one())));
-    assert!(flag_set(Flag(U::one()), Flag(U::one())));
-    assert!(!flag_set(Flag(U::one()), Flag(U::two())));
-    assert!(flag_set(Flag(U::one() | U::two()), Flag(U::one())));
+fn check_flag_set<U: Underlying>()
+where
+    Flag<U>: FlagEnum,
+{
+    assert!(!enums::is_flag_set(Flag(U::zero()), Flag(U::one())));
+    assert!(enums::is_flag_set(Flag(U::one()), Flag(U::one())));
+    assert!(!enums::is_flag_set(Flag(U::one()), Flag(U::two())));
+    assert!(enums::is_flag_set(
+        Flag(U::one() | U::two()),
+        Flag(U::one())
+    ));
     let mut random = Mt19937_64::new(SEED);
     for bit in 0..U::bit_width() {
         let integral_flag = U::single_bit(bit);
-        assert!(!flag_set(Flag(U::zero()), Flag(integral_flag)));
+        assert!(!enums::is_flag_set(Flag(U::zero()), Flag(integral_flag)));
         for _ in 0..100 {
             let value = U::from_random(random.next());
             assert_eq!(
-                flag_set(Flag(value), Flag(integral_flag)),
+                enums::is_flag_set(Flag(value), Flag(integral_flag)),
                 value & integral_flag != U::zero()
             );
         }
@@ -360,58 +348,49 @@ fn wave_b2_is_flag_set() {
 
 #[test]
 fn wave_b2_underlying_value() {
-    unary_scalar::<i32, i32>(|flag| flag.0, |value| value);
-    unary_scalar::<u64, u64>(|flag| flag.0, |value| value);
+    unary_scalar::<i32, i32>(enums::underlying_value, |value| value);
+    unary_scalar::<u64, u64>(enums::underlying_value, |value| value);
 }
 
 #[test]
 fn wave_b2_incr() {
-    both!(
-        unary_enum,
-        |flag: Flag<_>| Flag(flag.0.wrapping_add_one()),
-        |value: _| value.wrapping_add_one()
-    );
+    both!(unary_enum, enums::increment, |value: _| value
+        .wrapping_add_one());
 }
 
 #[test]
 fn wave_b2_decr() {
-    both!(
-        unary_enum,
-        |flag: Flag<_>| Flag(flag.0.wrapping_sub_one()),
-        |value: _| value.wrapping_sub_one()
-    );
+    both!(unary_enum, enums::decrement, |value: _| value
+        .wrapping_sub_one());
 }
 
 #[test]
 fn wave_b2_any_flag_set_unmasked() {
-    unary_scalar::<i32, bool>(|flag| flag.0 != 0, |value| value != 0);
+    unary_scalar::<i32, bool>(enums::any_flag_set, |value| value != 0);
     // Preserve the pinned Flags64 branch's accidental call to decr.
-    unary_enum::<u64>(
-        |flag| Flag(flag.0.wrapping_sub_one()),
-        |value| value.wrapping_sub_one(),
-    );
+    unary_enum::<u64>(enums::decrement, |value| value.wrapping_sub_one());
 }
 
 #[test]
 fn wave_b2_any_flag_set_masked() {
-    binary_scalar::<i32, bool>(flag_set, |flags, mask| flags & mask != 0);
-    binary_scalar::<u64, bool>(flag_set, |flags, mask| flags & mask != 0);
+    binary_scalar::<i32, bool>(enums::any_flag_in_mask, |flags, mask| flags & mask != 0);
+    binary_scalar::<u64, bool>(enums::any_flag_in_mask, |flags, mask| flags & mask != 0);
 }
 
 #[test]
 fn wave_b2_all_flags_set() {
-    binary_scalar::<i32, bool>(|f, m| f.0 & m.0 == m.0, |f, m| f & m == m);
-    binary_scalar::<u64, bool>(|f, m| f.0 & m.0 == m.0, |f, m| f & m == m);
+    binary_scalar::<i32, bool>(enums::all_flags_set, |f, m| f & m == m);
+    binary_scalar::<u64, bool>(enums::all_flags_set, |f, m| f & m == m);
 }
 
 #[test]
 fn wave_b2_no_flag_set_unmasked() {
-    unary_scalar::<i32, bool>(|flag| flag.0 == 0, |value| value == 0);
-    unary_scalar::<u64, bool>(|flag| flag.0 == 0, |value| value == 0);
+    unary_scalar::<i32, bool>(enums::no_flags_set, |value| value == 0);
+    unary_scalar::<u64, bool>(enums::no_flags_set, |value| value == 0);
 }
 
 #[test]
 fn wave_b2_no_flags_set_masked() {
-    binary_scalar::<i32, bool>(|f, m| f.0 & m.0 == 0, |f, m| f & m == 0);
-    binary_scalar::<u64, bool>(|f, m| f.0 & m.0 == 0, |f, m| f & m == 0);
+    binary_scalar::<i32, bool>(enums::no_flags_in_mask, |f, m| f & m == 0);
+    binary_scalar::<u64, bool>(enums::no_flags_in_mask, |f, m| f & m == 0);
 }

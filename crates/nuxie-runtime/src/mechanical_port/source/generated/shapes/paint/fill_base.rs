@@ -42,7 +42,7 @@ impl FillBase {
             return;
         }
         callbacks.fill_rule_changed();
-        callbacks.notify_property_changed(Self::FILL_RULE_PROPERTY_KEY);
+        FillBaseCallbacks::notify_property_changed(callbacks, Self::FILL_RULE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_fill_rule_value(&mut self, value: u32) -> bool {

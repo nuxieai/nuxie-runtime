@@ -7,7 +7,7 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub struct CubicInterpolator {
     pub base: CubicInterpolatorBase,
-    solver: CubicInterpolatorSolver,
+    pub(super) solver: CubicInterpolatorSolver,
 }
 
 impl CubicInterpolator {

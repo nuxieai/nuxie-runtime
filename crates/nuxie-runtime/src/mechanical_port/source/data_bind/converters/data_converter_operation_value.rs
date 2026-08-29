@@ -66,14 +66,23 @@ impl Default for DataConverterOperationValue {
 impl DataConverterOperationValue {
     pub fn new(operation: ArithmeticOperation, operation_value: f32) -> Self {
         let mut converter = Self::default();
-        converter.base.base.base.set_operation_type(
-            operation as u32,
-            &mut DataConverterOperationValueInitializationCallbacks,
-        );
-        converter.base.set_operation_value(
-            operation_value,
-            &mut DataConverterOperationValueInitializationCallbacks,
-        );
+        if converter
+            .base
+            .base
+            .base
+            .set_operation_type_value(operation as u32)
+        {
+            DataConverterOperationBaseCallbacks::operation_type_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(crate::mechanical_port::source::generated::data_bind::converters::data_converter_operation_base::DataConverterOperationBase::OPERATION_TYPE_PROPERTY_KEY);
+        }
+        if converter.base.set_operation_value_value(operation_value) {
+            DataConverterOperationValueBaseCallbacks::operation_value_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(
+                    DataConverterOperationValueBase::OPERATION_VALUE_PROPERTY_KEY,
+                );
+        }
         converter
     }
     pub fn convert<'a>(&'a mut self, input: &dyn DataValue) -> &'a dyn DataValue {
@@ -106,16 +115,4 @@ impl DataConverterOperationValueBaseCallbacks for DataConverterOperationValue {
     fn operation_value_changed(&mut self) {
         Self::operation_value_changed(self);
     }
-}
-
-struct DataConverterOperationValueInitializationCallbacks;
-
-impl DataConverterOperationValueBaseCallbacks
-    for DataConverterOperationValueInitializationCallbacks
-{
-    fn notify_property_changed(&mut self, _property_key: u16) {}
-}
-
-impl DataConverterOperationBaseCallbacks for DataConverterOperationValueInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }

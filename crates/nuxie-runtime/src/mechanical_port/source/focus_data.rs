@@ -17,7 +17,7 @@ use crate::mechanical_port::source::{
         focus_data_base::{FocusDataBase, FocusDataBaseCallbacks},
     },
     input::{
-        focus_node::{EdgeBehavior, FocusNode, FocusNodeRef, FocusableRef},
+        focus_node::{FocusNode, FocusNodeRef, FocusableRef},
         focusable::{Focusable, Key, KeyModifiers},
     },
     layout_component::LayoutComponent,
@@ -169,11 +169,7 @@ impl FocusData {
         if self.component().is_collapsed() {
             return false;
         }
-        let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
-        else {
-            return true;
-        };
-        let mut traversal = ParentTraversal::new(Some(this));
+        let mut traversal = ParentTraversal::from_component(self.component());
         loop {
             let Some(parent) = traversal.next() else {
                 break;
@@ -300,51 +296,6 @@ impl FocusData {
     }
 }
 
-impl Focusable for FocusData {
-    fn key_input(
-        &mut self,
-        key: Key,
-        modifiers: KeyModifiers,
-        is_pressed: bool,
-        is_repeat: bool,
-    ) -> bool {
-        FocusData::key_input(self, key, modifiers, is_pressed, is_repeat)
-    }
-
-    fn text_input(&mut self, text: &str) -> bool {
-        FocusData::text_input(self, text)
-    }
-
-    fn gamepad_dispatch(
-        &mut self,
-        invocation: &ListenerInvocation,
-        out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
-    ) -> bool {
-        FocusData::gamepad_dispatch(self, invocation, out_dispatched_scripted_drawable)
-    }
-
-    fn focused(&mut self) {
-        FocusData::focused(self);
-    }
-
-    fn blurred(&mut self) {
-        FocusData::blurred(self);
-    }
-
-    fn world_position(&self) -> Option<(f32, f32)> {
-        let mut position = Vec2D::default();
-        FocusData::world_position(self, &mut position).then_some((position.x, position.y))
-    }
-
-    fn is_eligible_for_focus_traversal(&self) -> bool {
-        FocusData::is_eligible_for_focus_traversal(self)
-    }
-
-    fn accepts_keyboard_input(&self) -> bool {
-        FocusData::accepts_keyboard_input(self)
-    }
-}
-
 impl FocusDataBaseCallbacks for FocusData {
     fn notify_property_changed(&mut self, property_key: u16) {
         self.base
@@ -378,6 +329,14 @@ impl ComponentBaseCallbacks for FocusData {
 }
 
 impl Focusable for FocusDataFocusable {
+    fn focusable_artboard(&self) -> Option<CoreHandle> {
+        self.owner.as_ref().and_then(|owner| {
+            owner
+                .with_downcast::<FocusData, _>(FocusData::focusable_artboard)
+                .flatten()
+        })
+    }
+
     fn key_input(
         &mut self,
         key: Key,
@@ -385,23 +344,15 @@ impl Focusable for FocusDataFocusable {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        self.owner
-            .as_ref()
-            .and_then(|owner| {
-                owner.with_downcast_mut::<FocusData, _>(|owner| {
-                    owner.key_input(key, modifiers, is_pressed, is_repeat)
-                })
-            })
-            .unwrap_or(false)
+        self.owner.as_ref().is_some_and(|owner| {
+            FocusData::key_input_occurrence(owner, key, modifiers, is_pressed, is_repeat)
+        })
     }
 
     fn text_input(&mut self, text: &str) -> bool {
         self.owner
             .as_ref()
-            .and_then(|owner| {
-                owner.with_downcast_mut::<FocusData, _>(|owner| owner.text_input(text))
-            })
-            .unwrap_or(false)
+            .is_some_and(|owner| FocusData::text_input_occurrence(owner, text))
     }
 
     fn gamepad_dispatch(
@@ -409,14 +360,13 @@ impl Focusable for FocusDataFocusable {
         invocation: &ListenerInvocation,
         out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
     ) -> bool {
-        self.owner
-            .as_ref()
-            .and_then(|owner| {
-                owner.with_downcast_mut::<FocusData, _>(|owner| {
-                    owner.gamepad_dispatch(invocation, out_dispatched_scripted_drawable)
-                })
-            })
-            .unwrap_or(false)
+        self.owner.as_ref().is_some_and(|owner| {
+            FocusData::gamepad_dispatch_occurrence(
+                owner,
+                invocation,
+                out_dispatched_scripted_drawable,
+            )
+        })
     }
 
     fn focused(&mut self) {
@@ -489,15 +439,9 @@ impl Drop for FocusData {
             return;
         };
         node.borrow_mut().clear_focusable();
-        let parent = node.borrow().parent();
-        let manager = self
-            .component()
-            .with_artboard(Artboard::focus_manager_handle)
-            .flatten();
+        let manager = node.borrow().manager();
         if let Some(manager) = manager {
             manager.with_focus_manager_mut(|manager| manager.remove_child(&node));
-        } else if let Some(parent) = parent {
-            FocusNode::remove_child(&parent, &node);
         }
     }
 }
@@ -527,7 +471,7 @@ impl FocusData {
                 node_ref.set_can_traverse(
                     self.base.focus_flags() & FocusDataBase::CAN_TRAVERSE_BITMASK != 0,
                 );
-                node_ref.set_edge_behavior(edge_behavior(self.base.edge_behavior_value()));
+                node_ref.set_edge_behavior_raw(self.base.edge_behavior_value() as u8);
                 node_ref.name = self.base.base.base.name().to_owned();
             }
             self.focus_node = Some(node);
@@ -598,16 +542,22 @@ impl FocusData {
 
     pub fn focus(&mut self) {}
 
-    pub fn key_input(
-        &mut self,
+    pub fn key_input_occurrence(
+        owner: &CoreHandle,
         value: Key,
         modifiers: KeyModifiers,
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        self.keyboard_listeners
-            .retain(RuntimeKeyboardListenerHandle::is_alive);
-        for listener in &self.keyboard_listeners {
+        let listeners = owner
+            .with_downcast_mut::<Self, _>(|owner| {
+                owner
+                    .keyboard_listeners
+                    .retain(RuntimeKeyboardListenerHandle::is_alive);
+                owner.keyboard_listeners.clone()
+            })
+            .expect("live FocusData");
+        for listener in listeners {
             if listener.key_input(value, modifiers, is_pressed, is_repeat) {
                 return true;
             }
@@ -615,10 +565,16 @@ impl FocusData {
         false
     }
 
-    pub fn text_input(&mut self, text: &str) -> bool {
-        self.text_input_listeners
-            .retain(RuntimeKeyboardListenerHandle::is_alive);
-        for listener in &self.text_input_listeners {
+    pub fn text_input_occurrence(owner: &CoreHandle, text: &str) -> bool {
+        let listeners = owner
+            .with_downcast_mut::<Self, _>(|owner| {
+                owner
+                    .text_input_listeners
+                    .retain(RuntimeKeyboardListenerHandle::is_alive);
+                owner.text_input_listeners.clone()
+            })
+            .expect("live FocusData");
+        for listener in listeners {
             if listener.text_input(text) {
                 return true;
             }
@@ -626,28 +582,26 @@ impl FocusData {
         false
     }
 
-    pub fn gamepad_dispatch(
-        &mut self,
+    pub fn gamepad_dispatch_occurrence(
+        owner: &CoreHandle,
         invocation: &ListenerInvocation,
         out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
     ) -> bool {
-        self.gamepad_listeners
-            .retain(RuntimeGamepadListenerHandle::is_alive);
+        let listeners = owner
+            .with_downcast_mut::<Self, _>(|owner| {
+                owner
+                    .gamepad_listeners
+                    .retain(RuntimeGamepadListenerHandle::is_alive);
+                owner.gamepad_listeners.clone()
+            })
+            .expect("live FocusData");
         let mut output = out_dispatched_scripted_drawable;
-        for listener in &self.gamepad_listeners {
+        for listener in listeners {
             if listener.dispatch(invocation, output.as_deref_mut()) {
                 return true;
             }
         }
         false
-    }
-}
-
-fn edge_behavior(value: u32) -> EdgeBehavior {
-    match value {
-        1 => EdgeBehavior::ClosedLoop,
-        2 => EdgeBehavior::Stop,
-        _ => EdgeBehavior::ParentScope,
     }
 }
 
@@ -660,9 +614,7 @@ fn find_sibling_semantic_data(component: &Component) -> Option<CoreHandle> {
                 .children()
                 .iter()
                 .find(|child| {
-                    child
-                        .with(|child| child.as_semantic_data().is_some())
-                        .unwrap_or(false)
+                    child.is_type_of(crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBase::TYPE_KEY)
                 })
                 .cloned()
         })
@@ -697,11 +649,7 @@ impl FocusData {
             return;
         };
 
-        let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
-        else {
-            return;
-        };
-        let mut traversal = ParentTraversal::new(Some(this));
+        let mut traversal = ParentTraversal::from_component(self.component());
         while let Some(parent) = traversal.next() {
             if traversal.did_cross_boundary() {
                 if let (Some(host), Some(source_artboard)) =
@@ -854,7 +802,7 @@ impl FocusData {
     pub fn edge_behavior_value_changed(&mut self) {
         if let Some(node) = &self.focus_node {
             node.borrow_mut()
-                .set_edge_behavior(edge_behavior(self.base.edge_behavior_value()));
+                .set_edge_behavior_raw(self.base.edge_behavior_value() as u8);
         }
     }
 
@@ -868,7 +816,7 @@ impl FocusData {
                 .unwrap_or_default();
             for child in children {
                 if Some(&child) != this.as_ref()
-                    && child.with_downcast::<FocusData, _>(|_| ()).is_some()
+                    && child.is_type_of(crate::mechanical_port::source::generated::focus_data_base::FocusDataBase::TYPE_KEY)
                 {
                     return Some(child);
                 }
@@ -883,11 +831,19 @@ impl FocusData {
     pub fn find_closest_focus_node_handle(
         component: crate::mechanical_port::source::core::CoreHandle,
     ) -> Option<FocusNodeRef> {
-        let mut current = component
+        let parent = component
             .with(|component| component.as_component()?.parent_handle())
             .flatten();
+        Self::find_closest_focus_node_from_parent(parent)
+    }
+
+    pub(crate) fn find_closest_focus_node_from_parent(
+        mut current: Option<CoreHandle>,
+    ) -> Option<FocusNodeRef> {
         while let Some(parent) = current {
-            if parent.with_downcast::<Artboard, _>(|_| ()).is_some() {
+            if parent.is_type_of(
+                crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
+            ) {
                 if let Some(host) = parent
                     .with_downcast::<Artboard, _>(Artboard::host)
                     .flatten()
@@ -918,7 +874,10 @@ impl FocusData {
                 .flatten()
                 .unwrap_or_default();
             for child in children {
-                if let Some(node) = child.with_downcast_mut::<FocusData, _>(FocusData::focus_node) {
+                if child.is_type_of(FocusDataBase::TYPE_KEY)
+                    && let Some(node) =
+                        child.with_downcast_mut::<FocusData, _>(FocusData::focus_node)
+                {
                     return Some(node);
                 }
             }

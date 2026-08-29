@@ -63,7 +63,7 @@ impl FileAssetBase {
             return;
         }
         callbacks.asset_id_changed();
-        callbacks.notify_property_changed(Self::ASSET_ID_PROPERTY_KEY);
+        FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::ASSET_ID_PROPERTY_KEY);
     }
     pub(crate) fn set_asset_id_value(&mut self, value: u32) -> bool {
         if self.asset_id == value {
@@ -86,7 +86,7 @@ impl FileAssetBase {
             return;
         }
         callbacks.cdn_base_url_changed();
-        callbacks.notify_property_changed(Self::CDN_BASE_URL_PROPERTY_KEY);
+        FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::CDN_BASE_URL_PROPERTY_KEY);
     }
     pub(crate) fn set_cdn_base_url_value(&mut self, value: String) -> bool {
         if self.cdn_base_url == value {

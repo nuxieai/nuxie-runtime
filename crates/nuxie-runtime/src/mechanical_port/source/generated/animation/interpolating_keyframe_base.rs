@@ -1,4 +1,6 @@
-use crate::mechanical_port::source::{core::binary_reader::BinaryReader, animation::keyframe::KeyFrame};
+use crate::mechanical_port::source::{
+    animation::keyframe::KeyFrame, core::binary_reader::BinaryReader,
+};
 
 pub trait InterpolatingKeyFrameBaseCallbacks:
     crate::mechanical_port::source::generated::animation::keyframe_base::KeyFrameBaseCallbacks
@@ -47,7 +49,10 @@ impl InterpolatingKeyFrameBase {
             return;
         }
         callbacks.interpolation_type_changed();
-        callbacks.notify_property_changed(Self::INTERPOLATION_TYPE_PROPERTY_KEY);
+        InterpolatingKeyFrameBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INTERPOLATION_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_interpolation_type_value(&mut self, value: u32) -> bool {
@@ -69,7 +74,10 @@ impl InterpolatingKeyFrameBase {
             return;
         }
         callbacks.interpolator_id_changed();
-        callbacks.notify_property_changed(Self::INTERPOLATOR_ID_PROPERTY_KEY);
+        InterpolatingKeyFrameBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INTERPOLATOR_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_interpolator_id_value(&mut self, value: u32) -> bool {

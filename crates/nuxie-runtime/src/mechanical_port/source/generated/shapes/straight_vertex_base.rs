@@ -42,7 +42,7 @@ impl StraightVertexBase {
             return;
         }
         callbacks.radius_changed();
-        callbacks.notify_property_changed(Self::RADIUS_PROPERTY_KEY);
+        StraightVertexBaseCallbacks::notify_property_changed(callbacks, Self::RADIUS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_radius_value(&mut self, value: f32) -> bool {

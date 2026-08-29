@@ -44,6 +44,23 @@ impl From<u32> for ImageFit {
     }
 }
 
+impl std::ops::Deref for Image {
+    type Target = ImageBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Image {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Image {
+    pub const TYPE_KEY: u16 = ImageBase::TYPE_KEY;
+}
+
 pub struct Image {
     pub base: ImageBase,
     pub file_asset_referencer: FileAssetReferencer,
@@ -126,7 +143,7 @@ impl Image {
 
     pub fn set_asset_occurrence(owner: &CoreHandle, asset: Option<CoreHandle>) {
         let Some(asset) =
-            asset.filter(|asset| asset.with_downcast::<ImageAsset, _>(|_| ()).is_some())
+            asset.filter(|asset| asset.is_type_of(crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY))
         else {
             return;
         };
@@ -197,7 +214,9 @@ impl Image {
     }
 
     pub fn will_draw(&self) -> bool {
-        self.base.will_draw() && self.base.render_opacity() != 0.0 && self.image_asset().is_some()
+        self.base.will_draw()
+            && self.base.render_opacity() != 0.0
+            && self.file_asset_referencer.has_asset()
     }
 
     pub fn hit_test<'a>(&'a self, hinfo: &HitInfo, xform: Mat2D) -> Option<&'a Core> {
@@ -208,15 +227,19 @@ impl Image {
             println!("Missing mesh");
         } else {
             let matrix = xform
-                * self.base.world_transform()
+                * *self.base.world_transform()
                 * Mat2D::from_translate(
                     -width * self.base.origin_x(),
                     -height * self.base.origin_y(),
                 );
-            let mut tester = HitTester::new(hinfo.area());
-            tester.add_rect(Aabb::new(0.0, 0.0, width, height), matrix);
-            if tester.test() {
-                return Some(self.base.as_core());
+            let mut tester = HitTester::from_area(hinfo.area);
+            tester.add_rect(
+                Aabb::new(0.0, 0.0, width, height),
+                matrix,
+                crate::mechanical_port::source::math::path_types::PathDirection::Counterclockwise,
+            );
+            if tester.test(crate::mechanical_port::source::math::path_types::FillRule::NonZero) {
+                return Some(self);
             }
         }
         None
@@ -242,7 +265,7 @@ impl Image {
 
     pub fn set_asset(&mut self, asset: Option<CoreHandle>) {
         if let Some(asset) =
-            asset.filter(|asset| asset.with_downcast::<ImageAsset, _>(|_| ()).is_some())
+            asset.filter(|asset| asset.is_type_of(crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY))
         {
             let this = self.base.handle().expect("live Image owner");
             self.file_asset_referencer.set_asset(this, Some(asset));
@@ -377,8 +400,9 @@ impl Image {
         });
         if let (Some((left, top)), Some(parent_world)) = (participant, parent_world) {
             let base = Mat2D::from_translation(Vec2D::new(left, top));
+            let transform = *self.base.transform();
             self.base
-                .set_world_transform(parent_world * base * *self.base.transform());
+                .set_world_transform(parent_world * base * transform);
             return true;
         }
         false
@@ -390,8 +414,7 @@ impl Image {
             .iter()
             .find(|child| {
                 child
-                    .with_downcast::<LayoutParticipant, _>(|_| ())
-                    .is_some()
+                    .is_type_of(crate::mechanical_port::source::generated::layout::layout_participant_base::LayoutParticipantBase::TYPE_KEY)
             })
             .cloned()
     }
@@ -415,10 +438,10 @@ impl Image {
 
     pub(crate) fn update_transform_after_super(&mut self) {
         self.base
-            .transform_mut()
+            .mutable_transform()
             .scale_by_values(self.layout_scale_x, self.layout_scale_y);
-        self.base.transform_mut()[4] += self.layout_offset_x;
-        self.base.transform_mut()[5] += self.layout_offset_y;
+        self.base.mutable_transform()[4] += self.layout_offset_x;
+        self.base.mutable_transform()[5] += self.layout_offset_y;
     }
 
     fn update_image_scale(&mut self) {
@@ -518,9 +541,9 @@ impl Image {
     }
 
     pub fn image_asset(&self) -> Option<CoreHandle> {
-        self.file_asset_referencer
-            .asset()
-            .filter(|asset| asset.with_downcast::<ImageAsset, _>(|_| ()).is_some())
+        // Pinned Image::imageAsset is a static cast. Both public assignment
+        // paths validate ImageAsset before FileAssetReferencer retains it.
+        self.file_asset_referencer.asset()
     }
     pub fn render_image(&self) -> Option<crate::mechanical_port::source::renderer::RenderImageRef> {
         self.image_asset()?

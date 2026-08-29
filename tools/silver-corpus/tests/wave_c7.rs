@@ -45,7 +45,6 @@ fn replay_text_input_silver() {
 }
 
 #[test]
-#[ignore = "expected-red: text_input frame 0, op 25 transform.xy expected -0.0 (0x80000000), got 0"]
 fn wave_c7_text_input_002_file_with_text_input_renders_correctly() {
     replay_text_input_silver();
 }

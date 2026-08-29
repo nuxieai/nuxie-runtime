@@ -7,11 +7,10 @@ repository.workspace = true
 
 [dependencies]
 anyhow = "1"
-nuxie-binary = { path = "../../crates/nuxie-binary" }
-nuxie-graph = { path = "../../crates/nuxie-graph" }
 nuxie-render-api = { path = "../../crates/nuxie-render-api" }
 nuxie-runtime = { path = "../../crates/nuxie-runtime", features = ["tools"] }
 nuxie-scripting = { path = "../../crates/nuxie-scripting", features = ["upstream-test-seams"] }
+nuxie-sriv = { path = "../../crates/nuxie-sriv" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
 
@@ -20,4 +19,3 @@ luaur-rt = "=0.1.8"
 luaur-vm = "=0.1.8"
 luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
-nuxie = { path = "../../crates/nuxie", default-features = false, features = ["scripting", "test-support"] }

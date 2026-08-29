@@ -46,7 +46,10 @@ impl ScriptInputArtboardBase {
             return;
         }
         callbacks.artboard_id_changed();
-        callbacks.notify_property_changed(Self::ARTBOARD_ID_PROPERTY_KEY);
+        ScriptInputArtboardBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ARTBOARD_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_artboard_id_value(&mut self, value: u32) -> bool {

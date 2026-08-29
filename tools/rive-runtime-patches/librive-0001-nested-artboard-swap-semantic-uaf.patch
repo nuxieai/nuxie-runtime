@@ -3,7 +3,7 @@ view-model artboard swap.
 
 Provenance:
   - Applies to pinned upstream rive-runtime 4ac7b32798da0482e441ef09304dc3b480ed3ee5
-    (port-manifest.toml upstream_ref). No upstream commit exists for this fix;
+    (repository RIVE_RUNTIME_REF). No upstream commit exists for this fix;
     it is a local patch authored 2026-08-03 against the pinned oracle.
   - Symptom: rive_golden_runner{,_scripted} --side-channel flakily crashes
     (EXC_BAD_ACCESS) on corpus entries replace_view_model,

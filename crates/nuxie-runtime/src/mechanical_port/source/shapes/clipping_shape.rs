@@ -2,9 +2,11 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
     component::{ComponentDirt, has_dirt},
+    container_component::ContainerComponent,
     core::CoreHandle,
     core_context::CoreContext,
     drawable::{DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
+    generated::shapes::clipping_shape_base::ClippingShapeBase,
     math::mat2d::Mat2D,
     shapes::{paint::shape_paint_path::ShapePaintPath, path_flags::PathFlags},
     status_code::StatusCode,
@@ -126,7 +128,11 @@ pub struct ClippingShapeProxyDrawing {
 }
 
 impl ProxyDrawing for ClippingShapeProxyDrawing {
-    fn draw_proxy(&mut self, renderer: &mut dyn Renderer, needs_save_operation: bool) {
+    fn draw_proxy(
+        &mut self,
+        renderer: &mut crate::mechanical_port::source::renderer::Renderer<'_>,
+        needs_save_operation: bool,
+    ) {
         self.operation
             .borrow_mut()
             .draw(renderer, needs_save_operation);
@@ -160,6 +166,23 @@ impl ProxyDrawing for ClippingShapeProxyDrawing {
 struct ClippingShapeProxy {
     drawable: Rc<RefCell<DrawableProxy>>,
     operation: Rc<RefCell<Box<dyn ClippingShapeOperation>>>,
+}
+
+impl std::ops::Deref for ClippingShape {
+    type Target = ClippingShapeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ClippingShape {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl ClippingShape {
+    pub const TYPE_KEY: u16 = ClippingShapeBase::TYPE_KEY;
 }
 
 pub struct ClippingShape {
@@ -204,33 +227,35 @@ impl ClippingShape {
             return StatusCode::MissingObject;
         };
         if let Some(parent) = self.base.parent_handle() {
-            parent.with_mut(|parent| {
-                if let Some(parent) = parent.as_container_component_mut() {
-                    parent.for_all(|component| {
-                        component.with_mut(|component| {
-                            if let Some(drawable) = component.as_drawable_mut() {
-                                drawable.add_clipping_shape(this.clone());
-                            }
-                        });
-                        true
+            ContainerComponent::for_all(&parent, |component| {
+                if component
+                    .is_type_of(crate::mechanical_port::source::generated::drawable_base::DrawableBase::TYPE_KEY)
+                {
+                    component.with_mut(|component| {
+                        component
+                            .as_drawable_mut()
+                            .expect("Drawable subtype")
+                            .add_clipping_shape(this.clone());
                     });
                 }
+                true
             });
         }
         if let Some(source) = self.source.clone() {
-            source.with_mut(|source| {
-                if let Some(source) = source.as_container_component_mut() {
-                    source.for_all(|component| {
-                        let handle = component.clone();
-                        component.with_mut(|component| {
-                            if let Some(shape) = component.as_shape_mut() {
-                                shape.add_flags(PathFlags::WORLD | PathFlags::CLIPPING);
-                                self.shapes.push(handle);
-                            }
-                        });
-                        true
+            ContainerComponent::for_all(&source, |component| {
+                if component
+                    .is_type_of(crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY)
+                {
+                    let handle = component.clone();
+                    component.with_mut(|component| {
+                        component
+                            .as_shape_mut()
+                            .expect("Shape subtype")
+                            .add_flags(PathFlags::WORLD | PathFlags::CLIPPING);
                     });
+                    self.shapes.push(handle);
                 }
+                true
             });
         }
         StatusCode::Ok
@@ -244,9 +269,9 @@ impl ClippingShape {
         let Some(source) = context
             .resolve_handle(self.base.source_id())
             .filter(|source| {
-                source
-                    .with(|source| source.as_node().is_some())
-                    .unwrap_or(false)
+                source.is_type_of(
+                    crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY,
+                )
             })
         else {
             return StatusCode::MissingObject;
@@ -275,7 +300,13 @@ impl ClippingShape {
             value,
             ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
         ) {
-            self.path.rewind_as(false, self.base.fill_rule().into());
+            let fill_rule = match self.base.fill_rule() {
+                0 => nuxie_render_api::FillRule::NonZero,
+                1 => nuxie_render_api::FillRule::EvenOdd,
+                2 => nuxie_render_api::FillRule::Clockwise,
+                value => panic!("unsupported renderer fill rule {value}"),
+            };
+            self.path.rewind_as(false, fill_rule);
             self.clip_path = false;
             for shape in &self.shapes {
                 shape.with_mut(|shape| {
@@ -294,7 +325,7 @@ impl ClippingShape {
 
     pub fn is_visible_changed(&mut self) {
         self.base.with_artboard_mut(|artboard| {
-            artboard.add_dirt(ComponentDirt::CLIPPING);
+            artboard.add_dirt(ComponentDirt::CLIPPING, false);
         });
     }
 

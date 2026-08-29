@@ -4,6 +4,23 @@ use crate::mechanical_port::source::{
     shapes::path::Path,
     shapes::vertex::{Vertex, VertexBehavior},
 };
+impl std::ops::Deref for PathVertex {
+    type Target = PathVertexBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for PathVertex {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl PathVertex {
+    pub const TYPE_KEY: u16 = PathVertexBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct PathVertex {
     pub base: PathVertexBase,
@@ -33,7 +50,8 @@ impl PathVertex {
             return StatusCode::MissingObject;
         };
         let added = parent
-            .with_downcast_mut::<Path, _>(|parent| parent.add_vertex(this))
+            .with_mut(|parent| parent.as_path_mut().map(|parent| parent.add_vertex(this)))
+            .flatten()
             .is_some();
         if !added {
             return StatusCode::MissingObject;
@@ -42,7 +60,7 @@ impl PathVertex {
     }
     pub fn mark_geometry_dirty(&mut self) {
         if let Some(parent) = self.base.parent_handle() {
-            parent.with_downcast_mut::<Path, _>(|parent| parent.mark_path_dirty(true));
+            parent.with_mut(|parent| Path::mark_path_dirty_for(parent, true));
         }
     }
 }

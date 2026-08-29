@@ -47,7 +47,10 @@ impl TransformSpaceConstraintBase {
             return;
         }
         callbacks.source_space_value_changed();
-        callbacks.notify_property_changed(Self::SOURCE_SPACE_VALUE_PROPERTY_KEY);
+        TransformSpaceConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SOURCE_SPACE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_source_space_value_value(&mut self, value: u32) -> bool {
@@ -69,7 +72,10 @@ impl TransformSpaceConstraintBase {
             return;
         }
         callbacks.dest_space_value_changed();
-        callbacks.notify_property_changed(Self::DEST_SPACE_VALUE_PROPERTY_KEY);
+        TransformSpaceConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DEST_SPACE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_dest_space_value_value(&mut self, value: u32) -> bool {

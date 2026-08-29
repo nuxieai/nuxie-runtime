@@ -23,9 +23,11 @@ impl Default for DataConverterRounder {
 impl DataConverterRounder {
     pub fn new(decimals: u32) -> Self {
         let mut converter = Self::default();
-        converter
-            .base
-            .set_decimals(decimals, &mut DataConverterRounderInitializationCallbacks);
+        if converter.base.set_decimals_value(decimals) {
+            DataConverterRounderBaseCallbacks::decimals_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterRounderBase::DECIMALS_PROPERTY_KEY);
+        }
         converter
     }
     pub fn output_type(&self) -> DataType {
@@ -42,12 +44,6 @@ impl DataConverterRounder {
         self.output.set_value(result);
         &self.output
     }
-}
-
-struct DataConverterRounderInitializationCallbacks;
-
-impl DataConverterRounderBaseCallbacks for DataConverterRounderInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }
 
 crate::impl_data_converter_capability_forward!(DataConverterRounder, base.base);

@@ -43,7 +43,10 @@ impl DrawableBase {
             return;
         }
         callbacks.blend_mode_value_changed();
-        callbacks.notify_property_changed(Self::BLEND_MODE_VALUE_PROPERTY_KEY);
+        DrawableBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::BLEND_MODE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_blend_mode_value_value(&mut self, value: u32) -> bool {
@@ -61,7 +64,10 @@ impl DrawableBase {
             return;
         }
         callbacks.drawable_flags_changed();
-        callbacks.notify_property_changed(Self::DRAWABLE_FLAGS_PROPERTY_KEY);
+        DrawableBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DRAWABLE_FLAGS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_drawable_flags_value(&mut self, value: u32) -> bool {

@@ -52,11 +52,9 @@ impl ShapePaintContainer {
 
     pub fn invalidate_stroke_effects(&mut self) {
         for paint in self.shape_paints.iter().cloned() {
-            paint.with_mut(|paint| {
-                if let Some(paint) = paint.as_shape_paint_mut() {
-                    paint.invalidate_effects();
-                }
-            });
+            crate::mechanical_port::source::shapes::paint::effects_container::invalidate_effects_handle(
+                &paint, None,
+            );
         }
     }
 

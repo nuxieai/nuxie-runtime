@@ -10,7 +10,9 @@ use crate::mechanical_port::source::{
     core::{CoreHandle, CoreObject},
     core_context::{CoreContext, StatusCode},
     generated::constraints::scrolling::scroll_bar_constraint_base::ScrollBarConstraintBase,
+    generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
     generated::core_registry::CoreCapabilities,
+    generated::layout_component_base::LayoutComponentBase,
     layout_component::LayoutComponent,
     math::{mat2d::Mat2D, math_types, transform_components::TransformComponents, vec2d::Vec2D},
     transform_component::TransformComponent,
@@ -46,17 +48,17 @@ impl ScrollBarConstraint {
 
     fn with_thumb<R>(&self, use_thumb: impl FnOnce(&LayoutComponent) -> R) -> Option<R> {
         self.thumb_handle()?
-            .with_downcast::<LayoutComponent, _>(use_thumb)
+            .with(|thumb| thumb.as_layout_component().map(use_thumb))?
     }
 
     fn with_thumb_mut<R>(&self, use_thumb: impl FnOnce(&mut LayoutComponent) -> R) -> Option<R> {
         self.thumb_handle()?
-            .with_downcast_mut::<LayoutComponent, _>(use_thumb)
+            .with_mut(|thumb| thumb.as_layout_component_mut().map(use_thumb))?
     }
 
     fn with_track<R>(&self, use_track: impl FnOnce(&LayoutComponent) -> R) -> Option<R> {
         self.track_handle()?
-            .with_downcast::<LayoutComponent, _>(use_track)
+            .with(|track| track.as_layout_component().map(use_track))?
     }
 
     fn with_scroll<R>(&self, use_scroll: impl FnOnce(&ScrollConstraint) -> R) -> Option<R> {
@@ -103,16 +105,32 @@ impl ScrollBarConstraint {
             .handle()
             .expect("arena-owned ScrollBarConstraint");
         if let Some(thumb) = self.thumb_handle()
-            && thumb.with_downcast::<LayoutComponent, _>(|_| ()).is_some()
+            && thumb.is_type_of(LayoutComponentBase::TYPE_KEY)
         {
+            let thumb = thumb
+                .with_mut(|thumb| {
+                    thumb
+                        .as_layout_component_mut()
+                        .and_then(LayoutComponent::proxy)
+                })
+                .flatten()
+                .expect("ScrollBarConstraint thumb retains its drawable proxy");
             items.push(Box::new(ThumbDraggableProxy::new(
                 constraint.clone(),
                 thumb,
             )));
         }
         if let Some(track) = self.track_handle()
-            && track.with_downcast::<LayoutComponent, _>(|_| ()).is_some()
+            && track.is_type_of(LayoutComponentBase::TYPE_KEY)
         {
+            let track = track
+                .with_mut(|track| {
+                    track
+                        .as_layout_component_mut()
+                        .and_then(LayoutComponent::proxy)
+                })
+                .flatten()
+                .expect("ScrollBarConstraint track retains its drawable proxy");
             items.push(Box::new(TrackDraggableProxy::new(constraint, track)));
         }
         items
@@ -245,10 +263,7 @@ impl ScrollBarConstraint {
         let Some(scroll) = context.resolve(self.base.scroll_constraint_id()) else {
             return StatusCode::MissingObject;
         };
-        if scroll
-            .with_downcast::<ScrollConstraint, _>(|_| ())
-            .is_none()
-        {
+        if !scroll.is_type_of(ScrollConstraintBase::TYPE_KEY) {
             return StatusCode::MissingObject;
         }
         self.scroll_constraint = Some(scroll);
@@ -261,8 +276,12 @@ impl ScrollBarConstraint {
         }
         let Some((inverse_world, padding_left, padding_top, inner_width, inner_height)) = self
             .with_track(|track| {
+                let mut inverse_world = Mat2D::default();
+                if !track.world_transform().invert(&mut inverse_world) {
+                    return None;
+                }
                 Some((
-                    track.world_transform().inverted()?,
+                    inverse_world,
                     track.padding_left(),
                     track.padding_top(),
                     track.inner_width(),
@@ -283,7 +302,7 @@ impl ScrollBarConstraint {
                 local_position.x -= padding_left;
                 let track_range = inner_width - thumb_width;
                 let max_offset = scroll.max_offset_x();
-                scroll.set_scroll_offset_x(math_types::clamp(
+                scroll.set_authored_scroll_offset_x(math_types::clamp(
                     local_position.x / track_range * max_offset,
                     max_offset,
                     0.0,
@@ -293,7 +312,7 @@ impl ScrollBarConstraint {
                 local_position.y -= padding_top;
                 let track_range = inner_height - thumb_height;
                 let max_offset = scroll.max_offset_y();
-                scroll.set_scroll_offset_y(math_types::clamp(
+                scroll.set_authored_scroll_offset_y(math_types::clamp(
                     local_position.y / track_range * max_offset,
                     max_offset,
                     0.0,
@@ -334,7 +353,7 @@ impl ScrollBarConstraint {
                 let track_range = inner_width - thumb_width;
                 let max_offset = scroll.max_offset_x();
                 let thumb_offset = scroll.offset_x() / max_offset * track_range + delta.x;
-                scroll.set_scroll_offset_x(math_types::clamp(
+                scroll.set_authored_scroll_offset_x(math_types::clamp(
                     thumb_offset / track_range * max_offset,
                     max_offset,
                     0.0,
@@ -344,7 +363,7 @@ impl ScrollBarConstraint {
                 let track_range = inner_height - thumb_height;
                 let max_offset = scroll.max_offset_y();
                 let thumb_offset = scroll.offset_y() / max_offset * track_range + delta.y;
-                scroll.set_scroll_offset_y(math_types::clamp(
+                scroll.set_authored_scroll_offset_y(math_types::clamp(
                     thumb_offset / track_range * max_offset,
                     max_offset,
                     0.0,
@@ -361,10 +380,6 @@ impl ScrollBarConstraint {
     pub fn validate(&self, context: &dyn CoreContext) -> bool {
         context
             .resolve(self.base.scroll_constraint_id())
-            .is_some_and(|object| {
-                object
-                    .with_downcast::<ScrollConstraint, _>(|_| ())
-                    .is_some()
-            })
+            .is_some_and(|object| object.is_type_of(ScrollConstraintBase::TYPE_KEY))
     }
 }

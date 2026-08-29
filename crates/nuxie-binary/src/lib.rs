@@ -4963,16 +4963,12 @@ impl RuntimeFile {
                 }
                 value
             }
-            "DataConverterBooleanNegate" => {
-                RuntimeConvertedDataValue::Boolean(data_converter_boolean_negate_value(
-                    input.as_boolean(),
-                ))
-            }
-            "DataConverterListToLength" => {
-                RuntimeConvertedDataValue::Number(data_converter_list_to_length_value(
-                    input.list_len(),
-                ))
-            }
+            "DataConverterBooleanNegate" => RuntimeConvertedDataValue::Boolean(
+                data_converter_boolean_negate_value(input.as_boolean()),
+            ),
+            "DataConverterListToLength" => RuntimeConvertedDataValue::Number(
+                data_converter_list_to_length_value(input.list_len()),
+            ),
             "DataConverterNumberToList" => match input {
                 RuntimeConvertedDataValue::List(_)
                 | RuntimeConvertedDataValue::GeneratedList(_) => input.clone(),
@@ -5125,11 +5121,9 @@ impl RuntimeFile {
                 }
                 value
             }
-            "DataConverterBooleanNegate" => {
-                RuntimeConvertedDataValue::Boolean(data_converter_boolean_negate_value(
-                    input.as_boolean(),
-                ))
-            }
+            "DataConverterBooleanNegate" => RuntimeConvertedDataValue::Boolean(
+                data_converter_boolean_negate_value(input.as_boolean()),
+            ),
             "DataConverterOperationValue" => {
                 RuntimeConvertedDataValue::Number(cpp_reverse_convert_operation_value(
                     input,
@@ -9143,7 +9137,8 @@ fn data_converter_to_number_value(
         }
         RuntimeConvertedDataValue::Enum { value, .. } => (*value as u32) as f32,
         RuntimeConvertedDataValue::Number(value) => *value,
-        RuntimeConvertedDataValue::Color(value) => *value as f32,
+        // DataValueColor stores these serialized bits in a signed C++ `int`.
+        RuntimeConvertedDataValue::Color(value) => (*value as i32) as f32,
         RuntimeConvertedDataValue::Boolean(value) => {
             if *value {
                 1.0
@@ -12735,11 +12730,12 @@ mod manifest_key_tests {
     }
 
     #[test]
-    fn manifest_known_sections_do_not_read_past_their_declared_size() {
-        // A path-section count starts in the one declared section byte but
-        // finishes in the following bytes. Known sections must never consume
-        // those trailing bytes, even though they form one otherwise-valid
-        // path entry when decoded as an unbounded stream.
+    fn manifest_known_sections_keep_cpp_partial_mutation_before_size_mismatch() {
+        // Pinned ManifestAsset::decodePaths reads known sections through the
+        // shared file reader and inserts each decoded path before decode()
+        // checks bytesRead against sectionSize. FileAssetImporter::resolve
+        // ignores decode()'s boolean result, so this malformed section keeps
+        // the path assembled from the trailing bytes.
         let malformed_manifest = vec![1, 1, 0x81, 0x00, 7, 2, 10, 11];
         let runtime = RuntimeFile::from_fixture_records(vec![
             FixtureRecord {
@@ -12768,10 +12764,10 @@ mod manifest_key_tests {
             .expect("ManifestAsset remains discoverable");
         assert_eq!(
             manifest.resolve_path(7),
-            None,
-            "the lazy decoder must not recover a path from bytes outside section_size",
+            Some([10, 11].as_slice()),
+            "the lazy decoder must preserve pinned C++'s pre-check mutation",
         );
-        assert!(manifest.paths.is_empty());
+        assert_eq!(manifest.paths.len(), 1);
     }
 
     #[test]

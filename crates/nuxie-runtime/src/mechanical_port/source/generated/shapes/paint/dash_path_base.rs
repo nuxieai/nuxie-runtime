@@ -46,7 +46,7 @@ impl DashPathBase {
             return;
         }
         callbacks.offset_changed();
-        callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+        DashPathBaseCallbacks::notify_property_changed(callbacks, Self::OFFSET_PROPERTY_KEY);
     }
 
     pub(crate) fn set_offset_value(&mut self, value: f32) -> bool {
@@ -68,7 +68,10 @@ impl DashPathBase {
             return;
         }
         callbacks.offset_is_percentage_changed();
-        callbacks.notify_property_changed(Self::OFFSET_IS_PERCENTAGE_PROPERTY_KEY);
+        DashPathBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OFFSET_IS_PERCENTAGE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_offset_is_percentage_value(&mut self, value: bool) -> bool {

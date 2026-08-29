@@ -90,7 +90,11 @@ impl ScriptInputArtboard {
         else {
             return StatusCode::MissingObject;
         };
-        importer.add_input(this, ScriptInputArtboardBase::TYPE_KEY.into());
+        importer.add_input(
+            this,
+            ScriptInputArtboardBase::TYPE_KEY.into(),
+            &mut self.script_input,
+        );
 
         if self.script_input.scripted_object().is_some_and(|object| {
             object
@@ -109,7 +113,9 @@ impl ScriptInputArtboard {
         }
 
         if let (Some(this), Some(parent)) = (self.base.handle(), self.base.parent_handle()) {
-            parent.with_mut(|parent| parent.scripted_object_add_property(this));
+            parent.with_mut(|parent| {
+                parent.scripted_object_add_property_from_input(this, &mut self.script_input)
+            });
         }
         StatusCode::Ok
     }

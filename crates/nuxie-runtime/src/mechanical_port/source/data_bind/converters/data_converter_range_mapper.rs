@@ -37,15 +37,41 @@ impl DataConverterRangeMapper {
         interpolation_type: u32,
     ) -> Self {
         let mut converter = Self::default();
-        let mut callbacks = DataConverterRangeMapperInitializationCallbacks;
-        converter.base.set_min_input(min_input, &mut callbacks);
-        converter.base.set_max_input(max_input, &mut callbacks);
-        converter.base.set_min_output(min_output, &mut callbacks);
-        converter.base.set_max_output(max_output, &mut callbacks);
-        converter.base.set_flags(flags, &mut callbacks);
-        converter
+        if converter.base.set_min_input_value(min_input) {
+            DataConverterRangeMapperBaseCallbacks::min_input_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterRangeMapperBase::MIN_INPUT_PROPERTY_KEY);
+        }
+        if converter.base.set_max_input_value(max_input) {
+            DataConverterRangeMapperBaseCallbacks::max_input_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterRangeMapperBase::MAX_INPUT_PROPERTY_KEY);
+        }
+        if converter.base.set_min_output_value(min_output) {
+            DataConverterRangeMapperBaseCallbacks::min_output_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterRangeMapperBase::MIN_OUTPUT_PROPERTY_KEY);
+        }
+        if converter.base.set_max_output_value(max_output) {
+            DataConverterRangeMapperBaseCallbacks::max_output_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterRangeMapperBase::MAX_OUTPUT_PROPERTY_KEY);
+        }
+        if converter.base.set_flags_value(flags) {
+            DataConverterRangeMapperBaseCallbacks::flags_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterRangeMapperBase::FLAGS_PROPERTY_KEY);
+        }
+        if converter
             .base
-            .set_interpolation_type(interpolation_type, &mut callbacks);
+            .set_interpolation_type_value(interpolation_type)
+        {
+            DataConverterRangeMapperBaseCallbacks::interpolation_type_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(
+                    DataConverterRangeMapperBase::INTERPOLATION_TYPE_PROPERTY_KEY,
+                );
+        }
         converter
     }
     pub fn output_type(&self) -> DataType {
@@ -136,10 +162,9 @@ impl DataConverterRangeMapper {
     }
     pub fn copy(&mut self, other: &Self) {
         self.interpolator = other.interpolator.clone();
-        self.base.copy(
-            &other.base,
-            &mut DataConverterRangeMapperInitializationCallbacks,
-        );
+        let mut base = std::mem::take(&mut self.base);
+        base.copy(&other.base, self);
+        self.base = base;
     }
     pub fn min_input_changed(&mut self) {
         self.base.base.mark_converter_dirty()
@@ -179,12 +204,6 @@ impl DataConverterRangeMapperBaseCallbacks for DataConverterRangeMapper {
     fn max_output_changed(&mut self) {
         Self::max_output_changed(self);
     }
-}
-
-struct DataConverterRangeMapperInitializationCallbacks;
-
-impl DataConverterRangeMapperBaseCallbacks for DataConverterRangeMapperInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }
 
 crate::impl_data_converter_capability_bidi!(DataConverterRangeMapper, base.base);

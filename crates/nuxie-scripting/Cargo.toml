@@ -20,6 +20,7 @@ apple-authored-msl = ["luau", "dep:sha2"]
 # Cross-crate access to otherwise private observables needed by literal ports
 # of upstream unit tests. Shipping runtime consumers do not enable this.
 upstream-test-seams = ["luau"]
+tools = ["nuxie-runtime/tools"]
 luau = [
     "dep:luaur-common",
     "dep:luaur-rt",
@@ -46,8 +47,8 @@ sha2 = { version = "0.10", optional = true }
 # real .riv files in tests. dev-dependency only: nuxie-binary never becomes
 # part of nuxie-scripting's public dependency surface.
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
-nuxie-graph = { path = "../nuxie-graph" }
 nuxie-schema = { path = "../nuxie-schema" }
+nuxie-sriv = { path = "../nuxie-sriv" }
 libhydrogen = "=0.4.6"
 luaur-compiler = "=0.1.8"
 image-webp = "0.2.4"

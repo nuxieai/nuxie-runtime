@@ -19,9 +19,7 @@ impl ListenerInputTypeGamepadImporter {
     }
 
     /// Mechanical translation of `listenerInputTypeGamepad()`.
-    pub(super) fn listener_input_type_gamepad(
-        &self,
-    ) -> RuntimeStateMachineListenerInputTypeOwner {
+    pub(super) fn listener_input_type_gamepad(&self) -> RuntimeStateMachineListenerInputTypeOwner {
         self.listener_input_type_gamepad
     }
 

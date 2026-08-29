@@ -21,6 +21,18 @@ impl Drop for ListenerViewModelChange {
         }
     }
 }
+
+impl std::ops::Deref for ListenerViewModelChange {
+    type Target = ListenerViewModelChangeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ListenerViewModelChange {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
 impl ListenerViewModelChange {
     pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
         let Some(importer) = stack.latest::<BindablePropertyImporter>(crate::mechanical_port::source::generated::data_bind::bindable_property_base::BindablePropertyBase::TYPE_KEY) else { return StatusCode::MissingObject };
@@ -42,8 +54,7 @@ impl ListenerViewModelChange {
                 .flatten()
             {
                 if target
-                    .with_downcast::<BindablePropertyViewModel, _>(|_| ())
-                    .is_some()
+                    .is_type_of(crate::mechanical_port::source::generated::data_bind::bindable_property_viewmodel_base::BindablePropertyViewModelBase::TYPE_KEY)
                 {
                     if let Some(context) = machine.data_context() {
                         let value =
@@ -57,11 +68,9 @@ impl ListenerViewModelChange {
                     }
                 }
             }
-            data_bind.with_mut(|bind| {
-                bind.as_data_bind_mut()
-                    .expect("an owned source binding remains DataBind")
-                    .update_source_binding(true)
-            });
+            crate::mechanical_port::source::data_bind::data_bind::DataBind::update_source_binding_handle(
+                &data_bind, true,
+            );
         }
         if let Some(to_target) = to_target {
             to_target.with_mut(|bind| {

@@ -6,6 +6,7 @@ pub mod line_breaker;
 pub mod raw_text;
 pub mod raw_text_input;
 pub mod text;
+pub mod text_engine;
 pub mod text_follow_path_modifier;
 pub mod text_input;
 pub mod text_input_cursor;

@@ -26,7 +26,9 @@ impl AnyStateBase {
     }
     pub fn clone_into(&self) -> AnyState {
         let mut cloned = AnyState::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

@@ -3996,15 +3996,50 @@ fn runtime_backboard_registries_reset_for_each_importer_occurrence() {
     }))
     .expect("multiple Backboard objects replace and resolve their importers like C++");
 
-    assert_eq!(file.object(2).and_then(|asset| asset.uint_property("assetId")), Some(8));
-    assert_eq!(file.object(12).and_then(|asset| asset.uint_property("assetId")), Some(7));
-    assert_eq!(file.resolved_file_asset_for_object(8).map(|asset| asset.id), Some(1));
-    assert_eq!(file.resolved_file_asset_for_object(18).map(|asset| asset.id), Some(12));
-    assert_eq!(file.resolved_data_converter_for_data_bind(10).map(|value| value.id), Some(4));
-    assert_eq!(file.resolved_data_converter_for_data_bind(20).map(|value| value.id), Some(14));
-    assert_eq!(file.resolved_scroll_physics_for_constraint(9).map(|value| value.id), Some(6));
-    assert_eq!(file.resolved_scroll_physics_for_constraint(19).map(|value| value.id), Some(16));
-    assert_eq!(file.resolved_interpolator_for_data_converter(5).map(|value| value.id), Some(3));
+    assert_eq!(
+        file.object(2)
+            .and_then(|asset| asset.uint_property("assetId")),
+        Some(8)
+    );
+    assert_eq!(
+        file.object(12)
+            .and_then(|asset| asset.uint_property("assetId")),
+        Some(7)
+    );
+    assert_eq!(
+        file.resolved_file_asset_for_object(8).map(|asset| asset.id),
+        Some(1)
+    );
+    assert_eq!(
+        file.resolved_file_asset_for_object(18)
+            .map(|asset| asset.id),
+        Some(12)
+    );
+    assert_eq!(
+        file.resolved_data_converter_for_data_bind(10)
+            .map(|value| value.id),
+        Some(4)
+    );
+    assert_eq!(
+        file.resolved_data_converter_for_data_bind(20)
+            .map(|value| value.id),
+        Some(14)
+    );
+    assert_eq!(
+        file.resolved_scroll_physics_for_constraint(9)
+            .map(|value| value.id),
+        Some(6)
+    );
+    assert_eq!(
+        file.resolved_scroll_physics_for_constraint(19)
+            .map(|value| value.id),
+        Some(16)
+    );
+    assert_eq!(
+        file.resolved_interpolator_for_data_converter(5)
+            .map(|value| value.id),
+        Some(3)
+    );
     assert!(file.resolved_interpolator_for_data_converter(15).is_none());
 }
 
@@ -6981,11 +7016,11 @@ fn manifest_asset_contents_decode_names_and_paths_like_cpp_runtime() {
     assert_eq!(manifest.resolve_name_bytes(9), Some(b"opacity".as_slice()));
     assert_eq!(manifest.resolve_name(u32::MAX), Some("wrapped"));
     assert!(manifest.names.contains_key(&-1));
-    assert_eq!(manifest.resolve_name(404), None);
+    assert_eq!(manifest.resolve_name(404), Some(""));
     assert_eq!(manifest.resolve_path(3), Some(&[7, 9, 11][..]));
     assert_eq!(manifest.resolve_path(u32::MAX), Some(&[13, 21][..]));
     assert!(manifest.paths.contains_key(&-1));
-    assert_eq!(manifest.resolve_path(404), None);
+    assert_eq!(manifest.resolve_path(404), Some(&[][..]));
 }
 
 #[test]

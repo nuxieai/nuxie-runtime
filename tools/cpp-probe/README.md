@@ -42,6 +42,6 @@ Run the Rust comparison harnesses:
 
 ```sh
 make cpp-binary-compare
-make cpp-graph-compare
+make cpp-runtime-compare
 make cpp-compare
 ```

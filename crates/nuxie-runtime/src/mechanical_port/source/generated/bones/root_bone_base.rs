@@ -47,7 +47,7 @@ impl RootBoneBase {
             return;
         }
         callbacks.x_changed();
-        callbacks.notify_property_changed(Self::X_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::bones::bone_base::BoneBaseCallbacks::notify_property_changed(callbacks, Self::X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
@@ -67,7 +67,7 @@ impl RootBoneBase {
             return;
         }
         callbacks.y_changed();
-        callbacks.notify_property_changed(Self::Y_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::bones::bone_base::BoneBaseCallbacks::notify_property_changed(callbacks, Self::Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_y_value(&mut self, value: f32) -> bool {

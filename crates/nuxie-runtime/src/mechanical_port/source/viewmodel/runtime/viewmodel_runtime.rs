@@ -59,7 +59,7 @@ impl RuntimeViewModelHandle {
             .unwrap_or_default()
     }
 
-    fn property_data(property: CoreHandle) -> PropertyData {
+    pub(super) fn property_data(property: CoreHandle) -> PropertyData {
         use crate::mechanical_port::source::generated::viewmodel::{
             viewmodel_property_artboard_base::ViewModelPropertyArtboardBase,
             viewmodel_property_asset_blob_base::ViewModelPropertyAssetBlobBase,
@@ -111,10 +111,12 @@ impl RuntimeViewModelHandle {
                     .as_view_model_property_enum()
                     .and_then(|property| property.data_enum())
                     .and_then(|data| {
-                        data.with_downcast::<
-                            crate::mechanical_port::source::viewmodel::data_enum::DataEnum,
-                            _,
-                        >(|data| data.enum_name().to_owned())
+                        data.with(|data| {
+                            data.data_enum_name()
+                                .or_else(|| data.as_data_enum().map(|data| data.enum_name()))
+                                .map(str::to_owned)
+                        })
+                        .flatten()
                     })
                     .unwrap_or_default();
                 Some((base.base.name().to_owned(), enum_name))
@@ -176,60 +178,35 @@ impl RuntimeViewModelHandle {
         &self,
         index: usize,
     ) -> Option<RuntimeViewModelInstanceHandle> {
-        let name = self.0.view_model.with(|model| {
-            model
-                .as_view_model()?
-                .instance_at(index)?
-                .with(|instance| {
-                    instance
-                        .as_view_model_instance()
-                        .map(|instance| instance.base.name().to_owned())
-                })
-                .flatten()
-        })??;
-        self.create_instance_from_name(&name)
+        let source = self
+            .0
+            .view_model
+            .with(|model| model.as_view_model()?.instance_at(index))??;
+        let instance = crate::mechanical_port::source::viewmodel::viewmodel_instance::ViewModelInstance::clone_instance(&source)?;
+        self.0
+            .file
+            .with_file(|file| file.complete_view_model_instance(&instance))?;
+        Some(self.runtime(instance))
     }
 
     pub fn create_instance_from_name(&self, name: &str) -> Option<RuntimeViewModelInstanceHandle> {
-        let instance = self
-            .0
-            .view_model
-            .with_downcast_mut::<crate::mechanical_port::source::viewmodel::viewmodel::ViewModel, _>(
-                |model| model.create_from_instance(name),
-            )
-            .flatten()?;
+        let instance = crate::mechanical_port::source::viewmodel::viewmodel::ViewModel::create_from_instance_handle(&self.0.view_model, name)?;
         Some(self.runtime(instance))
     }
 
     pub fn create_default_instance(&self) -> RuntimeViewModelInstanceHandle {
-        let name = self
+        let instance = self
             .0
-            .view_model
-            .with(|model| {
-                model
-                    .as_view_model()?
-                    .default_instance()?
-                    .with(|instance| {
-                        instance
-                            .as_view_model_instance()
-                            .map(|instance| instance.base.name().to_owned())
-                    })
-                    .flatten()
-            })
+            .file
+            .with_file(|file| file.create_default_view_model_instance(self.0.view_model.clone()))
             .flatten();
-        name.as_deref()
-            .and_then(|name| self.create_instance_from_name(name))
+        instance
+            .map(|instance| self.runtime(instance))
             .unwrap_or_else(|| self.create_instance())
     }
 
     pub fn create_instance(&self) -> RuntimeViewModelInstanceHandle {
-        let instance = self
-            .0
-            .view_model
-            .with_downcast_mut::<crate::mechanical_port::source::viewmodel::viewmodel::ViewModel, _>(
-                |model| model.create_instance(),
-            )
-            .flatten()
+        let instance = crate::mechanical_port::source::viewmodel::viewmodel::ViewModel::create_instance_handle(&self.0.view_model)
             .expect("a live RuntimeViewModelHandle retains its File and can create an instance");
         self.runtime(instance)
     }

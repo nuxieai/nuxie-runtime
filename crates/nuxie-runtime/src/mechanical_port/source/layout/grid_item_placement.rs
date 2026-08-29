@@ -1,6 +1,7 @@
 use crate::mechanical_port::source::layout::layout_style_applier::YGStyle;
 use crate::mechanical_port::source::{
-    component::{ComponentDirt, ContainerComponent},
+    component::ComponentDirt,
+    container_component::ContainerComponent,
     core_context::{CoreContext, StatusCode},
     generated::layout::grid_item_placement_base::GridItemPlacementBase,
     layout::{
@@ -9,6 +10,23 @@ use crate::mechanical_port::source::{
         layout_style_applier::{LayoutStyleApplier, LayoutSyncContext},
     },
 };
+
+impl std::ops::Deref for GridItemPlacement {
+    type Target = GridItemPlacementBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for GridItemPlacement {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl GridItemPlacement {
+    pub const TYPE_KEY: u16 = GridItemPlacementBase::TYPE_KEY;
+}
 
 #[derive(Default)]
 pub struct GridItemPlacement {
@@ -23,8 +41,7 @@ impl GridItemPlacement {
             .iter()
             .find(|child| {
                 child
-                    .with_downcast::<GridItemPlacement, _>(|_| ())
-                    .is_some()
+                    .is_type_of(crate::mechanical_port::source::generated::layout::grid_item_placement_base::GridItemPlacementBase::TYPE_KEY)
             })
             .cloned()
     }
@@ -55,10 +72,10 @@ impl GridItemPlacement {
         }
         GridTrack::sync_item_lines(
             style,
-            self.base.grid_column(),
-            self.base.grid_row(),
-            self.base.grid_column_span(),
-            self.base.grid_row_span(),
+            i32::from(self.base.grid_column()),
+            i32::from(self.base.grid_row()),
+            u32::from(self.base.grid_column_span()),
+            u32::from(self.base.grid_row_span()),
         );
     }
     fn mark_owner_dirty(&mut self) {

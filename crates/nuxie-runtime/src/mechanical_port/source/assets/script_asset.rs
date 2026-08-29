@@ -81,6 +81,21 @@ impl ScriptInput {
     pub fn set_scripted_object(&mut self, object: Option<CoreHandle>) {
         self.scripted_object = object;
     }
+
+    /// The input can already be borrowed during import/onAddedClean. The
+    /// concrete scripted owner passes its real container here, preserving the
+    /// source backlink-before-unique-insertion order without reborrowing input.
+    pub(crate) fn attach_to_container(
+        &mut self,
+        owner: Option<CoreHandle>,
+        property: CoreHandle,
+        properties: &mut Vec<CoreHandle>,
+    ) {
+        self.set_scripted_object(owner);
+        if !properties.contains(&property) {
+            properties.push(property);
+        }
+    }
 }
 
 pub trait ScriptInputBehavior {
@@ -410,7 +425,7 @@ impl ScriptAsset {
     }
 
     pub fn verified(&self) -> bool {
-        self.base.text_asset().verified()
+        self.base.base.verified()
     }
 
     pub fn module_bytecode(&self) -> &[u8] {
@@ -427,7 +442,7 @@ impl ScriptAsset {
 
     pub fn decode(&mut self, data: &mut Vec<u8>, _factory: &RuntimeFactoryHandle) -> bool {
         {
-            self.base.text_asset_mut().set_verified(false);
+            self.base.base.set_verified(false);
             let header = SignedContentHeader::new(data.as_slice());
             if !header.is_valid() {
                 return false;
@@ -437,33 +452,51 @@ impl ScriptAsset {
         true
     }
 
+    /// Decode code admitted by the host's enclosing-artifact authorization.
+    /// This is a host trust boundary, not verification of a Rive signature.
+    /// Ordinary source imports continue to use `decode` and signature checks.
+    ///
+    /// # Safety
+    /// The caller must have authorized execution of these exact original
+    /// in-band bytes. A capability for another artifact, or bytes substituted
+    /// by an external asset loader, does not satisfy this requirement.
+    pub unsafe fn decode_with_host_authorization(
+        &mut self,
+        data: &mut Vec<u8>,
+        factory: &RuntimeFactoryHandle,
+    ) -> bool {
+        let decoded = self.decode(data, factory);
+        self.base.base.set_verified(decoded);
+        decoded
+    }
+
     pub fn bytecode(&mut self, data: &mut [u8]) -> bool {
         {
             let header = SignedContentHeader::new(data);
             if !header.is_valid() {
-                self.base.text_asset_mut().set_verified(false);
+                self.base.base.set_verified(false);
                 return false;
             }
             let bytecode = header.content();
             if !header.is_signed() {
-                self.base.text_asset_mut().set_verified(false);
+                self.base.base.set_verified(false);
                 self.bytecode = bytecode.to_vec();
                 return true;
             }
             let Ok(signature): Result<[u8; libhydrogen::sign::BYTES], _> =
                 header.signature().try_into()
             else {
-                self.base.text_asset_mut().set_verified(false);
+                self.base.base.set_verified(false);
                 return false;
             };
             let signature = libhydrogen::sign::Signature::from(signature);
             let public_key = libhydrogen::sign::PublicKey::from(SCRIPT_VERIFICATION_PUBLIC_KEY);
             let context = libhydrogen::sign::Context::from("RiveCode");
             if libhydrogen::sign::verify(&signature, bytecode, &context, &public_key).is_err() {
-                self.base.text_asset_mut().set_verified(false);
+                self.base.base.set_verified(false);
                 return false;
             }
-            self.base.text_asset_mut().set_verified(true);
+            self.base.base.set_verified(true);
             self.bytecode = bytecode.to_vec();
         }
         true

@@ -89,22 +89,29 @@ impl Constraint {
     }
 
     pub fn mark_constraint_dirty(&mut self) {
-        self.base
+        let parent = self
+            .base
             .base
             .parent_handle()
-            .and_then(|parent| {
-                parent.with_mut(|parent| {
-                    parent
-                        .as_transform_component_mut()
-                        .map(TransformComponent::mark_transform_dirty)
-                })
-            })
-            .flatten()
             .expect("Constraint parent was validated");
+        TransformComponent::mark_transform_dirty_occurrence(&parent);
     }
 
     pub fn strength_changed(&mut self) {
         self.mark_constraint_dirty();
+    }
+
+    pub(crate) fn mark_constraint_dirty_occurrence(owner: &CoreHandle) {
+        let parent = owner
+            .with(|owner| {
+                owner
+                    .as_component()
+                    .expect("Constraint component")
+                    .parent_handle()
+            })
+            .flatten()
+            .expect("Constraint parent was validated");
+        TransformComponent::mark_transform_dirty_occurrence(&parent);
     }
 
     pub fn build_dependencies(&mut self) {
@@ -128,6 +135,26 @@ impl Constraint {
         self.mark_constraint_dirty();
     }
 
+    pub(crate) fn on_dirty_from_shape(
+        owner: &CoreHandle,
+        _dirt: ComponentDirt,
+        active_shape: &mut crate::mechanical_port::source::shapes::shape::Shape,
+    ) {
+        // A path composer can dirty a constraint while its Shape is active.
+        // Release the constraint before synchronously dirtying its parent:
+        // that parent's dependents can lead back to the same Shape's paths.
+        let parent = owner
+            .with(|owner| {
+                owner
+                    .as_component()
+                    .expect("Constraint inherits Component")
+                    .parent_handle()
+            })
+            .flatten()
+            .expect("Constraint parent was validated");
+        TransformComponent::mark_transform_dirty_from_shape(&parent, active_shape);
+    }
+
     pub fn handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.handle()
     }
@@ -144,5 +171,5 @@ pub fn get_parent_world(component: &TransformComponent) -> Mat2D {
             })
         })
         .flatten()
-        .unwrap_or(Mat2D::IDENTITY)
+        .unwrap_or_default()
 }

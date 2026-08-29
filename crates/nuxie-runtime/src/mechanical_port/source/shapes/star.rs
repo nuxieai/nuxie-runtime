@@ -4,6 +4,23 @@ use crate::mechanical_port::source::{
     math::math_types,
     shapes::{polygon::PolygonState, straight_vertex::StraightVertex},
 };
+impl std::ops::Deref for Star {
+    type Target = StarBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Star {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Star {
+    pub const TYPE_KEY: u16 = StarBase::TYPE_KEY;
+}
+
 pub struct Star {
     pub base: StarBase,
     pub polygon: PolygonState,
@@ -16,7 +33,7 @@ impl Star {
         }
     }
     pub fn inner_radius_changed(&mut self) {
-        self.base.mark_path_dirty();
+        self.base.mark_path_dirty(true);
     }
     pub fn vertex_count(&self) -> usize {
         self.base.points() as usize * 2
@@ -33,15 +50,15 @@ impl Star {
         let increment = 2.0 * math_types::PI / length as f32;
         for index in (0..length).step_by(2) {
             let mut outer = self.polygon.vertices[index].borrow_mut();
-            outer.base.set_x(ox + angle.cos() * half_width);
-            outer.base.set_y(oy + angle.sin() * half_height);
-            outer.base.set_radius(self.base.corner_radius());
+            outer.set_x(ox + angle.cos() * half_width);
+            outer.set_y(oy + angle.sin() * half_height);
+            outer.set_radius(self.base.corner_radius());
             drop(outer);
             angle += increment;
             let mut inner = self.polygon.vertices[index + 1].borrow_mut();
-            inner.base.set_x(ox + angle.cos() * inner_half_width);
-            inner.base.set_y(oy + angle.sin() * inner_half_height);
-            inner.base.set_radius(self.base.corner_radius());
+            inner.set_x(ox + angle.cos() * inner_half_width);
+            inner.set_y(oy + angle.sin() * inner_half_height);
+            inner.set_radius(self.base.corner_radius());
             angle += increment;
         }
     }
@@ -58,5 +75,11 @@ impl Star {
             }
             self.build_polygon();
         }
+    }
+}
+
+impl Default for Star {
+    fn default() -> Self {
+        Self::new(StarBase::default())
     }
 }

@@ -6,6 +6,23 @@ use crate::mechanical_port::source::{
         vertex::{Vertex, VertexBehavior},
     },
 };
+impl std::ops::Deref for CubicMirroredVertex {
+    type Target = CubicMirroredVertexBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicMirroredVertex {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl CubicMirroredVertex {
+    pub const TYPE_KEY: u16 = CubicMirroredVertexBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct CubicMirroredVertex {
     pub base: CubicMirroredVertexBase,

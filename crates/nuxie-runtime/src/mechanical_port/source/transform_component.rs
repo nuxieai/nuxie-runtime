@@ -32,6 +32,26 @@ impl Default for TransformComponent {
 }
 
 impl TransformComponent {
+    pub fn set_scale_x(&mut self, value: f32) {
+        if self.base.set_scale_x_value(value) {
+            TransformComponentBaseCallbacks::scale_x_changed(self);
+            TransformComponentBaseCallbacks::notify_property_changed(
+                self,
+                TransformComponentBase::SCALE_X_PROPERTY_KEY,
+            );
+        }
+    }
+
+    pub fn set_scale_y(&mut self, value: f32) {
+        if self.base.set_scale_y_value(value) {
+            TransformComponentBaseCallbacks::scale_y_changed(self);
+            TransformComponentBaseCallbacks::notify_property_changed(
+                self,
+                TransformComponentBase::SCALE_Y_PROPERTY_KEY,
+            );
+        }
+    }
+
     pub fn constraints(&self) -> &[CoreHandle] {
         &self.constraints
     }
@@ -93,6 +113,33 @@ impl TransformComponent {
 
     pub fn mark_transform_dirty(&mut self) {
         CoreCapabilities::transform_mark_dirty(self);
+    }
+
+    pub(crate) fn mark_transform_dirty_occurrence(owner: &CoreHandle) {
+        assert!(owner.is_type_of(TransformComponentBase::TYPE_KEY));
+        let occurrence =
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            );
+        // The recursive world-transform dirt visits child Paths, whose
+        // callbacks can synchronously return to this component's Shape.
+        if occurrence.add_dirt(ComponentDirt::TRANSFORM, false) {
+            occurrence.add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+        }
+    }
+
+    pub(crate) fn mark_transform_dirty_from_shape(
+        owner: &CoreHandle,
+        active_shape: &mut crate::mechanical_port::source::shapes::shape::Shape,
+    ) {
+        assert!(owner.is_type_of(TransformComponentBase::TYPE_KEY));
+        let occurrence =
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            );
+        if occurrence.add_dirt_from_shape(active_shape, ComponentDirt::TRANSFORM, false) {
+            occurrence.add_dirt_from_shape(active_shape, ComponentDirt::WORLD_TRANSFORM, true);
+        }
     }
 
     pub fn update_transform_state(&mut self, x: f32, y: f32) {
@@ -177,6 +224,32 @@ impl TransformComponent {
 }
 
 impl IntrinsicallySizeable for TransformComponent {}
+
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+    for TransformComponent
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(
+            &mut self.base,
+            property_key,
+        );
+    }
+}
+
+impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks
+    for TransformComponent
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(
+            &mut self.base,
+            property_key,
+        );
+    }
+
+    fn opacity_changed(&mut self) {
+        self.base.base.opacity_changed();
+    }
+}
 
 impl TransformComponentBaseCallbacks for TransformComponent {
     fn notify_property_changed(&mut self, property_key: u16) {

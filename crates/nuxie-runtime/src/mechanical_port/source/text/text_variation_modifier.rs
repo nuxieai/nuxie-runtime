@@ -2,13 +2,31 @@ use crate::mechanical_port::source::{
     generated::text::text_variation_modifier_base::TextVariationModifierBase, text_engine::Font,
 };
 use std::collections::HashMap;
+impl std::ops::Deref for TextVariationModifier {
+    type Target = TextVariationModifierBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextVariationModifier {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextVariationModifier {
+    pub const TYPE_KEY: u16 = TextVariationModifierBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct TextVariationModifier {
     pub base: TextVariationModifierBase,
 }
 impl TextVariationModifier {
     pub fn modify(
         &self,
-        font: &Font,
+        font: &dyn Font,
         variations: &mut HashMap<u32, f32>,
         font_size: f32,
         strength: f32,
@@ -32,5 +50,17 @@ impl TextVariationModifier {
                 }
             });
         }
+    }
+}
+
+impl super::text_shape_modifier::TextShapeModifierBehavior for TextVariationModifier {
+    fn modify(
+        &self,
+        font: &dyn Font,
+        variations: &mut HashMap<u32, f32>,
+        font_size: f32,
+        strength: f32,
+    ) -> f32 {
+        TextVariationModifier::modify(self, font, variations, font_size, strength)
     }
 }

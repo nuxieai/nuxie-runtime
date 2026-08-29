@@ -14,8 +14,17 @@ impl NestedAnimationBehavior for NestedSimpleAnimation {
         Self::advance(self, elapsed_seconds, new_frame)
     }
 
-    fn initialize_animation(&mut self, artboard: RuntimeArtboardInstanceWeakHandle) {
-        self.base.base.initialize_animation(artboard);
+    fn animation_initializer(
+        &self,
+    ) -> crate::mechanical_port::source::animation::nested_animation::NestedAnimationInitializer
+    {
+        |owner, artboard| {
+            owner
+                .with_downcast_mut::<Self, _>(|owner| {
+                    owner.base.base.initialize_animation(artboard)
+                })
+                .expect("live NestedSimpleAnimation");
+        }
     }
 
     fn release_dependencies(&mut self) {

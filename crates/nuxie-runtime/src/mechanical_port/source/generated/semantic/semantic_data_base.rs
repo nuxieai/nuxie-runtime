@@ -131,7 +131,7 @@ impl SemanticDataBase {
             return;
         }
         c.role_changed();
-        c.notify_property_changed(Self::ROLE_PROPERTY_KEY);
+        SemanticDataBaseCallbacks::notify_property_changed(c, Self::ROLE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_role_value(&mut self, value: u32) -> bool {
@@ -146,7 +146,7 @@ impl SemanticDataBase {
             return;
         }
         c.label_changed();
-        c.notify_property_changed(Self::LABEL_PROPERTY_KEY);
+        SemanticDataBaseCallbacks::notify_property_changed(c, Self::LABEL_PROPERTY_KEY);
     }
 
     pub(crate) fn set_label_value(&mut self, value: String) -> bool {
@@ -161,7 +161,7 @@ impl SemanticDataBase {
             return;
         }
         c.value_changed();
-        c.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+        SemanticDataBaseCallbacks::notify_property_changed(c, Self::VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_value_value(&mut self, value: String) -> bool {
@@ -176,7 +176,7 @@ impl SemanticDataBase {
             return;
         }
         c.hint_changed();
-        c.notify_property_changed(Self::HINT_PROPERTY_KEY);
+        SemanticDataBaseCallbacks::notify_property_changed(c, Self::HINT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_hint_value(&mut self, value: String) -> bool {
@@ -191,7 +191,7 @@ impl SemanticDataBase {
             return;
         }
         c.heading_level_changed();
-        c.notify_property_changed(Self::HEADING_LEVEL_PROPERTY_KEY);
+        SemanticDataBaseCallbacks::notify_property_changed(c, Self::HEADING_LEVEL_PROPERTY_KEY);
     }
 
     pub(crate) fn set_heading_level_value(&mut self, value: u32) -> bool {
@@ -206,7 +206,7 @@ impl SemanticDataBase {
             return;
         }
         c.trait_flags_changed();
-        c.notify_property_changed(Self::TRAIT_FLAGS_PROPERTY_KEY);
+        SemanticDataBaseCallbacks::notify_property_changed(c, Self::TRAIT_FLAGS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_trait_flags_value(&mut self, value: u32) -> bool {
@@ -221,7 +221,7 @@ impl SemanticDataBase {
             return;
         }
         c.state_flags_changed();
-        c.notify_property_changed(Self::STATE_FLAGS_PROPERTY_KEY);
+        SemanticDataBaseCallbacks::notify_property_changed(c, Self::STATE_FLAGS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_state_flags_value(&mut self, value: u32) -> bool {

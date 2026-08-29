@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
-    animation::state_machine_fire_action::StateMachineFireAction,
-    core::binary_reader::BinaryReader, core::Core,
+    animation::state_machine_fire_action::StateMachineFireAction, core::Core,
+    core::binary_reader::BinaryReader,
 };
 
 pub trait StateMachineFireActionBaseCallbacks {

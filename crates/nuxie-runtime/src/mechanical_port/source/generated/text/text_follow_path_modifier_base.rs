@@ -64,7 +64,10 @@ impl TextFollowPathModifierBase {
             return;
         }
         callbacks.radial_changed();
-        callbacks.notify_property_changed(Self::RADIAL_PROPERTY_KEY);
+        TextFollowPathModifierBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::RADIAL_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_radial_value(&mut self, value: bool) -> bool {
@@ -86,7 +89,10 @@ impl TextFollowPathModifierBase {
             return;
         }
         callbacks.orient_changed();
-        callbacks.notify_property_changed(Self::ORIENT_PROPERTY_KEY);
+        TextFollowPathModifierBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ORIENT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_orient_value(&mut self, value: bool) -> bool {
@@ -108,7 +114,10 @@ impl TextFollowPathModifierBase {
             return;
         }
         callbacks.start_changed();
-        callbacks.notify_property_changed(Self::START_PROPERTY_KEY);
+        TextFollowPathModifierBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::START_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_start_value(&mut self, value: f32) -> bool {
@@ -130,7 +139,10 @@ impl TextFollowPathModifierBase {
             return;
         }
         callbacks.end_changed();
-        callbacks.notify_property_changed(Self::END_PROPERTY_KEY);
+        TextFollowPathModifierBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::END_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_end_value(&mut self, value: f32) -> bool {
@@ -152,7 +164,10 @@ impl TextFollowPathModifierBase {
             return;
         }
         callbacks.strength_changed();
-        callbacks.notify_property_changed(Self::STRENGTH_PROPERTY_KEY);
+        TextFollowPathModifierBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::STRENGTH_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_strength_value(&mut self, value: f32) -> bool {
@@ -174,7 +189,10 @@ impl TextFollowPathModifierBase {
             return;
         }
         callbacks.offset_changed();
-        callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+        TextFollowPathModifierBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OFFSET_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_offset_value(&mut self, value: f32) -> bool {

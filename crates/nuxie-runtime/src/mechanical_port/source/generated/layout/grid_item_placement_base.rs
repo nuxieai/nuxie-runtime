@@ -58,7 +58,10 @@ impl GridItemPlacementBase {
             return;
         }
         callbacks.grid_column_changed();
-        callbacks.notify_property_changed(Self::GRID_COLUMN_PROPERTY_KEY);
+        GridItemPlacementBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::GRID_COLUMN_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_grid_column_value(&mut self, value: i16) -> bool {
@@ -80,7 +83,10 @@ impl GridItemPlacementBase {
             return;
         }
         callbacks.grid_row_changed();
-        callbacks.notify_property_changed(Self::GRID_ROW_PROPERTY_KEY);
+        GridItemPlacementBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::GRID_ROW_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_grid_row_value(&mut self, value: i16) -> bool {
@@ -102,7 +108,10 @@ impl GridItemPlacementBase {
             return;
         }
         callbacks.grid_column_span_changed();
-        callbacks.notify_property_changed(Self::GRID_COLUMN_SPAN_PROPERTY_KEY);
+        GridItemPlacementBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::GRID_COLUMN_SPAN_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_grid_column_span_value(&mut self, value: u16) -> bool {
@@ -124,7 +133,10 @@ impl GridItemPlacementBase {
             return;
         }
         callbacks.grid_row_span_changed();
-        callbacks.notify_property_changed(Self::GRID_ROW_SPAN_PROPERTY_KEY);
+        GridItemPlacementBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::GRID_ROW_SPAN_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_grid_row_span_value(&mut self, value: u16) -> bool {
@@ -157,19 +169,19 @@ impl GridItemPlacementBase {
     ) -> bool {
         match property_key {
             Self::GRID_COLUMN_PROPERTY_KEY => {
-                self.grid_column = crate::mechanical_port::source::core::field_types::core_int_type::CoreIntType::deserialize(reader);
+                self.grid_column = crate::mechanical_port::source::core::field_types::core_int_type::CoreIntType::deserialize(reader) as i16;
                 true
             }
             Self::GRID_ROW_PROPERTY_KEY => {
-                self.grid_row = crate::mechanical_port::source::core::field_types::core_int_type::CoreIntType::deserialize(reader);
+                self.grid_row = crate::mechanical_port::source::core::field_types::core_int_type::CoreIntType::deserialize(reader) as i16;
                 true
             }
             Self::GRID_COLUMN_SPAN_PROPERTY_KEY => {
-                self.grid_column_span = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.grid_column_span = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u16;
                 true
             }
             Self::GRID_ROW_SPAN_PROPERTY_KEY => {
-                self.grid_row_span = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.grid_row_span = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u16;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

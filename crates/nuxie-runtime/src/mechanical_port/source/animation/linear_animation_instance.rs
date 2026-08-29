@@ -133,7 +133,7 @@ impl LinearAnimationInstance {
             .remove_nested_event_listener(listener);
     }
 
-    fn with_animation<R>(&self, f: impl FnOnce(&LinearAnimation) -> R) -> R {
+    pub(crate) fn with_animation<R>(&self, f: impl FnOnce(&LinearAnimation) -> R) -> R {
         match &self.animation {
             LinearAnimationOwner::Authored(animation) => animation
                 .with_downcast::<LinearAnimation, _>(f)
@@ -508,7 +508,7 @@ impl LinearAnimationInstance {
     }
     pub fn is_translucent(&self) -> bool {
         self.artboard
-            .with_artboard(|artboard| artboard.base.is_translucent())
+            .with_artboard(|artboard| artboard.is_animation_instance_translucent(self))
             .unwrap_or(false)
     }
     pub fn report_event(&mut self, event: CoreHandle, _delay: f32) {

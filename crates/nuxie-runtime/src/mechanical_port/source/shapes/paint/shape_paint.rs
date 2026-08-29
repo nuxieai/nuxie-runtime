@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     component_dirt::{ComponentDirt, has_dirt},
     core::CoreHandle,
     core_context::{CoreContext, StatusCode},
+    factory::RuntimeFactoryHandle,
     generated::shapes::paint::shape_paint_base::ShapePaintBase,
     math::mat2d::Mat2D,
     shapes::{
@@ -51,7 +52,11 @@ pub trait ShapePaintBehavior {
     fn fill_rule(&self) -> Option<u32> {
         None
     }
-    fn initialize_render_paint(&mut self, mutator: CoreHandle) -> bool;
+    fn initialize_render_paint(
+        &mut self,
+        mutator: CoreHandle,
+        factory: &RuntimeFactoryHandle,
+    ) -> bool;
     fn apply_to(&mut self, paint: &mut dyn RenderPaint, opacity: f32);
 }
 
@@ -80,6 +85,29 @@ impl Default for ShapePaint {
 }
 
 impl ShapePaint {
+    /// The actual inherited PathProvider, shared with this paint's effects.
+    pub fn path_provider(&self) -> &PathProvider {
+        &self.path_provider
+    }
+
+    pub fn paint_type(&self) -> ShapePaintType {
+        use crate::mechanical_port::source::generated::shapes::paint::{
+            fill_base::FillBase, stroke_base::StrokeBase,
+        };
+        // The cached type is immutable, so effects can inspect their active
+        // parent paint without reborrowing the Fill/Stroke occurrence.
+        match self
+            .base
+            .handle()
+            .expect("installed ShapePaint occurrence")
+            .core_type()
+        {
+            Some(FillBase::TYPE_KEY) => ShapePaintType::Fill,
+            Some(StrokeBase::TYPE_KEY) => ShapePaintType::Stroke,
+            type_key => panic!("abstract ShapePaint has no paint type: {type_key:?}"),
+        }
+    }
+
     pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
         let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::MissingObject;
@@ -108,7 +136,7 @@ impl ShapePaint {
         &mut self,
         value: ComponentDirt,
         kind: ShapePaintPathKind,
-        paint_snapshot: crate::scripting::ScriptPaint,
+        stroke: Option<(f32, u32, u32)>,
     ) {
         if has_dirt(value, ComponentDirt::PATH) && !self.effects_container.effects.is_empty() {
             let parent = self.base.parent_handle().expect("ShapePaint container");
@@ -126,7 +154,11 @@ impl ShapePaint {
             let Some(source) = source else {
                 return;
             };
-            self.script_paint_scope = Some(Rc::new(paint_snapshot));
+            // A paint snapshot is only needed inside an effect invocation.
+            // Ordinary Fill/Stroke updates never construct Lua PaintData upstream.
+            self.script_paint_scope = Some(Rc::new(crate::scripting::ScriptPaint::from_fresh(
+                self, stroke,
+            )));
             let mut current: Option<Rc<RefCell<ShapePaintPath>>> = None;
             for handle in self.effects_container.effects.iter().cloned() {
                 handle.with_mut(|effect| {
@@ -147,17 +179,18 @@ impl ShapePaint {
         }
     }
 
-    pub fn init_render_paint(&mut self, mutator: CoreHandle) -> bool {
+    pub fn init_render_paint(
+        &mut self,
+        mutator: CoreHandle,
+        factory: &RuntimeFactoryHandle,
+    ) -> bool {
         if self.render_paint.is_some() {
             return false;
         }
-        let Some(factory) = self
-            .base
-            .with_artboard(|artboard| artboard.factory())
-            .flatten()
-        else {
-            return false;
-        };
+        // Upstream uses mutator->component()->artboard()->factory(), not this
+        // paint's artboard: the mutator may initialize before its parent paint.
+        // The caller snapshots that same factory without reborrowing the active
+        // mutator occurrence while the parent Fill/Stroke is borrowed.
         self.paint_mutator = Some(mutator);
         self.render_paint = Some(Rc::new(RefCell::new(
             factory.with_factory_mut(|factory| factory.make_render_paint()),
@@ -364,19 +397,11 @@ impl ShapePaint {
     }
 
     pub fn invalidate_effects_from(&mut self, effect: Option<&CoreHandle>) {
-        let mut found = effect.is_none();
-        for current in self.effects_container.effects.iter().cloned() {
-            if found {
-                current.with_mut(|current| {
-                    if let Some(current) = current.as_stroke_effect_mut() {
-                        current.invalidate_effect(None);
-                    }
-                });
-            }
-            if effect == Some(&current) {
-                found = true;
-            }
-        }
+        self.effects_container.invalidate_effects(effect);
+        self.finish_invalidate_effects();
+    }
+
+    pub(crate) fn finish_invalidate_effects(&mut self) {
         if let Some(feather) = self.feather.as_ref() {
             feather.with_downcast_mut::<Feather, _>(Feather::mark_effect_path_dirty);
         }
@@ -391,13 +416,13 @@ impl ShapePaint {
         self.base.add_dirt(ComponentDirt::PATH, false);
     }
 
-    pub fn add_stroke_effect(&mut self, effect: CoreHandle) {
-        effect.with_mut(|effect| {
-            if let Some(effect) = effect.as_stroke_effect_mut() {
-                effect.add_path_provider(&self.path_provider);
-            }
-        });
-        EffectsContainer::add_stroke_effect(self, effect);
+    pub fn add_stroke_effect(
+        &mut self,
+        identity: CoreHandle,
+        effect: &mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect,
+    ) {
+        effect.add_path_provider(&self.path_provider);
+        self.effects_container.add_stroke_effect(identity);
     }
 
     pub fn render_opacity(&self) -> f32 {
@@ -494,7 +519,11 @@ impl EffectsContainer for ShapePaint {
         self.invalidate_effects_from(effect);
     }
 
-    fn add_stroke_effect(&mut self, effect: CoreHandle) {
-        ShapePaint::add_stroke_effect(self, effect);
+    fn add_stroke_effect(
+        &mut self,
+        identity: CoreHandle,
+        effect: &mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect,
+    ) {
+        ShapePaint::add_stroke_effect(self, identity, effect);
     }
 }

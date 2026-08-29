@@ -1,71 +1,79 @@
-use std::{any::Any, marker::PhantomData};
+use std::marker::PhantomData;
 
-pub trait TypedCore: Any {
-    fn as_any(&self) -> &dyn Any;
+use crate::mechanical_port::source::core::{CoreHandle, CoreType};
+
+#[derive(Clone, Copy)]
+enum Children<'a> {
+    Nullable(&'a [Option<CoreHandle>]),
+    NonNull(&'a [CoreHandle]),
 }
 
-pub struct TypedChild<'a, T: Any> {
-    children: &'a [Option<&'a dyn TypedCore>],
+impl<'a> Children<'a> {
+    fn len(self) -> usize {
+        match self {
+            Self::Nullable(children) => children.len(),
+            Self::NonNull(children) => children.len(),
+        }
+    }
+
+    fn get(self, index: usize) -> Option<&'a CoreHandle> {
+        match self {
+            Self::Nullable(children) => children[index].as_ref(),
+            Self::NonNull(children) => Some(&children[index]),
+        }
+    }
+}
+
+pub struct TypedChild<'a, T: CoreType> {
+    children: Children<'a>,
     index: usize,
     marker: PhantomData<T>,
 }
 
-impl<'a, T: Any> TypedChild<'a, T> {
-    fn new(children: &'a [Option<&'a dyn TypedCore>], index: usize) -> Self {
+impl<T: CoreType> Iterator for TypedChild<'_, T> {
+    type Item = CoreHandle;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.index < self.children.len() {
+            let child = self.children.get(self.index);
+            self.index += 1;
+            if let Some(child) = child.filter(|child| child.is_type_of(T::TYPE_KEY)) {
+                return Some(child.clone());
+            }
+        }
+        None
+    }
+}
+
+pub struct TypedChildren<'a, T: CoreType> {
+    children: Children<'a>,
+    marker: PhantomData<T>,
+}
+
+impl<'a, T: CoreType> TypedChildren<'a, T> {
+    pub fn new(children: &'a [Option<CoreHandle>]) -> Self {
         Self {
-            children,
-            index,
+            children: Children::Nullable(children),
             marker: PhantomData,
         }
     }
 
-    fn advance_to_typed(&mut self) {
-        while self.index < self.children.len()
-            && self.children[self.index].is_none_or(|child| !child.as_any().is::<T>())
-        {
-            self.index += 1;
-        }
-    }
-}
-
-impl<'a, T: Any> Iterator for TypedChild<'a, T> {
-    type Item = &'a T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.advance_to_typed();
-        if self.index == self.children.len() {
-            return None;
-        }
-        let child = self.children[self.index]
-            .expect("typed-child filtering rejects null children")
-            .as_any()
-            .downcast_ref::<T>()
-            .expect("typed-child filtering accepts only the requested type");
-        self.index += 1;
-        Some(child)
-    }
-}
-
-pub struct TypedChildren<'a, T: Any> {
-    children: &'a [Option<&'a dyn TypedCore>],
-    marker: PhantomData<T>,
-}
-
-impl<'a, T: Any> TypedChildren<'a, T> {
-    pub fn new(children: &'a [Option<&'a dyn TypedCore>]) -> Self {
+    pub fn from_handles(children: &'a [CoreHandle]) -> Self {
         Self {
-            children,
+            children: Children::NonNull(children),
             marker: PhantomData,
         }
     }
 
     pub fn iter(&self) -> TypedChild<'a, T> {
-        let mut child = TypedChild::new(self.children, 0);
-        child.advance_to_typed();
-        child
+        TypedChild {
+            children: self.children,
+            index: 0,
+            marker: PhantomData,
+        }
     }
 
-    pub fn first(&self) -> Option<&'a T> {
+    pub fn first(&self) -> Option<CoreHandle> {
         self.iter().next()
     }
 

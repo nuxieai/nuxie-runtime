@@ -100,11 +100,5 @@ impl ViewModelInstanceValueRuntime {
             .unwrap_or_default()
     }
 
-    pub fn relink_data_bind(&self) {
-        let _ = self.inner.value.with_mut(|value| {
-            if let Some(value) = value.as_view_model_instance_value_mut() {
-                value.relink_dependents();
-            }
-        });
-    }
+    pub fn relink_data_bind(&self) {}
 }

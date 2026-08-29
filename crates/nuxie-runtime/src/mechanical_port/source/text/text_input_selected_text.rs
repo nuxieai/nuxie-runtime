@@ -25,7 +25,7 @@ impl TextInputSelectedText {
                 .as_text_input_mut()
                 .expect("TextInputSelectedText parent")
                 .raw_text_input()
-                .separate_selection_text(true);
+                .set_separate_selection_text(true);
         });
         StatusCode::Ok
     }

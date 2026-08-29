@@ -27,6 +27,30 @@ use crate::mechanical_port::source::text_engine::{
 
 const STANDARD_SCALE: i32 = 2048;
 const INVERSE_SCALE: f32 = 1.0 / STANDARD_SCALE as f32;
+const KERN_TAG: u32 = u32::from_be_bytes(*b"kern");
+
+fn suppress_legacy_kern(font: &OutlineFont<'_>) -> bool {
+    font.kern().is_ok() && font.gpos().is_err() && font.kerx().is_err()
+}
+
+fn shaping_features(
+    feature_values: &HashMap<u32, u32>,
+    suppress_legacy_kern: bool,
+) -> Vec<ShapingFeature> {
+    let kern_tag = Tag::from_u32(KERN_TAG);
+    let mut features: Vec<_> = feature_values
+        .iter()
+        .map(|(&tag, &value)| ShapingFeature::new(Tag::from_u32(tag), value, ..))
+        .collect();
+    if suppress_legacy_kern {
+        if let Some(kern) = features.iter_mut().find(|feature| feature.tag == kern_tag) {
+            kern.value = 0;
+        } else {
+            features.push(ShapingFeature::new(kern_tag, 0, ..));
+        }
+    }
+    features
+}
 
 /// The HBFont owner retains Rive's run/fallback/color semantics. Only its
 /// backend is adapted: harfrust shapes, skrifa reads outlines and color tables,
@@ -131,10 +155,10 @@ impl HbFont {
         } else {
             Vec::new()
         };
-        let features = feature_values
-            .iter()
-            .map(|(&tag, &value)| ShapingFeature::new(Tag::from_u32(tag), value, ..))
-            .collect();
+        // Pinned Rive HarfBuzz is compiled with HB_NO_LEGACY. HarfRust has no
+        // equivalent build switch, so suppress only its legacy `kern` fallback.
+        // A GPOS or kerx font retains its normal positioning path.
+        let features = shaping_features(&feature_values, suppress_legacy_kern(&outline));
         Self {
             base: FontBase::new(line_metrics),
             bytes,
@@ -517,29 +541,62 @@ fn glyph_path(font: &OutlineFont<'_>, location: LocationRef<'_>, glyph: GlyphId)
     let mut path = RawPath::default();
     if let Some(outline) = font.outline_glyphs().get(OutlineGlyphId::new(glyph as u32)) {
         let settings = DrawSettings::unhinted(Size::new(STANDARD_SCALE as f32), location)
-            .with_path_style(skrifa::outline::pen::PathStyle::FreeType);
-        let _ = outline.draw(settings, &mut RawPathPen(&mut path));
+            .with_path_style(skrifa::outline::pen::PathStyle::HarfBuzz);
+        let mut pen = RawPathPen {
+            path: &mut path,
+            current: Vec2D::default(),
+            start: Vec2D::default(),
+            open: false,
+        };
+        let _ = outline.draw(settings, &mut pen);
+        pen.close();
     }
     path
 }
-struct RawPathPen<'a>(&'a mut RawPath);
+// Match hb_draw_session_t's callback protocol at the Rust outline boundary:
+// move is deferred until a segment opens the contour, and close emits the
+// explicit closing line when its endpoint differs from the contour start.
+// RawPath::close itself must not grow that line for other callers.
+struct RawPathPen<'a> {
+    path: &'a mut RawPath,
+    current: Vec2D,
+    start: Vec2D,
+    open: bool,
+}
+impl RawPathPen<'_> {
+    fn start_path(&mut self) {
+        if !self.open {
+            self.path.move_to_point(self.current);
+            self.start = self.current;
+            self.open = true;
+        }
+    }
+}
 impl OutlinePen for RawPathPen<'_> {
     fn move_to(&mut self, x: f32, y: f32) {
-        self.0.move_to(x * INVERSE_SCALE, -y * INVERSE_SCALE);
+        if self.open {
+            self.close();
+        }
+        self.current = Vec2D::new(x * INVERSE_SCALE, -y * INVERSE_SCALE);
     }
     fn line_to(&mut self, x: f32, y: f32) {
-        self.0.line_to(x * INVERSE_SCALE, -y * INVERSE_SCALE);
+        self.start_path();
+        self.current = Vec2D::new(x * INVERSE_SCALE, -y * INVERSE_SCALE);
+        self.path.line_to_point(self.current);
     }
     fn quad_to(&mut self, x: f32, y: f32, end_x: f32, end_y: f32) {
-        self.0.quad_to_cubic(
+        self.start_path();
+        self.path.quad_to_cubic(
             x * INVERSE_SCALE,
             -y * INVERSE_SCALE,
             end_x * INVERSE_SCALE,
             -end_y * INVERSE_SCALE,
         );
+        self.current = Vec2D::new(end_x * INVERSE_SCALE, -end_y * INVERSE_SCALE);
     }
     fn curve_to(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, x2: f32, y2: f32) {
-        self.0.cubic_to(
+        self.start_path();
+        self.path.cubic_to(
             x0 * INVERSE_SCALE,
             -y0 * INVERSE_SCALE,
             x1 * INVERSE_SCALE,
@@ -547,9 +604,18 @@ impl OutlinePen for RawPathPen<'_> {
             x2 * INVERSE_SCALE,
             -y2 * INVERSE_SCALE,
         );
+        self.current = Vec2D::new(x2 * INVERSE_SCALE, -y2 * INVERSE_SCALE);
     }
     fn close(&mut self) {
-        self.0.close();
+        if self.open {
+            if self.current != self.start {
+                self.path.line_to_point(self.start);
+            }
+            self.path.close();
+        }
+        self.open = false;
+        self.current = Vec2D::default();
+        self.start = Vec2D::default();
     }
 }
 
@@ -639,7 +705,7 @@ impl HbFont {
                         let back = bidi_runs.last_mut().unwrap();
                         back.unichar_count = (text_index - run_start_text_index) as u32;
                         last_level = bidi_levels[paragraph_text_index];
-                        bidi_runs.push(TextRun {
+                        let next_run = TextRun {
                             font: back.font.clone(),
                             size: back.size,
                             line_height: back.line_height,
@@ -648,7 +714,8 @@ impl HbFont {
                             script: script as u32,
                             style_id: back.style_id,
                             level: last_level,
-                        });
+                        };
+                        bidi_runs.push(next_run);
                         run_start_text_index = text_index;
                     }
                     run_text_index += 1;
@@ -995,4 +1062,111 @@ impl skrifa::color::ColorPainter for PaintState<'_> {
     // Pinned HB callbacks deliberately do not implement group compositing.
     fn push_layer(&mut self, _: skrifa::color::CompositeMode) {}
     fn pop_layer(&mut self) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn decode_hex(input: &str) -> Vec<u8> {
+        let input: String = input
+            .chars()
+            .filter(|character| !character.is_ascii_whitespace())
+            .collect();
+        assert_eq!(input.len() % 2, 0, "hex fixture has a complete final byte");
+        input
+            .as_bytes()
+            .chunks_exact(2)
+            .map(|pair| {
+                let pair = std::str::from_utf8(pair).expect("hex fixture is ASCII");
+                u8::from_str_radix(pair, 16).expect("hex fixture contains only hex digits")
+            })
+            .collect()
+    }
+
+    fn shape(font: &FontRef, text: &str) -> GlyphRun {
+        let text: Vec<u32> = text.chars().map(u32::from).collect();
+        let paragraphs = font.shape_text(
+            &text,
+            &[TextRun {
+                font: Some(font.clone()),
+                size: STANDARD_SCALE as f32,
+                line_height: -1.0,
+                letter_spacing: 0.0,
+                unichar_count: text.len() as u32,
+                script: u32::from_be_bytes(*b"Latn"),
+                style_id: 0,
+                level: 0,
+            }],
+            0,
+        );
+        assert_eq!(paragraphs.len(), 1);
+        assert_eq!(paragraphs[0].runs.len(), 1);
+        paragraphs
+            .into_iter()
+            .next()
+            .expect("one paragraph")
+            .runs
+            .into_iter()
+            .next()
+            .expect("one glyph run")
+    }
+
+    #[test]
+    fn legacy_only_kern_is_suppressed_like_pinned_harfbuzz() {
+        let bytes = decode_hex(include_str!("testdata/legacy_kern_he.hex"));
+        let font = HbFont::decode(&bytes).expect("legacy kern test font decodes");
+        let run = shape(&font, "He");
+
+        assert_eq!(run.advances, [1135.0, 930.0]);
+        assert_eq!(run.offsets[1], Vec2D::new(0.0, 0.0));
+        let font = font
+            .as_any()
+            .downcast_ref::<HbFont>()
+            .expect("decoded font is HbFont");
+        assert!(
+            font.features
+                .iter()
+                .any(|feature| { feature.tag == Tag::from_u32(KERN_TAG) && feature.value == 0 })
+        );
+    }
+
+    #[test]
+    fn gpos_kern_remains_enabled_when_legacy_kern_is_suppressed() {
+        let runtime = nuxie_binary::read_runtime_file(include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/semantic/semantic_list_scroll_focus_fixed.riv"
+        )))
+        .expect("semantic fixture decodes");
+        let font = runtime
+            .imported_file_assets_with_contents()
+            .into_iter()
+            .filter_map(|asset| asset.bytes())
+            .find_map(HbFont::decode)
+            .expect("semantic fixture embeds a font");
+
+        let kerned = shape(&font, "AV");
+        let unkerned_font = font.with_options(
+            &[],
+            &[Feature {
+                tag: KERN_TAG,
+                value: 0,
+            }],
+        );
+        let unkerned = shape(&unkerned_font, "AV");
+
+        assert_eq!(kerned.advances[0], 1273.0);
+        assert_eq!(unkerned.advances[0], 1413.0);
+        assert!(kerned.advances[0] < unkerned.advances[0]);
+        let font = font
+            .as_any()
+            .downcast_ref::<HbFont>()
+            .expect("decoded font is HbFont");
+        assert!(
+            !font
+                .features
+                .iter()
+                .any(|feature| { feature.tag == Tag::from_u32(KERN_TAG) && feature.value == 0 })
+        );
+    }
 }

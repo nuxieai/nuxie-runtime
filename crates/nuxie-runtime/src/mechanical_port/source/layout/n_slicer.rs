@@ -7,6 +7,19 @@ use crate::mechanical_port::source::{
     shapes::{image::Image, slice_mesh::SliceMesh},
 };
 
+impl std::ops::Deref for NSlicer {
+    type Target = NSlicerBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NSlicer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
 pub struct NSlicer {
     pub base: NSlicerBase,
     details: NSlicerDetailsState,
@@ -23,9 +36,11 @@ impl NSlicer {
         }
     }
     pub fn image_handle(&self) -> Option<CoreHandle> {
-        self.base
-            .parent_handle()
-            .filter(|parent| parent.with_downcast::<Image, _>(|_| ()).is_some())
+        self.base.parent_handle().filter(|parent| {
+            parent.is_type_of(
+                crate::mechanical_port::source::generated::shapes::image_base::ImageBase::TYPE_KEY,
+            )
+        })
     }
     pub fn slice_mesh(&mut self) -> &mut SliceMesh {
         &mut self.slice_mesh
@@ -82,10 +97,13 @@ impl Default for NSlicer {
 }
 
 impl NSlicerDetails for NSlicer {
+    fn details_state_ref(&self) -> &NSlicerDetailsState {
+        &self.details
+    }
     fn details_state(&mut self) -> &mut NSlicerDetailsState {
         &mut self.details
     }
     fn axis_changed(&mut self) {
-        self.base.add_dirt(ComponentDirt::N_SLICER);
+        self.base.add_dirt(ComponentDirt::N_SLICER, false);
     }
 }

@@ -16,7 +16,6 @@ fn runtime_root() -> PathBuf {
 }
 
 #[test]
-#[ignore = "expected-red: deterministic_mode retained stream differs at frame 0 transform signed zero"]
 fn wave_b2_deterministic_mode_replays_the_pinned_action_stream() {
     let runtime = runtime_root();
     let manifest = read_manifest(&workspace_root().join("silver-corpus.toml"))

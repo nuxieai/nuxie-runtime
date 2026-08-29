@@ -17,8 +17,7 @@ pub(super) fn imports_successfully(
     definition: &'static Definition,
     context: &ImportContext,
 ) -> Option<bool> {
-    (definition.name == "KeyedProperty")
-        .then(|| context.latest(ImportStackKey::KeyedObject))
+    (definition.name == "KeyedProperty").then(|| context.latest(ImportStackKey::KeyedObject))
 }
 
 pub(super) fn update_context(definition: &'static Definition, context: &mut ImportContext) {

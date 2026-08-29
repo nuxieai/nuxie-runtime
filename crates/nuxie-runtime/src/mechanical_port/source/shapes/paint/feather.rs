@@ -8,6 +8,23 @@ use crate::mechanical_port::source::{
     shapes::paint::shape_paint_path::ShapePaintPath,
     transform_space::TransformSpace,
 };
+impl std::ops::Deref for Feather {
+    type Target = FeatherBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Feather {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Feather {
+    pub const TYPE_KEY: u16 = FeatherBase::TYPE_KEY;
+}
+
 pub struct Feather {
     pub base: FeatherBase,
     inner_path: Rc<RefCell<ShapePaintPath>>,
@@ -21,7 +38,7 @@ impl Default for Feather {
         Self {
             base: FeatherBase::default(),
             inner_path: Rc::new(RefCell::new(ShapePaintPath::new(true))),
-            effect_path_dirty: false,
+            effect_path_dirty: true,
             #[cfg(test)]
             render_count: 0,
         }
@@ -29,7 +46,7 @@ impl Default for Feather {
 }
 
 impl Feather {
-    pub fn validate(&self, context: &dyn CoreContext) -> bool {
+    pub fn validate(&mut self, context: &mut dyn CoreContext) -> bool {
         if !self.base.validate(context) {
             return false;
         }
@@ -43,9 +60,6 @@ impl Feather {
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
-        if code != StatusCode::Ok {
-            return code;
-        }
         let (Some(this), Some(parent)) = (self.base.handle(), self.base.parent_handle()) else {
             return StatusCode::MissingObject;
         };
@@ -66,11 +80,10 @@ impl Feather {
     }
     pub fn is_inner(&self) -> bool {
         self.base.inner()
-            && self.base.parent_handle().is_some_and(|parent| {
-                parent
-                    .with(|parent| parent.is_type_of(FillBase::TYPE_KEY))
-                    .unwrap_or(false)
-            })
+            && self
+                .base
+                .parent_handle()
+                .is_some_and(|parent| parent.is_type_of(FillBase::TYPE_KEY))
     }
     pub fn update(&mut self, value: ComponentDirt) {
         if has_dirt(value, ComponentDirt::PAINT) {
@@ -85,7 +98,36 @@ impl Feather {
         }
         if has_dirt(value, ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH) && self.is_inner()
         {
-            self.effect_path_dirty = true;
+            let paint = self.base.parent_handle().expect("Feather parent paint");
+            let (container, kind) = paint
+                .with(|paint| {
+                    (
+                        paint.component_parent_handle(),
+                        paint
+                            .as_shape_paint_behavior()
+                            .expect("Feather ShapePaint parent")
+                            .pick_path_kind(),
+                    )
+                })
+                .expect("live Feather paint");
+            if let Some(container) = container {
+                let offset_in_artboard = self.space() == TransformSpace::World;
+                let result = container
+                    .with_mut(|container| {
+                        let Some(transform) = container.shape_paint_world_transform() else {
+                            return None;
+                        };
+                        Some(container.with_shape_paint_path_mut(kind, &mut |path| {
+                            self.rebuild_inner_path(path, &transform, offset_in_artboard);
+                        }))
+                    })
+                    .flatten();
+                match result {
+                    Some(true) => self.effect_path_dirty = true,
+                    Some(false) => return,
+                    None => {}
+                }
+            }
             #[cfg(test)]
             {
                 self.render_count += 1;
@@ -102,11 +144,11 @@ impl Feather {
         let bounds = path.raw_path().bounds().pad(self.base.strength() * 1.5);
         let mut offset = Vec2D::new(self.base.offset_x(), self.base.offset_y());
         if offset_in_artboard {
-            offset = Vec2D::transform_dir(offset, shape_transform.invert_or_identity());
+            offset = Vec2D::transform_dir(offset, &shape_transform.invert_or_identity());
         }
         let mut inner_path = self.inner_path.borrow_mut();
         inner_path.rewind();
-        inner_path.add_rect(bounds, PathDirection::Cw);
+        inner_path.add_rect(bounds, PathDirection::Clockwise);
         let transform = Mat2D::from_translation(offset);
         inner_path.add_path_backwards(path.raw_path(), Some(&transform));
     }
@@ -128,11 +170,15 @@ impl Feather {
         }
     }
     pub fn strength_changed(&mut self) {
-        self.base.add_dirt(if self.base.inner() {
-            ComponentDirt::PAINT | ComponentDirt::WORLD_TRANSFORM
-        } else {
-            ComponentDirt::PAINT
-        });
+        let inner = self.base.inner();
+        self.base.add_dirt(
+            if inner {
+                ComponentDirt::PAINT | ComponentDirt::WORLD_TRANSFORM
+            } else {
+                ComponentDirt::PAINT
+            },
+            false,
+        );
     }
     pub fn offset_x_changed(&mut self) {
         self.strength_changed();

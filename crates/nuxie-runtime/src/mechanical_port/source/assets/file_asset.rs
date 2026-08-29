@@ -89,7 +89,6 @@ impl FileAsset {
 
     pub fn import(
         &mut self,
-        this: CoreHandle,
         adds_to_backboard: bool,
         import_stack: &mut ImportStack,
     ) -> StatusCode {
@@ -97,7 +96,7 @@ impl FileAsset {
             let Some(backboard_importer) = import_stack.latest_backboard_importer() else {
                 return StatusCode::MissingObject;
             };
-            backboard_importer.add_file_asset(this);
+            backboard_importer.add_file_asset(self);
         }
         self.base.import(import_stack)
     }

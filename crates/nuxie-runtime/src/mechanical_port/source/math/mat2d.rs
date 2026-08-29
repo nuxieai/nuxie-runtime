@@ -337,3 +337,131 @@ impl Mul<Vec2D> for Mat2D {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn multiply_matches_pinned_fused_product_sums() {
+        let bone_world = Mat2D::new(
+            -0.187692404,
+            -0.775338828,
+            0.771069884,
+            -0.205327198,
+            284.760468,
+            272.738983,
+        );
+        let inverse_bind = Mat2D::new(
+            -0.246825233,
+            0.974436581,
+            -0.969326734,
+            -0.224662051,
+            300.711243,
+            -294.504639,
+        );
+
+        let result = bone_world * inverse_bind;
+        assert_eq!(
+            result.values().map(f32::to_bits),
+            [
+                0x3f4c_3525,
+                0xbc0e_a00d,
+                0x3c0e_9fef,
+                0x3f4c_3524,
+                0x3f9e_2800,
+                0x42c8_1c84,
+            ]
+        );
+    }
+
+    #[test]
+    fn map_point_matches_pinned_fused_linear_sum() {
+        let world = Mat2D::new(
+            0.835797548,
+            -0.167389423,
+            0.159021586,
+            0.884335815,
+            352.651398,
+            220.692368,
+        );
+
+        let result = world * Vec2D::new(43.021419525146484, -749.8175659179688);
+        assert_eq!(result.x.to_bits(), 0x4386_af8b);
+        assert_eq!(result.y.to_bits(), 0xc3e0_ccbc);
+    }
+
+    #[test]
+    fn map_points_matches_pinned_simd_fma_stages() {
+        let matrix = Mat2D::new(-189.62933, 0.0, 83.74298, 1.0, -162.7352, 0.0);
+        let point = Vec2D::new(52.703873, -199.69064);
+        let mut result = [Vec2D::default()];
+
+        matrix.map_points(&mut result, &[point]);
+
+        assert_eq!(result[0].x.to_bits(), 0xc6d1_ff41);
+        assert_ne!(
+            result[0].x.to_bits(),
+            (point.x * matrix[0] + (point.y * matrix[2] + matrix[4])).to_bits()
+        );
+    }
+
+    #[test]
+    fn invert_matches_pinned_fused_determinant_and_translation() {
+        let world = Mat2D::new(
+            -1.5231051445007324,
+            0.16598844528198242,
+            -0.8321806192398071,
+            -0.213197261095047,
+            403.1590270996094,
+            513.412841796875,
+        );
+        let mut inverse = Mat2D::identity();
+
+        assert!(world.invert(&mut inverse));
+        assert_eq!(
+            inverse.values().map(f32::to_bits),
+            [
+                0xbeeb_d5a2,
+                0xbeb7_9cf2,
+                0x3fe6_22a6,
+                0xc052_9a80,
+                0xc438_585e,
+                0x44e5_41db,
+            ]
+        );
+    }
+
+    #[test]
+    fn decompose_and_compose_match_pinned_rotation_constraint_bits() {
+        let world = Mat2D::new(
+            f32::from_bits(0xbe42_8f5c),
+            f32::from_bits(0xb2f6_7039),
+            f32::from_bits(0x32f6_7039),
+            f32::from_bits(0xbe42_8f5c),
+            f32::from_bits(0x43c6_73b2),
+            f32::from_bits(0x43a0_b75d),
+        );
+
+        let components = world.decompose();
+        assert_eq!(components.x().to_bits(), 0x43c6_73b2);
+        assert_eq!(components.y().to_bits(), 0x43a0_b75d);
+        assert_eq!(components.scale_x().to_bits(), 0x3e42_8f5c);
+        assert_eq!(components.scale_y().to_bits(), 0x3e42_8f5c);
+        assert_eq!(components.rotation().to_bits(), 0xc049_0fda);
+        assert_eq!(components.skew().to_bits(), 0xa7c5_a99a);
+
+        let recomposed = Mat2D::compose(&components);
+        assert_eq!(
+            recomposed.values().map(f32::to_bits),
+            [
+                0xbe42_8f5c,
+                0xb2f6_7039,
+                0x32f6_703a,
+                0xbe42_8f5c,
+                0x43c6_73b2,
+                0x43a0_b75d,
+            ]
+        );
+    }
+}

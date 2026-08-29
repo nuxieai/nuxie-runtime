@@ -92,9 +92,8 @@ impl RuntimeFile {
 
             if definition.is_a("DataConverter") {
                 if definition.name == "DataConverterGroup" {
-                    current_group_importer = Some(DataConverterGroupImporter::new(
-                        current_converter_index,
-                    ));
+                    current_group_importer =
+                        Some(DataConverterGroupImporter::new(current_converter_index));
                 }
                 current_converter_index += 1;
                 continue;

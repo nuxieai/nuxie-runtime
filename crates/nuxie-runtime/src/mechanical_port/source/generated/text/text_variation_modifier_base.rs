@@ -50,7 +50,10 @@ impl TextVariationModifierBase {
             return;
         }
         callbacks.axis_tag_changed();
-        callbacks.notify_property_changed(Self::AXIS_TAG_PROPERTY_KEY);
+        TextVariationModifierBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::AXIS_TAG_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_axis_tag_value(&mut self, value: u32) -> bool {
@@ -72,7 +75,10 @@ impl TextVariationModifierBase {
             return;
         }
         callbacks.axis_value_changed();
-        callbacks.notify_property_changed(Self::AXIS_VALUE_PROPERTY_KEY);
+        TextVariationModifierBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::AXIS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_axis_value_value(&mut self, value: f32) -> bool {

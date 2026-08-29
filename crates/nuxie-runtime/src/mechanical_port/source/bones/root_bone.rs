@@ -1,20 +1,23 @@
 use crate::mechanical_port::source::{
-    core_context::CoreContext,
-    generated::bones::{
-        bone_base::BoneBaseCallbacks,
-        root_bone_base::{RootBoneBase, RootBoneBaseCallbacks},
-    },
+    core_context::CoreContext, generated::bones::root_bone_base::RootBoneBase,
     status_code::StatusCode,
 };
 
-struct SilentRootBoneCallbacks;
-impl BoneBaseCallbacks for SilentRootBoneCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
-}
-impl RootBoneBaseCallbacks for SilentRootBoneCallbacks {}
-
 pub struct RootBone {
     pub base: RootBoneBase,
+}
+
+impl std::ops::Deref for RootBone {
+    type Target = RootBoneBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for RootBone {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
 }
 
 impl Default for RootBone {
@@ -31,11 +34,9 @@ impl RootBone {
     }
 
     pub fn set_x(&mut self, value: f32) {
-        if self.base.x() == value {
+        if !self.base.set_x_value(value) {
             return;
         }
-        let mut callbacks = SilentRootBoneCallbacks;
-        self.base.set_x(value, &mut callbacks);
         self.x_changed();
         self.base
             .base
@@ -48,11 +49,9 @@ impl RootBone {
     }
 
     pub fn set_y(&mut self, value: f32) {
-        if self.base.y() == value {
+        if !self.base.set_y_value(value) {
             return;
         }
-        let mut callbacks = SilentRootBoneCallbacks;
-        self.base.set_y(value, &mut callbacks);
         self.y_changed();
         self.base
             .base
@@ -63,7 +62,10 @@ impl RootBone {
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         // Skip Bone::onAddedClean exactly: a root bone may have any
         // TransformComponent parent.
-        self.base.transform_component_on_added_clean(context)
+        crate::mechanical_port::source::transform_component::TransformComponent::on_added_clean(
+            &mut self.base.base.base.base.base.base,
+            context,
+        )
     }
 
     pub fn x_changed(&mut self) {

@@ -27,7 +27,9 @@ impl BindablePropertyArtboardBase {
     }
     pub fn clone_into(&self) -> BindablePropertyArtboard {
         let mut cloned = BindablePropertyArtboard::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

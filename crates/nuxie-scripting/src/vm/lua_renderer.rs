@@ -74,6 +74,7 @@ impl RendererBindings {
 struct ActiveRenderer {
     token: u64,
     renderer: NonNull<dyn Renderer>,
+    borrowed: bool,
 }
 
 thread_local! {
@@ -86,8 +87,8 @@ pub(super) struct ScopedRendererAccess<'a> {
     _exclusive_borrow: PhantomData<&'a mut dyn Renderer>,
 }
 
-impl ScopedRendererAccess<'_> {
-    fn new(renderer: &mut dyn Renderer) -> Self {
+impl<'a> ScopedRendererAccess<'a> {
+    fn new(renderer: &'a mut dyn Renderer) -> Self {
         let token = NEXT_RENDERER_TOKEN.with(|next| {
             let token = next.get();
             next.set(token.wrapping_add(1).max(1));
@@ -100,7 +101,11 @@ impl ScopedRendererAccess<'_> {
         let renderer =
             unsafe { mem::transmute::<NonNull<dyn Renderer + '_>, NonNull<dyn Renderer>>(ptr) };
         ACTIVE_RENDERERS.with(|active| {
-            active.borrow_mut().push(ActiveRenderer { token, renderer });
+            active.borrow_mut().push(ActiveRenderer {
+                token,
+                renderer,
+                borrowed: false,
+            });
         });
         Self {
             token,
@@ -119,24 +124,54 @@ impl Drop for ScopedRendererAccess<'_> {
     }
 }
 
+struct ActiveRendererBorrow {
+    token: u64,
+    renderer: NonNull<dyn Renderer>,
+}
+
+impl Drop for ActiveRendererBorrow {
+    fn drop(&mut self) {
+        ACTIVE_RENDERERS.with(|active| {
+            let mut active = active.borrow_mut();
+            let frame = active
+                .iter_mut()
+                .rev()
+                .find(|frame| frame.token == self.token)
+                .expect("active renderer borrow outlived its scope");
+            frame.borrowed = false;
+        });
+    }
+}
+
 fn with_active_renderer<R>(
     token: u64,
     callback: impl FnOnce(&mut dyn Renderer) -> Result<R>,
 ) -> Result<R> {
-    ACTIVE_RENDERERS.with(|active| {
-        let mut active = active
-            .try_borrow_mut()
-            .map_err(|_| Error::runtime("Renderer is already mutably borrowed by this callback"))?;
+    let mut renderer = ACTIVE_RENDERERS.with(|active| {
+        let mut active = active.borrow_mut();
         let frame = active
             .iter_mut()
             .rev()
             .find(|frame| frame.token == token)
             .ok_or_else(|| Error::lua_l_runtime("Renderer is no longer valid."))?;
-        // SAFETY: ScopedRendererAccess owns the exclusive borrow for the
-        // entire time this frame is present. The RefCell borrow above makes
-        // every access through this token unique, including reentrant Lua.
-        callback(unsafe { frame.renderer.as_mut() })
-    })
+        if frame.borrowed {
+            return Err(Error::runtime(
+                "Renderer is already mutably borrowed by this callback",
+            ));
+        }
+        frame.borrowed = true;
+        Ok::<_, Error>(ActiveRendererBorrow {
+            token,
+            renderer: frame.renderer,
+        })
+    })?;
+    // Drawing a scripted artboard can synchronously install a child renderer
+    // scope reborrowed from this callback. Keep only this token borrowed, not
+    // the registry that the nested draw must extend.
+    // SAFETY: ScopedRendererAccess owns the exclusive borrow while this token
+    // is registered. Its per-token borrowed flag excludes reentrant use of
+    // that reference; a child scope receives a shorter reborrow from the callback.
+    callback(unsafe { renderer.renderer.as_mut() })
 }
 
 enum RendererTarget {
@@ -309,7 +344,6 @@ impl UserData for ScriptedRenderer {
                 String,
                 f32,
             )| {
-                this.validate()?;
                 let sampler = sampler.borrow::<ScriptedImageSampler>()?;
                 let blend_mode = parse_blend_mode_name(&blend_mode)?;
 
@@ -365,6 +399,38 @@ mod tests {
     use crate::vm::ScriptVm;
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_runtime::{NoopScriptHost, ScriptInstance};
+
+    #[test]
+    fn nested_renderer_scope_reborrows_without_unlocking_its_parent() {
+        let factory = RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let outer = ScopedRendererAccess::new(&mut renderer);
+        let mut nested_token = 0;
+        with_active_renderer(outer.token, |renderer| {
+            renderer.save();
+            {
+                let nested = ScopedRendererAccess::new(renderer);
+                nested_token = nested.token;
+                with_active_renderer(nested.token, |renderer| {
+                    renderer.save();
+                    assert!(with_active_renderer(outer.token, |_| Ok(())).is_err());
+                    renderer.restore();
+                    Ok(())
+                })?;
+            }
+            renderer.restore();
+            Ok(())
+        })
+        .unwrap();
+        assert!(with_active_renderer(nested_token, |_| Ok(())).is_err());
+        let outer_token = outer.token;
+        drop(outer);
+        assert!(with_active_renderer(outer_token, |_| Ok(())).is_err());
+        assert_eq!(
+            factory.stream(),
+            "rive-golden-stream-v1\nsave\nsave\nrestore\nrestore\n"
+        );
+    }
 
     #[test]
     fn scripted_renderer_keeps_callback_lifetime_state_inline() {
@@ -568,10 +634,13 @@ end\n";
                 "#,
             )
             .unwrap();
-        let mut instance = vm.script_instance_from_table(table);
         let mut renderer = factory.borrow().make_renderer();
-        let error = instance
-            .call_draw(&mut factory, &mut renderer, &mut NoopScriptHost)
+        // The approved host bounds guard rejects the Lua binding call before
+        // allocation. ScriptedDrawable's outer protected call contains an
+        // ordinary Lua error, so observe the binding error at this boundary.
+        let error = vm
+            .renderer_bindings
+            .call_draw(&table, &mut factory, &mut renderer)
             .unwrap_err()
             .to_string();
         assert!(
@@ -579,5 +648,15 @@ end\n";
             "{error}"
         );
         assert!(!factory.borrow().stream().contains("makeRenderBuffer"));
+
+        // Pinned ScriptedDrawable::draw discards the protected-call error and
+        // still balances the renderer; that must not bypass the host guard.
+        let mut instance = vm.script_instance_from_table(table);
+        instance
+            .call_draw(&mut factory, &mut renderer, &mut NoopScriptHost)
+            .expect("ordinary Lua draw errors are contained");
+        let stream = factory.borrow().stream();
+        assert!(!stream.contains("makeRenderBuffer"));
+        assert!(!stream.contains("drawImageMesh"));
     }
 }

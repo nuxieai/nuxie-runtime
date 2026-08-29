@@ -33,17 +33,28 @@ impl NestedStateMachine {
         })
     }
 
-    pub fn initialize_animation(&mut self, artboard: RuntimeArtboardInstanceWeakHandle) {
-        let animation_id = self.base.animation_id() as usize;
-        self.instance = artboard
-            .with_artboard_mut(|artboard| artboard.state_machine_instance_handle(animation_id))
-            .flatten();
+    pub fn initialize_animation_handle(
+        owner: &CoreHandle,
+        artboard: RuntimeArtboardInstanceWeakHandle,
+    ) {
+        let animation_id = owner
+            .with_downcast::<Self, _>(|owner| owner.base.animation_id() as usize)
+            .expect("live NestedStateMachine");
+        let instance = artboard
+            .upgrade()
+            .and_then(|artboard| artboard.state_machine_instance_handle(animation_id));
+        owner
+            .with_downcast_mut::<Self, _>(|owner| owner.instance = instance)
+            .expect("live NestedStateMachine");
 
         // Pinned order is significant: create the machine, share the parent
         // focus manager and rebuild the nested focus tree, then apply authored
         // bool/number input values in file order.
-        self.share_parent_focus_manager();
-        for input in self.nested_inputs.clone() {
+        Self::share_parent_focus_manager(owner);
+        let inputs = owner
+            .with_downcast::<Self, _>(|owner| owner.nested_inputs.clone())
+            .expect("live NestedStateMachine");
+        for input in inputs {
             if input
                 .with_downcast_mut::<NestedBool, _>(NestedBool::apply_value)
                 .is_none()
@@ -53,13 +64,19 @@ impl NestedStateMachine {
         }
     }
 
-    fn share_parent_focus_manager(&mut self) {
-        let (Some(instance), Some(parent)) = (self.instance.as_ref(), self.base.parent_handle())
+    fn share_parent_focus_manager(owner: &CoreHandle) {
+        let (Some(instance), Some(parent)) = owner
+            .with_downcast::<Self, _>(|owner| (owner.instance.clone(), owner.base.parent_handle()))
+            .expect("live NestedStateMachine")
         else {
             return;
         };
         let focus_manager = parent
-            .with_downcast::<NestedArtboard, _>(NestedArtboard::parent_artboard_handle)
+            .with(|parent| {
+                parent
+                    .as_nested_artboard()
+                    .and_then(NestedArtboard::parent_artboard_handle)
+            })
             .flatten()
             .and_then(|artboard| {
                 artboard
@@ -73,9 +90,7 @@ impl NestedStateMachine {
             instance.set_external_focus_manager_handle(focus_manager);
         });
         let fallback = FocusData::find_closest_focus_node_handle(parent.clone());
-        parent.with_downcast_mut::<NestedArtboard, _>(|nested_artboard| {
-            nested_artboard.sync_nested_focus_tree(fallback, false, true);
-        });
+        NestedArtboard::sync_nested_focus_tree_occurrence(&parent, fallback, false, true);
     }
 
     pub fn state_machine_instance(&self) -> Option<RuntimeStateMachineInstanceHandle> {
@@ -190,33 +205,27 @@ impl NestedStateMachine {
 
     pub fn set_bool_input(&mut self, index: u32, value: bool) {
         if let Some(instance) = &self.instance {
-            instance.with_instance_mut(|instance| {
-                let Some(name) = instance
+            let name = instance.with_instance(|instance| {
+                instance
                     .input(index as usize)
                     .map(|input| input.name().to_owned())
-                else {
-                    return;
-                };
-                if let Some(input) = instance.get_bool_mut(&name) {
-                    input.set_value(value);
-                }
             });
+            if let Some(name) = name {
+                instance.set_bool(&name, value);
+            }
         }
     }
 
     pub fn set_number_input(&mut self, index: u32, value: f32) {
         if let Some(instance) = &self.instance {
-            instance.with_instance_mut(|instance| {
-                let Some(name) = instance
+            let name = instance.with_instance(|instance| {
+                instance
                     .input(index as usize)
                     .map(|input| input.name().to_owned())
-                else {
-                    return;
-                };
-                if let Some(input) = instance.get_number_mut(&name) {
-                    input.set_value(value);
-                }
             });
+            if let Some(name) = name {
+                instance.set_number(&name, value);
+            }
         }
     }
 
@@ -272,8 +281,11 @@ impl NestedAnimationBehavior for NestedStateMachine {
         Self::advance(self, elapsed_seconds, new_frame)
     }
 
-    fn initialize_animation(&mut self, artboard: RuntimeArtboardInstanceWeakHandle) {
-        Self::initialize_animation(self, artboard);
+    fn animation_initializer(
+        &self,
+    ) -> crate::mechanical_port::source::animation::nested_animation::NestedAnimationInitializer
+    {
+        Self::initialize_animation_handle
     }
 
     fn release_dependencies(&mut self) {

@@ -30,6 +30,7 @@ pub type RuntimeViewModelInstanceHandle = Rc<ViewModelInstanceRuntime>;
 pub struct ViewModelInstanceRuntime {
     instance: CoreHandle,
     properties: RefCell<HashMap<String, ViewModelInstanceValueRuntime>>,
+    list_properties: RefCell<HashMap<String, ViewModelInstanceListRuntime>>,
     view_model_instances: RefCell<HashMap<String, RuntimeViewModelInstanceHandle>>,
 }
 
@@ -43,6 +44,7 @@ impl ViewModelInstanceRuntime {
         Self {
             instance,
             properties: RefCell::new(HashMap::new()),
+            list_properties: RefCell::new(HashMap::new()),
             view_model_instances: RefCell::new(HashMap::new()),
         }
     }
@@ -66,11 +68,13 @@ impl ViewModelInstanceRuntime {
         self.instance
             .with(|instance| {
                 let model = instance.as_view_model_instance()?.get_view_model()?;
-                model.with(|model| {
-                    model
-                        .as_view_model()
-                        .map(|model| model.base.name().to_owned())
-                })
+                model
+                    .with(|model| {
+                        model
+                            .as_view_model()
+                            .map(|model| model.base.name().to_owned())
+                    })
+                    .flatten()
             })
             .flatten()
             .unwrap_or_default()
@@ -203,7 +207,21 @@ impl ViewModelInstanceRuntime {
         ViewModelInstanceTriggerRuntime::new(self.property_of_type(path, DataType::Trigger)?)
     }
     pub fn property_list(&self, path: &str) -> Option<ViewModelInstanceListRuntime> {
-        ViewModelInstanceListRuntime::new(self.property_of_type(path, DataType::List)?)
+        let name = self.get_property_name_from_path(path);
+        if let Some((parents, _)) = path.rsplit_once('/') {
+            return self
+                .view_model_instance_at_path(parents)?
+                .property_list(name);
+        }
+        if let Some(runtime) = self.list_properties.borrow().get(name) {
+            return Some(runtime.clone());
+        }
+        let runtime =
+            ViewModelInstanceListRuntime::new(self.get_property_instance(name, DataType::List)?)?;
+        self.list_properties
+            .borrow_mut()
+            .insert(name.to_owned(), runtime.clone());
+        Some(runtime)
     }
     pub fn property_list_index(&self, path: &str) -> Option<ViewModelInstanceListIndexRuntime> {
         ViewModelInstanceListIndexRuntime::new(
@@ -260,96 +278,117 @@ impl ViewModelInstanceRuntime {
     }
 
     pub fn property(&self, path: &str) -> Option<ViewModelInstanceValueRuntime> {
+        if path.is_empty() {
+            return None;
+        }
         let name = self.get_property_name_from_path(path);
         if let Some((parents, _)) = path.rsplit_once('/') {
             let owner = self.view_model_instance_at_path(parents)?;
-            let value = owner
-                .instance
-                .with(|instance| {
-                    instance
-                        .as_view_model_instance()?
-                        .property_value_named(name)
-                })
-                .flatten()?;
-            let data_type = Self::data_type(&value);
-            owner.get_property_instance(name, data_type)
+            owner.property(name)
         } else {
-            let value = self
-                .instance
-                .with(|instance| {
-                    instance
-                        .as_view_model_instance()?
-                        .property_value_named(name)
-                })
-                .flatten()?;
-            let data_type = Self::data_type(&value);
-            self.get_property_instance(name, data_type)
+            let data_type = self
+                .properties()
+                .into_iter()
+                .find(|property| property.name == name)?
+                .data_type;
+            match data_type {
+                DataType::String => self
+                    .property_string(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::Number => self
+                    .property_number(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::Boolean => self
+                    .property_boolean(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::Color => self
+                    .property_color(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::AssetImage => self
+                    .property_image(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::AssetFont => self
+                    .property_font(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::AssetBlob => self
+                    .property_blob(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::Artboard => self
+                    .property_artboard(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::List => self
+                    .property_list(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::Enum => self
+                    .property_enum(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::Trigger => self
+                    .property_trigger(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                DataType::SymbolListIndex => self
+                    .property_list_index(name)
+                    .map(|runtime| runtime.value_runtime().clone()),
+                _ => None,
+            }
         }
     }
 
     pub fn replace_view_model(&self, path: &str, value: RuntimeViewModelInstanceHandle) -> bool {
         let name = self.get_property_name_from_path(path);
-        let owner = if let Some((parents, _)) = path.rsplit_once('/') {
-            self.view_model_instance_at_path(parents)
+        let target = if let Some((parents, _)) = path.rsplit_once('/') {
+            let Some(owner) = self.view_model_instance_at_path(parents) else {
+                return false;
+            };
+            owner
         } else {
-            None
+            return self.replace_view_model_by_name(name, value);
         };
-        let target = owner.as_deref().unwrap_or(self);
-        let replaced = target
-            .instance
-            .with_mut(|instance| {
-                instance
-                    .as_view_model_instance_mut()
-                    .is_some_and(|instance| {
-                        instance.replace_view_model_by_name(name, value.instance())
-                    })
-            })
-            .unwrap_or(false);
+        target.replace_view_model_by_name(name, value)
+    }
+
+    fn replace_view_model_by_name(
+        &self,
+        name: &str,
+        value: RuntimeViewModelInstanceHandle,
+    ) -> bool {
+        let replaced =
+            super::super::viewmodel_instance::ViewModelInstance::replace_view_model_by_name(
+                &self.instance,
+                name,
+                value.instance(),
+            );
         if replaced {
-            target
+            let is_stored = self
                 .view_model_instances
-                .borrow_mut()
-                .insert(name.to_owned(), value);
+                .borrow()
+                .values()
+                .any(|stored| Rc::ptr_eq(stored, &value));
+            if !is_stored {
+                self.view_model_instances
+                    .borrow_mut()
+                    .insert(name.to_owned(), value);
+            }
         }
         replaced
     }
 
     pub fn properties(&self) -> Vec<PropertyData> {
-        let values = self
+        let properties = self
             .instance
             .with(|instance| {
-                instance
-                    .as_view_model_instance()
-                    .map(|instance| instance.property_values().to_vec())
+                let view_model = instance.as_view_model_instance()?.get_view_model()?;
+                view_model.with(|view_model| {
+                    view_model
+                        .as_view_model()
+                        .map(|view_model| view_model.properties())
+                })
             })
             .flatten()
+            .flatten()
             .unwrap_or_default();
-        values
+        properties
             .into_iter()
-            .map(|value| {
-                let data_type = Self::data_type(&value);
-                let name = value
-                    .with(|value| {
-                        value
-                            .as_view_model_instance_value()
-                            .map(|value| value.name())
-                    })
-                    .flatten()
-                    .unwrap_or_default();
-                let enum_name = if data_type == DataType::Enum {
-                    self.get_property_instance(&name, data_type)
-                        .and_then(ViewModelInstanceEnumRuntime::new)
-                        .map(|value| value.enum_type())
-                        .unwrap_or_default()
-                } else {
-                    String::new()
-                };
-                PropertyData {
-                    data_type,
-                    name,
-                    enum_name,
-                }
-            })
+            .map(super::viewmodel_runtime::RuntimeViewModelHandle::property_data)
             .collect()
     }
 }

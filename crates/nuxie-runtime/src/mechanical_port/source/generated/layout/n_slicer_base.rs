@@ -26,7 +26,9 @@ impl NSlicerBase {
     }
     pub fn clone_into(&self) -> NSlicer {
         let mut cloned = NSlicer::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

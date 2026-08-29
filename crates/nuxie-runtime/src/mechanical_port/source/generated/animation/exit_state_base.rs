@@ -26,7 +26,9 @@ impl ExitStateBase {
     }
     pub fn clone_into(&self) -> ExitState {
         let mut cloned = ExitState::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

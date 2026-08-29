@@ -66,7 +66,10 @@ impl NestedArtboardLayoutBase {
             return;
         }
         callbacks.instance_width_changed();
-        callbacks.notify_property_changed(Self::INSTANCE_WIDTH_PROPERTY_KEY);
+        NestedArtboardLayoutBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INSTANCE_WIDTH_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_instance_width_value(&mut self, value: f32) -> bool {
@@ -88,7 +91,10 @@ impl NestedArtboardLayoutBase {
             return;
         }
         callbacks.instance_height_changed();
-        callbacks.notify_property_changed(Self::INSTANCE_HEIGHT_PROPERTY_KEY);
+        NestedArtboardLayoutBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INSTANCE_HEIGHT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_instance_height_value(&mut self, value: f32) -> bool {
@@ -110,7 +116,10 @@ impl NestedArtboardLayoutBase {
             return;
         }
         callbacks.instance_width_units_value_changed();
-        callbacks.notify_property_changed(Self::INSTANCE_WIDTH_UNITS_VALUE_PROPERTY_KEY);
+        NestedArtboardLayoutBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INSTANCE_WIDTH_UNITS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_instance_width_units_value_value(&mut self, value: u32) -> bool {
@@ -132,7 +141,10 @@ impl NestedArtboardLayoutBase {
             return;
         }
         callbacks.instance_height_units_value_changed();
-        callbacks.notify_property_changed(Self::INSTANCE_HEIGHT_UNITS_VALUE_PROPERTY_KEY);
+        NestedArtboardLayoutBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INSTANCE_HEIGHT_UNITS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_instance_height_units_value_value(&mut self, value: u32) -> bool {
@@ -154,7 +166,10 @@ impl NestedArtboardLayoutBase {
             return;
         }
         callbacks.instance_width_scale_type_changed();
-        callbacks.notify_property_changed(Self::INSTANCE_WIDTH_SCALE_TYPE_PROPERTY_KEY);
+        NestedArtboardLayoutBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INSTANCE_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_instance_width_scale_type_value(&mut self, value: u32) -> bool {
@@ -176,7 +191,10 @@ impl NestedArtboardLayoutBase {
             return;
         }
         callbacks.instance_height_scale_type_changed();
-        callbacks.notify_property_changed(Self::INSTANCE_HEIGHT_SCALE_TYPE_PROPERTY_KEY);
+        NestedArtboardLayoutBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INSTANCE_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_instance_height_scale_type_value(&mut self, value: u32) -> bool {
@@ -186,12 +204,17 @@ impl NestedArtboardLayoutBase {
         self.instance_height_scale_type = value;
         true
     }
-    pub fn clone_into(
-        &self,
-        callbacks: &mut impl NestedArtboardLayoutBaseCallbacks,
-    ) -> NestedArtboardLayout {
+    pub fn clone_into(source: &NestedArtboardLayout) -> NestedArtboardLayout {
         let mut cloned = NestedArtboardLayout::default();
-        cloned.base.copy(self, callbacks);
+        cloned.base.instance_width = source.base.instance_width;
+        cloned.base.instance_height = source.base.instance_height;
+        cloned.base.instance_width_units_value = source.base.instance_width_units_value;
+        cloned.base.instance_height_units_value = source.base.instance_height_units_value;
+        cloned.base.instance_width_scale_type = source.base.instance_width_scale_type;
+        cloned.base.instance_height_scale_type = source.base.instance_height_scale_type;
+        let mut nested_base = std::mem::take(&mut cloned.base.base.base);
+        nested_base.copy(&source.base.base, &mut cloned.base.base);
+        cloned.base.base.base = nested_base;
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl NestedArtboardLayoutBaseCallbacks) {

@@ -27,7 +27,9 @@ impl TransitionValueAssetComparatorBase {
     }
     pub fn clone_into(&self) -> TransitionValueAssetComparator {
         let mut cloned = TransitionValueAssetComparator::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

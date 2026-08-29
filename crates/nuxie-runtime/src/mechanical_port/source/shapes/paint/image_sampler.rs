@@ -1,16 +1,30 @@
-#[repr(u8)]
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ImageFilter {
-    Bilinear = 0,
-    Nearest = 1,
+pub struct ImageFilter(u8);
+#[allow(non_upper_case_globals)]
+impl ImageFilter {
+    pub const Bilinear: Self = Self(0);
+    pub const Nearest: Self = Self(1);
+}
+impl From<u8> for ImageFilter {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
 }
 pub const NUM_IMAGE_FILTERS: usize = 2;
-#[repr(u8)]
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ImageWrap {
-    Clamp = 0,
-    Repeat = 1,
-    Mirror = 2,
+pub struct ImageWrap(u8);
+#[allow(non_upper_case_globals)]
+impl ImageWrap {
+    pub const Clamp: Self = Self(0);
+    pub const Repeat: Self = Self(1);
+    pub const Mirror: Self = Self(2);
+}
+impl From<u8> for ImageWrap {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
 }
 pub const NUM_IMAGE_WRAP: usize = 3;
 
@@ -40,9 +54,9 @@ impl ImageSampler {
         }
     }
     pub const fn as_key(self) -> u8 {
-        self.wrap_x as u8
-            + self.wrap_y as u8 * NUM_IMAGE_WRAP as u8
-            + self.filter as u8 * NUM_IMAGE_WRAP as u8 * NUM_IMAGE_WRAP as u8
+        (self.wrap_x.0 as u16
+            + self.wrap_y.0 as u16 * NUM_IMAGE_WRAP as u16
+            + self.filter.0 as u16 * NUM_IMAGE_WRAP as u16 * NUM_IMAGE_WRAP as u16) as u8
     }
     pub fn sampler_from_key(key: u8) -> Self {
         Self {
@@ -69,15 +83,18 @@ impl From<ImageSampler> for nuxie_render_api::ImageSampler {
                 ImageWrap::Clamp => nuxie_render_api::ImageWrap::Clamp,
                 ImageWrap::Repeat => nuxie_render_api::ImageWrap::Repeat,
                 ImageWrap::Mirror => nuxie_render_api::ImageWrap::Mirror,
+                ImageWrap(value) => panic!("unsupported renderer image wrap {value}"),
             },
             wrap_y: match value.wrap_y {
                 ImageWrap::Clamp => nuxie_render_api::ImageWrap::Clamp,
                 ImageWrap::Repeat => nuxie_render_api::ImageWrap::Repeat,
                 ImageWrap::Mirror => nuxie_render_api::ImageWrap::Mirror,
+                ImageWrap(value) => panic!("unsupported renderer image wrap {value}"),
             },
             filter: match value.filter {
                 ImageFilter::Bilinear => nuxie_render_api::ImageFilter::Bilinear,
                 ImageFilter::Nearest => nuxie_render_api::ImageFilter::Nearest,
+                ImageFilter(value) => panic!("unsupported renderer image filter {value}"),
             },
         }
     }

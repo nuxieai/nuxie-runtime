@@ -41,7 +41,7 @@ impl AudioEventBase {
             return;
         }
         callbacks.asset_id_changed();
-        callbacks.notify_property_changed(Self::ASSET_ID_PROPERTY_KEY);
+        AudioEventBaseCallbacks::notify_property_changed(callbacks, Self::ASSET_ID_PROPERTY_KEY);
     }
 
     pub(crate) fn set_asset_id_value(&mut self, value: u32) -> bool {
@@ -56,9 +56,9 @@ impl AudioEventBase {
         cloned.base.copy(self, callbacks);
         cloned
     }
-    pub fn copy(&mut self, object: &Self, callbacks: &mut impl AudioEventBaseCallbacks) {
+    pub fn copy(&mut self, object: &Self, _callbacks: &mut impl AudioEventBaseCallbacks) {
         self.asset_id = object.asset_id;
-        self.base.copy(&object.base, callbacks);
+        self.base.base.copy(&object.base.base);
     }
     pub fn deserialize(
         &mut self,

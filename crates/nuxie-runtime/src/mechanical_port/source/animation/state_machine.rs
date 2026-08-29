@@ -16,11 +16,20 @@ pub struct StateMachine {
     scripted_objects: Vec<CoreHandle>,
 }
 impl StateMachine {
+    pub fn set_name(&mut self, value: String) {
+        use crate::mechanical_port::source::generated::animation::animation_base::{
+            AnimationBase, AnimationBaseCallbacks,
+        };
+        if self.base.set_name_value(value) {
+            AnimationBaseCallbacks::name_changed(self);
+            AnimationBaseCallbacks::notify_property_changed(self, AnimationBase::NAME_PROPERTY_KEY);
+        }
+    }
+
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         for input in self.inputs.iter().filter_map(Clone::clone) {
             let code = input
-                .with_mut(|input| input.state_machine_input_on_added_dirty(context))
-                .flatten()
+                .with_mut(|input| input.on_added_dirty(context))
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
@@ -39,8 +48,7 @@ impl StateMachine {
         }
         for listener in self.listeners.iter().cloned() {
             let code = listener
-                .with_mut(|listener| listener.state_machine_listener_on_added_dirty(context))
-                .flatten()
+                .with_mut(|listener| listener.on_added_dirty(context))
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
@@ -51,8 +59,7 @@ impl StateMachine {
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         for input in self.inputs.iter().filter_map(Clone::clone) {
             let code = input
-                .with_mut(|input| input.state_machine_input_on_added_clean(context))
-                .flatten()
+                .with_mut(|input| input.on_added_clean(context))
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
@@ -71,8 +78,7 @@ impl StateMachine {
         }
         for listener in self.listeners.iter().cloned() {
             let code = listener
-                .with_mut(|listener| listener.state_machine_listener_on_added_clean(context))
-                .flatten()
+                .with_mut(|listener| listener.on_added_clean(context))
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
@@ -148,5 +154,17 @@ impl StateMachine {
     }
     pub fn data_bind(&self, index: usize) -> Option<CoreHandle> {
         self.data_binds.get(index).cloned()
+    }
+}
+
+impl std::ops::Deref for StateMachine {
+    type Target = StateMachineBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for StateMachine {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

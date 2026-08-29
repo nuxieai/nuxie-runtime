@@ -4,8 +4,8 @@ Decision (Levi, 2026-08-04): fork `luaur` — the pure-Rust Luau translation
 that is Nuxie's scripting engine — and maintain the Luau engine port
 in-house rather than waiting on upstream luaur releases. This document
 records the fork point, the carried patches, and the port plan. It owns the
-exit path for the standing WATCH `deferred-2026-07-19-luau-engine`
-(docs/parity-gap-register.md): that row's exit criterion is **fork parity
+exit path for the historical WATCH `deferred-2026-07-19-luau-engine`
+(the retired register is available in git history): its exit criterion was **fork parity
 with the pinned C++ engine**, not "luaur publishes a newer base".
 **STATUS 2026-08-05: ladder complete — all nine rungs landed, WATCH CLOSED.**
 The vendored engine now carries every upstream delta from its 0.724-era
@@ -228,8 +228,9 @@ Additional plan points:
 2. Oracles: the real bytecode-v7 fixture and the full forced-scripted
    ratchet remain the floor; the exact-0.732 C++ runner is the target
    comparison. The editor-emitted-bytecode compatibility matrix
-   (upstream_ref `4ac7b327` discipline — read `port-manifest.toml`, not
-   triage briefs, for the pin) is a valid interim evidence step.
+   (upstream_ref `4ac7b327` discipline — read the repository
+   `RIVE_RUNTIME_REF`, not triage briefs, for the pin) is a valid interim
+   evidence step.
 3. Versioning: vendored crate versions stay `0.1.8` while the `=0.1.8`
    pins hold (a `[patch]` must satisfy the dependency requirement); the
    fork state is identified by this document plus per-package patch files,

@@ -46,7 +46,7 @@ impl TextStyleFeatureBase {
             return;
         }
         callbacks.tag_changed();
-        callbacks.notify_property_changed(Self::TAG_PROPERTY_KEY);
+        TextStyleFeatureBaseCallbacks::notify_property_changed(callbacks, Self::TAG_PROPERTY_KEY);
     }
 
     pub(crate) fn set_tag_value(&mut self, value: u32) -> bool {
@@ -68,7 +68,10 @@ impl TextStyleFeatureBase {
             return;
         }
         callbacks.feature_value_changed();
-        callbacks.notify_property_changed(Self::FEATURE_VALUE_PROPERTY_KEY);
+        TextStyleFeatureBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FEATURE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_feature_value_value(&mut self, value: u32) -> bool {

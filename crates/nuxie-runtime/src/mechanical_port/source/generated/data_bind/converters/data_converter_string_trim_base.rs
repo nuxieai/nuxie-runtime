@@ -44,7 +44,10 @@ impl DataConverterStringTrimBase {
             return;
         }
         callbacks.trim_type_changed();
-        callbacks.notify_property_changed(Self::TRIM_TYPE_PROPERTY_KEY);
+        DataConverterStringTrimBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TRIM_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_trim_type_value(&mut self, value: u32) -> bool {
@@ -68,7 +71,7 @@ impl DataConverterStringTrimBase {
         callbacks: &mut impl DataConverterStringTrimBaseCallbacks,
     ) {
         self.trim_type = object.trim_type;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,

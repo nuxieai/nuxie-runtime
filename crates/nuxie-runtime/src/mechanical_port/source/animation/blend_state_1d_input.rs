@@ -87,3 +87,15 @@ impl BlendState1DDefinition<BlendAnimation1D> for BlendState1DInput {
         BlendState1DValueSource::Input(self.base.input_id())
     }
 }
+
+impl std::ops::Deref for BlendState1DInput {
+    type Target = BlendState1DInputBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for BlendState1DInput {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

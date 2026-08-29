@@ -654,7 +654,7 @@ impl ScriptedObject {
             .flatten()
             .expect("bound view-model instance has a definition");
         let file = definition
-            .with(|model| model.as_view_model().unwrap().file())
+            .with(|model| model.as_view_model().unwrap().file_handle())
             .and_then(|file| file.upgrade())
             .expect("bound view-model definition retains a live file");
         let facade = ScriptViewModel::from_native(view_model, file)
@@ -692,7 +692,13 @@ impl ScriptedObject {
             .flatten()
             .and_then(|file| file.upgrade())
             .expect("live script asset retains its File");
-        let Ok(artboard) = native_script_artboard(file, source, None, parent) else {
+        let Some(artboard) =
+            crate::mechanical_port::source::artboard::Artboard::instance_from_handle(&source)
+        else {
+            return;
+        };
+        artboard.with_artboard_mut(|artboard| artboard.base.set_frame_origin(false));
+        let Ok(artboard) = native_script_artboard(file, artboard, None, parent) else {
             return;
         };
         let assigned = instance
@@ -839,6 +845,9 @@ impl ScriptedObject {
         self.disposed = false;
         self.user_init_done = false
     }
+    pub fn reset_lua_init(&mut self) {
+        self.user_init_done = false;
+    }
     pub fn script_asset(&self) -> Option<CoreHandle> {
         self.file_asset_referencer.asset()
     }
@@ -886,7 +895,45 @@ impl ScriptedObject {
         self.data_context.clone()
     }
     pub fn set_data_context(&mut self, v: Option<RuntimeDataContextHandle>) {
-        self.data_context = v
+        self.data_context = v.clone();
+
+        // C++ ScriptedContext retains its ScriptedObject and resolves the
+        // object's current DataContext on every viewModel/rootViewModel call.
+        // A Rust script instance retains the ownership-safe projected chain
+        // instead, so an already-live table must receive the same synchronous
+        // context change before `internalDataContext` rehydrates it.
+        let Some(instance) = self.runtime_instance.clone() else {
+            return;
+        };
+        let Some(context) = v else {
+            let _ = instance.borrow_mut().clear_unresolved_context_view_model();
+            return;
+        };
+        let Some(file) = self
+            .script_asset()
+            .and_then(|asset| {
+                asset
+                    .with_downcast::<crate::mechanical_port::source::assets::script_asset::ScriptAsset, _>(|asset| asset.file())
+                    .flatten()
+            })
+            .and_then(|file| file.upgrade())
+        else {
+            return;
+        };
+        let mut chain = Vec::new();
+        let mut current = Some(context);
+        while let Some(context) = current {
+            let (model, parent) = context
+                .with_context(|context| (context.main_view_model_instance(), context.parent()));
+            chain.push(model.and_then(|model| {
+                crate::scripting::ScriptViewModel::from_native(model, file.clone())
+            }));
+            current = parent;
+        }
+        let view_model = chain.remove(0);
+        let _ = instance
+            .borrow_mut()
+            .set_context_view_model_chain(view_model, chain);
     }
     pub fn in_update_phase(&self) -> bool {
         self.in_update_phase
@@ -978,6 +1025,13 @@ impl ScriptedObject {
                 | WANTS_GAMEPAD_EVENT_BIT)
             != 0
     }
+    /// Retain the approved Rust VM in place of exposing its internal Lua state.
+    pub fn scripting_vm(
+        &self,
+    ) -> Option<crate::mechanical_port::source::lua::scripting_vm::RuntimeScriptingVmHandle> {
+        self.runtime_vm.clone()
+    }
+
     pub fn clear_scripting_vm(&mut self) {
         self.runtime_instance = None;
         self.runtime_vm = None;

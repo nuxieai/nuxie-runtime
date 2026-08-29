@@ -1,11 +1,12 @@
 use crate::mechanical_port::source::{
     constraints::constraint::get_parent_world,
     generated::{
-        constraints::transform_constraint_base::{TransformConstraintBase, TransformSpace},
+        constraints::transform_constraint_base::TransformConstraintBase,
         core_registry::CoreCapabilities,
     },
     math::{mat2d::Mat2D, math_types, transform_components::TransformComponents},
     transform_component::TransformComponent,
+    transform_space::TransformSpace,
 };
 
 #[derive(Default)]
@@ -20,10 +21,12 @@ impl TransformConstraint {
         let target = self.base.target().expect("targeted constraint has target");
         target
             .with(|target| {
+                let bounds = target
+                    .transform_component_constraint_bounds()
+                    .expect("validated targeted constraint target");
                 let target = target
                     .as_transform_component()
                     .expect("validated targeted constraint target");
-                let bounds = target.constraint_bounds();
                 let local = Mat2D::from_translate(
                     bounds.left() + bounds.width() * self.base.origin_x(),
                     bounds.top() + bounds.height() * self.base.origin_y(),
@@ -51,9 +54,10 @@ impl TransformConstraint {
         let transform_a = *component.world_transform();
         let mut transform_b = self.target_transform();
         if self.base.source_space() == TransformSpace::Local {
-            let Some(inverse) = target_parent_world.inverted() else {
+            let mut inverse = Mat2D::default();
+            if !target_parent_world.invert(&mut inverse) {
                 return;
-            };
+            }
             transform_b = inverse * transform_b;
         }
         if self.base.dest_space() == TransformSpace::Local {
@@ -102,6 +106,6 @@ impl TransformConstraint {
         components_to.set_scale_x(components_from.scale_x() * ti + components_to.scale_x() * t);
         components_to.set_scale_y(components_from.scale_y() * ti + components_to.scale_y() * t);
         components_to.set_skew(components_from.skew() * ti + components_to.skew() * t);
-        *component.mutable_world_transform() = Mat2D::compose(components_to);
+        *component.mutable_world_transform() = Mat2D::compose(&components_to);
     }
 }

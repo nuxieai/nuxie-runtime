@@ -118,9 +118,8 @@ impl RuntimeFile {
 
             if definition.is_a("DataConverter") {
                 if definition.name == "DataConverterFormula" {
-                    latest_formula_importer = Some(DataConverterFormulaImporter::new(
-                        current_converter_index,
-                    ));
+                    latest_formula_importer =
+                        Some(DataConverterFormulaImporter::new(current_converter_index));
                 }
                 current_converter_index += 1;
                 continue;

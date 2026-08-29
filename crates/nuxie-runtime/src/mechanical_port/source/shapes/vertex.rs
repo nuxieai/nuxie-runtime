@@ -38,6 +38,12 @@ impl VertexBaseCallbacks for Vertex {
     }
 }
 
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks for Vertex {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        Vertex::notify_property_changed(self, property_key);
+    }
+}
+
 impl Vertex {
     pub fn notify_property_changed(&mut self, property_key: u16) {
         self.base
@@ -62,14 +68,17 @@ pub trait VertexBehavior {
         self.vertex().state.weight.clone()
     }
     fn render_translation(&self) -> Vec2D {
-        self.vertex()
-            .state
-            .weight
-            .as_ref()
-            .and_then(|weight| {
-                weight.with_downcast_mut::<Weight, _>(|weight| *weight.translation())
-            })
-            .unwrap_or_else(|| Vec2D::new(self.vertex().base.x(), self.vertex().base.y()))
+        if let Some(weight) = self.vertex().state.weight.as_ref() {
+            return weight
+                .with_mut(|object| {
+                    *object
+                        .as_weight_mut()
+                        .expect("a retained vertex weight preserves its Weight base")
+                        .translation()
+                })
+                .expect("a retained vertex weight remains live");
+        }
+        Vec2D::new(self.vertex().base.x(), self.vertex().base.y())
     }
     fn x_changed(&mut self) {
         self.mark_geometry_dirty();
@@ -78,19 +87,27 @@ pub trait VertexBehavior {
         self.mark_geometry_dirty();
     }
     fn deform(&mut self, world: &Mat2D, bone_transforms: &[f32]) {
-        let Some(weight) = self.vertex().state.weight.clone() else {
-            return;
-        };
+        let weight = self
+            .vertex()
+            .state
+            .weight
+            .clone()
+            .expect("a skin-deformed vertex has a Weight");
         let position = Vec2D::new(self.vertex().base.x(), self.vertex().base.y());
-        weight.with_downcast_mut::<Weight, _>(|weight| {
-            *weight.translation() = Weight::deform(
-                position,
-                weight.indices(),
-                weight.values(),
-                world,
-                bone_transforms,
-            );
-        });
+        weight
+            .with_mut(|object| {
+                let weight = object
+                    .as_weight_mut()
+                    .expect("a retained vertex weight preserves its Weight base");
+                *weight.translation() = Weight::deform(
+                    position,
+                    weight.indices(),
+                    weight.values(),
+                    world,
+                    bone_transforms,
+                );
+            })
+            .expect("a retained vertex weight remains live");
     }
 }
 

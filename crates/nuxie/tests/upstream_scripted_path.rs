@@ -4,7 +4,10 @@
 
 use std::path::PathBuf;
 
-use nuxie::{File, PersistentFactory};
+use nuxie::{
+    File, FileImportLimits, PersistentFactory, ScriptExecutionLimits, ViewModelInstanceRuntime,
+    import_unsigned_scripted,
+};
 use nuxie_render_api::SerializingFactory;
 use silver_corpus::{compare_sriv, parse_sriv};
 
@@ -36,53 +39,45 @@ fn compare_silver(name: &str, actual: &[u8]) {
 }
 
 fn run_silver(asset: &str, artboard_name: &str, silver_name: &str, frames_per_iteration: usize) {
-    let file = File::import_with_unsigned_scripts(&pinned_fixture(asset))
-        .unwrap_or_else(|error| panic!("{asset} imports with trusted scripts: {error:#}"));
-    let artboard = file
-        .artboard_named(artboard_name)
-        .unwrap_or_else(|| panic!("{artboard_name} artboard"));
-    let mut artboard = artboard
-        .instantiate()
-        .unwrap_or_else(|error| panic!("{artboard_name} instantiates: {error:#}"));
     let mut silver = PersistentFactory::new(SerializingFactory::new());
-    artboard
-        .initialize_renderer(&mut silver)
-        .unwrap_or_else(|error| panic!("{artboard_name} renderer initializes: {error:#}"));
-    let (width, height) = artboard.artboard_dimensions();
+    let scripted = import_unsigned_scripted(
+        &pinned_fixture(asset),
+        &mut silver,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .unwrap_or_else(|error| panic!("{asset} imports with trusted scripts: {error:#}"));
+    let file = scripted.native_file();
+    let artboard = file
+        .with_file(|file| file.artboard_named(artboard_name))
+        .unwrap_or_else(|| panic!("{artboard_name} artboard"));
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
     silver.borrow_mut().frame_size(width as u32, height as u32);
-    let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
+    let state_machine = artboard.state_machine_at(0).expect("state machine 0");
 
-    artboard
-        .try_advance_with_state_machine_and_factory(&mut state_machine, 0.1, &mut silver)
-        .expect("initial scripted path advance");
+    state_machine.advance_and_apply(0.1);
     let mut renderer = silver.borrow().make_renderer();
-    artboard
-        .draw(&mut silver, &mut renderer)
-        .expect("initial scripted path draw");
+    artboard.draw(&mut renderer);
 
     for _ in 0..60 {
         for _ in 0..frames_per_iteration {
             silver.borrow_mut().add_frame();
         }
-        artboard
-            .try_advance_with_state_machine_and_factory(&mut state_machine, 0.016, &mut silver)
-            .expect("scripted path frame advances");
-        artboard
-            .draw(&mut silver, &mut renderer)
-            .expect("scripted path frame draws");
+        state_machine.advance_and_apply(0.016);
+        artboard.draw(&mut renderer);
     }
 
     compare_silver(silver_name, &silver.borrow().bytes());
 }
 
 #[test]
-#[ignore = "expected-red: script_paths first differs at frame 0 paint color value"]
 fn path_drawing_examples() {
     run_silver("script_paths_test.riv", "PathsScript", "script_paths", 1);
 }
 
 #[test]
-#[ignore = "expected-red: path-effect update fails and emits an empty frame 0 path"]
+#[ignore = "expected-red: script_path_effects differs at frame 1 op 86 (expected save, got frame)"]
 fn path_effects_examples() {
     run_silver(
         "script_path_effects_test.riv",
@@ -93,7 +88,6 @@ fn path_effects_examples() {
 }
 
 #[test]
-#[ignore = "expected-red: opacity fixture initializes one fewer paint before frameSize"]
 fn paths_with_opacity_applied() {
     run_silver(
         "script_paths_opacity_test.riv",
@@ -104,37 +98,39 @@ fn paths_with_opacity_applied() {
 }
 
 #[test]
-#[ignore = "expected-red: Node Script 1 init indexes nil instance"]
+#[ignore = "expected-red: scripted_as_path differs at frame 0 op 31 (expected save, got makeRenderPaint)"]
 fn access_paint_and_path_data() {
-    let file = File::import_with_unsigned_scripts(&pinned_fixture("scripted_as_path.riv"))
-        .expect("scripted_as_path.riv imports with trusted scripts");
-    let artboard = file.default_artboard().expect("default artboard");
-    let mut artboard = artboard
-        .instantiate()
-        .expect("default artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
-    artboard
-        .initialize_renderer(&mut silver)
-        .expect("default renderer initializes at the import boundary");
-    let (width, height) = artboard.artboard_dimensions();
+    let scripted = import_unsigned_scripted(
+        &pinned_fixture("scripted_as_path.riv"),
+        &mut silver,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .expect("scripted_as_path.riv imports with trusted scripts");
+    let file = scripted.native_file();
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
     silver.borrow_mut().frame_size(width as u32, height as u32);
-    let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = artboard
-        .instantiate_default_view_model_instance()
+    let state_machine = artboard.state_machine_at(0).expect("state machine 0");
+    let view_model = file
+        .with_file(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+                .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
         .expect("default view-model instance");
+    state_machine
+        .with_instance_mut(|machine| machine.bind_view_model_instance(view_model.instance()));
+    artboard.bind_view_model_instance(Some(view_model.instance()));
     let mut renderer = silver.borrow().make_renderer();
 
-    artboard
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.016,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("scripted-as-path frame advances");
-    artboard
-        .draw(&mut silver, &mut renderer)
-        .expect("scripted-as-path frame draws");
+    state_machine.advance_and_apply(0.016);
+    artboard.draw(&mut renderer);
 
     compare_silver("scripted_as_path", &silver.borrow().bytes());
 }

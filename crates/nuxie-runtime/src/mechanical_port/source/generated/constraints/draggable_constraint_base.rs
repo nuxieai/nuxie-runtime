@@ -45,7 +45,10 @@ impl DraggableConstraintBase {
             return;
         }
         callbacks.direction_value_changed();
-        callbacks.notify_property_changed(Self::DIRECTION_VALUE_PROPERTY_KEY);
+        DraggableConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DIRECTION_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_direction_value_value(&mut self, value: u32) -> bool {

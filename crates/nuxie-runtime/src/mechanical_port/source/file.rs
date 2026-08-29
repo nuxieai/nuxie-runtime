@@ -6,8 +6,7 @@ use std::{
 
 use crate::mechanical_port::source::{
     artboard::{Artboard, RuntimeArtboardInstanceHandle},
-    assets::{manifest_asset::ManifestAsset, script_asset::ScriptAsset},
-    backboard::Backboard,
+    assets::script_asset::ScriptAsset,
     bindable_artboard::RuntimeBindableArtboardHandle,
     core::{
         Core, CoreArena, CoreHandle,
@@ -20,16 +19,22 @@ use crate::mechanical_port::source::{
     data_resolver::DataResolver,
     factory::RuntimeFactoryHandle,
     file_asset_loader::FileAssetLoaderRef,
-    generated::core_registry::CoreRegistry,
+    generated::{
+        artboard_base::ArtboardBase, assets::file_asset_base::FileAssetBase,
+        backboard_base::BackboardBase, core_registry::CoreRegistry,
+    },
     importers::{
-        ImportStackObject, artboard_importer::ArtboardImporter,
+        artboard_importer::ArtboardImporter,
         backboard_importer::BackboardImporter,
         bindable_property_importer::BindablePropertyImporter,
         data_bind_path_importer::DataBindPathImporter,
         data_converter_formula_importer::DataConverterFormulaImporter,
-        data_converter_group_importer::DataConverterGroupImporter, enum_importer::EnumImporter,
-        file_asset_importer::FileAssetImporter, import_stack::ImportStack,
-        keyed_object_importer::KeyedObjectImporter, keyed_property_importer::KeyedPropertyImporter,
+        data_converter_group_importer::DataConverterGroupImporter,
+        enum_importer::EnumImporter,
+        file_asset_importer::FileAssetImporter,
+        import_stack::{ImportStack, ImportStackObject},
+        keyed_object_importer::KeyedObjectImporter,
+        keyed_property_importer::KeyedPropertyImporter,
         layer_state_importer::LayerStateImporter,
         linear_animation_importer::LinearAnimationImporter,
         listener_input_type_gamepad_importer::ListenerInputTypeGamepadImporter,
@@ -65,32 +70,38 @@ pub enum ImportResult {
     Malformed,
 }
 
-/// Optional host metadata observed from the actual importer. These records do
-/// not participate in runtime execution or retain a second ownership graph.
-#[derive(Clone, Debug)]
-pub enum RuntimeImportRecord {
-    NullObject,
-    Imported(CoreHandle),
-    Dropped(StatusCode),
+/// Explicit host resource admission. Ordinary upstream imports do not install
+/// this policy. Checks observe source-accepted objects and precede asset loaders
+/// and decoders; rejection aborts import without registering scripts.
+pub trait ImportAdmission {
+    fn admit_object(&self, object: &CoreHandle) -> bool;
+    fn admit_asset_bytes(&self, asset: &CoreHandle, bytes: &[u8]) -> bool;
+    fn admit_loaded_asset(&self, asset: &CoreHandle) -> bool;
+    fn is_rejected(&self) -> bool;
 }
+
+pub type ImportAdmissionRef = Rc<dyn ImportAdmission>;
 
 /// Shared identity for the one non-Core File occurrence that owns an imported
 /// runtime graph. Consumers may only borrow it for the duration of a closure.
 #[derive(Clone)]
-pub struct RuntimeFileHandle(Rc<RefCell<File>>);
+pub struct RuntimeFileHandle(Rc<RefCell<File>>, Rc<RefCell<Vec<CoreHandle>>>);
 
 #[derive(Clone, Default)]
-pub struct RuntimeFileWeakHandle(Weak<RefCell<File>>);
+pub struct RuntimeFileWeakHandle(Weak<RefCell<File>>, Weak<RefCell<Vec<CoreHandle>>>);
 
 impl RuntimeFileHandle {
     pub fn new(file: File) -> Self {
-        let handle = Self(Rc::new(RefCell::new(file)));
+        // The File's one canonical model table is also reachable during its
+        // synchronous import callbacks, without reborrowing File::read.
+        let models = file.view_models.clone();
+        let handle = Self(Rc::new(RefCell::new(file)), models);
         handle.0.borrow_mut().self_handle = handle.downgrade();
         handle
     }
 
     pub fn downgrade(&self) -> RuntimeFileWeakHandle {
-        RuntimeFileWeakHandle(Rc::downgrade(&self.0))
+        RuntimeFileWeakHandle(Rc::downgrade(&self.0), Rc::downgrade(&self.1))
     }
 
     pub fn with_file<R>(&self, f: impl FnOnce(&File) -> R) -> R {
@@ -100,11 +111,29 @@ impl RuntimeFileHandle {
     pub fn with_file_mut<R>(&self, f: impl FnOnce(&mut File) -> R) -> R {
         f(&mut self.0.borrow_mut())
     }
+
+    pub fn complete_view_model_properties(&self, instance: &CoreHandle) {
+        File::complete_view_model_properties_in(&self.1, instance);
+    }
+
+    pub fn view_model(&self, index: usize) -> Option<CoreHandle> {
+        self.1.borrow().get(index).cloned()
+    }
 }
 
 impl RuntimeFileWeakHandle {
     pub fn upgrade(&self) -> Option<RuntimeFileHandle> {
-        self.0.upgrade().map(RuntimeFileHandle)
+        Some(RuntimeFileHandle(self.0.upgrade()?, self.1.upgrade()?))
+    }
+
+    pub fn complete_view_model_properties(&self, instance: &CoreHandle) {
+        if let Some(file) = self.upgrade() {
+            file.complete_view_model_properties(instance);
+        }
+    }
+
+    pub fn view_model(&self, index: usize) -> Option<CoreHandle> {
+        self.upgrade()?.view_model(index)
     }
 
     pub fn with_file<R>(&self, f: impl FnOnce(&File) -> R) -> Option<R> {
@@ -165,7 +194,7 @@ fn read_runtime_object(
             .as_deref_mut()
             .is_some_and(|object| object.deserialize(property_key, reader));
         if !handled {
-            let mut field_id = CoreRegistry::property_field_id(property_key);
+            let mut field_id = CoreRegistry::property_field_id(property_key as i32);
             if field_id == -1 {
                 field_id = header.property_field_id(property_key as i32);
             }
@@ -207,8 +236,8 @@ pub struct File {
     scripted_interpolators: Vec<CoreHandle>,
     scroll_physics: Vec<CoreHandle>,
     artboards: Vec<CoreHandle>,
-    view_models: Vec<CoreHandle>,
-    view_model_instances: Vec<CoreHandle>,
+    view_models: Rc<RefCell<Vec<CoreHandle>>>,
+    view_model_instances: Rc<RefCell<Vec<CoreHandle>>>,
     enums: Vec<CoreHandle>,
     factory: RuntimeFactoryHandle,
     asset_loader: Option<FileAssetLoaderRef>,
@@ -225,7 +254,7 @@ impl Drop for File {
         DEBUG_TOTAL_FILE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         self.cleanup_scripting_vm();
         self.artboards.clear();
-        self.view_models.clear();
+        self.view_models.borrow_mut().clear();
         #[cfg(feature = "tools")]
         {
             self.view_model_instance_registrar = None;
@@ -244,7 +273,6 @@ impl File {
 
     pub fn set_deterministic_mode(value: bool) {
         DETERMINISTIC_MODE.store(value, std::sync::atomic::Ordering::Relaxed);
-        crate::mechanical_port::source::math::random::set_runtime_deterministic_mode(value);
     }
 
     pub fn deterministic_mode() -> bool {
@@ -264,8 +292,8 @@ impl File {
             scripted_interpolators: Vec::new(),
             scroll_physics: Vec::new(),
             artboards: Vec::new(),
-            view_models: Vec::new(),
-            view_model_instances: Vec::new(),
+            view_models: Rc::default(),
+            view_model_instances: Rc::default(),
             enums: Vec::new(),
             factory,
             asset_loader,
@@ -294,19 +322,32 @@ impl File {
         asset_loader: FileAssetLoaderRef,
         scripting_vm: Option<RuntimeScriptingVmHandle>,
     ) -> Option<RuntimeFileHandle> {
-        Self::import_internal(bytes, factory, result, Some(asset_loader), scripting_vm, None)
+        Self::import_internal(
+            bytes,
+            factory,
+            result,
+            Some(asset_loader),
+            scripting_vm,
+            None,
+        )
     }
 
-    pub fn import_with_records(
+    pub fn import_with_admission(
         bytes: &[u8],
         factory: RuntimeFactoryHandle,
         result: Option<&mut ImportResult>,
         asset_loader: Option<FileAssetLoaderRef>,
         scripting_vm: Option<RuntimeScriptingVmHandle>,
-        records: &mut Vec<RuntimeImportRecord>,
+        admission: ImportAdmissionRef,
     ) -> Option<RuntimeFileHandle> {
-        records.clear();
-        Self::import_internal(bytes, factory, result, asset_loader, scripting_vm, Some(records))
+        Self::import_internal(
+            bytes,
+            factory,
+            result,
+            asset_loader,
+            scripting_vm,
+            Some(admission),
+        )
     }
 
     fn import_internal(
@@ -315,7 +356,7 @@ impl File {
         mut result: Option<&mut ImportResult>,
         asset_loader: Option<FileAssetLoaderRef>,
         scripting_vm: Option<RuntimeScriptingVmHandle>,
-        records: Option<&mut Vec<RuntimeImportRecord>>,
+        admission: Option<ImportAdmissionRef>,
     ) -> Option<RuntimeFileHandle> {
         if scripting_vm
             .as_ref()
@@ -352,9 +393,13 @@ impl File {
         let file = RuntimeFileHandle::new(File::new(factory, asset_loader));
         let (read_result, registration_ready) = file.with_file_mut(|file| {
             file.set_scripting_vm(scripting_vm);
-            file.read(&mut reader, &header, records)
+            file.read(&mut reader, &header, admission.clone())
         });
-        if registration_ready {
+        if registration_ready
+            && !admission
+                .as_ref()
+                .is_some_and(|policy| policy.is_rejected())
+        {
             Self::register_scripts(&file);
         }
         if let Some(result) = result.as_deref_mut() {
@@ -370,7 +415,7 @@ impl File {
         &mut self,
         reader: &mut BinaryReader<'_>,
         header: &RuntimeHeader,
-        mut records: Option<&mut Vec<RuntimeImportRecord>>,
+        admission: Option<ImportAdmissionRef>,
     ) -> (ImportResult, bool) {
         let mut import_stack = ImportStack::default();
         import_stack.set_version(header.major_version(), header.minor_version());
@@ -381,9 +426,6 @@ impl File {
 
         while !reader.reached_end() {
             let Some(object) = read_runtime_object(reader, header) else {
-                if let Some(records) = records.as_deref_mut() {
-                    records.push(RuntimeImportRecord::NullObject);
-                }
                 import_stack.read_null_object();
                 continue;
             };
@@ -409,24 +451,30 @@ impl File {
                     &object,
                     &mut import_stack,
                 )
+            } else if object_type
+                == crate::mechanical_port::source::generated::assets::file_asset_contents_base::FileAssetContentsBase::TYPE_KEY
+            {
+                crate::mechanical_port::source::assets::file_asset_contents::FileAssetContents::import_handle(
+                    &object,
+                    &mut import_stack,
+                )
             } else {
                 object
                     .with_mut(|object| object.import(&mut import_stack))
                     .unwrap_or(StatusCode::MissingObject)
             };
-            if let Some(records) = records.as_deref_mut() {
-                records.push(if import_result == StatusCode::Ok {
-                    RuntimeImportRecord::Imported(object.clone())
-                } else {
-                    RuntimeImportRecord::Dropped(import_result)
-                });
-            }
             if import_result == StatusCode::Ok {
+                if admission
+                    .as_ref()
+                    .is_some_and(|policy| !policy.admit_object(&object))
+                {
+                    return (ImportResult::Malformed, false);
+                }
                 match object_type {
-                    Backboard::TYPE_KEY => {
+                    BackboardBase::TYPE_KEY => {
                         self.backboard = Some(object.clone());
                     }
-                    Artboard::TYPE_KEY => {
+                    ArtboardBase::TYPE_KEY => {
                         let factory = self.factory.clone();
                         object.with_downcast_mut::<Artboard, _>(|artboard| {
                             artboard.set_core_arena(self.core_arena.clone());
@@ -436,29 +484,32 @@ impl File {
                         });
                         self.artboards.push(object.clone());
                     }
-                    crate::mechanical_port::source::assets::image_asset::ImageAsset::TYPE_KEY
-                    | crate::mechanical_port::source::assets::font_asset::FontAsset::TYPE_KEY
-                    | crate::mechanical_port::source::assets::audio_asset::AudioAsset::TYPE_KEY
-                    | crate::mechanical_port::source::assets::blob_asset::BlobAsset::TYPE_KEY
-                    | crate::mechanical_port::source::assets::script_asset::ScriptAsset::TYPE_KEY
-                    | crate::mechanical_port::source::assets::shader_asset::ShaderAsset::TYPE_KEY => {
+                    crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY
+                    | crate::mechanical_port::source::generated::assets::font_asset_base::FontAssetBase::TYPE_KEY
+                    | crate::mechanical_port::source::generated::assets::audio_asset_base::AudioAssetBase::TYPE_KEY
+                    | crate::mechanical_port::source::generated::assets::blob_asset_base::BlobAssetBase::TYPE_KEY
+                    | crate::mechanical_port::source::generated::assets::script_asset_base::ScriptAssetBase::TYPE_KEY
+                    | crate::mechanical_port::source::generated::assets::shader_asset_base::ShaderAssetBase::TYPE_KEY => {
                         self.file_assets.push(object.clone());
                         if object_type
-                            == crate::mechanical_port::source::assets::audio_asset::AudioAsset::TYPE_KEY
+                            == crate::mechanical_port::source::generated::assets::audio_asset_base::AudioAssetBase::TYPE_KEY
                         {
                             self.has_audio = true;
                         }
                     }
                     crate::mechanical_port::source::generated::viewmodel::viewmodel_base::ViewModelBase::TYPE_KEY => {
-                        self.view_models.push(object.clone());
+                        self.view_models.borrow_mut().push(object.clone());
                     }
                     crate::mechanical_port::source::generated::viewmodel::data_enum_base::DataEnumBase::TYPE_KEY
                     | crate::mechanical_port::source::generated::viewmodel::data_enum_custom_base::DataEnumCustomBase::TYPE_KEY => {
                         self.enums.push(object.clone());
                     }
                     crate::mechanical_port::source::generated::viewmodel::viewmodel_property_enum_custom_base::ViewModelPropertyEnumCustomBase::TYPE_KEY => {
-                        // The enum relationship is resolved through the retained
-                        // CoreHandle graph after the importer stack closes.
+                        object.with_downcast_mut::<crate::mechanical_port::source::viewmodel::viewmodel_property_enum_custom::ViewModelPropertyEnumCustom, _>(|property| {
+                            if let Some(data_enum) = self.enums.get(property.base.enum_id() as usize) {
+                                property.base.base.set_data_enum(data_enum.clone());
+                            }
+                        });
                     }
                     _ => {}
                 }
@@ -475,12 +526,16 @@ impl File {
             let mut stack_object: Option<Box<dyn ImportStackObject>> = None;
             let mut stack_type = object_type;
             match stack_type {
-                Backboard::TYPE_KEY => {
+                BackboardBase::TYPE_KEY => {
                     let mut importer = Box::new(BackboardImporter::new(object.clone()));
-                    importer.set_file(Some(self.self_handle.clone()));
+                    importer.set_file(
+                        self.self_handle.clone(),
+                        self.view_models.clone(),
+                        self.view_model_instances.clone(),
+                    );
                     stack_object = Some(importer);
                 }
-                Artboard::TYPE_KEY => {
+                ArtboardBase::TYPE_KEY => {
                     stack_object = Some(Box::new(ArtboardImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::viewmodel::data_enum_custom_base::DataEnumCustomBase::TYPE_KEY => {
@@ -527,16 +582,16 @@ impl File {
                     stack_object = Some(Box::new(StateMachineListenerImporter::new(object.clone())));
                     stack_type = crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::TYPE_KEY;
                 }
-                crate::mechanical_port::source::assets::image_asset::ImageAsset::TYPE_KEY
-                | crate::mechanical_port::source::assets::font_asset::FontAsset::TYPE_KEY
-                | crate::mechanical_port::source::assets::audio_asset::AudioAsset::TYPE_KEY
-                | crate::mechanical_port::source::assets::blob_asset::BlobAsset::TYPE_KEY => {
+                crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY
+                | crate::mechanical_port::source::generated::assets::font_asset_base::FontAssetBase::TYPE_KEY
+                | crate::mechanical_port::source::generated::assets::audio_asset_base::AudioAssetBase::TYPE_KEY
+                | crate::mechanical_port::source::generated::assets::blob_asset_base::BlobAssetBase::TYPE_KEY => {
                     stack_object = Some(Box::new(FileAssetImporter::new(
                         object.clone(),
                         self.asset_loader.clone(),
                         self.factory.clone(),
-                    )));
-                    stack_type = crate::mechanical_port::source::assets::file_asset::FileAsset::TYPE_KEY;
+                    ).with_admission(admission.clone())));
+                    stack_type = crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::TYPE_KEY;
                 }
                 crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_keyboard_base::ListenerInputTypeKeyboardBase::TYPE_KEY => {
                     stack_object = Some(Box::new(ListenerInputTypeKeyboardImporter::new(object.clone())));
@@ -547,7 +602,7 @@ impl File {
                 crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_semantic_base::ListenerInputTypeSemanticBase::TYPE_KEY => {
                     stack_object = Some(Box::new(ListenerInputTypeSemanticImporter::new(object.clone())));
                 }
-                crate::mechanical_port::source::assets::script_asset::ScriptAsset::TYPE_KEY => {
+                crate::mechanical_port::source::generated::assets::script_asset_base::ScriptAssetBase::TYPE_KEY => {
                     object.with_downcast_mut::<ScriptAsset, _>(|script| {
                         script.set_file(Some(self.self_handle.clone()));
                         script.set_scripting_vm(self.scripting_vm.clone());
@@ -558,28 +613,28 @@ impl File {
                             self.asset_loader.clone(),
                             self.factory.clone(),
                             in_band_content.clone(),
-                        ),
+                        ).with_admission(admission.clone()),
                     ));
-                    stack_type = crate::mechanical_port::source::assets::file_asset::FileAsset::TYPE_KEY;
+                    stack_type = crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::TYPE_KEY;
                 }
-                crate::mechanical_port::source::assets::shader_asset::ShaderAsset::TYPE_KEY => {
+                crate::mechanical_port::source::generated::assets::shader_asset_base::ShaderAssetBase::TYPE_KEY => {
                     stack_object = Some(Box::new(
                         crate::mechanical_port::source::importers::text_asset_importer::TextAssetImporter::new(
                             object.clone(),
                             self.asset_loader.clone(),
                             self.factory.clone(),
                             in_band_content.clone(),
-                        ),
+                        ).with_admission(admission.clone()),
                     ));
-                    stack_type = crate::mechanical_port::source::assets::file_asset::FileAsset::TYPE_KEY;
+                    stack_type = crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::TYPE_KEY;
                 }
-                crate::mechanical_port::source::assets::manifest_asset::ManifestAsset::TYPE_KEY => {
+                crate::mechanical_port::source::generated::assets::manifest_asset_base::ManifestAssetBase::TYPE_KEY => {
                     stack_object = Some(Box::new(FileAssetImporter::new(
                         object.clone(),
                         self.asset_loader.clone(),
                         self.factory.clone(),
-                    )));
-                    stack_type = FileAsset::TYPE_KEY;
+                    ).with_admission(admission.clone())));
+                    stack_type = FileAssetBase::TYPE_KEY;
                     self.manifest = Some(object.clone());
                 }
                 crate::mechanical_port::source::generated::viewmodel::viewmodel_base::ViewModelBase::TYPE_KEY => {
@@ -636,7 +691,7 @@ impl File {
                 | crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::TYPE_KEY => {
                     object.with_mut(|object| {
                         if let Some(nested) = object.as_nested_artboard_mut() {
-                            nested.set_file(Some(self.self_handle.clone()));
+                            nested.set_file(self.self_handle.clone());
                         }
                     });
                 }
@@ -654,10 +709,8 @@ impl File {
                     stack_object = Some(Box::new(DataBindPathImporter::new(object.clone())));
                 }
                 crate::mechanical_port::source::generated::script_input_artboard_base::ScriptInputArtboardBase::TYPE_KEY => {
-                    object.with_mut(|object| {
-                        if let Some(input) = object.as_script_input_artboard_mut() {
-                            input.set_file(Some(self.self_handle.clone()));
-                        }
+                    object.with_downcast_mut::<crate::mechanical_port::source::script_input_artboard::ScriptInputArtboard, _>(|input| {
+                        input.set_file(Some(self.self_handle.clone()));
                     });
                 }
                 _ => {}
@@ -701,9 +754,7 @@ impl File {
     }
 
     pub fn add_file_view_model_instance(&mut self, instance: CoreHandle) {
-        if !self.view_model_instances.contains(&instance) {
-            self.view_model_instances.push(instance);
-        }
+        self.view_model_instances.borrow_mut().push(instance);
     }
 
     fn register_scripts(file: &RuntimeFileHandle) {
@@ -712,7 +763,7 @@ impl File {
                 file.file_assets.clone(),
                 file.scripting_vm.clone(),
                 file.scripted_interpolators.clone(),
-                file.view_models.clone(),
+                file.view_models.borrow().clone(),
             )
         });
         let scripts: Vec<_> = assets
@@ -937,7 +988,7 @@ impl File {
         source: Option<CoreHandle>,
     ) -> Option<RuntimeBindableArtboardHandle> {
         let source = source?;
-        let artboard = self.instance_artboard(Some(source.clone()))?;
+        let artboard = Artboard::instance_from_handle(&source)?;
         Some(RuntimeBindableArtboardHandle::new(
             None,
             artboard,
@@ -966,37 +1017,11 @@ impl File {
         else {
             return;
         };
-        let Some(view_model) = self.view_models.get(view_model_id).cloned() else {
+        let Some(view_model) = self.view_model_handle(view_model_id) else {
             return;
         };
 
         for value in values {
-            let property_id = value
-                .with(|value| {
-                    value
-                        .as_view_model_instance_value()
-                        .map(|value| value.base.view_model_property_id())
-                })
-                .flatten();
-            let Some(property_id) = property_id else {
-                continue;
-            };
-            let property = view_model
-                .with(|view_model| {
-                    view_model
-                        .as_view_model()
-                        .and_then(|view_model| view_model.property_at(property_id as usize))
-                })
-                .flatten();
-            let Some(property) = property else {
-                continue;
-            };
-            value.with_mut(|value| {
-                if let Some(value) = value.as_view_model_instance_value_mut() {
-                    value.set_view_model_property(property.clone());
-                }
-            });
-
             let nested_index = value
                 .with(|value| {
                     value
@@ -1005,94 +1030,196 @@ impl File {
                 })
                 .flatten();
             if let Some(nested_index) = nested_index {
-                value.with_mut(|value| {
-                    if let Some(nested) = value.as_view_model_instance_view_model_mut() {
-                        nested.set_parent_view_model_instance(Some(instance.clone()));
+                let property = Self::view_model_property_for(&view_model, &value);
+                let reference_id = property.with_downcast::<crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(|property| property.base.view_model_reference_id());
+                if let Some(reference_id) = reference_id {
+                    let source = self
+                        .view_model_handle(reference_id as usize)
+                        .and_then(|model| {
+                            model
+                                .with_downcast::<ViewModel, _>(|model| {
+                                    model.instance_at(nested_index as usize)
+                                })
+                                .flatten()
+                        });
+                    value.with_mut(|value| {
+                        value
+                            .as_view_model_instance_view_model_mut()
+                            .expect("nested VMI value")
+                            .set_parent_view_model_instance(Some(instance.clone()));
+                    });
+                    if let Some(source) = source {
+                        let copied = if let Some(copied) = instances.get(&source) {
+                            Some(copied.clone())
+                        } else {
+                            let copied = self.copy_view_model_instance(&source, instances);
+                            if let Some(copied) = &copied {
+                                instances.insert(source, copied.clone());
+                            }
+                            copied
+                        };
+                        if let Some(copied) = copied {
+                            value.with_mut(|value| {
+                                value
+                                    .as_view_model_instance_view_model_mut()
+                                    .expect("nested VMI value")
+                                    .set_reference_view_model_instance(Some(copied));
+                            });
+                        }
                     }
-                });
-                let reference_id = property
-                    .with(|property| {
-                        property
-                            .as_view_model_property()
-                            .and_then(|property| property.base.as_view_model_reference_id())
+                }
+            } else {
+                let items = value
+                    .with_mut(|value| {
+                        let list = value.as_view_model_instance_list_mut()?;
+                        list.set_parent_view_model_instance(Some(instance.clone()));
+                        Some(list.list_items().to_vec())
                     })
                     .flatten();
-                let source = reference_id
-                    .and_then(|id| self.view_models.get(id as usize))
-                    .and_then(|model| {
+                for item in items.into_iter().flatten() {
+                    let ids = item
+                        .with(|item| {
+                            let item = item.as_view_model_instance_list_item()?;
+                            Some((
+                                item.base.view_model_id() as usize,
+                                item.base.view_model_instance_id() as usize,
+                            ))
+                        })
+                        .flatten();
+                    let Some((model_id, source_id)) = ids else {
+                        continue;
+                    };
+                    let source = self.view_model_handle(model_id).and_then(|model| {
                         model
                             .with(|model| {
                                 model
                                     .as_view_model()
-                                    .and_then(|model| model.instance_at(nested_index as usize))
+                                    .and_then(|model| model.instance_at(source_id))
                             })
                             .flatten()
                     });
-                if let Some(source) = source {
-                    let copied = instances
-                        .get(&source)
-                        .cloned()
-                        .or_else(|| self.copy_view_model_instance(&source, instances));
+                    let Some(source) = source else {
+                        continue;
+                    };
+                    let copied = if let Some(copied) = instances.get(&source) {
+                        Some(copied.clone())
+                    } else {
+                        let copied = self.copy_view_model_instance(&source, instances);
+                        if let Some(copied) = &copied {
+                            instances.insert(source, copied.clone());
+                        }
+                        copied
+                    };
                     if let Some(copied) = copied {
-                        value.with_mut(|value| {
-                            if let Some(nested) = value.as_view_model_instance_view_model_mut() {
-                                nested.set_reference_view_model_instance(Some(copied));
+                        item.with_mut(|item| {
+                            if let Some(item) = item.as_view_model_instance_list_item_mut() {
+                                item.set_view_model_instance(Some(copied));
                             }
                         });
                     }
                 }
-                continue;
             }
-
-            let items = value
-                .with_mut(|value| {
-                    let list = value.as_view_model_instance_list_mut()?;
-                    list.set_parent_view_model_instance(Some(instance.clone()));
-                    Some(list.list_items().to_vec())
-                })
-                .flatten();
-            for item in items.into_iter().flatten() {
-                let ids = item
-                    .with(|item| {
-                        let item = item.as_view_model_instance_list_item()?;
-                        Some((
-                            item.base.view_model_id() as usize,
-                            item.base.view_model_instance_id() as usize,
-                        ))
-                    })
-                    .flatten();
-                let Some((model_id, source_id)) = ids else {
-                    continue;
-                };
-                let source = self.view_models.get(model_id).and_then(|model| {
-                    model
-                        .with(|model| {
-                            model
-                                .as_view_model()
-                                .and_then(|model| model.instance_at(source_id))
-                        })
-                        .flatten()
-                });
-                let Some(source) = source else {
-                    continue;
-                };
-                let copied = instances
-                    .get(&source)
-                    .cloned()
-                    .or_else(|| self.copy_view_model_instance(&source, instances));
-                if let Some(copied) = copied {
-                    item.with_mut(|item| {
-                        if let Some(item) = item.as_view_model_instance_list_item_mut() {
-                            item.set_view_model_instance(Some(copied));
-                        }
-                    });
-                }
-            }
+            let property = Self::view_model_property_for(&view_model, &value);
+            value.with_mut(|value| {
+                value
+                    .as_view_model_instance_value_mut()
+                    .expect("VMI property value")
+                    .set_view_model_property(property);
+            });
         }
     }
 
+    fn view_model_property_for(model: &CoreHandle, value: &CoreHandle) -> CoreHandle {
+        let property_id = value
+            .with(|value| {
+                value
+                    .as_view_model_instance_value()
+                    .expect("VMI property value")
+                    .base
+                    .view_model_property_id() as usize
+            })
+            .expect("live VMI property value");
+        model
+            .with_downcast::<ViewModel, _>(|model| model.property_at(property_id))
+            .flatten()
+            .expect("valid ViewModel property index")
+    }
+
     pub fn complete_view_model_properties(&self, instance: &CoreHandle) {
-        self.complete_view_model_instance(instance);
+        Self::complete_view_model_properties_in(&self.view_models, instance);
+    }
+
+    fn complete_view_model_properties_in(
+        models: &Rc<RefCell<Vec<CoreHandle>>>,
+        instance: &CoreHandle,
+    ) {
+        let (model_id, values) = instance
+            .with_downcast::<ViewModelInstance, _>(|instance| {
+                (
+                    instance.base.view_model_id() as usize,
+                    instance.property_values().to_vec(),
+                )
+            })
+            .expect("completeViewModelProperties requires a live ViewModelInstance");
+        let model = models.borrow()[model_id].clone();
+        for value in values {
+            let nested_index = value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_view_model()
+                        .map(|value| value.base.property_value())
+                })
+                .flatten();
+            if let Some(nested_index) = nested_index {
+                let property = Self::view_model_property_for(&model, &value);
+                if let Some(reference_id) = property.with_downcast::<crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(|property| property.base.view_model_reference_id()) {
+                    let referenced_model = models.borrow()[reference_id as usize].clone();
+                    let referenced = referenced_model.with_downcast::<ViewModel, _>(|model| {
+                        model.instance_at(nested_index as usize)
+                    }).flatten();
+                    if let Some(referenced) = referenced {
+                        Self::complete_view_model_properties_in(models, &referenced);
+                    }
+                }
+            } else if let Some(items) = value
+                .with(|value| {
+                    value
+                        .as_view_model_instance_list()
+                        .map(|list| list.list_items().to_vec())
+                })
+                .flatten()
+            {
+                for item in items {
+                    let (model_id, instance_id) = item
+                        .with(|item| {
+                            let item = item
+                                .as_view_model_instance_list_item()
+                                .expect("VMI list item");
+                            (
+                                item.base.view_model_id() as usize,
+                                item.base.view_model_instance_id() as usize,
+                            )
+                        })
+                        .expect("live VMI list item");
+                    let model = models.borrow()[model_id].clone();
+                    let referenced = model
+                        .with_downcast::<ViewModel, _>(|model| model.instance_at(instance_id))
+                        .flatten();
+                    if let Some(referenced) = referenced {
+                        Self::complete_view_model_properties_in(models, &referenced);
+                    }
+                }
+            }
+            // Source binds this property's metadata after walking its nested
+            // values. This operation never clones instances or installs refs.
+            let property = Self::view_model_property_for(&model, &value);
+            value.with_mut(|value| {
+                value
+                    .as_view_model_instance_value_mut()
+                    .expect("VMI property value")
+                    .set_view_model_property(property);
+            });
+        }
     }
 
     fn copy_view_model_instance(
@@ -1101,11 +1228,14 @@ impl File {
         instances: &mut HashMap<CoreHandle, CoreHandle>,
     ) -> Option<CoreHandle> {
         let copied = ViewModelInstance::clone_instance(instance)?;
-        instances.insert(instance.clone(), copied.clone());
         self.complete_view_model_instance_with_map(&copied, instances);
         #[cfg(feature = "tools")]
         self.register_view_model_instance(copied.clone());
         Some(copied)
+    }
+
+    pub fn create_view_model_instance_for_name(&self, model_name: &str) -> Option<CoreHandle> {
+        self.create_view_model_instance(self.view_model_named(model_name)?)
     }
 
     pub fn create_view_model_instance_named(
@@ -1129,7 +1259,7 @@ impl File {
         model_index: usize,
         instance_index: usize,
     ) -> Option<CoreHandle> {
-        let model = self.view_models.get(model_index)?;
+        let model = self.view_model_handle(model_index)?;
         let source = model
             .with(|model| {
                 model
@@ -1141,10 +1271,11 @@ impl File {
     }
 
     fn find_view_model_id(&self, search: &CoreHandle) -> u32 {
-        self.view_models
+        let models = self.view_models.borrow();
+        models
             .iter()
             .position(|model| model == search)
-            .unwrap_or(self.view_models.len()) as u32
+            .unwrap_or(models.len()) as u32
     }
 
     #[cfg(feature = "tools")]
@@ -1172,15 +1303,19 @@ impl File {
     #[cfg(feature = "tools")]
     pub fn clear_runtime_view_model_instances(&mut self) {
         if let Some(registrar) = &self.view_model_instance_registrar {
-            registrar.with_mut(ViewModelInstanceRegistrar::clear);
+            registrar.with_mut(|registrar| registrar.clear());
         }
     }
 
-    pub fn create_view_model_instance(&mut self, view_model: CoreHandle) -> Option<CoreHandle> {
+    pub fn create_view_model_instance(&self, view_model: CoreHandle) -> Option<CoreHandle> {
         let instance = self.core_arena.insert(ViewModelInstance::default());
         let view_model_id = self.find_view_model_id(&view_model);
+        CoreRegistry::set_uint_handle(
+            &instance,
+            crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase::VIEW_MODEL_ID_PROPERTY_KEY as i32,
+            view_model_id,
+        );
         instance.with_downcast_mut::<ViewModelInstance, _>(|instance| {
-            instance.base.set_view_model_id(view_model_id);
             instance.view_model(view_model.clone());
         });
         let properties = view_model.with_downcast::<ViewModel, _>(ViewModel::properties)?;
@@ -1214,10 +1349,6 @@ impl File {
                 .core_arena
                 .insert_boxed(CoreRegistry::make_core_box(value_type as i32)?);
             value.with_mut(|value| {
-                if let Some(value) = value.as_view_model_instance_value_mut() {
-                    value.base.set_view_model_property_id(property_id as u32);
-                    value.set_view_model_property(property.clone());
-                }
                 if let Some(list) = value.as_view_model_instance_list_mut() {
                     list.set_parent_view_model_instance(Some(instance.clone()));
                 }
@@ -1226,23 +1357,29 @@ impl File {
                 .with(|value| value.as_view_model_instance_view_model().is_some())
                 .unwrap_or(false)
             {
-                let reference_id = property
-                    .with(|property| {
-                        property
-                            .as_view_model_property()
-                            .and_then(|property| property.base.as_view_model_reference_id())
-                    })
-                    .flatten();
+                let reference_id = property.with_downcast::<crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(|property| property.base.view_model_reference_id());
                 let nested = reference_id
-                    .and_then(|id| self.view_models.get(id as usize).cloned())
+                    .and_then(|id| self.view_model_handle(id as usize))
                     .and_then(|model| self.create_view_model_instance(model));
-                value.with_mut(|value| {
-                    if let Some(value) = value.as_view_model_instance_view_model_mut() {
-                        value.set_parent_view_model_instance(Some(instance.clone()));
-                        value.set_reference_view_model_instance(nested);
-                    }
-                });
+                if let Some(nested) = nested {
+                    value.with_mut(|value| {
+                        if let Some(value) = value.as_view_model_instance_view_model_mut() {
+                            value.set_parent_view_model_instance(Some(instance.clone()));
+                            value.set_reference_view_model_instance(Some(nested));
+                        }
+                    });
+                }
             }
+            value.with_mut(|value| {
+                if let Some(value) = value.as_view_model_instance_value_mut() {
+                    value.set_view_model_property(property.clone());
+                }
+            });
+            CoreRegistry::set_uint_handle(
+                &value,
+                crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBase::VIEW_MODEL_PROPERTY_ID_PROPERTY_KEY as i32,
+                property_id as u32,
+            );
             instance
                 .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.add_value(value));
         }
@@ -1252,27 +1389,24 @@ impl File {
     }
 
     pub fn create_view_model_instance_for_artboard(
-        &mut self,
+        &self,
         artboard: CoreHandle,
     ) -> Option<CoreHandle> {
         let id = artboard
             .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id() as usize)?;
-        self.create_view_model_instance(self.view_models.get(id)?.clone())
+        self.create_view_model_instance(self.view_model_handle(id)?)
     }
 
     pub fn create_default_view_model_instance_for_artboard(
-        &mut self,
+        &self,
         artboard: CoreHandle,
     ) -> Option<CoreHandle> {
         let id = artboard
             .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id() as usize)?;
-        self.create_default_view_model_instance(self.view_models.get(id)?.clone())
+        self.create_default_view_model_instance(self.view_model_handle(id)?)
     }
 
-    pub fn create_default_view_model_instance(
-        &mut self,
-        view_model: CoreHandle,
-    ) -> Option<CoreHandle> {
+    pub fn create_default_view_model_instance(&self, view_model: CoreHandle) -> Option<CoreHandle> {
         let source = view_model.with_downcast::<ViewModel, _>(ViewModel::default_instance)?;
         if let Some(source) = source {
             return self.copy_view_model_instance(&source, &mut HashMap::new());
@@ -1316,6 +1450,7 @@ impl File {
 
     pub fn view_model_named(&self, name: &str) -> Option<CoreHandle> {
         self.view_models
+            .borrow()
             .iter()
             .find(|model| {
                 model
@@ -1326,7 +1461,7 @@ impl File {
     }
 
     pub fn view_model_handle(&self, index: usize) -> Option<CoreHandle> {
-        self.view_models.get(index).cloned()
+        self.view_models.borrow().get(index).cloned()
     }
 
     pub fn view_model(&self, index: usize) -> Option<CoreHandle> {
@@ -1334,25 +1469,26 @@ impl File {
     }
 
     pub fn view_model_id(&self, name: &str) -> u32 {
-        self.view_models
+        let models = self.view_models.borrow();
+        models
             .iter()
             .position(|model| {
                 model
                     .with_downcast::<ViewModel, _>(|model| model.base.name() == name)
                     .unwrap_or(false)
             })
-            .unwrap_or(self.view_models.len()) as u32
+            .unwrap_or(models.len()) as u32
     }
 
     pub fn global_view_models(&self) -> Vec<CoreHandle> {
         self.view_models
+            .borrow()
             .iter()
             .cloned()
             .filter(|model| {
                 model
                     .with_downcast::<ViewModel, _>(|model| {
-                        ViewModelType::from_u32(model.base.view_model_type())
-                            == Some(ViewModelType::Global)
+                        model.base.view_model_type() == ViewModelType::Global as u32
                     })
                     .unwrap_or(false)
             })
@@ -1369,7 +1505,7 @@ impl File {
     }
 
     pub fn view_model_by_index(&self, index: usize) -> Option<RuntimeViewModelHandle> {
-        if let Some(model) = self.view_models.get(index).cloned() {
+        if let Some(model) = self.view_model_handle(index) {
             return self.create_view_model_runtime(model);
         }
         eprintln!(
@@ -1380,7 +1516,7 @@ impl File {
     }
 
     pub fn view_model_by_name(&self, name: &str) -> Option<RuntimeViewModelHandle> {
-        for model in &self.view_models {
+        for model in self.view_models.borrow().iter() {
             let matches = model
                 .with_downcast::<ViewModel, _>(|model| model.base.name() == name)
                 .unwrap_or(false);
@@ -1403,7 +1539,7 @@ impl File {
                 artboard.base.name().to_owned(),
             )
         })?;
-        if let Some(model) = self.view_models.get(id).cloned() {
+        if let Some(model) = self.view_model_handle(id) {
             return self.create_view_model_runtime(model);
         }
         eprintln!(
@@ -1457,10 +1593,16 @@ impl File {
             let Some(object) = object else {
                 continue;
             };
-            if object.is_file_asset() {
+            if crate::mechanical_port::source::core::CoreObject::is_type_of(
+                object.as_ref(),
+                FileAssetBase::TYPE_KEY,
+            ) {
                 last_asset_type = object.core_type();
             }
-            if object.is_file_asset_contents() && type_keys.contains(&last_asset_type) {
+            if crate::mechanical_port::source::core::CoreObject::is_type_of(
+                object.as_ref(),
+                crate::mechanical_port::source::generated::assets::file_asset_contents_base::FileAssetContentsBase::TYPE_KEY,
+            ) && type_keys.contains(&last_asset_type) {
                 if from != to {
                     stripped.extend_from_slice(&bytes[from..to]);
                 }
@@ -1493,7 +1635,7 @@ impl File {
     }
 
     pub fn view_model_count(&self) -> usize {
-        self.view_models.len()
+        self.view_models.borrow().len()
     }
 
     pub fn artboards(&self) -> Vec<CoreHandle> {

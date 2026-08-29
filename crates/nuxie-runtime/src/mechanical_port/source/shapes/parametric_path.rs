@@ -6,6 +6,24 @@ use crate::mechanical_port::source::{
     },
     math::{aabb::Aabb, vec2d::Vec2D},
 };
+impl std::ops::Deref for ParametricPath {
+    type Target = ParametricPathBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ParametricPath {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl ParametricPath {
+    pub const TYPE_KEY: u16 = ParametricPathBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct ParametricPath {
     pub base: ParametricPathBase,
 }
@@ -39,37 +57,29 @@ impl ParametricPath {
         _height: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
-        self.base.set_width(size.x);
-        self.base.set_height(size.y);
+        self.set_width(size.x);
+        self.set_height(size.y);
         self.base.mark_world_transform_dirty();
         self.mark_path_dirty(false);
     }
     pub fn mark_path_dirty(&mut self, send_to_layout: bool) {
-        self.base.super_mark_path_dirty();
+        self.base.base.mark_path_dirty(true);
         if send_to_layout {
             let shape = self.base.shape_handle();
             let mut parent = self.base.parent_handle();
             while let Some(current) = parent {
-                let found_layout = current
-                    .with_mut(|current| {
-                        if let Some(layout) = current.as_layout_component_mut() {
-                            layout.mark_layout_node_dirty(false);
-                            true
-                        } else {
-                            false
-                        }
-                    })
-                    .unwrap_or(false);
-                if found_layout {
+                if current.is_type_of(
+                    crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
+                ) {
+                    crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(&current, false);
                     break;
                 }
-                let is_node = current
-                    .with(|current| current.as_node().is_some())
-                    .unwrap_or(false);
+                let is_node = current.is_type_of(
+                    crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY,
+                );
                 if is_node {
                     if current
-                        .with(|current| current.as_shape().is_some())
-                        .unwrap_or(false)
+                        .is_type_of(crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY)
                         && shape.as_ref() == Some(&current)
                     {
                         parent = current
@@ -96,6 +106,24 @@ impl ParametricPath {
     }
     pub fn width_changed(&mut self) {
         self.mark_path_dirty(true);
+    }
+    pub fn set_width(&mut self, value: f32) {
+        if self.base.set_width_value(value) {
+            self.width_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                ParametricPathBase::WIDTH_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_height(&mut self, value: f32) {
+        if self.base.set_height_value(value) {
+            self.height_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                ParametricPathBase::HEIGHT_PROPERTY_KEY,
+            );
+        }
     }
     pub fn height_changed(&mut self) {
         self.mark_path_dirty(true);

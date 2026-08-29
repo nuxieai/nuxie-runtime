@@ -30,3 +30,15 @@ impl ListenerTriggerChange {
         }
     }
 }
+
+impl std::ops::Deref for ListenerTriggerChange {
+    type Target = ListenerTriggerChangeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ListenerTriggerChange {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

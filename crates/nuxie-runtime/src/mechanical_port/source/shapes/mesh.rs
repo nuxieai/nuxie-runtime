@@ -25,6 +25,23 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 #[derive(Default)]
 pub struct IndexBuffer(pub Vec<u16>);
 
+impl std::ops::Deref for Mesh {
+    type Target = MeshBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Mesh {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Mesh {
+    pub const TYPE_KEY: u16 = MeshBase::TYPE_KEY;
+}
+
 pub struct Mesh {
     pub base: MeshBase,
     pub skinnable: Skinnable,
@@ -148,13 +165,13 @@ impl Mesh {
     }
 
     pub fn mark_skin_dirty(&mut self) {
-        self.base.add_dirt(ComponentDirt::VERTICES);
+        self.base.add_dirt(ComponentDirt::VERTICES, false);
     }
 
     pub fn on_asset_loaded(&mut self, render_image: Option<&dyn RenderImage>) {
         let uv_transform = render_image
             .map(RenderImage::uv_transform)
-            .unwrap_or_default();
+            .unwrap_or(nuxie_render_api::Mat2D::IDENTITY);
         let Some(factory) = self
             .base
             .with_artboard(|artboard| artboard.factory())

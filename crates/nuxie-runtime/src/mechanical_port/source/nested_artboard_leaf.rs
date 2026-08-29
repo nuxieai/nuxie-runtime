@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
+    core::CoreHandle,
     generated::nested_artboard_leaf_base::{
         NestedArtboardLeafBase, NestedArtboardLeafBaseCallbacks,
     },
@@ -12,37 +13,48 @@ pub struct NestedArtboardLeaf {
     pub base: NestedArtboardLeafBase,
 }
 
-struct CloneCallbacks;
-
-impl NestedArtboardLeafBaseCallbacks for CloneCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
-}
-
 impl NestedArtboardLeaf {
     pub fn clone_leaf(&self) -> Self {
-        let mut nested_artboard = self.base.clone_into(&mut CloneCallbacks);
+        let mut nested_artboard = NestedArtboardLeafBase::clone_into(self);
         nested_artboard.base.base.set_file(self.base.base.file());
-        if let Some(referenced) = self.base.base.source_artboard() {
-            nested_artboard
-                .base
-                .base
-                .referenced_artboard(Some(referenced));
+        // Upstream instances the currently referenced Artboard, which is the
+        // mounted instance after mounting and the authored source before it.
+        let referenced = match self.base.base.artboard_instance_handle(0) {
+            Some(instance) => Some(instance.core_handle()),
+            None => self.base.base.source_artboard(),
+        };
+        if let Some(referenced) = referenced {
+            if let Some(instance) =
+                crate::mechanical_port::source::artboard::Artboard::nested_instance_from_handle(
+                    &referenced,
+                )
+            {
+                nested_artboard
+                    .base
+                    .base
+                    .referenced_artboard_instance(instance);
+            }
         }
         nested_artboard
     }
 
-    pub(crate) fn update_after_nested_artboard_super(&mut self, value: ComponentDirt) {
+    pub(crate) fn update_after_nested_artboard_super_occurrence(
+        owner: &CoreHandle,
+        value: ComponentDirt,
+    ) {
         if !value.contains(ComponentDirt::WORLD_TRANSFORM) {
             return;
         }
-        let Some(artboard) = self.base.base.artboard_instance_handle(0) else {
+        let Some(artboard) = owner
+            .with_downcast::<Self, _>(|owner| owner.base.base.artboard_instance_handle(0))
+            .expect("live NestedArtboardLeaf")
+        else {
             return;
         };
 
-        let bounds = self
-            .base
-            .base
-            .parent_handle()
+        let bounds = owner
+            .with_downcast::<Self, _>(|owner| owner.base.base.parent_handle())
+            .expect("live NestedArtboardLeaf")
             .and_then(|parent| {
                 parent
                     .with(|parent| {
@@ -54,7 +66,10 @@ impl NestedArtboardLeaf {
             })
             .unwrap_or_else(|| artboard.with_artboard(|artboard| artboard.bounds()));
 
-        let fit = match self.base.fit() {
+        let fit = match owner
+            .with_downcast::<Self, _>(|owner| owner.base.fit())
+            .expect("live NestedArtboardLeaf")
+        {
             0 => Fit::Fill,
             1 => Fit::Contain,
             2 => Fit::Cover,
@@ -83,14 +98,23 @@ impl NestedArtboardLeaf {
             }
         }
 
+        let alignment = owner
+            .with_downcast::<Self, _>(|owner| {
+                Alignment::new(owner.base.alignment_x(), owner.base.alignment_y())
+            })
+            .expect("live NestedArtboardLeaf");
         let view_transform = compute_alignment(
             fit,
-            Alignment::new(self.base.alignment_x(), self.base.alignment_y()),
+            alignment,
             &bounds,
             &artboard.with_artboard(|artboard| artboard.bounds()),
             1.0,
         );
-        *self.base.base.mutable_world_transform() *= view_transform;
+        owner
+            .with_downcast_mut::<Self, _>(|owner| {
+                *owner.base.base.mutable_world_transform() *= view_transform;
+            })
+            .expect("live NestedArtboardLeaf");
     }
 
     pub fn fit_changed(&mut self) {

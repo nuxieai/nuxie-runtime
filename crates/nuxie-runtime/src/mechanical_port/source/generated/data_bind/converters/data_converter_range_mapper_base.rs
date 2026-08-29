@@ -68,7 +68,10 @@ impl DataConverterRangeMapperBase {
             return;
         }
         callbacks.interpolation_type_changed();
-        callbacks.notify_property_changed(Self::INTERPOLATION_TYPE_PROPERTY_KEY);
+        DataConverterRangeMapperBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INTERPOLATION_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_interpolation_type_value(&mut self, value: u32) -> bool {
@@ -90,7 +93,10 @@ impl DataConverterRangeMapperBase {
             return;
         }
         callbacks.interpolator_id_changed();
-        callbacks.notify_property_changed(Self::INTERPOLATOR_ID_PROPERTY_KEY);
+        DataConverterRangeMapperBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INTERPOLATOR_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_interpolator_id_value(&mut self, value: u32) -> bool {
@@ -112,7 +118,10 @@ impl DataConverterRangeMapperBase {
             return;
         }
         callbacks.flags_changed();
-        callbacks.notify_property_changed(Self::FLAGS_PROPERTY_KEY);
+        DataConverterRangeMapperBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FLAGS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_flags_value(&mut self, value: u32) -> bool {
@@ -134,7 +143,10 @@ impl DataConverterRangeMapperBase {
             return;
         }
         callbacks.min_input_changed();
-        callbacks.notify_property_changed(Self::MIN_INPUT_PROPERTY_KEY);
+        DataConverterRangeMapperBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_INPUT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_min_input_value(&mut self, value: f32) -> bool {
@@ -156,7 +168,10 @@ impl DataConverterRangeMapperBase {
             return;
         }
         callbacks.max_input_changed();
-        callbacks.notify_property_changed(Self::MAX_INPUT_PROPERTY_KEY);
+        DataConverterRangeMapperBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_INPUT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_max_input_value(&mut self, value: f32) -> bool {
@@ -178,7 +193,10 @@ impl DataConverterRangeMapperBase {
             return;
         }
         callbacks.min_output_changed();
-        callbacks.notify_property_changed(Self::MIN_OUTPUT_PROPERTY_KEY);
+        DataConverterRangeMapperBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_OUTPUT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_min_output_value(&mut self, value: f32) -> bool {
@@ -200,7 +218,10 @@ impl DataConverterRangeMapperBase {
             return;
         }
         callbacks.max_output_changed();
-        callbacks.notify_property_changed(Self::MAX_OUTPUT_PROPERTY_KEY);
+        DataConverterRangeMapperBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_OUTPUT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_max_output_value(&mut self, value: f32) -> bool {
@@ -230,7 +251,7 @@ impl DataConverterRangeMapperBase {
         self.max_input = object.max_input;
         self.min_output = object.min_output;
         self.max_output = object.max_output;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,

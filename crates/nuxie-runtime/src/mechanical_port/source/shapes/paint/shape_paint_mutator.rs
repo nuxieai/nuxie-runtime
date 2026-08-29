@@ -1,4 +1,6 @@
-use crate::mechanical_port::source::{core::CoreHandle, core_context::StatusCode};
+use crate::mechanical_port::source::{
+    core::CoreHandle, core_context::StatusCode, factory::RuntimeFactoryHandle,
+};
 use core::ops::{BitAnd, BitOr, BitOrAssign};
 use nuxie_render_api::RenderPaint;
 use std::{
@@ -60,6 +62,7 @@ pub trait ShapePaintMutator {
         &mut self,
         component: CoreHandle,
         parent: Option<CoreHandle>,
+        factory: &RuntimeFactoryHandle,
     ) -> StatusCode {
         self.mutator_state_mut().flags = MutatorFlags::TRANSLUCENT | MutatorFlags::VISIBLE;
         self.mutator_state_mut().component = Some(component.clone());
@@ -71,7 +74,7 @@ pub trait ShapePaintMutator {
                 let Some(paint) = parent.as_shape_paint_behavior_mut() else {
                     return StatusCode::MissingObject;
                 };
-                if !paint.initialize_render_paint(component) {
+                if !paint.initialize_render_paint(component, factory) {
                     return StatusCode::InvalidObject;
                 }
                 let render_paint = paint

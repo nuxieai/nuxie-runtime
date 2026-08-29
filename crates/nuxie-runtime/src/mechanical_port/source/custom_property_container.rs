@@ -21,7 +21,12 @@ pub trait CustomPropertyContainer {
             .iter()
             .filter(|child| {
                 child
-                    .with(|child| child.is_type_of(CustomPropertyBase::TYPE_KEY))
+                    .with(|child| {
+                        crate::mechanical_port::source::core::CoreObject::is_type_of(
+                            child,
+                            CustomPropertyBase::TYPE_KEY,
+                        )
+                    })
                     .unwrap_or(false)
             })
             .cloned()

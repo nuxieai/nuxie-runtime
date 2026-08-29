@@ -36,7 +36,8 @@ impl UserData for ScriptedMat2D {
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("invert", |lua, this, ()| {
-            this.0.invert()
+            this.0
+                .invert()
                 .map(|matrix| lua.create_userdata(ScriptedMat2D(matrix)))
                 .transpose()
         });
@@ -216,7 +217,11 @@ mod matrix_tests {
         ]);
         assert_eq!(matrix.determinant().to_bits(), 0xa7ee_c560);
         assert_eq!(
-            matrix.invert().expect("pinned determinant is nonzero").0.map(f32::to_bits),
+            matrix
+                .invert()
+                .expect("pinned determinant is nonzero")
+                .0
+                .map(f32::to_bits),
             [
                 0x6611_a2d3,
                 0x3cc0_fa97,

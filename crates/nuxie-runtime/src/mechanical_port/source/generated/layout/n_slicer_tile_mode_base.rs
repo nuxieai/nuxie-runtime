@@ -50,7 +50,10 @@ impl NSlicerTileModeBase {
             return;
         }
         callbacks.patch_index_changed();
-        callbacks.notify_property_changed(Self::PATCH_INDEX_PROPERTY_KEY);
+        NSlicerTileModeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PATCH_INDEX_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_patch_index_value(&mut self, value: u32) -> bool {
@@ -68,7 +71,7 @@ impl NSlicerTileModeBase {
             return;
         }
         callbacks.style_changed();
-        callbacks.notify_property_changed(Self::STYLE_PROPERTY_KEY);
+        NSlicerTileModeBaseCallbacks::notify_property_changed(callbacks, Self::STYLE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_style_value(&mut self, value: u32) -> bool {

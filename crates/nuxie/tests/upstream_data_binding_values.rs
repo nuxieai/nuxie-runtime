@@ -1,10 +1,20 @@
 //! Exact value-level ports for Wave B1 `data_binding_test.cpp` cases not in SRIV corpus.
 
-use std::{path::PathBuf, rc::Rc};
+use std::path::PathBuf;
 
-use nuxie::{File, PersistentFactory};
+use nuxie::{
+    CoreHandle, File, PersistentFactory, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle,
+    RuntimeFileHandle, RuntimeStateMachineInstanceHandle, RuntimeViewModelInstanceHandle,
+    ViewModelInstanceRuntime,
+};
 use nuxie_render_api::SerializingFactory;
-use nuxie_runtime::{ViewModelRuntime, ViewModelRuntimeDataType};
+use nuxie_runtime::{
+    ViewModelRuntimeDataType,
+    source::{
+        generated::{component_base::ComponentBase, core_registry::CoreRegistry},
+        text::text_value_run::TextValueRun,
+    },
+};
 use silver_corpus::{compare_sriv, parse_sriv};
 
 fn catch_approx_eq(actual: f32, expected: f32) -> bool {
@@ -59,28 +69,45 @@ fn key(owner: &str, property: &str) -> u16 {
         .int
 }
 
-fn local(artboard: &nuxie::ArtboardInstance<'_>, name: &str) -> usize {
+fn object(artboard: &RuntimeArtboardInstanceHandle, local_id: usize) -> CoreHandle {
     artboard
-        .artboard()
-        .graph()
-        .component_named(name)
-        .unwrap_or_else(|| panic!("component {name}"))
-        .local_id
+        .with_artboard(|artboard| artboard.base.resolve_handle(local_id as u32))
+        .unwrap_or_else(|| panic!("live object {local_id}"))
 }
 
-fn local_of_type(artboard: &nuxie::ArtboardInstance<'_>, type_name: &str) -> usize {
-    artboard
-        .artboard()
-        .graph()
-        .components
+fn local(artboard: &RuntimeArtboardInstanceHandle, name: &str) -> usize {
+    let objects = artboard.with_artboard(|artboard| artboard.base.objects().to_vec());
+    objects
         .iter()
-        .find(|component| component.type_name == type_name)
+        .enumerate()
+        .find_map(|(local_id, component)| {
+            let component = component.as_ref()?;
+            (CoreRegistry::get_string_handle(
+                component,
+                i32::from(ComponentBase::NAME_PROPERTY_KEY),
+            )
+            .as_deref()
+                == Some(name))
+            .then_some(local_id)
+        })
+        .unwrap_or_else(|| panic!("component {name}"))
+}
+
+fn local_of_type(artboard: &RuntimeArtboardInstanceHandle, type_name: &str) -> usize {
+    let objects = artboard.with_artboard(|artboard| artboard.base.objects().to_vec());
+    objects
+        .iter()
+        .enumerate()
+        .find_map(|(local_id, component)| {
+            let component = component.as_ref()?;
+            let definition = nuxie_schema::definition_by_type_key(component.core_type()?)?;
+            (definition.name == type_name).then_some(local_id)
+        })
         .unwrap_or_else(|| panic!("component of type {type_name}"))
-        .local_id
 }
 
 fn assert_live_bool(
-    artboard: &mut nuxie::ArtboardInstance<'_>,
+    artboard: &RuntimeArtboardInstanceHandle,
     local_id: usize,
     owner: &str,
     property: &str,
@@ -91,176 +118,209 @@ fn assert_live_bool(
     // no-op write, so an opposite write followed by restoration is an exact,
     // executable observation of the pre-write value.
     assert!(
-        artboard
-            .raw_mut()
-            .set_bool_property(local_id, key(owner, property), !expected),
+        CoreRegistry::set_bool_handle(
+            &object(artboard, local_id),
+            i32::from(key(owner, property)),
+            !expected
+        ),
         "{owner}.{property} was not {expected} before the opposite write"
     );
     assert!(
-        artboard
-            .raw_mut()
-            .set_bool_property(local_id, key(owner, property), expected),
+        CoreRegistry::set_bool_handle(
+            &object(artboard, local_id),
+            i32::from(key(owner, property)),
+            expected
+        ),
         "{owner}.{property} did not restore to {expected}"
     );
 }
 
-fn number(artboard: &nuxie::ArtboardInstance<'_>, name: &str, owner: &str, property: &str) -> f32 {
-    artboard
-        .raw()
-        .double_property(local(artboard, name), key(owner, property))
-        .unwrap_or_else(|| panic!("{name}.{property}"))
+fn number(
+    artboard: &RuntimeArtboardInstanceHandle,
+    name: &str,
+    owner: &str,
+    property: &str,
+) -> f32 {
+    CoreRegistry::get_double_handle(
+        &object(artboard, local(artboard, name)),
+        i32::from(key(owner, property)),
+    )
+    .unwrap_or_else(|| panic!("{name}.{property}"))
 }
 
 fn string(
-    artboard: &nuxie::ArtboardInstance<'_>,
+    artboard: &RuntimeArtboardInstanceHandle,
     name: &str,
     owner: &str,
     property: &str,
 ) -> Vec<u8> {
-    artboard
-        .raw()
-        .debug_string_property(local(artboard, name), key(owner, property))
-        .unwrap_or_else(|| panic!("{name}.{property}"))
-        .to_vec()
+    CoreRegistry::get_string_handle(
+        &object(artboard, local(artboard, name)),
+        i32::from(key(owner, property)),
+    )
+    .unwrap_or_else(|| panic!("{name}.{property}"))
+    .into_bytes()
+}
+
+fn import(asset: &str) -> RuntimeFileHandle {
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    File::import(&pinned(asset), factory, None, None, None).expect("fixture imports")
+}
+
+fn artboard_named(file: &RuntimeFileHandle, name: &str) -> RuntimeArtboardInstanceHandle {
+    file.with_file(|file| file.artboard_named(name))
+        .unwrap_or_else(|| panic!("named artboard {name}"))
+}
+
+fn fresh_view_model(
+    file: &RuntimeFileHandle,
+    artboard: &RuntimeArtboardInstanceHandle,
+    default_instance: bool,
+) -> RuntimeViewModelInstanceHandle {
+    let instance = file
+        .with_file_mut(|file| {
+            if default_instance {
+                file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+            } else {
+                file.create_view_model_instance_for_artboard(artboard.core_handle())
+            }
+        })
+        .expect("artboard view model");
+    ViewModelInstanceRuntime::new(instance).into_handle()
+}
+
+fn bind_view_model(
+    artboard: &RuntimeArtboardInstanceHandle,
+    machine: &RuntimeStateMachineInstanceHandle,
+    view_model: &RuntimeViewModelInstanceHandle,
+) {
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(view_model.instance()));
+    artboard.bind_view_model_instance(Some(view_model.instance()));
 }
 
 fn fixture(
     asset: &str,
     artboard_name: &str,
 ) -> (
-    nuxie::ArtboardInstance<'static>,
-    nuxie::StateMachineInstance,
-    nuxie::ViewModelInstance,
+    RuntimeArtboardInstanceHandle,
+    RuntimeStateMachineInstanceHandle,
+    RuntimeViewModelInstanceHandle,
 ) {
-    let file = Box::leak(Box::new(
-        File::import(&pinned(asset)).expect("fixture imports"),
-    ));
-    let mut artboard = file
-        .artboard_named(artboard_name)
-        .expect("named artboard")
-        .instantiate()
-        .expect("artboard instantiates");
-    let view_model = artboard
-        .instantiate_default_view_model_instance()
-        .or_else(|| artboard.instantiate_view_model())
+    let file = import(asset);
+    let artboard = artboard_named(&file, artboard_name);
+    let view_model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+                .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
         .expect("view model");
-    let mut machine = artboard
-        .default_state_machine_instance()
+    let machine = artboard
+        .default_state_machine_handle()
         .expect("default machine");
-    let _ = machine.bind_owned_view_model_handle(view_model.handle());
-    let _ = artboard.bind_view_model(&view_model);
+    bind_view_model(&artboard, &machine, &view_model);
     (artboard, machine, view_model)
 }
 
 fn advance(
-    artboard: &mut nuxie::ArtboardInstance<'_>,
-    machine: &mut nuxie::StateMachineInstance,
-    view_model: &mut nuxie::ViewModelInstance,
+    _artboard: &RuntimeArtboardInstanceHandle,
+    machine: &RuntimeStateMachineInstanceHandle,
+    _view_model: &RuntimeViewModelInstanceHandle,
     seconds: f32,
 ) {
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(machine),
-        seconds,
-        view_model,
-    );
+    machine.advance_and_apply(seconds);
 }
 
 fn shared_fixture(
     artboard_name: &str,
     default_instance: bool,
 ) -> (
-    nuxie::ArtboardInstance<'static>,
-    nuxie::StateMachineInstance,
-    nuxie::ViewModelInstance,
+    RuntimeArtboardInstanceHandle,
+    RuntimeStateMachineInstanceHandle,
+    RuntimeViewModelInstanceHandle,
 ) {
-    let file = Box::leak(Box::new(
-        File::import(&pinned("shared_viewmodel_instance.riv")).expect("fixture imports"),
-    ));
-    let mut artboard = file
-        .artboard_named(artboard_name)
-        .expect("named artboard")
-        .instantiate()
-        .expect("artboard instantiates");
-    let view_model = if default_instance {
-        artboard
-            .instantiate_default_view_model_instance()
-            .expect("default view model")
-    } else {
-        artboard.instantiate_view_model().expect("new view model")
-    };
-    let mut machine = artboard
-        .default_state_machine_instance()
+    let file = import("shared_viewmodel_instance.riv");
+    let artboard = artboard_named(&file, artboard_name);
+    let view_model = fresh_view_model(&file, &artboard, default_instance);
+    let machine = artboard
+        .default_state_machine_handle()
         .expect("default machine");
-    assert!(machine.bind_owned_view_model_handle(view_model.handle()));
-    let _ = artboard.bind_view_model(&view_model);
+    bind_view_model(&artboard, &machine, &view_model);
     (artboard, machine, view_model)
 }
 
-fn nested_texts(artboard: &mut nuxie::ArtboardInstance<'_>) -> Vec<Vec<u8>> {
-    let mut texts = Vec::new();
+fn nested_texts(artboard: &RuntimeArtboardInstanceHandle) -> Vec<Vec<u8>> {
     artboard
-        .raw_mut()
-        .try_visit_nested_artboard_instances_mut(&mut |_depth, _graph_id, child| {
-            if let Some(text) = child.root_text_value_run("text_run") {
-                texts.push(text.to_vec());
-            }
-            Ok::<_, ()>(())
+        .with_artboard(|artboard| artboard.base.nested_artboards())
+        .into_iter()
+        .filter_map(|nested| nested.with(|nested| nested.nested_artboard_instance_handle()).flatten())
+        .filter_map(|child| {
+            child.with_artboard(|child| child.base.find_handle::<TextValueRun>("text_run"))
         })
-        .expect("nested occurrence traversal");
-    texts
+        .filter_map(|run| {
+            CoreRegistry::get_string_handle(
+                &run,
+                i32::from(nuxie_runtime::source::generated::text::text_value_run_base::TextValueRunBase::TEXT_PROPERTY_KEY),
+            )
+        })
+        .map(String::into_bytes)
+        .collect()
 }
 
 fn descendant_of_type(
-    artboard: &nuxie::ArtboardInstance<'_>,
+    artboard: &RuntimeArtboardInstanceHandle,
     root_name: &str,
     type_name: &str,
 ) -> usize {
-    let graph = artboard.artboard().graph();
-    let root = graph
-        .component_named(root_name)
-        .unwrap_or_else(|| panic!("component {root_name}"))
-        .local_id;
-    graph
-        .components
+    let root = local(artboard, root_name);
+    let root_handle = object(artboard, root);
+    let objects = artboard.with_artboard(|artboard| artboard.base.objects().to_vec());
+    objects
         .iter()
-        .find(|candidate| {
-            if candidate.type_name != type_name {
-                return false;
+        .enumerate()
+        .find_map(|(local_id, candidate)| {
+            let candidate = candidate.as_ref()?;
+            let definition = nuxie_schema::definition_by_type_key(candidate.core_type()?)?;
+            if definition.name != type_name {
+                return None;
             }
-            let mut parent = candidate.parent_local;
-            while let Some(local) = parent {
-                if local == root {
-                    return true;
+            let mut parent = candidate
+                .with(|candidate| candidate.as_component()?.parent_handle())
+                .flatten();
+            let mut remaining = objects.len();
+            while let Some(parent_handle) = parent {
+                if parent_handle == root_handle {
+                    return Some(local_id);
                 }
-                parent = graph
-                    .components
-                    .iter()
-                    .find(|component| component.local_id == local)
-                    .and_then(|component| component.parent_local);
+                if remaining == 0 {
+                    return None;
+                }
+                remaining -= 1;
+                parent = parent_handle
+                    .with(|parent| parent.as_component()?.parent_handle())
+                    .flatten();
             }
-            false
+            None
         })
         .unwrap_or_else(|| panic!("{root_name} descendant {type_name}"))
-        .local_id
 }
 
-fn set_number(view_model: &mut nuxie::ViewModelInstance, name: &str, value: f32) {
-    let _ = view_model.set_number(name, value);
-    assert_eq!(
-        view_model.raw().number_value_by_property_name_path(name),
-        Some(value)
-    );
+fn set_number(view_model: &RuntimeViewModelInstanceHandle, name: &str, value: f32) {
+    let property = view_model
+        .property_number(name)
+        .unwrap_or_else(|| panic!("number {name}"));
+    property.set_value(value);
+    assert_eq!(property.value(), value);
 }
 
-fn set_string(view_model: &mut nuxie::ViewModelInstance, name: &str, value: &str) {
-    let _ = view_model.set_string(name, value);
-    assert_eq!(
-        view_model
-            .raw()
-            .string_value_by_property_name_path(name)
-            .as_deref(),
-        Some(value.as_bytes())
-    );
+fn set_string(view_model: &RuntimeViewModelInstanceHandle, name: &str, value: &str) {
+    let property = view_model
+        .property_string(name)
+        .unwrap_or_else(|| panic!("string {name}"));
+    property.set_value(value);
+    assert_eq!(property.value(), value);
 }
 
 #[test]
@@ -315,7 +375,7 @@ fn calculate_and_to_string_converters_with_numbers() {
 fn trim_string_converter() {
     let (mut artboard, mut machine, mut view_model) =
         fixture("data_binding_test.riv", "artboard-3");
-    let reads = |artboard: &nuxie::ArtboardInstance<'_>| {
+    let reads = |artboard: &RuntimeArtboardInstanceHandle| {
         [
             string(artboard, "second_text_run_no_trim", "TextValueRun", "text"),
             string(
@@ -369,7 +429,7 @@ fn trim_string_converter() {
 fn to_string_converter_with_color_formatters() {
     let (mut artboard, mut machine, mut view_model) =
         fixture("data_binding_test.riv", "artboard-4");
-    let reads = |artboard: &nuxie::ArtboardInstance<'_>| {
+    let reads = |artboard: &RuntimeArtboardInstanceHandle| {
         [
             string(artboard, "RGBA_formatted_color_run", "TextValueRun", "text"),
             string(artboard, "rgba_formatted_color_run", "TextValueRun", "text"),
@@ -407,7 +467,10 @@ fn to_string_converter_with_color_formatters() {
             ],
         ),
     ] {
-        let _ = view_model.set_color("col", color);
+        view_model
+            .property_color("col")
+            .expect("col")
+            .set_value(color as i32);
         advance(&mut artboard, &mut machine, &mut view_model, 0.0);
         assert_eq!(
             reads(&artboard),
@@ -421,7 +484,7 @@ fn range_mapper() {
     let (mut artboard, mut machine, mut view_model) =
         fixture("data_binding_test_2.riv", "artboard-2");
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
-    let read = |artboard: &nuxie::ArtboardInstance<'_>| {
+    let read = |artboard: &RuntimeArtboardInstanceHandle| {
         (1..=5)
             .map(|n| {
                 number(
@@ -436,9 +499,10 @@ fn range_mapper() {
     assert_eq!(read(&artboard), [6.0, 3.0, 2.0, 2.0, 2.0]);
     assert_eq!(
         view_model
-            .raw()
-            .number_value_by_property_name("map-range-num"),
-        Some(4.0)
+            .property_number("map-range-num")
+            .expect("map-range-num")
+            .value(),
+        4.0
     );
 
     set_number(&mut view_model, "map-range-num", -1.0);
@@ -473,12 +537,11 @@ fn range_mapper() {
 }
 
 #[test]
-#[ignore = "expected-red: pad-string-3 retains '-' instead of the pinned empty string after initial advance"]
 fn pad_string() {
     let (mut artboard, mut machine, mut view_model) =
         fixture("data_binding_test_2.riv", "artboard-3");
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
-    let read = |artboard: &nuxie::ArtboardInstance<'_>| {
+    let read = |artboard: &RuntimeArtboardInstanceHandle| {
         (1..=3)
             .map(|n| {
                 string(
@@ -513,43 +576,37 @@ fn pad_string() {
 
 #[test]
 fn advance_and_apply_can_skip_view_model_reset() {
-    let (mut artboard, mut machine, view_model) = fixture("data_binding_test.riv", "artboard-2");
-    machine
-        .advance_and_apply_with_view_models(artboard.raw_mut(), 0.0, true)
-        .expect("settle");
-    assert!(
-        view_model
-            .raw_mut()
-            .set_trigger_by_property_name("trigger-prop", 1)
-    );
-    machine
-        .advance_and_apply_with_view_models(artboard.raw_mut(), 0.0, false)
-        .expect("skip view models");
-    assert_eq!(
-        view_model
-            .raw()
-            .trigger_value_by_property_name("trigger-prop"),
-        Some(1)
-    );
-    machine
-        .advance_and_apply_with_view_models(artboard.raw_mut(), 0.0, true)
-        .expect("advance view models");
-    assert_eq!(
-        view_model
-            .raw()
-            .trigger_value_by_property_name("trigger-prop"),
-        Some(0)
-    );
+    let (_artboard, machine, view_model) = fixture("data_binding_test.riv", "artboard-2");
+    machine.advance_and_apply_view_models(0.0, true);
+    let trigger = view_model
+        .property_trigger("trigger-prop")
+        .expect("trigger-prop");
+    trigger.trigger();
+    let trigger_value = || {
+        trigger
+            .value_runtime()
+            .handle()
+            .with(|property| {
+                property
+                    .as_view_model_instance_trigger()
+                    .map(|property| property.base.property_value())
+            })
+            .flatten()
+            .expect("trigger value")
+    };
+    machine.advance_and_apply_view_models(0.0, false);
+    assert_eq!(trigger_value(), 1);
+    machine.advance_and_apply_view_models(0.0, true);
+    assert_eq!(trigger_value(), 0);
 }
 
 #[test]
 fn view_model_runtime_properties() {
-    let file = File::import(&pinned("viewmodel_runtime_file.riv")).expect("fixture imports");
-    let runtime =
-        ViewModelRuntime::named(Rc::new(file.runtime().clone()), "vm").expect("vm runtime");
-    let instance = runtime
-        .create_default_instance()
-        .expect("default vm instance");
+    let file = import("viewmodel_runtime_file.riv");
+    let runtime = file
+        .with_file(|file| file.view_model_by_name("vm"))
+        .expect("vm runtime");
+    let instance = runtime.create_default_instance();
     assert_eq!(instance.view_model_name(), "vm");
     let _ = instance.property_number("num").expect("num");
     assert_eq!(
@@ -626,30 +683,26 @@ fn view_model_runtime_properties() {
 fn two_way_fixture(
     artboard_name: &str,
 ) -> (
-    nuxie::ArtboardInstance<'static>,
-    nuxie::StateMachineInstance,
-    nuxie::ViewModelInstance,
+    RuntimeArtboardInstanceHandle,
+    RuntimeStateMachineInstanceHandle,
+    RuntimeViewModelInstanceHandle,
     usize,
 ) {
     let (artboard, machine, view_model) = fixture("bidirectional_precedence.riv", artboard_name);
     let target = artboard
-        .artboard()
-        .graph()
-        .data_binds
-        .iter()
+        .with_artboard(|artboard| artboard.base.data_bind_handles())
+        .into_iter()
         .find_map(|bind| {
-            let target = bind.target_local?;
-            let definition = bind
-                .target_type_name
-                .and_then(nuxie_schema::definition_by_name)?;
+            let target = bind.with(|bind| bind.as_data_bind()?.target()).flatten()?;
+            let definition = nuxie_schema::definition_by_type_key(target.core_type()?)?;
             definition.is_a("Node").then_some(target)
         })
         .expect("two-way Node target");
+    let target = artboard.with_artboard(|artboard| artboard.base.object_index(&target)) as usize;
     (artboard, machine, view_model, target)
 }
 
 #[test]
-#[ignore = "expected-red: target-first source x=500 settles retained Node.x at 252.5 instead of 500"]
 fn two_way_source_change_reaches_target_under_target_first_precedence() {
     let (mut artboard, mut machine, mut view_model, target) = two_way_fixture("target_first");
     set_number(&mut view_model, "x", 100.0);
@@ -658,62 +711,51 @@ fn two_way_source_change_reaches_target_under_target_first_precedence() {
         advance(&mut artboard, &mut machine, &mut view_model, seconds);
     }
     assert_eq!(
-        view_model.raw().number_value_by_property_name("x"),
-        artboard.raw().double_property(target, key("Node", "x"))
+        view_model.property_number("x").expect("x").value(),
+        CoreRegistry::get_double_handle(&object(&artboard, target), i32::from(key("Node", "x")))
+            .expect("Node.x")
     );
     assert_eq!(
-        view_model.raw().number_value_by_property_name("y"),
-        artboard.raw().double_property(target, key("Node", "y"))
+        view_model.property_number("y").expect("y").value(),
+        CoreRegistry::get_double_handle(&object(&artboard, target), i32::from(key("Node", "y")))
+            .expect("Node.y")
     );
     set_number(&mut view_model, "x", 500.0);
     set_number(&mut view_model, "y", 600.0);
     for _ in 0..20 {
         advance(&mut artboard, &mut machine, &mut view_model, 0.016);
     }
+    assert_eq!(view_model.property_number("x").expect("x").value(), 500.0);
+    assert_eq!(view_model.property_number("y").expect("y").value(), 600.0);
     assert_eq!(
-        view_model.raw().number_value_by_property_name("x"),
+        CoreRegistry::get_double_handle(&object(&artboard, target), i32::from(key("Node", "x"))),
         Some(500.0)
     );
     assert_eq!(
-        view_model.raw().number_value_by_property_name("y"),
-        Some(600.0)
-    );
-    assert_eq!(
-        artboard.raw().double_property(target, key("Node", "x")),
-        Some(500.0)
-    );
-    assert_eq!(
-        artboard.raw().double_property(target, key("Node", "y")),
+        CoreRegistry::get_double_handle(&object(&artboard, target), i32::from(key("Node", "y"))),
         Some(600.0)
     );
 }
 
 #[test]
-#[ignore = "expected-red: source-first target Node.x=700 leaves bound source x at 100 instead of 700"]
 fn two_way_target_change_reaches_source_under_source_first_precedence() {
     let (mut artboard, mut machine, mut view_model, target) = two_way_fixture("source_first");
     set_number(&mut view_model, "x", 100.0);
     set_number(&mut view_model, "y", 100.0);
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
-    assert!(
-        artboard
-            .raw_mut()
-            .set_double_property(target, key("Node", "x"), 700.0)
-    );
-    assert!(
-        artboard
-            .raw_mut()
-            .set_double_property(target, key("Node", "y"), 800.0)
-    );
+    assert!(CoreRegistry::set_double_handle(
+        &object(&artboard, target),
+        i32::from(key("Node", "x")),
+        700.0,
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &object(&artboard, target),
+        i32::from(key("Node", "y")),
+        800.0,
+    ));
     advance(&mut artboard, &mut machine, &mut view_model, 0.016);
-    assert_eq!(
-        view_model.raw().number_value_by_property_name("x"),
-        Some(700.0)
-    );
-    assert_eq!(
-        view_model.raw().number_value_by_property_name("y"),
-        Some(800.0)
-    );
+    assert_eq!(view_model.property_number("x").expect("x").value(), 700.0);
+    assert_eq!(view_model.property_number("y").expect("y").value(), 800.0);
 }
 
 #[test]
@@ -726,14 +768,12 @@ fn same_view_model_instance_is_shared_by_two_properties() {
     );
 
     let child = view_model
-        .handle()
-        .linked_view_model_by_property_name_path("child1")
+        .property_view_model("child1")
         .expect("child1 linked view model");
-    assert!(
-        child
-            .borrow_mut()
-            .set_string_by_property_name_path("label", b"label-update")
-    );
+    child
+        .property_string("label")
+        .expect("label")
+        .set_value("label-update");
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_eq!(
         nested_texts(&mut artboard),
@@ -751,14 +791,12 @@ fn different_view_model_instances_are_not_shared_by_two_properties() {
     );
 
     let child = view_model
-        .handle()
-        .linked_view_model_by_property_name_path("vm_2_child1")
+        .property_view_model("vm_2_child1")
         .expect("vm_2_child1 linked view model");
-    assert!(
-        child
-            .borrow_mut()
-            .set_string_by_property_name_path("label", b"label-update")
-    );
+    child
+        .property_string("label")
+        .expect("label")
+        .set_value("label-update");
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_eq!(
         nested_texts(&mut artboard),
@@ -776,14 +814,12 @@ fn newly_created_view_model_instances_do_not_share_nested_instances() {
     );
 
     let child = view_model
-        .handle()
-        .linked_view_model_by_property_name_path("vm_2_child1")
+        .property_view_model("vm_2_child1")
         .expect("vm_2_child1 linked view model");
-    assert!(
-        child
-            .borrow_mut()
-            .set_string_by_property_name_path("label", b"label-update")
-    );
+    child
+        .property_string("label")
+        .expect("label")
+        .set_value("label-update");
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_eq!(
         nested_texts(&mut artboard),
@@ -793,26 +829,21 @@ fn newly_created_view_model_instances_do_not_share_nested_instances() {
 
 #[test]
 fn triggers_updated_by_events_update_parent_state() {
-    let file = Box::leak(Box::new(
-        File::import(&pinned("data_binding_test_triggers.riv")).expect("fixture imports"),
-    ));
-    let mut artboard = file
-        .artboard_named("root")
-        .expect("root artboard")
-        .instantiate()
-        .expect("artboard instantiates");
-    let mut view_model = artboard.instantiate_view_model().expect("new view model");
+    let file = import("data_binding_test_triggers.riv");
+    let mut artboard = artboard_named(&file, "root");
+    let mut view_model = fresh_view_model(&file, &artboard, false);
     let mut machine = artboard
-        .default_state_machine_instance()
+        .default_state_machine_handle()
         .expect("default machine");
-    assert!(machine.bind_owned_view_model_handle(view_model.handle()));
-    let _ = artboard.bind_view_model(&view_model);
+    bind_view_model(&artboard, &machine, &view_model);
     let color = descendant_of_type(&artboard, "main_rect", "SolidColor");
-    let read = |artboard: &nuxie::ArtboardInstance<'_>| {
-        artboard
-            .raw()
-            .color_property(color, key("SolidColor", "colorValue"))
-            .expect("main_rect SolidColor.colorValue")
+    let read = |artboard: &RuntimeArtboardInstanceHandle| {
+        CoreRegistry::get_color_handle(
+            &object(artboard, color),
+            i32::from(key("SolidColor", "colorValue")),
+        )
+        .map(|color| color as u32)
+        .expect("main_rect SolidColor.colorValue")
     };
 
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
@@ -824,84 +855,66 @@ fn triggers_updated_by_events_update_parent_state() {
 
 #[test]
 fn custom_property_trigger_binding_has_exact_initial_owners() {
-    let file = Box::leak(Box::new(
-        File::import(&pinned("custom_property_trigger.riv")).expect("fixture imports"),
-    ));
-    let mut artboard = file
-        .artboard_named("Main")
-        .expect("Main artboard")
-        .instantiate()
-        .expect("artboard instantiates");
     let mut factory = PersistentFactory::new(SerializingFactory::new());
-    artboard
-        .initialize_renderer(&mut factory)
-        .expect("renderer initializes");
-    let mut machine = artboard
-        .default_state_machine_instance()
-        .expect("default state machine");
-    let mut view_model = artboard
-        .instantiate_default_view_model_instance()
-        .or_else(|| artboard.instantiate_view_model())
+    let factory_handle =
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(
+        &pinned("custom_property_trigger.riv"),
+        factory_handle,
+        None,
+        None,
+        None,
+    )
+    .expect("fixture imports");
+    let mut artboard = artboard_named(&file, "Main");
+    let mut view_model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+                .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
         .expect("artboard view model");
-    assert!(machine.bind_owned_view_model_handle(view_model.handle()));
-    let _ = artboard.bind_view_model(&view_model);
-    let (width, height) = artboard.artboard_dimensions();
+    let mut machine = artboard
+        .default_state_machine_handle()
+        .expect("default state machine");
+    bind_view_model(&artboard, &machine, &view_model);
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
     factory.borrow_mut().frame_size(width as u32, height as u32);
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
 
-    let circle_descriptor = artboard
-        .artboard()
-        .graph()
-        .component_named("MainCircle")
-        .expect("MainCircle descriptor");
-    let circle = artboard
-        .raw()
-        .component(circle_descriptor.local_id)
-        .expect("live MainCircle owner");
-    assert_eq!(circle.global_id, circle_descriptor.global_id);
+    let circle_local = local(&artboard, "MainCircle");
+    let circle = object(&artboard, circle_local);
     assert!(
-        nuxie_schema::definition_by_name(circle.type_name)
+        circle
+            .core_type()
+            .and_then(nuxie_schema::definition_by_type_key)
             .is_some_and(|definition| definition.is_a("Shape"))
     );
     assert_eq!(
-        artboard
-            .raw()
-            .double_property(circle_descriptor.local_id, key("Node", "scaleX")),
+        CoreRegistry::get_double_handle(&circle, i32::from(key("Node", "scaleX"))),
         Some(1.0)
     );
     assert_eq!(
-        artboard
-            .raw()
-            .double_property(circle_descriptor.local_id, key("Node", "scaleY")),
+        CoreRegistry::get_double_handle(&circle, i32::from(key("Node", "scaleY"))),
         Some(1.0)
     );
 
-    let trigger_descriptor = artboard
-        .artboard()
-        .graph()
-        .component_named("Trig")
-        .expect("Trig descriptor");
-    let trigger = artboard
-        .raw()
-        .component(trigger_descriptor.local_id)
-        .expect("live CustomPropertyTrigger owner");
-    assert_eq!(trigger.global_id, trigger_descriptor.global_id);
+    let trigger = object(&artboard, local(&artboard, "Trig"));
     assert!(
-        nuxie_schema::definition_by_name(trigger.type_name)
+        trigger
+            .core_type()
+            .and_then(nuxie_schema::definition_by_type_key)
             .is_some_and(|definition| definition.is_a("CustomPropertyTrigger"))
     );
 
     let mut renderer = factory.borrow().make_renderer();
-    artboard
-        .draw(&mut factory, &mut renderer)
-        .expect("initial trigger frame draws");
+    artboard.draw(&mut renderer);
     for _ in 0..(1.0_f32 / 0.16_f32) as usize {
         factory.borrow_mut().add_frame();
         advance(&mut artboard, &mut machine, &mut view_model, 0.16);
         let mut renderer = factory.borrow().make_renderer();
-        artboard
-            .draw(&mut factory, &mut renderer)
-            .expect("trigger animation frame draws");
+        artboard.draw(&mut renderer);
     }
     let expected =
         parse_sriv(&pinned_silver("custom_property_trigger_bind.sriv")).expect("pinned C++ silver");
@@ -912,30 +925,18 @@ fn custom_property_trigger_binding_has_exact_initial_owners() {
 
 #[test]
 fn state_machine_is_led_by_bound_enum_and_trigger() {
-    let file = Box::leak(Box::new(
-        File::import(&pinned("data_binding_test.riv")).expect("fixture imports"),
-    ));
-    let mut artboard = file
-        .artboard_named("artboard-2")
-        .expect("artboard-2")
-        .instantiate()
-        .expect("artboard instantiates");
-    let mut view_model = artboard
-        .instantiate_default_view_model_instance()
-        .expect("default view model");
-    let mut machine = artboard
-        .default_state_machine_instance()
-        .expect("default machine");
-    assert!(machine.bind_owned_view_model_handle(view_model.handle()));
-    let _ = artboard.bind_view_model(&view_model);
+    let (mut artboard, mut machine, mut view_model) =
+        fixture("data_binding_test.riv", "artboard-2");
     let color = descendant_of_type(&artboard, "color_rectangle", "SolidColor");
-    let read_color = |artboard: &nuxie::ArtboardInstance<'_>| {
-        artboard
-            .raw()
-            .color_property(color, key("SolidColor", "colorValue"))
-            .expect("color_rectangle SolidColor.colorValue")
+    let read_color = |artboard: &RuntimeArtboardInstanceHandle| {
+        CoreRegistry::get_color_handle(
+            &object(artboard, color),
+            i32::from(key("SolidColor", "colorValue")),
+        )
+        .map(|color| color as u32)
+        .expect("color_rectangle SolidColor.colorValue")
     };
-    let read_position = |artboard: &nuxie::ArtboardInstance<'_>| {
+    let read_position = |artboard: &RuntimeArtboardInstanceHandle| {
         (
             number(artboard, "color_rectangle", "Node", "x"),
             number(artboard, "color_rectangle", "Node", "y"),
@@ -947,40 +948,45 @@ fn state_machine_is_led_by_bound_enum_and_trigger() {
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_eq!(read_color(&artboard), 0xffff_0000);
 
-    assert!(view_model.set_enum("state", 1));
+    assert!(
+        view_model
+            .property_enum("state")
+            .expect("state")
+            .set_value_index(1)
+    );
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_eq!(read_color(&artboard), 0xff00_ff00);
     assert_eq!(read_position(&artboard), (150.0, 250.0));
 
-    let script_view_model =
-        nuxie_runtime::script_view_model_from_owned(file.runtime(), view_model.handle())
-            .expect("bound script view model");
-    assert!(script_view_model.set_enum_value("state", "state-blue"));
-    assert!(view_model.fire_trigger("trigger-prop"));
+    assert!(
+        view_model
+            .property_enum("state")
+            .expect("state")
+            .set_value("state-blue")
+    );
+    view_model
+        .property_trigger("trigger-prop")
+        .expect("trigger-prop")
+        .trigger();
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_eq!(read_color(&artboard), 0xff00_00ff);
     assert_eq!(read_position(&artboard), (350.0, 250.0));
 
-    assert!(view_model.fire_trigger("trigger-prop"));
+    view_model
+        .property_trigger("trigger-prop")
+        .expect("trigger-prop")
+        .trigger();
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_eq!(read_position(&artboard), (350.0, 350.0));
 }
 
 #[test]
 fn artboard_has_bound_properties() {
-    let file = Box::leak(Box::new(
-        File::import(&pinned("data_binding_test.riv")).expect("fixture imports"),
-    ));
-    let mut artboard = file
-        .artboard_named("artboard-1")
-        .expect("artboard-1")
-        .instantiate()
-        .expect("artboard instantiates");
-    let mut view_model = artboard
-        .instantiate_default_view_model_instance()
-        .expect("default view model");
-    assert!(artboard.bind_view_model(&view_model));
-    artboard.advance(0.0);
+    let file = import("data_binding_test.riv");
+    let mut artboard = artboard_named(&file, "artboard-1");
+    let view_model = fresh_view_model(&file, &artboard, true);
+    artboard.bind_view_model_instance(Some(view_model.instance()));
+    artboard.advance_default(0.0);
 
     let rectangle = local(&artboard, "bound_rect");
     let shape = local(&artboard, "bound_rect_shape");
@@ -988,29 +994,34 @@ fn artboard_has_bound_properties() {
     let text = local(&artboard, "bound_text_run");
     let follow = local_of_type(&artboard, "FollowPathConstraint");
     assert_eq!(
-        artboard
-            .raw()
-            .double_property(rectangle, key("Rectangle", "width")),
+        CoreRegistry::get_double_handle(
+            &object(&artboard, rectangle),
+            i32::from(key("Rectangle", "width"))
+        ),
         Some(100.0)
     );
     assert_catch_approx(
-        artboard
-            .raw()
-            .double_property(shape, key("Node", "rotation"))
-            .expect("bound_rect_shape rotation"),
+        CoreRegistry::get_double_handle(
+            &object(&artboard, shape),
+            i32::from(key("Node", "rotation")),
+        )
+        .expect("bound_rect_shape rotation"),
         1.5708,
     );
     assert_eq!(
-        artboard
-            .raw()
-            .color_property(solid, key("SolidColor", "colorValue")),
-        Some(0xffff_0000)
+        CoreRegistry::get_color_handle(
+            &object(&artboard, solid),
+            i32::from(key("SolidColor", "colorValue"))
+        )
+        .map(|color| color as u32),
+        Some(0xffff_0000_u32)
     );
     assert_eq!(
-        artboard
-            .raw()
-            .debug_string_property(text, key("TextValueRun", "text")),
-        Some(b"bound text".as_slice())
+        CoreRegistry::get_string_handle(
+            &object(&artboard, text),
+            i32::from(key("TextValueRun", "text"))
+        ),
+        Some("bound text".to_owned())
     );
     assert_live_bool(
         &mut artboard,
@@ -1020,36 +1031,47 @@ fn artboard_has_bound_properties() {
         false,
     );
 
-    assert!(view_model.set_number("width", 200.0));
-    assert!(view_model.set_number("rotation", 180.0));
-    assert!(view_model.set_color("color", 0xff00_ff00));
-    assert!(view_model.set_string("text", "New text"));
-    assert!(view_model.set_bool("orient", true));
-    artboard.advance(0.0);
+    set_number(&view_model, "width", 200.0);
+    set_number(&view_model, "rotation", 180.0);
+    view_model
+        .property_color("color")
+        .expect("color")
+        .set_value(0xff00_ff00_u32 as i32);
+    set_string(&view_model, "text", "New text");
+    view_model
+        .property_boolean("orient")
+        .expect("orient")
+        .set_value(true);
+    artboard.advance_default(0.0);
     assert_eq!(
-        artboard
-            .raw()
-            .double_property(rectangle, key("Rectangle", "width")),
+        CoreRegistry::get_double_handle(
+            &object(&artboard, rectangle),
+            i32::from(key("Rectangle", "width"))
+        ),
         Some(200.0)
     );
     assert_catch_approx(
-        artboard
-            .raw()
-            .double_property(shape, key("Node", "rotation"))
-            .expect("bound_rect_shape rotation"),
+        CoreRegistry::get_double_handle(
+            &object(&artboard, shape),
+            i32::from(key("Node", "rotation")),
+        )
+        .expect("bound_rect_shape rotation"),
         3.14159,
     );
     assert_eq!(
-        artboard
-            .raw()
-            .color_property(solid, key("SolidColor", "colorValue")),
-        Some(0xff00_ff00)
+        CoreRegistry::get_color_handle(
+            &object(&artboard, solid),
+            i32::from(key("SolidColor", "colorValue"))
+        )
+        .map(|color| color as u32),
+        Some(0xff00_ff00_u32)
     );
     assert_eq!(
-        artboard
-            .raw()
-            .debug_string_property(text, key("TextValueRun", "text")),
-        Some(b"New text".as_slice())
+        CoreRegistry::get_string_handle(
+            &object(&artboard, text),
+            i32::from(key("TextValueRun", "text"))
+        ),
+        Some("New text".to_owned())
     );
     assert_live_bool(
         &mut artboard,
@@ -1075,12 +1097,16 @@ fn boolean_toggle_converter_negates_bound_value() {
     );
     assert_eq!(
         view_model
-            .raw()
-            .boolean_value_by_property_name_path("bool-prop"),
-        Some(false)
+            .property_boolean("bool-prop")
+            .expect("bool-prop")
+            .value(),
+        false
     );
 
-    assert!(view_model.set_bool("bool-prop", true));
+    view_model
+        .property_boolean("bool-prop")
+        .expect("bool-prop")
+        .set_value(true);
     advance(&mut artboard, &mut machine, &mut view_model, 0.0);
     assert_live_bool(
         &mut artboard,

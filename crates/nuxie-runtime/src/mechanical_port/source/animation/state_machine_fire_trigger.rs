@@ -14,13 +14,15 @@ pub struct StateMachineFireTrigger {
 
 impl StateMachineFireTrigger {
     pub fn perform(&self, state_machine_instance: &mut StateMachineInstance) {
-        let Some(path) = self
+        let Some(trigger) = self
             .data_bind_path_referencer
-            .with_data_bind_path(|path| path.path().clone())
+            .with_data_bind_path_mut(|path| {
+                state_machine_instance.data_context().and_then(|context| {
+                    context.with_context(|context| context.get_property_from_path(path))
+                })
+            })
+            .flatten()
         else {
-            return;
-        };
-        let Some(trigger) = state_machine_instance.view_model_property(&path) else {
             return;
         };
         let _ =
@@ -40,5 +42,17 @@ impl StateMachineFireTrigger {
     pub fn copy_view_model_path_ids(&mut self, object: &Self) {
         self.data_bind_path_referencer
             .copy_data_bind_path(&object.data_bind_path_referencer);
+    }
+}
+
+impl std::ops::Deref for StateMachineFireTrigger {
+    type Target = StateMachineFireTriggerBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for StateMachineFireTrigger {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

@@ -43,7 +43,7 @@ impl PathBase {
             return;
         }
         callbacks.path_flags_changed();
-        callbacks.notify_property_changed(Self::PATH_FLAGS_PROPERTY_KEY);
+        PathBaseCallbacks::notify_property_changed(callbacks, Self::PATH_FLAGS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_path_flags_value(&mut self, value: u32) -> bool {
@@ -61,7 +61,7 @@ impl PathBase {
             return;
         }
         callbacks.is_hole_changed();
-        callbacks.notify_property_changed(Self::IS_HOLE_PROPERTY_KEY);
+        PathBaseCallbacks::notify_property_changed(callbacks, Self::IS_HOLE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_is_hole_value(&mut self, value: bool) -> bool {

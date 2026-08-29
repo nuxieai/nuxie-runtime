@@ -4,6 +4,23 @@ use crate::mechanical_port::source::{
     layout::n_slicer_details,
 };
 
+impl std::ops::Deref for AxisX {
+    type Target = AxisXBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for AxisX {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl AxisX {
+    pub const TYPE_KEY: u16 = AxisXBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct AxisX {
     pub base: AxisXBase,

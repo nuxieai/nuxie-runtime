@@ -252,6 +252,35 @@ impl ListenerGroup {
             );
             state_machine_instance.mark_needs_advance();
             self.consume();
+            {
+                use crate::mechanical_port::source::profiler::rive_profile;
+                if rive_profile::global_listener_enabled() {
+                    let artboard = state_machine_instance
+                        .artboard()
+                        .upgrade()
+                        .expect("live listener Artboard");
+                    let artboard_name =
+                        artboard.with_artboard(|artboard| artboard.base.name().to_owned());
+                    let listener_name = listener
+                        .with(|object| {
+                            object
+                                .as_state_machine_listener()
+                                .expect("StateMachineListener")
+                                .base
+                                .name()
+                                .to_owned()
+                        })
+                        .expect("live listener");
+                    rive_profile::record_global_listener_perform_change(
+                        &artboard_name,
+                        &state_machine_instance.name(),
+                        &listener_name,
+                        listener_type_matched as u32,
+                        hit_event as u32,
+                        pointer_id as u32,
+                    );
+                }
+            }
         }
         pointer.previous_position.set(position);
         ProcessEventResult::Pointer
@@ -265,18 +294,18 @@ impl ListenerGroup {
 }
 
 pub struct HitTarget {
-    component: CoreHandle,
+    component: RuntimeDrawableOccurrence,
     is_opaque: bool,
 }
 
 impl HitTarget {
-    pub fn new(component: CoreHandle, is_opaque: bool) -> Self {
+    pub fn new(component: RuntimeDrawableOccurrence, is_opaque: bool) -> Self {
         Self {
             component,
             is_opaque,
         }
     }
-    pub fn component(&self) -> CoreHandle {
+    pub fn component(&self) -> RuntimeDrawableOccurrence {
         self.component.clone()
     }
     pub fn is_opaque(&self) -> bool {

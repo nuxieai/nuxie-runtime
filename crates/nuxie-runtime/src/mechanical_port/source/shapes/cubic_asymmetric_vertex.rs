@@ -6,6 +6,23 @@ use crate::mechanical_port::source::{
         vertex::{Vertex, VertexBehavior},
     },
 };
+impl std::ops::Deref for CubicAsymmetricVertex {
+    type Target = CubicAsymmetricVertexBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for CubicAsymmetricVertex {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl CubicAsymmetricVertex {
+    pub const TYPE_KEY: u16 = CubicAsymmetricVertexBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct CubicAsymmetricVertex {
     pub base: CubicAsymmetricVertexBase,

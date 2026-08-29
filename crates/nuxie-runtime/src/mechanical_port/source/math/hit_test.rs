@@ -167,16 +167,18 @@ impl HitTester {
         {
             return false;
         }
-        for triangle in indices.chunks_exact(3) {
-            let a = vertices[triangle[0] as usize] - point;
-            let b = vertices[triangle[1] as usize] - point;
-            let c = vertices[triangle[2] as usize] - point;
+        let mut index = 0;
+        while index < indices.len() {
+            let a = vertices[indices[index] as usize] - point;
+            let b = vertices[indices[index + 1] as usize] - point;
+            let c = vertices[indices[index + 2] as usize] - point;
             let ab = cross_less(a, b);
             let bc = cross_less(b, c);
             let ca = cross_less(c, a);
             if ab == bc && ab == ca {
                 return true;
             }
+            index += 3;
         }
         false
     }
@@ -201,10 +203,11 @@ impl HitTester {
         }
         let mut windings = vec![0; (area.width() * area.height()) as usize];
         let offset = Vec2D::new(area.left as f32, area.top as f32);
-        for triangle in indices.chunks_exact(3) {
-            let a = vertices[triangle[0] as usize] - offset;
-            let b = vertices[triangle[1] as usize] - offset;
-            let c = vertices[triangle[2] as usize] - offset;
+        let mut index = 0;
+        while index < indices.len() {
+            let a = vertices[indices[index] as usize] - offset;
+            let b = vertices[indices[index + 1] as usize] - offset;
+            let c = vertices[indices[index + 2] as usize] - offset;
             clip_line(area.height() as f32, a, b, &mut windings, area.width());
             clip_line(area.height() as f32, b, c, &mut windings, area.width());
             clip_line(area.height() as f32, c, a, &mut windings, area.width());
@@ -215,6 +218,7 @@ impl HitTester {
             if nonzero != 0 {
                 return true;
             }
+            index += 3;
         }
         false
     }
@@ -242,7 +246,7 @@ fn append_line(
     let mut x = p0.x + slope * (top as f32 - p0.y + 0.5) + 0.5;
     let mut row = (top * width) as usize;
     for _ in top..bottom {
-        let ix = x.max(0.0) as i32;
+        let ix = cpp_max(x, 0.0) as i32;
         if ix < width {
             delta[row + ix as usize] += winding;
         }
@@ -276,10 +280,14 @@ fn clip_line(height: f32, mut p0: Vec2D, mut p1: Vec2D, delta: &mut [i32], width
 fn compute_cubic_segments(a: Vec2D, b: Vec2D, c: Vec2D, d: Vec2D) -> i32 {
     let abc = a - b - b + c;
     let bcd = b - c - c + d;
-    let dx = abc.x.abs().max(bcd.x.abs());
-    let dy = abc.y.abs().max(bcd.y.abs());
+    let dx = cpp_max(abc.x.abs(), bcd.x.abs());
+    let dy = cpp_max(abc.y.abs(), bcd.y.abs());
     let distance = (dx * dx + dy * dy).sqrt();
     ((3.0 * distance).sqrt().ceil() as i32).clamp(1, MAX_CURVE_SEGMENTS)
+}
+
+fn cpp_max(first: f32, second: f32) -> f32 {
+    if first < second { second } else { first }
 }
 #[derive(Clone, Copy)]
 struct CubicCoeff {

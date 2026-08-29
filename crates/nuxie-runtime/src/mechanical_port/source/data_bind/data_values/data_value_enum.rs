@@ -1,7 +1,5 @@
 use super::{data_type::DataType, data_value::DataValue, data_value_integer::DataValueInteger};
-use crate::mechanical_port::source::{
-    core::CoreHandle, viewmodel::data_enum::DataEnum as CoreDataEnum,
-};
+use crate::mechanical_port::source::core::CoreHandle;
 use core::any::Any;
 use std::rc::Rc;
 pub trait DataEnum: Any {
@@ -18,7 +16,12 @@ impl DataEnumRef {
     pub fn value(&self, index: u32) -> String {
         match self {
             Self::Core(data_enum) => data_enum
-                .with_downcast::<CoreDataEnum, _>(|data_enum| data_enum.value_by_index(index))
+                .with(|data_enum| {
+                    data_enum
+                        .as_data_enum()
+                        .expect("authored enum")
+                        .value_by_index(index)
+                })
                 .unwrap_or_default(),
             Self::Static(data_enum) => data_enum.value(index),
         }

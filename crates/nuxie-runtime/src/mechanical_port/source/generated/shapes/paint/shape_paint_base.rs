@@ -45,7 +45,7 @@ impl ShapePaintBase {
             return;
         }
         callbacks.is_visible_changed();
-        callbacks.notify_property_changed(Self::IS_VISIBLE_PROPERTY_KEY);
+        ShapePaintBaseCallbacks::notify_property_changed(callbacks, Self::IS_VISIBLE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_is_visible_value(&mut self, value: bool) -> bool {
@@ -67,7 +67,10 @@ impl ShapePaintBase {
             return;
         }
         callbacks.blend_mode_value_changed();
-        callbacks.notify_property_changed(Self::BLEND_MODE_VALUE_PROPERTY_KEY);
+        ShapePaintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::BLEND_MODE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_blend_mode_value_value(&mut self, value: u32) -> bool {

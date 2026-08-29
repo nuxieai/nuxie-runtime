@@ -48,22 +48,163 @@ macro_rules! unsigned_integer { ($($ty:ty),* $(,)?) => {$( impl Integer for $ty 
 signed_integer!(i8, i16, i32, i64, isize);
 unsigned_integer!(u8, u16, u32, u64, usize);
 
-pub fn lossless_numeric_cast<T: Integer, U: Integer>(value: U) -> T {
-    let raw = value.to_i128();
-    assert!(raw >= T::MIN_I128 && raw <= T::MAX_I128);
-    let result = T::from_i128(raw);
-    assert_eq!(result.to_i128(), raw);
-    if T::SIGNED != U::SIGNED {
-        if U::SIGNED {
-            assert!(raw >= 0, "lossless_numeric_cast failed due to sign change");
-        } else {
-            assert!(
-                result.to_i128() >= 0,
-                "lossless_numeric_cast failed due to sign change"
-            );
+#[doc(hidden)]
+pub enum LosslessNumericValue {
+    Signed(i128),
+    Unsigned(u128),
+    F32(f32),
+    F64(f64),
+}
+
+pub trait LosslessNumeric: Copy {
+    fn into_lossless_value(self) -> LosslessNumericValue;
+    fn from_lossless_value(value: LosslessNumericValue) -> Self;
+}
+
+macro_rules! signed_lossless_numeric {
+    ($($ty:ty),* $(,)?) => {$(
+        impl LosslessNumeric for $ty {
+            fn into_lossless_value(self) -> LosslessNumericValue {
+                LosslessNumericValue::Signed(self as i128)
+            }
+            fn from_lossless_value(value: LosslessNumericValue) -> Self {
+                match value {
+                    LosslessNumericValue::Signed(value) => {
+                        assert!(value >= Self::MIN as i128 && value <= Self::MAX as i128);
+                        value as Self
+                    }
+                    LosslessNumericValue::Unsigned(value) => {
+                        assert!(value <= Self::MAX as u128);
+                        let result = value as Self;
+                        assert!(result >= 0, "lossless_numeric_cast failed due to sign change");
+                        result
+                    }
+                    LosslessNumericValue::F32(value) => {
+                        let promoted = value as f64;
+                        assert!(promoted.is_finite() && promoted.fract() == 0.0);
+                        assert!(promoted >= Self::MIN as f64);
+                        assert!(promoted < (Self::MAX as i128 + 1) as f64);
+                        let result = value as Self;
+                        assert!((result as f64) == promoted);
+                        result
+                    }
+                    LosslessNumericValue::F64(value) => {
+                        assert!(value.is_finite() && value.fract() == 0.0);
+                        assert!(value >= Self::MIN as f64);
+                        assert!(value < (Self::MAX as i128 + 1) as f64);
+                        let result = value as Self;
+                        assert!((result as f64) == value);
+                        result
+                    }
+                }
+            }
+        }
+    )*};
+}
+
+macro_rules! unsigned_lossless_numeric {
+    ($($ty:ty),* $(,)?) => {$(
+        impl LosslessNumeric for $ty {
+            fn into_lossless_value(self) -> LosslessNumericValue {
+                LosslessNumericValue::Unsigned(self as u128)
+            }
+            fn from_lossless_value(value: LosslessNumericValue) -> Self {
+                match value {
+                    LosslessNumericValue::Signed(value) => {
+                        assert!(value >= 0, "lossless_numeric_cast failed due to sign change");
+                        assert!((value as u128) <= Self::MAX as u128);
+                        value as Self
+                    }
+                    LosslessNumericValue::Unsigned(value) => {
+                        assert!(value <= Self::MAX as u128);
+                        value as Self
+                    }
+                    LosslessNumericValue::F32(value) => {
+                        let promoted = value as f64;
+                        assert!(promoted.is_finite() && promoted.fract() == 0.0);
+                        assert!(promoted >= 0.0);
+                        assert!(promoted < (Self::MAX as u128 + 1) as f64);
+                        let result = value as Self;
+                        assert!((result as f64) == promoted);
+                        result
+                    }
+                    LosslessNumericValue::F64(value) => {
+                        assert!(value.is_finite() && value.fract() == 0.0);
+                        assert!(value >= 0.0);
+                        assert!(value < (Self::MAX as u128 + 1) as f64);
+                        let result = value as Self;
+                        assert!((result as f64) == value);
+                        result
+                    }
+                }
+            }
+        }
+    )*};
+}
+
+signed_lossless_numeric!(i8, i16, i32, i64, isize);
+unsigned_lossless_numeric!(u8, u16, u32, u64, usize);
+
+impl LosslessNumeric for f32 {
+    fn into_lossless_value(self) -> LosslessNumericValue {
+        LosslessNumericValue::F32(self)
+    }
+    fn from_lossless_value(value: LosslessNumericValue) -> Self {
+        match value {
+            LosslessNumericValue::Signed(value) => {
+                let result = value as Self;
+                assert!((result as i128) == value);
+                result
+            }
+            LosslessNumericValue::Unsigned(value) => {
+                let result = value as Self;
+                assert!((result as u128) == value);
+                result
+            }
+            LosslessNumericValue::F32(value) => {
+                assert!(value == value);
+                value
+            }
+            LosslessNumericValue::F64(value) => {
+                let result = value as Self;
+                assert!((result as f64) == value);
+                result
+            }
         }
     }
-    result
+}
+
+impl LosslessNumeric for f64 {
+    fn into_lossless_value(self) -> LosslessNumericValue {
+        LosslessNumericValue::F64(self)
+    }
+    fn from_lossless_value(value: LosslessNumericValue) -> Self {
+        match value {
+            LosslessNumericValue::Signed(value) => {
+                let result = value as Self;
+                assert!((result as i128) == value);
+                result
+            }
+            LosslessNumericValue::Unsigned(value) => {
+                let result = value as Self;
+                assert!((result as u128) == value);
+                result
+            }
+            LosslessNumericValue::F32(value) => {
+                let result = value as Self;
+                assert!((result as f32) == value);
+                result
+            }
+            LosslessNumericValue::F64(value) => {
+                assert!(value == value);
+                value
+            }
+        }
+    }
+}
+
+pub fn lossless_numeric_cast<T: LosslessNumeric, U: LosslessNumeric>(value: U) -> T {
+    T::from_lossless_value(value.into_lossless_value())
 }
 pub fn cmp_equal<A: Integer, B: Integer>(a: A, b: B) -> bool {
     a.to_i128() == b.to_i128()
@@ -91,24 +232,51 @@ pub trait RoundWord:
     Copy + Add<Output = Self> + BitAnd<Output = Self> + Not<Output = Self>
 {
     fn from_usize(value: usize) -> Self;
+    fn wrapping_add(self, other: Self) -> Self;
 }
-macro_rules! round_word { ($($ty:ty),* $(,)?) => {$(impl RoundWord for $ty { fn from_usize(value:usize)->Self{value as Self} })*}; }
+macro_rules! round_word { ($($ty:ty),* $(,)?) => {$(impl RoundWord for $ty { fn from_usize(value:usize)->Self{value as Self} fn wrapping_add(self, other:Self)->Self{<$ty>::wrapping_add(self,other)} })*}; }
 round_word!(u8, u16, u32, u64, usize, i8, i16, i32, i64, isize);
 pub fn round_up_to_multiple_of<const N: usize, T: RoundWord>(value: T) -> T {
     assert!(N != 0 && N & (N - 1) == 0);
-    (value + T::from_usize(N - 1)) & !T::from_usize(N - 1)
+    // The upstream offset is size_t, so its addition has unsigned wrapping
+    // semantics, including when rounding the maximum size_t value.
+    value.wrapping_add(T::from_usize(N - 1)) & !T::from_usize(N - 1)
 }
-pub fn clamp(value: f32, low: f32, high: f32) -> f32 {
-    let value = if low < value || low.is_nan() {
-        value
+
+#[inline(always)]
+fn cpp_fmax(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        // C fmaxf selects +0 when the arguments are opposite signed zeroes.
+        f32::from_bits(first.to_bits() & second.to_bits())
+    } else if first < second {
+        second
     } else {
-        low
-    };
-    if high < value || value.is_nan() {
-        high
-    } else {
-        value
+        first
     }
+}
+
+#[inline(always)]
+fn cpp_fmin(first: f32, second: f32) -> f32 {
+    if first.is_nan() {
+        second
+    } else if second.is_nan() {
+        first
+    } else if first == 0.0 && second == 0.0 {
+        // C fminf selects -0 when the arguments are opposite signed zeroes.
+        f32::from_bits(first.to_bits() | second.to_bits())
+    } else if second < first {
+        second
+    } else {
+        first
+    }
+}
+
+pub fn clamp(value: f32, low: f32, high: f32) -> f32 {
+    cpp_fmin(cpp_fmax(low, value), high)
 }
 pub fn positive_mod(value: f32, mut range: f32) -> f32 {
     if range < 0.0 {

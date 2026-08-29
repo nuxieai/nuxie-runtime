@@ -15,6 +15,13 @@ impl Default for DataBindPath {
     }
 }
 impl DataBindPath {
+    pub(crate) fn clone_core(&self) -> Self {
+        let mut cloned = Self::default();
+        cloned.copy_path(self);
+        cloned.base.set_is_relative_value(self.base.is_relative());
+        cloned
+    }
+
     pub fn decode_path(&mut self, bytes: &[u8]) {
         let mut index = 0;
         while index < bytes.len() {
@@ -46,8 +53,25 @@ impl DataBindPath {
         self.file = file;
         importer.import_super(self)
     }
-    pub fn path(&mut self) -> &mut Vec<u32> {
-        &mut self.base.path_buffer
+    pub fn import_stack(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> StatusCode {
+        use crate::mechanical_port::source::{
+            generated::backboard_base::BackboardBase,
+            importers::backboard_importer::BackboardImporter,
+        };
+        let Some(importer) = stack.latest::<BackboardImporter>(BackboardBase::TYPE_KEY) else {
+            return StatusCode::MissingObject;
+        };
+        let Some(file) = importer.file() else {
+            return StatusCode::MissingObject;
+        };
+        self.file = file;
+        self.base.base.import(stack)
+    }
+    pub fn path(&self) -> &[u32] {
+        &self.base.path_buffer
     }
     pub fn is_relative(&self) -> bool {
         self.base.is_relative()
@@ -67,7 +91,6 @@ impl DataBindPath {
                                 resolver.resolve_path(path_id as i32).to_vec()
                             })
                     })
-                    .flatten()
                     .flatten();
                 if let Some(resolved) = resolved {
                     self.base.path_buffer = resolved;

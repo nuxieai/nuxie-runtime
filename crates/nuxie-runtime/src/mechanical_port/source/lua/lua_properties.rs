@@ -688,7 +688,8 @@ impl ScriptedPropertyEnum {
                     .and_then(|property| property.data_enum());
                 data_enum
                     .and_then(|data_enum| {
-                        data_enum.with_downcast::<DataEnum, _>(|data_enum| {
+                        data_enum.with(|data_enum| {
+                            let data_enum = data_enum.as_data_enum().expect("authored enum");
                             data_enum.key_at(value.property_value()).to_owned()
                         })
                     })
@@ -982,11 +983,12 @@ impl ScriptedEnumValues {
                 .data_enum
                 .as_ref()
                 .and_then(|data_enum| {
-                    data_enum.with_downcast::<DataEnum, _>(|data_enum| {
+                    data_enum.with(|data_enum| {
+                        let data_enum = data_enum.as_data_enum().expect("authored enum");
                         data_enum
                             .values()
                             .get(index as usize)
-                            .map(|value| value.key().to_owned())
+                            .map(|_| data_enum.key_at(index as u32))
                     })
                 })
                 .flatten()
@@ -1004,7 +1006,13 @@ impl ScriptedEnumValues {
             .data_enum
             .as_ref()
             .and_then(|data_enum| {
-                data_enum.with_downcast::<DataEnum, _>(|data_enum| data_enum.values().len())
+                data_enum.with(|data_enum| {
+                    data_enum
+                        .as_data_enum()
+                        .expect("authored enum")
+                        .values()
+                        .len()
+                })
             })
             .unwrap_or(0);
         unsafe { &mut *self.state }.push_integer(length as i64);

@@ -8,12 +8,15 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::data_bind_list_item_consumer::DataBindListItemConsumer,
     dirtyable::Dirtyable,
-    generated::shapes::{
-        cubic_detached_vertex_base::CubicDetachedVertexBase, list_path_base::ListPathBase,
-        vertex_base::VertexBase,
+    generated::{
+        core_registry::CoreRegistry,
+        shapes::{
+            cubic_detached_vertex_base::CubicDetachedVertexBase, list_path_base::ListPathBase,
+            vertex_base::VertexBase,
+        },
     },
     math::{math_types::PI, vec2d::Vec2D},
-    shapes::{cubic_detached_vertex::CubicDetachedVertex, vertex::VertexBehavior},
+    shapes::cubic_detached_vertex::CubicDetachedVertex,
     viewmodel::{
         symbol_type::SymbolType, viewmodel_instance_value::ValueDependentHandle,
         viewmodel_value_dependent::ViewModelValueDependent,
@@ -44,7 +47,12 @@ struct VertexPropertyListener {
 }
 
 impl VertexPropertyListener {
-    fn number(value: Option<&CoreHandle>) -> f32 {
+    fn number(value: Option<&CoreHandle>, borrowed: Option<(&CoreHandle, f32)>) -> f32 {
+        if let (Some(value), Some((source, number))) = (value, borrowed) {
+            if value == source {
+                return number;
+            }
+        }
         value
             .and_then(|value| {
                 value.with(|value| {
@@ -58,42 +66,13 @@ impl VertexPropertyListener {
     }
 
     fn set_value(vertex: &mut CubicDetachedVertex, key: u16, value: f32) {
-        match key {
-            VertexBase::X_PROPERTY_KEY => {
-                if vertex.base.set_x_value(value) {
-                    VertexBehavior::x_changed(vertex);
-                }
-            }
-            VertexBase::Y_PROPERTY_KEY => {
-                if vertex.base.set_y_value(value) {
-                    VertexBehavior::y_changed(vertex);
-                }
-            }
-            CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY => {
-                if vertex.base.set_in_rotation_value(value) {
-                    vertex.in_rotation_changed();
-                }
-            }
-            CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY => {
-                if vertex.base.set_in_distance_value(value) {
-                    vertex.in_distance_changed();
-                }
-            }
-            CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY => {
-                if vertex.base.set_out_rotation_value(value) {
-                    vertex.out_rotation_changed();
-                }
-            }
-            CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY => {
-                if vertex.base.set_out_distance_value(value) {
-                    vertex.out_distance_changed();
-                }
-            }
-            _ => {}
-        }
+        // Pinned VertexPropertyListener writes through CoreRegistry so the
+        // most-derived callbacks run. Calling Vertex::x/yChanged directly skips
+        // CubicVertex's cached control-point invalidation after a list remap.
+        CoreRegistry::set_double(vertex, key.into(), value);
     }
 
-    fn write_value(&mut self) {
+    fn write_value(&mut self, borrowed: Option<(&CoreHandle, f32)>) {
         let Some(vertex) = self.vertex.upgrade() else {
             return;
         };
@@ -103,11 +82,11 @@ impl VertexPropertyListener {
                 Self::set_value(
                     &mut vertex,
                     *key,
-                    Self::number(self.x_value.as_ref()) * *multiplier,
+                    Self::number(self.x_value.as_ref(), borrowed) * *multiplier,
                 );
             }
             VertexProperty::Multi { keys, multiplier } => {
-                let value = Self::number(self.x_value.as_ref()) * *multiplier;
+                let value = Self::number(self.x_value.as_ref(), borrowed) * *multiplier;
                 for key in keys {
                     Self::set_value(&mut vertex, *key, value);
                 }
@@ -117,19 +96,16 @@ impl VertexPropertyListener {
                 rotation_key,
             } => {
                 let point = Vec2D::new(
-                    Self::number(self.x_value.as_ref()),
-                    Self::number(self.y_value.as_ref()),
+                    Self::number(self.x_value.as_ref(), borrowed),
+                    Self::number(self.y_value.as_ref(), borrowed),
                 );
                 Self::set_value(&mut vertex, *distance_key, point.length());
                 Self::set_value(&mut vertex, *rotation_key, point.y.atan2(point.x));
             }
         }
     }
-}
-
-impl Dirtyable for VertexPropertyListener {
-    fn add_dirt(&mut self, _value: ComponentDirt, _recurse: bool) {
-        self.write_value();
+    fn write_value_and_dirty_path(&mut self, borrowed: Option<(&CoreHandle, f32)>) {
+        self.write_value(borrowed);
         self.path.with_mut(|path| {
             if let Some(path) = path.as_path_mut() {
                 path.mark_path_dirty(true);
@@ -138,8 +114,24 @@ impl Dirtyable for VertexPropertyListener {
     }
 }
 
+impl Dirtyable for VertexPropertyListener {
+    fn add_dirt(&mut self, _value: ComponentDirt, _recurse: bool) {
+        self.write_value_and_dirty_path(None);
+    }
+}
+
 impl ViewModelValueDependent for VertexPropertyListener {
     fn relink_data_bind(&mut self) {}
+
+    fn add_dirt_from_number(
+        &mut self,
+        _value: ComponentDirt,
+        _recurse: bool,
+        source: &CoreHandle,
+        number_value: f32,
+    ) {
+        self.write_value_and_dirty_path(Some((source, number_value)));
+    }
 }
 
 struct VertexListener {
@@ -183,8 +175,7 @@ impl VertexListener {
             .flatten()
             .filter(|value| {
                 value
-                    .with(|value| value.as_view_model_instance_number().is_some())
-                    .unwrap_or(false)
+                    .is_type_of(crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase::TYPE_KEY)
             })
     }
 
@@ -204,7 +195,7 @@ impl VertexListener {
             y_value: y_value.clone(),
             property,
         }));
-        listener.borrow_mut().write_value();
+        listener.borrow_mut().write_value(None);
         let dependent: Rc<RefCell<dyn ViewModelValueDependent>> = listener;
         let dependent_handle = ValueDependentHandle::runtime(&dependent);
         for value in [x_value, y_value].into_iter().flatten() {
@@ -219,55 +210,75 @@ impl VertexListener {
 
     fn create_properties(&mut self) {
         self.properties.clear();
-        for (symbol, key, multiplier) in [
-            (SymbolType::VertexX, VertexBase::X_PROPERTY_KEY, 1.0),
-            (SymbolType::VertexY, VertexBase::Y_PROPERTY_KEY, 1.0),
+        // Match VertexListener::createProperties: the shared rotation/distance
+        // are written before the individual in/out overrides, not after them.
+        for (symbol, property) in [
+            (
+                SymbolType::VertexX,
+                VertexProperty::Single {
+                    key: VertexBase::X_PROPERTY_KEY,
+                    multiplier: 1.0,
+                },
+            ),
+            (
+                SymbolType::VertexY,
+                VertexProperty::Single {
+                    key: VertexBase::Y_PROPERTY_KEY,
+                    multiplier: 1.0,
+                },
+            ),
+            (
+                SymbolType::Rotation,
+                VertexProperty::Multi {
+                    keys: vec![
+                        CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY,
+                        CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY,
+                    ],
+                    multiplier: PI / 180.0,
+                },
+            ),
             (
                 SymbolType::InRotation,
-                CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY,
-                PI / 180.0,
+                VertexProperty::Single {
+                    key: CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY,
+                    multiplier: PI / 180.0,
+                },
             ),
             (
                 SymbolType::OutRotation,
-                CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY,
-                PI / 180.0,
+                VertexProperty::Single {
+                    key: CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY,
+                    multiplier: PI / 180.0,
+                },
+            ),
+            (
+                SymbolType::Distance,
+                VertexProperty::Multi {
+                    keys: vec![
+                        CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY,
+                        CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY,
+                    ],
+                    multiplier: 1.0,
+                },
             ),
             (
                 SymbolType::InDistance,
-                CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY,
-                1.0,
+                VertexProperty::Single {
+                    key: CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY,
+                    multiplier: 1.0,
+                },
             ),
             (
                 SymbolType::OutDistance,
-                CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY,
-                1.0,
+                VertexProperty::Single {
+                    key: CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY,
+                    multiplier: 1.0,
+                },
             ),
         ] {
             let value = self.instance_value(symbol);
-            self.add_listener(value, None, VertexProperty::Single { key, multiplier });
+            self.add_listener(value, None, property);
         }
-        self.add_listener(
-            self.instance_value(SymbolType::Distance),
-            None,
-            VertexProperty::Multi {
-                keys: vec![
-                    CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY,
-                    CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY,
-                ],
-                multiplier: 1.0,
-            },
-        );
-        self.add_listener(
-            self.instance_value(SymbolType::Rotation),
-            None,
-            VertexProperty::Multi {
-                keys: vec![
-                    CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY,
-                    CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY,
-                ],
-                multiplier: PI / 180.0,
-            },
-        );
         for (x_symbol, y_symbol, distance_key, rotation_key) in [
             (
                 SymbolType::CubicVertexInPointX,
@@ -292,6 +303,23 @@ impl VertexListener {
             );
         }
     }
+}
+
+impl std::ops::Deref for ListPath {
+    type Target = ListPathBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ListPath {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl ListPath {
+    pub const TYPE_KEY: u16 = ListPathBase::TYPE_KEY;
 }
 
 #[derive(Default)]
@@ -341,5 +369,98 @@ impl ListPath {
 impl DataBindListItemConsumer for ListPath {
     fn update_list(&mut self, list: &[CoreHandle]) {
         Self::update_list(self, list);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        core::CoreArena,
+        shapes::cubic_vertex::CubicVertexBehavior,
+        viewmodel::{
+            viewmodel_instance::ViewModelInstance,
+            viewmodel_instance_number::ViewModelInstanceNumber,
+        },
+    };
+
+    fn number(
+        arena: &CoreArena,
+        instance: &CoreHandle,
+        symbol: SymbolType,
+        value: f32,
+    ) -> CoreHandle {
+        let number = arena.insert(ViewModelInstanceNumber::default());
+        number
+            .with_downcast_mut::<ViewModelInstanceNumber, _>(|number| number.set_value(value))
+            .unwrap();
+        instance
+            .with_downcast_mut::<ViewModelInstance, _>(|instance| {
+                instance.set_property_symbol(symbol, number.clone());
+            })
+            .unwrap();
+        number
+    }
+
+    #[test]
+    fn individual_controls_override_shared_controls_in_pinned_creation_order() {
+        let arena = CoreArena::default();
+        let instance = arena.insert(ViewModelInstance::default());
+        for (symbol, value) in [
+            (SymbolType::Rotation, 10.0),
+            (SymbolType::InRotation, 20.0),
+            (SymbolType::OutRotation, 30.0),
+            (SymbolType::Distance, 4.0),
+            (SymbolType::InDistance, 5.0),
+            (SymbolType::OutDistance, 6.0),
+        ] {
+            number(&arena, &instance, symbol, value);
+        }
+        let vertex = Rc::new(RefCell::new(CubicDetachedVertex::default()));
+        let _listener =
+            VertexListener::new(vertex.clone(), instance, arena.insert(ListPath::default()));
+        let vertex = vertex.borrow();
+        assert_eq!(vertex.base.in_rotation(), 20.0 * (PI / 180.0));
+        assert_eq!(vertex.base.out_rotation(), 30.0 * (PI / 180.0));
+        assert_eq!(vertex.base.in_distance(), 5.0);
+        assert_eq!(vertex.base.out_distance(), 6.0);
+    }
+
+    #[test]
+    fn live_point_listener_reads_the_borrowed_number_and_the_other_coordinate() {
+        let arena = CoreArena::default();
+        let instance = arena.insert(ViewModelInstance::default());
+        let x = number(&arena, &instance, SymbolType::CubicVertexInPointX, 0.0);
+        let y = number(&arena, &instance, SymbolType::CubicVertexInPointY, 4.0);
+        let vertex = Rc::new(RefCell::new(CubicDetachedVertex::default()));
+        let _listener =
+            VertexListener::new(vertex.clone(), instance, arena.insert(ListPath::default()));
+        x.with_downcast_mut::<ViewModelInstanceNumber, _>(|number| number.set_value(3.0))
+            .unwrap();
+        assert_eq!(vertex.borrow().base.in_distance(), 5.0);
+        assert_eq!(vertex.borrow().base.in_rotation(), 4.0_f32.atan2(3.0));
+        y.with_downcast_mut::<ViewModelInstanceNumber, _>(|number| number.set_value(0.0))
+            .unwrap();
+        assert_eq!(vertex.borrow().base.in_distance(), 3.0);
+        assert_eq!(vertex.borrow().base.in_rotation(), 0.0);
+    }
+
+    #[test]
+    fn remapping_a_vertex_invalidates_its_previously_rendered_control_points() {
+        let arena = CoreArena::default();
+        let first = arena.insert(ViewModelInstance::default());
+        number(&arena, &first, SymbolType::VertexX, 0.0);
+        number(&arena, &first, SymbolType::VertexY, 100.0);
+        let next = arena.insert(ViewModelInstance::default());
+        number(&arena, &next, SymbolType::VertexX, 100.0);
+        number(&arena, &next, SymbolType::VertexY, 100.0);
+        let vertex = Rc::new(RefCell::new(CubicDetachedVertex::default()));
+        let mut listener =
+            VertexListener::new(vertex.clone(), first, arena.insert(ListPath::default()));
+        assert_eq!(vertex.borrow_mut().render_in(), Vec2D::new(0.0, 100.0));
+        assert_eq!(vertex.borrow_mut().render_out(), Vec2D::new(0.0, 100.0));
+        listener.remap(next);
+        assert_eq!(vertex.borrow_mut().render_in(), Vec2D::new(100.0, 100.0));
+        assert_eq!(vertex.borrow_mut().render_out(), Vec2D::new(100.0, 100.0));
     }
 }

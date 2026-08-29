@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::{
     animation::transition_focus_condition::TransitionFocusCondition,
-    core::binary_reader::BinaryReader,
     animation::transition_viewmodel_condition::TransitionViewModelCondition,
+    core::binary_reader::BinaryReader,
 };
 
 pub struct TransitionFocusConditionBase {
@@ -27,7 +27,9 @@ impl TransitionFocusConditionBase {
     }
     pub fn clone_into(&self) -> TransitionFocusCondition {
         let mut cloned = TransitionFocusCondition::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

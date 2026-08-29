@@ -35,6 +35,104 @@ impl Default for Drawable {
     }
 }
 
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+    for Drawable
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(
+            &mut self.base,
+            property_key,
+        );
+    }
+}
+
+impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for Drawable {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(&mut self.base, property_key);
+    }
+    fn opacity_changed(&mut self) {
+        self.base.base.base.base.base.base.opacity_changed();
+    }
+}
+
+impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for Drawable {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(&mut self.base, property_key);
+    }
+    fn rotation_changed(&mut self) {
+        self.base.base.base.base.rotation_changed();
+    }
+    fn scale_x_changed(&mut self) {
+        self.base.base.base.base.scale_x_changed();
+    }
+    fn scale_y_changed(&mut self) {
+        self.base.base.base.base.scale_y_changed();
+    }
+}
+
+impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks for Drawable {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(
+            &mut self.base,
+            property_key,
+        );
+    }
+    fn x_changed(&mut self) {
+        self.base.base.x_changed();
+    }
+    fn y_changed(&mut self) {
+        self.base.base.y_changed();
+    }
+    fn set_computed_local_x(&mut self, value: f32) {
+        self.base.base.set_computed_local_x(value);
+    }
+    fn computed_local_x(&mut self) -> f32 {
+        self.base.base.computed_local_x()
+    }
+    fn set_computed_local_y(&mut self, value: f32) {
+        self.base.base.set_computed_local_y(value);
+    }
+    fn computed_local_y(&mut self) -> f32 {
+        self.base.base.computed_local_y()
+    }
+    fn set_computed_world_x(&mut self, value: f32) {
+        self.base.base.set_computed_world_x(value);
+    }
+    fn computed_world_x(&mut self) -> f32 {
+        self.base.base.computed_world_x()
+    }
+    fn set_computed_world_y(&mut self, value: f32) {
+        self.base.base.set_computed_world_y(value);
+    }
+    fn computed_world_y(&mut self) -> f32 {
+        self.base.base.computed_world_y()
+    }
+    fn set_computed_root_x(&mut self, value: f32) {
+        self.base.base.set_computed_root_x(value);
+    }
+    fn computed_root_x(&mut self) -> f32 {
+        self.base.base.computed_root_x()
+    }
+    fn set_computed_root_y(&mut self, value: f32) {
+        self.base.base.set_computed_root_y(value);
+    }
+    fn computed_root_y(&mut self) -> f32 {
+        self.base.base.computed_root_y()
+    }
+    fn set_computed_width(&mut self, value: f32) {
+        self.base.base.set_computed_width(value);
+    }
+    fn computed_width(&mut self) -> f32 {
+        self.base.base.computed_width()
+    }
+    fn set_computed_height(&mut self, value: f32) {
+        self.base.base.set_computed_height(value);
+    }
+    fn computed_height(&mut self) -> f32 {
+        self.base.base.computed_height()
+    }
+}
+
 impl DrawableBaseCallbacks for Drawable {
     fn notify_property_changed(&mut self, property_key: u16) {
         self.base
@@ -55,7 +153,7 @@ impl DrawableBaseCallbacks for Drawable {
 
 impl Drawable {
     pub fn blend_mode(&self) -> BlendMode {
-        match self.base.blend_mode_value() {
+        match self.base.blend_mode_value() as u8 {
             3 => BlendMode::SrcOver,
             14 => BlendMode::Screen,
             15 => BlendMode::Overlay,
@@ -159,12 +257,12 @@ impl Drawable {
     }
 
     pub fn is_child_of_layout(&self, layout: &CoreHandle) -> bool {
-        let mut parent = self.base.base.base.base.base.parent_handle();
-        while let Some(current) = parent {
-            if &current == layout {
+        let mut current = self.base.base.base.base.base.handle();
+        while let Some(component) = current {
+            if &component == layout {
                 return true;
             }
-            parent = current
+            current = component
                 .with(|current| current.component_parent_handle())
                 .flatten();
         }
@@ -176,23 +274,12 @@ impl Drawable {
         if code != StatusCode::Ok {
             return code;
         }
-        match self.blend_mode() {
-            BlendMode::SrcOver
-            | BlendMode::Screen
-            | BlendMode::Overlay
-            | BlendMode::Darken
-            | BlendMode::Lighten
-            | BlendMode::ColorDodge
-            | BlendMode::ColorBurn
-            | BlendMode::HardLight
-            | BlendMode::SoftLight
-            | BlendMode::Difference
-            | BlendMode::Exclusion
-            | BlendMode::Multiply
-            | BlendMode::Hue
-            | BlendMode::Saturation
-            | BlendMode::Color
-            | BlendMode::Luminosity => StatusCode::Ok,
+        // C++ casts to the unsigned-char enum before checking its supported
+        // cases. Validate that byte before constructing a Rust enum, so a
+        // malformed drawable follows InvalidObject instead of panicking.
+        match self.base.blend_mode_value() as u8 {
+            3 | 14..=28 => StatusCode::Ok,
+            _ => StatusCode::InvalidObject,
         }
     }
 

@@ -2,14 +2,15 @@ use std::{
     collections::HashMap,
     ops::Deref,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Condvar, Mutex, MutexGuard, Weak,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
 use nuxie_render_api::RenderImage;
 
 use crate::mechanical_port::source::{
+    animation::semantic_listener_group::SemanticActionType,
     audio::audio_source::AudioSourceRef,
     command_server::CommandServer,
     factory::RuntimeFactoryHandle,
@@ -17,7 +18,7 @@ use crate::mechanical_port::source::{
     lua::scripting_vm::RuntimeScriptingVmHandle,
     math::vec2d::Vec2D,
     object_stream::{ObjectStream, PodStream},
-    semantic::semantic_snapshot::{SemanticActionType, SemanticsDiff},
+    semantic::semantic_snapshot::SemanticsDiff,
 };
 use crate::{RawTextFont, RuntimeBlobAsset};
 
@@ -107,8 +108,13 @@ impl SynchronizedPodWriter<'_> {
     }
 }
 
-#[derive(Default)]
 struct SynchronizedObjectStream<T>(Mutex<ObjectStream<T>>);
+
+impl<T> Default for SynchronizedObjectStream<T> {
+    fn default() -> Self {
+        Self(Mutex::new(ObjectStream::default()))
+    }
+}
 
 impl<T> SynchronizedObjectStream<T> {
     fn empty(&self) -> bool {
@@ -584,9 +590,9 @@ impl_listener_registration!(ArtboardListener, ArtboardHandle);
 impl_listener_registration!(ViewModelInstanceListener, ViewModelInstanceHandle);
 impl_listener_registration!(StateMachineListener, StateMachineHandle);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-enum Command {
+pub(crate) enum Command {
     LoadFile,
     DeleteFile,
     DecodeImage,
@@ -667,7 +673,7 @@ enum Command {
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
-enum Message {
+pub(crate) enum Message {
     MessageLoopBreak,
     ViewModelEnumsListed,
     ArtboardsListed,
@@ -1060,11 +1066,13 @@ impl CommandQueue {
         handle: H,
         listener: WeakListenerHandle<T>,
     ) {
-        assert!(listeners
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(handle, listener)
-            .is_none());
+        assert!(
+            listeners
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(handle, listener)
+                .is_none()
+        );
     }
 
     fn listener<T: ?Sized, H: Eq + std::hash::Hash>(
@@ -1156,7 +1164,7 @@ impl CommandQueue {
         self.notify_command();
     }
 
-    fn global_asset<H: Copy>(
+    fn global_asset<H: Copy + Send + 'static>(
         &mut self,
         command: Command,
         name: String,
@@ -2067,7 +2075,12 @@ impl CommandQueue {
         self.record_handle(Command::DeleteBlob, handle, request_id);
     }
 
-    fn record_handle<H: Copy>(&mut self, command: Command, handle: H, request_id: u64) {
+    fn record_handle<H: Copy + Send + 'static>(
+        &mut self,
+        command: Command,
+        handle: H,
+        request_id: u64,
+    ) {
         let _lock = self.command_gate.acquire();
         self.command_stream
             .write(command)
@@ -2075,7 +2088,7 @@ impl CommandQueue {
             .write(request_id);
         self.notify_command();
     }
-    fn record_two_handles<A: Copy, B: Copy>(
+    fn record_two_handles<A: Copy + Send + 'static, B: Copy + Send + 'static>(
         &mut self,
         command: Command,
         first: A,
@@ -2359,11 +2372,11 @@ impl CommandQueue {
         *self.global_blob_listener.lock().unwrap() = listener.map(ListenerHandle::downgrade);
     }
 
-    fn read_message_pod<T: Copy + Send + 'static>(&mut self) -> T {
+    fn read_message_pod<T: Copy + Send + 'static>(&self) -> T {
         self.message_stream.read()
     }
 
-    fn read_message_names(&mut self, count: usize) -> Vec<String> {
+    fn read_message_names(&self, count: usize) -> Vec<String> {
         (0..count).map(|_| self.message_names.read()).collect()
     }
 
@@ -2394,10 +2407,11 @@ impl CommandQueue {
                     }
                     drop(lock);
                     if let Some(listener) = Self::global_listener(&self.global_file_listener) {
+                        let global_enums = std::mem::take(&mut enums);
                         listener.borrow_mut().on_view_model_enums_listed(
                             handle,
                             request_id,
-                            enums.clone(),
+                            global_enums,
                         );
                     }
                     if let Some(listener) = Self::listener(&self.file_listeners, &handle) {

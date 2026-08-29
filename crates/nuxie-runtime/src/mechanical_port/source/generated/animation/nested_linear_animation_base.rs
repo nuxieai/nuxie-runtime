@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, animation::nested_animation::NestedAnimation,
+    animation::nested_animation::NestedAnimation, core::binary_reader::BinaryReader,
 };
 
 pub trait NestedLinearAnimationBaseCallbacks:
@@ -41,7 +41,10 @@ impl NestedLinearAnimationBase {
             return;
         }
         callbacks.mix_changed();
-        callbacks.notify_property_changed(Self::MIX_PROPERTY_KEY);
+        NestedLinearAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIX_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_mix_value(&mut self, value: f32) -> bool {

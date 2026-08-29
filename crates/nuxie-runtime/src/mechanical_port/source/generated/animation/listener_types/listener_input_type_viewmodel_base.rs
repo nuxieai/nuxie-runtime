@@ -8,7 +8,7 @@ use crate::mechanical_port::source::{
 pub trait ListenerInputTypeViewModelBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBaseCallbacks {
     fn view_model_path_ids_changed(&mut self) {}
     fn decode_view_model_path_ids(&mut self, value: &[u8]);
-    fn copy_view_model_path_ids(&mut self, object: &ListenerInputTypeViewModelBase);
+    fn copy_view_model_path_ids(&mut self, object: &ListenerInputTypeViewModel);
 }
 
 pub struct ListenerInputTypeViewModelBase {
@@ -33,21 +33,20 @@ impl ListenerInputTypeViewModelBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub fn clone_into(
-        &self,
-        callbacks: &mut impl ListenerInputTypeViewModelBaseCallbacks,
-    ) -> ListenerInputTypeViewModel {
+    pub fn clone_into(source: &ListenerInputTypeViewModel) -> ListenerInputTypeViewModel {
         let mut cloned = ListenerInputTypeViewModel::default();
-        cloned.base.copy(self, callbacks);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(source, &mut cloned);
+        cloned.base = base;
         cloned
     }
     pub fn copy(
         &mut self,
-        object: &Self,
+        object: &ListenerInputTypeViewModel,
         callbacks: &mut impl ListenerInputTypeViewModelBaseCallbacks,
     ) {
         callbacks.copy_view_model_path_ids(object);
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base.base, callbacks);
     }
     pub fn deserialize(
         &mut self,

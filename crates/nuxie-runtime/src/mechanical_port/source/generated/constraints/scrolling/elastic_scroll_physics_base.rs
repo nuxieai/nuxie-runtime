@@ -52,7 +52,10 @@ impl ElasticScrollPhysicsBase {
             return;
         }
         callbacks.friction_changed();
-        callbacks.notify_property_changed(Self::FRICTION_PROPERTY_KEY);
+        ElasticScrollPhysicsBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FRICTION_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_friction_value(&mut self, value: f32) -> bool {
@@ -74,7 +77,10 @@ impl ElasticScrollPhysicsBase {
             return;
         }
         callbacks.speed_multiplier_changed();
-        callbacks.notify_property_changed(Self::SPEED_MULTIPLIER_PROPERTY_KEY);
+        ElasticScrollPhysicsBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SPEED_MULTIPLIER_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_speed_multiplier_value(&mut self, value: f32) -> bool {
@@ -96,7 +102,10 @@ impl ElasticScrollPhysicsBase {
             return;
         }
         callbacks.elastic_factor_changed();
-        callbacks.notify_property_changed(Self::ELASTIC_FACTOR_PROPERTY_KEY);
+        ElasticScrollPhysicsBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ELASTIC_FACTOR_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_elastic_factor_value(&mut self, value: f32) -> bool {

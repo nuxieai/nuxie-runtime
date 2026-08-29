@@ -50,7 +50,7 @@ use std::sync::Arc;
 
 pub use bytecode::BytecodeValidationError;
 use bytecode::validate_luau_bytecode;
-use logging_scripting_context::LoggingScriptingContext;
+use logging_scripting_context::{LoggingScriptingContext, LoggingScriptingContextLua};
 use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
 use luaur_rt::ffi::lua_error;
@@ -674,6 +674,8 @@ pub struct ScriptVm {
     resource_limits: resource_limits::ResourceLimitTracker,
     blob_assets: lua_blob::ScriptedBlobAssets,
     audio_assets: lua_audio::ScriptedAudioAssets,
+    #[cfg(feature = "tools")]
+    audio_tools_state: lua_audio::ScriptedAudioToolsState,
     gpu_canvas_shaders: ImportedGpuCanvasShaderAssets,
     native_shader_authorities:
         RefCell<Vec<(Arc<[u8]>, nuxie_render_api::GpuCanvasShaderProvenance)>>,
@@ -1476,6 +1478,8 @@ impl ScriptVm {
         lua.set_app_data(view_model_frame_context.clone());
         let blob_assets = lua_blob::ScriptedBlobAssets::install(&lua);
         let audio_assets = lua_audio::ScriptedAudioAssets::install(&lua);
+        #[cfg(feature = "tools")]
+        let audio_tools_state = lua_audio::ScriptedAudioToolsState::install(&lua);
         let initialization_error = lua
             .set_memory_limit(SCRIPT_VM_MEMORY_LIMIT_BYTES)
             .err()
@@ -1510,6 +1514,8 @@ impl ScriptVm {
             resource_limits,
             blob_assets,
             audio_assets,
+            #[cfg(feature = "tools")]
+            audio_tools_state,
             gpu_canvas_shaders: Rc::new(RefCell::new(Vec::new())),
             native_shader_authorities: RefCell::new(Vec::new()),
             logging: LoggingScriptingContext::default(),
@@ -1521,6 +1527,12 @@ impl ScriptVm {
         let vm = Self::new();
         vm.set_log_sink(sink);
         vm
+    }
+
+    /// Set the tools playback state used by the pinned `ScriptingContext`.
+    #[cfg(feature = "tools")]
+    pub fn set_is_playing(&self, value: bool) {
+        self.audio_tools_state.set_is_playing(value);
     }
 
     /// Route future complete script log lines to a host-provided sink.
@@ -1572,9 +1584,6 @@ impl ScriptVm {
     }
 
     fn reset_execution_budget(&self) {
-        if let Err(error) = lua_image_decode::poll_completed(&self.lua) {
-            self.logging.log_error(&error);
-        }
         // File/Artboard facade callbacks do not all have an explicit flow
         // operation around them. Treat each such callback as its own bounded
         // cycle so the cumulative main-VM ceiling cannot poison an otherwise
@@ -2274,10 +2283,19 @@ impl RuntimeScriptingVm for ScriptVm {
             self.set_image_assets(nuxie_runtime::script_image_assets(&file));
             let assets = file.with_file(|file| file.assets().to_vec());
             for asset in assets {
-                if let Some((name, payload)) = asset.with_downcast::<nuxie_runtime::mechanical_port::source::assets::shader_asset::ShaderAsset,_>(|asset|(asset.base.name().to_owned(),asset.encoded_payload().to_vec())) {
+                if let Some((name, short_name, payload)) = asset.with_downcast::<nuxie_runtime::mechanical_port::source::assets::shader_asset::ShaderAsset,_>(|asset| {
+                    let short_name = asset.base.name().to_owned();
+                    let folder_path = asset.base.folder_path();
+                    let name = if folder_path.is_empty() {
+                        short_name.clone()
+                    } else {
+                        format!("{folder_path}/{short_name}")
+                    };
+                    (name, short_name, asset.encoded_payload().to_vec())
+                }) {
                     let provenance = self.native_shader_authorities.borrow().iter().find(|(bytes,_)|bytes.as_ref()==payload.as_slice()).map(|(_,proof)|proof.clone());
                     self.gpu_canvas_shaders.borrow_mut().push(ImportedGpuCanvasShaderAssetEntry {
-                        name:name.clone(), short_name:name,
+                        name, short_name,
                         owner:Rc::new(RefCell::new(RegisteredGpuCanvasShaderAsset::from_native(asset.clone(),provenance))),
                     });
                 }
@@ -2388,6 +2406,16 @@ impl RuntimeScriptingVm for ScriptVm {
             Some(Rc::clone(&self.script_cycle_active)),
             self.logging.clone(),
         )))
+    }
+
+    fn poll_async_work(&self) -> std::result::Result<bool, ScriptError> {
+        match lua_image_decode::poll_completed(&self.lua) {
+            Ok(settled) => Ok(settled),
+            Err(error) => {
+                self.logging.log_error(&error);
+                Err(self.script_error(error))
+            }
+        }
     }
 
     fn advance_detached_view_models(&self) -> bool {

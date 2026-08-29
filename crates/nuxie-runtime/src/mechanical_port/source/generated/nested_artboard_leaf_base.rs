@@ -50,7 +50,7 @@ impl NestedArtboardLeafBase {
             return;
         }
         callbacks.fit_changed();
-        callbacks.notify_property_changed(Self::FIT_PROPERTY_KEY);
+        NestedArtboardLeafBaseCallbacks::notify_property_changed(callbacks, Self::FIT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_fit_value(&mut self, value: u32) -> bool {
@@ -72,7 +72,10 @@ impl NestedArtboardLeafBase {
             return;
         }
         callbacks.alignment_x_changed();
-        callbacks.notify_property_changed(Self::ALIGNMENT_X_PROPERTY_KEY);
+        NestedArtboardLeafBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ALIGNMENT_X_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_alignment_x_value(&mut self, value: f32) -> bool {
@@ -94,7 +97,10 @@ impl NestedArtboardLeafBase {
             return;
         }
         callbacks.alignment_y_changed();
-        callbacks.notify_property_changed(Self::ALIGNMENT_Y_PROPERTY_KEY);
+        NestedArtboardLeafBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ALIGNMENT_Y_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_alignment_y_value(&mut self, value: f32) -> bool {
@@ -104,12 +110,14 @@ impl NestedArtboardLeafBase {
         self.alignment_y = value;
         true
     }
-    pub fn clone_into(
-        &self,
-        callbacks: &mut impl NestedArtboardLeafBaseCallbacks,
-    ) -> NestedArtboardLeaf {
+    pub fn clone_into(source: &NestedArtboardLeaf) -> NestedArtboardLeaf {
         let mut cloned = NestedArtboardLeaf::default();
-        cloned.base.copy(self, callbacks);
+        cloned.base.fit = source.base.fit;
+        cloned.base.alignment_x = source.base.alignment_x;
+        cloned.base.alignment_y = source.base.alignment_y;
+        let mut nested_base = std::mem::take(&mut cloned.base.base.base);
+        nested_base.copy(&source.base.base, &mut cloned.base.base);
+        cloned.base.base.base = nested_base;
         cloned
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl NestedArtboardLeafBaseCallbacks) {

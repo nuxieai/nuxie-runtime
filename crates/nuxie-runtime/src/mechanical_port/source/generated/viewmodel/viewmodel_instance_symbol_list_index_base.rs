@@ -1,7 +1,8 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, viewmodel::viewmodel_instance_symbol::ViewModelInstanceSymbol,
+    core::binary_reader::BinaryReader,
+    viewmodel::viewmodel_instance_symbol::ViewModelInstanceSymbol,
 };
 
 pub trait ViewModelInstanceSymbolListIndexBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBaseCallbacks {
@@ -45,7 +46,10 @@ impl ViewModelInstanceSymbolListIndexBase {
             return;
         }
         callbacks.property_value_changed();
-        callbacks.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+        ViewModelInstanceSymbolListIndexBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PROPERTY_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_property_value_value(&mut self, value: u32) -> bool {

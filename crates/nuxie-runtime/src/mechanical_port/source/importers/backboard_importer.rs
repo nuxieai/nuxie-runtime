@@ -1,10 +1,14 @@
 use std::{
     any::Any,
+    cell::RefCell,
     collections::{HashMap, HashSet},
+    rc::Rc,
 };
 
 use crate::mechanical_port::source::{
-    artboard::Artboard, core::CoreHandle, file::RuntimeFileWeakHandle, status_code::StatusCode,
+    artboard::Artboard, assets::file_asset::FileAsset, core::CoreHandle,
+    file::RuntimeFileWeakHandle, status_code::StatusCode,
+    viewmodel::viewmodel_instance::ViewModelInstance,
 };
 
 use super::import_stack::ImportStackObject;
@@ -22,6 +26,8 @@ pub struct BackboardImporter {
     physics: Vec<CoreHandle>,
     next_artboard_id: i32,
     file: Option<RuntimeFileWeakHandle>,
+    file_view_models: Option<Rc<RefCell<Vec<CoreHandle>>>>,
+    file_view_model_instances: Option<Rc<RefCell<Vec<CoreHandle>>>>,
 }
 
 impl BackboardImporter {
@@ -39,6 +45,8 @@ impl BackboardImporter {
             physics: Vec::new(),
             next_artboard_id: 0,
             file: None,
+            file_view_models: None,
+            file_view_model_instances: None,
         }
     }
 
@@ -46,35 +54,38 @@ impl BackboardImporter {
         self.artboard_referencers.push(artboard);
     }
 
-    pub fn add_file_asset(&mut self, asset: CoreHandle) {
-        self.file_assets.push(asset);
+    pub fn add_file_asset(&mut self, asset: &mut FileAsset) {
+        let handle = asset
+            .handle()
+            .expect("imported FileAsset has an arena owner");
+        self.file_assets.push(handle.clone());
         let mut ids = HashSet::new();
         let mut next_id = 1u32;
-        for file_asset in &self.file_assets {
-            let asset_id = file_asset
-                .with(|asset| {
-                    asset
-                        .as_file_asset()
-                        .expect("BackboardImporter assets remain FileAsset-derived")
-                        .file_asset_base()
-                        .asset_id()
-                })
-                .expect("BackboardImporter retains live FileAssets");
+        let mut ensure_unique_id = |file_asset: &mut FileAsset| {
+            let asset_id = file_asset.asset_id();
             if ids.contains(&asset_id) {
-                file_asset
-                    .with_mut(|asset| {
-                        asset
-                            .as_file_asset_mut()
-                            .expect("BackboardImporter assets remain FileAsset-derived")
-                            .file_asset_base_mut()
-                            .set_asset_id(next_id);
-                    })
-                    .expect("BackboardImporter retains live FileAssets");
+                file_asset.set_asset_id(next_id);
             } else {
                 ids.insert(asset_id);
                 if asset_id >= next_id {
                     next_id = asset_id.wrapping_add(1);
                 }
+            }
+        };
+        for file_asset in &self.file_assets {
+            if *file_asset == handle {
+                ensure_unique_id(asset);
+            } else {
+                file_asset
+                    .with_mut(|asset| {
+                        ensure_unique_id(
+                            asset
+                                .as_file_asset_mut()
+                                .expect("BackboardImporter assets remain FileAsset-derived")
+                                .file_asset_base_mut(),
+                        );
+                    })
+                    .expect("BackboardImporter retains live FileAssets");
             }
         }
     }
@@ -83,13 +94,12 @@ impl BackboardImporter {
         self.file_asset_referencers.push(referencer);
     }
 
-    pub fn add_artboard(&mut self, artboard: CoreHandle) {
+    pub fn add_artboard(&mut self, artboard: &mut Artboard) {
         #[cfg(feature = "tools")]
-        artboard
-            .with_downcast_mut::<Artboard, _>(|artboard| {
-                artboard.set_artboard_id(self.next_artboard_id as u16)
-            })
-            .expect("BackboardImporter retains a live Artboard");
+        artboard.set_artboard_id(self.next_artboard_id as u16);
+        let artboard = crate::mechanical_port::source::core::CoreObject::core(artboard)
+            .handle()
+            .expect("imported Artboard owner");
         self.artboard_lookup.insert(self.next_artboard_id, artboard);
         self.next_artboard_id += 1;
     }
@@ -110,37 +120,38 @@ impl BackboardImporter {
         self.data_converter_group_item_referencers.push(item);
     }
 
-    pub fn add_interpolator(&mut self, interpolator: CoreHandle) {
-        let initialized = interpolator
-            .with_mut(|interpolator| interpolator.keyframe_interpolator_initialize())
-            .expect("BackboardImporter retains a live interpolator");
+    pub fn add_interpolator(
+        &mut self,
+        interpolator: &mut dyn crate::mechanical_port::source::core::CoreObject,
+    ) {
+        // Import is already executing on this owner. Invoke the real virtual
+        // initialize before retaining its handle, without reborrowing its slot.
+        let initialized = interpolator.keyframe_interpolator_initialize();
         assert!(
             initialized,
             "BackboardImporter interpolators must implement KeyFrameInterpolator"
         );
-        self.interpolators.push(interpolator);
+        self.interpolators.push(
+            interpolator
+                .core()
+                .handle()
+                .expect("imported interpolator owner"),
+        );
     }
 
     pub fn add_physics(&mut self, physics: CoreHandle) {
         self.physics.push(physics);
     }
 
-    pub fn add_view_model_instance(&mut self, instance: CoreHandle) {
-        let Some(file) = self.file.as_ref() else {
+    pub fn add_view_model_instance(&mut self, instance: &mut ViewModelInstance) {
+        let Some(models) = self.file_view_models.as_ref() else {
             return;
         };
-        let view_model_id = instance
-            .with(|instance| {
-                instance
-                    .as_view_model_instance()
-                    .map(|instance| instance.base.view_model_id())
-            })
-            .flatten()
-            .expect("BackboardImporter instances remain ViewModelInstance-derived");
-        if let Some(view_model) = file
-            .with_file(|file| file.view_model_handle(view_model_id as usize))
-            .flatten()
-        {
+        let view_model = models
+            .borrow()
+            .get(instance.base.view_model_id() as usize)
+            .cloned();
+        if let Some(view_model) = view_model {
             view_model
                 .with_mut(|view_model| {
                     view_model
@@ -152,6 +163,12 @@ impl BackboardImporter {
         }
     }
 
+    pub(crate) fn add_file_view_model_instance(&mut self, instance: CoreHandle) {
+        if let Some(instances) = &self.file_view_model_instances {
+            instances.borrow_mut().push(instance);
+        }
+    }
+
     pub fn physics(&self) -> Vec<CoreHandle> {
         self.physics.clone()
     }
@@ -160,8 +177,17 @@ impl BackboardImporter {
         &mut self.file_assets
     }
 
-    pub fn set_file(&mut self, file: Option<RuntimeFileWeakHandle>) {
-        self.file = file;
+    pub(crate) fn set_file(
+        &mut self,
+        file: RuntimeFileWeakHandle,
+        view_models: Rc<RefCell<Vec<CoreHandle>>>,
+        view_model_instances: Rc<RefCell<Vec<CoreHandle>>>,
+    ) {
+        self.file = Some(file);
+        // These are the File's canonical lists, shared only to permit synchronous
+        // registration while File::read and the imported instance are borrowed.
+        self.file_view_models = Some(view_models);
+        self.file_view_model_instances = Some(view_model_instances);
     }
 
     pub fn file(&self) -> Option<RuntimeFileWeakHandle> {

@@ -24,6 +24,93 @@ fn is_solo_set_member(child: &CoreHandle) -> bool {
 }
 
 impl Solo {
+    fn set_active_component_id_occurrence(owner: &CoreHandle, value: u32) {
+        let changed = owner
+            .with_downcast_mut::<Solo, _>(|solo| solo.base.set_active_component_id_value(value))
+            .unwrap_or(false);
+        if !changed {
+            return;
+        }
+
+        // C++ has no ownership guard here. Release Rust's Solo borrow before
+        // collapsing children because TextStyle dirt can synchronously inspect
+        // the owning layout chain through this same Solo.
+        let collapses = owner
+            .with_downcast::<Solo, _>(|solo| {
+                solo.collapse_children(solo.base.base.base.base.base.is_collapsed())
+            })
+            .unwrap_or_default();
+        for (child, collapsed) in collapses {
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(child)
+                .collapse(collapsed);
+        }
+        owner.with_downcast_mut::<Solo, _>(Solo::recollect_owning_layout);
+        owner.with_downcast_mut::<Solo, _>(|solo| {
+            solo.notify_property_changed(SoloBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY);
+        });
+    }
+
+    pub(crate) fn update_by_index_occurrence(owner: &CoreHandle, index: usize) {
+        let selected = owner
+            .with_downcast::<Solo, _>(|solo| {
+                let children = solo.base.base.base.base.base.children();
+                if index >= children.len() {
+                    return None;
+                }
+                let artboard = solo.base.base.base.base.base.artboard_handle()?;
+                children
+                    .iter()
+                    .filter(|child| is_solo_set_member(child))
+                    .nth(index)
+                    .map(|child| {
+                        artboard
+                            .with_downcast::<crate::mechanical_port::source::artboard::Artboard, _>(
+                                |artboard| artboard.id_of(child),
+                            )
+                            .unwrap_or(0)
+                    })
+            })
+            .flatten();
+        if let Some(value) = selected {
+            Self::set_active_component_id_occurrence(owner, value);
+        }
+    }
+
+    pub(crate) fn update_by_name_occurrence(owner: &CoreHandle, name: &str) {
+        let selected = owner
+            .with_downcast::<Solo, _>(|solo| {
+                let artboard = solo.base.base.base.base.base.artboard_handle()?;
+                solo.base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .children()
+                    .iter()
+                    .find(|child| {
+                        is_solo_set_member(child)
+                            && child
+                                .with(|child| {
+                                    child
+                                        .as_component()
+                                        .is_some_and(|component| component.base.name() == name)
+                                })
+                                .unwrap_or(false)
+                    })
+                    .map(|child| {
+                        artboard
+                            .with_downcast::<crate::mechanical_port::source::artboard::Artboard, _>(
+                                |artboard| artboard.id_of(child),
+                            )
+                            .unwrap_or(0)
+                    })
+            })
+            .flatten();
+        if let Some(value) = selected {
+            Self::set_active_component_id_occurrence(owner, value);
+        }
+    }
+
     pub fn active_component(&self) -> Option<CoreHandle> {
         let active = self
             .base
@@ -50,15 +137,8 @@ impl Solo {
     pub fn recollect_owning_layout(&mut self) {
         let mut parent = self.base.base.base.base.base.parent_handle();
         while let Some(current) = parent {
-            let synced = current
-                .with_mut(|current| {
-                    current.as_layout_component_mut().map(|layout| {
-                        layout.sync_layout_children();
-                    })
-                })
-                .flatten()
-                .is_some();
-            if synced {
+            if current.is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY) {
+                crate::mechanical_port::source::layout_component::LayoutComponent::sync_layout_children_from_solo(&current, self);
                 return;
             }
             parent = current
@@ -67,7 +147,7 @@ impl Solo {
         }
     }
 
-    fn propagate_collapse(&mut self, collapse: bool) {
+    pub(crate) fn collapse_children(&self, collapse: bool) -> Vec<(CoreHandle, bool)> {
         let active = if collapse {
             None
         } else {
@@ -85,22 +165,30 @@ impl Solo {
                         .flatten()
                 })
         };
-        let children = self.base.base.base.base.base.children().to_vec();
-        for child in children {
-            if !is_solo_set_member(&child) {
-                child.with_mut(|child| {
-                    if let Some(child) = child.as_component_mut() {
-                        child.collapse(collapse);
-                    }
-                });
-                continue;
-            }
-            let child_is_active = active.as_ref() == Some(&child);
-            child.with_mut(|child| {
-                if let Some(child) = child.as_component_mut() {
-                    child.collapse(!child_is_active);
-                }
-            });
+        self.base
+            .base
+            .base
+            .base
+            .base
+            .children()
+            .iter()
+            .map(|child| {
+                (
+                    child.clone(),
+                    if is_solo_set_member(child) {
+                        active.as_ref() != Some(child)
+                    } else {
+                        collapse
+                    },
+                )
+            })
+            .collect()
+    }
+
+    fn propagate_collapse(&mut self, collapse: bool) {
+        for (child, collapsed) in self.collapse_children(collapse) {
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(child)
+                .collapse(collapsed);
         }
     }
 
@@ -134,7 +222,7 @@ impl Solo {
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> StatusCode {
-        let code = self.base.base.base.base.base.on_added_clean(context);
+        let code = self.base.base.base.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
         }

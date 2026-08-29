@@ -1,449 +1,505 @@
-//! Executable ports for the Wave A cases whose first review found only
-//! synthetic or nearby evidence.
-
-use nuxie_binary::{RuntimeFile, read_runtime_file};
-use nuxie_graph::{ArtboardGraph, GraphFile};
-use nuxie_runtime::{
-    ArtboardInstance, Mat2D, RuntimeBindableArtboard, RuntimeOwnedViewModelContext,
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, StateMachineInstance,
+//! Native executable ports of the formerly partial Wave A bounds, iterator,
+//! and stateful component cases.
+use nuxie_render_api::{PersistentFactory, RecordingFactory, RecordingRenderer};
+use nuxie_runtime::source::{
+    advance_flags::AdvanceFlags,
+    animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
+    artboard::{Artboard, RuntimeArtboardInstanceHandle},
+    bindable_artboard::RuntimeBindableArtboardHandle,
+    core::{CoreHandle, CoreType},
+    factory::RuntimeFactoryHandle,
+    file::{File, RuntimeFileHandle},
+    generated::{core_registry::CoreRegistry, text::text_value_run_base::TextValueRunBase},
+    layout::n_sliced_node::NSlicedNode,
+    layout_component::LayoutComponent,
+    math::aabb::Aabb,
+    math::vec2d::Vec2D,
+    nested_artboard::NestedArtboard,
+    node::Node,
+    shapes::{image::Image, paint::shape_paint::ShapePaint, path::Path, shape::Shape},
+    text::{text::Text, text_value_run::TextValueRun},
+    viewmodel::{
+        viewmodel::ViewModel, viewmodel_instance::ViewModelInstance,
+        viewmodel_instance_artboard::ViewModelInstanceArtboard,
+        viewmodel_instance_boolean::ViewModelInstanceBoolean,
+        viewmodel_instance_color::ViewModelInstanceColor,
+        viewmodel_instance_list::ViewModelInstanceList,
+        viewmodel_instance_list_item::ViewModelInstanceListItem,
+        viewmodel_instance_number::ViewModelInstanceNumber,
+        viewmodel_instance_string::ViewModelInstanceString,
+    },
 };
 use std::path::PathBuf;
-
-fn asset_path(name: &str) -> PathBuf {
+fn import(name: &str) -> (RuntimeFileHandle, RecordingRenderer) {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
-    root.join("tests/unit_tests/assets").join(name)
+    let bytes =
+        std::fs::read(root.join("tests/unit_tests/assets").join(name)).expect("pinned fixture");
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let renderer = factory.borrow().make_renderer();
+    let handle = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    (
+        File::import(&bytes, handle, None, None, None).expect("native File import"),
+        renderer,
+    )
 }
-
-fn import(name: &str) -> (RuntimeFile, GraphFile) {
-    let bytes = std::fs::read(asset_path(name))
-        .unwrap_or_else(|error| panic!("read pinned fixture {name}: {error}"));
-    let runtime = read_runtime_file(&bytes)
-        .unwrap_or_else(|error| panic!("import pinned fixture {name}: {error:#}"));
-    let graphs = GraphFile::from_runtime_file(&runtime)
-        .unwrap_or_else(|error| panic!("graph pinned fixture {name}: {error:#}"));
-    (runtime, graphs)
+fn read<T: std::any::Any, R>(handle: &CoreHandle, f: impl FnOnce(&T) -> R) -> R {
+    handle.with_downcast(f).expect("native owner")
 }
-
+fn write<T: std::any::Any, R>(handle: &CoreHandle, f: impl FnOnce(&mut T) -> R) -> R {
+    handle.with_downcast_mut(f).expect("native owner")
+}
+fn find<T: CoreType>(root: &CoreHandle, name: &str) -> CoreHandle {
+    read::<Artboard, _>(root, |artboard| artboard.find_handle::<T>(name)).expect(name)
+}
+fn property(instance: &CoreHandle, name: &str) -> CoreHandle {
+    read::<ViewModelInstance, _>(instance, |instance| instance.property_value_named(name))
+        .expect(name)
+}
 fn close(actual: f32, expected: f32, label: &str) {
-    let tolerance = expected.abs().mul_add(1.0e-5, 1.0e-5);
+    // Catch Approx's default epsilon is 100 * float epsilon, evaluated in double.
+    let difference = (f64::from(actual) - f64::from(expected)).abs();
     assert!(
-        (actual - expected).abs() <= tolerance,
+        difference <= f64::from(100.0 * f32::EPSILON) * f64::from(expected).abs(),
         "{label}: expected {expected}, got {actual}"
     );
 }
-
-fn component_local(graph: &ArtboardGraph, name: &str, type_name: &str) -> usize {
-    graph
-        .components
-        .iter()
-        .find(|component| {
-            component.name.as_deref() == Some(name)
-                && nuxie_schema::definition_by_name(component.type_name).is_some_and(|definition| {
-                    definition.name == type_name || definition.ancestors.contains(&type_name)
-                })
-        })
-        .unwrap_or_else(|| panic!("missing {type_name} named {name}"))
-        .local_id
+fn advance(root: &CoreHandle) {
+    Artboard::advance_handle(
+        root,
+        0.0,
+        AdvanceFlags::ADVANCE_NESTED | AdvanceFlags::ANIMATE | AdvanceFlags::NEW_FRAME,
+    );
 }
-
 #[test]
-#[ignore = "expected-red: Shape::computeLocalBounds has no callable Rust owner"]
 fn upstream_background_shape_bounds_call_the_world_and_local_owners() {
-    let (runtime, graphs) = import("background_measure.riv");
-    let graph = graphs.artboards.first().expect("background artboard");
-    let background = component_local(graph, "background", "Shape");
-    assert!(graph.components.iter().any(|component| {
-        component.name.as_deref() == Some("nameRun") && component.type_name == "TextValueRun"
-    }));
-    let mut artboard =
-        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
-            .expect("background instance");
-    artboard.update_pass();
-
-    let initial = artboard
-        .object_world_bounds(background)
-        .expect("initial Shape::computeWorldBounds analogue");
+    let (file, _renderer) = import("background_measure.riv");
+    let artboard = file.with_file(File::artboard).expect("default artboard");
+    let background = find::<Shape>(&artboard, "background");
+    let name = find::<TextValueRun>(&artboard, "nameRun");
+    advance(&artboard);
+    let initial = read::<Shape, _>(&background, |shape| shape.compute_world_bounds(None));
     close(initial.width(), 42.010925, "initial width");
     close(initial.height(), 29.995453, "initial height");
-
-    assert_eq!(
-        artboard.set_root_text_value_run("nameRun", b"much much longer".to_vec()),
-        Some(true)
-    );
-    artboard.update_pass();
-    let extended = artboard
-        .object_world_bounds(background)
-        .expect("extended Shape::computeWorldBounds analogue");
+    assert!(CoreRegistry::set_string_handle(
+        &name,
+        TextValueRunBase::TEXT_PROPERTY_KEY as i32,
+        "much much longer".into()
+    ));
+    advance(&artboard);
+    let extended = read::<Shape, _>(&background, |shape| shape.compute_world_bounds(None));
     close(extended.width(), 138.01093, "extended width");
     close(extended.height(), 29.995453, "extended height");
-
-    artboard.debug_update_pass_with_root_transform(Mat2D([0.5, 0.0, 0.0, 0.5, 0.0, 0.0]));
-    let scaled = artboard
-        .object_world_bounds(background)
-        .expect("scaled Shape::computeWorldBounds analogue");
+    write::<Artboard, _>(&artboard, |artboard| {
+        artboard.mutable_world_transform().scale_by_values(0.5, 0.5);
+        artboard.mark_world_transform_dirty();
+    });
+    advance(&artboard);
+    let scaled = read::<Shape, _>(&background, |shape| shape.compute_world_bounds(None));
     close(scaled.width(), 138.01093 / 2.0, "scaled width");
     close(scaled.height(), 29.995453 / 2.0, "scaled height");
-
-    panic!(
-        "the remaining pinned action is background.computeLocalBounds(); deriving it by dividing world bounds is not parity evidence"
-    );
+    let local = read::<Shape, _>(&background, Shape::compute_local_bounds);
+    close(local.width(), 138.01093, "local width");
+    close(local.height(), 29.995453, "local height");
 }
-
 #[test]
-#[ignore = "expected-red: the generic Component::localBounds matrix has no callable Rust owner"]
 fn upstream_local_bounds_executes_the_complete_object_matrix() {
-    let (runtime, graphs) = import("local_bounds.riv");
-    let graph = graphs.artboards.first().expect("local-bounds artboard");
-    let mut artboard =
-        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
-            .expect("local-bounds instance");
-    artboard.update_pass();
-
-    // Preserve every REQUIRE and every concrete owner in the pinned case.
-    let matrix = [
-        ("Shape1", "Shape"),
-        ("Shape2", "Shape"),
-        ("Shape3", "Shape"),
-        ("Text1", "Text"),
-        ("Text2", "Text"),
-        ("Group1", "Node"),
-        ("Image1", "Image"),
-        ("NSlice2", "NSlicedNode"),
-        ("CustomShape1", "Shape"),
-        ("CustomPath1", "Path"),
-        ("LayoutContainer", "LayoutComponent"),
-        ("LayoutCellLeft", "LayoutComponent"),
+    let (file, _renderer) = import("local_bounds.riv");
+    let artboard = file.with_file(File::artboard).expect("default artboard");
+    let shape1 = find::<Shape>(&artboard, "Shape1");
+    let shape2 = find::<Shape>(&artboard, "Shape2");
+    let shape3 = find::<Shape>(&artboard, "Shape3");
+    let text1 = find::<Text>(&artboard, "Text1");
+    let text2 = find::<Text>(&artboard, "Text2");
+    let group = find::<Node>(&artboard, "Group1");
+    let image = find::<Image>(&artboard, "Image1");
+    assert!(read::<Image, _>(&image, Image::image_asset).is_some());
+    let nslice = find::<NSlicedNode>(&artboard, "NSlice2");
+    let custom_shape = find::<Shape>(&artboard, "CustomShape1");
+    let custom_path = find::<Path>(&artboard, "CustomPath1");
+    let container = find::<LayoutComponent>(&artboard, "LayoutContainer");
+    let cell = find::<LayoutComponent>(&artboard, "LayoutCellLeft");
+    advance(&artboard);
+    let cases = [
+        (
+            read::<Shape, _>(&shape1, Shape::local_bounds),
+            [-35.0, -35.0, 35.0, 35.0],
+            [false; 4],
+        ),
+        (
+            read::<Shape, _>(&shape2, Shape::local_bounds),
+            [-80.0, -80.0, 0.0, 0.0],
+            [false; 4],
+        ),
+        (
+            read::<Shape, _>(&shape3, Shape::local_bounds),
+            [0.0, 0.0, 60.0, 60.0],
+            [false; 4],
+        ),
+        (
+            read::<Text, _>(&text1, Text::local_bounds),
+            [0.0, 0.0, 159.55078, 24.19921],
+            [false, false, true, true],
+        ),
+        (
+            read::<Text, _>(&text2, Text::local_bounds),
+            [-79.77539, -12.099609, 79.77539, 12.099609],
+            [true; 4],
+        ),
+        (
+            read::<Node, _>(&group, |node| node.local_bounds()),
+            [0.0; 4],
+            [false; 4],
+        ),
+        (
+            read::<Image, _>(&image, Image::local_bounds),
+            [-64.0, -64.0, 64.0, 64.0],
+            [false; 4],
+        ),
+        (
+            read::<NSlicedNode, _>(&nslice, NSlicedNode::local_bounds),
+            [0.0, 0.0, 112.1891, 77.7086],
+            [false, false, true, true],
+        ),
+        (
+            read::<Shape, _>(&custom_shape, Shape::local_bounds),
+            [-27.82596, -32.0276, 105.36988, 52.38258],
+            [true; 4],
+        ),
+        (
+            custom_path
+                .with(|path| path.as_path().expect("Path-derived owner").local_bounds())
+                .expect("live Path-derived owner"),
+            [-11.52589, -25.32601, 100.66321, 52.38258],
+            [true; 4],
+        ),
+        (
+            read::<LayoutComponent, _>(&container, LayoutComponent::local_bounds),
+            [0.0, 0.0, 200.0, 100.0],
+            [false; 4],
+        ),
+        (
+            read::<LayoutComponent, _>(&cell, LayoutComponent::local_bounds),
+            [0.0, 0.0, 88.0, 84.0],
+            [false; 4],
+        ),
     ];
-    for (name, type_name) in matrix {
-        let local = component_local(graph, name, type_name);
-        // Execute the retained object's real bounds dispatch. This is not
-        // accepted as local-bounds proof: transformed world bounds are a
-        // distinct owner, which is why the test remains expected-red.
-        let _ = artboard.object_world_bounds(local);
+    for (bounds, expected, approximate) in cases {
+        let actual = [bounds.left(), bounds.top(), bounds.right(), bounds.bottom()];
+        for i in 0..4 {
+            if approximate[i] {
+                close(actual[i], expected[i], "local edge");
+            } else {
+                assert_eq!(actual[i], expected[i]);
+            }
+        }
     }
-    assert!(
-        runtime
-            .file_assets()
-            .iter()
-            .any(|asset| asset.type_name.contains("ImageAsset")),
-        "Image1 retains a concrete image-asset owner"
-    );
-
-    panic!(
-        "Rust must expose and execute each concrete localBounds owner before the 48 pinned edge assertions can be translated"
-    );
 }
-
 #[test]
-#[ignore = "expected-red: Artboard children<T>/objects<T> typed iterators are absent in Rust"]
 fn upstream_child_typed_iterators_execute_the_iterator_owners() {
-    let (runtime, graphs) = import("juice.riv");
-    let graph = graphs.artboards.first().expect("default juice artboard");
-    let mut artboard =
-        ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
-            .expect("juice instance");
-    artboard.update_pass();
-
-    // Do not replace children<Node>, children<ShapePaint>, or objects<ShapePaint>
-    // with graph filtering. The missing callable owner is the parity failure.
-    panic!(
-        "execute children::<Node>(), children::<ShapePaint>(), and objects::<ShapePaint>() here; expected counts are 1, 1, and 20"
-    );
+    let (file, _renderer) = import("juice.riv");
+    let artboard = file
+        .with_file(|file| file.artboard_default())
+        .expect("juice");
+    artboard.with_artboard(|artboard| {
+        let mut count = 0;
+        for child in artboard.children_typed::<Node>().iter() {
+            assert_eq!(
+                child
+                    .with(|child| child.as_component().unwrap().name().to_owned())
+                    .unwrap(),
+                "root"
+            );
+            count += 1;
+        }
+        assert_eq!(count, 1);
+        let mut paint_count = 0;
+        for paint in artboard.children_typed::<ShapePaint>().iter() {
+            assert!(
+                !paint
+                    .with(|paint| paint.as_shape_paint_behavior().unwrap().is_translucent())
+                    .unwrap()
+            );
+            paint_count += 1;
+        }
+        assert_eq!(paint_count, 1);
+        let paints = artboard.objects_typed::<ShapePaint>();
+        let count = paints.iter().count();
+        assert_eq!(paints.size(), 20);
+        assert_eq!(paints.size(), count);
+    });
 }
-
 struct StatefulFixture {
-    runtime: RuntimeFile,
-    graphs: GraphFile,
-    artboard: ArtboardInstance,
-    machine: StateMachineInstance,
-    context: RuntimeOwnedViewModelContext,
+    file: RuntimeFileHandle,
+    artboard: RuntimeArtboardInstanceHandle,
+    machine: RuntimeStateMachineInstanceHandle,
+    root: CoreHandle,
+    renderer: RecordingRenderer,
 }
-
 impl StatefulFixture {
-    fn load(asset: &str, artboard_name: &str) -> Self {
-        let (runtime, graphs) = import(asset);
-        let (artboard_index, graph) = graphs
-            .artboards
-            .iter()
-            .enumerate()
-            .find(|(_, graph)| graph.name.as_deref() == Some(artboard_name))
-            .unwrap_or_else(|| panic!("missing artboard {artboard_name} in {asset}"));
-        let mut artboard =
-            ArtboardInstance::from_graph_with_artboards(&runtime, graph, &graphs.artboards)
-                .unwrap_or_else(|error| panic!("instantiate {artboard_name}: {error:#}"));
-        let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
-        let view_model_index = runtime
-            .artboard(artboard_index)
-            .and_then(|object| object.uint_property("viewModelId"))
-            .and_then(|value| usize::try_from(value).ok())
-            .expect("artboard view-model id");
-        let main = RuntimeOwnedViewModelInstance::from_instance(&runtime, view_model_index, 0)
-            .or_else(|| RuntimeOwnedViewModelInstance::new(&runtime, view_model_index))
-            .expect("main view-model instance");
-        let mut context = RuntimeOwnedViewModelContext::from_main(main);
-        context.complete_for_artboard(&runtime, artboard_index);
-        artboard.bind_owned_view_model_artboard_contexts(&runtime, &context);
-        assert!(machine.bind_owned_view_model_contexts(&context));
-        machine.advance_data_context();
+    fn load(asset: &str, name: &str) -> Self {
+        let (file, renderer) = import(asset);
+        let artboard = file
+            .with_file(|file| file.artboard_named(name))
+            .expect("named artboard");
+        let machine = artboard
+            .state_machine_instance_handle(0)
+            .expect("state machine");
+        let id = artboard.with_artboard(|artboard| artboard.base.base.view_model_id());
+        let root = if id == u32::MAX {
+            file.with_file_mut(|file| {
+                file.create_view_model_instance_for_artboard(artboard.core_handle())
+            })
+        } else {
+            file.with_file(|file| file.create_view_model_instance_at(id as usize, 0))
+        }
+        .expect("main VMI");
+        machine.with_instance_mut(|machine| machine.bind_view_model_instance(root.clone()));
         let mut fixture = Self {
-            runtime,
-            graphs,
+            file,
             artboard,
             machine,
-            context,
+            root,
+            renderer,
         };
         fixture.frames(1, 0.0);
         fixture
     }
-
-    fn root(&self) -> RuntimeOwnedViewModelHandle {
-        self.context
-            .main_handle()
-            .expect("main view-model handle")
-            .clone()
-    }
-
     fn frames(&mut self, count: usize, elapsed: f32) {
         for _ in 0..count {
-            StateMachineInstance::advance_and_apply_state_machines_with_view_models(
-                &mut self.artboard,
-                std::slice::from_mut(&mut self.machine),
-                elapsed,
-                true,
-                || false,
-            )
-            .expect("stateful frame advances");
+            self.machine.advance_and_apply(elapsed);
+            self.artboard.draw(&mut self.renderer);
         }
     }
-
-    fn source(&self, name: &str) -> (u32, RuntimeBindableArtboard) {
-        let graph = self
-            .graphs
-            .artboards
-            .iter()
-            .find(|graph| graph.name.as_deref() == Some(name))
-            .unwrap_or_else(|| panic!("missing source artboard {name}"));
-        let instance = ArtboardInstance::from_graph_with_artboards(
-            &self.runtime,
-            graph,
-            &self.graphs.artboards,
-        )
-        .unwrap_or_else(|error| panic!("instantiate source {name}: {error:#}"));
-        (
-            graph.global_id,
-            RuntimeBindableArtboard::new_with_artboard_instance(name, &instance),
-        )
+    fn source(&self, name: &str) -> RuntimeBindableArtboardHandle {
+        self.file
+            .with_file(|file| file.bindable_artboard_named(name))
+            .expect("source artboard")
     }
-
-    fn nested_graphs(&mut self) -> Vec<u32> {
-        let mut ids = Vec::new();
-        self.artboard
-            .try_visit_artboard_tree_instances_mut(&mut |_, global_id, _| {
-                ids.push(global_id);
-                Ok::<_, ()>(())
-            })
-            .expect("tree visit");
-        ids
+    fn set_source(&self, name: &str, source: Option<RuntimeBindableArtboardHandle>) {
+        write::<ViewModelInstanceArtboard, _>(&property(&self.root, name), |value| {
+            value.set_asset(source)
+        });
     }
-}
-
-#[test]
-#[ignore = "expected-red: replacement StrokedButton lacks the pinned owned strokeWidth VMI context"]
-fn upstream_stateful_component_dynamic_artboard_swap_replays_the_complete_fixture() {
-    let mut fixture = StatefulFixture::load("stateful_artboard_swap.riv", "Main");
-    let (button_id, button) = fixture.source("Button");
-    let (stroked_id, stroked) = fixture.source("StrokedButton");
-    let root = fixture.root();
-
-    fixture.frames(2, 0.016);
-    assert!(!fixture.nested_graphs().contains(&button_id));
-    assert!(
-        root.borrow_mut()
-            .set_runtime_artboard_by_property_name("buttonArtboard", Some(button.clone()))
-    );
-    fixture.frames(5, 0.016);
-    assert!(fixture.nested_graphs().contains(&button_id));
-
-    assert!(
-        root.borrow_mut()
-            .set_runtime_artboard_by_property_name("buttonArtboard", Some(stroked))
-    );
-    fixture.frames(5, 0.016);
-    assert!(fixture.nested_graphs().contains(&stroked_id));
-    let mut saw_stroke_width = false;
-    fixture
-        .artboard
-        .try_visit_artboard_tree_instances_mut(&mut |_, global_id, child| {
-            if global_id == stroked_id
-                && let Some(main) = child
-                    .owned_view_model_context()
-                    .and_then(RuntimeOwnedViewModelContext::main_handle)
-            {
-                saw_stroke_width = main
-                    .borrow_mut()
-                    .set_number_by_property_name("strokeWidth", 8.0);
-            }
-            Ok::<_, ()>(())
+    fn swapped_nested(&self, names: &[&str]) -> Option<CoreHandle> {
+        let nested = self
+            .artboard
+            .with_artboard(|artboard| artboard.nested_artboards());
+        nested.into_iter().find(|nested| {
+            nested
+                .with(|nested| nested.as_nested_artboard().unwrap().source_artboard())
+                .flatten()
+                .and_then(|source| {
+                    source.with(|source| source.as_component().unwrap().name().to_owned())
+                })
+                .is_some_and(|name| names.contains(&name.as_str()))
         })
-        .expect("stroked child visit");
-    assert!(saw_stroke_width);
-    fixture.frames(5, 0.016);
-
-    assert!(
-        root.borrow_mut()
-            .set_runtime_artboard_by_property_name("buttonArtboard", Some(button.clone()))
-    );
-    fixture.frames(5, 0.016);
-    assert!(fixture.nested_graphs().contains(&button_id));
-    assert!(
-        root.borrow_mut()
-            .set_runtime_artboard_by_property_name("buttonArtboard", None)
-    );
-    fixture.frames(5, 0.016);
-    assert!(!fixture.nested_graphs().contains(&button_id));
-    assert!(
-        root.borrow_mut()
-            .set_runtime_artboard_by_property_name("buttonArtboard", Some(button))
-    );
-    fixture.frames(5, 0.016);
-    assert!(fixture.nested_graphs().contains(&button_id));
-}
-
-#[test]
-#[ignore = "expected-red: active nested VMI pointer identity is not observable through the Rust test surface"]
-fn upstream_stateful_nested_source_switch_replays_matching_and_different_vm_lifetimes() {
-    let mut fixture = StatefulFixture::load("stateful_source_switch.riv", "ParentArtboard");
-    let (matching_id, matching) = fixture.source("MatchingArtboardA");
-    let (different_id, different) = fixture.source("DifferentArtboardB");
-    let root = fixture.root();
-    fixture.frames(5, 0.016);
-
-    assert!(
-        root.borrow_mut()
-            .set_runtime_artboard_by_property_name("sourceArtboard", Some(matching.clone()))
-    );
-    fixture.frames(5, 0.016);
-    assert!(fixture.nested_graphs().contains(&matching_id));
-    assert!(
-        root.borrow_mut()
-            .set_string_by_property_name("labelInput", b"Matching A")
-    );
-    fixture.frames(10, 0.016);
-
-    assert!(
-        root.borrow_mut()
-            .set_runtime_artboard_by_property_name("sourceArtboard", Some(different))
-    );
-    fixture.frames(5, 0.016);
-    assert!(fixture.nested_graphs().contains(&different_id));
-    assert!(
-        root.borrow_mut()
-            .set_string_by_property_name("labelInput", b"Different B")
-    );
-    fixture.frames(10, 0.016);
-
-    assert!(
-        root.borrow_mut()
-            .set_runtime_artboard_by_property_name("sourceArtboard", Some(matching))
-    );
-    fixture.frames(5, 0.016);
-    assert!(fixture.nested_graphs().contains(&matching_id));
-    assert!(
-        root.borrow_mut()
-            .set_string_by_property_name("labelInput", b"Matching A Again")
-    );
-    fixture.frames(10, 0.016);
-
-    panic!(
-        "the remaining pinned assertions compare the active nested VMI pointer with the retained stateful-child pointer before and after the round trip"
-    );
-}
-
-#[test]
-#[ignore = "expected-red: stateful list bridge lifecycle does not yet complete on the pinned fixture"]
-fn upstream_stateful_component_list_bridge_replays_add_remove_click_readd_and_clear() {
-    let mut fixture = StatefulFixture::load("stateful_list_props.riv", "Main");
-    let root = fixture.root();
-    let button_schema = fixture
-        .runtime
-        .view_models()
-        .iter()
-        .position(|candidate| candidate.object.string_property("name") == Some("ButtonVM"))
-        .expect("ButtonVM schema");
-    let make_button = |label: &[u8], tint: u32| {
-        let mut button = RuntimeOwnedViewModelInstance::new(&fixture.runtime, button_schema)
-            .expect("ButtonVM instance");
-        assert!(button.set_string_by_property_name("label", label));
-        assert!(button.set_color_by_property_name("tint", tint));
-        RuntimeOwnedViewModelHandle::new(button)
-    };
-    let alpha = make_button(b"Alpha", 0xffff_3344);
-    let beta = make_button(b"Beta", 0xff33_aaff);
-    let gamma = make_button(b"Gamma", 0xff44_cc55);
-    for button in [&alpha, &beta, &gamma] {
-        let index = root
-            .list_item_count_by_property_name_path("buttons")
-            .expect("buttons list");
-        assert!(root.insert_list_item_by_property_name_path("buttons", index, button));
     }
-    fixture.frames(3, 0.016);
-    assert_eq!(
-        root.list_item_count_by_property_name_path("buttons"),
-        Some(3)
+    fn click(&mut self, y: f32) {
+        self.machine.with_instance_mut(|machine| {
+            machine.pointer_down(Vec2D::new(50.0, y), 1);
+            machine.pointer_up(Vec2D::new(50.0, y), 1);
+        });
+        self.frames(1, 0.016);
+    }
+}
+fn nested_instance(nested: &CoreHandle) -> RuntimeArtboardInstanceHandle {
+    nested
+        .with(|nested| {
+            nested
+                .as_nested_artboard()
+                .unwrap()
+                .artboard_instance_default()
+        })
+        .flatten()
+        .expect("nested instance")
+}
+fn main_vmi(artboard: &RuntimeArtboardInstanceHandle) -> CoreHandle {
+    artboard
+        .data_context()
+        .expect("nested data context")
+        .with_context(|context| context.main_view_model_instance())
+        .expect("nested main VMI")
+}
+#[test]
+fn upstream_stateful_component_dynamic_artboard_swap_replays_the_complete_fixture() {
+    let mut f = StatefulFixture::load("stateful_artboard_swap.riv", "Main");
+    let button = f.source("Button");
+    let stroked = f.source("StrokedButton");
+    f.frames(2, 0.016);
+    assert!(f.swapped_nested(&["Button", "StrokedButton"]).is_none());
+    f.set_source("buttonArtboard", Some(button.clone()));
+    f.frames(5, 0.016);
+    f.swapped_nested(&["Button"]).expect("Button nested");
+    f.set_source("buttonArtboard", Some(stroked));
+    f.frames(5, 0.016);
+    let nested = f
+        .swapped_nested(&["StrokedButton"])
+        .expect("StrokedButton nested");
+    let stroked_vmi = main_vmi(&nested_instance(&nested));
+    write::<ViewModelInstanceNumber, _>(&property(&stroked_vmi, "strokeWidth"), |value| {
+        value.set_value(8.0)
+    });
+    f.frames(5, 0.016);
+    f.set_source("buttonArtboard", Some(button.clone()));
+    f.frames(5, 0.016);
+    let nested = f.swapped_nested(&["Button"]).expect("Button restored");
+    let vmi = main_vmi(&nested_instance(&nested));
+    property(&vmi, "count");
+    assert!(
+        read::<ViewModelInstance, _>(&vmi, |vmi| vmi.property_value_named("strokeWidth")).is_none()
     );
-
-    assert!(root.remove_list_item_by_property_name_path("buttons", 1));
-    fixture.frames(5, 0.016);
-    assert_eq!(
-        root.list_item_count_by_property_name_path("buttons"),
-        Some(2)
+    f.set_source("buttonArtboard", None);
+    f.frames(5, 0.016);
+    assert!(f.swapped_nested(&["Button", "StrokedButton"]).is_none());
+    f.set_source("buttonArtboard", Some(button));
+    f.frames(5, 0.016);
+    let nested = f.swapped_nested(&["Button"]).expect("Button after clear");
+    let vmi = main_vmi(&nested_instance(&nested));
+    property(&vmi, "count");
+    assert!(
+        read::<ViewModelInstance, _>(&vmi, |vmi| vmi.property_value_named("strokeWidth")).is_none()
     );
-    assert_eq!(
-        gamma.borrow().boolean_value_by_property_name("clicked"),
-        Some(false)
+}
+fn stateful_child(nested: &CoreHandle) -> Option<CoreHandle> {
+    nested
+        .with(|nested| {
+            nested
+                .as_container_component()
+                .unwrap()
+                .children_typed::<ViewModelInstance>()
+                .first()
+        })
+        .flatten()
+}
+#[test]
+fn upstream_stateful_nested_source_switch_replays_matching_and_different_vm_lifetimes() {
+    let mut f = StatefulFixture::load("stateful_source_switch.riv", "ParentArtboard");
+    let matching = f.source("MatchingArtboardA");
+    let different = f.source("DifferentArtboardB");
+    let nested = f
+        .artboard
+        .with_artboard(|artboard| artboard.nested_artboards())
+        .into_iter()
+        .find(|nested| {
+            nested
+                .with(|nested| nested.as_nested_artboard().unwrap().base.is_stateful())
+                .unwrap()
+        })
+        .expect("stateful nested artboard");
+    let child = stateful_child(&nested).expect("stateful child");
+    let initial_id = read::<ViewModelInstance, _>(&child, |child| child.base.view_model_id());
+    let label = property(&f.root, "labelInput");
+    f.frames(5, 0.016);
+    f.set_source("sourceArtboard", Some(matching.clone()));
+    f.frames(5, 0.016);
+    f.swapped_nested(&["MatchingArtboardA"])
+        .expect("matching source");
+    assert_eq!(main_vmi(&nested_instance(&nested)), child);
+    write::<ViewModelInstanceString, _>(&label, |label| label.set_value("Matching A"));
+    f.frames(10, 0.016);
+    f.set_source("sourceArtboard", Some(different));
+    f.frames(5, 0.016);
+    f.swapped_nested(&["DifferentArtboardB"])
+        .expect("different source");
+    let bound = main_vmi(&nested_instance(&nested));
+    assert_ne!(bound, child);
+    assert_ne!(
+        read::<ViewModelInstance, _>(&bound, |vmi| vmi.base.view_model_id()),
+        read::<ViewModelInstance, _>(&child, |vmi| vmi.base.view_model_id())
     );
-    fixture
-        .machine
-        .pointer_down(&mut fixture.artboard, 50.0, 73.0, 1);
-    fixture
-        .machine
-        .pointer_up(&mut fixture.artboard, 50.0, 73.0, 1);
-    fixture.frames(1, 0.016);
-    let gamma_clicked_after_first = gamma.borrow().boolean_value_by_property_name("clicked");
-    let removed_beta_clicked_after_first = beta.borrow().boolean_value_by_property_name("clicked");
-    fixture.frames(3, 0.016);
-
-    let index = root
-        .list_item_count_by_property_name_path("buttons")
-        .expect("buttons list");
-    assert!(root.insert_list_item_by_property_name_path("buttons", index, &beta));
-    fixture.frames(5, 0.016);
+    assert_eq!(stateful_child(&nested), Some(child.clone()));
     assert_eq!(
-        root.list_item_count_by_property_name_path("buttons"),
-        Some(3)
+        read::<ViewModelInstance, _>(&child, |child| child.base.view_model_id()),
+        initial_id
     );
-    fixture
-        .machine
-        .pointer_down(&mut fixture.artboard, 50.0, 118.0, 1);
-    fixture
-        .machine
-        .pointer_up(&mut fixture.artboard, 50.0, 118.0, 1);
-    fixture.frames(1, 0.016);
-    let beta_clicked_after_readd = beta.borrow().boolean_value_by_property_name("clicked");
-    fixture.frames(3, 0.016);
-
-    assert!(root.clear_list_items_by_property_name_path("buttons"));
-    fixture.frames(5, 0.016);
+    write::<ViewModelInstanceString, _>(&label, |label| label.set_value("Different B"));
+    f.frames(10, 0.016);
+    f.set_source("sourceArtboard", Some(matching));
+    f.frames(5, 0.016);
+    f.swapped_nested(&["MatchingArtboardA"])
+        .expect("matching source restored");
+    assert_eq!(main_vmi(&nested_instance(&nested)), child);
+    write::<ViewModelInstanceString, _>(&label, |label| label.set_value("Matching A Again"));
+    f.frames(10, 0.016);
+}
+fn add_item(instance: &CoreHandle, list: &CoreHandle) {
+    let item = instance
+        .insert_sibling(ViewModelInstanceListItem::default())
+        .expect("list item allocation");
+    write::<ViewModelInstanceListItem, _>(&item, |item| {
+        item.set_view_model_instance(Some(instance.clone()))
+    });
+    write::<ViewModelInstanceList, _>(list, |list| list.add_item(item));
+}
+#[test]
+fn upstream_stateful_component_list_bridge_replays_add_remove_click_readd_and_clear() {
+    let mut f = StatefulFixture::load("stateful_list_props.riv", "Main");
+    let list = property(&f.root, "buttons");
+    let model = f
+        .file
+        .with_file(|file| file.view_model_named("ButtonVM"))
+        .expect("ButtonVM");
+    let make_button = |label: &str, tint: u32| {
+        let button = f
+            .file
+            .with_file_mut(|file| file.create_view_model_instance(model.clone()))
+            .expect("button instance");
+        write::<ViewModelInstanceString, _>(&property(&button, "label"), |value| {
+            value.set_value(label)
+        });
+        write::<ViewModelInstanceColor, _>(&property(&button, "tint"), |value| {
+            value.set_value(tint as i32)
+        });
+        add_item(&button, &list);
+        button
+    };
+    let _alpha = make_button("Alpha", 0xffff3344);
+    let beta = make_button("Beta", 0xff33aaff);
+    let gamma = make_button("Gamma", 0xff44cc55);
+    f.frames(3, 0.016);
     assert_eq!(
-        root.list_item_count_by_property_name_path("buttons"),
-        Some(0)
+        read::<ViewModelInstanceList, _>(&list, |list| list.list_items().len()),
+        3
     );
-
-    // Upstream uses non-fatal CHECK for click propagation, so retain every
-    // later action before reporting the first behavioral mismatch.
-    assert_eq!(gamma_clicked_after_first, Some(true));
-    assert_eq!(removed_beta_clicked_after_first, Some(false));
-    assert_eq!(beta_clicked_after_readd, Some(true));
+    write::<ViewModelInstanceList, _>(&list, |list| list.remove_item_at(1));
+    f.frames(5, 0.016);
+    assert_eq!(
+        read::<ViewModelInstanceList, _>(&list, |list| list.list_items().len()),
+        2
+    );
+    let gamma_clicked = property(&gamma, "clicked");
+    let beta_clicked = property(&beta, "clicked");
+    assert!(!read::<ViewModelInstanceBoolean, _>(
+        &gamma_clicked,
+        ViewModelInstanceBoolean::value
+    ));
+    f.click(73.0);
+    let gamma_after =
+        read::<ViewModelInstanceBoolean, _>(&gamma_clicked, ViewModelInstanceBoolean::value);
+    let beta_removed =
+        read::<ViewModelInstanceBoolean, _>(&beta_clicked, ViewModelInstanceBoolean::value);
+    f.frames(3, 0.016);
+    add_item(&beta, &list);
+    f.frames(5, 0.016);
+    assert_eq!(
+        read::<ViewModelInstanceList, _>(&list, |list| list.list_items().len()),
+        3
+    );
+    f.click(118.0);
+    let beta_after =
+        read::<ViewModelInstanceBoolean, _>(&beta_clicked, ViewModelInstanceBoolean::value);
+    f.frames(3, 0.016);
+    while read::<ViewModelInstanceList, _>(&list, |list| !list.list_items().is_empty()) {
+        write::<ViewModelInstanceList, _>(&list, |list| list.remove_item_at(0));
+    }
+    f.frames(5, 0.016);
+    assert_eq!(
+        read::<ViewModelInstanceList, _>(&list, |list| list.list_items().len()),
+        0
+    );
+    assert!(gamma_after);
+    assert!(!beta_removed);
+    assert!(beta_after);
 }

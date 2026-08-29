@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    artboard::{Artboard, ArtboardInstance, RuntimeArtboardInstanceWeakHandle},
+    artboard::{Artboard, RuntimeArtboardInstanceHandle, RuntimeArtboardInstanceWeakHandle},
     artboard_host::ArtboardHost,
     component_dirt::ComponentDirt,
     core::CoreHandle,
@@ -32,31 +32,39 @@ impl Default for NestedArtboardLayout {
     }
 }
 
-struct CloneCallbacks;
-impl NestedArtboardLayoutBaseCallbacks for CloneCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
-}
-
 impl NestedArtboardLayout {
+    pub fn layout_node(
+        &self,
+        _index: i32,
+    ) -> Option<crate::mechanical_port::source::layout::layout_node_provider::LayoutNodeKey> {
+        let artboard = self.base.base.artboard_instance_handle(0)?;
+        artboard.with_artboard_mut(|artboard| {
+            artboard.take_layout_data();
+            artboard.layout_node_key(0)
+        })
+    }
+
     pub fn clone_layout(&self) -> Self {
-        let mut nested = self.base.clone_into(&mut CloneCallbacks);
+        let mut nested = NestedArtboardLayoutBase::clone_into(self);
         nested.base.base.set_file(self.base.base.file());
-        if let Some(referenced) = self.base.base.source_artboard() {
-            nested.base.base.referenced_artboard(Some(referenced));
+        // Upstream instances the current reference, not necessarily its
+        // original authored definition.
+        let referenced = match self.base.base.artboard_instance_handle(0) {
+            Some(instance) => Some(instance.core_handle()),
+            None => self.base.base.source_artboard(),
+        };
+        if let Some(referenced) = referenced {
+            if let Some(instance) = Artboard::nested_instance_from_handle(&referenced) {
+                nested.base.base.referenced_artboard_instance(instance);
+            }
         }
         nested
     }
 
-    fn mark_hosting_layout_dirty_instance(&mut self, _instance: &ArtboardInstance) {
-        let Some(hosted) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
-        else {
-            return;
-        };
+    fn mark_hosting_layout_dirty_instance(&mut self, instance: &RuntimeArtboardInstanceHandle) {
         if let Some(artboard) = self.base.base.parent_artboard_handle() {
-            artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-                artboard.mark_layout_dirty(hosted);
-                artboard.mark_layout_style_dirty();
-            });
+            Artboard::mark_layout_dirty_occurrence(&artboard, instance.core_handle(), None);
+            crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_style_dirty_occurrence(&artboard);
         }
     }
 
@@ -93,8 +101,14 @@ impl NestedArtboardLayout {
         self.provider_state.layout_constraints().to_vec()
     }
 
-    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        let code = self.base.base.on_added_clean(context);
+    pub(crate) fn on_added_clean_after_animation_initialization(
+        &mut self,
+        context: &mut dyn CoreContext,
+    ) -> StatusCode {
+        let code = self
+            .base
+            .base
+            .on_added_clean_after_animation_initialization(context);
         if code != StatusCode::Ok {
             return code;
         }
@@ -169,6 +183,42 @@ impl NestedArtboardLayout {
         }
     }
 
+    pub(crate) fn update_artboard_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
+        let parent = owner
+            .with(|owner| {
+                owner
+                    .as_component()
+                    .expect("NestedArtboardLayout component")
+                    .parent_handle()
+            })
+            .expect("live NestedArtboardLayout");
+        if let Some(parent) = parent.as_ref() {
+            parent.with_mut(|parent| {
+                if let Some(layout) = parent.as_layout_component_mut() {
+                    layout.clear_layout_children();
+                }
+            });
+        }
+        crate::mechanical_port::source::nested_artboard::NestedArtboard::update_artboard_occurrence(
+            owner, value,
+        );
+        owner.with_downcast_mut::<Self, _>(|owner| owner.update_width_override());
+        owner.with_downcast_mut::<Self, _>(|owner| owner.update_height_override());
+        let parent = owner
+            .with(|owner| {
+                owner
+                    .as_component()
+                    .expect("NestedArtboardLayout component")
+                    .parent_handle()
+            })
+            .expect("live NestedArtboardLayout");
+        if let Some(parent) = parent.filter(|parent| parent.is_type_of(
+            crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
+        )) {
+            crate::mechanical_port::source::layout_component::LayoutComponent::sync_layout_children_occurrence(&parent);
+        }
+    }
+
     pub fn is_row(&self) -> bool {
         self.base
             .base
@@ -187,17 +237,13 @@ impl NestedArtboardLayout {
 
     fn update_width_override(&mut self) {
         if let Some(instance) = self.base.base.artboard_instance_handle(0) {
-            instance.with_artboard_mut(|instance| {
-                StyleOverrider::<NestedArtboardLayout>::update_width_override(self, instance)
-            });
+            StyleOverrider::<NestedArtboardLayout>::update_width_override(self, &instance);
         }
     }
 
     fn update_height_override(&mut self) {
         if let Some(instance) = self.base.base.artboard_instance_handle(0) {
-            instance.with_artboard_mut(|instance| {
-                StyleOverrider::<NestedArtboardLayout>::update_height_override(self, instance)
-            });
+            StyleOverrider::<NestedArtboardLayout>::update_height_override(self, &instance);
         }
     }
 }
@@ -248,8 +294,11 @@ impl StyleOverrideProvider for NestedArtboardLayout {
     fn instance_width(&self) -> f32 {
         self.base.instance_width()
     }
-    fn mark_hosting_layout_dirty(&mut self, artboard: &mut ArtboardInstance) {
+    fn mark_hosting_layout_dirty(&mut self, artboard: &RuntimeArtboardInstanceHandle) {
         self.mark_hosting_layout_dirty_instance(artboard);
+    }
+    fn borrowed_artboard_host(&mut self) -> Option<&mut dyn ArtboardHost> {
+        Some(self)
     }
 }
 
@@ -296,6 +345,12 @@ impl LayoutNodeProvider for NestedArtboardLayout {
 }
 
 impl ArtboardHost for NestedArtboardLayout {
+    fn data_bind_path_referencer(
+        &self,
+    ) -> &crate::mechanical_port::source::data_bind_path_referencer::DataBindPathReferencer {
+        &self.base.base.data_bind_path_referencer
+    }
+
     fn artboard_count(&self) -> usize {
         self.base.base.artboard_count()
     }
@@ -334,13 +389,8 @@ impl ArtboardHost for NestedArtboardLayout {
     }
 
     fn mark_hosting_layout_dirty(&mut self, _artboard_instance: RuntimeArtboardInstanceWeakHandle) {
-        if let Some(hosted) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
-            && let Some(artboard) = self.base.base.parent_artboard_handle()
-        {
-            artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-                artboard.mark_layout_dirty(hosted);
-                artboard.mark_layout_style_dirty();
-            });
+        if let Some(instance) = self.base.base.artboard_instance_handle(0) {
+            self.mark_hosting_layout_dirty_instance(&instance);
         }
     }
 
@@ -392,7 +442,7 @@ impl ArtboardHost for NestedArtboardLayout {
         crate::mechanical_port::source::core::CoreObject::core(self).handle()
     }
 
-    fn relink_data_context(&mut self, view_model_instance: CoreHandle) {
+    fn relink_data_context(&mut self, view_model_instance: Option<CoreHandle>) {
         self.base.base.relink_data_context(view_model_instance);
     }
 

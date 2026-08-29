@@ -51,7 +51,7 @@ impl TextAssetBase {
             return;
         }
         callbacks.folder_path_changed();
-        callbacks.notify_property_changed(Self::FOLDER_PATH_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::FOLDER_PATH_PROPERTY_KEY);
     }
     pub(crate) fn set_folder_path_value(&mut self, value: String) -> bool {
         if self.folder_path == value {

@@ -45,7 +45,10 @@ impl WorldTransformComponentBase {
             return;
         }
         callbacks.opacity_changed();
-        callbacks.notify_property_changed(Self::OPACITY_PROPERTY_KEY);
+        WorldTransformComponentBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OPACITY_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_opacity_value(&mut self, value: f32) -> bool {

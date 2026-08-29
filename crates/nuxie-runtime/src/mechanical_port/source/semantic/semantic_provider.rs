@@ -1,6 +1,7 @@
 use crate::mechanical_port::source::{
     artboard::Artboard,
     core::CoreHandle,
+    generated::{container_component_base::ContainerComponentBase, node_base::NodeBase},
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     semantic::{
         semantic_inference_registry::{resolve_inferred_semantics, supports_inferred_semantics},
@@ -94,6 +95,9 @@ pub fn resolve_semantic_data(component: Option<&CoreHandle>) -> ResolvedSemantic
     let Some(component) = component else {
         return ResolvedSemanticData::default();
     };
+    if !component.is_type_of(NodeBase::TYPE_KEY) {
+        return ResolvedSemanticData::default();
+    }
     let explicit = component
         .with(|component| {
             let node = component.as_node()?;
@@ -121,6 +125,9 @@ pub fn resolve_semantic_data(component: Option<&CoreHandle>) -> ResolvedSemantic
 }
 
 fn node_world_bounds(component: &CoreHandle) -> Option<(Bounds, Option<CoreHandle>)> {
+    if !component.is_type_of(NodeBase::TYPE_KEY) {
+        return None;
+    }
     let (local_bounds, world_transform, artboard) = component.with(|component| {
         let node = component.as_node()?;
         let local_bounds = component.semantic_provider_local_bounds()?;
@@ -130,17 +137,20 @@ fn node_world_bounds(component: &CoreHandle) -> Option<(Bounds, Option<CoreHandl
             node.artboard_handle(),
         ))
     })??;
-    if local_bounds.empty() {
+    if local_bounds.is_empty_or_nan() {
         return None;
     }
     let world_bounds = world_transform.map_bounding_box(local_bounds);
-    if world_bounds.empty() {
+    if world_bounds.is_empty_or_nan() {
         return None;
     }
     Some((bounds_from_aabb(world_bounds), artboard))
 }
 
 fn collect_descendant_bounds(component: &CoreHandle, merged: &mut Aabb, found: &mut bool) {
+    if !component.is_type_of(ContainerComponentBase::TYPE_KEY) {
+        return;
+    }
     let children = component
         .with(|component| {
             component
@@ -167,6 +177,9 @@ pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
     let Some(component) = component else {
         return Bounds::default();
     };
+    if !component.is_type_of(NodeBase::TYPE_KEY) {
+        return Bounds::default();
+    }
     if let Some((world_bounds, artboard)) = node_world_bounds(component) {
         return artboard.as_ref().map_or(world_bounds, |artboard| {
             root_transform_aabb(artboard, world_bounds)
@@ -189,9 +202,7 @@ pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
         return Bounds::default();
     }
 
-    let is_container = component
-        .with(|component| component.as_container_component().is_some())
-        .unwrap_or(false);
+    let is_container = component.is_type_of(ContainerComponentBase::TYPE_KEY);
     if is_container {
         let mut merged = Aabb::default();
         let mut found = false;

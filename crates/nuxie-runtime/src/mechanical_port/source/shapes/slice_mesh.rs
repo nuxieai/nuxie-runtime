@@ -1,6 +1,9 @@
 use crate::mechanical_port::source::{
     core::CoreHandle,
-    layout::{axis::AxisType, n_slicer::NSlicer, n_slicer_tile_mode::NSlicerTileModeType},
+    layout::{
+        axis::AxisType, axis_x::AxisX, axis_y::AxisY, n_slicer::NSlicer,
+        n_slicer_details::NSlicerDetails, n_slicer_tile_mode::NSlicerTileModeType,
+    },
     math::{mat2d::Mat2D, n_slicer_helpers::NSlicerHelpers, vec2d::Vec2D},
     shapes::mesh_drawable::{MeshType, RuntimeRenderBufferHandle},
 };
@@ -85,7 +88,7 @@ impl SliceMesh {
             image.with_downcast::<crate::mechanical_port::source::shapes::image::Image, _>(
                 |image| {
                     (
-                        image.base.world_transform(),
+                        *image.base.world_transform(),
                         -image.width() * image.base.origin_x(),
                         -image.height() * image.base.origin_y(),
                     )
@@ -182,7 +185,7 @@ impl SliceMesh {
                 )
             })
             .flatten()
-            .unwrap_or_default();
+            .unwrap_or(nuxie_render_api::Mat2D::IDENTITY);
         if let Some(buffer) = self.uv_render_buffer.as_ref() {
             let mut buffer = buffer.borrow_mut();
             {
@@ -242,14 +245,47 @@ impl SliceMesh {
         if size == 0.0 || scale == 0.0 {
             return Vec::new();
         }
-        NSlicerHelpers::uv_stops(
-            if axis == AxisType::X {
-                nslicer.xs()
-            } else {
-                nslicer.ys()
-            },
-            size,
-        )
+        let axes = if axis == AxisType::X {
+            nslicer.xs()
+        } else {
+            nslicer.ys()
+        };
+        struct AxisSnapshot {
+            offset: f32,
+            normalized: bool,
+        }
+        impl crate::mechanical_port::source::math::n_slicer_helpers::Axis for AxisSnapshot {
+            fn normalized(&self) -> bool {
+                self.normalized
+            }
+            fn offset(&self) -> f32 {
+                self.offset
+            }
+        }
+        let axes: Vec<_> = axes
+            .iter()
+            .map(|axis| {
+                axis.with_downcast::<AxisX, _>(|axis| AxisSnapshot {
+                    offset: axis.offset(),
+                    normalized: axis.normalized(),
+                })
+                .or_else(|| {
+                    axis.with_downcast::<AxisY, _>(|axis| AxisSnapshot {
+                        offset: axis.offset(),
+                        normalized: axis.normalized(),
+                    })
+                })
+            })
+            .collect();
+        let refs: Vec<Option<&dyn crate::mechanical_port::source::math::n_slicer_helpers::Axis>> =
+            axes.iter()
+                .map(|axis| {
+                    axis.as_ref().map(|axis| {
+                        axis as &dyn crate::mechanical_port::source::math::n_slicer_helpers::Axis
+                    })
+                })
+                .collect();
+        NSlicerHelpers::uv_stops(&refs, size)
     }
     fn vertex_stops(&self, nslicer: &mut NSlicer, stops: &[f32], axis: AxisType) -> Vec<f32> {
         let Some((size, scale)) = nslicer.image_handle().and_then(|image| {
@@ -272,7 +308,7 @@ impl SliceMesh {
         let mut result = Vec::new();
         let mut vertex = 0.0;
         let mut in_bounds = 0.0;
-        for i in 0..stops.len() - 1 {
+        for i in 0..stops.len().saturating_sub(1) {
             result.push(in_bounds);
             let segment = size * (stops[i + 1] - stops[i]) / scale;
             if NSlicerHelpers::is_fixed_segment(i as i32) {
@@ -386,14 +422,14 @@ impl SliceMesh {
         let ys = self.vertex_stops(nslicer, &vs, AxisType::Y);
         let mut expanded = Vec::new();
         let mut vertex_index = 0u16;
-        for patch_y in 0..vs.len() - 1 {
-            for patch_x in 0..us.len() - 1 {
+        for patch_y in 0..vs.len().saturating_sub(1) {
+            for patch_x in 0..us.len().saturating_sub(1) {
                 let mode = nslicer
                     .tile_modes()
                     .get(&nslicer.patch_index(patch_x as i32, patch_y as i32))
                     .copied()
-                    .unwrap_or(NSlicerTileModeType::STRETCH);
-                if mode == NSlicerTileModeType::HIDDEN {
+                    .unwrap_or(NSlicerTileModeType::Stretch);
+                if mode == NSlicerTileModeType::Hidden {
                     continue;
                 }
                 let v0 = vertex_index;
@@ -401,7 +437,7 @@ impl SliceMesh {
                 for corner in PATCH_CORNERS {
                     let x = patch_x + corner.x;
                     let y = patch_y + corner.y;
-                    let id = if mode != NSlicerTileModeType::REPEAT {
+                    let id = if mode != NSlicerTileModeType::Repeat {
                         let id = vertex_index;
                         vertex_index += 1;
                         id as i32
@@ -414,7 +450,7 @@ impl SliceMesh {
                         vertex: Vec2D::new(xs[x], ys[y]),
                     });
                 }
-                if mode == NSlicerTileModeType::REPEAT {
+                if mode == NSlicerTileModeType::Repeat {
                     let mut new_indices = Vec::new();
                     vertex_index +=
                         self.tile_repeat(nslicer, &mut expanded, &mut new_indices, &patch, v0);

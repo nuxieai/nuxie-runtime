@@ -32,6 +32,10 @@ impl RuntimeScriptingVmHandle {
         })
     }
 
+    pub fn poll_async_work(&self) -> Result<bool, crate::scripting::ScriptError> {
+        self.with_vm_mut(|vm| vm.poll_async_work())
+    }
+
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.inner, &other.inner)
     }

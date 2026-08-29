@@ -47,7 +47,7 @@ impl DataBindContainerDependent {
                 }
             }
             Self::StateMachine(dependent) => {
-                dependent.with_instance_mut(|dependent| dependent.relink_data_context());
+                dependent.relink_data_context();
             }
         }
     }
@@ -64,7 +64,7 @@ pub struct ViewModelInstance {
 }
 
 impl ViewModelInstance {
-    fn handle(&self) -> Option<CoreHandle> {
+    pub(crate) fn handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.base.base.handle()
     }
 
@@ -82,29 +82,40 @@ impl ViewModelInstance {
         if self.property_values.contains(&value) {
             return;
         }
-        if let Some(instance) = self.handle() {
-            value.with_mut(|value| {
-                if let Some(value) = value.as_view_model_instance_value_mut() {
-                    value.set_view_model_instance(instance);
-                }
-            });
-        }
-        let symbol = value
-            .with(|value| {
-                let value = value.as_view_model_instance_value()?;
-                let property = value.view_model_property()?;
-                property
-                    .with(|property| {
-                        let property = property.as_view_model_property()?;
-                        SymbolType::from_i32(property.base.symbol_type_value())
-                    })
-                    .flatten()
+        value
+            .with_mut(|value| {
+                self.add_value_borrowed(
+                    value
+                        .as_view_model_instance_value_mut()
+                        .expect("ViewModelInstance values derive from ViewModelInstanceValue"),
+                );
             })
-            .flatten();
-        if let Some(symbol) = symbol.filter(|symbol| *symbol != SymbolType::None) {
-            self.set_property_symbol(symbol, value.clone());
+            .expect("ViewModelInstance values are arena-owned");
+    }
+
+    pub(crate) fn add_value_borrowed(
+        &mut self,
+        value: &mut super::viewmodel_instance_value::ViewModelInstanceValue,
+    ) {
+        let handle = value
+            .handle()
+            .expect("ViewModelInstanceValue is arena-owned");
+        if self.property_values.contains(&handle) {
+            return;
         }
-        self.property_values.push(value);
+        value.set_view_model_instance_borrowed(self);
+        let symbol = value.view_model_property().and_then(|property| {
+            property
+                .with(|property| {
+                    let property = property.as_view_model_property()?;
+                    SymbolType::from_i32(property.base.symbol_type_value() as i32)
+                })
+                .flatten()
+        });
+        if let Some(symbol) = symbol.filter(|symbol| *symbol != SymbolType::None) {
+            self.set_property_symbol(symbol, handle.clone());
+        }
+        self.property_values.push(handle);
     }
 
     pub fn remove_value(&mut self, property_id: u32) -> bool {
@@ -183,8 +194,13 @@ impl ViewModelInstance {
         }
     }
 
-    pub fn replace_view_model_by_name(&mut self, name: &str, value: CoreHandle) -> bool {
-        let Some(view_model) = self.view_model.as_ref() else {
+    pub fn replace_view_model_by_name(owner: &CoreHandle, name: &str, value: CoreHandle) -> bool {
+        let Some((view_model, property_values)) = owner
+            .with_downcast::<Self, _>(|owner| {
+                Some((owner.view_model.clone()?, owner.property_values.clone()))
+            })
+            .flatten()
+        else {
             return false;
         };
         let property = view_model
@@ -197,7 +213,7 @@ impl ViewModelInstance {
         let Some(property) = property else {
             return false;
         };
-        for property_value in &self.property_values {
+        for property_value in &property_values {
             let matches = property_value
                 .with(|value| {
                     value
@@ -209,13 +225,9 @@ impl ViewModelInstance {
             if !matches {
                 continue;
             }
-            let required_id = property
-                .with(|property| {
-                    property
-                        .as_view_model_property()
-                        .map(|property| property.base.view_model_reference_id())
-                })
-                .flatten();
+            let required_id = property.with_downcast::<super::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(
+                |property| property.base.view_model_reference_id(),
+            );
             if required_id
                 != value
                     .with(|value| {
@@ -227,7 +239,7 @@ impl ViewModelInstance {
             {
                 break;
             }
-            if self.replace_view_model_property_handle(property_value.clone(), value) {
+            if Self::replace_view_model_property_occurrence(owner, property_value, Some(value)) {
                 return true;
             }
             break;
@@ -417,7 +429,7 @@ impl ViewModelInstance {
         let Some((copy_values, properties, view_model)) =
             source.with_downcast::<Self, _>(|source| {
                 (
-                    source.base.base.base.base.artboard().is_none(),
+                    source.base.base.base.base.artboard_handle().is_none(),
                     source.property_values.clone(),
                     source.view_model.clone(),
                 )
@@ -458,11 +470,11 @@ impl ViewModelInstance {
             return StatusCode::MissingObject;
         };
         let Some(importer) = import_stack.latest::<BackboardImporter>(
-            crate::mechanical_port::source::backboard::Backboard::TYPE_KEY,
+            crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
         ) else {
             return StatusCode::MissingObject;
         };
-        importer.add_view_model_instance(instance.clone());
+        importer.add_view_model_instance(self);
         if import_stack
             .latest::<ArtboardImporter>(
                 crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
@@ -471,9 +483,12 @@ impl ViewModelInstance {
         {
             return self.base.import(import_stack);
         }
-        if let Some(file) = importer.file() {
-            file.with_file_mut(|file| file.add_file_view_model_instance(instance));
-        }
+        import_stack
+            .latest::<BackboardImporter>(
+                crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
+            )
+            .expect("the BackboardImporter remains on the import stack")
+            .add_file_view_model_instance(instance);
         StatusCode::Ok
     }
 
@@ -552,7 +567,6 @@ impl ViewModelInstance {
             .collect()
     }
 
-    #[cfg(any(test, feature = "tools"))]
     pub fn parents(&self) -> Vec<CoreHandle> {
         self.parents.clone()
     }

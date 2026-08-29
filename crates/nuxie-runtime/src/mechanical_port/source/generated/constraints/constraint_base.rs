@@ -39,7 +39,7 @@ impl ConstraintBase {
             return;
         }
         callbacks.strength_changed();
-        callbacks.notify_property_changed(Self::STRENGTH_PROPERTY_KEY);
+        ConstraintBaseCallbacks::notify_property_changed(callbacks, Self::STRENGTH_PROPERTY_KEY);
     }
 
     pub(crate) fn set_strength_value(&mut self, value: f32) -> bool {

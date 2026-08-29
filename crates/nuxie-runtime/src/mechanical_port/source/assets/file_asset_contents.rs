@@ -20,12 +20,15 @@ impl Default for FileAssetContents {
 }
 
 impl FileAssetContents {
-    pub fn import(&mut self, this: CoreHandle, import_stack: &mut ImportStack) -> StatusCode {
+    pub fn import_handle(this: &CoreHandle, import_stack: &mut ImportStack) -> StatusCode {
         let Some(file_asset_importer) = import_stack.latest_file_asset_importer() else {
             return StatusCode::MissingObject;
         };
-        file_asset_importer.on_file_asset_contents(this);
-        self.base.import(import_stack)
+        // TextAssetImporter reads this occurrence's bytes in the virtual call.
+        // Retain its identity, but do not borrow it until that callback returns.
+        file_asset_importer.on_file_asset_contents(this.clone());
+        this.with_downcast_mut::<Self, _>(|contents| contents.base.import(import_stack))
+            .expect("FileAssetContents remains live after importer ownership transfer")
     }
 
     pub fn decode_bytes(&mut self, value: &[u8]) {

@@ -36,6 +36,33 @@ pub fn from(
     component.as_intrinsically_sizeable_mut()
 }
 
+/// Dispatch controlSize without holding a host borrow across a child callback.
+pub fn control_size_handle(
+    owner: &crate::mechanical_port::source::core::CoreHandle,
+    size: Vec2D,
+    width: LayoutScaleType,
+    height: LayoutScaleType,
+    direction: LayoutDirection,
+) -> bool {
+    if owner.is_type_of(
+        crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY,
+    ) {
+        crate::mechanical_port::source::shapes::shape::Shape::control_size_occurrence(
+            owner, size, width, height, direction,
+        );
+        return true;
+    }
+    owner
+        .with_mut(|owner| {
+            let Some(sizeable) = owner.as_intrinsically_sizeable_mut() else {
+                return false;
+            };
+            sizeable.control_size(size, width, height, direction);
+            true
+        })
+        .unwrap_or(false)
+}
+
 macro_rules! intrinsic_owner {
     ($owner:path) => {
         impl IntrinsicallySizeable for $owner {

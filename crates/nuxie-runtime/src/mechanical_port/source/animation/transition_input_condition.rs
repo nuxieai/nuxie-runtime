@@ -21,7 +21,7 @@ impl TransitionInputCondition {
         import_stack: &mut ImportStack,
         validate_input: impl FnOnce(&CoreHandle) -> bool,
     ) -> StatusCode {
-        let Some(importer) = import_stack.latest::<StateMachineImporter>(StateMachine::TYPE_KEY)
+        let Some(importer) = import_stack.latest::<StateMachineImporter>(crate::mechanical_port::source::generated::animation::state_machine_base::StateMachineBase::TYPE_KEY)
         else {
             return StatusCode::MissingObject;
         };

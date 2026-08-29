@@ -26,7 +26,9 @@ impl TextInputSelectionBase {
     }
     pub fn clone_into(&self) -> TextInputSelection {
         let mut cloned = TextInputSelection::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

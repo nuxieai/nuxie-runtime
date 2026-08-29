@@ -12,6 +12,17 @@ pub struct WorldTransformComponent {
     world_transform: Mat2D,
 }
 
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+    for WorldTransformComponent
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(
+            &mut self.base,
+            property_key,
+        );
+    }
+}
+
 impl WorldTransformComponentBaseCallbacks for WorldTransformComponent {
     fn notify_property_changed(&mut self, property_key: u16) {
         self.base

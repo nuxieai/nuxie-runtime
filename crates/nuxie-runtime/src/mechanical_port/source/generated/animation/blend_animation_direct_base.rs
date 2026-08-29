@@ -52,7 +52,10 @@ impl BlendAnimationDirectBase {
             return;
         }
         callbacks.input_id_changed();
-        callbacks.notify_property_changed(Self::INPUT_ID_PROPERTY_KEY);
+        BlendAnimationDirectBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INPUT_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_input_id_value(&mut self, value: u32) -> bool {
@@ -74,7 +77,10 @@ impl BlendAnimationDirectBase {
             return;
         }
         callbacks.mix_value_changed();
-        callbacks.notify_property_changed(Self::MIX_VALUE_PROPERTY_KEY);
+        BlendAnimationDirectBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIX_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_mix_value_value(&mut self, value: f32) -> bool {
@@ -96,7 +102,10 @@ impl BlendAnimationDirectBase {
             return;
         }
         callbacks.blend_source_changed();
-        callbacks.notify_property_changed(Self::BLEND_SOURCE_PROPERTY_KEY);
+        BlendAnimationDirectBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::BLEND_SOURCE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_blend_source_value(&mut self, value: u32) -> bool {

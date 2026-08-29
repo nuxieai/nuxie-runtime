@@ -13,34 +13,40 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 #[test]
 #[ignore = "expected-red: no-loader File::import leaves the in-band ImageAsset undecoded instead of retaining the pinned 308-byte source payload"]
 fn wave_c1_in_band_asset_001_no_loader_import_flow() {
-    let file = File::import(&pinned_fixture("in_band_asset.riv"))
-        .expect("no-loader File::import succeeds");
-    let assets = file.runtime().file_assets();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &pinned_fixture("in_band_asset.riv"),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("no-loader File::import succeeds");
+    let assets = file.with_file(|file| file.assets().to_vec());
     assert_eq!(assets.len(), 1);
-    let asset = assets[0];
-    assert_eq!(asset.type_name, "ImageAsset");
-    assert_eq!(asset.file_asset_cdn_uuid_string().as_deref(), Some(""));
-    assert_eq!(
-        asset.string_property("cdnBaseUrl"),
-        Some("https://public.rive.app/cdn/uuid"),
-    );
-    assert_eq!(
-        asset.file_asset_unique_filename().as_deref(),
-        Some("1x1-45022.png"),
-    );
-    assert_eq!(asset.file_asset_extension(), Some("png"));
-    assert_eq!(
-        file.runtime()
-            .imported_file_asset_contents(asset.id)
-            .expect("in-band source payload")
-            .len(),
-        308,
-    );
-    assert!(
-        file.file_asset_owners
-            .image_assets()
-            .get(asset.id)
-            .is_some(),
-        "no-loader import must decode and retain the in-band ImageAsset"
-    );
+    let asset = assets[0].clone();
+    asset
+        .with(|object| {
+            let image = object
+                .as_any()
+                .downcast_ref::<nuxie_runtime::source::assets::image_asset::ImageAsset>()
+                .expect("ImageAsset");
+            let file_asset = object.as_file_asset().expect("FileAsset").file_asset_base();
+            assert_eq!(file_asset.cdn_uuid_str(), "");
+            assert_eq!(
+                file_asset.cdn_base_url(),
+                "https://public.rive.app/cdn/uuid"
+            );
+            assert_eq!(
+                file_asset.unique_filename(image.file_extension()),
+                "1x1-45022.png"
+            );
+            assert_eq!(image.file_extension(), "png");
+            assert_eq!(image.decoded_byte_size, 308);
+            assert!(
+                image.render_image().is_some(),
+                "no-loader import must decode and retain the in-band ImageAsset"
+            );
+        })
+        .expect("live ImageAsset");
 }

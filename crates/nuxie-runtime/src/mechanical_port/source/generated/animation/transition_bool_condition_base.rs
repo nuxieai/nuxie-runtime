@@ -27,7 +27,9 @@ impl TransitionBoolConditionBase {
     }
     pub fn clone_into(&self) -> TransitionBoolCondition {
         let mut cloned = TransitionBoolCondition::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

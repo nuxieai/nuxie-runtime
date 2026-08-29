@@ -40,3 +40,15 @@ impl BlendStateDefinition<BlendAnimationDirect> for BlendStateDirect {
         self.base.base.base.base.base.flags() as u8
     }
 }
+
+impl std::ops::Deref for BlendStateDirect {
+    type Target = BlendStateDirectBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for BlendStateDirect {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

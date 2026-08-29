@@ -42,7 +42,7 @@ impl ForegroundLayoutDrawable {
             for paint in self.paint_container.shape_paints().iter().cloned() {
                 paint.with_mut(|paint| {
                     if let Some(paint) = paint.as_shape_paint_mut() {
-                        paint.blend_mode(blend);
+                        paint.blend_mode(blend.into());
                     }
                 });
             }

@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, core::Core,
+    core::Core, core::binary_reader::BinaryReader,
     data_bind::converters::data_converter_group_item::DataConverterGroupItem,
 };
 

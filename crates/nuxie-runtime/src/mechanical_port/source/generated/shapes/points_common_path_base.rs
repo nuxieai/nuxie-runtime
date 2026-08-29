@@ -43,7 +43,10 @@ impl PointsCommonPathBase {
             return;
         }
         callbacks.is_closed_changed();
-        callbacks.notify_property_changed(Self::IS_CLOSED_PROPERTY_KEY);
+        PointsCommonPathBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::IS_CLOSED_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_is_closed_value(&mut self, value: bool) -> bool {

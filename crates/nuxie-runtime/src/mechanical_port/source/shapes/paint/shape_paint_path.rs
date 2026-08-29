@@ -1,10 +1,6 @@
 use crate::mechanical_port::source::{
     factory::RuntimeFactoryHandle,
-    math::{
-        aabb::Aabb,
-        mat2d::Mat2D,
-        raw_path::{PathDirection, RawPath},
-    },
+    math::{aabb::Aabb, mat2d::Mat2D, path_types::PathDirection, raw_path::RawPath},
 };
 use nuxie_render_api::{FillRule, RawPath as RenderRawPath, RenderPath};
 pub struct ShapePaintPath {
@@ -65,7 +61,7 @@ impl ShapePaintPath {
     }
     pub fn add_path(&mut self, raw_path: &RawPath, transform: Option<&Mat2D>) {
         let iterator = self.raw_path.add_path(raw_path, transform);
-        self.raw_path.prune_empty_segments(iterator);
+        self.raw_path.prune_empty_segments_from(iterator);
         self.render_path_dirty = true;
     }
     pub fn add_shape_paint_path(&mut self, path: &ShapePaintPath, transform: Option<&Mat2D>) {
@@ -73,7 +69,7 @@ impl ShapePaintPath {
     }
     pub fn add_path_backwards(&mut self, raw_path: &RawPath, transform: Option<&Mat2D>) {
         let iterator = self.raw_path.add_path_backwards(raw_path, transform);
-        self.raw_path.prune_empty_segments(iterator);
+        self.raw_path.prune_empty_segments_from(iterator);
         self.render_path_dirty = true;
     }
     pub fn add_shape_paint_path_backwards(
@@ -137,14 +133,15 @@ impl ShapePaintPath {
     }
 
     pub fn render_path(&mut self, factory: &RuntimeFactoryHandle) -> &mut dyn RenderPath {
-        let raw_path = self.render_raw_path();
         if self.render_path.is_none() {
+            let raw_path = self.render_raw_path();
             let mut path = factory.with_factory_mut(|factory| factory.make_empty_render_path());
             path.add_raw_path(&raw_path);
             path.fill_rule(self.fill_rule);
             self.render_path = Some(path);
             self.render_path_dirty = false;
         } else if self.render_path_dirty {
+            let raw_path = self.render_raw_path();
             let path = self.render_path.as_mut().unwrap();
             path.rewind();
             path.add_raw_path(&raw_path);

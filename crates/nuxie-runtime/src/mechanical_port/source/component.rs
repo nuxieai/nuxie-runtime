@@ -14,6 +14,7 @@ use crate::mechanical_port::source::{
     importers::{artboard_importer::ArtboardImporter, import_stack::ImportStack},
     math::vec2d::Vec2D,
     status_code::StatusCode,
+    text::text_modifier_range::TextModifierRange,
 };
 pub fn has_dirt(value: ComponentDirt, flags: ComponentDirt) -> bool {
     value.intersects(flags)
@@ -122,9 +123,32 @@ impl ComponentOccurrenceHandle {
     }
     pub fn add_dirt(&self, value: ComponentDirt, recurse: bool) -> bool {
         if let Self::Authored(handle) = self {
-            return handle
-                .with_mut(|object| object.component_add_dirt(value, recurse))
+            if handle.is_type_of(
+                crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY,
+            ) {
+                return crate::mechanical_port::source::text::text_style::TextStyle::add_dirt_occurrence(
+                    handle, value, recurse,
+                );
+            }
+            // Complete this owner's onDirty/artboard callbacks before visiting
+            // dependents. They may synchronously call back into this owner.
+            let changed = handle
+                .with_mut(|object| object.component_add_dirt(value, false))
                 .unwrap_or(false);
+            if changed && recurse {
+                let dependents = handle
+                    .with(|object| {
+                        object
+                            .as_component()
+                            .expect("Component dirt owner")
+                            .dependents_snapshot()
+                    })
+                    .expect("live Component dirt owner");
+                for dependent in dependents {
+                    dependent.add_dirt(value, true);
+                }
+            }
+            return changed;
         }
         let Some(dirt) = self
             .with_component_mut(|component| component.add_dirt_state(value))
@@ -144,11 +168,181 @@ impl ComponentOccurrenceHandle {
         }
         true
     }
+    /// A scroll offset dirties its content, which in turn dirties the same
+    /// active constraint through the dependency graph. Retain the real caller
+    /// across that cascade instead of borrowing its Core slot again.
+    pub(crate) fn add_dirt_from_scroll(
+        &self,
+        scroll: &mut crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint,
+        value: ComponentDirt,
+        recurse: bool,
+    ) -> bool {
+        let is_scroll = self.authored().is_some_and(|owner| {
+            crate::mechanical_port::source::core::CoreObject::core(scroll)
+                .handle()
+                .as_ref()
+                == Some(owner)
+        });
+        let changed = if is_scroll {
+            scroll.component_add_dirt(value, false)
+        } else {
+            self.add_dirt(value, false)
+        };
+        if changed && recurse {
+            let dependents = if is_scroll {
+                scroll
+                    .as_component()
+                    .expect("ScrollConstraint inherits Component")
+                    .dependents_snapshot()
+            } else {
+                self.with_component(Component::dependents_snapshot)
+                    .expect("live dirt dependent")
+            };
+            for dependent in dependents {
+                dependent.add_dirt_from_scroll(scroll, value, true);
+            }
+        }
+        changed
+    }
+
+    /// A Shape property callback may synchronously dirty its paths while the
+    /// Shape is already borrowed. Carry that actual owner through the same
+    /// dirt cascade rather than reacquiring its arena slot in Path::onDirty.
+    pub(crate) fn add_dirt_from_shape(
+        &self,
+        shape: &mut crate::mechanical_port::source::shapes::shape::Shape,
+        value: ComponentDirt,
+        recurse: bool,
+    ) -> bool {
+        if self
+            .authored()
+            .is_some_and(|owner| shape.base.handle().as_ref() == Some(owner))
+        {
+            return shape.component_add_dirt(value, recurse);
+        }
+        let Some(dirt) = self
+            .with_component_mut(|component| component.add_dirt_state(value))
+            .flatten()
+        else {
+            return false;
+        };
+        match self {
+            Self::Authored(handle) => {
+                if handle.is_type_of(
+                    crate::mechanical_port::source::generated::shapes::path_base::PathBase::TYPE_KEY,
+                ) {
+                    crate::mechanical_port::source::shapes::path::Path::on_dirty_from_shape(
+                        handle, dirt, shape,
+                    );
+                } else if handle.is_type_of(
+                    crate::mechanical_port::source::generated::constraints::constraint_base::ConstraintBase::TYPE_KEY,
+                ) {
+                    crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_from_shape(
+                        handle, dirt, shape,
+                    );
+                } else {
+                    handle.with_mut(|object| object.component_on_dirty(dirt));
+                }
+            }
+            Self::PathComposer(handle) => {
+                let dirty_shape = handle
+                    .upgrade()
+                    .and_then(|helper| helper.borrow().dirty_shape());
+                if let Some(dirty_shape) = dirty_shape {
+                    if shape.base.handle().as_ref() == Some(&dirty_shape) {
+                        shape.path_changed();
+                    } else {
+                        dirty_shape.with_mut(|owner| {
+                            owner.as_shape_mut().map(|shape| shape.path_changed())
+                        });
+                    }
+                }
+            }
+            Self::TextVariationHelper(_) => self.on_dirty(dirt),
+        }
+        self.notify_artboard();
+        if recurse {
+            for dependent in self
+                .with_component(Component::dependents_snapshot)
+                .unwrap_or_default()
+            {
+                dependent.add_dirt_from_shape(shape, value, true);
+            }
+        }
+        true
+    }
     pub fn collapse(&self, value: bool) -> bool {
         if let Self::Authored(handle) = self {
-            return handle
-                .with_mut(|object| object.component_collapse(value))
-                .unwrap_or(false);
+            let Some(dirt) = self
+                .with_component_mut(|component| component.collapse_state(value))
+                .flatten()
+            else {
+                return false;
+            };
+            if handle.is_type_of(
+                crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY,
+            ) {
+                // ScrollConstraint inherits Constraint::onDirty. Its parent
+                // transform's dependents include this same constraint, so
+                // invoke that callback after releasing the constraint slot.
+                crate::mechanical_port::source::constraints::constraint::Constraint::mark_constraint_dirty_occurrence(handle);
+            } else {
+                handle.with_mut(|object| object.component_on_dirty(dirt));
+            }
+            self.notify_artboard();
+            let collapsables = self
+                .with_component(Component::collapsables_snapshot)
+                .expect("live collapse owner");
+            for collapsable in collapsables {
+                collapsable.with_mut(|object| {
+                    if let Some(bind) = object.as_data_bind_mut() {
+                        bind.collapse(value);
+                    }
+                });
+            }
+            if handle.is_type_of(
+                crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
+            ) {
+                crate::mechanical_port::source::layout_component::LayoutComponent::propagate_collapse_occurrence(handle, value);
+                return true;
+            }
+            // Container children can synchronously call back into their host
+            // (notably Path::onDirty into Shape). End the host borrow first.
+            if handle.is_type_of(
+                crate::mechanical_port::source::generated::solo_base::SoloBase::TYPE_KEY,
+            ) {
+                let children = handle
+                    .with_downcast::<crate::mechanical_port::source::solo::Solo, _>(|solo| {
+                        solo.collapse_children(value)
+                    })
+                    .expect("live Solo");
+                for (child, collapsed) in children {
+                    Self::Authored(child).collapse(collapsed);
+                }
+            } else {
+                let children = handle
+                    .with(|object| {
+                        object
+                            .as_container_component()
+                            .map(|container| container.component_children().to_vec())
+                    })
+                    .flatten()
+                    .unwrap_or_default();
+                for child in children {
+                    child.collapse(value);
+                }
+                handle.with_mut(|object| object.component_collapse_after_container(value));
+                if handle.is_type_of(
+                    crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY,
+                ) {
+                    crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::collapse_after_super_occurrence(handle, value);
+                } else if handle.is_type_of(
+                    crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY,
+                ) {
+                    crate::mechanical_port::source::nested_artboard::NestedArtboard::collapse_after_super_occurrence(handle, value);
+                }
+            }
+            return true;
         }
         let Some(dirt) = self
             .with_component_mut(|component| component.collapse_state(value))
@@ -298,6 +492,33 @@ impl Component {
             .is_some_and(|object| object.is_type_of(ContainerComponentBase::TYPE_KEY))
     }
 
+    /// Prepare the C++-legal case where a ContainerComponent parents itself.
+    /// The concrete CoreObject lifecycle wrapper uses the returned occurrence
+    /// to call the virtual ContainerComponent::addChild implementation without
+    /// reborrowing this same arena slot.
+    pub(crate) fn prepare_self_parent_on_added_dirty(
+        &mut self,
+        context: &mut dyn CoreContext,
+    ) -> Option<CoreHandle> {
+        let this = self.base.base.handle()?;
+        let artboard = context.resolve_handle(0);
+        if artboard.as_ref() == Some(&this) {
+            return None;
+        }
+        let parent = context
+            .resolve(self.base.parent_id())
+            .filter(|object| object.is_type_of(ContainerComponentBase::TYPE_KEY));
+        if parent.as_ref() != Some(&this) {
+            // Preserve the ordinary source order. The concrete lifecycle
+            // method will resolve Component::m_Artboard/m_Parent when it calls
+            // Super::onAddedDirty.
+            return None;
+        }
+        self.artboard = artboard;
+        self.parent = parent;
+        Some(this)
+    }
+
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let Some(this) = self.base.base.handle() else {
             return StatusCode::MissingObject;
@@ -312,18 +533,34 @@ impl Component {
         let Some(parent) = self.parent.as_ref() else {
             return StatusCode::MissingObject;
         };
-        let added = parent
-            .with_mut(|parent| {
-                parent
-                    .as_container_component_mut()
-                    .map(|parent| parent.add_child(this))
-            })
-            .flatten()
-            .is_some();
+        // The CoreObject lifecycle wrapper has already performed this virtual
+        // self-add through its concrete owner. Re-entering the occurrence by
+        // handle would violate RefCell's exclusive borrow and does not model a
+        // second C++ callback.
+        if parent == &this {
+            return StatusCode::Ok;
+        }
+        let added = Self::add_child_to_parent(parent, this);
         if !added {
             return StatusCode::MissingObject;
         }
         StatusCode::Ok
+    }
+
+    pub(crate) fn add_child_to_parent(parent: &CoreHandle, child: CoreHandle) -> bool {
+        parent
+            .with_mut(|parent| {
+                if let Some(range) = parent.as_any_mut().downcast_mut::<TextModifierRange>() {
+                    range.add_child(child);
+                    true
+                } else if let Some(parent) = parent.as_container_component_mut() {
+                    parent.add_child(child);
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false)
     }
 
     pub fn add_collapsable(&mut self, collapsable: CoreHandle) {
@@ -414,12 +651,15 @@ impl Component {
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
-        if self.base.base.is_type_of(ArtboardBase::TYPE_KEY) {
-            return self.base.base.import(import_stack);
-        }
         let Some(this) = self.base.base.handle() else {
             return StatusCode::MissingObject;
         };
+        // Artboard::import performs the root's addObject(this) against the
+        // already-borrowed Artboard. Query the retained occurrence's immutable
+        // type here, not the abstract Core base or a second owner borrow.
+        if this.core_type() == Some(ArtboardBase::TYPE_KEY) {
+            return self.base.base.import(import_stack);
+        }
 
         let Some(artboard_importer) =
             import_stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY)

@@ -28,9 +28,9 @@ where
     }
 
     fn apply(&mut self, artboard: &RuntimeArtboardInstanceWeakHandle, mix: f32) {
-        let _ = artboard.with_artboard_mut(|artboard| {
-            BlendState1DInstance::apply(self, artboard, mix);
-        });
+        if let Some(mut artboard) = artboard.upgrade() {
+            BlendState1DInstance::apply(self, &mut artboard, mix);
+        }
     }
 
     fn keep_going(&self) -> bool {
@@ -71,8 +71,8 @@ pub trait BlendState1DDefinition<T>: BlendStateDefinition<T> {
 
 pub struct BlendState1DInstance<K, T>
 where
-    K: BlendState1DDefinition<T>,
-    T: BlendAnimation1DDefinition,
+    K: BlendState1DDefinition<T> + std::any::Any,
+    T: BlendAnimation1DDefinition + std::any::Any,
 {
     pub base: BlendStateInstance<K, T>,
     from: Option<usize>,

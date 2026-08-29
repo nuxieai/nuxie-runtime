@@ -99,7 +99,7 @@ impl TextBase {
             return;
         }
         callbacks.align_value_changed();
-        callbacks.notify_property_changed(Self::ALIGN_VALUE_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::ALIGN_VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_align_value_value(&mut self, value: u32) -> bool {
@@ -117,7 +117,7 @@ impl TextBase {
             return;
         }
         callbacks.sizing_value_changed();
-        callbacks.notify_property_changed(Self::SIZING_VALUE_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::SIZING_VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_sizing_value_value(&mut self, value: u32) -> bool {
@@ -135,7 +135,7 @@ impl TextBase {
             return;
         }
         callbacks.overflow_value_changed();
-        callbacks.notify_property_changed(Self::OVERFLOW_VALUE_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::OVERFLOW_VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_overflow_value_value(&mut self, value: u32) -> bool {
@@ -153,7 +153,7 @@ impl TextBase {
             return;
         }
         callbacks.width_changed();
-        callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::WIDTH_PROPERTY_KEY);
     }
 
     pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
@@ -171,7 +171,7 @@ impl TextBase {
             return;
         }
         callbacks.height_changed();
-        callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::HEIGHT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
@@ -189,7 +189,7 @@ impl TextBase {
             return;
         }
         callbacks.origin_x_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
@@ -207,7 +207,7 @@ impl TextBase {
             return;
         }
         callbacks.origin_y_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
@@ -225,7 +225,7 @@ impl TextBase {
             return;
         }
         callbacks.paragraph_spacing_changed();
-        callbacks.notify_property_changed(Self::PARAGRAPH_SPACING_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::PARAGRAPH_SPACING_PROPERTY_KEY);
     }
 
     pub(crate) fn set_paragraph_spacing_value(&mut self, value: f32) -> bool {
@@ -243,7 +243,7 @@ impl TextBase {
             return;
         }
         callbacks.origin_value_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_VALUE_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_origin_value_value(&mut self, value: u32) -> bool {
@@ -261,7 +261,7 @@ impl TextBase {
             return;
         }
         callbacks.wrap_value_changed();
-        callbacks.notify_property_changed(Self::WRAP_VALUE_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::WRAP_VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_wrap_value_value(&mut self, value: u32) -> bool {
@@ -279,7 +279,10 @@ impl TextBase {
             return;
         }
         callbacks.vertical_align_value_changed();
-        callbacks.notify_property_changed(Self::VERTICAL_ALIGN_VALUE_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VERTICAL_ALIGN_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_vertical_align_value_value(&mut self, value: u32) -> bool {
@@ -297,7 +300,7 @@ impl TextBase {
             return;
         }
         callbacks.fit_from_baseline_changed();
-        callbacks.notify_property_changed(Self::FIT_FROM_BASELINE_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::FIT_FROM_BASELINE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_fit_from_baseline_value(&mut self, value: bool) -> bool {
@@ -315,7 +318,10 @@ impl TextBase {
             return;
         }
         callbacks.text_run_list_source_changed();
-        callbacks.notify_property_changed(Self::TEXT_RUN_LIST_SOURCE_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TEXT_RUN_LIST_SOURCE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_text_run_list_source_value(&mut self, value: u32) -> bool {
@@ -333,7 +339,10 @@ impl TextBase {
             return;
         }
         callbacks.vertical_trim_value_changed();
-        callbacks.notify_property_changed(Self::VERTICAL_TRIM_VALUE_PROPERTY_KEY);
+        TextBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VERTICAL_TRIM_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_vertical_trim_value_value(&mut self, value: u32) -> bool {

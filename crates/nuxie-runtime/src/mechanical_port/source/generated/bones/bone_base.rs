@@ -45,7 +45,7 @@ impl BoneBase {
             return;
         }
         callbacks.length_changed();
-        callbacks.notify_property_changed(Self::LENGTH_PROPERTY_KEY);
+        BoneBaseCallbacks::notify_property_changed(callbacks, Self::LENGTH_PROPERTY_KEY);
     }
 
     pub(crate) fn set_length_value(&mut self, value: f32) -> bool {

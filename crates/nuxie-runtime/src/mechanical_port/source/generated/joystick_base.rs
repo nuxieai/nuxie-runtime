@@ -85,7 +85,7 @@ impl JoystickBase {
             return;
         }
         callbacks.x_changed();
-        callbacks.notify_property_changed(Self::X_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
@@ -103,7 +103,7 @@ impl JoystickBase {
             return;
         }
         callbacks.y_changed();
-        callbacks.notify_property_changed(Self::Y_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_y_value(&mut self, value: f32) -> bool {
@@ -121,7 +121,7 @@ impl JoystickBase {
             return;
         }
         callbacks.pos_x_changed();
-        callbacks.notify_property_changed(Self::POS_X_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::POS_X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_pos_x_value(&mut self, value: f32) -> bool {
@@ -139,7 +139,7 @@ impl JoystickBase {
             return;
         }
         callbacks.pos_y_changed();
-        callbacks.notify_property_changed(Self::POS_Y_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::POS_Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_pos_y_value(&mut self, value: f32) -> bool {
@@ -157,7 +157,7 @@ impl JoystickBase {
             return;
         }
         callbacks.origin_x_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
@@ -175,7 +175,7 @@ impl JoystickBase {
             return;
         }
         callbacks.origin_y_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
@@ -193,7 +193,7 @@ impl JoystickBase {
             return;
         }
         callbacks.width_changed();
-        callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::WIDTH_PROPERTY_KEY);
     }
 
     pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
@@ -211,7 +211,7 @@ impl JoystickBase {
             return;
         }
         callbacks.height_changed();
-        callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::HEIGHT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
@@ -229,7 +229,7 @@ impl JoystickBase {
             return;
         }
         callbacks.x_id_changed();
-        callbacks.notify_property_changed(Self::X_ID_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::X_ID_PROPERTY_KEY);
     }
 
     pub(crate) fn set_x_id_value(&mut self, value: u32) -> bool {
@@ -247,7 +247,7 @@ impl JoystickBase {
             return;
         }
         callbacks.y_id_changed();
-        callbacks.notify_property_changed(Self::Y_ID_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(callbacks, Self::Y_ID_PROPERTY_KEY);
     }
 
     pub(crate) fn set_y_id_value(&mut self, value: u32) -> bool {
@@ -265,7 +265,10 @@ impl JoystickBase {
             return;
         }
         callbacks.joystick_flags_changed();
-        callbacks.notify_property_changed(Self::JOYSTICK_FLAGS_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::JOYSTICK_FLAGS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_joystick_flags_value(&mut self, value: u32) -> bool {
@@ -283,7 +286,10 @@ impl JoystickBase {
             return;
         }
         callbacks.handle_source_id_changed();
-        callbacks.notify_property_changed(Self::HANDLE_SOURCE_ID_PROPERTY_KEY);
+        JoystickBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::HANDLE_SOURCE_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_handle_source_id_value(&mut self, value: u32) -> bool {

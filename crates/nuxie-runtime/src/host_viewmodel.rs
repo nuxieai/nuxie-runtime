@@ -9,9 +9,8 @@ pub use crate::view_model_cell::{
     RuntimeBlobAsset, RuntimeBlobAssetValue, RuntimeFontAssetValue, RuntimeViewModelChangeCapture,
     RuntimeViewModelChangeLimitExceeded, RuntimeViewModelChangeValue,
 };
-pub use nuxie_binary::RuntimeViewModelPropertyDirection;
 use std::{
-    cell::{Cell, Ref, RefCell, RefMut},
+    cell::{Ref, RefCell, RefMut},
     collections::{BTreeMap, BTreeSet},
     rc::Rc,
     sync::Arc,

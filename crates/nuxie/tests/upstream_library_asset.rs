@@ -1,434 +1,312 @@
-//! One-for-one ports of the ten active cases in pinned
-//! `tests/unit_tests/runtime/library_asset_test.cpp`.
+//! Direct ports of the ten active pinned `runtime/library_asset_test.cpp` cases.
 
-use nuxie::{File, FileAssetKind};
-use nuxie_binary::RuntimeObject;
-use nuxie_graph::ArtboardGraph;
-use nuxie_runtime::ArtboardInstance as RuntimeArtboardInstance;
-use nuxie_schema::definition_by_name;
 use std::path::PathBuf;
 
-fn fixture(name: &str) -> Vec<u8> {
+use nuxie::runtime::{
+    animation::{
+        linear_animation::LinearAnimation, nested_simple_animation::NestedSimpleAnimation,
+        nested_state_machine::NestedStateMachine, state_machine::StateMachine,
+    },
+    assets::{image_asset::ImageAsset, script_asset::ScriptAsset},
+    custom_property_string::CustomPropertyString,
+    nested_artboard::NestedArtboard,
+    shapes::{image::Image, paint::solid_color::SolidColor, rectangle::Rectangle},
+};
+use nuxie::{
+    Artboard, File, ImportResult, PersistentFactory, RecordingFactory,
+    RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
+};
+
+fn bytes(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
     let path = PathBuf::from(root)
         .join("tests/unit_tests/assets")
         .join(name);
-    std::fs::read(&path)
-        .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
+    std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
 }
 
-fn load(name: &str) -> File {
-    File::import(&fixture(name)).unwrap_or_else(|error| panic!("import {name}: {error:#}"))
+struct Fixture {
+    file: RuntimeFileHandle,
+    _factory: PersistentFactory<RecordingFactory>,
 }
 
-fn object_named<'a>(
-    file: &'a File,
-    graph: &ArtboardGraph,
-    kind: &str,
-    name: &str,
-) -> &'a RuntimeObject {
-    let global_id = graph
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some(kind) && object.name.as_deref() == Some(name))
-        .unwrap_or_else(|| panic!("missing {kind} named {name}"))
-        .global_id;
-    file.runtime().objects[global_id as usize]
-        .as_ref()
-        .unwrap_or_else(|| panic!("missing imported object {global_id}"))
-}
-
-fn local_named(graph: &ArtboardGraph, kind: &str, name: &str) -> usize {
-    graph
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some(kind) && object.name.as_deref() == Some(name))
-        .unwrap_or_else(|| panic!("missing {kind} named {name}"))
-        .local_id
-}
-
-fn local_of_type(graph: &ArtboardGraph, kind: &str) -> usize {
-    graph
-        .local_objects
-        .iter()
-        .find(|object| object.type_name == Some(kind))
-        .unwrap_or_else(|| panic!("missing {kind}"))
-        .local_id
-}
-
-fn property_key(type_name: &str, property_name: &str) -> u16 {
-    let definition = definition_by_name(type_name)
-        .unwrap_or_else(|| panic!("missing schema definition {type_name}"));
-    if let Some(property) = definition
-        .properties
-        .iter()
-        .find(|property| property.name == property_name)
-    {
-        return property.key.int;
+fn load(name: &str) -> Fixture {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let mut result = ImportResult::Malformed;
+    let file = File::import(&bytes(name), retained, Some(&mut result), None, None)
+        .unwrap_or_else(|| panic!("import {name}: {result:?}"));
+    assert_eq!(result, ImportResult::Success);
+    Fixture {
+        file,
+        _factory: factory,
     }
-    for ancestor_name in definition.ancestors {
-        let ancestor = definition_by_name(ancestor_name)
-            .unwrap_or_else(|| panic!("missing ancestor definition {ancestor_name}"));
-        if let Some(property) = ancestor
-            .properties
-            .iter()
-            .find(|property| property.name == property_name)
-        {
-            return property.key.int;
-        }
-    }
-    panic!("missing property {type_name}.{property_name}")
 }
 
-fn graph_for_global(file: &File, global_id: u32) -> &ArtboardGraph {
-    file.graph()
-        .artboards
-        .iter()
-        .find(|graph| graph.global_id == global_id)
-        .unwrap_or_else(|| panic!("missing artboard graph {global_id}"))
+fn source(file: &RuntimeFileHandle, index: usize) -> nuxie::CoreHandle {
+    file.with_file(|file| file.artboard_handle(index))
+        .unwrap_or_else(|| panic!("missing artboard {index}"))
 }
 
-fn string_property(
-    instance: &RuntimeArtboardInstance,
-    local_id: usize,
-    kind: &str,
-    name: &str,
-) -> String {
-    let bytes = instance
-        .debug_string_property(local_id, property_key(kind, name))
-        .unwrap_or_else(|| panic!("missing live {kind}.{name}"));
-    String::from_utf8(bytes.to_vec()).expect("live string is UTF-8")
+fn instance(file: &RuntimeFileHandle, index: usize) -> RuntimeArtboardInstanceHandle {
+    let result = Artboard::instance_from_handle(&source(file, index)).expect("artboard instance");
+    result.with_artboard_mut(|artboard| artboard.set_file(Some(file.downgrade())));
+    result
+}
+
+fn nested_named(artboard: &nuxie::CoreHandle, name: &str) -> nuxie::CoreHandle {
+    artboard
+        .with_downcast::<Artboard, _>(|artboard| artboard.find_handle::<NestedArtboard>(name))
+        .flatten()
+        .unwrap_or_else(|| panic!("missing nested {name:?}"))
+}
+
+fn assert_nested_header(nested: &nuxie::CoreHandle) {
+    nested.with_downcast::<NestedArtboard, _>(|nested| {
+        assert_eq!(nested.base.base.name(), "The nested artboard");
+        assert_eq!((nested.base.x(), nested.base.y()), (1.0, 2.0));
+        assert_eq!(nested.base.artboard_id(), 1);
+    });
+}
+
+fn bind_default(file: &RuntimeFileHandle, artboard: &RuntimeArtboardInstanceHandle) {
+    let view_model = file
+        .with_file(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+        })
+        .expect("default view model");
+    artboard.bind_view_model_instance(Some(view_model));
 }
 
 #[test]
 fn file_with_library_artboard_loads() {
-    let file = load("library_export_test.riv");
-    let host = file.artboard(0).expect("host artboard");
-    let nested = object_named(&file, host.graph(), "NestedArtboard", "The nested artboard");
-    assert_eq!(nested.string_property("name"), Some("The nested artboard"));
-    assert_eq!(nested.double_property("x"), Some(1.0));
-    assert_eq!(nested.double_property("y"), Some(2.0));
-    assert_eq!(nested.uint_property("artboardId"), Some(1));
-
-    let artboard = file.artboard(1).expect("library artboard");
-    assert_eq!(artboard.name(), Some("Rocket"));
-    assert_eq!(artboard.dimensions(), Some((512.0, 513.0)));
-    assert_eq!(file.asset_count(), 0);
+    let f = load("library_export_test.riv");
+    assert_nested_header(&nested_named(&source(&f.file, 0), "The nested artboard"));
+    source(&f.file, 1).with_downcast::<Artboard, _>(|a| {
+        assert_eq!(a.base.name(), "Rocket");
+        assert_eq!((a.width(), a.height()), (512.0, 513.0));
+    });
+    assert_eq!(f.file.with_file(|file| file.assets().len()), 0);
 }
 
 #[test]
 fn file_with_library_animation_loads() {
-    let file = load("library_export_animation_test.riv");
-    let host = file.artboard(0).expect("host artboard");
-    let nested = object_named(&file, host.graph(), "NestedArtboard", "The nested artboard");
-    assert_eq!(nested.string_property("name"), Some("The nested artboard"));
-    assert_eq!(nested.double_property("x"), Some(1.0));
-    assert_eq!(nested.double_property("y"), Some(2.0));
-    assert_eq!(nested.uint_property("artboardId"), Some(1));
-
-    let library = file.artboard(1).expect("library artboard");
-    assert_eq!(library.animation_count(), 1);
-    assert_eq!(library.animation_name(0), Some("LA Rocket"));
-    let nested_animations = host
-        .graph()
-        .local_objects
-        .iter()
-        .filter(|object| object.type_name == Some("NestedSimpleAnimation"))
-        .collect::<Vec<_>>();
-    assert_eq!(nested_animations.len(), 1);
-    let nested_animation = file.runtime().objects[nested_animations[0].global_id as usize]
-        .as_ref()
-        .expect("nested animation object");
-    assert_eq!(nested_animation.string_property("name"), Some(""));
-    assert_eq!(nested_animation.uint_property("animationId"), Some(0));
-    assert_eq!(file.asset_count(), 0);
+    let f = load("library_export_animation_test.riv");
+    let nested = nested_named(&source(&f.file, 0), "The nested artboard");
+    assert_nested_header(&nested);
+    source(&f.file, 1).with_downcast::<Artboard, _>(|a| {
+        assert_eq!(a.animation_count(), 1);
+        a.first_animation()
+            .expect("animation")
+            .with_downcast::<LinearAnimation, _>(|v| assert_eq!(v.base.name(), "LA Rocket"));
+    });
+    nested.with_downcast::<NestedArtboard, _>(|n| {
+        assert_eq!(n.nested_animations().len(), 1);
+        n.nested_animations()[0].with_downcast::<NestedSimpleAnimation, _>(|v| {
+            assert_eq!(v.base.base.name(), "");
+            assert_eq!(v.base.animation_id(), 0);
+        });
+    });
+    assert_eq!(f.file.with_file(|file| file.assets().len()), 0);
 }
 
 #[test]
 fn file_with_library_state_machine_loads() {
-    let file = load("library_export_state_machine_test.riv");
-    let host = file.artboard(0).expect("host artboard");
-    let nested = object_named(&file, host.graph(), "NestedArtboard", "The nested artboard");
-    assert_eq!(nested.string_property("name"), Some("The nested artboard"));
-    assert_eq!(nested.double_property("x"), Some(1.0));
-    assert_eq!(nested.double_property("y"), Some(2.0));
-    assert_eq!(nested.uint_property("artboardId"), Some(1));
-
-    let library = file.artboard(1).expect("library artboard");
-    assert_eq!(library.state_machine_count(), 1);
-    assert_eq!(library.state_machine_name(0), Some("SM Rocket"));
-    let nested_animations = host
-        .graph()
-        .local_objects
-        .iter()
-        .filter(|object| object.type_name == Some("NestedStateMachine"))
-        .collect::<Vec<_>>();
-    assert_eq!(nested_animations.len(), 1);
-    let nested_animation = file.runtime().objects[nested_animations[0].global_id as usize]
-        .as_ref()
-        .expect("nested state machine object");
-    assert_eq!(nested_animation.string_property("name"), Some(""));
-    assert_eq!(nested_animation.uint_property("animationId"), Some(0));
-    assert_eq!(file.asset_count(), 0);
+    let f = load("library_export_state_machine_test.riv");
+    let nested = nested_named(&source(&f.file, 0), "The nested artboard");
+    assert_nested_header(&nested);
+    source(&f.file, 1).with_downcast::<Artboard, _>(|a| {
+        assert_eq!(a.state_machine_count(), 1);
+        a.first_state_machine()
+            .expect("machine")
+            .with_downcast::<StateMachine, _>(|v| assert_eq!(v.base.name(), "SM Rocket"));
+    });
+    nested.with_downcast::<NestedArtboard, _>(|n| {
+        assert_eq!(n.nested_animations().len(), 1);
+        n.nested_animations()[0].with_downcast::<NestedStateMachine, _>(|v| {
+            assert_eq!(v.base.base.name(), "");
+            assert_eq!(v.base.animation_id(), 0);
+        });
+    });
+    assert_eq!(f.file.with_file(|file| file.assets().len()), 0);
 }
 
 #[test]
-#[ignore = "expected-red: ScriptAsset.moduleName is not retained by the Rust import"]
 fn library_script_exports_flat_under_its_mangle_prefix() {
-    let file = load("library_scope_edge_test.riv");
-    let script = file
-        .assets()
-        .find(|asset| asset.kind() == FileAssetKind::Script)
-        .expect("script asset");
+    let f = load("library_scope_edge_test.riv");
+    let assets = f.file.with_file(|file| file.assets().to_vec());
+    let script = assets
+        .iter()
+        .find(|a| a.with_downcast::<ScriptAsset, _>(|_| ()).is_some())
+        .expect("script");
     assert_eq!(
-        script.descriptor().string_property("moduleName"),
+        script
+            .with_downcast::<ScriptAsset, _>(ScriptAsset::module_name)
+            .as_deref(),
         Some("FruitsLib@4/FruitModule")
     );
 }
 
 #[test]
-#[ignore = "expected-red: ScriptAsset.moduleName is not retained by the Rust import"]
 fn nested_library_scripts_export_flat_under_distinct_prefixes() {
-    let file = load("nested_library_scope_test.riv");
-    let useb = file
-        .assets()
-        .find(|asset| asset.kind() == FileAssetKind::Script && asset.name() == Some("useb"))
-        .expect("useb script");
-    let mesh = file
-        .assets()
-        .find(|asset| asset.kind() == FileAssetKind::Script && asset.name() == Some("mesh"))
-        .expect("mesh script");
-    assert_eq!(
-        useb.descriptor().string_property("moduleName"),
-        Some("OuterLib@6/useb")
-    );
-    assert_eq!(
-        mesh.descriptor().string_property("moduleName"),
-        Some("InnerLib@4/mesh")
-    );
+    let f = load("nested_library_scope_test.riv");
+    let assets = f.file.with_file(|file| file.assets().to_vec());
+    for (name, module) in [("useb", "OuterLib@6/useb"), ("mesh", "InnerLib@4/mesh")] {
+        let script = assets
+            .iter()
+            .find(|a| a.with_downcast::<ScriptAsset, _>(|s| s.base.name() == name) == Some(true))
+            .unwrap_or_else(|| panic!("missing {name}"));
+        assert_eq!(
+            script
+                .with_downcast::<ScriptAsset, _>(ScriptAsset::module_name)
+                .as_deref(),
+            Some(module)
+        );
+    }
 }
 
 #[test]
 fn file_with_library_including_image() {
-    let file = load("library_with_image.riv");
-    assert_eq!(file.asset_count(), 1);
-    let host = file.artboard(0).expect("host artboard");
-    let nested = object_named(&file, host.graph(), "NestedArtboard", "The instance");
-    let source = file
-        .artboard(
-            nested
-                .uint_property("artboardId")
-                .expect("source artboard id") as usize,
-        )
+    let f = load("library_with_image.riv");
+    assert_eq!(f.file.with_file(|file| file.assets().len()), 1);
+    let nested = nested_named(&source(&f.file, 0), "The instance");
+    let library = nested
+        .with_downcast::<NestedArtboard, _>(NestedArtboard::source_artboard)
+        .flatten()
         .expect("source artboard");
-    let images = source
-        .graph()
-        .local_objects
-        .iter()
-        .filter(|object| object.type_name == Some("Image"))
-        .collect::<Vec<_>>();
+    let images = library
+        .with_downcast::<Artboard, _>(Artboard::find_all_handles::<Image>)
+        .expect("artboard");
     assert_eq!(images.len(), 1);
-    let image = file.runtime().objects[images[0].global_id as usize]
-        .as_ref()
-        .expect("image object");
-    assert_eq!(image.uint_property("assetId"), Some(0));
-    assert!(
-        file.asset(image.uint_property("assetId").expect("asset id") as usize)
-            .is_some()
-    );
+    images[0].with_downcast::<Image, _>(|image| {
+        assert_eq!(image.asset_id(), 0);
+        assert!(image.image_asset().is_some());
+    });
 }
 
 #[test]
 fn file_with_multiple_libraries_including_image() {
-    let file = load("double_library_with_image.riv");
-    assert_eq!(file.asset_count(), 2);
-    let host = file.artboard(0).expect("host artboard");
+    let f = load("double_library_with_image.riv");
+    assert_eq!(f.file.with_file(|file| file.assets().len()), 2);
+    let host = source(&f.file, 0);
     for (nested_name, asset_name) in [
         ("The nested artboard", "MyFirstImageAsset"),
         ("Another nested artboard", "MyOtherImageAsset"),
     ] {
-        let nested = object_named(&file, host.graph(), "NestedArtboard", nested_name);
-        let source = file
-            .artboard(
-                nested
-                    .uint_property("artboardId")
-                    .expect("source artboard id") as usize,
-            )
+        let nested = nested_named(&host, nested_name);
+        let library = nested
+            .with_downcast::<NestedArtboard, _>(NestedArtboard::source_artboard)
+            .flatten()
             .expect("source artboard");
-        let images = source
-            .graph()
-            .local_objects
-            .iter()
-            .filter(|object| object.type_name == Some("Image"))
-            .collect::<Vec<_>>();
+        let images = library
+            .with_downcast::<Artboard, _>(Artboard::find_all_handles::<Image>)
+            .expect("artboard");
         assert_eq!(images.len(), 1);
-        let image = file.runtime().objects[images[0].global_id as usize]
-            .as_ref()
-            .expect("image object");
-        let asset = file
-            .asset(image.uint_property("assetId").expect("asset id") as usize)
+        let asset = images[0]
+            .with_downcast::<Image, _>(Image::image_asset)
+            .flatten()
             .expect("image asset");
-        assert_eq!(asset.name(), Some(asset_name));
-        assert!(asset.resource().is_some());
+        assert_eq!(
+            asset
+                .with_downcast::<ImageAsset, _>(|a| a.base.base.name().to_owned())
+                .as_deref(),
+            Some(asset_name)
+        );
     }
 }
 
 #[test]
 fn file_with_data_enum() {
-    let file = load("library_data_enum_test.riv");
-    let artboard = file.artboard(0).expect("artboard");
-    let mut instance = artboard.instantiate().expect("artboard instance");
-    let view_model = instance
-        .instantiate_default_view_model_instance()
-        .expect("default view model instance");
-    assert!(instance.bind_view_model(&view_model));
-    let event = local_named(artboard.graph(), "Event", "my_event");
+    let f = load("library_data_enum_test.riv");
+    let artboard = instance(&f.file, 0);
+    bind_default(&f.file, &artboard);
+    assert!(artboard.with_artboard(|a| {
+        a.find_handle::<nuxie::runtime::event::Event>("my_event")
+            .is_some()
+    }));
+    artboard.advance_default(0.0);
+    let property = artboard
+        .with_artboard(|a| a.find_handle::<CustomPropertyString>("my_event_property"))
+        .expect("property");
     assert_eq!(
-        instance.raw().component(event).map(|owner| owner.type_name),
-        Some("Event")
-    );
-    instance.advance(0.0);
-    let property = local_named(
-        artboard.graph(),
-        "CustomPropertyString",
-        "my_event_property",
-    );
-    assert_eq!(
-        string_property(
-            instance.raw(),
-            property,
-            "CustomPropertyString",
-            "propertyValue"
-        ),
-        "red3"
+        property
+            .with_downcast::<CustomPropertyString, _>(|p| p.base.property_value().to_owned())
+            .as_deref(),
+        Some("red3")
     );
 }
 
 #[test]
 fn file_with_view_model() {
-    let file = load("library_view_model_test.riv");
-    let artboard = file.artboard(0).expect("artboard");
-    let mut instance = artboard.instantiate().expect("artboard instance");
-    let view_model = instance
-        .instantiate_default_view_model_instance()
-        .expect("default view model instance");
-    assert!(instance.bind_view_model(&view_model));
-
-    let mut retained_two_before_advance = false;
-    let mut retained_one_before_advance = false;
-    instance
-        .raw_mut()
-        .try_visit_nested_artboard_instances_mut(&mut |depth, global_id, _child| {
-            let graph = graph_for_global(&file, global_id);
-            if depth == 1 {
-                assert_eq!(graph.name.as_deref(), Some("2"));
-                retained_two_before_advance = true;
-            } else if depth == 2 {
-                assert_eq!(graph.name.as_deref(), Some("1"));
-                retained_one_before_advance = true;
-            }
-            Ok::<_, ()>(())
-        })
-        .expect("retain both exact nested owners before advance");
-    assert!(retained_two_before_advance);
-    assert!(retained_one_before_advance);
-    instance.advance(0.0);
-
-    let mut saw_two = false;
-    let mut saw_one = false;
-    instance
-        .raw_mut()
-        .try_visit_nested_artboard_instances_mut(&mut |depth, global_id, child| {
-            let graph = graph_for_global(&file, global_id);
-            if depth == 1 {
-                assert_eq!(graph.name.as_deref(), Some("2"));
-                saw_two = true;
-            } else if depth == 2 {
-                assert_eq!(graph.name.as_deref(), Some("1"));
-                saw_one = true;
-                let for_string = local_named(graph, "CustomPropertyString", "for_string");
-                assert_eq!(
-                    string_property(child, for_string, "CustomPropertyString", "propertyValue"),
-                    "hello"
-                );
-                let for_enum = local_named(graph, "CustomPropertyString", "for_enum");
-                assert_eq!(
-                    string_property(child, for_enum, "CustomPropertyString", "propertyValue"),
-                    "uk"
-                );
-                let rectangle = local_of_type(graph, "Rectangle");
-                assert_eq!(
-                    child.double_property(rectangle, property_key("Rectangle", "width")),
-                    Some(123.0)
-                );
-                assert_eq!(
-                    child.double_property(rectangle, property_key("Rectangle", "height")),
-                    Some(123.0)
-                );
-                let solid = local_of_type(graph, "SolidColor");
-                assert_eq!(
-                    child.color_property(solid, property_key("SolidColor", "colorValue")),
-                    Some(0xff0a0f42)
-                );
-            }
-            Ok::<_, ()>(())
-        })
-        .expect("visit nested artboards");
-    assert!(saw_two);
-    assert!(saw_one);
+    let f = load("library_view_model_test.riv");
+    let root = instance(&f.file, 0);
+    bind_default(&f.file, &root);
+    let middle_host = root
+        .with_artboard(|a| a.find_handle::<NestedArtboard>(""))
+        .expect("nested 2");
+    let middle = middle_host
+        .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+        .flatten()
+        .expect("instance 2");
+    assert_eq!(middle.with_artboard(|a| a.base.name().to_owned()), "2");
+    let leaf_host = middle
+        .with_artboard(|a| a.find_handle::<NestedArtboard>(""))
+        .expect("nested 1");
+    let leaf = leaf_host
+        .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+        .flatten()
+        .expect("instance 1");
+    assert_eq!(leaf.with_artboard(|a| a.base.name().to_owned()), "1");
+    root.advance_default(0.0);
+    for (name, value) in [("for_string", "hello"), ("for_enum", "uk")] {
+        let p = leaf
+            .with_artboard(|a| a.find_handle::<CustomPropertyString>(name))
+            .unwrap_or_else(|| panic!("missing {name}"));
+        assert_eq!(
+            p.with_downcast::<CustomPropertyString, _>(|p| p.base.property_value().to_owned())
+                .as_deref(),
+            Some(value)
+        );
+    }
+    let rectangle = leaf
+        .with_artboard(|a| a.find_handle::<Rectangle>(""))
+        .expect("rectangle");
+    rectangle.with_downcast::<Rectangle, _>(|r| {
+        assert_eq!((r.base.width(), r.base.height()), (123.0, 123.0))
+    });
+    let color = leaf
+        .with_artboard(|a| a.find_handle::<SolidColor>(""))
+        .expect("solid color");
+    assert_eq!(
+        color.with_downcast::<SolidColor, _>(|c| c.base.color_value()),
+        Some(0xff0a0f42u32 as i32)
+    );
 }
 
 #[test]
 fn library_vmtest_1_host() {
-    let file = load("library_vmtest_1_host.riv");
-    let artboard = file.artboard(0).expect("artboard");
-    let mut instance = artboard.instantiate().expect("artboard instance");
-    let view_model = instance
-        .instantiate_default_view_model_instance()
-        .expect("default view model instance");
-    assert!(instance.bind_view_model(&view_model));
-
-    let mut retained_before_advance = false;
-    instance
-        .raw_mut()
-        .try_visit_nested_artboard_instances_mut(&mut |depth, global_id, _child| {
-            if depth == 1 {
-                let graph = graph_for_global(&file, global_id);
-                assert_eq!(graph.name.as_deref(), Some("lib2artboard"));
-                retained_before_advance = true;
-            }
-            Ok::<_, ()>(())
-        })
-        .expect("retain exact lib2 occurrence before advance");
-    assert!(retained_before_advance);
-    instance.advance(0.0);
-
-    let mut occurrences = 0;
-    instance
-        .raw_mut()
-        .try_visit_nested_artboard_instances_mut(&mut |depth, global_id, child| {
-            if depth != 1 {
-                return Ok::<_, ()>(());
-            }
-            occurrences += 1;
-            let graph = graph_for_global(&file, global_id);
-            assert_eq!(graph.name.as_deref(), Some("lib2artboard"));
-            assert_eq!(
-                graph
-                    .shape_paint_containers
-                    .iter()
-                    .map(|container| container.paints.len())
-                    .sum::<usize>(),
-                1
-            );
-            let solid = local_of_type(graph, "SolidColor");
-            assert_eq!(
-                child.color_property(solid, property_key("SolidColor", "colorValue")),
-                Some(0xff101566)
-            );
-            Ok(())
-        })
-        .expect("visit nested artboards");
-    assert_eq!(occurrences, 1);
+    let f = load("library_vmtest_1_host.riv");
+    let root = instance(&f.file, 0);
+    bind_default(&f.file, &root);
+    let nested = root
+        .with_artboard(|a| a.find_handle::<NestedArtboard>(""))
+        .expect("nested");
+    let child = nested
+        .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+        .flatten()
+        .expect("lib2 instance");
+    assert_eq!(
+        child.with_artboard(|a| a.base.name().to_owned()),
+        "lib2artboard"
+    );
+    root.advance_default(0.0);
+    assert_eq!(child.with_artboard(|a| a.count::<SolidColor>()), 1);
+    let color = child
+        .with_artboard(|a| a.find_handle::<SolidColor>(""))
+        .expect("solid color");
+    assert_eq!(
+        color.with_downcast::<SolidColor, _>(|c| c.base.color_value()),
+        Some(0xff101566u32 as i32)
+    );
 }

@@ -51,7 +51,10 @@ impl TransformComponentBase {
             return;
         }
         callbacks.rotation_changed();
-        callbacks.notify_property_changed(Self::ROTATION_PROPERTY_KEY);
+        TransformComponentBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ROTATION_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_rotation_value(&mut self, value: f32) -> bool {
@@ -73,7 +76,10 @@ impl TransformComponentBase {
             return;
         }
         callbacks.scale_x_changed();
-        callbacks.notify_property_changed(Self::SCALE_X_PROPERTY_KEY);
+        TransformComponentBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SCALE_X_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_scale_x_value(&mut self, value: f32) -> bool {
@@ -95,7 +101,10 @@ impl TransformComponentBase {
             return;
         }
         callbacks.scale_y_changed();
-        callbacks.notify_property_changed(Self::SCALE_Y_PROPERTY_KEY);
+        TransformComponentBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SCALE_Y_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_scale_y_value(&mut self, value: f32) -> bool {

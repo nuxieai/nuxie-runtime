@@ -1,657 +1,562 @@
-//! Distinct strict ports for the Wave C9 state-machine rows with retained
-//! Rust owner authority. Unsupported rows remain ledger-only pending.
+//! Preserved state-machine, event, and input tests against the native owners.
+//! Authority: pinned state_machine_test.cpp, state_machine_event_test.cpp,
+//! and state_machine_input_test.cpp. No parsed graph substitutes for execution.
 
-use std::path::PathBuf;
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::{
+    File, ImportResult, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
+    RuntimeStateMachineInstanceHandle,
+    source::{
+        animation::{
+            animation_state::AnimationState, blend_animation_1d::BlendAnimation1D,
+            blend_state_1d::BlendState1D, blend_state_transition::BlendStateTransition,
+            listener_fire_event::ListenerFireEvent, listener_input_change::ListenerInputChange,
+            nested_bool::NestedBool, nested_number::NestedNumber,
+            nested_state_machine::NestedStateMachine, nested_trigger::NestedTrigger,
+            state_machine::StateMachine, state_machine_bool::StateMachineBool,
+            state_machine_instance::StateMachineInstance, state_machine_layer::StateMachineLayer,
+            state_machine_listener::StateMachineListener,
+        },
+        core::{CoreHandle, CoreType},
+        event::Event,
+        generated::core_registry::CoreRegistry,
+        math::vec2d::Vec2D,
+        nested_artboard::NestedArtboard,
+        node::Node,
+        shapes::shape::Shape,
+        viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger,
+    },
+};
+use std::{any::Any, path::PathBuf};
 
-use nuxie_binary::{read_runtime_file, RuntimeFile};
-use nuxie_graph::GraphFile;
-use nuxie_runtime::{ArtboardInstance, StateMachineInstance};
-use nuxie_schema::definition_by_name;
-
-fn pinned_fixture(name: &str) -> PathBuf {
-    let root = std::env::var_os("RIVE_RUNTIME_DIR")
-        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
-    PathBuf::from(root)
+fn read<T: Any, R>(owner: &CoreHandle, f: impl FnOnce(&T) -> R) -> R {
+    owner
+        .with_downcast(f)
+        .expect("live native owner of expected type")
+}
+fn read_listener<R>(owner: &CoreHandle, f: impl FnOnce(&StateMachineListener) -> R) -> R {
+    owner
+        .with(|object| {
+            f(object
+                .as_state_machine_listener()
+                .expect("native listener base"))
+        })
+        .expect("live listener owner")
+}
+fn typed<T: CoreType>(owner: &CoreHandle) {
+    assert!(owner.is_type_of(T::TYPE_KEY));
+}
+fn key(owner: &str, property: &str) -> i32 {
+    let def = nuxie_schema::definition_by_name(owner).unwrap();
+    std::iter::once(def.name)
+        .chain(def.ancestors.iter().copied())
+        .filter_map(nuxie_schema::definition_by_name)
+        .flat_map(|def| def.properties)
+        .find(|p| p.name == property)
+        .unwrap()
+        .key
+        .int as i32
+}
+fn uint(owner: &CoreHandle, type_name: &str, property: &str) -> u32 {
+    CoreRegistry::get_uint_handle(owner, key(type_name, property)).expect("live property")
+}
+fn name(owner: &CoreHandle) -> String {
+    owner
+        .with(|object| {
+            object
+                .as_component()
+                .expect("named Component")
+                .name()
+                .to_owned()
+        })
+        .unwrap()
+}
+struct Fixture {
+    machine: RuntimeStateMachineInstanceHandle,
+    artboard: RuntimeArtboardInstanceHandle,
+    file: RuntimeFileHandle,
+    _factory: PersistentFactory<RecordingFactory>,
+}
+impl Fixture {
+    fn new(asset: &str, artboard_name: Option<&str>, machine_name: Option<&str>) -> Self {
+        let path = PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
         .join("tests/unit_tests/assets")
-        .join(name)
+        .join(asset);
+        let bytes = std::fs::read(&path).expect("pinned fixture");
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        let mut result = ImportResult::Malformed;
+        let file = File::import(&bytes, retained, Some(&mut result), None, None)
+            .unwrap_or_else(|| panic!("{}: {result:?}", path.display()));
+        assert_eq!(result, ImportResult::Success);
+        let artboard = file
+            .with_file(|file| match artboard_name {
+                Some(name) => file.artboard_named(name),
+                None => file.artboard_default(),
+            })
+            .expect("artboard instance");
+        let machine = match machine_name {
+            Some(name) => artboard.state_machine_named(name),
+            None => artboard.state_machine_at(0),
+        }
+        .expect("state machine instance");
+        Self {
+            machine,
+            artboard,
+            file,
+            _factory: factory,
+        }
+    }
+    fn definition(&self) -> CoreHandle {
+        self.machine.with_instance(|m| m.state_machine())
+    }
+    fn layer(&self) -> CoreHandle {
+        read::<StateMachine, _>(&self.definition(), |m| m.layer(0)).unwrap()
+    }
+    fn assert_counts(&self, animations: usize, machines: usize) {
+        self.artboard.with_artboard(|a| {
+            assert_eq!(a.animation_count(), animations);
+            assert_eq!(a.state_machine_count(), machines);
+        });
+    }
+    fn advance(&self, seconds: f32) {
+        // Pinned advance(), not advanceAndApply(): several pointer tests
+        // intentionally retain design-time transforms after the state applies.
+        self.machine
+            .with_instance_mut(|m| m.advance_seconds(seconds));
+    }
+    fn initial_advance(&self) {
+        self.artboard.advance_default(0.0);
+        self.advance(0.0);
+    }
+    fn listener(&self, index: usize) -> CoreHandle {
+        read::<StateMachine, _>(&self.definition(), |m| m.listener(index)).unwrap()
+    }
+    fn resolve(&self, id: u32) -> CoreHandle {
+        self.artboard
+            .with_artboard(|a| a.resolve_handle(id))
+            .expect("resolved authored object")
+    }
+    fn events(&self) -> Vec<CoreHandle> {
+        self.artboard
+            .with_artboard(|a| a.find_all_handles::<Event>())
+    }
+    fn event_count(&self) -> usize {
+        self.machine.with_instance(|m| m.reported_event_count())
+    }
+    fn event_name(&self, index: usize) -> String {
+        name(
+            &self
+                .machine
+                .with_instance(|m| m.reported_event_at(index).event.expect("reported event")),
+        )
+    }
+    fn down(&self, x: f32, y: f32) {
+        self.machine
+            .with_instance_mut(|m| m.pointer_down(Vec2D::new(x, y), 0));
+    }
+    fn up(&self, x: f32, y: f32) {
+        self.machine
+            .with_instance_mut(|m| m.pointer_up(Vec2D::new(x, y), 0));
+    }
 }
-
-fn import_fixture(name: &str) -> (RuntimeFile, GraphFile) {
-    let path = pinned_fixture(name);
-    let bytes = std::fs::read(&path)
-        .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()));
-    let file = read_runtime_file(&bytes)
-        .unwrap_or_else(|error| panic!("import pinned fixture {}: {error}", path.display()));
-    let graphs = GraphFile::from_runtime_file(&file)
-        .unwrap_or_else(|error| panic!("graph pinned fixture {}: {error}", path.display()));
-    (file, graphs)
+fn layer_shape(layer: &CoreHandle, count: usize) {
+    read::<StateMachineLayer, _>(layer, |layer| {
+        assert_eq!(layer.state_count(), count);
+        assert!(layer.any_state().is_some());
+        assert!(layer.entry_state().is_some());
+        assert!(layer.exit_state().is_some());
+    });
 }
-
-fn artboard_index(graphs: &GraphFile, name: Option<&str>) -> usize {
-    name.map_or(0, |name| {
-        graphs
-            .artboards
-            .iter()
-            .position(|artboard| artboard.name.as_deref() == Some(name))
-            .unwrap_or_else(|| panic!("missing artboard {name}"))
-    })
+fn transitions(state: &CoreHandle) -> Vec<CoreHandle> {
+    state
+        .with(|s| {
+            (0..s.layer_state_transition_count().unwrap())
+                .map(|i| s.layer_state_transition(i).unwrap())
+                .collect()
+        })
+        .unwrap()
 }
-
-fn live_machine(
-    file: &RuntimeFile,
-    graphs: &GraphFile,
-    artboard_index: usize,
-    machine_index: usize,
-) -> (ArtboardInstance, StateMachineInstance) {
-    let graph = &graphs.artboards[artboard_index];
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(file, graph, &graphs.artboards)
-        .expect("pinned artboard instantiates");
-    let machine = artboard
-        .state_machine_instance(machine_index)
-        .expect("pinned state machine instantiates");
-    (artboard, machine)
+fn state_to(transition: &CoreHandle) -> CoreHandle {
+    transition
+        .with(|t| t.as_state_transition().unwrap().state_to())
+        .flatten()
+        .unwrap()
+}
+fn animation_name(state: &CoreHandle) -> String {
+    let animation = read::<AnimationState, _>(state, |s| s.animation()).unwrap();
+    animation
+        .with_downcast::<nuxie_runtime::source::animation::linear_animation::LinearAnimation, _>(
+            |a| a.name().to_owned(),
+        )
+        .unwrap()
 }
 
 #[test]
 fn wave_c9_state_machine_001_file_with_state_machine_can_be_read() {
-    let (file, graphs) = import_fixture("rocket.riv");
-    let artboard = &graphs.artboards[0];
-    assert_eq!(artboard.animations.len(), 3);
-    assert_eq!(artboard.state_machines.len(), 1);
-
-    let machine_index = artboard
-        .state_machines
-        .iter()
-        .position(|machine| machine.name.as_deref() == Some("Button"))
-        .expect("Button state machine");
-    let machine = &file.artboard_state_machine_graphs(0)[machine_index];
-    assert_eq!(machine.layers.len(), 1);
-    assert_eq!(machine.inputs.len(), 2);
-
-    let hover = machine
-        .inputs
-        .iter()
-        .flatten()
-        .find(|input| input.string_property("name") == Some("Hover"))
-        .expect("Hover input");
-    assert!(definition_by_name(hover.type_name).is_some_and(|kind| kind.is_a("StateMachineBool")));
-    let press = machine
-        .inputs
-        .iter()
-        .flatten()
-        .find(|input| input.string_property("name") == Some("Press"))
-        .expect("Press input");
-    assert!(definition_by_name(press.type_name).is_some_and(|kind| kind.is_a("StateMachineBool")));
-
-    let layer = &machine.layers[0];
-    assert_eq!(layer.state_count, 6);
-    assert!(layer.states.iter().any(|state| {
-        state
-            .object
-            .is_some_and(|state| state.type_name == "AnyState")
-    }));
-    let entry = layer
-        .states
-        .iter()
-        .find(|state| {
-            state
-                .object
-                .is_some_and(|state| state.type_name == "EntryState")
-        })
-        .expect("entry state");
-    assert!(layer.states.iter().any(|state| {
-        state
-            .object
-            .is_some_and(|state| state.type_name == "ExitState")
-    }));
-
-    let mut found_animation_states = 0;
-    for state in &layer.states {
-        if state
-            .object
-            .is_some_and(|state| state.type_name == "AnimationState")
-        {
-            found_animation_states += 1;
-            assert!(state.animation.is_some());
+    let f = Fixture::new("rocket.riv", None, Some("Button"));
+    f.assert_counts(3, 1);
+    let machine = f.definition();
+    read::<StateMachine, _>(&machine, |m| {
+        assert_eq!(m.layer_count(), 1);
+        assert_eq!(m.input_count(), 2);
+        typed::<StateMachineBool>(&m.input_named("Hover").unwrap());
+        typed::<StateMachineBool>(&m.input_named("Press").unwrap());
+    });
+    let layer = f.layer();
+    layer_shape(&layer, 6);
+    let states = read::<StateMachineLayer, _>(&layer, |l| l.states().to_vec());
+    let mut animation_states = 0;
+    for state in states {
+        if state.is_type_of(AnimationState::TYPE_KEY) {
+            animation_states += 1;
+            assert!(read::<AnimationState, _>(&state, |s| s.animation()).is_some());
         }
     }
-    assert_eq!(found_animation_states, 3);
-
-    assert_eq!(entry.transitions.len(), 1);
-    let state_to = entry.transitions[0]
-        .state_to
-        .expect("entry transition target");
-    assert!(definition_by_name(state_to.type_name).is_some_and(|kind| kind.is_a("AnimationState")));
-    let idle_state = layer
-        .states
-        .iter()
-        .find(|state| state.object.is_some_and(|state| state.id == state_to.id))
-        .expect("idle animation state");
-    let idle_animation = idle_state.animation.expect("idle animation");
-    assert_eq!(idle_animation.string_property("name"), Some("idle"));
-    assert_eq!(idle_state.transitions.len(), 2);
-    for transition in &idle_state.transitions {
-        let target = transition.state_to.expect("idle transition target");
-        let target_animation = layer
-            .states
-            .iter()
-            .find(|state| state.object.is_some_and(|state| state.id == target.id))
-            .and_then(|state| state.animation)
-            .expect("idle target animation");
-        if target_animation.string_property("name") == Some("Roll_over") {
-            assert_eq!(transition.conditions.len(), 1);
+    assert_eq!(animation_states, 3);
+    let entry = read::<StateMachineLayer, _>(&layer, |l| l.entry_state()).unwrap();
+    let entry_transitions = transitions(&entry);
+    assert_eq!(entry_transitions.len(), 1);
+    let idle = state_to(&entry_transitions[0]);
+    typed::<AnimationState>(&idle);
+    assert_eq!(animation_name(&idle), "idle");
+    let idle_transitions = transitions(&idle);
+    assert_eq!(idle_transitions.len(), 2);
+    for transition in idle_transitions {
+        if animation_name(&state_to(&transition)) == "Roll_over" {
+            assert_eq!(
+                transition.with(|t| t.as_state_transition().unwrap().condition_count()),
+                Some(1)
+            );
         }
     }
-
-    let (mut instance, state_machine) = live_machine(&file, &graphs, 0, machine_index);
-    assert_eq!(
-        state_machine
-            .get_bool("Hover")
-            .and_then(|input| input.name()),
-        Some("Hover")
-    );
-    assert_eq!(
-        state_machine
-            .get_bool("Press")
-            .and_then(|input| input.name()),
-        Some("Press")
-    );
-    assert!(state_machine.get_bool("Hover").is_some());
-    assert!(state_machine.get_bool("Press").is_some());
-    assert_eq!(state_machine.changed_state_count(), 0);
-    assert_eq!(state_machine.current_animation_count(), 0);
-    let _ = &mut instance;
+    f.machine.with_instance_mut(|m| {
+        assert_eq!(m.get_bool("Hover").map(|i| i.base.name()), Some("Hover"));
+        assert_eq!(m.get_bool("Press").map(|i| i.base.name()), Some("Press"));
+        assert!(m.get_bool("Hover").is_some());
+        assert!(m.get_bool("Press").is_some());
+        assert_eq!(m.state_changed_count(), 0);
+        assert_eq!(m.current_animation_count(), 0);
+    });
 }
 
 #[test]
 fn wave_c9_state_machine_002_file_with_blend_states_loads_correctly() {
-    let (file, graphs) = import_fixture("blend_test.riv");
-    let artboard = &graphs.artboards[0];
-    assert_eq!(artboard.animations.len(), 4);
-    assert_eq!(artboard.state_machines.len(), 2);
-    let machine_index = artboard
-        .state_machines
-        .iter()
-        .position(|machine| machine.name.as_deref() == Some("blend"))
-        .expect("blend state machine");
-    let machine = &file.artboard_state_machine_graphs(0)[machine_index];
-    assert_eq!(machine.layers.len(), 1);
-    let layer = &machine.layers[0];
-    assert_eq!(layer.state_count, 5);
-    assert!(layer.states.iter().any(|state| {
-        state
-            .object
-            .is_some_and(|state| state.type_name == "AnyState")
-    }));
-    assert!(layer.states.iter().any(|state| {
-        state
-            .object
-            .is_some_and(|state| state.type_name == "EntryState")
-    }));
-    assert!(layer.states.iter().any(|state| {
-        state
-            .object
-            .is_some_and(|state| state.type_name == "ExitState")
-    }));
-    assert!(layer.states[1].object.is_some_and(|state| {
-        definition_by_name(state.type_name).is_some_and(|kind| kind.is_a("BlendState1D"))
-    }));
-    assert!(layer.states[2].object.is_some_and(|state| {
-        definition_by_name(state.type_name).is_some_and(|kind| kind.is_a("BlendState1D"))
-    }));
-    let blend_a = &layer.states[1];
-    let blend_b = &layer.states[2];
-    assert_eq!(blend_a.blend_animations.len(), 3);
-    assert_eq!(blend_b.blend_animations.len(), 3);
-
-    let animation = &blend_a.blend_animations[0];
-    assert!(definition_by_name(animation.object.type_name)
-        .is_some_and(|kind| kind.is_a("BlendAnimation1D")));
-    let animation_target = animation.animation.expect("horizontal animation");
-    assert_eq!(animation_target.string_property("name"), Some("horizontal"));
-    assert_eq!(animation.object.double_property("value"), Some(0.0));
-
-    let animation = &blend_a.blend_animations[1];
-    assert!(definition_by_name(animation.object.type_name)
-        .is_some_and(|kind| kind.is_a("BlendAnimation1D")));
-    let animation_target = animation.animation.expect("vertical animation");
-    assert_eq!(animation_target.string_property("name"), Some("vertical"));
-    assert_eq!(animation.object.double_property("value"), Some(100.0));
-
-    let animation = &blend_a.blend_animations[2];
-    assert!(definition_by_name(animation.object.type_name)
-        .is_some_and(|kind| kind.is_a("BlendAnimation1D")));
-    let animation_target = animation.animation.expect("rotate animation");
-    assert_eq!(animation_target.string_property("name"), Some("rotate"));
-    assert_eq!(animation.object.double_property("value"), Some(0.0));
-
-    assert_eq!(blend_a.transitions.len(), 1);
-    assert!(definition_by_name(blend_a.transitions[0].object.type_name)
-        .is_some_and(|kind| kind.is_a("BlendStateTransition")));
-    assert!(blend_a.transitions[0].exit_blend_animation.is_some());
+    let f = Fixture::new("blend_test.riv", None, Some("blend"));
+    f.assert_counts(4, 2);
+    assert_eq!(
+        read::<StateMachine, _>(&f.definition(), |m| m.layer_count()),
+        1
+    );
+    let layer = f.layer();
+    layer_shape(&layer, 5);
+    let a = read::<StateMachineLayer, _>(&layer, |l| l.state(1)).unwrap();
+    let b = read::<StateMachineLayer, _>(&layer, |l| l.state(2)).unwrap();
+    typed::<BlendState1D>(&a);
+    typed::<BlendState1D>(&b);
+    assert_eq!(
+        a.with(|s| s.blend_state_animations().unwrap().len()),
+        Some(3)
+    );
+    assert_eq!(
+        b.with(|s| s.blend_state_animations().unwrap().len()),
+        Some(3)
+    );
+    for (index, expected_name, expected_value) in [
+        (0, "horizontal", 0.0),
+        (1, "vertical", 100.0),
+        (2, "rotate", 0.0),
+    ] {
+        let blend = a
+            .with(|s| s.blend_state_animations().unwrap()[index].clone())
+            .unwrap();
+        typed::<BlendAnimation1D>(&blend);
+        read::<BlendAnimation1D, _>(&blend, |blend| {
+            let animation = blend.base.base.animation().unwrap();
+            assert_eq!(
+                animation
+                    .with_downcast::<nuxie_runtime::source::animation::linear_animation::LinearAnimation,_>(|a| a.name().to_owned())
+                    .unwrap(),
+                expected_name
+            );
+            assert_eq!(blend.base.value(), expected_value);
+        });
+    }
+    let transitions = transitions(&a);
+    assert_eq!(transitions.len(), 1);
+    typed::<BlendStateTransition>(&transitions[0]);
+    assert!(
+        read::<BlendStateTransition, _>(&transitions[0], |t| t.exit_blend_animation()).is_some()
+    );
 }
 
 #[test]
 fn wave_c9_state_machine_003_animation_state_without_animation_does_not_crash() {
-    let (file, graphs) = import_fixture("multiple_state_machines.riv");
-    let artboard = &graphs.artboards[0];
-    assert_eq!(artboard.animations.len(), 1);
-    assert_eq!(artboard.state_machines.len(), 4);
-    let machine_index = artboard
-        .state_machines
-        .iter()
-        .position(|machine| machine.name.as_deref() == Some("two"))
-        .expect("two state machine");
-    let machine = &file.artboard_state_machine_graphs(0)[machine_index];
-    assert_eq!(machine.layers.len(), 1);
-    let layer = &machine.layers[0];
-    assert_eq!(layer.state_count, 4);
-    assert!(layer.states.iter().any(|state| {
-        state
-            .object
-            .is_some_and(|state| state.type_name == "AnyState")
-    }));
-    assert!(layer.states.iter().any(|state| {
-        state
-            .object
-            .is_some_and(|state| state.type_name == "EntryState")
-    }));
-    assert!(layer.states.iter().any(|state| {
-        state
-            .object
-            .is_some_and(|state| state.type_name == "ExitState")
-    }));
-    assert!(layer.states[3].object.is_some_and(|state| {
-        definition_by_name(state.type_name).is_some_and(|kind| kind.is_a("AnimationState"))
-    }));
-    assert!(layer.states[3].animation.is_none());
-    let (mut artboard, mut state_machine) = live_machine(&file, &graphs, 0, machine_index);
-    artboard.advance_state_machine_instance(&mut state_machine, 0.0);
+    let f = Fixture::new("multiple_state_machines.riv", None, Some("two"));
+    f.assert_counts(1, 4);
+    assert_eq!(
+        read::<StateMachine, _>(&f.definition(), |m| m.layer_count()),
+        1
+    );
+    let layer = f.layer();
+    layer_shape(&layer, 4);
+    let state = read::<StateMachineLayer, _>(&layer, |l| l.state(3)).unwrap();
+    typed::<AnimationState>(&state);
+    assert!(read::<AnimationState, _>(&state, |s| s.animation()).is_none());
+    f.advance(0.0);
 }
-
 #[test]
 fn wave_c9_state_machine_004_oneshot_blend_keeps_going_after_animations_stop() {
-    let (file, graphs) = import_fixture("oneshotblend.riv");
-    let machine_index = graphs.artboards[0]
-        .state_machines
-        .iter()
-        .position(|machine| machine.name.as_deref() == Some("State Machine 1"))
-        .expect("State Machine 1");
-    let (mut artboard, mut state_machine) = live_machine(&file, &graphs, 0, machine_index);
-    artboard.advance_state_machine_instance(&mut state_machine, 0.0);
-    assert!(state_machine.needs_advance());
-    artboard.advance_state_machine_instance(&mut state_machine, 0.5);
-    assert!(state_machine.needs_advance());
-    artboard.advance_state_machine_instance(&mut state_machine, 1.0);
-    assert!(state_machine.needs_advance());
-}
-
-fn event_fixture(
-    name: &str,
-    artboard_name: Option<&str>,
-) -> (
-    RuntimeFile,
-    GraphFile,
-    usize,
-    ArtboardInstance,
-    StateMachineInstance,
-) {
-    let (file, graphs) = import_fixture(name);
-    let index = artboard_index(&graphs, artboard_name);
-    let (artboard, machine) = live_machine(&file, &graphs, index, 0);
-    (file, graphs, index, artboard, machine)
+    let f = Fixture::new("oneshotblend.riv", None, Some("State Machine 1"));
+    for seconds in [0.0, 0.5, 1.0] {
+        f.advance(seconds);
+        assert!(f.machine.with_instance(StateMachineInstance::needs_advance));
+    }
 }
 
 #[test]
 fn wave_c9_event_001_file_with_state_machine_listeners_can_be_read() {
-    let (file, graphs, index, _, _) = event_fixture("bullet_man.riv", Some("Bullet Man"));
-    let artboard = &graphs.artboards[index];
-    assert_eq!(artboard.state_machines.len(), 1);
-    let machine = &file.artboard_state_machine_graphs(index)[0];
-    assert_eq!(machine.listeners.len(), 3);
-    assert_eq!(machine.inputs.len(), 4);
-
-    let listener = &machine.listeners[0];
-    let target = &artboard.components[listener.object.uint_property("targetId").unwrap() as usize];
-    assert!(definition_by_name(target.type_name).is_some_and(|kind| kind.is_a("Node")));
-    assert_eq!(target.name.as_deref(), Some("HandWickHit"));
-    assert_eq!(listener.actions.len(), 1);
-    let action = listener.actions[0].object;
-    assert!(
-        definition_by_name(action.type_name).is_some_and(|kind| kind.is_a("ListenerInputChange"))
-    );
-    assert_eq!(action.uint_property("inputId"), Some(0));
-
-    let listener = &machine.listeners[1];
-    let target = &artboard.components[listener.object.uint_property("targetId").unwrap() as usize];
-    assert!(definition_by_name(target.type_name).is_some_and(|kind| kind.is_a("Node")));
-    assert_eq!(target.name.as_deref(), Some("HandCannonHit"));
-    assert_eq!(listener.actions.len(), 1);
-    let action = listener.actions[0].object;
-    assert!(
-        definition_by_name(action.type_name).is_some_and(|kind| kind.is_a("ListenerInputChange"))
-    );
-    assert_eq!(action.uint_property("inputId"), Some(1));
-
-    let listener = &machine.listeners[2];
-    let target = &artboard.components[listener.object.uint_property("targetId").unwrap() as usize];
-    assert!(definition_by_name(target.type_name).is_some_and(|kind| kind.is_a("Node")));
-    assert_eq!(target.name.as_deref(), Some("HandHelmetHit"));
-    assert_eq!(listener.actions.len(), 1);
-    let action = listener.actions[0].object;
-    assert!(
-        definition_by_name(action.type_name).is_some_and(|kind| kind.is_a("ListenerInputChange"))
-    );
-    assert_eq!(action.uint_property("inputId"), Some(2));
+    let f = Fixture::new("bullet_man.riv", Some("Bullet Man"), None);
+    assert_eq!(f.artboard.with_artboard(|a| a.state_machine_count()), 1);
+    read::<StateMachine, _>(&f.definition(), |m| {
+        assert_eq!(m.listener_count(), 3);
+        assert_eq!(m.input_count(), 4);
+    });
+    for (index, expected_name) in ["HandWickHit", "HandCannonHit", "HandHelmetHit"]
+        .into_iter()
+        .enumerate()
+    {
+        let listener = f.listener(index);
+        let (target, action) = read_listener(&listener, |l| {
+            assert_eq!(l.action_count(), 1);
+            (l.target_id(), l.action(0).unwrap())
+        });
+        let target = f.resolve(target);
+        typed::<Node>(&target);
+        assert_eq!(name(&target), expected_name);
+        typed::<ListenerInputChange>(&action);
+        assert_eq!(
+            uint(&action, "ListenerInputChange", "inputId"),
+            index as u32
+        );
+    }
 }
-
 #[test]
 fn wave_c9_event_002_hit_testing_via_state_machine_works() {
-    let (_, graphs, index, mut artboard, mut machine) =
-        event_fixture("bullet_man.riv", Some("Bullet Man"));
-    assert_eq!(graphs.artboards[index].state_machines.len(), 1);
-    artboard.advance(0.0).expect("initial artboard advance");
-    artboard.advance_state_machine_instance(&mut machine, 0.0);
-    let light = machine.input_index_named("Light").expect("Light trigger");
-    machine.pointer_down(&mut artboard, 71.0, 263.0, 0);
-    assert_eq!(
-        machine.input(light).and_then(|input| input.trigger_fired()),
-        Some(true)
+    let f = Fixture::new("bullet_man.riv", Some("Bullet Man"), None);
+    assert_eq!(f.artboard.with_artboard(|a| a.state_machine_count()), 1);
+    f.initial_advance();
+    assert!(
+        f.machine
+            .with_instance(|m| m.get_trigger("Light").is_some())
+    );
+    f.down(71.0, 263.0);
+    assert!(
+        f.machine
+            .with_instance(|m| m.get_trigger("Light").unwrap().fired())
     );
 }
-
 #[test]
 fn wave_c9_event_003_hit_toggle_boolean_listener() {
-    let (_, graphs, index, mut artboard, mut machine) = event_fixture("light_switch.riv", None);
-    assert_eq!(graphs.artboards[index].state_machines.len(), 1);
-    artboard.advance(0.0).expect("initial artboard advance");
-    artboard.advance_state_machine_instance(&mut machine, 0.0);
-    let on = machine.input_index_named("On").expect("On boolean");
-    assert_eq!(
-        machine.input(on).and_then(|input| input.bool_value()),
-        Some(true)
+    let f = Fixture::new("light_switch.riv", None, None);
+    assert_eq!(f.artboard.with_artboard(|a| a.state_machine_count()), 1);
+    f.initial_advance();
+    assert!(
+        f.machine
+            .with_instance(|m| m.get_bool("On").unwrap().value())
     );
-    machine.pointer_down(&mut artboard, 150.0, 258.0, 0);
-    machine.pointer_up(&mut artboard, 150.0, 258.0, 0);
-    assert_eq!(
-        machine.input(on).and_then(|input| input.bool_value()),
-        Some(false)
+    f.down(150.0, 258.0);
+    f.up(150.0, 258.0);
+    assert!(
+        !f.machine
+            .with_instance(|m| m.get_bool("On").unwrap().value())
     );
-    machine.pointer_down(&mut artboard, 150.0, 258.0, 0);
-    machine.pointer_up(&mut artboard, 150.0, 258.0, 0);
-    assert_eq!(
-        machine.input(on).and_then(|input| input.bool_value()),
-        Some(true)
+    f.down(150.0, 258.0);
+    f.up(150.0, 258.0);
+    assert!(
+        f.machine
+            .with_instance(|m| m.get_bool("On").unwrap().value())
     );
 }
-
-fn event_components<'a>(
-    graphs: &'a GraphFile,
-    index: usize,
-) -> Vec<&'a nuxie_graph::ComponentNode> {
-    graphs.artboards[index]
-        .components
-        .iter()
-        .filter(|component| {
-            definition_by_name(component.type_name).is_some_and(|kind| kind.is_a("Event"))
-        })
-        .collect()
-}
-
 #[test]
 fn wave_c9_event_004_can_query_all_rive_events() {
-    let (_, graphs) = import_fixture("event_on_listener.riv");
-    assert_eq!(event_components(&graphs, 0).len(), 4);
+    let f = Fixture::new("event_on_listener.riv", None, None);
+    assert_eq!(f.artboard.with_artboard(|a| a.count::<Event>()), 4);
 }
-
 #[test]
 fn wave_c9_event_005_can_query_rive_event_at_index() {
-    let (_, graphs) = import_fixture("event_on_listener.riv");
-    let events = event_components(&graphs, 0);
-    assert_eq!(events[0].name.as_deref(), Some("Somewhere.com"));
+    let f = Fixture::new("event_on_listener.riv", None, None);
+    let event = f
+        .artboard
+        .with_artboard(|a| a.object_handle_at::<Event>(0))
+        .unwrap();
+    assert_eq!(name(&event), "Somewhere.com");
 }
-
 #[test]
 fn wave_c9_event_006_events_load_on_listener() {
-    let (file, graphs, index, mut artboard, mut machine) =
-        event_fixture("event_on_listener.riv", None);
-    assert_eq!(graphs.artboards[index].state_machines.len(), 1);
-    artboard.advance(0.0).expect("initial artboard advance");
-    artboard.advance_state_machine_instance(&mut machine, 0.0);
-    assert_eq!(event_components(&graphs, index).len(), 4);
-    let definition = &file.artboard_state_machine_graphs(index)[0];
-    assert_eq!(definition.listeners.len(), 1);
-    let listener = &definition.listeners[0];
-    let target = &graphs.artboards[index].components
-        [listener.object.uint_property("targetId").unwrap() as usize];
-    assert!(definition_by_name(target.type_name).is_some_and(|kind| kind.is_a("Shape")));
-    assert_eq!(listener.actions.len(), 2);
-    let fire = &listener.actions[0];
-    assert!(definition_by_name(fire.object.type_name)
-        .is_some_and(|kind| kind.is_a("ListenerFireEvent")));
-    assert_ne!(fire.object.uint_property("eventId"), Some(0));
-    let event = fire.event.expect("listener event");
-    assert!(definition_by_name(event.type_name).is_some_and(|kind| kind.is_a("Event")));
-    assert_eq!(event.string_property("name"), Some("Footstep"));
-    assert_eq!(machine.reported_event_count(), 0);
-    machine.pointer_down(&mut artboard, 343.0, 116.0, 0);
-    machine.pointer_up(&mut artboard, 343.0, 116.0, 0);
-    assert_eq!(machine.reported_event_count(), 2);
+    let f = Fixture::new("event_on_listener.riv", None, None);
+    assert_eq!(f.artboard.with_artboard(|a| a.state_machine_count()), 1);
+    f.initial_advance();
+    assert_eq!(f.events().len(), 4);
     assert_eq!(
-        machine
-            .reported_event(&artboard, 0)
-            .and_then(|event| event.name()),
-        Some("Footstep")
+        read::<StateMachine, _>(&f.definition(), |m| m.listener_count()),
+        1
     );
-    assert_eq!(
-        machine
-            .reported_event(&artboard, 1)
-            .and_then(|event| event.name()),
-        Some("Event 3")
-    );
-    artboard.advance_state_machine_instance(&mut machine, 0.0);
-    assert_eq!(machine.reported_event_count(), 0);
+    let (target, action) = read_listener(&f.listener(0), |l| {
+        assert_eq!(l.action_count(), 2);
+        (l.target_id(), l.action(0).unwrap())
+    });
+    typed::<Shape>(&f.resolve(target));
+    typed::<ListenerFireEvent>(&action);
+    let id = read::<ListenerFireEvent, _>(&action, |a| a.event_id());
+    assert_ne!(id, 0);
+    let event = f.resolve(id);
+    typed::<Event>(&event);
+    assert_eq!(name(&event), "Footstep");
+    assert_eq!(f.event_count(), 0);
+    f.down(343.0, 116.0);
+    f.up(343.0, 116.0);
+    assert_eq!(f.event_count(), 2);
+    assert_eq!(f.event_name(0), "Footstep");
+    assert_eq!(f.event_name(1), "Event 3");
+    f.advance(0.0);
+    assert_eq!(f.event_count(), 0);
 }
-
 #[test]
 fn wave_c9_event_007_events_load_on_state_and_transition() {
-    let (file, graphs, index, mut artboard, mut machine) =
-        event_fixture("events_on_states.riv", None);
-    assert_eq!(graphs.artboards[index].state_machines.len(), 1);
-    artboard.advance(0.0).expect("initial artboard advance");
-    artboard.advance_state_machine_instance(&mut machine, 0.0);
-    let definition = &file.artboard_state_machine_graphs(index)[0];
-    assert_eq!(definition.layers.len(), 1);
-    let layer = &definition.layers[0];
-    assert_eq!(layer.state_count, 5);
-    let entry = layer
-        .states
-        .iter()
-        .find(|state| {
-            state
-                .object
-                .is_some_and(|state| state.type_name == "EntryState")
-        })
-        .expect("entry state");
-    assert_eq!(entry.transitions.len(), 1);
-    let mut transition = &entry.transitions[0];
-    assert_eq!(transition.fire_actions.len(), 0);
-    let state_to = transition.state_to.expect("first animation state");
-    assert!(definition_by_name(state_to.type_name).is_some_and(|kind| kind.is_a("AnimationState")));
-    let first = layer
-        .states
-        .iter()
-        .find(|state| state.object.is_some_and(|state| state.id == state_to.id))
-        .expect("first animation state");
-    assert_eq!(first.fire_actions.len(), 2);
-    assert_eq!(first.transitions.len(), 1);
-    transition = &first.transitions[0];
-    assert_eq!(transition.fire_actions.len(), 2);
-    assert_eq!(machine.reported_event_count(), 1);
+    let f = Fixture::new("events_on_states.riv", None, None);
+    assert_eq!(f.artboard.with_artboard(|a| a.state_machine_count()), 1);
+    f.initial_advance();
     assert_eq!(
-        machine
-            .reported_event(&artboard, 0)
-            .and_then(|event| event.name()),
-        Some("First")
+        read::<StateMachine, _>(&f.definition(), |m| m.layer_count()),
+        1
     );
-    artboard.advance_state_machine_instance(&mut machine, 1.0);
-    assert_eq!(machine.reported_event_count(), 0);
-    artboard.advance_state_machine_instance(&mut machine, 1.0);
-    assert_eq!(machine.reported_event_count(), 2);
+    let layer = f.layer();
+    assert_eq!(read::<StateMachineLayer, _>(&layer, |l| l.state_count()), 5);
+    let entry = read::<StateMachineLayer, _>(&layer, |l| l.entry_state()).unwrap();
+    let entry_transitions = transitions(&entry);
+    assert_eq!(entry_transitions.len(), 1);
+    let transition = &entry_transitions[0];
     assert_eq!(
-        machine
-            .reported_event(&artboard, 0)
-            .and_then(|event| event.name()),
-        Some("Second")
+        transition.with(|t| t.as_state_transition().unwrap().events().len()),
+        Some(0)
     );
+    let first = state_to(transition);
+    typed::<AnimationState>(&first);
     assert_eq!(
-        machine
-            .reported_event(&artboard, 1)
-            .and_then(|event| event.name()),
-        Some("Third")
+        first.with(|s| s.state_machine_layer_component_events().unwrap().len()),
+        Some(2)
     );
-    artboard.advance_state_machine_instance(&mut machine, 1.0);
-    assert_eq!(machine.reported_event_count(), 1);
+    let next = transitions(&first);
+    assert_eq!(next.len(), 1);
     assert_eq!(
-        machine
-            .reported_event(&artboard, 0)
-            .and_then(|event| event.name()),
-        Some("Fourth")
+        next[0].with(|t| t.as_state_transition().unwrap().events().len()),
+        Some(2)
     );
+    assert_eq!(f.event_count(), 1);
+    assert_eq!(f.event_name(0), "First");
+    f.advance(1.0);
+    assert_eq!(f.event_count(), 0);
+    f.advance(1.0);
+    assert_eq!(f.event_count(), 2);
+    assert_eq!(f.event_name(0), "Second");
+    assert_eq!(f.event_name(1), "Third");
+    f.advance(1.0);
+    assert_eq!(f.event_count(), 1);
+    assert_eq!(f.event_name(0), "Fourth");
 }
-
 #[test]
 fn wave_c9_event_008_timeline_events_load_and_report() {
-    let (_, graphs, index, mut artboard, mut machine) =
-        event_fixture("timeline_event_test.riv", None);
-    assert_eq!(graphs.artboards[index].state_machines.len(), 1);
-    artboard.advance(0.0).expect("initial artboard advance");
-    artboard.advance_state_machine_instance(&mut machine, 0.0);
-    assert_eq!(machine.reported_event_count(), 0);
-    artboard.advance_state_machine_instance(&mut machine, 0.4);
-    assert_eq!(machine.reported_event_count(), 0);
-    artboard.advance_state_machine_instance(&mut machine, 0.2);
-    assert_eq!(machine.reported_event_count(), 1);
-    let event = machine.reported_event(&artboard, 0).expect("Half event");
-    assert_eq!(event.name(), Some("Half"));
-    let actual = f64::from(event.seconds_delay());
+    let f = Fixture::new("timeline_event_test.riv", None, None);
+    assert_eq!(f.artboard.with_artboard(|a| a.state_machine_count()), 1);
+    f.initial_advance();
+    assert_eq!(f.event_count(), 0);
+    f.advance(0.4);
+    assert_eq!(f.event_count(), 0);
+    f.advance(0.2);
+    assert_eq!(f.event_count(), 1);
+    assert_eq!(f.event_name(0), "Half");
+    let actual = f64::from(
+        f.machine
+            .with_instance(|m| m.reported_event_at(0).seconds_delay),
+    );
     let expected = f64::from(0.1f32);
     let relative_margin = f64::from(f32::EPSILON) * 100.0 * expected.abs();
     assert!((actual - expected).abs() <= relative_margin);
 }
-
 #[test]
 fn wave_c9_event_011_view_model_listener_event_is_host_visible() {
-    let (file, graphs) = import_fixture("vm_listener_fire_event.riv");
-    let definition = &file.artboard_state_machine_graphs(0)[0];
-    let listener = &definition.listeners[0];
-    assert_eq!(listener.listener_input_types.len(), 1);
-    assert_eq!(
-        listener.listener_input_types[0].uint_property("listenerTypeValue"),
-        Some(11)
-    );
-    let (mut artboard, mut machine) = live_machine(&file, &graphs, 0, 0);
-    let mut vmi = artboard
-        .imported_view_model_instance_context(0, 0)
-        .expect("authored VMI");
-    assert!(machine.bind_imported_view_model_context(&file, &vmi));
-    machine
-        .advance_and_apply(&mut artboard, 0.0)
-        .expect("initial advance");
-    assert_eq!(machine.reported_event_count(), 0);
-    assert!(vmi.set_trigger_by_property_name(&file, "go", 1));
-    machine
-        .advance_and_apply(&mut artboard, 0.016)
-        .expect("listener advance");
-    assert_eq!(machine.reported_event_count(), 1);
-    assert_eq!(
-        machine
-            .reported_event(&artboard, 0)
-            .and_then(|event| event.name()),
-        Some("ding")
-    );
-    machine
-        .advance_and_apply(&mut artboard, 0.016)
-        .expect("event reset advance");
-    assert_eq!(machine.reported_event_count(), 0);
+    let f = Fixture::new("vm_listener_fire_event.riv", None, None);
+    read_listener(&f.listener(0), |l| {
+        assert_eq!(l.listener_input_type_count(), 1);
+        let input = l.listener_input_type(0).unwrap();
+        assert_eq!(
+            input.with(|i| i.listener_input_type_value()),
+            Some(Some(11))
+        );
+    });
+    let instance = f
+        .file
+        .with_file_mut(|file| file.create_view_model_instance_at(0, 0))
+        .unwrap();
+    f.machine
+        .with_instance_mut(|m| m.bind_view_model_instance(instance.clone()));
+    f.machine.advance_and_apply(0.0);
+    assert_eq!(f.event_count(), 0);
+    let go = instance
+        .with(|i| {
+            i.as_view_model_instance()
+                .unwrap()
+                .property_value_named("go")
+        })
+        .flatten()
+        .unwrap();
+    go.with_downcast_mut::<ViewModelInstanceTrigger, _>(ViewModelInstanceTrigger::trigger)
+        .unwrap();
+    f.machine.advance_and_apply(0.016);
+    assert_eq!(f.event_count(), 1);
+    assert_eq!(f.event_name(0), "ding");
+    f.machine.advance_and_apply(0.016);
+    assert_eq!(f.event_count(), 0);
 }
-
 #[test]
 fn wave_c9_input_001_file_with_state_machine_inputs_loads() {
-    let (file, graphs) = import_fixture("smi_test.riv");
-    let artboard = &graphs.artboards[0];
-    let nested_artboard = artboard
-        .local_objects
-        .iter()
-        .find(|object| {
-            object.type_name == Some("NestedArtboard")
-                && object.name.as_deref() == Some("artboard to nest component")
-        })
-        .expect("named nested artboard");
-    let nested_artboard = file
-        .object(nested_artboard.global_id as usize)
-        .expect("nested artboard object");
-    assert_eq!(nested_artboard.double_property("x"), Some(100.0));
-    assert_eq!(nested_artboard.double_property("y"), Some(100.0));
-    assert_eq!(
-        nested_artboard.string_property("name"),
-        Some("artboard to nest component")
-    );
-    assert_eq!(nested_artboard.uint_property("artboardId"), Some(1));
-
-    let nested_machine = artboard
-        .local_objects
-        .iter()
-        .find(|object| {
-            object.type_name == Some("NestedStateMachine")
-                && object.name.as_deref().unwrap_or("").is_empty()
-        })
-        .expect("unnamed nested state machine");
-    let nested_machine = file
-        .object(nested_machine.global_id as usize)
-        .expect("nested state machine object");
-    assert_eq!(nested_machine.string_property("name").unwrap_or(""), "");
-    assert_eq!(nested_machine.uint_property("animationId"), Some(0));
-
-    let nested_trigger = artboard
-        .local_objects
-        .iter()
-        .find(|object| {
-            object.type_name == Some("NestedTrigger")
-                && object.name.as_deref().unwrap_or("").is_empty()
-        })
-        .expect("unnamed nested trigger");
-    let nested_trigger = file
-        .object(nested_trigger.global_id as usize)
-        .expect("nested trigger object");
-    assert_eq!(nested_trigger.string_property("name").unwrap_or(""), "");
-    assert_eq!(nested_trigger.uint_property("inputId"), Some(0));
-
-    let nested_bool = artboard
-        .local_objects
-        .iter()
-        .find(|object| {
-            object.type_name == Some("NestedBool")
-                && object.name.as_deref().unwrap_or("").is_empty()
-        })
-        .expect("unnamed nested bool");
-    let nested_bool = file
-        .object(nested_bool.global_id as usize)
-        .expect("nested bool object");
-    assert_eq!(nested_bool.string_property("name").unwrap_or(""), "");
-    assert_eq!(nested_bool.uint_property("inputId"), Some(1));
-
-    let nested_number = artboard
-        .local_objects
-        .iter()
-        .find(|object| {
-            object.type_name == Some("NestedNumber")
-                && object.name.as_deref().unwrap_or("").is_empty()
-        })
-        .expect("unnamed nested number");
-    let nested_number = file
-        .object(nested_number.global_id as usize)
-        .expect("nested number object");
-    assert_eq!(nested_number.string_property("name").unwrap_or(""), "");
-    assert_eq!(nested_number.uint_property("inputId"), Some(2));
+    let f = Fixture::new("smi_test.riv", None, None);
+    let nested = f
+        .artboard
+        .with_artboard(|a| a.find_handle::<NestedArtboard>("artboard to nest component"))
+        .unwrap();
+    read::<NestedArtboard, _>(&nested, |n| {
+        assert_eq!(n.base.x(), 100.0);
+        assert_eq!(n.base.y(), 100.0);
+        assert_eq!(n.base.name(), "artboard to nest component");
+        assert_eq!(n.base.artboard_id(), 1);
+    });
+    let machine = f
+        .artboard
+        .with_artboard(|a| a.find_handle::<NestedStateMachine>(""))
+        .unwrap();
+    assert_eq!(name(&machine), "");
+    assert_eq!(uint(&machine, "NestedStateMachine", "animationId"), 0);
+    let trigger = f
+        .artboard
+        .with_artboard(|a| a.find_handle::<NestedTrigger>(""))
+        .unwrap();
+    assert_eq!(name(&trigger), "");
+    assert_eq!(uint(&trigger, "NestedTrigger", "inputId"), 0);
+    let boolean = f
+        .artboard
+        .with_artboard(|a| a.find_handle::<NestedBool>(""))
+        .unwrap();
+    assert_eq!(name(&boolean), "");
+    assert_eq!(uint(&boolean, "NestedBool", "inputId"), 1);
+    let number = f
+        .artboard
+        .with_artboard(|a| a.find_handle::<NestedNumber>(""))
+        .unwrap();
+    assert_eq!(name(&number), "");
+    assert_eq!(uint(&number, "NestedNumber", "inputId"), 2);
 }

@@ -70,7 +70,7 @@ impl LinearAnimationBase {
             return;
         }
         callbacks.fps_changed();
-        callbacks.notify_property_changed(Self::FPS_PROPERTY_KEY);
+        LinearAnimationBaseCallbacks::notify_property_changed(callbacks, Self::FPS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_fps_value(&mut self, value: u32) -> bool {
@@ -88,7 +88,10 @@ impl LinearAnimationBase {
             return;
         }
         callbacks.duration_changed();
-        callbacks.notify_property_changed(Self::DURATION_PROPERTY_KEY);
+        LinearAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DURATION_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_duration_value(&mut self, value: u32) -> bool {
@@ -106,7 +109,7 @@ impl LinearAnimationBase {
             return;
         }
         callbacks.speed_changed();
-        callbacks.notify_property_changed(Self::SPEED_PROPERTY_KEY);
+        LinearAnimationBaseCallbacks::notify_property_changed(callbacks, Self::SPEED_PROPERTY_KEY);
     }
 
     pub(crate) fn set_speed_value(&mut self, value: f32) -> bool {
@@ -128,7 +131,10 @@ impl LinearAnimationBase {
             return;
         }
         callbacks.loop_value_changed();
-        callbacks.notify_property_changed(Self::LOOP_VALUE_PROPERTY_KEY);
+        LinearAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::LOOP_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_loop_value_value(&mut self, value: u32) -> bool {
@@ -150,7 +156,10 @@ impl LinearAnimationBase {
             return;
         }
         callbacks.work_start_changed();
-        callbacks.notify_property_changed(Self::WORK_START_PROPERTY_KEY);
+        LinearAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::WORK_START_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_work_start_value(&mut self, value: u32) -> bool {
@@ -168,7 +177,10 @@ impl LinearAnimationBase {
             return;
         }
         callbacks.work_end_changed();
-        callbacks.notify_property_changed(Self::WORK_END_PROPERTY_KEY);
+        LinearAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::WORK_END_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_work_end_value(&mut self, value: u32) -> bool {
@@ -190,7 +202,10 @@ impl LinearAnimationBase {
             return;
         }
         callbacks.enable_work_area_changed();
-        callbacks.notify_property_changed(Self::ENABLE_WORK_AREA_PROPERTY_KEY);
+        LinearAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ENABLE_WORK_AREA_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_enable_work_area_value(&mut self, value: bool) -> bool {
@@ -208,7 +223,10 @@ impl LinearAnimationBase {
             return;
         }
         callbacks.quantize_changed();
-        callbacks.notify_property_changed(Self::QUANTIZE_PROPERTY_KEY);
+        LinearAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::QUANTIZE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_quantize_value(&mut self, value: bool) -> bool {

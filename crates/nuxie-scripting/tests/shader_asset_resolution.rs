@@ -813,7 +813,7 @@ fn one_persistent_render_context_serves_every_callback_family() {
 }
 
 #[test]
-fn draw_callback_cannot_bootstrap_an_unbound_vm_render_context() {
+fn draw_callback_does_not_bootstrap_an_unbound_vm_render_context() {
     let mut vm = ScriptVm::new();
     vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("unbound"))
         .unwrap();
@@ -828,19 +828,19 @@ fn draw_callback_cannot_bootstrap_an_unbound_vm_render_context() {
     let mut callback_factory = persistent_observing_factory();
     let mut renderer = callback_factory.borrow().inner.make_renderer();
 
-    let error = instance
+    instance
         .call_draw(&mut callback_factory, &mut renderer, &mut host)
-        .expect_err("a callback factory must not become the VM's lifetime owner");
-
-    assert!(
-        error
-            .to_string()
-            .contains("pre-import persistent render context"),
-        "{error}"
-    );
+        .expect("pinned ScriptedDrawable contains an ordinary draw callback failure");
     assert!(
         callback_factory.borrow().module_sources.is_empty(),
-        "the rejected callback must not materialize a shader or retain its factory"
+        "the contained callback failure must not materialize a shader or retain its factory"
+    );
+    assert_eq!(
+        instance
+            .call_method(ScriptMethod::Evaluate, &[], &mut host)
+            .unwrap(),
+        ScriptValue::Number(0.0),
+        "the rejected draw must not run the shader materialization callback"
     );
 }
 

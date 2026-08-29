@@ -1,20 +1,23 @@
 use super::aabb::Aabb;
 use super::bezier_utils::EvalCubic;
 use super::mat2d::Mat2D;
-use super::path_types::{path_verb_to_point_count, PathDirection, PathVerb};
+use super::path_types::{PathDirection, PathVerb, path_verb_to_point_count};
+use super::simd::{self, Float2, Float4};
 use super::vec2d::Vec2D;
 
-pub trait CommandPath {
-    fn move_to(&mut self, point: Vec2D);
-    fn line_to(&mut self, point: Vec2D);
-    fn cubic_to(&mut self, control1: Vec2D, control2: Vec2D, end: Vec2D);
-    fn close(&mut self);
-}
+use crate::mechanical_port::source::command_path::CommandPath;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PathSegment<'a> {
     pub verb: PathVerb,
     pub points: &'a [Vec2D],
+}
+
+/// Position of appended geometry without borrowing the growable path buffers.
+#[derive(Clone, Copy, Debug)]
+pub struct RawPathCursor {
+    verb: usize,
+    point: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -55,20 +58,32 @@ impl RawPath {
     }
 
     pub fn bounds(&self) -> Aabb {
-        let Some(first) = self.points.first().copied() else {
-            return Aabb::default();
+        let (mut mins, mut maxes, mut index) = if self.points.len() & 1 != 0 {
+            let first = self.points[0];
+            let first = Float2::from_array([first.x, first.y]).xyxy();
+            (first, first, 1)
+        } else if self.points.is_empty() {
+            let zero = Float4::default();
+            (zero, zero, 2)
+        } else {
+            let first = self.points[0];
+            let second = self.points[1];
+            let pair = Float4::from_array([first.x, first.y, second.x, second.y]);
+            (pair, pair, 2)
         };
-        let mut min_x = first.x;
-        let mut min_y = first.y;
-        let mut max_x = first.x;
-        let mut max_y = first.y;
-        for point in &self.points[1..] {
-            min_x = min_x.min(point.x);
-            min_y = min_y.min(point.y);
-            max_x = max_x.max(point.x);
-            max_y = max_y.max(point.y);
+
+        while index < self.points.len() {
+            let first = self.points[index];
+            let second = self.points[index + 1];
+            let points = Float4::from_array([first.x, first.y, second.x, second.y]);
+            mins = simd::min(mins, points);
+            maxes = simd::max(maxes, points);
+            index += 2;
         }
-        Aabb::new(min_x, min_y, max_x, max_y)
+
+        let mins = simd::min(mins.xy(), mins.zw());
+        let maxes = simd::max(maxes.xy(), maxes.zw());
+        Aabb::new(mins.x(), mins.y(), maxes.x(), maxes.y())
     }
     pub fn count_move_tos(&self) -> usize {
         self.verbs
@@ -240,7 +255,7 @@ impl RawPath {
 
     pub fn segments(&self) -> Vec<PathSegment<'_>> {
         let mut result = Vec::with_capacity(self.verbs.len());
-        let mut point_index = 0;
+        let mut point_index: usize = 0;
         for verb in &self.verbs {
             let count = path_verb_to_point_count(*verb);
             let start = if *verb == PathVerb::Move {
@@ -276,8 +291,9 @@ impl RawPath {
         }
         dst
     }
-    pub fn add_path(&mut self, source: &Self, matrix: Option<&Mat2D>) -> usize {
+    pub fn add_path(&mut self, source: &Self, matrix: Option<&Mat2D>) -> RawPathCursor {
         let initial_verb_count = self.verbs.len();
+        let initial_point_count = self.points.len();
         self.verbs.extend_from_slice(&source.verbs);
         if let Some(matrix) = matrix {
             let start = self.points.len();
@@ -287,11 +303,17 @@ impl RawPath {
         } else {
             self.points.extend_from_slice(&source.points);
         }
-        initial_verb_count
+        RawPathCursor {
+            verb: initial_verb_count,
+            point: initial_point_count,
+        }
     }
-    pub fn add_path_backwards(&mut self, source: &Self, matrix: Option<&Mat2D>) -> usize {
+    pub fn add_path_backwards(&mut self, source: &Self, matrix: Option<&Mat2D>) -> RawPathCursor {
         if source.empty() {
-            return self.verbs.len();
+            return RawPathCursor {
+                verb: self.verbs.len(),
+                point: self.points.len(),
+            };
         }
         let initial_point_count = self.points.len();
         self.points.extend(source.points.iter().rev().copied());
@@ -321,14 +343,24 @@ impl RawPath {
         if let Some(matrix) = matrix {
             let source_points = self.points[initial_point_count..].to_vec();
             matrix.map_points(&mut self.points[initial_point_count..], &source_points);
-            self.prune_empty_segments_from(initial_verb_count, initial_point_count);
+            self.prune_empty_segments_from(RawPathCursor {
+                verb: initial_verb_count,
+                point: initial_point_count,
+            });
         }
-        initial_verb_count
+        RawPathCursor {
+            verb: initial_verb_count,
+            point: initial_point_count,
+        }
     }
     pub fn prune_empty_segments(&mut self) {
-        self.prune_empty_segments_from(0, 0);
+        self.prune_empty_segments_from(RawPathCursor { verb: 0, point: 0 });
     }
-    fn prune_empty_segments_from(&mut self, start_verb: usize, start_point: usize) {
+    pub fn prune_empty_segments_from(&mut self, start: RawPathCursor) {
+        let RawPathCursor {
+            verb: start_verb,
+            point: start_point,
+        } = start;
         let mut kept_verbs = self.verbs[..start_verb].to_vec();
         let mut kept_points = self.points[..start_point].to_vec();
         let mut point_index = start_point;
@@ -359,13 +391,13 @@ impl RawPath {
     pub fn add_to(&self, result: &mut dyn CommandPath) {
         for segment in self.segments() {
             match segment.verb {
-                PathVerb::Move => result.move_to(segment.points[0]),
-                PathVerb::Line => result.line_to(segment.points[1]),
+                PathVerb::Move => result.move_(segment.points[0]),
+                PathVerb::Line => result.line(segment.points[1]),
                 PathVerb::Cubic => {
-                    result.cubic_to(segment.points[1], segment.points[2], segment.points[3])
+                    result.cubic(segment.points[1], segment.points[2], segment.points[3])
                 }
                 PathVerb::Close => result.close(),
-                PathVerb::Quad => result.cubic_to(
+                PathVerb::Quad => result.cubic(
                     Vec2D::lerp(segment.points[0], segment.points[1], 2.0 / 3.0),
                     Vec2D::lerp(segment.points[2], segment.points[1], 2.0 / 3.0),
                     segment.points[2],
@@ -490,7 +522,7 @@ impl RawPath {
                             let point = eval.at(low_t);
                             area += Vec2D::cross(last, point);
                             last = point;
-                            if low_t < 1.0 {
+                            if high_t < 1.0 {
                                 let point = eval.at(high_t);
                                 area += Vec2D::cross(last, point);
                                 last = point;
@@ -587,8 +619,10 @@ fn expand_cubic_bounds_for_axis(
 fn cubic_wangs_formula(points: &[Vec2D; 4], precision: f32) -> f32 {
     let v0 = points[0] - 2.0 * points[1] + points[2];
     let v1 = points[1] - 2.0 * points[2] + points[3];
-    let maximum = v0.length_squared().max(v1.length_squared());
-    (maximum * (81.0 / 16.0) * precision * precision)
+    let first = v0.length_squared();
+    let second = v1.length_squared();
+    let maximum = if first < second { second } else { first };
+    (maximum * (9.0 / 16.0) * precision * precision)
         .sqrt()
         .sqrt()
 }

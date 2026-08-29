@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::data_bind_container::DataBindContainerOwner,
     data_bind::data_values::data_type::DataType,
+    data_bind_flags::DataBindFlags,
     file::RuntimeFileWeakHandle,
     generated::{
         animation::{
@@ -42,12 +43,12 @@ pub const BINDINGS: u32 =
     crate::mechanical_port::source::component_dirt::ComponentDirt::BINDINGS.0 as u32;
 pub const BINDINGS_TARGET: u32 =
     crate::mechanical_port::source::component_dirt::ComponentDirt::BINDINGS_TARGET.0 as u32;
-pub const TO_SOURCE: u32 = 1;
-pub const TWO_WAY: u32 = 2;
-pub const DIRECTION: u32 = 3;
-pub const SOURCE_TO_TARGET_FIRST: u32 = 4;
-pub const ONCE: u32 = 8;
-pub const NAME_BASED: u32 = 16;
+pub const TO_SOURCE: u32 = DataBindFlags::TO_SOURCE.0 as u32;
+pub const TWO_WAY: u32 = DataBindFlags::TWO_WAY.0 as u32;
+pub const DIRECTION: u32 = DataBindFlags::DIRECTION.0 as u32;
+pub const SOURCE_TO_TARGET_FIRST: u32 = DataBindFlags::SOURCE_TO_TARGET_RUNS_FIRST.0 as u32;
+pub const ONCE: u32 = DataBindFlags::ONCE.0 as u32;
+pub const NAME_BASED: u32 = DataBindFlags::NAME_BASED.0 as u32;
 
 const COLLAPSED: u8 = 1;
 const IN_DIRTY: u8 = 2;
@@ -714,6 +715,7 @@ impl DataBind {
             let mut context = self.context_value.as_ref().unwrap().borrow_mut();
             context.apply(target, self.base.property_key(), is_main, bind.clone());
             context.refresh_target_value(bind);
+            drop(context);
             self.set_flag(SUPPRESS_DIRT, false);
         }
     }

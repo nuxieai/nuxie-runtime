@@ -33,7 +33,7 @@ pub trait SkinnableBehavior {
 }
 
 pub fn from(component: CoreHandle, _context: &dyn CoreContext) -> Option<CoreHandle> {
-    match component.core_type() {
+    match component.core_type()? {
         POINTS_PATH_TYPE_KEY | MESH_TYPE_KEY => Some(component),
         _ => None,
     }

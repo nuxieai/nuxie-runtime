@@ -50,7 +50,7 @@ impl BlendAnimationDirect {
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let Some(state_machine_importer) =
-            import_stack.latest::<StateMachineImporter>(StateMachine::TYPE_KEY)
+            import_stack.latest::<StateMachineImporter>(crate::mechanical_port::source::generated::animation::state_machine_base::StateMachineBase::TYPE_KEY)
         else {
             return StatusCode::MissingObject;
         };
@@ -66,7 +66,7 @@ impl BlendAnimationDirect {
                         }
                         state_machine
                             .input(input_id)
-                            .is_some_and(|input| input.is_type_of(StateMachineNumber::TYPE_KEY))
+                            .is_some_and(|input| input.is_type_of(crate::mechanical_port::source::generated::animation::state_machine_number_base::StateMachineNumberBase::TYPE_KEY))
                     })
                     .unwrap_or(false);
                 if !valid {
@@ -93,6 +93,18 @@ impl BlendAnimationDirect {
 
     pub fn bindable_property(&self) -> Option<CoreHandle> {
         self.bindable_property.clone()
+    }
+}
+
+impl std::ops::Deref for BlendAnimationDirect {
+    type Target = BlendAnimationDirectBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for BlendAnimationDirect {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }
 

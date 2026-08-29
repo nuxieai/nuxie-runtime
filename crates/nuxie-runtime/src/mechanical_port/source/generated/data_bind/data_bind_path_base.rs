@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, core::Core, data_bind::data_bind_path::DataBindPath,
+    core::Core, core::binary_reader::BinaryReader, data_bind::data_bind_path::DataBindPath,
 };
 
 pub trait DataBindPathBaseCallbacks {

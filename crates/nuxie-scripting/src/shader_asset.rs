@@ -1876,19 +1876,13 @@ mod tests {
         out
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    struct UpstreamTextureSamplerPair {
-        tex_group: u8,
-        tex_binding: u8,
-        samp_group: u8,
-        samp_binding: u8,
-    }
-
-    fn upstream_texture_sampler_pairs(_asset: &ShaderAsset) -> Vec<UpstreamTextureSamplerPair> {
-        // The production Rust ShaderAsset has no tag-1 texture/sampler-pair
-        // owner yet. Returning its observable empty surface keeps all four
-        // upstream section cases executable without adding runtime behavior.
-        Vec::new()
+    fn upstream_texture_sampler_pairs(
+        asset: &ShaderAsset,
+    ) -> Vec<nuxie_runtime::source::assets::shader_asset::TextureSamplerPair> {
+        asset
+            .asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| asset.texture_sampler_pairs().to_vec())
+            .expect("decoded native ShaderAsset")
     }
 
     fn make_upstream_tex_sampler_pairs_tag(pairs: &[[u8; 4]]) -> Vec<u8> {
@@ -1971,7 +1965,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "expected-red: Rust ShaderAsset does not retain tag-1 texture/sampler pairs"]
     fn upstream_shader_asset_decode_texture_sampler_pairs() {
         let pairs =
             make_upstream_tex_sampler_pairs_tag(&[[0, 1, 0, 2], [1, 3, 1, 4], [2, 5, 2, 6]]);

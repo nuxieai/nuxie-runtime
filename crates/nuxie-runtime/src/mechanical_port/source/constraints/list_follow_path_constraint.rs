@@ -65,9 +65,8 @@ impl ListFollowPathConstraint {
 impl ListConstraint for ListFollowPathConstraint {
     fn constrain_list(&mut self, list: &mut dyn ConstrainableList) {
         let list_transform = *list.list_transform();
-        let mut transforms = Vec::new();
-        list.list_item_transforms(&mut transforms);
-        let count = transforms.len();
+        let mut count = 0usize;
+        list.for_each_list_item_transform(&mut |_| count += 1);
         let start_offset = self.base.distance_offset() + self.base.distance();
         let start_to_end_distance = self.base.distance_end() - self.base.distance();
         let offset_distance = if count <= 1 {
@@ -75,19 +74,21 @@ impl ListConstraint for ListFollowPathConstraint {
         } else {
             start_to_end_distance / (count as f32 - 1.0)
         };
-        for (index, transform) in transforms.into_iter().enumerate() {
+        let mut index = 0usize;
+        list.for_each_list_item_transform(&mut |transform| {
             let components = self.constrain_at_offset(
                 transform,
                 &list_transform,
                 start_offset + index as f32 * offset_distance,
             );
-            let transform_b = Mat2D::compose(components);
+            let transform_b = Mat2D::compose(&components);
             transform.set_xx(transform_b.xx());
             transform.set_xy(transform_b.xy());
             transform.set_yx(transform_b.yx());
             transform.set_yy(transform_b.yy());
             transform.set_tx(transform_b.tx());
             transform.set_ty(transform_b.ty());
-        }
+            index += 1;
+        });
     }
 }

@@ -61,7 +61,7 @@ impl CubicWeightBase {
             return;
         }
         callbacks.in_values_changed();
-        callbacks.notify_property_changed(Self::IN_VALUES_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::bones::weight_base::WeightBaseCallbacks::notify_property_changed(callbacks, Self::IN_VALUES_PROPERTY_KEY);
     }
 
     pub(crate) fn set_in_values_value(&mut self, value: u32) -> bool {
@@ -76,7 +76,7 @@ impl CubicWeightBase {
             return;
         }
         callbacks.in_indices_changed();
-        callbacks.notify_property_changed(Self::IN_INDICES_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::bones::weight_base::WeightBaseCallbacks::notify_property_changed(callbacks, Self::IN_INDICES_PROPERTY_KEY);
     }
 
     pub(crate) fn set_in_indices_value(&mut self, value: u32) -> bool {
@@ -91,7 +91,7 @@ impl CubicWeightBase {
             return;
         }
         callbacks.out_values_changed();
-        callbacks.notify_property_changed(Self::OUT_VALUES_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::bones::weight_base::WeightBaseCallbacks::notify_property_changed(callbacks, Self::OUT_VALUES_PROPERTY_KEY);
     }
 
     pub(crate) fn set_out_values_value(&mut self, value: u32) -> bool {
@@ -106,7 +106,7 @@ impl CubicWeightBase {
             return;
         }
         callbacks.out_indices_changed();
-        callbacks.notify_property_changed(Self::OUT_INDICES_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::bones::weight_base::WeightBaseCallbacks::notify_property_changed(callbacks, Self::OUT_INDICES_PROPERTY_KEY);
     }
 
     pub(crate) fn set_out_indices_value(&mut self, value: u32) -> bool {

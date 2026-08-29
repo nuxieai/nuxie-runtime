@@ -15,6 +15,23 @@ use crate::mechanical_port::source::{
 };
 use nuxie_render_api::{RenderPaint, RenderPaintStyle};
 
+impl std::ops::Deref for Stroke {
+    type Target = StrokeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Stroke {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Stroke {
+    pub const TYPE_KEY: u16 = StrokeBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct Stroke {
     pub base: StrokeBase,
@@ -29,8 +46,12 @@ impl Stroke {
         }
     }
 
-    pub fn init_render_paint(&mut self, mutator: CoreHandle) -> bool {
-        if !self.base.init_render_paint(mutator) {
+    pub fn init_render_paint(
+        &mut self,
+        mutator: CoreHandle,
+        factory: &crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    ) -> bool {
+        if !self.base.init_render_paint(mutator, factory) {
             return false;
         }
         let thickness = self.base.thickness();
@@ -79,11 +100,8 @@ impl Stroke {
 
     pub fn update(&mut self, value: ComponentDirt) {
         let kind = self.pick_path_kind();
-        let paint = crate::scripting::ScriptPaint::from_fresh(
-            &self.base.base,
-            Some((self.base.thickness(), self.base.cap(), self.base.join())),
-        );
-        self.base.base.update_with_path_kind(value, kind, paint);
+        let stroke = Some((self.base.thickness(), self.base.cap(), self.base.join()));
+        self.base.base.update_with_path_kind(value, kind, stroke);
         if has_dirt(value, ComponentDirt::PAINT) {
             let thickness = self.base.thickness();
             let cap = StrokeCap::from(self.base.cap()).into();
@@ -143,8 +161,12 @@ impl ShapePaintBehavior for Stroke {
         }
     }
 
-    fn initialize_render_paint(&mut self, mutator: CoreHandle) -> bool {
-        self.init_render_paint(mutator)
+    fn initialize_render_paint(
+        &mut self,
+        mutator: CoreHandle,
+        factory: &crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    ) -> bool {
+        self.init_render_paint(mutator, factory)
     }
 
     fn apply_to(&mut self, paint: &mut dyn RenderPaint, opacity: f32) {

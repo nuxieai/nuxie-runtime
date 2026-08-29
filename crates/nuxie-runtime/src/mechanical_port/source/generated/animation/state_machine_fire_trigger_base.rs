@@ -7,7 +7,7 @@ use crate::mechanical_port::source::{
 pub trait StateMachineFireTriggerBaseCallbacks: crate::mechanical_port::source::generated::animation::state_machine_fire_action_base::StateMachineFireActionBaseCallbacks {
     fn view_model_path_ids_changed(&mut self) {}
     fn decode_view_model_path_ids(&mut self, value: &[u8]);
-    fn copy_view_model_path_ids(&mut self, object: &StateMachineFireTriggerBase);
+    fn copy_view_model_path_ids(&mut self, object: &StateMachineFireTrigger);
 }
 
 pub struct StateMachineFireTriggerBase {
@@ -32,21 +32,20 @@ impl StateMachineFireTriggerBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub fn clone_into(
-        &self,
-        callbacks: &mut impl StateMachineFireTriggerBaseCallbacks,
-    ) -> StateMachineFireTrigger {
+    pub fn clone_into(source: &StateMachineFireTrigger) -> StateMachineFireTrigger {
         let mut cloned = StateMachineFireTrigger::default();
-        cloned.base.copy(self, callbacks);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(source, &mut cloned);
+        cloned.base = base;
         cloned
     }
     pub fn copy(
         &mut self,
-        object: &Self,
+        object: &StateMachineFireTrigger,
         callbacks: &mut impl StateMachineFireTriggerBaseCallbacks,
     ) {
         callbacks.copy_view_model_path_ids(object);
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base.base, callbacks);
     }
     pub fn deserialize(
         &mut self,

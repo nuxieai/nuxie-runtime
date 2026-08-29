@@ -120,7 +120,7 @@ impl ScriptedDataConverter {
                         owner.store::<DataValueString>(|cache| cache.set_value(value))
                     }
                     Ok(ScriptDataConverterOptionalCall::Returned(ScriptValue::Color(value))) => {
-                        owner.store::<DataValueColor>(|cache| cache.set_value(value))
+                        owner.store::<DataValueColor>(|cache| cache.set_value(value as i32))
                     }
                     _ => {}
                 }
@@ -162,7 +162,7 @@ impl ScriptedDataConverter {
             value
                 .as_any()
                 .downcast_ref::<DataValueColor>()
-                .map(|value| ScriptValue::Color(value.value()))
+                .map(|value| ScriptValue::Color(value.value() as u32))
         }
     }
 
@@ -212,14 +212,14 @@ impl ScriptedDataConverter {
                 self.store::<DataValueString>(|cache| cache.set_value(value))
             }
             Ok(ScriptDataConverterOptionalCall::Returned(ScriptValue::Color(value))) => {
-                self.store::<DataValueColor>(|cache| cache.set_value(value))
+                self.store::<DataValueColor>(|cache| cache.set_value(value as i32))
             }
             // An unsupported input/output or protected error preserves the cache.
             _ => {}
         }
-        self.data_value
+        &**self
+            .data_value
             .get_or_insert_with(|| Box::new(EmptyDataValue))
-            .as_ref()
     }
 
     pub fn convert<'a>(&'a mut self, value: &'a dyn DataValue) -> &'a dyn DataValue {
@@ -285,7 +285,21 @@ impl ScriptedDataConverter {
         property.with_mut(|property| {
             property.script_input_set_scripted_object(owner);
         });
-        self.properties.push(property);
+        if !self.properties.contains(&property) {
+            self.properties.push(property);
+        }
+    }
+
+    pub(crate) fn add_property_from_input(
+        &mut self,
+        property: CoreHandle,
+        input: &mut crate::mechanical_port::source::assets::script_asset::ScriptInput,
+    ) {
+        input.attach_to_container(
+            CoreObject::core(self).handle(),
+            property,
+            &mut self.properties,
+        );
     }
 
     pub fn remove_property(&mut self, property: &CoreHandle) {

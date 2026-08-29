@@ -51,7 +51,7 @@ impl ExportAudioBase {
             return;
         }
         callbacks.volume_changed();
-        callbacks.notify_property_changed(Self::VOLUME_PROPERTY_KEY);
+        crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::VOLUME_PROPERTY_KEY);
     }
     pub(crate) fn set_volume_value(&mut self, value: f32) -> bool {
         if self.volume == value {

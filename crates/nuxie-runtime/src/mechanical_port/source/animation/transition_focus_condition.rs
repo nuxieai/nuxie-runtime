@@ -54,7 +54,7 @@ impl TransitionFocusCondition {
                 }
             }
         }
-        if self.base.base.op() == TransitionConditionOp::Equal {
+        if self.base.base.op() == Some(TransitionConditionOp::Equal) {
             focused
         } else {
             !focused

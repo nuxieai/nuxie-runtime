@@ -25,7 +25,9 @@ impl AxisXBase {
     }
     pub fn clone_into(&self) -> AxisX {
         let mut cloned = AxisX::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

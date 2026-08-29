@@ -46,7 +46,7 @@ impl PolygonBase {
             return;
         }
         callbacks.points_changed();
-        callbacks.notify_property_changed(Self::POINTS_PROPERTY_KEY);
+        PolygonBaseCallbacks::notify_property_changed(callbacks, Self::POINTS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_points_value(&mut self, value: u32) -> bool {
@@ -64,7 +64,7 @@ impl PolygonBase {
             return;
         }
         callbacks.corner_radius_changed();
-        callbacks.notify_property_changed(Self::CORNER_RADIUS_PROPERTY_KEY);
+        PolygonBaseCallbacks::notify_property_changed(callbacks, Self::CORNER_RADIUS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_corner_radius_value(&mut self, value: f32) -> bool {

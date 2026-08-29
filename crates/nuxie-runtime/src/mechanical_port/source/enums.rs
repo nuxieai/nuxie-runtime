@@ -49,8 +49,9 @@ pub fn bit_not<E: FlagEnum>(value: E) -> E {
 pub fn is_single_flag<E: FlagEnum>(flags: E) -> bool {
     let value = flags.underlying_value();
     let zero = E::Repr::from(0);
-    let one = E::Repr::from(1);
-    value != zero && (value & (value - one)) == zero
+    // Use the same underlying-integer decrement boundary as decr(), including
+    // the signed representation's high bit tested by the upstream flag suite.
+    value != zero && (value & E::decrement_underlying(value)) == zero
 }
 
 pub fn is_flag_set<E: FlagEnum>(flags: E, test_flag: E) -> bool {

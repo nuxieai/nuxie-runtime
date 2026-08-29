@@ -7,6 +7,23 @@ use crate::mechanical_port::source::{
     layout::style_overrider::{StyleOverrideProvider, StyleOverrider},
 };
 
+impl std::ops::Deref for ArtboardComponentListOverride {
+    type Target = ArtboardComponentListOverrideBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ArtboardComponentListOverride {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl ArtboardComponentListOverride {
+    pub const TYPE_KEY: u16 = ArtboardComponentListOverrideBase::TYPE_KEY;
+}
+
 pub struct ArtboardComponentListOverride {
     pub base: ArtboardComponentListOverrideBase,
     artboards: Vec<RuntimeArtboardInstanceWeakHandle>,
@@ -23,10 +40,8 @@ impl ArtboardComponentListOverride {
     }
     pub fn add_artboard(&mut self, artboard: &RuntimeArtboardInstanceHandle) {
         self.artboards.push(artboard.downgrade());
-        artboard.with_artboard_mut(|artboard| {
-            StyleOverrider::<Self>::update_width_override(self, artboard);
-            StyleOverrider::<Self>::update_height_override(self, artboard);
-        });
+        StyleOverrider::<Self>::update_width_override(self, artboard);
+        StyleOverrider::<Self>::update_height_override(self, artboard);
     }
     pub fn remove_artboard(&mut self, artboard: &RuntimeArtboardInstanceHandle) {
         let target = artboard.downgrade();
@@ -42,16 +57,16 @@ impl ArtboardComponentListOverride {
     }
     fn update_width_override(&mut self) {
         for artboard in self.artboards.clone() {
-            artboard.with_artboard_mut(|artboard| {
-                StyleOverrider::<Self>::update_width_override(self, artboard)
-            });
+            if let Some(artboard) = artboard.upgrade() {
+                StyleOverrider::<Self>::update_width_override(self, &artboard);
+            }
         }
     }
     fn update_height_override(&mut self) {
         for artboard in self.artboards.clone() {
-            artboard.with_artboard_mut(|artboard| {
-                StyleOverrider::<Self>::update_height_override(self, artboard)
-            });
+            if let Some(artboard) = artboard.upgrade() {
+                StyleOverrider::<Self>::update_height_override(self, &artboard);
+            }
         }
     }
     pub fn instance_width_changed(&mut self) {
@@ -72,14 +87,14 @@ impl ArtboardComponentListOverride {
     pub fn instance_height_scale_type_changed(&mut self) {
         self.update_height_override();
     }
-    pub fn mark_hosting_layout_dirty(&mut self, artboard_instance: &mut ArtboardInstance) {
+    pub fn mark_hosting_layout_dirty(&mut self, artboard_instance: &RuntimeArtboardInstanceHandle) {
         if let Some(artboard) = self.base.artboard_handle() {
-            artboard.with_downcast_mut::<crate::mechanical_port::source::artboard::Artboard, _>(
-                |artboard| {
-                    artboard.mark_layout_dirty(artboard_instance);
-                    artboard.mark_layout_style_dirty();
-                },
+            crate::mechanical_port::source::artboard::Artboard::mark_layout_dirty_occurrence(
+                &artboard,
+                artboard_instance.core_handle(),
+                None,
             );
+            crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_style_dirty_occurrence(&artboard);
         }
     }
     pub fn actual_instance_width(&mut self, artboard: &ArtboardInstance) -> f32 {
@@ -118,7 +133,12 @@ impl StyleOverrideProvider for ArtboardComponentListOverride {
     fn instance_width(&self) -> f32 {
         self.base.instance_width()
     }
-    fn mark_hosting_layout_dirty(&mut self, artboard: &mut ArtboardInstance) {
+    fn mark_hosting_layout_dirty(&mut self, artboard: &RuntimeArtboardInstanceHandle) {
         ArtboardComponentListOverride::mark_hosting_layout_dirty(self, artboard);
+    }
+    fn borrowed_artboard_host(
+        &mut self,
+    ) -> Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost> {
+        None
     }
 }

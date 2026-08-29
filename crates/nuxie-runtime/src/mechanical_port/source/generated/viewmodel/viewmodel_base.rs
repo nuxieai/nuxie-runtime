@@ -41,7 +41,10 @@ impl ViewModelBase {
             return;
         }
         callbacks.view_model_type_changed();
-        callbacks.notify_property_changed(Self::VIEW_MODEL_TYPE_PROPERTY_KEY);
+        ViewModelBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VIEW_MODEL_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_view_model_type_value(&mut self, value: u32) -> bool {

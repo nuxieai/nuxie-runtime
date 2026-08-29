@@ -103,8 +103,7 @@ impl FocusListenerGroup {
         if self.is_focus_listener
             && let Some(group) = self.occurrence.upgrade()
         {
-            self.state_machine_instance
-                .with_instance_mut(|machine| machine.queue_focus_event(group, true));
+            self.state_machine_instance.queue_focus_event(group, true);
         }
     }
 
@@ -112,8 +111,7 @@ impl FocusListenerGroup {
         if self.is_blur_listener
             && let Some(group) = self.occurrence.upgrade()
         {
-            self.state_machine_instance
-                .with_instance_mut(|machine| machine.queue_focus_event(group, false));
+            self.state_machine_instance.queue_focus_event(group, false);
         }
     }
 }

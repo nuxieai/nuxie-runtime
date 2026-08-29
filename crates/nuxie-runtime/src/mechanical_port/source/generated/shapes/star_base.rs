@@ -44,7 +44,7 @@ impl StarBase {
             return;
         }
         callbacks.inner_radius_changed();
-        callbacks.notify_property_changed(Self::INNER_RADIUS_PROPERTY_KEY);
+        StarBaseCallbacks::notify_property_changed(callbacks, Self::INNER_RADIUS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_inner_radius_value(&mut self, value: f32) -> bool {

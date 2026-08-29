@@ -55,8 +55,7 @@ impl RuntimeFile {
         // retained owner elsewhere or one rejected during later validation.
         let mut current_animation = None::<(u32, Option<usize>)>;
         let mut current_keyed_object = None::<Option<(usize, usize)>>;
-        let mut current_keyed_property =
-            None::<keyed_property_importer::KeyedPropertyImporter>;
+        let mut current_keyed_property = None::<keyed_property_importer::KeyedPropertyImporter>;
 
         for (file_index, object) in self.objects.iter().enumerate() {
             let Some(object) = object.as_ref() else {
@@ -114,37 +113,36 @@ impl RuntimeFile {
                 let Some(keyed_object) = current_keyed_object else {
                     continue;
                 };
-                let keyed_property = keyed_object.and_then(|(animation_index, keyed_object_index)| {
-                    if !cpp_keyed_object_supports_property(
-                        animations[animation_index].keyed_objects[keyed_object_index].object,
-                        object,
-                        &local_slots,
-                        &self.objects,
-                    ) {
-                        return None;
-                    }
-                    animations[animation_index].keyed_objects[keyed_object_index]
-                        .keyed_properties
-                        .push(RuntimeKeyedProperty {
+                let keyed_property =
+                    keyed_object.and_then(|(animation_index, keyed_object_index)| {
+                        if !cpp_keyed_object_supports_property(
+                            animations[animation_index].keyed_objects[keyed_object_index].object,
                             object,
-                            first_key_frame: None,
-                            key_frames: Vec::new(),
-                        });
-                    Some((
-                        animation_index,
-                        keyed_object_index,
+                            &local_slots,
+                            &self.objects,
+                        ) {
+                            return None;
+                        }
                         animations[animation_index].keyed_objects[keyed_object_index]
                             .keyed_properties
-                            .len()
-                            - 1,
-                    ))
-                });
-                current_keyed_property = Some(
-                    keyed_property_importer::KeyedPropertyImporter::new(
-                        animation_fps,
-                        keyed_property,
-                    ),
-                );
+                            .push(RuntimeKeyedProperty {
+                                object,
+                                first_key_frame: None,
+                                key_frames: Vec::new(),
+                            });
+                        Some((
+                            animation_index,
+                            keyed_object_index,
+                            animations[animation_index].keyed_objects[keyed_object_index]
+                                .keyed_properties
+                                .len()
+                                - 1,
+                        ))
+                    });
+                current_keyed_property = Some(keyed_property_importer::KeyedPropertyImporter::new(
+                    animation_fps,
+                    keyed_property,
+                ));
                 continue;
             }
 

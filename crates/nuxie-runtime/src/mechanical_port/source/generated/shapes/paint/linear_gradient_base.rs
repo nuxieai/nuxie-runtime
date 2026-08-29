@@ -58,7 +58,7 @@ impl LinearGradientBase {
             return;
         }
         callbacks.start_x_changed();
-        callbacks.notify_property_changed(Self::START_X_PROPERTY_KEY);
+        LinearGradientBaseCallbacks::notify_property_changed(callbacks, Self::START_X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_start_x_value(&mut self, value: f32) -> bool {
@@ -76,7 +76,7 @@ impl LinearGradientBase {
             return;
         }
         callbacks.start_y_changed();
-        callbacks.notify_property_changed(Self::START_Y_PROPERTY_KEY);
+        LinearGradientBaseCallbacks::notify_property_changed(callbacks, Self::START_Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_start_y_value(&mut self, value: f32) -> bool {
@@ -94,7 +94,7 @@ impl LinearGradientBase {
             return;
         }
         callbacks.end_x_changed();
-        callbacks.notify_property_changed(Self::END_X_PROPERTY_KEY);
+        LinearGradientBaseCallbacks::notify_property_changed(callbacks, Self::END_X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_end_x_value(&mut self, value: f32) -> bool {
@@ -112,7 +112,7 @@ impl LinearGradientBase {
             return;
         }
         callbacks.end_y_changed();
-        callbacks.notify_property_changed(Self::END_Y_PROPERTY_KEY);
+        LinearGradientBaseCallbacks::notify_property_changed(callbacks, Self::END_Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_end_y_value(&mut self, value: f32) -> bool {
@@ -130,7 +130,7 @@ impl LinearGradientBase {
             return;
         }
         callbacks.opacity_changed();
-        callbacks.notify_property_changed(Self::OPACITY_PROPERTY_KEY);
+        LinearGradientBaseCallbacks::notify_property_changed(callbacks, Self::OPACITY_PROPERTY_KEY);
     }
 
     pub(crate) fn set_opacity_value(&mut self, value: f32) -> bool {

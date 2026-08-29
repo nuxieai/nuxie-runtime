@@ -1,4 +1,8 @@
-use crate::mechanical_port::source::artboard::ArtboardInstance;
+use crate::mechanical_port::source::{
+    artboard::{ArtboardInstance, RuntimeArtboardInstanceHandle},
+    artboard_host::ArtboardHost,
+    layout_component::LayoutComponent,
+};
 
 pub trait StyleOverrideProvider {
     fn is_row(&self) -> bool;
@@ -8,7 +12,9 @@ pub trait StyleOverrideProvider {
     fn instance_width_units_value(&self) -> u32;
     fn instance_height(&self) -> f32;
     fn instance_width(&self) -> f32;
-    fn mark_hosting_layout_dirty(&mut self, artboard: &mut ArtboardInstance);
+    fn mark_hosting_layout_dirty(&mut self, artboard: &RuntimeArtboardInstanceHandle);
+    /// The provider can be the currently borrowed host of the sized Artboard.
+    fn borrowed_artboard_host(&mut self) -> Option<&mut dyn ArtboardHost>;
 }
 
 pub struct StyleOverrider<T: StyleOverrideProvider>(std::marker::PhantomData<fn() -> T>);
@@ -21,46 +27,88 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
     }
     pub fn attach(&mut self, _provider: &mut T) {}
 
-    pub fn update_height_override(provider: &mut T, artboard: &mut ArtboardInstance) {
+    pub fn update_height_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) {
         let is_row = provider.is_row();
         if provider.instance_height_scale_type() == 0 {
-            artboard.set_height_intrinsically_size_override(false);
-            artboard.height_override(
-                Self::actual_instance_height_for(provider, artboard),
-                provider.instance_height_units_value(),
+            LayoutComponent::set_height_intrinsically_size_override_occurrence(
+                &artboard.core_handle(),
+                false,
+                provider.borrowed_artboard_host(),
+            );
+            let height = artboard
+                .with_artboard(|artboard| Self::actual_instance_height_for(provider, artboard));
+            let units = provider.instance_height_units_value() as i32;
+            LayoutComponent::height_override_occurrence(
+                &artboard.core_handle(),
+                height,
+                units,
                 is_row,
+                provider.borrowed_artboard_host(),
             );
         } else if provider.instance_height_scale_type() == 1 {
-            artboard.set_height_intrinsically_size_override(false);
-            artboard.height_override(
-                Self::actual_instance_height_for(provider, artboard),
+            LayoutComponent::set_height_intrinsically_size_override_occurrence(
+                &artboard.core_handle(),
+                false,
+                provider.borrowed_artboard_host(),
+            );
+            let height = artboard
+                .with_artboard(|artboard| Self::actual_instance_height_for(provider, artboard));
+            LayoutComponent::height_override_occurrence(
+                &artboard.core_handle(),
+                height,
                 3,
                 is_row,
+                provider.borrowed_artboard_host(),
             );
         } else if provider.instance_width_scale_type() == 2 {
             // Preserve the pinned width-scale check in the height branch.
-            artboard.set_height_intrinsically_size_override(true);
+            LayoutComponent::set_height_intrinsically_size_override_occurrence(
+                &artboard.core_handle(),
+                true,
+                provider.borrowed_artboard_host(),
+            );
         }
         provider.mark_hosting_layout_dirty(artboard);
     }
-    pub fn update_width_override(provider: &mut T, artboard: &mut ArtboardInstance) {
+    pub fn update_width_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) {
         let is_row = provider.is_row();
         if provider.instance_width_scale_type() == 0 {
-            artboard.set_width_intrinsically_size_override(false);
-            artboard.width_override(
-                Self::actual_instance_width_for(provider, artboard),
-                provider.instance_width_units_value(),
+            LayoutComponent::set_width_intrinsically_size_override_occurrence(
+                &artboard.core_handle(),
+                false,
+                provider.borrowed_artboard_host(),
+            );
+            let width = artboard
+                .with_artboard(|artboard| Self::actual_instance_width_for(provider, artboard));
+            let units = provider.instance_width_units_value() as i32;
+            LayoutComponent::width_override_occurrence(
+                &artboard.core_handle(),
+                width,
+                units,
                 is_row,
+                provider.borrowed_artboard_host(),
             );
         } else if provider.instance_width_scale_type() == 1 {
-            artboard.set_width_intrinsically_size_override(false);
-            artboard.width_override(
-                Self::actual_instance_width_for(provider, artboard),
+            LayoutComponent::set_width_intrinsically_size_override_occurrence(
+                &artboard.core_handle(),
+                false,
+                provider.borrowed_artboard_host(),
+            );
+            let width = artboard
+                .with_artboard(|artboard| Self::actual_instance_width_for(provider, artboard));
+            LayoutComponent::width_override_occurrence(
+                &artboard.core_handle(),
+                width,
                 3,
                 is_row,
+                provider.borrowed_artboard_host(),
             );
         } else if provider.instance_width_scale_type() == 2 {
-            artboard.set_width_intrinsically_size_override(true);
+            LayoutComponent::set_width_intrinsically_size_override_occurrence(
+                &artboard.core_handle(),
+                true,
+                provider.borrowed_artboard_host(),
+            );
         }
         provider.mark_hosting_layout_dirty(artboard);
     }

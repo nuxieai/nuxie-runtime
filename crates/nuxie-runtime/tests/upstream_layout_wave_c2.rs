@@ -2,10 +2,16 @@
 
 use std::path::PathBuf;
 
-use nuxie_binary::{RuntimeFile, read_runtime_file};
-use nuxie_graph::{ArtboardGraph, GraphFile};
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::source::{
+    advance_flags::AdvanceFlags,
+    component_dirt::ComponentDirt,
+    generated::{core_registry::CoreRegistry, layout_component_base::LayoutComponentBase},
+    layout::{layout_component_style::LayoutComponentStyle, layout_style_applier::YGDisplay},
+    layout_component::{Layout, LayoutComponent},
+};
 use nuxie_runtime::{
-    ArtboardInstance, ComponentDirt, RuntimeLayoutBounds, RuntimeLayoutBoundsReport,
+    Artboard, CoreHandle, File, ImportResult, RuntimeFactoryHandle, RuntimeFileHandle,
 };
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
@@ -19,85 +25,136 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 }
 
 struct Fixture {
-    file: RuntimeFile,
-    graphs: GraphFile,
-    graph_index: usize,
-    artboard: ArtboardInstance,
+    // The pinned layout tests use File::artboard(), not an ArtboardInstance.
+    artboard: CoreHandle,
+    _file: RuntimeFileHandle,
 }
 
 impl Fixture {
-    fn graph(&self) -> &ArtboardGraph {
-        &self.graphs.artboards[self.graph_index]
+    fn objects(&self) -> Vec<Option<CoreHandle>> {
+        self.artboard
+            .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
+            .expect("native Artboard")
     }
 
-    fn report(&self) -> Vec<RuntimeLayoutBoundsReport> {
-        self.artboard
-            .debug_taffy_layout_bounds_report(&self.file, self.graph())
-            .expect("runtime layout report")
+    fn object(&self, local: usize) -> CoreHandle {
+        self.objects()
+            .get(local)
+            .cloned()
+            .flatten()
+            .expect("native local object")
+    }
+
+    fn report(&self) -> Vec<(usize, bool)> {
+        self.objects()
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, owner)| {
+                owner?.with(|owner| {
+                    owner
+                        .as_layout_component()
+                        .map(|layout| (index, layout.is_collapsed()))
+                })?
+            })
+            .collect()
     }
 
     fn local(&self, name: &str) -> usize {
-        self.graph()
-            .local_objects
+        let handle = self
+            .artboard
+            .with_downcast::<Artboard, _>(|artboard| artboard.find_handle::<LayoutComponent>(name))
+            .flatten()
+            .unwrap_or_else(|| panic!("missing object named {name}"));
+        self.objects()
             .iter()
-            .find(|object| object.name.as_deref() == Some(name))
-            .unwrap_or_else(|| panic!("missing object named {name}"))
-            .local_id
+            .position(|owner| owner.as_ref() == Some(&handle))
+            .expect("authored local object")
     }
 
     fn style(&self, layout_local: usize) -> usize {
-        let global_id = self.graph().local_objects[layout_local].global_id;
-        usize::try_from(
-            self.file
-                .object(global_id as usize)
-                .and_then(|object| object.uint_property("styleId"))
-                .expect("LayoutComponent styleId"),
-        )
-        .expect("styleId fits usize")
+        let style = self
+            .object(layout_local)
+            .with(|owner| {
+                owner
+                    .as_layout_component()
+                    .expect("LayoutComponent")
+                    .style_handle()
+            })
+            .flatten()
+            .expect("attached LayoutComponentStyle");
+        self.objects()
+            .iter()
+            .position(|owner| owner.as_ref() == Some(&style))
+            .expect("native style object")
     }
 
-    fn bounds(&self, local_id: usize) -> RuntimeLayoutBounds {
-        self.artboard
-            .layout_bounds(local_id)
-            .unwrap_or_else(|| panic!("missing retained layout bounds for local {local_id}"))
+    fn bounds(&self, local_id: usize) -> Layout {
+        self.object(local_id)
+            .with(|owner| {
+                owner
+                    .as_layout_component()
+                    .expect("LayoutComponent")
+                    .layout()
+            })
+            .expect("live layout owner")
     }
 
     fn world_xy(&mut self, local_id: usize) -> (f32, f32) {
-        let transform = self
-            .artboard
-            .component_world_transform_with_scroll(local_id)
-            .unwrap_or_else(|| panic!("missing world transform for local {local_id}"));
-        transform.translation()
+        self.object(local_id)
+            .with(|owner| {
+                let transform = owner
+                    .as_transform_component()
+                    .expect("layout transform")
+                    .world_transform();
+                (transform[4], transform[5])
+            })
+            .expect("live layout transform")
+    }
+
+    fn uint_property(&self, local: usize, key: u16) -> Option<u64> {
+        CoreRegistry::get_uint_handle(&self.object(local), i32::from(key)).map(u64::from)
+    }
+
+    fn double_property(&self, local: usize, key: u16) -> Option<f32> {
+        CoreRegistry::get_double_handle(&self.object(local), i32::from(key))
+    }
+
+    fn set_uint_property(&self, local: usize, key: u16, value: u32) -> bool {
+        CoreRegistry::set_uint_handle(&self.object(local), i32::from(key), value)
     }
 
     fn advance(&mut self) {
-        self.artboard.advance(0.0).expect("Artboard::advance(0)");
+        Artboard::advance_handle(
+            &self.artboard,
+            0.0,
+            AdvanceFlags::ADVANCE_NESTED | AdvanceFlags::ANIMATE | AdvanceFlags::NEW_FRAME,
+        );
     }
 }
 
 fn fixture(name: &str, artboard_name: Option<&str>) -> Fixture {
-    let file = read_runtime_file(&pinned_fixture(name))
-        .unwrap_or_else(|error| panic!("{name} imports: {error:#}"));
-    let graphs = GraphFile::from_runtime_file(&file)
-        .unwrap_or_else(|error| panic!("{name} graphs: {error:#}"));
-    let graph_index = artboard_name.map_or(0, |wanted| {
-        graphs
-            .artboards
-            .iter()
-            .position(|graph| graph.name.as_deref() == Some(wanted))
-            .unwrap_or_else(|| panic!("missing artboard {wanted}"))
-    });
-    let artboard = ArtboardInstance::from_graph_with_artboards(
-        &file,
-        &graphs.artboards[graph_index],
-        &graphs.artboards,
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let factory =
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained RecordingFactory");
+    let mut result = ImportResult::Malformed;
+    let file = File::import(
+        &pinned_fixture(name),
+        factory,
+        Some(&mut result),
+        None,
+        None,
     )
-    .unwrap_or_else(|error| panic!("{name} instantiates: {error:#}"));
+    .unwrap_or_else(|| panic!("{name} imports: {result:?}"));
+    assert_eq!(result, ImportResult::Success);
+    let artboard = file
+        .with_file(|file| match artboard_name {
+            Some(name) => file.artboard_named_source(name),
+            None => file.artboard(),
+        })
+        .expect("native source artboard");
     Fixture {
-        file,
-        graphs,
-        graph_index,
         artboard,
+        _file: file,
     }
 }
 
@@ -124,18 +181,21 @@ fn stack_locals(fixture: &Fixture) -> (usize, usize, usize) {
     let mut stack = None;
     let mut fill = None;
     let mut box_child = None;
-    for object in &fixture.graph().local_objects {
-        if object.type_name != Some("LayoutComponent") || object.local_id == 0 {
+    for (local, object) in fixture.objects().into_iter().enumerate() {
+        let Some(object) = object else {
+            continue;
+        };
+        if object.core_type() != Some(LayoutComponentBase::TYPE_KEY) || local == 0 {
             continue;
         }
-        let style = fixture.style(object.local_id);
+        let style = fixture.style(local);
         match (
-            fixture.artboard.debug_uint_property(style, layout_type),
-            fixture.artboard.debug_uint_property(style, width_scale),
+            fixture.uint_property(style, layout_type),
+            fixture.uint_property(style, width_scale),
         ) {
-            (Some(2), _) => stack = Some(object.local_id),
-            (_, Some(1)) => fill = Some(object.local_id),
-            _ => box_child = Some(object.local_id),
+            (Some(2), _) => stack = Some(local),
+            (_, Some(1)) => fill = Some(local),
+            _ => box_child = Some(local),
         }
     }
     (
@@ -153,11 +213,16 @@ fn wave_c2_layout_stack_001_overlaps_children_and_aligns_from_file() {
     let fill = fixture.bounds(fill);
     let box_child = fixture.bounds(box_child);
     assert_eq!(
-        (fill.x, fill.y, fill.width, fill.height),
+        (fill.left(), fill.top(), fill.width(), fill.height()),
         (0.0, 0.0, 200.0, 200.0)
     );
     assert_eq!(
-        (box_child.x, box_child.y, box_child.width, box_child.height),
+        (
+            box_child.left(),
+            box_child.top(),
+            box_child.width(),
+            box_child.height()
+        ),
         (160.0, 160.0, 40.0, 40.0)
     );
 }
@@ -180,10 +245,10 @@ fn wave_c2_layout_stack_002_alignment_positions_fixed_child() {
         (7, 80.0, 160.0),
         (8, 160.0, 160.0),
     ] {
-        assert!(fixture.artboard.set_uint_property(style, alignment, value));
+        assert!(fixture.set_uint_property(style, alignment, value));
         fixture.advance();
         let bounds = fixture.bounds(box_child);
-        assert_eq!((bounds.x, bounds.y), (x, y), "alignment {value}");
+        assert_eq!((bounds.left(), bounds.top()), (x, y), "alignment {value}");
     }
 }
 
@@ -204,13 +269,28 @@ fn wave_c2_layout_stack_003_engine_display_folds_visibility_and_type() {
         (1, 1, 0),
         (1, 2, 0),
     ] {
-        let _ = fixture.artboard.set_uint_property(style, display, visible);
-        let _ = fixture.artboard.set_uint_property(style, layout_type, kind);
+        let _ = fixture.set_uint_property(style, display, visible);
+        let _ = fixture.set_uint_property(style, layout_type, kind);
+        // Preserve the original pinned assertion, in addition to the retained
+        // descendant visibility check from this Rust test.
+        let expected_display = if visible == 1 {
+            YGDisplay::None
+        } else if kind == 0 {
+            YGDisplay::Flex
+        } else {
+            YGDisplay::Grid
+        };
+        assert_eq!(
+            fixture
+                .object(style)
+                .with_downcast::<LayoutComponentStyle, _>(LayoutComponentStyle::display),
+            Some(expected_display)
+        );
         fixture.advance();
         let descendants = fixture
             .report()
             .into_iter()
-            .filter(|entry| entry.local_id != 0 && !entry.collapsed)
+            .filter(|(local, collapsed)| *local != 0 && !collapsed)
             .count();
         assert_eq!(
             descendants, expected_layouts,
@@ -235,7 +315,7 @@ fn wave_c2_layout_001_flex_direction_row() {
     let first = fixture.local("LayoutComponent1");
     let style = fixture.style(first);
     assert_eq!(
-        fixture.artboard.debug_uint_property(
+        fixture.uint_property(
             style,
             property_key("LayoutComponentStyle", "flexDirectionValue")
         ),
@@ -293,9 +373,7 @@ fn wave_c2_layout_005_center_alignment() {
 
 fn assert_style_f32(fixture: &Fixture, style: usize, property: &str, expected: f32) {
     assert_eq!(
-        fixture
-            .artboard
-            .double_property(style, property_key("LayoutComponentStyle", property)),
+        fixture.double_property(style, property_key("LayoutComponentStyle", property)),
         Some(expected),
         "{property}"
     );
@@ -303,9 +381,7 @@ fn assert_style_f32(fixture: &Fixture, style: usize, property: &str, expected: f
 
 fn assert_style_u64(fixture: &Fixture, style: usize, property: &str, expected: u64) {
     assert_eq!(
-        fixture
-            .artboard
-            .debug_uint_property(style, property_key("LayoutComponentStyle", property)),
+        fixture.uint_property(style, property_key("LayoutComponentStyle", property)),
         Some(expected),
         "{property}"
     );
@@ -390,44 +466,54 @@ fn wave_c2_layout_009_corner_radius() {
 #[test]
 fn wave_c2_layout_011_forced_size_dirt() {
     let mut fixture = fixture("layout/layout_complex1.riv", None);
-    let layout = fixture.local("LayoutLeftChild1");
-    assert_eq!(
-        fixture.artboard.debug_layout_forced_size(layout),
-        Some((None, None))
+    let layout = fixture.object(fixture.local("LayoutLeftChild1"));
+    let forced_size = || {
+        layout
+            .with_downcast::<LayoutComponent, _>(|layout| {
+                (layout.forced_width(), layout.forced_height())
+            })
+            .expect("native LayoutComponent")
+    };
+    let has_style_dirt = || {
+        layout
+            .with(|owner| {
+                owner
+                    .as_component()
+                    .expect("layout Component")
+                    .dirt()
+                    .contains(ComponentDirt::LAYOUT_STYLE)
+            })
+            .expect("live layout Component")
+    };
+    let before = forced_size();
+    assert!(before.0.is_nan());
+    assert!(before.1.is_nan());
+    layout
+        .with_downcast_mut::<LayoutComponent, _>(|layout| {
+            layout.set_forced_width(100.0);
+            layout.set_forced_height(150.0);
+        })
+        .expect("native LayoutComponent");
+    // Native setters return void. Check the same change/no-change contract
+    // through their actual retained fields, not a legacy debug-setter result.
+    let after = forced_size();
+    assert_ne!(
+        (before.0.to_bits(), before.1.to_bits()),
+        (after.0.to_bits(), after.1.to_bits())
     );
-    assert!(
-        fixture
-            .artboard
-            .debug_set_layout_forced_size(layout, 100.0, 150.0)
-    );
-    assert_eq!(
-        fixture.artboard.debug_layout_forced_size(layout),
-        Some((Some(100.0), Some(150.0)))
-    );
-    assert!(
-        fixture
-            .artboard
-            .debug_component_dirt(layout)
-            .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE))
-    );
+    assert_eq!(after, (100.0, 150.0));
+    assert!(has_style_dirt());
     fixture.advance();
-    assert!(
-        !fixture
-            .artboard
-            .debug_component_dirt(layout)
-            .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE))
-    );
-    assert!(
-        !fixture
-            .artboard
-            .debug_set_layout_forced_size(layout, 100.0, 150.0)
-    );
-    assert!(
-        !fixture
-            .artboard
-            .debug_component_dirt(layout)
-            .is_some_and(|dirt| dirt.contains(ComponentDirt::LAYOUT_STYLE))
-    );
+    assert!(!has_style_dirt());
+    let before = forced_size();
+    layout
+        .with_downcast_mut::<LayoutComponent, _>(|layout| {
+            layout.set_forced_width(100.0);
+            layout.set_forced_height(150.0);
+        })
+        .expect("native LayoutComponent");
+    assert_eq!(forced_size(), before);
+    assert!(!has_style_dirt());
 }
 
 #[test]
@@ -457,7 +543,7 @@ fn wave_c2_layout_012_alignment_mutation() {
     ];
     for (write, expected) in cases {
         let (key, value) = write.expect("mutation");
-        assert!(fixture.artboard.set_uint_property(style, key, value));
+        assert!(fixture.set_uint_property(style, key, value));
         fixture.advance();
         for (name, xy) in ["Layout1", "Layout2", "Layout3"].into_iter().zip(expected) {
             let local = fixture.local(name);
@@ -471,5 +557,5 @@ fn wave_c2_layout_013_prevent_percent_margin_on_artboard() {
     let mut fixture = fixture("layout/artboard_percent_margin.riv", None);
     fixture.advance();
     let root = fixture.bounds(0);
-    assert_eq!((root.width, root.height), (501.0, 512.0));
+    assert_eq!((root.width(), root.height()), (501.0, 512.0));
 }

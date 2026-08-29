@@ -44,7 +44,10 @@ impl DataConverterFormulaBase {
             return;
         }
         callbacks.random_mode_value_changed();
-        callbacks.notify_property_changed(Self::RANDOM_MODE_VALUE_PROPERTY_KEY);
+        DataConverterFormulaBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::RANDOM_MODE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_random_mode_value_value(&mut self, value: u32) -> bool {
@@ -64,7 +67,7 @@ impl DataConverterFormulaBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl DataConverterFormulaBaseCallbacks) {
         self.random_mode_value = object.random_mode_value;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,

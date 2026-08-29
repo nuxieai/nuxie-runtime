@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::animation::keyframe_callback::KeyFrameCallback;
 
-use crate::mechanical_port::source::{core::binary_reader::BinaryReader, animation::keyframe::KeyFrame};
+use crate::mechanical_port::source::{
+    animation::keyframe::KeyFrame, core::binary_reader::BinaryReader,
+};
 
 pub struct KeyFrameCallbackBase {
     pub base: KeyFrame,
@@ -25,7 +27,9 @@ impl KeyFrameCallbackBase {
     }
     pub fn clone_into(&self) -> KeyFrameCallback {
         let mut cloned = KeyFrameCallback::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

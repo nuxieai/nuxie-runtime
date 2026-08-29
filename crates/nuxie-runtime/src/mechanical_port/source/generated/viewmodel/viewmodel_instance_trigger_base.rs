@@ -1,7 +1,8 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, viewmodel::viewmodel_instance_value::ViewModelInstanceValue,
+    core::{binary_reader::BinaryReader, field_types::core_callback_type::CallbackData},
+    viewmodel::viewmodel_instance_value::ViewModelInstanceValue,
 };
 
 pub trait ViewModelInstanceTriggerBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBaseCallbacks {
@@ -47,7 +48,10 @@ impl ViewModelInstanceTriggerBase {
             return;
         }
         callbacks.property_value_changed();
-        callbacks.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+        ViewModelInstanceTriggerBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PROPERTY_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_property_value_value(&mut self, value: u32) -> bool {

@@ -1,13 +1,12 @@
 //! One-for-one ports of the eight cases in pinned
 //! `tests/unit_tests/runtime/wangs_formula_test.cpp`.
 //!
-//! Rust currently has only a private cubic subdivision count inside the path
-//! implementation. It has no counterpart for the upstream public quadratic,
-//! conic, transform, log2, or worst-case Wang owner, so the owner-dependent
-//! cases are executable expected-red tests. The reference-only tolerance case
-//! remains green.
+//! Outputs under test come from the translated production Wang owner. The
+//! independent scalar reference formulas and fixture math remain test oracles.
 
+use nuxie_runtime::source::math::{mat2d::Mat2D, vec2d::Vec2D, wangs_formula};
 use std::ops::{Add, Mul, Sub};
+use wangs_formula::{VectorXform, worst_case_cubic, worst_case_cubic_log2, worst_case_cubic_pow4};
 
 const PRECISION: f32 = 4.0;
 const EPSILON: f32 = 1.0 / 4096.0;
@@ -219,33 +218,43 @@ fn random_matrices(mut visit: impl FnMut(M)) {
     }
 }
 
-fn missing_owner<T>() -> T {
-    panic!("Rust has no standalone rive::wangs_formula owner")
+fn native_points<const N: usize>(points: &[V; N]) -> [Vec2D; N] {
+    points.map(|point| Vec2D::new(point.x, point.y))
 }
 
-fn quadratic(_points: &[V; 3], _precision: f32) -> f32 {
-    missing_owner()
+fn native_transform(transform: Option<M>) -> VectorXform {
+    transform.map_or_else(VectorXform::default, |M([a, b, c, d])| {
+        VectorXform::from_mat2d(&Mat2D::new(a, b, c, d, 0.0, 0.0))
+    })
 }
-fn quadratic_log2(_points: &[V; 3], _precision: f32, _transform: Option<M>) -> i32 {
-    missing_owner()
+
+fn quadratic(points: &[V; 3], precision: f32) -> f32 {
+    wangs_formula::quadratic(&native_points(points), precision, VectorXform::default())
 }
-fn cubic(_points: &[V; 4], _precision: f32) -> f32 {
-    missing_owner()
+fn quadratic_log2(points: &[V; 3], precision: f32, transform: Option<M>) -> i32 {
+    wangs_formula::quadratic_log2(
+        &native_points(points),
+        precision,
+        native_transform(transform),
+    )
 }
-fn cubic_log2(_points: &[V; 4], _precision: f32, _transform: Option<M>) -> i32 {
-    missing_owner()
+fn cubic(points: &[V; 4], precision: f32) -> f32 {
+    wangs_formula::cubic(&native_points(points), precision, VectorXform::default())
 }
-fn worst_case_cubic(_width: f32, _height: f32, _precision: f32) -> f32 {
-    missing_owner()
+fn cubic_log2(points: &[V; 4], precision: f32, transform: Option<M>) -> i32 {
+    wangs_formula::cubic_log2(
+        &native_points(points),
+        precision,
+        native_transform(transform),
+    )
 }
-fn worst_case_cubic_log2(_width: f32, _height: f32, _precision: f32) -> i32 {
-    missing_owner()
-}
-fn worst_case_cubic_pow4(_width: f32, _height: f32, _precision: f32) -> f32 {
-    missing_owner()
-}
-fn conic(_precision: f32, _points: &[V; 3], _weight: f32, _transform: Option<M>) -> f32 {
-    missing_owner()
+fn conic(precision: f32, points: &[V; 3], weight: f32, transform: Option<M>) -> f32 {
+    wangs_formula::conic(
+        &native_points(points),
+        precision,
+        weight,
+        native_transform(transform),
+    )
 }
 
 fn setup_term(seed: i32, term: f32, cubic_curve: bool) -> [V; 4] {
@@ -290,7 +299,6 @@ fn setup_term(seed: i32, term: f32, cubic_curve: bool) -> [V; 4] {
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no standalone rive::wangs_formula owner"]
 fn wangs_formula_log2() {
     for level in 0..30 {
         let epsilon = EPSILON * 2.0_f32.powi(level * 2);
@@ -355,7 +363,6 @@ fn wangs_formula_log2() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no standalone rive::wangs_formula owner"]
 fn wangs_formula_vector_xforms() {
     random_matrices(|matrix| {
         for points in [SERP, LOOP] {
@@ -388,7 +395,6 @@ fn wangs_formula_vector_xforms() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no standalone rive::wangs_formula owner"]
 fn wangs_formula_worst_case_cubic() {
     for points in [
         [
@@ -472,7 +478,6 @@ fn wangs_formula_quad_within_tol() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no standalone rive::wangs_formula owner"]
 fn wangs_formula_rational_quad_reduces() {
     for _ in 0..100 {
         random_beziers::<3>(30, |points| {
@@ -504,7 +509,6 @@ fn eval_conic(points: &[V; 3], weight: f64, t: f64) -> [f64; 2] {
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no standalone rive::wangs_formula owner"]
 fn wangs_formula_conic_within_tol() {
     let mut random = UpstreamRand::seeded();
     for exponent in -10..=10 {
@@ -532,7 +536,6 @@ fn wangs_formula_conic_within_tol() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no standalone rive::wangs_formula owner"]
 fn wangs_formula_conic_matches_reference() {
     let mut random = UpstreamRand::seeded();
     for exponent in -10..=10 {
@@ -550,7 +553,6 @@ fn wangs_formula_conic_matches_reference() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no standalone rive::wangs_formula owner"]
 fn wangs_formula_conic_vector_xforms() {
     let mut random = UpstreamRand::seeded();
     for exponent in -10..=10 {
@@ -574,7 +576,21 @@ fn wangs_formula_conic_vector_xforms() {
                 let transformed = points.map(|point| matrix.map(point));
                 let expected = conic(PRECISION, &transformed, weight, None);
                 let actual = conic(PRECISION, &points, weight, Some(matrix));
-                assert!((actual - expected).abs() <= 1e-4);
+                // Pinned Catch Approx(expected).margin(1e-4) retains its
+                // default relative epsilon as well as the absolute margin.
+                // Catch promotes both f32 values to double for comparison.
+                let actual = f64::from(actual);
+                let expected = f64::from(expected);
+                let within_margin =
+                    |margin: f64| expected + margin >= actual && actual + margin >= expected;
+                let scale = if expected.is_infinite() {
+                    0.0
+                } else {
+                    expected.abs()
+                };
+                assert!(
+                    within_margin(1e-4) || within_margin(f64::from(f32::EPSILON * 100.0) * scale)
+                );
             }
         });
     }

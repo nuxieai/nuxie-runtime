@@ -3,9 +3,11 @@
 
 use std::path::PathBuf;
 
-use nuxie_binary::read_runtime_file;
-use nuxie_graph::GraphFile;
-use nuxie_runtime::{ArtboardInstance, SemanticRole, SemanticsDiff};
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::source::semantic::{
+    semantic_role::SemanticRole, semantic_snapshot::SemanticsDiff,
+};
+use nuxie_runtime::{File, RuntimeFactoryHandle};
 
 const EXPECTED_SLOTS: [[f32; 4]; 4] = [
     [0.0, 0.0, 122.0, 59.0],
@@ -25,25 +27,37 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 }
 
 fn load_fixture() -> SemanticsDiff {
-    let file = read_runtime_file(&pinned_fixture("focus_nodes_list_order.riv"))
-        .expect("focus-list fixture imports");
-    let graphs = GraphFile::from_runtime_file(&file).expect("focus-list graph builds");
-    let graph = graphs.artboards.first().expect("default artboard graph");
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("default artboard instantiates");
-    let mut machine = artboard
-        .state_machine_instance(0)
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(
+        &pinned_fixture("focus_nodes_list_order.riv"),
+        factory,
+        None,
+        None,
+        None,
+    )
+    .expect("focus-list fixture imports");
+    let artboard = file
+        .with_file(|file| file.artboard_default())
+        .expect("default artboard");
+    let machine = artboard
+        .state_machine_instance_handle(0)
         .expect("state machine zero");
-    assert!(machine.enable_semantics());
-    let _ = machine.bind_default_view_model_context_on_artboard(&mut artboard);
-    for _ in 0..10 {
-        machine
-            .advance_and_apply(&mut artboard, 0.1)
-            .expect("focus-list fixture settles");
+    machine.with_instance_mut(|machine| machine.enable_semantics());
+    assert!(machine.with_instance(|machine| machine.semantic_manager().is_some()));
+    if let Some(instance) = file.with_file_mut(|file| {
+        file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+    }) {
+        artboard.bind_view_model_instance(Some(instance.clone()));
+        machine.with_instance_mut(|machine| machine.bind_view_model_instance(instance));
     }
-    machine
-        .drain_semantics_diff(&mut artboard)
-        .expect("semantic diff drains")
+    for _ in 0..10 {
+        machine.advance_and_apply(0.1);
+    }
+    let manager = machine
+        .with_instance(|machine| machine.semantic_manager())
+        .expect("semantic manager");
+    manager.with_semantic_manager_mut(|manager| manager.drain_diff())
 }
 
 fn catch_approx(actual: f32, expected: f32) -> bool {
@@ -51,7 +65,6 @@ fn catch_approx(actual: f32, expected: f32) -> bool {
 }
 
 #[test]
-#[ignore = "expected-red: focus_nodes_list_order added nodes do not retain the upstream visual-order bounds"]
 fn wave_c16_017_four_root_buttons_are_in_visual_order() {
     let diff = load_fixture();
     assert_eq!(diff.added.len(), EXPECTED_SLOTS.len());
@@ -81,7 +94,6 @@ fn wave_c16_017_four_root_buttons_are_in_visual_order() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust assigns the smallest semantic id to visual slot 0 instead of bottom slot 3"]
 fn wave_c16_018_bottom_button_has_the_smallest_id_but_sorts_last() {
     let diff = load_fixture();
     assert_eq!(diff.added.len(), EXPECTED_SLOTS.len());

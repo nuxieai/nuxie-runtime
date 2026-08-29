@@ -45,7 +45,10 @@ impl ViewModelPropertyEnumCustomBase {
             return;
         }
         callbacks.enum_id_changed();
-        callbacks.notify_property_changed(Self::ENUM_ID_PROPERTY_KEY);
+        ViewModelPropertyEnumCustomBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ENUM_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_enum_id_value(&mut self, value: u32) -> bool {

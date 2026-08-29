@@ -50,7 +50,10 @@ impl CubicMirroredVertexBase {
             return;
         }
         callbacks.rotation_changed();
-        callbacks.notify_property_changed(Self::ROTATION_PROPERTY_KEY);
+        CubicMirroredVertexBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ROTATION_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_rotation_value(&mut self, value: f32) -> bool {
@@ -72,7 +75,10 @@ impl CubicMirroredVertexBase {
             return;
         }
         callbacks.distance_changed();
-        callbacks.notify_property_changed(Self::DISTANCE_PROPERTY_KEY);
+        CubicMirroredVertexBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DISTANCE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_distance_value(&mut self, value: f32) -> bool {

@@ -78,7 +78,7 @@ impl SkinBase {
             return;
         }
         c.xx_changed();
-        c.notify_property_changed(Self::XX_PROPERTY_KEY);
+        SkinBaseCallbacks::notify_property_changed(c, Self::XX_PROPERTY_KEY);
     }
 
     pub(crate) fn set_xx_value(&mut self, value: f32) -> bool {
@@ -93,7 +93,7 @@ impl SkinBase {
             return;
         }
         c.yx_changed();
-        c.notify_property_changed(Self::YX_PROPERTY_KEY);
+        SkinBaseCallbacks::notify_property_changed(c, Self::YX_PROPERTY_KEY);
     }
 
     pub(crate) fn set_yx_value(&mut self, value: f32) -> bool {
@@ -108,7 +108,7 @@ impl SkinBase {
             return;
         }
         c.xy_changed();
-        c.notify_property_changed(Self::XY_PROPERTY_KEY);
+        SkinBaseCallbacks::notify_property_changed(c, Self::XY_PROPERTY_KEY);
     }
 
     pub(crate) fn set_xy_value(&mut self, value: f32) -> bool {
@@ -123,7 +123,7 @@ impl SkinBase {
             return;
         }
         c.yy_changed();
-        c.notify_property_changed(Self::YY_PROPERTY_KEY);
+        SkinBaseCallbacks::notify_property_changed(c, Self::YY_PROPERTY_KEY);
     }
 
     pub(crate) fn set_yy_value(&mut self, value: f32) -> bool {
@@ -138,7 +138,7 @@ impl SkinBase {
             return;
         }
         c.tx_changed();
-        c.notify_property_changed(Self::TX_PROPERTY_KEY);
+        SkinBaseCallbacks::notify_property_changed(c, Self::TX_PROPERTY_KEY);
     }
 
     pub(crate) fn set_tx_value(&mut self, value: f32) -> bool {
@@ -153,7 +153,7 @@ impl SkinBase {
             return;
         }
         c.ty_changed();
-        c.notify_property_changed(Self::TY_PROPERTY_KEY);
+        SkinBaseCallbacks::notify_property_changed(c, Self::TY_PROPERTY_KEY);
     }
 
     pub(crate) fn set_ty_value(&mut self, value: f32) -> bool {

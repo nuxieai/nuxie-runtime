@@ -1,6 +1,43 @@
 use core::ops::{Add, Neg, Sub};
 
-use super::vec2d::Vec2D;
+use super::{math_types, vec2d::Vec2D};
+
+/// Rust dispatch for the signedness-aware comparisons used by C++ TAABB.
+/// Integer operands go through the same helpers as the other math owners;
+/// same-type floats retain their ordinary partial-order behavior.
+pub trait BoundsComparison<Rhs = Self> {
+    fn bounds_equal(self, rhs: Rhs) -> bool;
+    fn bounds_less(self, rhs: Rhs) -> bool;
+    fn bounds_less_equal(self, rhs: Rhs) -> bool;
+    fn bounds_greater(self, rhs: Rhs) -> bool;
+    fn bounds_greater_equal(self, rhs: Rhs) -> bool;
+}
+
+macro_rules! integer_bounds_comparison {
+    ($($ty:ty),* $(,)?) => {$(
+        impl<U: math_types::Integer> BoundsComparison<U> for $ty {
+            fn bounds_equal(self, rhs: U) -> bool { math_types::cmp_equal(self, rhs) }
+            fn bounds_less(self, rhs: U) -> bool { math_types::cmp_less(self, rhs) }
+            fn bounds_less_equal(self, rhs: U) -> bool { math_types::cmp_less_equal(self, rhs) }
+            fn bounds_greater(self, rhs: U) -> bool { math_types::cmp_greater(self, rhs) }
+            fn bounds_greater_equal(self, rhs: U) -> bool { math_types::cmp_greater_equal(self, rhs) }
+        }
+    )*};
+}
+integer_bounds_comparison!(i8, u8, i16, u16, i32, u32, i64, u64, isize, usize);
+
+macro_rules! float_bounds_comparison {
+    ($($ty:ty),* $(,)?) => {$(
+        impl BoundsComparison for $ty {
+            fn bounds_equal(self, rhs: Self) -> bool { self == rhs }
+            fn bounds_less(self, rhs: Self) -> bool { self < rhs }
+            fn bounds_less_equal(self, rhs: Self) -> bool { self <= rhs }
+            fn bounds_greater(self, rhs: Self) -> bool { self > rhs }
+            fn bounds_greater_equal(self, rhs: Self) -> bool { self >= rhs }
+        }
+    )*};
+}
+float_bounds_comparison!(f32, f64);
 
 pub trait NumericBounds: Copy + PartialOrd {
     fn min_value() -> Self;
@@ -47,7 +84,7 @@ integer_casts!(u16; i16, u16, i32, u32, i64, u64, isize, usize);
 integer_casts!(i32; i16, u16, i32, u32, i64, u64, isize, usize);
 integer_casts!(u32; i16, u16, i32, u32, i64, u64, isize, usize);
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 pub struct TAabb<T> {
     pub left: T,
@@ -55,6 +92,17 @@ pub struct TAabb<T> {
     pub right: T,
     pub bottom: T,
 }
+
+impl<T: Copy + BoundsComparison<U>, U: Copy> PartialEq<TAabb<U>> for TAabb<T> {
+    fn eq(&self, other: &TAabb<U>) -> bool {
+        self.left.bounds_equal(other.left)
+            && self.right.bounds_equal(other.right)
+            && self.top.bounds_equal(other.top)
+            && self.bottom.bounds_equal(other.bottom)
+    }
+}
+
+impl<T: Copy + Eq + BoundsComparison> Eq for TAabb<T> {}
 
 impl<T> TAabb<T>
 where
@@ -144,20 +192,23 @@ impl<T: Copy + PartialOrd> TAabb<T> {
     }
     pub fn contains<U>(self, rhs: TAabb<U>) -> bool
     where
-        T: PartialOrd<U>,
+        T: BoundsComparison<U>,
         U: Copy,
     {
-        self.left <= rhs.left
-            && self.top <= rhs.top
-            && self.right >= rhs.right
-            && self.bottom >= rhs.bottom
+        self.left.bounds_less_equal(rhs.left)
+            && self.top.bounds_less_equal(rhs.top)
+            && self.right.bounds_greater_equal(rhs.right)
+            && self.bottom.bounds_greater_equal(rhs.bottom)
     }
     pub fn overlaps<U>(self, b: TAabb<U>) -> bool
     where
-        T: PartialOrd<U>,
+        T: BoundsComparison<U>,
         U: Copy,
     {
-        self.left < b.right && self.right > b.left && self.top < b.bottom && self.bottom > b.top
+        self.left.bounds_less(b.right)
+            && self.right.bounds_greater(b.left)
+            && self.top.bounds_less(b.bottom)
+            && self.bottom.bounds_greater(b.top)
     }
     pub fn intersect<U>(self, b: TAabb<U>) -> Self
     where

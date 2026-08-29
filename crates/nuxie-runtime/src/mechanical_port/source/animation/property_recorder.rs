@@ -1,27 +1,29 @@
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PropertyFieldType {
-    Double,
-    Color,
-    Uint,
-    String,
-    Bool,
-    Other,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StateMachineInputType {
-    Number,
-    Bool,
-    Trigger,
-    Other,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LayerStateType {
-    Animation,
-    Blend,
-    Other,
-}
+use crate::mechanical_port::source::{
+    animation::{
+        animation_state::AnimationState, keyed_object::KeyedObject, keyed_property::KeyedProperty,
+        linear_animation::LinearAnimation, state_machine::StateMachine,
+        state_machine_bool::StateMachineBool,
+        state_machine_instance::RuntimeStateMachineInstanceHandle,
+        state_machine_layer::StateMachineLayer, state_machine_number::StateMachineNumber,
+    },
+    artboard::{Artboard, RuntimeArtboardInstanceHandle},
+    core::{
+        CoreHandle,
+        field_types::{
+            core_bool_type::CoreBoolType, core_color_type::CoreColorType,
+            core_double_type::CoreDoubleType, core_string_type::CoreStringType,
+            core_uint_type::CoreUintType,
+        },
+    },
+    generated::{
+        animation::{
+            state_machine_bool_base::StateMachineBoolBase,
+            state_machine_number_base::StateMachineNumberBase,
+            state_machine_trigger_base::StateMachineTriggerBase,
+        },
+        core_registry::CoreRegistry,
+    },
+};
 
 pub struct CoreObjectData {
     property_keys: Vec<u16>,
@@ -43,71 +45,6 @@ impl CoreObjectData {
     pub fn property_keys(&mut self) -> &mut Vec<u16> {
         &mut self.property_keys
     }
-}
-
-pub trait PropertyRecorderRuntime {
-    fn artboard_state_machine(&self, artboard: &CoreHandle, index: usize) -> Option<CoreHandle>;
-    fn artboard_data_binds(&self, artboard: &CoreHandle) -> Vec<CoreHandle>;
-    fn data_bind_target(&self, data_bind: &CoreHandle) -> Option<CoreHandle>;
-    fn data_bind_property_key(&self, data_bind: &CoreHandle) -> u16;
-    fn artboard_object_index(&self, artboard: &CoreHandle, object: &CoreHandle) -> i32;
-    fn artboard_resolve(&mut self, artboard: &CoreHandle, object_id: u32) -> Option<CoreHandle>;
-    fn artboard_instance_resolve(
-        &mut self,
-        artboard: &RuntimeArtboardInstanceHandle,
-        object_id: u32,
-    ) -> Option<CoreHandle>;
-    fn property_field_type(&self, property_key: u16) -> PropertyFieldType;
-    fn get_double(&self, object: &CoreHandle, property_key: u16) -> f32;
-    fn get_color(&self, object: &CoreHandle, property_key: u16) -> u32;
-    fn get_uint(&self, object: &CoreHandle, property_key: u16) -> u32;
-    fn get_string(&self, object: &CoreHandle, property_key: u16) -> String;
-    fn get_bool(&self, object: &CoreHandle, property_key: u16) -> bool;
-    fn set_double(&mut self, object: &CoreHandle, property_key: u16, value: f32);
-    fn set_color(&mut self, object: &CoreHandle, property_key: u16, value: u32);
-    fn set_uint(&mut self, object: &CoreHandle, property_key: u16, value: u32);
-    fn set_string(&mut self, object: &CoreHandle, property_key: u16, value: String);
-    fn set_bool(&mut self, object: &CoreHandle, property_key: u16, value: bool);
-    fn state_machine_layer_count(&self, machine: &CoreHandle) -> usize;
-    fn state_machine_layer(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
-    fn state_machine_input_count(&self, machine: &CoreHandle) -> usize;
-    fn state_machine_input(&self, machine: &CoreHandle, index: usize) -> Option<CoreHandle>;
-    fn state_machine_input_type(&self, input: &CoreHandle) -> StateMachineInputType;
-    fn state_machine_number_value(&self, input: &CoreHandle) -> f32;
-    fn state_machine_bool_value(&self, input: &CoreHandle) -> bool;
-    fn state_machine_layer_state_count(&self, layer: &CoreHandle) -> usize;
-    fn state_machine_layer_state(&self, layer: &CoreHandle, index: usize) -> Option<CoreHandle>;
-    fn layer_state_type(&self, state: &CoreHandle) -> LayerStateType;
-    fn animation_state_animation(&self, state: &CoreHandle) -> Option<CoreHandle>;
-    fn blend_state_animations(&self, state: &CoreHandle) -> Vec<CoreHandle>;
-    fn blend_animation_animation(&self, animation: &CoreHandle) -> Option<CoreHandle>;
-    fn linear_animation_keyed_object_count(&self, animation: &CoreHandle) -> usize;
-    fn linear_animation_keyed_object(
-        &self,
-        animation: &CoreHandle,
-        index: usize,
-    ) -> Option<CoreHandle>;
-    fn keyed_object_id(&self, keyed_object: &CoreHandle) -> u32;
-    fn keyed_object_property_count(&self, keyed_object: &CoreHandle) -> usize;
-    fn keyed_object_property(&self, keyed_object: &CoreHandle, index: usize) -> Option<CoreHandle>;
-    fn keyed_property_key(&self, keyed_property: &CoreHandle) -> u16;
-    fn state_machine_instance_input_name(
-        &self,
-        instance: &RuntimeStateMachineInstanceHandle,
-        index: usize,
-    ) -> Option<String>;
-    fn state_machine_instance_set_number(
-        &mut self,
-        instance: &RuntimeStateMachineInstanceHandle,
-        name: &str,
-        value: f32,
-    );
-    fn state_machine_instance_set_bool(
-        &mut self,
-        instance: &RuntimeStateMachineInstanceHandle,
-        name: &str,
-        value: bool,
-    );
 }
 
 pub struct PropertyRecorder {
@@ -234,145 +171,146 @@ impl PropertyRecorder {
         self.reader_end_sm = self.writer_position_sm;
     }
 
-    pub fn record_artboard(
-        &mut self,
-        artboard: &CoreHandle,
-        runtime: &mut dyn PropertyRecorderRuntime,
-    ) {
-        let machine = runtime.artboard_state_machine(artboard, 0);
-        self.record_state_machine_inputs(machine.as_ref(), runtime);
-        self.record_state_machine(machine.as_ref(), runtime);
-        self.record_data_binds(artboard, runtime);
-        self.write_properties(artboard, runtime);
+    pub fn record_artboard(&mut self, artboard: &CoreHandle) {
+        let machine = artboard
+            .with_downcast::<Artboard, _>(|artboard| artboard.state_machine_handle_at(0))
+            .expect("PropertyRecorder records an Artboard occurrence");
+        self.record_state_machine_inputs(machine.as_ref());
+        self.record_state_machine(machine.as_ref());
+        self.record_data_binds(artboard);
+        self.write_properties(artboard);
         self.complete_main();
     }
-    fn record_data_binds(&mut self, artboard: &CoreHandle, runtime: &dyn PropertyRecorderRuntime) {
-        for bind in runtime.artboard_data_binds(artboard) {
-            let Some(target) = runtime.data_bind_target(&bind) else {
-                continue;
-            };
-            let index = self.get_object_id(artboard, &target, runtime);
+
+    fn record_data_binds(&mut self, artboard: &CoreHandle) {
+        let bindings = artboard
+            .with_downcast::<Artboard, _>(Artboard::data_bind_handles)
+            .expect("PropertyRecorder records an Artboard occurrence");
+        for binding in bindings {
+            let (target, key) = binding
+                .with(|binding| {
+                    let binding = binding.as_data_bind().expect("DataBind-derived owner");
+                    (binding.target(), binding.base.property_key())
+                })
+                .expect("Artboard retains native DataBind occurrences");
+            let Some(target) = target else { continue };
+            let index = self.get_object_id(artboard, &target);
             if index >= 0 {
-                self.add_property_key(index as u32, runtime.data_bind_property_key(&bind), runtime);
+                self.add_property_key(index as u32, key);
             }
         }
     }
-    fn add_property_key(
-        &mut self,
-        object_id: u32,
-        key: u16,
-        runtime: &dyn PropertyRecorderRuntime,
-    ) {
-        if matches!(
-            runtime.property_field_type(key),
-            PropertyFieldType::Double
-                | PropertyFieldType::Color
-                | PropertyFieldType::Uint
-                | PropertyFieldType::String
-                | PropertyFieldType::Bool
-        ) {
-            self.get_core_object_data(object_id).add_property_key(key);
+
+    fn add_property_key(&mut self, object_id: u32, key: u32) {
+        let object_data = self.get_core_object_data(object_id);
+        match CoreRegistry::property_field_id(key as i32) {
+            CoreDoubleType::ID
+            | CoreColorType::ID
+            | CoreUintType::ID
+            | CoreStringType::ID
+            | CoreBoolType::ID => object_data.add_property_key(key as u16),
+            _ => {}
         }
     }
-    fn record_state_machine(
-        &mut self,
-        machine: Option<&CoreHandle>,
-        runtime: &dyn PropertyRecorderRuntime,
-    ) {
-        let Some(machine) = machine else {
-            return;
-        };
-        for i in 0..runtime.state_machine_layer_count(machine) {
-            if let Some(layer) = runtime.state_machine_layer(machine, i) {
-                self.record_state_machine_layer(&layer, runtime);
-            }
+
+    fn record_state_machine(&mut self, machine: Option<&CoreHandle>) {
+        let Some(machine) = machine else { return };
+        let layers = machine
+            .with_downcast::<StateMachine, _>(|machine| {
+                (0..machine.layer_count())
+                    .map(|index| machine.layer(index).expect("state-machine layer index"))
+                    .collect::<Vec<_>>()
+            })
+            .expect("PropertyRecorder records a StateMachine occurrence");
+        for layer in layers {
+            self.record_state_machine_layer(&layer);
         }
     }
-    pub fn record_state_machine_inputs(
-        &mut self,
-        machine: Option<&CoreHandle>,
-        runtime: &dyn PropertyRecorderRuntime,
-    ) {
+
+    pub fn record_state_machine_inputs(&mut self, machine: Option<&CoreHandle>) {
         if let Some(machine) = machine {
-            for i in 0..runtime.state_machine_input_count(machine) {
-                if let Some(input) = runtime.state_machine_input(machine, i) {
-                    self.record_state_machine_input(&input, runtime);
-                }
+            let inputs = machine
+                .with_downcast::<StateMachine, _>(|machine| {
+                    (0..machine.input_count())
+                        .map(|index| machine.input(index))
+                        .collect::<Vec<_>>()
+                })
+                .expect("PropertyRecorder records a StateMachine occurrence");
+            for input in inputs.into_iter().flatten() {
+                self.record_state_machine_input(&input);
             }
         }
         self.complete_state_machine();
     }
-    fn record_state_machine_input(
-        &mut self,
-        input: &CoreHandle,
-        runtime: &dyn PropertyRecorderRuntime,
-    ) {
-        match runtime.state_machine_input_type(input) {
-            StateMachineInputType::Number => {
+
+    fn record_state_machine_input(&mut self, input: &CoreHandle) {
+        match input.core_type() {
+            Some(StateMachineNumberBase::TYPE_KEY) => {
                 self.write_property_int_sm(0);
-                self.write_property_float_sm(runtime.state_machine_number_value(input));
+                let value = input
+                    .with_downcast::<StateMachineNumber, _>(|input| input.base.value())
+                    .expect("StateMachineNumber occurrence");
+                self.write_property_float_sm(value);
             }
-            StateMachineInputType::Bool => {
+            Some(StateMachineBoolBase::TYPE_KEY) => {
                 self.write_property_int_sm(1);
-                self.write_property_bool_sm(runtime.state_machine_bool_value(input));
+                let value = input
+                    .with_downcast::<StateMachineBool, _>(|input| input.base.value())
+                    .expect("StateMachineBool occurrence");
+                self.write_property_bool_sm(value);
             }
-            StateMachineInputType::Trigger => self.write_property_int_sm(2),
-            StateMachineInputType::Other => {}
+            Some(StateMachineTriggerBase::TYPE_KEY) => self.write_property_int_sm(2),
+            _ => {}
         }
     }
-    fn record_state_machine_layer(
-        &mut self,
-        layer: &CoreHandle,
-        runtime: &dyn PropertyRecorderRuntime,
-    ) {
-        for i in 0..runtime.state_machine_layer_state_count(layer) {
-            if let Some(state) = runtime.state_machine_layer_state(layer, i) {
-                self.record_state_machine_layer_state(&state, runtime);
-            }
+
+    fn record_state_machine_layer(&mut self, layer: &CoreHandle) {
+        let states = layer
+            .with_downcast::<StateMachineLayer, _>(|layer| layer.states().to_vec())
+            .expect("PropertyRecorder records a StateMachineLayer occurrence");
+        for state in states {
+            self.record_state_machine_layer_state(&state);
         }
     }
-    fn record_state_machine_layer_state(
-        &mut self,
-        state: &CoreHandle,
-        runtime: &dyn PropertyRecorderRuntime,
-    ) {
-        match runtime.layer_state_type(state) {
-            LayerStateType::Animation => self.record_linear_animation(
-                runtime.animation_state_animation(state).as_ref(),
-                runtime,
-            ),
-            LayerStateType::Blend => {
-                for blend in runtime.blend_state_animations(state) {
-                    self.record_linear_animation(
-                        runtime.blend_animation_animation(&blend).as_ref(),
-                        runtime,
-                    );
-                }
-            }
-            LayerStateType::Other => {}
-        }
-    }
-    fn record_linear_animation(
-        &mut self,
-        animation: Option<&CoreHandle>,
-        runtime: &dyn PropertyRecorderRuntime,
-    ) {
-        let Some(animation) = animation else {
-            return;
-        };
-        for i in 0..runtime.linear_animation_keyed_object_count(animation) {
-            if let Some(object) = runtime.linear_animation_keyed_object(animation, i) {
-                self.record_keyed_object(&object, runtime);
+
+    fn record_state_machine_layer_state(&mut self, state: &CoreHandle) {
+        if let Some(animation) = state.with_downcast::<AnimationState, _>(AnimationState::animation)
+        {
+            self.record_linear_animation(animation.as_ref());
+        } else if let Some(animations) =
+            state.with(|state| state.blend_state_animations()).flatten()
+        {
+            for blend in animations {
+                let animation = blend
+                    .with(|blend| blend.blend_animation_animation())
+                    .expect("BlendState retains its BlendAnimation occurrences");
+                self.record_linear_animation(animation.as_ref());
             }
         }
     }
-    fn record_keyed_object(&mut self, object: &CoreHandle, runtime: &dyn PropertyRecorderRuntime) {
-        let id = runtime.keyed_object_id(object);
+
+    fn record_linear_animation(&mut self, animation: Option<&CoreHandle>) {
+        let Some(animation) = animation else { return };
+        let objects = animation
+            .with_downcast::<LinearAnimation, _>(|animation| animation.keyed_objects().to_vec())
+            .expect("PropertyRecorder records a LinearAnimation occurrence");
+        for object in objects {
+            self.record_keyed_object(&object);
+        }
+    }
+
+    fn record_keyed_object(&mut self, object: &CoreHandle) {
+        let (id, properties) = object
+            .with_downcast::<KeyedObject, _>(|object| {
+                (object.base.object_id(), object.keyed_properties().to_vec())
+            })
+            .expect("LinearAnimation retains native KeyedObject occurrences");
         self.get_core_object_data(id);
-        for i in 0..runtime.keyed_object_property_count(object) {
-            if let Some(property) = runtime.keyed_object_property(object, i) {
-                self.add_property_key(id, runtime.keyed_property_key(&property), runtime);
-            }
+        for property in properties {
+            let key = property
+                .with_downcast::<KeyedProperty, _>(|property| property.base.property_key())
+                .expect("KeyedObject retains native KeyedProperty occurrences");
+            self.add_property_key(id, key);
         }
     }
     fn get_core_object_data(&mut self, id: u32) -> &mut CoreObjectData {
@@ -387,56 +325,66 @@ impl PropertyRecorder {
             .push(Box::new(CoreObjectData::new(id)));
         self.core_objects_data.last_mut().unwrap()
     }
-    fn write_properties(
-        &mut self,
-        artboard: &CoreHandle,
-        runtime: &mut dyn PropertyRecorderRuntime,
-    ) {
-        for i in 0..self.core_objects_data.len() {
-            let id = self.core_objects_data[i].object_id;
-            let keys = self.core_objects_data[i].property_keys.clone();
+    fn write_properties(&mut self, artboard: &CoreHandle) {
+        for index in 0..self.core_objects_data.len() {
+            let id = self.core_objects_data[index].object_id;
+            let keys = self.core_objects_data[index].property_keys.clone();
             if keys.is_empty() {
                 continue;
             }
-            let Some(object) = runtime.artboard_resolve(artboard, id) else {
-                continue;
-            };
+            let object = artboard
+                .with_downcast::<Artboard, _>(|artboard| artboard.resolve_handle(id))
+                .flatten()
+                .expect("recorded property target resolves in its source Artboard");
             self.write_object_id(id);
             self.write_total_properties(keys.len() as u32);
             for key in keys {
-                match runtime.property_field_type(key) {
-                    PropertyFieldType::Double => {
+                match CoreRegistry::property_field_id(key as i32) {
+                    CoreDoubleType::ID => {
                         self.write_property_key(key as u32);
-                        self.write_property_float(runtime.get_double(&object, key));
+                        let value = object
+                            .with_mut(|object| CoreRegistry::get_double(object, key as i32))
+                            .expect("recorded target remains live");
+                        self.write_property_float(value);
                     }
-                    PropertyFieldType::Color => {
+                    CoreColorType::ID => {
                         self.write_property_key(key as u32);
-                        self.write_property_uint(runtime.get_color(&object, key));
+                        let value = object
+                            .with_mut(|object| CoreRegistry::get_color(object, key as i32))
+                            .expect("recorded target remains live");
+                        self.write_property_uint(value as u32);
                     }
-                    PropertyFieldType::Uint => {
+                    CoreUintType::ID => {
                         self.write_property_key(key as u32);
-                        self.write_property_uint(runtime.get_uint(&object, key));
+                        let value = object
+                            .with_mut(|object| CoreRegistry::get_uint(object, key as i32))
+                            .expect("recorded target remains live");
+                        self.write_property_uint(value);
                     }
-                    PropertyFieldType::String => {
+                    CoreStringType::ID => {
                         self.write_property_key(key as u32);
-                        self.write_property_string(runtime.get_string(&object, key));
+                        let value = object
+                            .with_mut(|object| CoreRegistry::get_string(object, key as i32))
+                            .expect("recorded target remains live");
+                        self.write_property_string(value);
                     }
-                    PropertyFieldType::Bool => {
+                    CoreBoolType::ID => {
                         self.write_property_key(key as u32);
-                        self.write_property_bool(runtime.get_bool(&object, key));
+                        let value = object
+                            .with_mut(|object| CoreRegistry::get_bool(object, key as i32))
+                            .expect("recorded target remains live");
+                        self.write_property_bool(value);
                     }
-                    PropertyFieldType::Other => {}
+                    _ => {}
                 }
             }
         }
     }
-    fn get_object_id(
-        &self,
-        artboard: &CoreHandle,
-        object: &CoreHandle,
-        runtime: &dyn PropertyRecorderRuntime,
-    ) -> i32 {
-        runtime.artboard_object_index(artboard, object)
+
+    fn get_object_id(&self, artboard: &CoreHandle, object: &CoreHandle) -> i32 {
+        artboard
+            .with_downcast::<Artboard, _>(|artboard| artboard.object_index(object))
+            .expect("PropertyRecorder records an Artboard occurrence")
     }
     fn read_byte(buffer: &[u8], position: &mut usize, end: usize) -> u8 {
         if *position >= end {
@@ -473,11 +421,7 @@ impl PropertyRecorder {
         *position += len;
         value
     }
-    pub fn apply_state_machine(
-        &mut self,
-        instance: &RuntimeStateMachineInstanceHandle,
-        runtime: &mut dyn PropertyRecorderRuntime,
-    ) {
+    pub fn apply_state_machine(&mut self, instance: &RuntimeStateMachineInstanceHandle) {
         let mut index = 0;
         self.reader_position_sm = 0;
         while self.reader_position_sm < self.reader_end_sm && index < 20 {
@@ -486,32 +430,40 @@ impl PropertyRecorder {
                 &mut self.reader_position_sm,
                 self.reader_end_sm,
             );
-            let Some(name) = runtime.state_machine_instance_input_name(instance, index) else {
-                break;
-            };
             if kind == 0 {
                 let value = Self::read_float(
                     &self.write_buffer_sm,
                     &mut self.reader_position_sm,
                     self.reader_end_sm,
                 );
-                runtime.state_machine_instance_set_number(instance, &name, value);
+                let name = instance.with_instance(|instance| {
+                    instance
+                        .input(index)
+                        .expect("recorded state-machine input index")
+                        .name()
+                        .to_owned()
+                });
+                instance.set_number(&name, value);
             } else if kind == 1 {
                 let value = Self::read_byte(
                     &self.write_buffer_sm,
                     &mut self.reader_position_sm,
                     self.reader_end_sm,
                 );
-                runtime.state_machine_instance_set_bool(instance, &name, value != 0);
+                let name = instance.with_instance(|instance| {
+                    instance
+                        .input(index)
+                        .expect("recorded state-machine input index")
+                        .name()
+                        .to_owned()
+                });
+                instance.set_bool(&name, value != 0);
             }
             index += 1;
         }
     }
-    pub fn apply_artboard(
-        &mut self,
-        artboard: &RuntimeArtboardInstanceHandle,
-        runtime: &mut dyn PropertyRecorderRuntime,
-    ) {
+
+    pub fn apply_artboard(&mut self, artboard: &RuntimeArtboardInstanceHandle) {
         self.reader_position = 0;
         while self.reader_position < self.reader_end {
             let id = Self::read_var_uint(
@@ -519,9 +471,9 @@ impl PropertyRecorder {
                 &mut self.reader_position,
                 self.reader_end,
             );
-            let Some(object) = runtime.artboard_instance_resolve(artboard, id) else {
-                break;
-            };
+            let object = artboard
+                .with_artboard(|artboard| artboard.base.resolve_handle(id))
+                .expect("recorded property target resolves in its Artboard instance");
             let total = Self::read_var_uint(
                 &self.write_buffer,
                 &mut self.reader_position,
@@ -532,55 +484,51 @@ impl PropertyRecorder {
                     &self.write_buffer,
                     &mut self.reader_position,
                     self.reader_end,
-                ) as u16;
-                match runtime.property_field_type(key) {
-                    PropertyFieldType::Double => {
-                        let v = Self::read_float(
+                );
+                match CoreRegistry::property_field_id(key as i32) {
+                    CoreDoubleType::ID => {
+                        let value = Self::read_float(
                             &self.write_buffer,
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_double(&object, key, v);
+                        CoreRegistry::set_double_handle(&object, key as i32, value);
                     }
-                    PropertyFieldType::Color => {
-                        let v = Self::read_var_uint(
+                    CoreColorType::ID => {
+                        let value = Self::read_var_uint(
                             &self.write_buffer,
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_color(&object, key, v);
+                        CoreRegistry::set_color_handle(&object, key as i32, value as i32);
                     }
-                    PropertyFieldType::Uint => {
-                        let v = Self::read_var_uint(
+                    CoreUintType::ID => {
+                        let value = Self::read_var_uint(
                             &self.write_buffer,
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_uint(&object, key, v);
+                        CoreRegistry::set_uint_handle(&object, key as i32, value);
                     }
-                    PropertyFieldType::String => {
-                        let v = Self::read_string(
+                    CoreStringType::ID => {
+                        let value = Self::read_string(
                             &self.write_buffer,
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_string(&object, key, v);
+                        CoreRegistry::set_string_handle(&object, key as i32, value);
                     }
-                    PropertyFieldType::Bool => {
-                        let v = Self::read_byte(
+                    CoreBoolType::ID => {
+                        let value = Self::read_byte(
                             &self.write_buffer,
                             &mut self.reader_position,
                             self.reader_end,
                         );
-                        runtime.set_bool(&object, key, v != 0);
+                        CoreRegistry::set_bool_handle(&object, key as i32, value != 0);
                     }
-                    PropertyFieldType::Other => {}
+                    _ => {}
                 }
             }
         }
     }
 }
-use crate::mechanical_port::source::{
-    animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
-    artboard::RuntimeArtboardInstanceHandle, core::CoreHandle,
-};

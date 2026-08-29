@@ -8,7 +8,6 @@ use crate::mechanical_port::source::{
     generated::viewmodel as generated,
     text::font_hb::HbFont,
     viewmodel::{
-        data_enum::DataEnum,
         symbol_type::SymbolType,
         viewmodel_instance::ViewModelInstance,
         viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob,
@@ -34,7 +33,7 @@ use crate::mechanical_port::source::{
 #[derive(Clone)]
 pub(super) struct NativeScriptViewModel {
     pub instance: Option<CoreHandle>,
-    pub model: CoreHandle,
+    pub model: Option<CoreHandle>,
     pub file: NativeScriptFile,
 }
 
@@ -101,8 +100,10 @@ impl ViewModelInstanceValueDelegate for NativePropertyDelegate {
 
 impl NativeScriptViewModel {
     pub fn properties(&self) -> BTreeMap<String, ScriptViewModelProperty> {
-        let properties = self
-            .model
+        let Some(model) = self.model.as_ref() else {
+            return BTreeMap::new();
+        };
+        let properties = model
             .with(|model| model.as_view_model().map(|model| model.properties()))
             .flatten()
             .expect("native ViewModel definition");
@@ -138,6 +139,7 @@ impl NativeScriptViewModel {
     pub fn property_path(&self, name: &str) -> Option<Vec<usize>> {
         let properties = self
             .model
+            .as_ref()?
             .with(|model| model.as_view_model().map(|model| model.properties()))
             .flatten()?;
         properties
@@ -184,6 +186,7 @@ impl NativeScriptViewModel {
     pub fn named_instance(&self, name: Option<&str>) -> Option<ScriptViewModel> {
         let model_name = self
             .model
+            .as_ref()?
             .with(|model| {
                 model
                     .as_view_model()
@@ -191,9 +194,9 @@ impl NativeScriptViewModel {
             })
             .flatten()?;
         let file = self.file.upgrade()?;
-        let instance = file.with_file_mut(|file| {
+        let instance = file.with_file(|file| {
             name.and_then(|name| file.create_view_model_instance_named(&model_name, name))
-                .or_else(|| file.create_view_model_instance(self.model.clone()))
+                .or_else(|| file.create_view_model_instance(self.model.clone()?))
         })?;
         ScriptViewModel::from_native(instance, file)
     }
@@ -279,7 +282,8 @@ impl NativeScriptViewModel {
             .flatten()
     }
     pub fn enum_values(&self, name: &str) -> Option<Vec<String>> {
-        self.data_enum(name)?.with_downcast::<DataEnum, _>(|owner| {
+        self.data_enum(name)?.with(|owner| {
+            let owner = owner.as_data_enum().expect("authored enum");
             (0..owner.values().len())
                 .map(|index| owner.key_at(index as u32))
                 .collect()
@@ -290,13 +294,18 @@ impl NativeScriptViewModel {
             .property(name)?
             .with_downcast::<ViewModelInstanceEnum, _>(|owner| owner.base.property_value())?;
         self.data_enum(name)?
-            .with_downcast::<DataEnum, _>(|owner| owner.key_at(index))
+            .with(|owner| owner.as_data_enum().expect("authored enum").key_at(index))
     }
     pub fn set_enum_value(&self, name: &str, value: &str) -> bool {
         let Some(index) = self
             .data_enum(name)
             .and_then(|owner| {
-                owner.with_downcast::<DataEnum, _>(|owner| owner.value_index_by_name(value))
+                owner.with(|owner| {
+                    owner
+                        .as_data_enum()
+                        .expect("authored enum")
+                        .value_index_by_name(value)
+                })
             })
             .filter(|index| *index >= 0)
         else {
@@ -456,14 +465,26 @@ impl NativeScriptViewModel {
     }
     pub fn set_blob_asset(&self, name: &str, asset: Option<Arc<RuntimeBlobAsset>>) -> bool {
         self.mutate::<ViewModelInstanceAssetBlob>(name, |owner| {
+            let current = owner.asset();
+            let changed = owner.base.property_value() != u32::MAX
+                || match (&current, &asset) {
+                    (Some(current), Some(asset)) => !Arc::ptr_eq(current, asset),
+                    (None, None) => false,
+                    _ => true,
+                };
             owner.set_value(asset);
-            true
+            changed
         })
     }
     pub fn set_blob(&self, name: &str, bytes: Option<Arc<[u8]>>) -> bool {
+        let current = self.blob_asset(name);
         self.set_blob_asset(
             name,
-            bytes.map(|bytes| Arc::new(RuntimeBlobAsset::from_decoded("", bytes.to_vec()))),
+            bytes.map(|bytes| {
+                current
+                    .filter(|asset| asset.bytes_arc_ptr_eq(&bytes))
+                    .unwrap_or_else(|| Arc::new(RuntimeBlobAsset::new("", bytes)))
+            }),
         )
     }
     pub fn component_list_item_index(&self) -> Option<u64> {
@@ -496,6 +517,7 @@ impl NativeScriptViewModel {
         }
         let definition = self
             .model
+            .as_ref()?
             .with(|owner| owner.as_view_model()?.property_named(name))
             .flatten()?;
         let id = definition.with_downcast::<ViewModelPropertyViewModel, _>(|owner| {
@@ -508,13 +530,38 @@ impl NativeScriptViewModel {
             self.file.handle(),
         ))
     }
+    pub fn referenced_view_model_value(
+        &self,
+        name: &str,
+        creation_time_model: Option<CoreHandle>,
+    ) -> ScriptViewModel {
+        let instance = self.property(name).and_then(|property| {
+            property
+                .with(|property| {
+                    property
+                        .as_view_model_instance_view_model()?
+                        .reference_view_model_instance()
+                })
+                .flatten()
+        });
+        let model = if let Some(instance) = instance.as_ref() {
+            instance
+                .with(|instance| instance.as_view_model_instance()?.get_view_model())
+                .flatten()
+        } else {
+            creation_time_model
+        };
+        ScriptViewModel::from_native_parts(model, instance, self.file.handle())
+    }
     pub fn set_view_model(&self, name: &str, value: &ScriptViewModel) -> bool {
-        let (Some(instance), Some(property), Some(value)) =
-            (&self.instance, self.property(name), value.native_instance())
-        else {
+        let (Some(instance), Some(property)) = (&self.instance, self.property(name)) else {
             return false;
         };
-        ViewModelInstance::replace_view_model_property_occurrence(instance, &property, Some(value))
+        ViewModelInstance::replace_view_model_property_occurrence(
+            instance,
+            &property,
+            value.native_instance(),
+        )
     }
     pub fn list_len(&self, name: &str) -> Option<usize> {
         self.property(name)?
@@ -630,20 +677,29 @@ impl NativeScriptViewModel {
         let Some(instance) = &self.instance else {
             return false;
         };
-        let changed = instance
-            .with_downcast::<ViewModelInstance, _>(|owner| {
-                owner.property_values().iter().any(|value| {
-                    value
-                        .with(|value| {
-                            value
-                                .as_view_model_instance_value()
-                                .is_some_and(|value| value.has_changed())
-                        })
-                        .unwrap_or(false)
+        let Some(value_count) =
+            instance.with_downcast::<ViewModelInstance, _>(|owner| owner.property_values().len())
+        else {
+            return false;
+        };
+        let mut changed = false;
+        for index in 0..value_count {
+            let value = instance
+                .with_downcast::<ViewModelInstance, _>(|owner| {
+                    owner.property_values().get(index).cloned()
                 })
-            })
-            .unwrap_or(false);
-        instance.with_downcast_mut::<ViewModelInstance, _>(ViewModelInstance::advanced);
+                .flatten()
+                .expect("ViewModel property topology remains stable during advance");
+            value.with_mut(|value| {
+                changed |= value
+                    .as_view_model_instance_value()
+                    .is_some_and(|value| value.has_changed());
+                assert!(
+                    value.view_model_instance_value_advanced(),
+                    "ViewModel property value advance capability"
+                );
+            });
+        }
         changed
     }
 }

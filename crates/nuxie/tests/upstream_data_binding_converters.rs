@@ -2,7 +2,11 @@
 
 use std::path::PathBuf;
 
-use nuxie::{File, PersistentFactory, ViewModelInstance};
+use nuxie::{
+    Artboard, File, PersistentFactory, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle,
+    RuntimeFileHandle, RuntimeStateMachineInstanceHandle, RuntimeViewModelInstanceHandle,
+    ViewModelInstanceRuntime,
+};
 use nuxie_render_api::SerializingFactory;
 use silver_corpus::{compare_sriv, parse_sriv};
 
@@ -23,75 +27,83 @@ fn compare_silver(name: &str, actual: &[u8]) {
 
 fn with_live(
     asset: &str,
-    run: impl for<'a> FnOnce(
-        &'a File,
-        &mut nuxie::ArtboardInstance<'a>,
-        &mut nuxie::StateMachineInstance,
-        &mut ViewModelInstance,
+    run: impl FnOnce(
+        &RuntimeFileHandle,
+        &RuntimeArtboardInstanceHandle,
+        &RuntimeStateMachineInstanceHandle,
+        &RuntimeViewModelInstanceHandle,
         &mut PersistentFactory<SerializingFactory>,
     ),
 ) {
-    // Keep the File at a stable address for the facade's borrowed instance.
-    let file = Box::leak(Box::new(
-        File::import(&pinned(&format!("assets/{asset}"))).expect("pinned fixture imports"),
-    ));
-    let mut artboard = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("default artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
-    artboard
-        .initialize_renderer(&mut silver)
-        .expect("renderer initializes at import boundary");
-    let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = artboard
-        .instantiate_default_view_model_instance()
-        .or_else(|| artboard.instantiate_view_model())
-        .expect("artboard view model");
-    let (width, height) = artboard.artboard_dimensions();
+    let factory = RuntimeFactoryHandle::from_factory(&mut silver).expect("retained factory");
+    let file = File::import(
+        &pinned(&format!("assets/{asset}")),
+        factory,
+        None,
+        None,
+        None,
+    )
+    .expect("pinned fixture imports");
+    let source = file.with_file(File::artboard).expect("default artboard");
+    let artboard = Artboard::instance_from_handle(&source).expect("default artboard instantiates");
+    let machine = artboard.state_machine_at(0).expect("state machine 0");
+    let view_model = fresh_default_view_model(&file, &artboard);
+    bind_view_model(&machine, &view_model);
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
     silver.borrow_mut().frame_size(width as u32, height as u32);
-    run(
-        file,
-        &mut artboard,
-        &mut machine,
-        &mut view_model,
-        &mut silver,
-    );
+    run(&file, &artboard, &machine, &view_model, &mut silver);
+}
+
+fn fresh_default_view_model(
+    file: &RuntimeFileHandle,
+    artboard: &RuntimeArtboardInstanceHandle,
+) -> RuntimeViewModelInstanceHandle {
+    let instance = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+                .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
+        })
+        .expect("artboard view model");
+    ViewModelInstanceRuntime::new(instance).into_handle()
+}
+
+fn bind_view_model(
+    machine: &RuntimeStateMachineInstanceHandle,
+    view_model: &RuntimeViewModelInstanceHandle,
+) {
+    machine.with_instance_mut(|machine| {
+        machine.bind_view_model_instance(view_model.instance());
+    });
 }
 
 fn advance_draw(
-    artboard: &mut nuxie::ArtboardInstance<'_>,
-    machine: &mut nuxie::StateMachineInstance,
-    view_model: &mut ViewModelInstance,
+    artboard: &RuntimeArtboardInstanceHandle,
+    machine: &RuntimeStateMachineInstanceHandle,
     silver: &mut PersistentFactory<SerializingFactory>,
     seconds: f32,
 ) {
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(machine),
-        seconds,
-        view_model,
-    );
+    machine.advance_and_apply(seconds);
     let mut renderer = silver.borrow().make_renderer();
-    artboard
-        .draw(silver, &mut renderer)
-        .expect("artboard draws");
+    artboard.draw(&mut renderer);
 }
 
-fn set_number(view_model: &mut ViewModelInstance, name: &str, value: f32) {
-    let _ = view_model.set_number(name, value);
+fn set_number(view_model: &RuntimeViewModelInstanceHandle, name: &str, value: f32) {
+    let property = view_model.property_number(name).expect("number property");
+    property.set_value(value);
     assert_eq!(
-        view_model.raw().number_value_by_property_name_path(name),
-        Some(value),
+        property.value(),
+        value,
         "{name} retains the exact assigned number"
     );
 }
 
-fn set_color(view_model: &mut ViewModelInstance, name: &str, value: u32) {
-    let _ = view_model.set_color(name, value);
+fn set_color(view_model: &RuntimeViewModelInstanceHandle, name: &str, value: u32) {
+    let property = view_model.property_color(name).expect("color property");
+    property.set_value(value as i32);
     assert_eq!(
-        view_model.raw().color_value_by_property_name_path(name),
-        Some(value),
+        property.value() as u32,
+        value,
         "{name} retains the exact assigned color"
     );
 }
@@ -101,26 +113,17 @@ fn list_to_length_converter() {
     with_live(
         "list_to_length_test.riv",
         |file, artboard, machine, view_model, silver| {
-            advance_draw(artboard, machine, view_model, silver, 0.1);
-            let child = file.view_model_named("child").expect("child view model");
+            advance_draw(artboard, machine, silver, 0.1);
+            let child = file
+                .with_file(|file| file.view_model_by_name("child"))
+                .expect("child view model");
+            let list = view_model.property_list("lis").expect("lis list");
             for _ in 0..4 {
                 silver.borrow_mut().add_frame();
-                let item = child.instantiate_default().expect("child instance");
-                let index = view_model
-                    .raw()
-                    .list_item_count_by_property_name_path("lis")
-                    .expect("lis list");
-                assert!(view_model.handle().insert_list_item_by_property_name_path(
-                    "lis",
-                    index,
-                    item.handle(),
-                ));
-                artboard.advance_with_state_machines_and_view_model(
-                    std::slice::from_mut(machine),
-                    0.1,
-                    view_model,
-                );
-                advance_draw(artboard, machine, view_model, silver, 0.1);
+                let item = child.create_default_instance();
+                assert!(list.add_instance_at(item, list.size() as i32));
+                machine.advance_and_apply(0.1);
+                advance_draw(artboard, machine, silver, 0.1);
             }
             compare_silver("list_to_length_test", &silver.borrow().bytes());
         },
@@ -128,34 +131,31 @@ fn list_to_length_converter() {
 }
 
 #[test]
-#[ignore = "expected-red: rebound interpolator stream diverges at frame 1 op 30 (expected save, got color)"]
 fn data_converter_interpolator_resets_on_binding() {
     with_live(
         "data_converter_interpolator_reset.riv",
-        |_file, artboard, machine, view_model, silver| {
+        |file, artboard, machine, view_model, silver| {
             set_number(view_model, "xPos", 250.0);
             set_color(view_model, "col", 0xffff_0000);
-            advance_draw(artboard, machine, view_model, silver, 0.1);
+            advance_draw(artboard, machine, silver, 0.1);
             set_color(view_model, "col", 0xff00_ff00);
             set_number(view_model, "xPos", 500.0);
             for _ in 0..(1.0_f32 / 0.016_f32) as usize {
                 silver.borrow_mut().add_frame();
-                advance_draw(artboard, machine, view_model, silver, 0.016);
+                advance_draw(artboard, machine, silver, 0.016);
             }
 
             silver.borrow_mut().add_frame();
-            let mut rebound = artboard
-                .instantiate_default_view_model_instance()
-                .or_else(|| artboard.instantiate_view_model())
-                .expect("replacement view model");
-            set_number(&mut rebound, "xPos", 250.0);
-            set_color(&mut rebound, "col", 0xffff_0000);
-            advance_draw(artboard, machine, &mut rebound, silver, 0.1);
-            set_color(&mut rebound, "col", 0xff00_00ff);
-            set_number(&mut rebound, "xPos", 0.0);
+            let rebound = fresh_default_view_model(file, artboard);
+            bind_view_model(machine, &rebound);
+            set_number(&rebound, "xPos", 250.0);
+            set_color(&rebound, "col", 0xffff_0000);
+            advance_draw(artboard, machine, silver, 0.1);
+            set_color(&rebound, "col", 0xff00_00ff);
+            set_number(&rebound, "xPos", 0.0);
             for _ in 0..(1.0_f32 / 0.016_f32) as usize {
                 silver.borrow_mut().add_frame();
-                advance_draw(artboard, machine, &mut rebound, silver, 0.016);
+                advance_draw(artboard, machine, silver, 0.016);
             }
             compare_silver(
                 "data_converter_interpolator_reset",
@@ -166,49 +166,32 @@ fn data_converter_interpolator_resets_on_binding() {
 }
 
 #[test]
-#[ignore = "expected-red: zero-duration interpolation stream diverges at frame 1 transform tx (expected 0, got 200)"]
 fn interpolations_that_change_duration_to_zero_work_correctly() {
     with_live(
         "interpolation_zero_duration.riv",
         |_file, artboard, machine, view_model, silver| {
-            advance_draw(artboard, machine, view_model, silver, 0.1);
+            advance_draw(artboard, machine, silver, 0.1);
             set_number(view_model, "objectX", 200.0);
             let frames = (1.5_f32 / 0.1_f32) as usize;
             for _ in 0..frames {
                 silver.borrow_mut().add_frame();
-                advance_draw(artboard, machine, view_model, silver, 0.1);
+                advance_draw(artboard, machine, silver, 0.1);
             }
             set_number(view_model, "interpValue", 0.0);
-            artboard.advance_with_state_machines_and_view_model(
-                std::slice::from_mut(machine),
-                0.016,
-                view_model,
-            );
+            machine.advance_and_apply(0.016);
             set_number(view_model, "objectX", 400.0);
-            artboard.advance_with_state_machines_and_view_model(
-                std::slice::from_mut(machine),
-                0.016,
-                view_model,
-            );
+            machine.advance_and_apply(0.016);
             for _ in 0..frames {
                 silver.borrow_mut().add_frame();
-                advance_draw(artboard, machine, view_model, silver, 0.1);
+                advance_draw(artboard, machine, silver, 0.1);
             }
             set_number(view_model, "interpValue", 1.0);
-            artboard.advance_with_state_machines_and_view_model(
-                std::slice::from_mut(machine),
-                0.016,
-                view_model,
-            );
+            machine.advance_and_apply(0.016);
             set_number(view_model, "objectX", 200.0);
-            artboard.advance_with_state_machines_and_view_model(
-                std::slice::from_mut(machine),
-                0.016,
-                view_model,
-            );
+            machine.advance_and_apply(0.016);
             for _ in 0..frames {
                 silver.borrow_mut().add_frame();
-                advance_draw(artboard, machine, view_model, silver, 0.1);
+                advance_draw(artboard, machine, silver, 0.1);
             }
             compare_silver("interpolation_zero_duration", &silver.borrow().bytes());
         },

@@ -26,7 +26,9 @@ impl TextInputCursorBase {
     }
     pub fn clone_into(&self) -> TextInputCursor {
         let mut cloned = TextInputCursor::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

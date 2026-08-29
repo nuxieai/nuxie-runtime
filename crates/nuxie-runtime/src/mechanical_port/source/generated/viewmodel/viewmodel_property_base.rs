@@ -49,7 +49,10 @@ impl ViewModelPropertyBase {
             return;
         }
         callbacks.symbol_type_value_changed();
-        callbacks.notify_property_changed(Self::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
+        ViewModelPropertyBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SYMBOL_TYPE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_symbol_type_value_value(&mut self, value: u32) -> bool {
@@ -71,7 +74,10 @@ impl ViewModelPropertyBase {
             return;
         }
         callbacks.component_props_changed();
-        callbacks.notify_property_changed(Self::COMPONENT_PROPS_PROPERTY_KEY);
+        ViewModelPropertyBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::COMPONENT_PROPS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_component_props_value(&mut self, value: u32) -> bool {

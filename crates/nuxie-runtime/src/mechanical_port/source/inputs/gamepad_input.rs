@@ -103,6 +103,6 @@ impl GamepadInput {
             artboard_importer.add_component(Some(this));
         }
 
-        self.base.import(import_stack)
+        crate::mechanical_port::source::core::CoreObject::core_mut(self).import(import_stack)
     }
 }

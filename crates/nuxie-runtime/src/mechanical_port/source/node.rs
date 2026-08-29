@@ -20,6 +20,26 @@ impl Default for Node {
 }
 
 impl Node {
+    pub fn set_x(&mut self, value: f32) {
+        if self.base.set_x_value(value) {
+            self.x_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                &mut self.base,
+                NodeBase::X_PROPERTY_KEY,
+            );
+        }
+    }
+
+    pub fn set_y(&mut self, value: f32) {
+        if self.base.set_y_value(value) {
+            self.y_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                &mut self.base,
+                NodeBase::Y_PROPERTY_KEY,
+            );
+        }
+    }
+
     pub fn set_computed_local_x(&mut self, _value: f32) {}
     pub fn set_computed_local_y(&mut self, _value: f32) {}
     pub fn set_computed_world_x(&mut self, _value: f32) {}
@@ -48,19 +68,23 @@ impl Node {
     pub fn computed_root_x(&mut self) -> f32 {
         let world = *self.base.base.world_transform();
         self.base
-            .base
-            .artboard_mut()
-            .map(|artboard| artboard.root_transform(Vec2D::new(world[4], world[5])).x)
-            .unwrap_or(world[4])
+            .artboard_handle()
+            .expect("computedRootX requires an artboard")
+            .with_downcast_mut::<crate::mechanical_port::source::artboard::Artboard, _>(
+                |artboard| artboard.root_transform(Vec2D::new(world[4], world[5])).x,
+            )
+            .expect("computedRootX requires a live artboard")
     }
 
     pub fn computed_root_y(&mut self) -> f32 {
         let world = *self.base.base.world_transform();
         self.base
-            .base
-            .artboard_mut()
-            .map(|artboard| artboard.root_transform(Vec2D::new(world[4], world[5])).y)
-            .unwrap_or(world[5])
+            .artboard_handle()
+            .expect("computedRootY requires an artboard")
+            .with_downcast_mut::<crate::mechanical_port::source::artboard::Artboard, _>(
+                |artboard| artboard.root_transform(Vec2D::new(world[4], world[5])).y,
+            )
+            .expect("computedRootY requires a live artboard")
     }
 
     pub fn computed_width(&mut self) -> f32 {
@@ -107,12 +131,22 @@ impl Node {
     }
 
     pub fn mark_layout_node_dirty(&mut self) {
-        let mut parent = self.base.base.parent_mut();
+        let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
-            if let Some(layout) = current.as_layout_component_mut() {
-                layout.mark_layout_node_dirty();
+            let (is_layout, next) = current
+                .with(|current| {
+                    (
+                        current.as_layout_component().is_some(),
+                        current
+                            .as_component()
+                            .and_then(|component| component.parent_handle()),
+                    )
+                })
+                .expect("a Node ancestor remains live");
+            if is_layout {
+                crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(&current, false);
             }
-            parent = current.base.base.parent_mut();
+            parent = next;
         }
     }
 }

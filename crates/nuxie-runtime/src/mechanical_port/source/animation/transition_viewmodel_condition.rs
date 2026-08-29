@@ -109,11 +109,26 @@ impl ComparisonShape {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ComparandRecipe {
+    ArtboardProperty,
+    ComponentProperty,
+    ViewModelProperty {
+        property: CoreHandle,
+        kind: ComparandKind,
+    },
+    Literal(ComparandKind),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum ComparisonRecipe {
     None,
-    SelfChange,
-    Typed(ComparisonShape),
+    SelfChange(CoreHandle),
+    Typed {
+        shape: ComparisonShape,
+        left: ComparandRecipe,
+        right: ComparandRecipe,
+    },
 }
 
 pub struct TransitionViewModelCondition {
@@ -151,7 +166,7 @@ impl TransitionViewModelCondition {
         }
     }
 
-    pub fn op(&self) -> TransitionConditionOp {
+    pub fn op(&self) -> Option<TransitionConditionOp> {
         TransitionConditionOp::from_u32(self.base.op_value())
     }
 
@@ -159,22 +174,26 @@ impl TransitionViewModelCondition {
         comparator.is_type_of(TransitionPropertyViewModelComparatorBase::TYPE_KEY)
     }
 
+    fn bindable_kind(bindable: &CoreHandle) -> Option<ComparandKind> {
+        match bindable.core_type()? {
+            crate::mechanical_port::source::generated::data_bind::bindable_property_number_base::BindablePropertyNumberBase::TYPE_KEY => Some(ComparandKind::NumberDouble),
+            crate::mechanical_port::source::generated::data_bind::bindable_property_integer_base::BindablePropertyIntegerBase::TYPE_KEY => Some(ComparandKind::NumberFromUint),
+            crate::mechanical_port::source::generated::data_bind::bindable_property_boolean_base::BindablePropertyBooleanBase::TYPE_KEY => Some(ComparandKind::Boolean),
+            crate::mechanical_port::source::generated::data_bind::bindable_property_string_base::BindablePropertyStringBase::TYPE_KEY => Some(ComparandKind::String),
+            crate::mechanical_port::source::generated::data_bind::bindable_property_color_base::BindablePropertyColorBase::TYPE_KEY => Some(ComparandKind::Color),
+            crate::mechanical_port::source::generated::data_bind::bindable_property_enum_base::BindablePropertyEnumBase::TYPE_KEY => Some(ComparandKind::Enum),
+            crate::mechanical_port::source::generated::data_bind::bindable_property_trigger_base::BindablePropertyTriggerBase::TYPE_KEY => Some(ComparandKind::Trigger),
+            crate::mechanical_port::source::generated::data_bind::bindable_property_asset_base::BindablePropertyAssetBase::TYPE_KEY => Some(ComparandKind::Asset),
+            crate::mechanical_port::source::generated::data_bind::bindable_property_artboard_base::BindablePropertyArtboardBase::TYPE_KEY => Some(ComparandKind::Artboard),
+            crate::mechanical_port::source::generated::data_bind::bindable_property_viewmodel_base::BindablePropertyViewModelBase::TYPE_KEY => Some(ComparandKind::ViewModel),
+            _ => None,
+        }
+    }
+
     fn viewmodel_kind(comparator: &CoreHandle) -> Option<ComparandKind> {
         let bindable = comparator
             .with(|comparator| comparator.transition_comparator_bindable_property())??;
-        match bindable.core_type()? {
-            BindablePropertyNumber::TYPE_KEY => Some(ComparandKind::NumberDouble),
-            BindablePropertyInteger::TYPE_KEY => Some(ComparandKind::NumberFromUint),
-            BindablePropertyBoolean::TYPE_KEY => Some(ComparandKind::Boolean),
-            BindablePropertyString::TYPE_KEY => Some(ComparandKind::String),
-            BindablePropertyColor::TYPE_KEY => Some(ComparandKind::Color),
-            BindablePropertyEnum::TYPE_KEY => Some(ComparandKind::Enum),
-            BindablePropertyTrigger::TYPE_KEY => Some(ComparandKind::Trigger),
-            BindablePropertyAsset::TYPE_KEY => Some(ComparandKind::Asset),
-            BindablePropertyArtboard::TYPE_KEY => Some(ComparandKind::Artboard),
-            BindablePropertyViewModel::TYPE_KEY => Some(ComparandKind::ViewModel),
-            _ => None,
-        }
+        Self::bindable_kind(&bindable)
     }
 
     fn component_kind(comparator: &CoreHandle) -> Option<ComparandKind> {
@@ -184,25 +203,25 @@ impl TransitionViewModelCondition {
         if field_id < 0 {
             return None;
         }
-        match field_id as u16 {
-            CoreRegistry::CORE_DOUBLE_TYPE_ID => Some(ComparandKind::NumberDouble),
-            CoreRegistry::CORE_BOOL_TYPE_ID => Some(ComparandKind::Boolean),
-            CoreRegistry::CORE_STRING_TYPE_ID => Some(ComparandKind::String),
-            CoreRegistry::CORE_COLOR_TYPE_ID => Some(ComparandKind::Color),
-            CoreRegistry::CORE_UINT_TYPE_ID => {
-                if property_key == CoreRegistry::CUSTOM_PROPERTY_ENUM_VALUE_KEY
-                    || property_key == CoreRegistry::VIEW_MODEL_ENUM_VALUE_KEY
+        match field_id {
+            crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::ID => Some(ComparandKind::NumberDouble),
+            crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::ID => Some(ComparandKind::Boolean),
+            crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::ID => Some(ComparandKind::String),
+            crate::mechanical_port::source::core::field_types::core_color_type::CoreColorType::ID => Some(ComparandKind::Color),
+            crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::ID => {
+                if property_key == crate::mechanical_port::source::generated::custom_property_enum_base::CustomPropertyEnumBase::PROPERTY_VALUE_PROPERTY_KEY as u32
+                    || property_key == crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_enum_base::ViewModelInstanceEnumBase::PROPERTY_VALUE_PROPERTY_KEY as u32
                 {
                     Some(ComparandKind::Enum)
-                } else if property_key == CoreRegistry::CUSTOM_PROPERTY_TRIGGER_VALUE_KEY
-                    || property_key == CoreRegistry::VIEW_MODEL_TRIGGER_VALUE_KEY
+                } else if property_key == crate::mechanical_port::source::generated::custom_property_trigger_base::CustomPropertyTriggerBase::PROPERTY_VALUE_PROPERTY_KEY as u32
+                    || property_key == crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY as u32
                 {
                     Some(ComparandKind::Trigger)
-                } else if property_key == CoreRegistry::VIEW_MODEL_ASSET_VALUE_KEY {
+                } else if property_key == crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_base::ViewModelInstanceAssetBase::PROPERTY_VALUE_PROPERTY_KEY as u32 {
                     Some(ComparandKind::Asset)
-                } else if property_key == CoreRegistry::VIEW_MODEL_ARTBOARD_VALUE_KEY {
+                } else if property_key == crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_artboard_base::ViewModelInstanceArtboardBase::PROPERTY_VALUE_PROPERTY_KEY as u32 {
                     Some(ComparandKind::Artboard)
-                } else if property_key == CoreRegistry::VIEW_MODEL_VIEW_MODEL_VALUE_KEY {
+                } else if property_key == crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_viewmodel_base::ViewModelInstanceViewModelBase::PROPERTY_VALUE_PROPERTY_KEY as u32 {
                     Some(ComparandKind::ViewModel)
                 } else {
                     Some(ComparandKind::NumberFromUint)
@@ -239,40 +258,43 @@ impl TransitionViewModelCondition {
         }
     }
 
-    fn literal_value(comparator: &CoreHandle) -> Option<RuntimeComparisonValue> {
-        comparator.with(|comparator| {
-            comparator
-                .transition_comparator_number_value()
-                .map(RuntimeComparisonValue::Number)
-                .or_else(|| {
-                    comparator
-                        .transition_comparator_bool_value()
-                        .map(RuntimeComparisonValue::Boolean)
-                })
-                .or_else(|| {
-                    comparator
-                        .transition_comparator_string_value()
-                        .map(RuntimeComparisonValue::String)
-                })
-                .or_else(|| {
-                    comparator
-                        .transition_comparator_color_value()
-                        .map(RuntimeComparisonValue::Color)
-                })
-                .or_else(|| {
-                    comparator
-                        .transition_comparator_uint_value()
-                        .map(RuntimeComparisonValue::Uint)
-                })
-        })?
+    fn comparand_recipe(
+        comparator: &CoreHandle,
+        side: ComparatorSide,
+        kind: ComparandKind,
+    ) -> Option<ComparandRecipe> {
+        match comparator.core_type()? {
+            TransitionPropertyArtboardComparatorBase::TYPE_KEY
+                if side == ComparatorSide::Left && kind == ComparandKind::NumberDouble =>
+            {
+                Some(ComparandRecipe::ArtboardProperty)
+            }
+            TransitionPropertyComponentComparatorBase::TYPE_KEY => {
+                (Self::component_kind(comparator) == Some(kind))
+                    .then_some(ComparandRecipe::ComponentProperty)
+            }
+            TransitionPropertyViewModelComparatorBase::TYPE_KEY => {
+                let property = comparator
+                    .with(|comparator| comparator.transition_comparator_bindable_property())??;
+                (Self::bindable_kind(&property) == Some(kind))
+                    .then_some(ComparandRecipe::ViewModelProperty { property, kind })
+            }
+            _ if side == ComparatorSide::Right
+                && Self::comparator_kind(comparator, side) == Some(kind) =>
+            {
+                Some(ComparandRecipe::Literal(kind))
+            }
+            _ => None,
+        }
     }
 
     fn comparand_value(
         comparator: &CoreHandle,
+        recipe: &ComparandRecipe,
         machine: &StateMachineInstance,
     ) -> Option<RuntimeComparisonValue> {
-        match comparator.core_type()? {
-            TransitionPropertyArtboardComparatorBase::TYPE_KEY => {
+        match recipe {
+            ComparandRecipe::ArtboardProperty => {
                 let property_type = comparator.with(|comparator| {
                     comparator.transition_comparator_artboard_property_type()
                 })??;
@@ -286,7 +308,7 @@ impl TransitionViewModelCondition {
                     },
                 ))
             }
-            TransitionPropertyComponentComparatorBase::TYPE_KEY => {
+            ComparandRecipe::ComponentProperty => {
                 let (object_id, property_key) = comparator.with(|comparator| {
                     Some((
                         comparator.transition_comparator_component_object_id()?,
@@ -295,12 +317,84 @@ impl TransitionViewModelCondition {
                 })??;
                 machine.component_comparison_value(object_id, property_key)
             }
-            TransitionPropertyViewModelComparatorBase::TYPE_KEY => {
-                let property = comparator
-                    .with(|comparator| comparator.transition_comparator_bindable_property())??;
-                machine.bindable_property_comparison_value(&property)
+            ComparandRecipe::ViewModelProperty { property, kind } => {
+                let property = machine.bindable_property_instance(property)?;
+                match kind {
+                    ComparandKind::NumberDouble => property
+                        .with_downcast::<BindablePropertyNumber, _>(|property| {
+                            RuntimeComparisonValue::Number(property.base.property_value())
+                        }),
+                    ComparandKind::NumberFromUint => property
+                        .with_downcast::<BindablePropertyInteger, _>(|property| {
+                            RuntimeComparisonValue::Uint(property.base.property_value())
+                        }),
+                    ComparandKind::Boolean => {
+                        property.with_downcast::<BindablePropertyBoolean, _>(|property| {
+                            RuntimeComparisonValue::Boolean(property.base.property_value())
+                        })
+                    }
+                    ComparandKind::String => {
+                        property.with_downcast::<BindablePropertyString, _>(|property| {
+                            RuntimeComparisonValue::String(
+                                property.base.property_value().to_owned(),
+                            )
+                        })
+                    }
+                    ComparandKind::Color => {
+                        property.with_downcast::<BindablePropertyColor, _>(|property| {
+                            RuntimeComparisonValue::Color(property.base.property_value())
+                        })
+                    }
+                    ComparandKind::Enum => {
+                        property.with_downcast::<BindablePropertyEnum, _>(|property| {
+                            RuntimeComparisonValue::Uint(property.base.property_value())
+                        })
+                    }
+                    ComparandKind::Trigger => {
+                        property.with_downcast::<BindablePropertyTrigger, _>(|property| {
+                            RuntimeComparisonValue::Uint(property.base.base.property_value())
+                        })
+                    }
+                    ComparandKind::Asset => {
+                        property.with_downcast::<BindablePropertyAsset, _>(|property| {
+                            RuntimeComparisonValue::Uint(property.base.property_value())
+                        })
+                    }
+                    ComparandKind::Artboard => property
+                        .with_downcast::<BindablePropertyArtboard, _>(|property| {
+                            RuntimeComparisonValue::Uint(property.base.property_value())
+                        }),
+                    ComparandKind::ViewModel => property
+                        .with_downcast::<BindablePropertyViewModel, _>(|property| {
+                            property
+                                .view_model_instance_value()
+                                .map(RuntimeComparisonValue::ViewModel)
+                        })
+                        .flatten(),
+                }
             }
-            _ => Self::literal_value(comparator),
+            ComparandRecipe::Literal(kind) => comparator.with(|comparator| match kind {
+                ComparandKind::NumberDouble => comparator
+                    .transition_comparator_number_value()
+                    .map(RuntimeComparisonValue::Number),
+                ComparandKind::Boolean => comparator
+                    .transition_comparator_bool_value()
+                    .map(RuntimeComparisonValue::Boolean),
+                ComparandKind::String => comparator
+                    .transition_comparator_string_value()
+                    .map(RuntimeComparisonValue::String),
+                ComparandKind::Color => comparator
+                    .transition_comparator_color_value()
+                    .map(RuntimeComparisonValue::Color),
+                ComparandKind::NumberFromUint
+                | ComparandKind::Enum
+                | ComparandKind::Trigger
+                | ComparandKind::Asset
+                | ComparandKind::Artboard => comparator
+                    .transition_comparator_uint_value()
+                    .map(RuntimeComparisonValue::Uint),
+                ComparandKind::ViewModel => None,
+            })?,
         }
     }
 
@@ -357,30 +451,42 @@ impl TransitionViewModelCondition {
 
     fn compare_eq<T: PartialEq>(&self, left: T, right: T) -> bool {
         match self.op() {
-            TransitionConditionOp::Equal => left == right,
-            TransitionConditionOp::NotEqual => left != right,
+            Some(TransitionConditionOp::Equal) => left == right,
+            Some(TransitionConditionOp::NotEqual) => left != right,
             _ => false,
         }
     }
 
     fn compare_number(&self, left: f32, right: f32) -> bool {
         match self.op() {
-            TransitionConditionOp::Equal => left == right,
-            TransitionConditionOp::NotEqual => left != right,
-            TransitionConditionOp::LessThanOrEqual => left <= right,
-            TransitionConditionOp::LessThan => left < right,
-            TransitionConditionOp::GreaterThanOrEqual => left >= right,
-            TransitionConditionOp::GreaterThan => left > right,
+            Some(TransitionConditionOp::Equal) => left == right,
+            Some(TransitionConditionOp::NotEqual) => left != right,
+            Some(TransitionConditionOp::LessThanOrEqual) => left <= right,
+            Some(TransitionConditionOp::LessThan) => left < right,
+            Some(TransitionConditionOp::GreaterThanOrEqual) => left >= right,
+            Some(TransitionConditionOp::GreaterThan) => left > right,
             _ => false,
         }
     }
 
     fn can_evaluate(&self, machine: &StateMachineInstance) -> bool {
-        let (Some(left), Some(right)) = (&self.left_comparator, &self.right_comparator) else {
+        let (Some(_), Some(_), Some(recipe)) = (
+            &self.left_comparator,
+            &self.right_comparator,
+            self.comparison.as_ref(),
+        ) else {
             return false;
         };
-        machine.data_context().is_some()
-            || (!Self::is_viewmodel_property(left) && !Self::is_viewmodel_property(right))
+        let requires_data_context = match recipe {
+            ComparisonRecipe::SelfChange(_) => true,
+            ComparisonRecipe::Typed { left, right, .. } => matches!(
+                (left, right),
+                (ComparandRecipe::ViewModelProperty { .. }, _)
+                    | (_, ComparandRecipe::ViewModelProperty { .. })
+            ),
+            ComparisonRecipe::None => false,
+        };
+        !requires_data_context || machine.data_context().is_some()
     }
 
     pub fn evaluate(
@@ -394,29 +500,27 @@ impl TransitionViewModelCondition {
         let (Some(left), Some(right), Some(recipe)) = (
             &self.left_comparator,
             &self.right_comparator,
-            self.comparison,
+            self.comparison.as_ref(),
         ) else {
             return false;
         };
         match recipe {
             ComparisonRecipe::None => false,
-            ComparisonRecipe::SelfChange => {
-                let Some(property) = left
-                    .with(|left| left.transition_comparator_bindable_property())
-                    .flatten()
-                else {
-                    return false;
-                };
-                machine.bindable_source_changed_in_layer(&property, layer)
+            ComparisonRecipe::SelfChange(property) => {
+                machine.bindable_source_changed_in_layer(property, layer)
             }
-            ComparisonRecipe::Typed(shape) => {
+            ComparisonRecipe::Typed {
+                shape,
+                left: left_recipe,
+                right: right_recipe,
+            } => {
                 let (Some(left), Some(right)) = (
-                    Self::comparand_value(left, machine),
-                    Self::comparand_value(right, machine),
+                    Self::comparand_value(left, left_recipe, machine),
+                    Self::comparand_value(right, right_recipe, machine),
                 ) else {
                     return false;
                 };
-                self.compare_values(shape, left, right)
+                self.compare_values(*shape, left, right)
             }
         }
     }
@@ -436,11 +540,12 @@ impl TransitionViewModelCondition {
             return;
         };
         if right.is_type_of(TransitionSelfComparatorBase::TYPE_KEY) {
-            self.comparison = Some(if Self::is_viewmodel_property(left) {
-                ComparisonRecipe::SelfChange
-            } else {
-                ComparisonRecipe::None
-            });
+            self.comparison = Some(
+                left.with(|left| left.transition_comparator_bindable_property())
+                    .flatten()
+                    .map(ComparisonRecipe::SelfChange)
+                    .unwrap_or(ComparisonRecipe::None),
+            );
             return;
         }
 
@@ -450,17 +555,30 @@ impl TransitionViewModelCondition {
             && right.is_type_of(TransitionValueTriggerComparatorBase::TYPE_KEY)
             && Self::is_viewmodel_property(left)
         {
-            self.comparison = Some(ComparisonRecipe::SelfChange);
+            self.comparison = Some(
+                left.with(|left| left.transition_comparator_bindable_property())
+                    .flatten()
+                    .map(ComparisonRecipe::SelfChange)
+                    .unwrap_or(ComparisonRecipe::None),
+            );
             return;
         }
 
-        self.comparison = Some(
-            left_kind
-                .zip(right_kind)
-                .and_then(|(left, right)| ComparisonShape::from_kinds(left, right))
-                .map(ComparisonRecipe::Typed)
-                .unwrap_or(ComparisonRecipe::None),
-        );
+        self.comparison = Some(match left_kind.zip(right_kind) {
+            Some((left_kind, right_kind)) => {
+                match (
+                    ComparisonShape::from_kinds(left_kind, right_kind),
+                    Self::comparand_recipe(left, ComparatorSide::Left, left_kind),
+                    Self::comparand_recipe(right, ComparatorSide::Right, right_kind),
+                ) {
+                    (Some(shape), Some(left), Some(right)) => {
+                        ComparisonRecipe::Typed { shape, left, right }
+                    }
+                    _ => ComparisonRecipe::None,
+                }
+            }
+            None => ComparisonRecipe::None,
+        });
     }
 }
 impl std::ops::Deref for TransitionViewModelCondition {

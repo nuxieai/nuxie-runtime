@@ -41,7 +41,7 @@ impl SolidColorBase {
             return;
         }
         callbacks.color_value_changed();
-        callbacks.notify_property_changed(Self::COLOR_VALUE_PROPERTY_KEY);
+        SolidColorBaseCallbacks::notify_property_changed(callbacks, Self::COLOR_VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_color_value_value(&mut self, value: i32) -> bool {

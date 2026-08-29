@@ -40,7 +40,6 @@ pub(super) fn update_context(definition: &'static Definition, context: &mut Impo
 #[derive(Debug)]
 struct CppStateMachineLayerResolution {
     object_id: u32,
-    owner_artboard_range: Option<(usize, usize)>,
     owner_artboard_resolve_boundary: usize,
     importer_resolve_boundary: usize,
     state_count: usize,
@@ -114,7 +113,6 @@ pub(super) fn validate_cpp_state_machine_layers(
             }
             layers.push(CppStateMachineLayerResolution {
                 object_id: object.id,
-                owner_artboard_range: current_state_machine_owner_artboard_range,
                 owner_artboard_resolve_boundary: current_state_machine_owner_artboard_boundary
                     .unwrap_or(0),
                 importer_resolve_boundary: objects.len(),
@@ -159,7 +157,7 @@ pub(super) fn validate_cpp_state_machine_layers(
     }
 
     for layer in layers {
-        validate_cpp_state_machine_layer_transitions(&layer, objects, import_statuses)?;
+        validate_cpp_state_machine_layer_transitions(&layer)?;
     }
 
     Ok(())
@@ -167,49 +165,11 @@ pub(super) fn validate_cpp_state_machine_layers(
 
 fn validate_cpp_state_machine_layer_transitions(
     layer: &CppStateMachineLayerResolution,
-    objects: &[Option<RuntimeObject>],
-    import_statuses: &[RuntimeImportStatus],
 ) -> Result<()> {
-    // LayerState::onAddedDirty visits retained transitions in authored order
-    // and returns the first StateTransition lifecycle error. Conditions have
-    // no-op dirty/clean hooks at this pin; the only fallible transition hook
-    // resolves a non-default interpolator id to KeyFrameInterpolator.
-    if let Some(owner_artboard_range) = layer.owner_artboard_range {
-        let mut slots =
-            runtime_artboard_local_slots(objects, import_statuses, owner_artboard_range);
-        validate_cpp_artboard_local_slots(&mut slots, objects);
-        for transition in &layer.transitions {
-            // A transition attached through the still-latest LayerState
-            // importer after its owner Artboard initialized is retained but
-            // never receives onAddedDirty.
-            if transition.file_index >= owner_artboard_range.1 {
-                continue;
-            }
-            let Some(interpolator_id) = objects[transition.file_index]
-                .as_ref()
-                .and_then(|object| object.uint_property("interpolatorId"))
-            else {
-                continue;
-            };
-            if interpolator_id == u64::from(u32::MAX) {
-                continue;
-            }
-            let interpolator = usize::try_from(interpolator_id).ok().and_then(|local_id| {
-                local_object_reference(&slots, objects, Some(local_id as u64))
-            });
-            let is_key_frame_interpolator = interpolator
-                .and_then(|object| definition_by_type_key(object.type_key))
-                .is_some_and(|definition| definition.is_a("KeyFrameInterpolator"));
-            if !is_key_frame_interpolator {
-                bail!(
-                    "state transition object {} ({}) has missing KeyFrameInterpolator {}",
-                    transition.object_id,
-                    transition.type_name,
-                    interpolator_id
-                );
-            }
-        }
-    }
+    // StateTransition::onAddedDirty returns MissingObject for an absent or
+    // wrong-kind interpolator. Artboard::canContinue deliberately tolerates
+    // every lifecycle status except InvalidObject, so the transition remains
+    // imported with a null interpolator pointer.
 
     // StateMachineLayer checks its required system-state pointers only after
     // every retained state's dirty lifecycle has completed.

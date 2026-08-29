@@ -49,10 +49,12 @@ impl ViewModelInstanceList {
     }
 
     fn add_parent_to_item(&self, item: &CoreHandle) {
-        if let (Some(instance), Some(parent)) = (
-            Self::item_instance(item),
-            self.parent_view_model_instance.as_ref(),
-        ) {
+        self.add_parent_to_instance(Self::item_instance(item));
+    }
+
+    fn add_parent_to_instance(&self, instance: Option<CoreHandle>) {
+        if let (Some(instance), Some(parent)) = (instance, self.parent_view_model_instance.as_ref())
+        {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
                     instance.add_parent(parent.clone());
@@ -89,8 +91,8 @@ impl ViewModelInstanceList {
     }
 
     pub fn add_item(&mut self, item: CoreHandle) {
+        self.list_items.push(item.clone());
         self.add_parent_to_item(&item);
-        self.list_items.push(item);
         self.property_value_changed();
     }
 
@@ -98,15 +100,26 @@ impl ViewModelInstanceList {
         if index < 0 || index as usize > self.list_items.len() {
             return false;
         }
+        self.list_items.insert(index as usize, item.clone());
         self.add_parent_to_item(&item);
-        self.list_items.insert(index as usize, item);
         self.property_value_changed();
         true
     }
 
     pub fn internal_add_item(&mut self, item: CoreHandle) {
-        self.add_parent_to_item(&item);
-        self.list_items.push(item);
+        item.with_downcast::<super::viewmodel_instance_list_item::ViewModelInstanceListItem, _>(
+            |item| self.internal_add_item_borrowed(item),
+        )
+        .expect("native list item");
+    }
+
+    pub(crate) fn internal_add_item_borrowed(
+        &mut self,
+        item: &super::viewmodel_instance_list_item::ViewModelInstanceListItem,
+    ) {
+        self.list_items
+            .push(item.base.base.handle().expect("arena-owned list item"));
+        self.add_parent_to_instance(item.view_model_instance());
     }
 
     pub fn remove_item_at(&mut self, index: i32) {
@@ -143,7 +156,6 @@ impl ViewModelInstanceList {
 
     pub fn pop(&mut self) -> Option<CoreHandle> {
         let item = self.list_items.pop()?;
-        self.remove_parent_from_item(&item);
         self.property_value_changed();
         Some(item)
     }
@@ -207,8 +219,8 @@ impl ViewModelInstanceList {
         self.list_items.clear();
         self.list_items.reserve(list.len());
         for item in list {
-            self.add_parent_to_item(item);
             self.list_items.push(item.clone());
+            self.add_parent_to_item(item);
         }
         self.property_value_changed();
     }

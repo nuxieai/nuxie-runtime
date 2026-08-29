@@ -11,6 +11,8 @@
 //!   results. Source compilation belongs to editor tooling.
 
 pub mod envelope;
+pub mod logging_scripting_context;
+pub use logging_scripting_context::make_logging_scripting_context_factory;
 
 #[cfg(feature = "luau")]
 pub mod gpu_canvas;

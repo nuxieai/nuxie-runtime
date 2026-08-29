@@ -84,7 +84,11 @@ impl ViewModelInstanceListRuntime {
     }
 
     pub fn add_instance_at(&self, runtime: RuntimeViewModelInstanceHandle, index: i32) -> bool {
-        let Some(item) = self.make_item(&runtime) else {
+        let Some(item) = self
+            .base
+            .handle()
+            .insert_sibling(ViewModelInstanceListItem::default())
+        else {
             return false;
         };
         let inserted = self
@@ -95,8 +99,14 @@ impl ViewModelInstanceListRuntime {
                     .is_some_and(|list| list.add_item_at(item.clone(), index))
             })
             .unwrap_or(false);
-        if !inserted {
-            self.items.borrow_mut().remove(&item);
+        if inserted {
+            item.with_mut(|item| {
+                item.as_view_model_instance_list_item_mut()
+                    .expect("new list item")
+                    .set_view_model_instance(Some(runtime.instance()));
+            });
+            self.items.borrow_mut().insert(item, runtime);
+        } else {
             item.remove_occurrence();
         }
         inserted

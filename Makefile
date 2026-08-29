@@ -1,29 +1,13 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect graph cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-metal-atomic-oracle-tracer renderer-native-metal-tracer-binary ore-metal-binding-witness ore-metal-authenticated-gpu-canvas renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks parity-scorecard parity-scorecard-snapshot parity-scorecard-check parity-scorecard-test cpp-binary-compare cpp-graph-compare cpp-runtime-compare cpp-compare runtime-drawing-port-test runtime-drawing-port-check runtime-drawing-port-closed runtime-drawing-port-gate runtime-frame-loop-trace-runners runtime-frame-loop-trace runtime-frame-loop-port-test runtime-frame-loop-port-check runtime-frame-loop-port-closed runtime-frame-loop-port-gate b6-audit-check crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check metal-assert-parity-check metal-port-progress metal-port-progress-check backend-port-source-inventory backend-port-source-inventory-check backend-port-ownership-inventory backend-port-ownership-inventory-check
-.PHONY: runtime-drift-queue runtime-drift-queue-test runtime-drift-queue-snapshot runtime-drift-queue-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-metal-atomic-oracle-tracer renderer-native-metal-tracer-binary ore-metal-binding-witness ore-metal-authenticated-gpu-canvas renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks cpp-binary-compare cpp-runtime-compare cpp-compare crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check metal-assert-parity-check metal-port-progress metal-port-progress-check backend-port-source-inventory backend-port-source-inventory-check backend-port-ownership-inventory backend-port-ownership-inventory-check
 .PHONY: backend-port-ownership-inventory backend-port-ownership-inventory-check backend-port-dependency-inventory backend-port-dependency-inventory-check backend-port-generated-inventory backend-port-generated-inventory-check backend-port-configuration-inventory backend-port-configuration-inventory-check backend-port-field-inventory backend-port-field-inventory-check backend-port-lifecycle-inventory backend-port-lifecycle-inventory-check backend-port-legacy-wgpu-inventory backend-port-legacy-wgpu-inventory-check backend-port-repeatability-inventory backend-port-repeatability-inventory-check backend-port-denominators-check backend-port-preparation-check backend-port-translation-check backend-port-source-review-admission backend-port-source-review-check backend-port-ownership-review-admission backend-port-ownership-review-check backend-port-shader-authority backend-port-shader-authority-check
 .PHONY: renderer-metal-msaa-contract renderer-metal-msaa-probe renderer-metal-cpp-parity renderer-metal-wgpu-diagnostic renderer-metal-wgpu-parity
 .PHONY: renderer-native-metal-replay
 .PHONY: renderer-native-metal-platform-matrix renderer-native-metal-v3 metal-test-census-check
-.PHONY: parity-evidence-freshness parity-evidence-freshness-test parity-evidence-registry-check parity-evidence-freshness-report
-.PHONY: runtime-behavior-inventory runtime-behavior-inventory-test runtime-behavior-inventory-snapshot runtime-behavior-inventory-check
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 RIVE_RUNTIME_REF ?= 4ac7b32798da0482e441ef09304dc3b480ed3ee5
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
-MICROBENCH_RUN_DIR ?= $(CURDIR)/target/microbench/run
-MICROBENCH_RUN_MANIFEST ?= $(MICROBENCH_RUN_DIR)/run.json
-MICROBENCH_REPORT ?= $(CURDIR)/target/microbench/comparison.md
-MICROBENCH_CPP_DURATION ?= 5
-MICROBENCH_WARM_UP ?= 3
-MICROBENCH_MEASUREMENT ?= 10
-MICROBENCH_SAMPLE_SIZE ?= 20
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
-PORT_MANIFEST ?= $(CURDIR)/port-manifest.toml
-PORT_MANIFEST_TOOL ?= $(CURDIR)/tools/port-manifest/port_manifest.py
-PORT_MANIFEST_UPSTREAM_REF ?= $(shell git -C "$(RIVE_RUNTIME_DIR)" rev-parse HEAD 2>/dev/null)
-RUNTIME_DRAWING_PORT_TOOL ?= $(CURDIR)/tools/runtime-drawing-port/check.py
-RUNTIME_DRAWING_OWNERSHIP ?= $(CURDIR)/docs/runtime-drawing-ownership.toml
-RUNTIME_DRAWING_GAPS ?= $(CURDIR)/docs/runtime-drawing-gaps.toml
 METAL_PORT_TOOL ?= $(CURDIR)/tools/metal-port/check.py
 METAL_PORT_MANIFEST ?= $(CURDIR)/docs/metal-port-manifest.toml
 METAL_PORT_OWNERSHIP ?= $(CURDIR)/docs/metal-port-ownership.toml
@@ -59,40 +43,12 @@ BACKEND_PORT_TRANSLATION_TOOL ?= $(CURDIR)/tools/backend-port/check_translation.
 BACKEND_PORT_SOURCE_REVIEW_TOOL ?= $(CURDIR)/tools/backend-port/check_source_review.py
 BACKEND_PORT_OWNERSHIP_REVIEW_TOOL ?= $(CURDIR)/tools/backend-port/check_ownership_review.py
 BACKEND_PORT_SHADER_AUTHORITY_TOOL ?= $(CURDIR)/tools/backend-port/build_shader_authority_translations.py
-RUNTIME_FRAME_LOOP_PORT_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check.py
-TEST_CORRESPONDENCE_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check_test_correspondence.py
-LAYOUT_STYLE_HANDLER_TOOL ?= $(CURDIR)/tools/runtime-frame-loop-port/check_layout_style_handlers.py
-RUNTIME_FRAME_LOOP_OWNERSHIP ?= $(CURDIR)/docs/runtime-frame-loop-ownership.toml
-RUNTIME_FRAME_LOOP_GAPS ?= $(CURDIR)/docs/runtime-frame-loop-gaps.toml
-TEST_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/test-correspondence-manifest.toml
-RUNTIME_FRAME_LOOP_TRACE_DIR ?= $(CURDIR)/target/runtime-frame-loop-trace/$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
-RUNTIME_FRAME_LOOP_TRACE_EVIDENCE ?= $(CURDIR)/docs/runtime-frame-loop-trace.json
 SILVER_CORPUS_MANIFEST ?= $(CURDIR)/silver-corpus.toml
 SILVER_CORPUS_GENERATOR ?= $(CURDIR)/tools/silver-corpus/generate_manifest.py
 RUNTIME_DIFFERENTIAL_REPORT_TOOL ?= $(CURDIR)/tools/runtime-differentials/report.py
 RUNTIME_DIFFERENTIAL_REPORT_DIR ?= $(CURDIR)/target/runtime-differentials
 RUNTIME_DIFFERENTIAL_LOG_DIR ?= $(RUNTIME_DIFFERENTIAL_REPORT_DIR)/diagnostics
-FILE_CORRESPONDENCE_MANIFEST ?= $(CURDIR)/file-correspondence-manifest.toml
-RUST_ADDITIONS ?= $(CURDIR)/rust-additions.toml
-RUST_ATTRIBUTION_TOOL ?= $(CURDIR)/tools/b6-audit/rust_attribution.py
-RUNTIME_BEHAVIOR_INVENTORY_TOOL ?= $(CURDIR)/tools/runtime-behavior-inventory/behavior_inventory.py
-RUNTIME_BEHAVIOR_INVENTORY ?= $(CURDIR)/runtime-behavior-inventory.json
 PURE_RUNTIME_BOUNDARY_TOOL ?= $(CURDIR)/tools/pure-runtime-boundary/check.py
-PARITY_SCORECARD_TOOL ?= $(CURDIR)/tools/parity-scorecard/parity_scorecard.py
-PARITY_SCORECARD_DOC ?= $(CURDIR)/docs/parity-scorecard.md
-PARITY_OWNER_PROOF_DOC ?= $(CURDIR)/docs/parity-owner-proofs.json
-PARITY_SCORECARD_GENERATED_DOC ?= $(CURDIR)/target/parity-scorecard/generated-parity-scorecard.md
-PARITY_OWNER_PROOF_GENERATED_DOC ?= $(CURDIR)/target/parity-scorecard/generated-owner-proofs.json
-PARITY_SCORECARD_EVIDENCE_DIR ?= $(CURDIR)/target/parity-scorecard/evidence
-PARITY_SCORECARD_JSON ?= $(CURDIR)/target/parity-scorecard/scorecard.json
-RUNTIME_DRIFT_QUEUE_TOOL ?= $(CURDIR)/tools/runtime-drift-queue/drift_queue.py
-RUNTIME_DRIFT_QUEUE_JSON ?= $(CURDIR)/docs/runtime-drift-queue.json
-RUNTIME_DRIFT_QUEUE_DOC ?= $(CURDIR)/docs/runtime-drift-queue.md
-PARITY_EVIDENCE_REGISTRY ?= $(CURDIR)/parity-evidence-proofs.json
-PARITY_EVIDENCE_REGISTRY_TOOL ?= $(CURDIR)/tools/parity-evidence-freshness/bootstrap_registry.py
-PARITY_EVIDENCE_FRESHNESS_TOOL ?= $(CURDIR)/tools/parity-evidence-freshness/freshness.py
-PARITY_EVIDENCE_FRESHNESS_JSON ?= $(CURDIR)/target/parity-evidence-freshness/report.json
-PARITY_EVIDENCE_FRESHNESS_DOC ?= $(CURDIR)/target/parity-evidence-freshness/report.md
 CPP_CONFIG ?= debug
 RUST_PROFILE ?= debug
 RUST_GOLDEN_RUNNER_FLAGS = $(if $(filter release,$(RUST_PROFILE)),--release,)
@@ -276,20 +232,7 @@ test: fixtures
 # fixed. That masked two separate live failures in #272 alone. The `-check`
 # targets now stand alone, and the `-gate` targets run the tests and the check
 # in one pass through tools/report-all.sh, which reports every failure.
-.PHONY: port-manifest-generate port-manifest-test port-manifest-check port-manifest-gate rust-attribution-test rust-attribution-check rust-attribution-gate pure-runtime-boundary-test pure-runtime-boundary-check pure-runtime-boundary-gate
-port-manifest-generate:
-	python3 "$(PORT_MANIFEST_TOOL)" generate --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --output "$(PORT_MANIFEST)"
-
-port-manifest-test:
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/port-manifest -p 'test_*.py' -v
-
-port-manifest-check:
-	python3 "$(PORT_MANIFEST_TOOL)" check --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(PORT_MANIFEST_UPSTREAM_REF)" --repo-root "$(CURDIR)" --manifest "$(PORT_MANIFEST)"
-
-port-manifest-gate:
-	@tools/report-all.sh "port-manifest" \
-		"port-manifest tool unit tests" "$(MAKE) --no-print-directory port-manifest-test" \
-		"upstream C++ port manifest check" "$(MAKE) --no-print-directory port-manifest-check"
+.PHONY: pure-runtime-boundary-test pure-runtime-boundary-check pure-runtime-boundary-gate
 
 metal-port-test:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/metal-port -p 'test_*.py' -v
@@ -419,31 +362,6 @@ ore-metal-authenticated-gpu-canvas:
 renderer-native-metal-replay:
 	MACOSX_DEPLOYMENT_TARGET=12.0 CARGO_TARGET_DIR="$(RENDERER_METAL_CANDIDATE_BUILD_DIR)" cargo build --quiet --locked --release -p renderer-replay --no-default-features --features native-metal --bin renderer-replay
 
-rust-attribution-test:
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/b6-audit -p 'test_rust_attribution.py' -v
-
-rust-attribution-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUST_ATTRIBUTION_TOOL)" --repo-root "$(CURDIR)" --manifest "$(FILE_CORRESPONDENCE_MANIFEST)" --additions "$(RUST_ADDITIONS)"
-
-rust-attribution-gate:
-	@tools/report-all.sh "rust-attribution" \
-		"rust attribution tool unit tests" "$(MAKE) --no-print-directory rust-attribution-test" \
-		"rust attribution coverage check" "$(MAKE) --no-print-directory rust-attribution-check"
-
-runtime-behavior-inventory-test:
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-behavior-inventory -p 'test_*.py' -v
-
-runtime-behavior-inventory-snapshot:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_BEHAVIOR_INVENTORY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --snapshot "$(RUNTIME_BEHAVIOR_INVENTORY)" --write
-
-runtime-behavior-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_BEHAVIOR_INVENTORY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --snapshot "$(RUNTIME_BEHAVIOR_INVENTORY)"
-
-runtime-behavior-inventory:
-	@tools/report-all.sh "runtime-behavior-inventory" \
-		"runtime behavior inventory unit tests" "$(MAKE) --no-print-directory runtime-behavior-inventory-test" \
-		"C++ member/header and Rust item inventory check" "$(MAKE) --no-print-directory runtime-behavior-inventory-check"
-
 pure-runtime-boundary-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/pure-runtime-boundary -p 'test_*.py' -v
 
@@ -456,7 +374,7 @@ pure-runtime-boundary-gate:
 		"workspace dependency and source debt check" "$(MAKE) --no-print-directory pure-runtime-boundary-check"
 
 # --- Pinned upstream microbenchmark mirror ----------------------------------
-.PHONY: microbench-test microbench-check microbench-upstream-check microbench-gate microbench-extract microbench-build microbench-run microbench-compare
+.PHONY: microbench-test microbench-check microbench-upstream-check microbench-gate microbench-extract
 microbench-test:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/microbench -p 'test_*.py' -v
 
@@ -469,71 +387,11 @@ microbench-upstream-check:
 microbench-gate:
 	@tools/report-all.sh "upstream-microbenchmarks" \
 		"microbenchmark tool unit tests" "$(MAKE) --no-print-directory microbench-test" \
-		"20-case Rust registry and fixture hashes" "$(MAKE) --no-print-directory microbench-check" \
+		"20-case upstream inventory and fixture hashes" "$(MAKE) --no-print-directory microbench-check" \
 		"pinned upstream registry, sources, and fixture provenance" "$(MAKE) --no-print-directory microbench-upstream-check"
 
 microbench-extract:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" extract --upstream "$(RIVE_RUNTIME_DIR)"
-
-microbench-build:
-	cargo build -p nuxie-runtime --features upstream-microbenchmarks --bench upstream_microbenchmarks
-	cargo build -p nuxie-renderer --features upstream-microbenchmarks --bench upstream_microbenchmarks
-
-microbench-run:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" run --upstream "$(RIVE_RUNTIME_DIR)" --run-dir "$(MICROBENCH_RUN_DIR)" --duration "$(MICROBENCH_CPP_DURATION)" --warm-up "$(MICROBENCH_WARM_UP)" --measurement "$(MICROBENCH_MEASUREMENT)" --sample-size "$(MICROBENCH_SAMPLE_SIZE)"
-
-microbench-compare:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" compare --run-manifest "$(MICROBENCH_RUN_MANIFEST)" --output "$(MICROBENCH_REPORT)"
-
-b6-audit-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 tools/b6-audit/check.py
-
-runtime-drawing-port-test:
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-drawing-port -p 'test_*.py' -v
-
-runtime-drawing-port-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DRAWING_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_DRAWING_OWNERSHIP)" --gaps "$(RUNTIME_DRAWING_GAPS)"
-
-runtime-drawing-port-closed:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DRAWING_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_DRAWING_OWNERSHIP)" --gaps "$(RUNTIME_DRAWING_GAPS)" --require-closed
-
-runtime-drawing-port-gate:
-	@tools/report-all.sh "runtime-drawing-port" \
-		"runtime drawing port tool unit tests" "$(MAKE) --no-print-directory runtime-drawing-port-test" \
-		"runtime drawing port ledger check" "$(MAKE) --no-print-directory runtime-drawing-port-check"
-
-runtime-frame-loop-port-test:
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-frame-loop-port -p 'test_*.py' -v
-
-runtime-frame-loop-trace-runners:
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/runtime-frame-loop-port/build-trace-runners.sh
-
-runtime-frame-loop-trace: runtime-frame-loop-trace-runners
-	PYTHONDONTWRITEBYTECODE=1 python3 tools/runtime-frame-loop-port/capture_trace.py \
-		--repo-root "$(CURDIR)" \
-		--upstream "$(RIVE_RUNTIME_DIR)" \
-		--output-dir "$(RUNTIME_FRAME_LOOP_TRACE_DIR)" \
-		--output "$(RUNTIME_FRAME_LOOP_TRACE_EVIDENCE)"
-
-# The three correspondence checks below are independent verdicts over the same
-# ledger, so they run through report-all.sh rather than as a `set -e` chain
-# that would report only the first drift.
-runtime-frame-loop-port-check:
-	@tools/report-all.sh "runtime-frame-loop-port-check" \
-		"test correspondence" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(TEST_CORRESPONDENCE_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --manifest "$(TEST_CORRESPONDENCE_MANIFEST)"' \
-		"layout style handler" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(LAYOUT_STYLE_HANDLER_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"' \
-		"frame loop ownership ledger" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_FRAME_LOOP_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_FRAME_LOOP_OWNERSHIP)" --gaps "$(RUNTIME_FRAME_LOOP_GAPS)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"'
-
-runtime-frame-loop-port-closed:
-	@tools/report-all.sh "runtime-frame-loop-port-closed" \
-		"test correspondence" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(TEST_CORRESPONDENCE_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --manifest "$(TEST_CORRESPONDENCE_MANIFEST)"' \
-		"layout style handler" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(LAYOUT_STYLE_HANDLER_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)"' \
-		"frame loop ownership ledger (closed)" 'PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_FRAME_LOOP_PORT_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --ledger "$(RUNTIME_FRAME_LOOP_OWNERSHIP)" --gaps "$(RUNTIME_FRAME_LOOP_GAPS)" --file-manifest "$(FILE_CORRESPONDENCE_MANIFEST)" --require-closed'
-
-runtime-frame-loop-port-gate:
-	@tools/report-all.sh "runtime-frame-loop-port" \
-		"runtime frame loop port tool unit tests" "$(MAKE) --no-print-directory runtime-frame-loop-port-test" \
-		"runtime frame loop correspondence checks" "$(MAKE) --no-print-directory runtime-frame-loop-port-check"
 
 # --- Clippy lint gate (panic-freedom discipline) ------------------------------
 # The runtime crates opt into the panic-freedom clippy lints
@@ -548,7 +406,7 @@ runtime-frame-loop-port-gate:
 # nuxie-scripting. NOTE: `cargo clippy -- -D lint` is not used because trailing
 # flags leak to dependency crates; the per-crate lints tables scope correctly.
 LINT_GATE_DENY_CRATES = nuxie nuxie-schema
-LINT_GATE_WARN_CRATES = nuxie-audio nuxie-runtime nuxie-binary nuxie-graph nuxie-ore-metal nux-capi
+LINT_GATE_WARN_CRATES = nuxie-audio nuxie-runtime nuxie-binary nuxie-ore-metal nux-capi
 
 .PHONY: lint-gate
 lint-gate:
@@ -582,16 +440,14 @@ lint-gate:
 feature-compile-gate-portable:
 	@tools/report-all.sh "feature-compile-gate (portable)" \
 		"nuxie-runtime --features threading" "cargo check -p nuxie-runtime --features threading --lib --test work_pool" \
-		"nuxie-runtime --features tools" "cargo check -p nuxie-runtime --features tools --lib --test cpp_probe" \
+		"nuxie-runtime --features tools" "cargo check -p nuxie-runtime --features tools --lib --tests" \
 		"nuxie-ore-metal --features tools" "cargo test -p nuxie-ore-metal --features tools --lib" \
-		"nuxie-runtime upstream microbenchmarks" "cargo check -p nuxie-runtime --features upstream-microbenchmarks --bench upstream_microbenchmarks" \
 		"nuxie-renderer exact Vulkan" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-vulkan" \
 		"nuxie-renderer exact WebGPU" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-webgpu" \
 		"rust-golden-runner --features coverage-trace" "cargo check -p rust-golden-runner --features coverage-trace --all-targets" \
 		"nuxie-scripting --no-default-features" "cargo check -p nuxie-scripting --no-default-features --lib" \
 		"nuxie --no-default-features" "cargo check -p nuxie --no-default-features --lib" \
-		"riv-inspect --features inspect" "cargo check -p nuxie-binary --features inspect --bin riv-inspect" \
-		"graph-inspect --features inspect" "cargo check -p nuxie-graph --features inspect --bin graph-inspect"
+		"riv-inspect --features inspect" "cargo check -p nuxie-binary --features inspect --bin riv-inspect"
 
 feature-compile-gate-apple:
 	@tools/report-all.sh "feature-compile-gate (apple)" \
@@ -608,9 +464,6 @@ feature-compile-gate:
 
 inspect:
 	@cargo run --quiet -p nuxie-binary --features inspect --bin riv-inspect -- fixtures/graph/dependency_test.riv
-
-graph:
-	@cargo run --quiet -p nuxie-graph --features inspect --bin graph-inspect -- fixtures/graph/dependency_test.riv
 
 cpp-probe:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/cpp-probe/build.sh "$(CPP_CONFIG)"
@@ -667,7 +520,7 @@ rust-runner-provenance-test:
 golden-compare: fixtures golden-runner rust-golden-runner
 	@mkdir -p "$(RUNTIME_DIFFERENTIAL_LOG_DIR)"; \
 	log="$(RUNTIME_DIFFERENTIAL_LOG_DIR)/golden-ordinary.log"; \
-	set +e; GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" >"$$log" 2>&1; gate_rc=$$?; set -e; \
+	set +e; GOLDEN_RUNNER="$(GOLDEN_RUNNER)" RUST_GOLDEN_RUNNER="$(RUST_GOLDEN_RUNNER)" RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" cargo run --quiet -p golden-compare --bin golden-compare -- --corpus corpus.toml --side-channel --verify-divergent-rust --cpp-runner "$(GOLDEN_RUNNER)" --rust-runner "$(RUST_GOLDEN_RUNNER)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" >"$$log" 2>&1; gate_rc=$$?; set -e; \
 	cat "$$log"; report_rc=0; \
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DIFFERENTIAL_REPORT_TOOL)" golden --manifest corpus.toml --runtime-dir "$(RIVE_RUNTIME_DIR)" --repo-root "$(CURDIR)" --mode ordinary --cpp-ref "$(RIVE_RUNTIME_REF)" --rust-commit "$$(git rev-parse HEAD)" --runner "cpp=$(GOLDEN_RUNNER)" --runner "rust=$(RUST_GOLDEN_RUNNER)" --diagnostics "$$log" --gate-rc "$$gate_rc" --output "$(RUNTIME_DIFFERENTIAL_REPORT_DIR)/golden-ordinary.json" || report_rc=$$?; \
 	if [ "$$gate_rc" -ne 0 ]; then exit "$$gate_rc"; fi; exit "$$report_rc"
@@ -714,9 +567,6 @@ silver-corpus:
 		"runtime differential report tests" "$(MAKE) --no-print-directory runtime-differential-report-test" \
 		"silver corpus manifest check and validation" "$(MAKE) --no-print-directory silver-corpus-validate"
 
-# b6-audit-check is deliberately NOT a prerequisite here: it is an unrelated
-# policy check, and as a prerequisite an audit drift would stop the workspace
-# test floor from running at all. CI runs it as its own step.
 cpp-oracle-workspace-tests: fixtures golden-runner cpp-probe cpp-probe-scripted
 	@test -x "$(GOLDEN_RUNNER)" || { echo "missing executable pinned C++ golden runner: $(GOLDEN_RUNNER)" >&2; exit 2; }
 	@test -x "$(CPP_PROBE)" || { echo "missing executable pinned C++ probe: $(CPP_PROBE)" >&2; exit 2; }
@@ -971,64 +821,14 @@ nux-capi-distribution-plan:
 nux-capi-xcframeworks:
 	tools/build-nux-capi-xcframeworks.sh
 
-parity-scorecard-test:
-	@PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/parity-scorecard -p 'test_*.py' -v
-
-# The snapshot no longer hides behind the tool's unit tests: a red suite used
-# to stop the snapshot from being taken at all.
-parity-scorecard-snapshot: parity-evidence-freshness-report
-	@PYTHONDONTWRITEBYTECODE=1 python3 "$(PARITY_SCORECARD_TOOL)" snapshot --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --output "$(PARITY_SCORECARD_DOC)" --json "$(PARITY_OWNER_PROOF_DOC)" --freshness-report "$(PARITY_EVIDENCE_FRESHNESS_JSON)"
-
-parity-scorecard-check: parity-evidence-freshness-report
-	@PYTHONDONTWRITEBYTECODE=1 python3 "$(PARITY_SCORECARD_TOOL)" snapshot --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --output "$(PARITY_SCORECARD_GENERATED_DOC)" --json "$(PARITY_OWNER_PROOF_GENERATED_DOC)" --freshness-report "$(PARITY_EVIDENCE_FRESHNESS_JSON)" >/dev/null
-	@cmp "$(PARITY_SCORECARD_GENERATED_DOC)" "$(PARITY_SCORECARD_DOC)"
-	@cmp "$(PARITY_OWNER_PROOF_GENERATED_DOC)" "$(PARITY_OWNER_PROOF_DOC)"
-
-parity-scorecard:
-	@tools/report-all.sh "parity-scorecard" \
-		"parity scorecard tool unit tests" "$(MAKE) --no-print-directory parity-scorecard-test" \
-		"parity scorecard snapshot freshness" "$(MAKE) --no-print-directory parity-scorecard-check"
-
-runtime-drift-queue-test:
-	@PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/runtime-drift-queue -p 'test_*.py' -v
-
-runtime-drift-queue-snapshot:
-	@PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DRIFT_QUEUE_TOOL)" build --repo-root "$(CURDIR)" --output "$(RUNTIME_DRIFT_QUEUE_JSON)" --markdown-output "$(RUNTIME_DRIFT_QUEUE_DOC)"
-
-runtime-drift-queue-check:
-	@PYTHONDONTWRITEBYTECODE=1 python3 "$(RUNTIME_DRIFT_QUEUE_TOOL)" check --repo-root "$(CURDIR)" --json "$(RUNTIME_DRIFT_QUEUE_JSON)" --markdown "$(RUNTIME_DRIFT_QUEUE_DOC)"
-
-runtime-drift-queue:
-	@tools/report-all.sh "runtime-drift-queue" \
-		"runtime drift queue tool unit tests" "$(MAKE) --no-print-directory runtime-drift-queue-test" \
-		"runtime drift queue snapshot freshness" "$(MAKE) --no-print-directory runtime-drift-queue-check"
-
-parity-evidence-freshness-test:
-	@PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/parity-evidence-freshness -p 'test_*.py' -v
-
-parity-evidence-registry-check:
-	@PYTHONDONTWRITEBYTECODE=1 python3 "$(PARITY_EVIDENCE_REGISTRY_TOOL)" --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --output "$(PARITY_EVIDENCE_REGISTRY)" --check
-
-parity-evidence-freshness-report:
-	@PYTHONDONTWRITEBYTECODE=1 python3 "$(PARITY_EVIDENCE_FRESHNESS_TOOL)" report --repo-root "$(CURDIR)" --rive-runtime-dir "$(RIVE_RUNTIME_DIR)" --registry "$(PARITY_EVIDENCE_REGISTRY)" --output "$(PARITY_EVIDENCE_FRESHNESS_JSON)" --markdown-output "$(PARITY_EVIDENCE_FRESHNESS_DOC)"
-
-parity-evidence-freshness:
-	@tools/report-all.sh "parity-evidence-freshness" \
-		"parity evidence freshness unit tests" "$(MAKE) --no-print-directory parity-evidence-freshness-test" \
-		"parity evidence registry reproducibility" "$(MAKE) --no-print-directory parity-evidence-registry-check" \
-		"parity evidence changed-since-proof report" "$(MAKE) --no-print-directory parity-evidence-freshness-report"
-
 cpp-binary-compare: cpp-probe
 	RIVE_CPP_PROBE="$(CPP_PROBE)" RIVE_CPP_CORPUS=1 cargo test -p nuxie-binary --test cpp_import -- --nocapture
 	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-runtime --test profiler_cpp_probe -- --nocapture
 
-cpp-graph-compare: cpp-probe
-	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-graph --test cpp_probe -- --nocapture
-
 cpp-runtime-compare: cpp-probe
-	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-runtime --features tools --test cpp_probe -- --nocapture
+	RIVE_CPP_PROBE="$(CPP_PROBE)" cargo test -p nuxie-runtime --features tools --tests -- --nocapture
 
-cpp-compare: cpp-binary-compare cpp-graph-compare cpp-runtime-compare
+cpp-compare: cpp-binary-compare cpp-runtime-compare
 
 .PHONY: fuzz-build fuzz-smoke fuzz fuzz-regressions
 

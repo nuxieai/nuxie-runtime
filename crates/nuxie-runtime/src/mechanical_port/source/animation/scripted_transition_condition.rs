@@ -86,7 +86,21 @@ impl ScriptedTransitionCondition {
         property.with_mut(|property| {
             property.script_input_set_scripted_object(owner);
         });
-        self.properties.push(property);
+        if !self.properties.contains(&property) {
+            self.properties.push(property);
+        }
+    }
+
+    pub(crate) fn add_property_from_input(
+        &mut self,
+        property: CoreHandle,
+        input: &mut crate::mechanical_port::source::assets::script_asset::ScriptInput,
+    ) {
+        input.attach_to_container(
+            CoreObject::core(self).handle(),
+            property,
+            &mut self.properties,
+        );
     }
 
     pub fn remove_property(&mut self, property: &CoreHandle) {

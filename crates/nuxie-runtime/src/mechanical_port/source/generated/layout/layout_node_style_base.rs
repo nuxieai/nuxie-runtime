@@ -52,7 +52,7 @@ impl LayoutNodeStyleBase {
             return;
         }
         callbacks.width_changed();
-        callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+        LayoutNodeStyleBaseCallbacks::notify_property_changed(callbacks, Self::WIDTH_PROPERTY_KEY);
     }
 
     pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
@@ -70,7 +70,7 @@ impl LayoutNodeStyleBase {
             return;
         }
         callbacks.height_changed();
-        callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+        LayoutNodeStyleBaseCallbacks::notify_property_changed(callbacks, Self::HEIGHT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
@@ -92,7 +92,10 @@ impl LayoutNodeStyleBase {
             return;
         }
         callbacks.fractional_width_changed();
-        callbacks.notify_property_changed(Self::FRACTIONAL_WIDTH_PROPERTY_KEY);
+        LayoutNodeStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FRACTIONAL_WIDTH_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_fractional_width_value(&mut self, value: f32) -> bool {
@@ -114,7 +117,10 @@ impl LayoutNodeStyleBase {
             return;
         }
         callbacks.fractional_height_changed();
-        callbacks.notify_property_changed(Self::FRACTIONAL_HEIGHT_PROPERTY_KEY);
+        LayoutNodeStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FRACTIONAL_HEIGHT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_fractional_height_value(&mut self, value: f32) -> bool {

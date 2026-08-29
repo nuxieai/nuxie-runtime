@@ -10,7 +10,7 @@ pub trait StateMachineListenerSingleBaseCallbacks: crate::mechanical_port::sourc
     fn event_id_changed(&mut self) {}
     fn view_model_path_ids_changed(&mut self) {}
     fn decode_view_model_path_ids(&mut self, value: &[u8]);
-    fn copy_view_model_path_ids(&mut self, object: &StateMachineListenerSingleBase);
+    fn copy_view_model_path_ids(&mut self, object: &StateMachineListenerSingle);
 }
 
 pub struct StateMachineListenerSingleBase {
@@ -53,7 +53,10 @@ impl StateMachineListenerSingleBase {
             return;
         }
         callbacks.listener_type_value_changed();
-        callbacks.notify_property_changed(Self::LISTENER_TYPE_VALUE_PROPERTY_KEY);
+        StateMachineListenerSingleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::LISTENER_TYPE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_listener_type_value_value(&mut self, value: u32) -> bool {
@@ -75,7 +78,10 @@ impl StateMachineListenerSingleBase {
             return;
         }
         callbacks.event_id_changed();
-        callbacks.notify_property_changed(Self::EVENT_ID_PROPERTY_KEY);
+        StateMachineListenerSingleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::EVENT_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_event_id_value(&mut self, value: u32) -> bool {
@@ -85,23 +91,22 @@ impl StateMachineListenerSingleBase {
         self.event_id = value;
         true
     }
-    pub fn clone_into(
-        &self,
-        callbacks: &mut impl StateMachineListenerSingleBaseCallbacks,
-    ) -> StateMachineListenerSingle {
+    pub fn clone_into(source: &StateMachineListenerSingle) -> StateMachineListenerSingle {
         let mut cloned = StateMachineListenerSingle::default();
-        cloned.base.copy(self, callbacks);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(source, &mut cloned);
+        cloned.base = base;
         cloned
     }
     pub fn copy(
         &mut self,
-        object: &Self,
+        object: &StateMachineListenerSingle,
         callbacks: &mut impl StateMachineListenerSingleBaseCallbacks,
     ) {
-        self.listener_type_value = object.listener_type_value;
-        self.event_id = object.event_id;
+        self.listener_type_value = object.base.listener_type_value;
+        self.event_id = object.base.event_id;
         callbacks.copy_view_model_path_ids(object);
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base.base, callbacks);
     }
     pub fn deserialize(
         &mut self,

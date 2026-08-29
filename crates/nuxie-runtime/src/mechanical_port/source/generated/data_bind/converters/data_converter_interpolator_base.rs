@@ -52,7 +52,10 @@ impl DataConverterInterpolatorBase {
             return;
         }
         callbacks.interpolation_type_changed();
-        callbacks.notify_property_changed(Self::INTERPOLATION_TYPE_PROPERTY_KEY);
+        DataConverterInterpolatorBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INTERPOLATION_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_interpolation_type_value(&mut self, value: u32) -> bool {
@@ -74,7 +77,10 @@ impl DataConverterInterpolatorBase {
             return;
         }
         callbacks.interpolator_id_changed();
-        callbacks.notify_property_changed(Self::INTERPOLATOR_ID_PROPERTY_KEY);
+        DataConverterInterpolatorBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INTERPOLATOR_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_interpolator_id_value(&mut self, value: u32) -> bool {
@@ -96,7 +102,10 @@ impl DataConverterInterpolatorBase {
             return;
         }
         callbacks.duration_changed();
-        callbacks.notify_property_changed(Self::DURATION_PROPERTY_KEY);
+        DataConverterInterpolatorBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DURATION_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_duration_value(&mut self, value: f32) -> bool {
@@ -122,7 +131,7 @@ impl DataConverterInterpolatorBase {
         self.interpolation_type = object.interpolation_type;
         self.interpolator_id = object.interpolator_id;
         self.duration = object.duration;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,

@@ -1,7 +1,14 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use nuxie::{AudioEngine, AudioSource, File};
+use nuxie::runtime::{
+    assets::audio_asset::AudioAsset, audio::audio_engine::AudioEngine as NativeAudioEngine,
+    audio_event::AudioEvent,
+};
+use nuxie::{
+    AudioEngine, AudioSource, File, PersistentFactory, RuntimeFactoryHandle, RuntimeFileHandle,
+};
+use nuxie_render_api::SerializingFactory;
 
 fn pinned_fixture(relative: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -20,27 +27,29 @@ fn pinned_wav_source() -> Arc<AudioSource> {
     )
 }
 
-fn assert_named_audio_artboard(name: &str, expected_events: usize, expected_has_audio: bool) {
-    let file = File::import(&pinned_fixture("sound2.riv")).expect("sound2.riv imports");
-    let mut artboard = file
-        .artboard_named(name)
-        .unwrap_or_else(|| panic!("missing {name} artboard"))
-        .instantiate()
-        .unwrap_or_else(|error| panic!("instantiate {name}: {error:#}"));
-    artboard.set_audio_engine(Some(
-        AudioEngine::new(2, 44_100).expect("audio engine initializes"),
-    ));
-    assert_eq!(direct_audio_event_count(&artboard), expected_events);
-    assert_eq!(artboard.has_audio(), expected_has_audio);
+fn import(relative: &str) -> RuntimeFileHandle {
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    File::import(&pinned_fixture(relative), factory, None, None, None)
+        .unwrap_or_else(|| panic!("{relative} imports"))
 }
 
-fn direct_audio_event_count(instance: &nuxie::ArtboardInstance<'_>) -> usize {
-    instance
-        .raw()
-        .components()
-        .iter()
-        .filter(|component| component.type_name == "AudioEvent")
-        .count()
+fn assert_named_audio_artboard(name: &str, expected_events: usize, expected_has_audio: bool) {
+    let file = import("sound2.riv");
+    let artboard = file
+        .with_file(|file| file.artboard_named(name))
+        .unwrap_or_else(|| panic!("missing {name} artboard"));
+    let engine = NativeAudioEngine::make(2, 44_100).expect("audio engine initializes");
+    artboard.with_artboard_mut(|artboard| artboard.set_audio_engine(Some(engine)));
+    assert_eq!(direct_audio_event_count(&artboard), expected_events);
+    assert_eq!(
+        artboard.with_artboard_mut(|artboard| artboard.has_audio()),
+        expected_has_audio
+    );
+}
+
+fn direct_audio_event_count(instance: &nuxie::RuntimeArtboardInstanceHandle) -> usize {
+    instance.with_artboard(|artboard| artboard.count::<AudioEvent>())
 }
 
 #[test]
@@ -96,40 +105,33 @@ fn upstream_audio_case_02_source_reader_levels_and_playback() {
 
 #[test]
 fn upstream_audio_case_03_file_with_audio_loads_correctly() {
-    let file = File::import(&pinned_fixture("sound.riv")).expect("sound.riv imports");
+    let file = import("sound.riv");
     let artboard = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
+        .with_file(|file| file.artboard_default())
         .expect("default artboard instance");
-    let events = artboard
-        .raw()
-        .components()
-        .iter()
-        .filter(|component| component.type_name == "AudioEvent")
-        .collect::<Vec<_>>();
+    let events = artboard.with_artboard(|artboard| artboard.find_all_handles::<AudioEvent>());
     assert_eq!(events.len(), 1);
-
-    let event_slot = artboard
-        .raw()
-        .slot(events[0].local_id)
-        .expect("AudioEvent instance slot");
-    let event = file
-        .runtime()
-        .object(event_slot.source_global_id as usize)
-        .expect("AudioEvent runtime object");
-    let dense_asset_ordinal = event.uint_property("assetId").expect("AudioEvent asset");
+    let dense_asset_ordinal = events[0]
+        .with_downcast::<AudioEvent, _>(AudioEvent::asset_id)
+        .expect("AudioEvent asset");
     let asset = file
-        .runtime()
-        .file_asset(dense_asset_ordinal as usize)
+        .with_file(|file| file.asset(dense_asset_ordinal as usize))
         .expect("AudioAsset runtime object");
     let semantic_asset_id = asset
-        .uint_property("assetId")
+        .with(|asset| {
+            asset
+                .as_file_asset()
+                .map(|asset| asset.file_asset_base().asset_id())
+        })
+        .flatten()
         .expect("AudioAsset semantic id");
     assert!(
-        file.audio_asset_source(semantic_asset_id as u32).is_some(),
+        asset
+            .with_downcast::<AudioAsset, _>(AudioAsset::has_audio_source)
+            .unwrap_or(false),
         "the imported AudioEvent asset has a decoded audio source"
     );
+    assert_ne!(semantic_asset_id, 0);
 }
 
 #[test]

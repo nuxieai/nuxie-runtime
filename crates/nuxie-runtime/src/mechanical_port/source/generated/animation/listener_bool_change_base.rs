@@ -40,7 +40,10 @@ impl ListenerBoolChangeBase {
             return;
         }
         callbacks.value_changed();
-        callbacks.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+        ListenerBoolChangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_value_value(&mut self, value: u32) -> bool {

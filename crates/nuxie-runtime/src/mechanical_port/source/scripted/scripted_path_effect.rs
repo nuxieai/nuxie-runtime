@@ -76,7 +76,7 @@ impl ScriptedPathEffect {
                 let Some(parent) = parent.as_effects_container_mut() else {
                     return StatusCode::InvalidObject;
                 };
-                parent.add_stroke_effect(this);
+                parent.add_stroke_effect(this, self);
                 StatusCode::Ok
             })
             .unwrap_or(StatusCode::InvalidObject)
@@ -107,6 +107,14 @@ impl ScriptedPathEffect {
             self.properties.push(property);
         }
     }
+    pub(crate) fn add_property_from_input(
+        &mut self,
+        property: CoreHandle,
+        input: &mut crate::mechanical_port::source::assets::script_asset::ScriptInput,
+    ) {
+        input.attach_to_container(self.base.handle(), property, &mut self.properties);
+    }
+
     pub fn remove_property(&mut self, property: &CoreHandle) {
         if let Some(index) = self.properties.iter().position(|item| item == property) {
             self.properties.remove(index);

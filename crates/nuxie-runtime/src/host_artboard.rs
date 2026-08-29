@@ -89,7 +89,7 @@ impl ArtboardInstance {
     pub fn artboard_bounds(&self) -> (f32, f32, f32, f32) {
         self.native.with_artboard(|artboard| {
             let bounds = artboard.base.bounds();
-            (bounds.left, bounds.top, bounds.width(), bounds.height())
+            (bounds.left(), bounds.top(), bounds.width(), bounds.height())
         })
     }
     pub fn bounds(&self) -> Aabb {
@@ -284,23 +284,6 @@ impl ArtboardInstance {
     }
     pub fn draw(&self, renderer: &mut dyn Renderer) {
         self.native.draw(renderer);
-    }
-    pub fn validate_renderer_factory(
-        &self,
-        factory: &mut dyn nuxie_render_api::Factory,
-    ) -> Result<()> {
-        let candidate = factory
-            .persistent_context()
-            .context("renderer factory must retain a persistent context")?;
-        let current = self
-            .native
-            .with_artboard(|a| a.base.factory())
-            .context("Artboard has no renderer factory")?;
-        ensure!(
-            candidate.identity() == current.persistent_context().identity(),
-            "Artboard was imported with a different renderer factory"
-        );
-        Ok(())
     }
     pub fn audio_engine(
         &self,

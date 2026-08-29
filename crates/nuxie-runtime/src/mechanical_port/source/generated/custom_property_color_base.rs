@@ -43,7 +43,10 @@ impl CustomPropertyColorBase {
             return;
         }
         c.property_value_changed();
-        c.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+        CustomPropertyColorBaseCallbacks::notify_property_changed(
+            c,
+            Self::PROPERTY_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_property_value_value(&mut self, value: i32) -> bool {

@@ -27,7 +27,9 @@ impl ViewModelPropertyListBase {
     }
     pub fn clone_into(&self) -> ViewModelPropertyList {
         let mut cloned = ViewModelPropertyList::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

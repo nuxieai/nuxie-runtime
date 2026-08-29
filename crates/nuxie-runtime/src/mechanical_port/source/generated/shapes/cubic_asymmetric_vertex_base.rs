@@ -54,7 +54,10 @@ impl CubicAsymmetricVertexBase {
             return;
         }
         callbacks.rotation_changed();
-        callbacks.notify_property_changed(Self::ROTATION_PROPERTY_KEY);
+        CubicAsymmetricVertexBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ROTATION_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_rotation_value(&mut self, value: f32) -> bool {
@@ -76,7 +79,10 @@ impl CubicAsymmetricVertexBase {
             return;
         }
         callbacks.in_distance_changed();
-        callbacks.notify_property_changed(Self::IN_DISTANCE_PROPERTY_KEY);
+        CubicAsymmetricVertexBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::IN_DISTANCE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_in_distance_value(&mut self, value: f32) -> bool {
@@ -98,7 +104,10 @@ impl CubicAsymmetricVertexBase {
             return;
         }
         callbacks.out_distance_changed();
-        callbacks.notify_property_changed(Self::OUT_DISTANCE_PROPERTY_KEY);
+        CubicAsymmetricVertexBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OUT_DISTANCE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_out_distance_value(&mut self, value: f32) -> bool {

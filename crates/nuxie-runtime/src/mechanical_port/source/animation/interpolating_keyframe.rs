@@ -1,10 +1,12 @@
 use crate::mechanical_port::source::{
-    core::CoreHandle, generated::animation::interpolating_keyframe_base::InterpolatingKeyFrameBase,
+    core::CoreHandle,
+    core_context::CoreContext,
+    generated::animation::{
+        interpolating_keyframe_base::InterpolatingKeyFrameBase,
+        keyframe_interpolator_base::KeyFrameInterpolatorBase,
+    },
     status_code::StatusCode,
 };
-pub trait InterpolatingKeyFrameContext {
-    fn resolve_interpolator(&self, id: u32) -> Option<CoreHandle>;
-}
 pub trait KeyFrameValueContext {
     fn bool_value(&self, keyframe: &CoreHandle) -> Option<bool>;
     fn string_value(&self, keyframe: &CoreHandle) -> Option<String>;
@@ -34,11 +36,14 @@ impl InterpolatingKeyFrame {
     pub fn interpolator(&self) -> Option<CoreHandle> {
         self.interpolator.clone()
     }
-    pub fn on_added_dirty(&mut self, context: &dyn InterpolatingKeyFrameContext) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         if self.base.interpolator_id() != u32::MAX {
-            let Some(value) = context.resolve_interpolator(self.base.interpolator_id()) else {
+            let Some(value) = context.resolve(self.base.interpolator_id()) else {
                 return StatusCode::MissingObject;
             };
+            if !value.is_type_of(KeyFrameInterpolatorBase::TYPE_KEY) {
+                return StatusCode::MissingObject;
+            }
             self.interpolator = Some(value);
         }
         StatusCode::Ok

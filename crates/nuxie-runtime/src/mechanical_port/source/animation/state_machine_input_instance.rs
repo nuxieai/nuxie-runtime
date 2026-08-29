@@ -2,6 +2,11 @@ use crate::mechanical_port::source::animation::state_machine_instance::{
     RuntimeStateMachineInstanceWeakHandle, RuntimeStateMachineLayerInstanceWeakHandle,
 };
 use std::{cell::Cell, rc::Rc};
+#[cfg(feature = "tools")]
+type InputChangedCallback =
+    Rc<std::cell::RefCell<Box<dyn FnMut(RuntimeStateMachineInstanceWeakHandle, u64)>>>;
+#[cfg(feature = "tools")]
+pub(crate) type InputChangedCallbackSlot = Rc<std::cell::RefCell<Option<InputChangedCallback>>>;
 pub trait StateMachineInputDefinition {
     fn core_type(&self) -> u16;
     fn name(&self) -> &str;
@@ -17,6 +22,8 @@ pub struct InputInstanceNotifier {
     needs_advance: Rc<Cell<bool>>,
     #[cfg(feature = "tools")]
     machine: Option<RuntimeStateMachineInstanceWeakHandle>,
+    #[cfg(feature = "tools")]
+    callback: InputChangedCallbackSlot,
 }
 impl InputInstanceNotifier {
     pub fn new(needs_advance: Rc<Cell<bool>>) -> Self {
@@ -24,20 +31,45 @@ impl InputInstanceNotifier {
             needs_advance,
             #[cfg(feature = "tools")]
             machine: None,
+            #[cfg(feature = "tools")]
+            callback: Default::default(),
         }
     }
     #[cfg(feature = "tools")]
-    pub fn set_machine(&mut self, machine: RuntimeStateMachineInstanceWeakHandle) {
+    pub(crate) fn set_machine(
+        &mut self,
+        machine: RuntimeStateMachineInstanceWeakHandle,
+        callback: InputChangedCallbackSlot,
+    ) {
         self.machine = Some(machine);
+        self.callback = callback;
     }
     fn value_changed(&self, index: u64) {
         self.needs_advance.set(true);
         #[cfg(feature = "tools")]
         if let Some(machine) = self.machine.as_ref() {
-            machine.with_instance_mut(|machine| machine.input_changed(index));
+            // SMIInput::valueChanged reads the owning machine's callback field,
+            // not its execution state. Share that actual field so a listener
+            // can notify while it is already executing with &mut machine.
+            let callback = self.callback.borrow().clone();
+            if let Some(callback) = callback {
+                callback.borrow_mut()(machine.clone(), index);
+            }
         }
     }
 }
+
+pub(crate) struct InputValueChangeNotification {
+    notifier: InputInstanceNotifier,
+    index: u64,
+}
+
+impl InputValueChangeNotification {
+    pub(crate) fn notify(self) {
+        self.notifier.value_changed(self.index);
+    }
+}
+
 pub struct SMIInput {
     notifier: InputInstanceNotifier,
     input_name: String,
@@ -65,12 +97,18 @@ impl SMIInput {
     pub(crate) fn set_index(&mut self, index: u64) {
         self.index = index;
     }
-    fn value_changed(&mut self) {
+    fn value_change_notification(&self) -> InputValueChangeNotification {
         #[cfg(not(feature = "tools"))]
         let index = 0;
         #[cfg(feature = "tools")]
         let index = self.index;
-        self.notifier.value_changed(index);
+        InputValueChangeNotification {
+            notifier: self.notifier.clone(),
+            index,
+        }
+    }
+    fn value_changed(&mut self) {
+        self.value_change_notification().notify();
     }
 }
 pub struct SMIBool {
@@ -88,9 +126,19 @@ impl SMIBool {
         self.value
     }
     pub fn set_value(&mut self, value: bool) {
+        if let Some(notification) = self.set_value_capture_notification(value) {
+            notification.notify();
+        }
+    }
+    pub(crate) fn set_value_capture_notification(
+        &mut self,
+        value: bool,
+    ) -> Option<InputValueChangeNotification> {
         if self.value != value {
             self.value = value;
-            self.base.value_changed();
+            Some(self.base.value_change_notification())
+        } else {
+            None
         }
     }
 }
@@ -109,9 +157,19 @@ impl SMINumber {
         self.value
     }
     pub fn set_value(&mut self, value: f32) {
+        if let Some(notification) = self.set_value_capture_notification(value) {
+            notification.notify();
+        }
+    }
+    pub(crate) fn set_value_capture_notification(
+        &mut self,
+        value: f32,
+    ) -> Option<InputValueChangeNotification> {
         if self.value != value {
             self.value = value;
-            self.base.value_changed();
+            Some(self.base.value_change_notification())
+        } else {
+            None
         }
     }
 }

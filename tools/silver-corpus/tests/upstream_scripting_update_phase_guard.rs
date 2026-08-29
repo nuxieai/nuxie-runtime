@@ -1,11 +1,13 @@
-//! Exact live-owner port of pinned
-//! `tests/unit_tests/runtime/scripting/scripting_update_phase_guard_test.cpp#1`.
+//! Live-owner ports of the three pinned
+//! `tests/unit_tests/runtime/scripting/scripting_update_phase_guard_test.cpp` cases.
 
 use std::path::PathBuf;
 
-use nuxie::{File, PersistentFactory};
-use nuxie_render_api::RecordingFactory;
-use nuxie_runtime::{ComponentDirt, ScriptMethod};
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::source::scripted::scripted_object::{ScriptedObject, UPDATES_BIT};
+use nuxie_runtime::{
+    ComponentDirt, CoreHandle, File, RuntimeFactoryHandle, RuntimeScriptingVmHandle, ScriptMethod,
+};
 use nuxie_scripting::vm::ScriptVm;
 
 const UPDATE_SCRIPT: &str = r#"
@@ -65,24 +67,35 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
 }
 
-fn with_production_update_owner(test: impl FnOnce(&mut nuxie::ArtboardInstance<'_>, usize, u32)) {
-    // Rust does not expose an abstract ScriptedDrawable constructor. Retain a
-    // concrete production occurrence from a pinned scripted fixture and attach
-    // the exact literal test program to that owner.
-    let file = File::import(&pinned_fixture("viewmodel_access.riv"))
-        .expect("viewmodel_access.riv imports");
-    let artboard = file.default_artboard().expect("default artboard");
-    let component = artboard
-        .graph()
-        .components
-        .iter()
-        .find(|component| component.type_name == "ScriptedDrawable")
-        .expect("fixture owns a concrete ScriptedDrawable");
-    let local_id = component.local_id;
-    let global_id = component.global_id;
-    let mut artboard = artboard
-        .instantiate()
-        .expect("default artboard instantiates");
+fn with_production_update_owner(test: impl FnOnce(&CoreHandle)) {
+    // Retain a production occurrence from the pinned fixture so these preserved
+    // tests observe actual Component dirt instead of the C++ test subclass's
+    // counting stub. Install the same literal test program on that owner.
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &pinned_fixture("viewmodel_access.riv"),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("viewmodel_access.riv imports");
+    let artboard = file
+        .with_file(|file| file.artboard_default())
+        .expect("default artboard");
+    let owner = artboard.with_artboard(|artboard| {
+        artboard
+            .objects()
+            .iter()
+            .flatten()
+            .find(|owner| {
+                owner
+                    .with(|owner| owner.as_scripted_drawable().is_some())
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .expect("fixture owns a concrete ScriptedDrawable")
+    });
 
     let wrapped = format!(
         "local generator = (function()\n{UPDATE_SCRIPT}\nend)()\n\
@@ -97,7 +110,6 @@ fn with_production_update_owner(test: impl FnOnce(&mut nuxie::ArtboardInstance<'
     payload.push(0);
     payload.extend(bytecode);
     let vm = ScriptVm::new();
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
     let program = vm
         .register_protocol_script_with_factory("update-phase-guard", &payload, &mut factory)
         .expect("literal update program registers");
@@ -109,52 +121,74 @@ fn with_production_update_owner(test: impl FnOnce(&mut nuxie::ArtboardInstance<'
             .has_method(ScriptMethod::Update)
             .expect("method lookup")
     );
-    artboard
-        .raw_mut()
-        .set_script_instance_for_global(global_id, script);
-    test(&mut artboard, local_id, global_id);
+    owner.with_mut(|owner| {
+        let scripted = owner.as_scripted_object_mut().expect("ScriptedObject base");
+        scripted.install_script_instance(script, RuntimeScriptingVmHandle::new(Box::new(vm)));
+        scripted.set_implemented_methods(scripted.implemented_methods() | UPDATES_BIT);
+        assert!(scripted.updates());
+    });
+    test(&owner);
+    // Keep the defining file, artboard occurrence and factory alive through
+    // the real callback and teardown; there is no late runtime attachment.
+}
+
+fn in_update_phase(owner: &CoreHandle) -> bool {
+    owner
+        .with(|owner| owner.as_scripted_object().unwrap().in_update_phase())
+        .unwrap()
+}
+
+fn has_update_dirt(owner: &CoreHandle) -> bool {
+    owner
+        .with(|owner| {
+            owner
+                .as_component()
+                .unwrap()
+                .dirt()
+                .contains(ComponentDirt::SCRIPT_UPDATE)
+        })
+        .unwrap()
+}
+
+fn clear_dirt(owner: &CoreHandle) {
+    owner.with_mut(|owner| {
+        owner
+            .as_component_mut()
+            .unwrap()
+            .set_dirt(ComponentDirt::NONE)
+    });
+}
+
+fn mark_needs_update(owner: &CoreHandle) {
+    owner.with_mut(|owner| {
+        owner
+            .as_scripted_drawable_mut()
+            .unwrap()
+            .mark_needs_update()
+    });
 }
 
 #[test]
 fn mark_needs_update_is_ignored_during_script_update() {
-    with_production_update_owner(|artboard, local_id, global_id| {
+    with_production_update_owner(|owner| {
         assert!(
-            artboard.raw_mut().mark_script_update_for_global(global_id),
-            "the production owner starts outside its update phase",
+            !in_update_phase(owner),
+            "the production owner starts outside its update phase"
         );
-        artboard.raw_mut().clear_component_dirt(local_id);
-        assert_eq!(
-            artboard
-                .raw()
-                .debug_script_in_update_phase_for_global(global_id),
-            Some(false),
-        );
+        mark_needs_update(owner);
+        assert!(has_update_dirt(owner));
+        clear_dirt(owner);
+        assert!(!in_update_phase(owner));
+        ScriptedObject::script_update_occurrence(owner);
+        assert!(!in_update_phase(owner));
         assert!(
-            artboard
-                .raw_mut()
-                .update_script_instances()
-                .expect("scriptUpdate")
-        );
-        assert_eq!(
-            artboard
-                .raw()
-                .debug_script_in_update_phase_for_global(global_id),
-            Some(false),
-        );
-        assert!(
-            !artboard
-                .raw()
-                .debug_component_dirt(local_id)
-                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
+            !has_update_dirt(owner),
             "Context.markNeedsUpdate is suppressed by the production owner's update phase",
         );
 
-        assert!(artboard.raw_mut().mark_script_update_for_global(global_id));
+        mark_needs_update(owner);
         assert!(
-            artboard
-                .raw()
-                .debug_component_dirt(local_id)
-                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
+            has_update_dirt(owner),
             "outside scriptUpdate the same live owner accepts ScriptUpdate dirt",
         );
     });
@@ -162,9 +196,11 @@ fn mark_needs_update_is_ignored_during_script_update() {
 
 #[test]
 fn in_update_phase_defaults_to_false() {
-    with_production_update_owner(|artboard, _local_id, global_id| {
+    with_production_update_owner(|owner| {
+        assert!(!in_update_phase(owner));
+        mark_needs_update(owner);
         assert!(
-            artboard.raw_mut().mark_script_update_for_global(global_id),
+            has_update_dirt(owner),
             "the production owner's default phase accepts ScriptUpdate dirt",
         );
     });
@@ -172,27 +208,14 @@ fn in_update_phase_defaults_to_false() {
 
 #[test]
 fn mark_needs_update_works_outside_update_phase() {
-    with_production_update_owner(|artboard, local_id, global_id| {
-        artboard.raw_mut().clear_component_dirt(local_id);
+    with_production_update_owner(|owner| {
+        clear_dirt(owner);
+        assert!(!has_update_dirt(owner));
+        mark_needs_update(owner);
+        assert!(has_update_dirt(owner));
+        mark_needs_update(owner);
         assert!(
-            !artboard
-                .raw()
-                .debug_component_dirt(local_id)
-                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
-        );
-        assert!(artboard.raw_mut().mark_script_update_for_global(global_id));
-        assert!(
-            artboard
-                .raw()
-                .debug_component_dirt(local_id)
-                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
-        );
-        assert!(artboard.raw_mut().mark_script_update_for_global(global_id));
-        assert!(
-            artboard
-                .raw()
-                .debug_component_dirt(local_id)
-                .is_some_and(|dirt| dirt.contains(ComponentDirt::SCRIPT_UPDATE)),
+            has_update_dirt(owner),
             "the second outside-phase request still reaches the live production owner",
         );
     });

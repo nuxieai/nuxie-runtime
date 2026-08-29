@@ -20,6 +20,16 @@ use crate::mechanical_port::source::{
 pub enum TrimPathMode {
     Sequential = 1,
     Synchronized = 2,
+    Unknown(u8),
+}
+impl From<u32> for TrimPathMode {
+    fn from(value: u32) -> Self {
+        match value as u8 {
+            1 => Self::Sequential,
+            2 => Self::Synchronized,
+            value => Self::Unknown(value),
+        }
+    }
 }
 pub struct TrimEffectPath {
     path: Rc<RefCell<ShapePaintPath>>,
@@ -45,6 +55,23 @@ impl EffectPath for TrimEffectPath {
         Some(self)
     }
 }
+impl std::ops::Deref for TrimPath {
+    type Target = TrimPathBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TrimPath {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TrimPath {
+    pub const TYPE_KEY: u16 = TrimPathBase::TYPE_KEY;
+}
+
 pub struct TrimPath {
     pub base: TrimPathBase,
     stroke: StrokeEffectState,
@@ -69,8 +96,9 @@ impl TrimPath {
             .with_mut(|parent| {
                 parent
                     .as_effects_container_mut()
-                    .map(|container| container.add_stroke_effect(this))
+                    .map(|container| container.add_stroke_effect(this, self))
             })
+            .flatten()
             .is_some();
         if !added {
             return StatusCode::InvalidObject;
@@ -78,26 +106,26 @@ impl TrimPath {
         StatusCode::Ok
     }
     fn trim_path(
-        &self,
+        base: &TrimPathBase,
         destination: &mut ShapePaintPath,
         contours: &mut Vec<Rc<ContourMeasure>>,
         source: &RawPath,
         paint_type: ShapePaintType,
     ) {
         let raw = destination.mutable_raw_path();
-        let render_offset = ((self.base.offset() % 1.0) + 1.0) % 1.0;
+        let render_offset = ((base.offset() % 1.0) + 1.0) % 1.0;
         let close_shape = paint_type == ShapePaintType::Fill;
         if contours.is_empty() {
-            let mut iter = ContourMeasureIter::new(source);
+            let mut iter = ContourMeasureIter::new(source, ContourMeasureIter::DEFAULT_TOLERANCE);
             while let Some(measure) = iter.next() {
                 contours.push(measure);
             }
         }
-        match self.mode() {
+        match TrimPathMode::from(base.mode_value()) {
             TrimPathMode::Sequential => {
                 let total: f32 = contours.iter().map(|c| c.length()).sum();
-                let mut start = total * (self.base.start() + render_offset);
-                let mut end = total * (self.base.end() + render_offset);
+                let mut start = total * (base.start() + render_offset);
+                let mut end = total * (base.end() + render_offset);
                 if end < start {
                     std::mem::swap(&mut start, &mut end);
                 }
@@ -156,8 +184,8 @@ impl TrimPath {
             TrimPathMode::Synchronized => {
                 for contour in contours.iter() {
                     let length = contour.length();
-                    let mut start = length * (self.base.start() + render_offset);
-                    let mut end = length * (self.base.end() + render_offset);
+                    let mut start = length * (base.start() + render_offset);
+                    let mut end = length * (base.end() + render_offset);
                     if end < start {
                         std::mem::swap(&mut start, &mut end);
                     }
@@ -171,13 +199,14 @@ impl TrimPath {
                         end -= length;
                         contour.get_segment(start, end, raw, !contour.is_closed());
                     }
-                    if (self.base.start() == 0.0 && self.base.end() == 1.0 && contour.is_closed())
+                    if (base.start() == 0.0 && base.end() == 1.0 && contour.is_closed())
                         || close_shape
                     {
                         raw.close();
                     }
                 }
             }
+            TrimPathMode::Unknown(_) => {}
         }
     }
     pub fn start_changed(&mut self) {
@@ -199,6 +228,7 @@ impl TrimPath {
         }
         match self.mode() {
             TrimPathMode::Sequential | TrimPathMode::Synchronized => StatusCode::Ok,
+            TrimPathMode::Unknown(_) => StatusCode::InvalidObject,
         }
     }
     pub fn update_effect(
@@ -222,7 +252,8 @@ impl TrimPath {
             .path
             .borrow_mut()
             .rewind_as(source.is_local(), source.fill_rule());
-        self.trim_path(
+        Self::trim_path(
+            &self.base,
             &mut effect.path.borrow_mut(),
             &mut effect.contours,
             source.raw_path(),

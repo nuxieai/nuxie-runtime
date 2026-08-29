@@ -5,10 +5,12 @@
 //! empty ViewModel string remains empty through encode, import, binding,
 //! shaping, and drawing without synthesizing placeholder glyphs.
 
-use std::sync::Arc;
-
 use anyhow::{Context, Result};
-use nuxie::{File, OwnedArtboardInstance, RecordingFactory};
+use nuxie::{
+    File, ImportResult, PersistentFactory, RecordingFactory, RuntimeFactoryHandle,
+    ViewModelInstanceRuntime,
+    runtime::{assets::font_asset::FontAsset, text::text_value_run::TextValueRun},
+};
 use nuxie_binary::{FixtureProperty, FixtureRecord, FixtureValue, read_runtime_file};
 
 fn fixture_font_bytes() -> Vec<u8> {
@@ -228,15 +230,25 @@ fn embedded_font_records(bytes: Vec<u8>) -> Vec<FixtureRecord> {
 #[test]
 fn embedded_font_import_uses_the_decoded_owner_as_validation_authority() {
     let valid = encode_fixture_records(&embedded_font_records(fixture_font_bytes()));
-    assert!(File::import(&valid).is_ok());
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    assert!(File::import(&valid, retained, None, None, None).is_some());
 
     let invalid = encode_fixture_records(&embedded_font_records(b"not a font".to_vec()));
-    let error = File::import(&invalid).expect_err("invalid embedded font must fail closed");
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let mut result = ImportResult::Malformed;
+    let invalid = File::import(&invalid, retained, Some(&mut result), None, None)
+        .expect("pinned importer permits unresolved assets");
+    assert_eq!(result, ImportResult::Success);
+    let invalid_font = invalid
+        .with_file(|file| file.asset(0))
+        .expect("invalid FontAsset owner remains observable");
     assert!(
-        error
-            .to_string()
-            .contains("embedded FontAsset bytes are not a valid font"),
-        "unexpected import error: {error:#}"
+        invalid_font
+            .with_downcast::<FontAsset, _>(FontAsset::font)
+            .flatten()
+            .is_none(),
+        "invalid embedded bytes must not produce a live Font"
     );
 }
 
@@ -284,38 +296,49 @@ fn empty_source_first_text_stays_empty_through_encode_import_bind_shape_and_draw
         std::fs::write(path, &bytes)?;
     }
 
-    let file = Arc::new(File::import(&bytes)?);
-    let mut instance = OwnedArtboardInstance::instantiate(file, 0)?;
-    let view_model = instance
-        .instantiate_view_model_instance(0)
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).context("retained factory")?;
+    let file = File::import(&bytes, retained, None, None, None).context("fixture imports")?;
+    let instance = file
+        .with_file(File::artboard)
+        .context("authored artboard")?;
+    let instance = nuxie::Artboard::instance_from_handle(&instance).context("artboard instance")?;
+    let view_model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(instance.core_handle())
+                .or_else(|| file.create_view_model_instance_for_artboard(instance.core_handle()))
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
         .context("imported default ViewModel instance")?;
     assert_eq!(
         view_model
-            .raw()
-            .string_value_by_property_name("value")
-            .as_deref(),
-        Some(&[][..]),
+            .property_string("value")
+            .context("value property")?
+            .value(),
+        "",
         "the imported ViewModel source must retain explicit empty"
     );
-    let _ = instance.bind_view_model(&view_model);
-    assert!(
-        instance.owned_view_model_context().is_some(),
-        "the imported source-first bind must retain the ViewModel context"
+    instance.bind_view_model_instance(Some(view_model.instance()));
+    assert!(instance.data_context().is_some());
+    instance.advance_default(0.0);
+
+    let run = instance
+        .with_artboard(|artboard| artboard.find_handle::<TextValueRun>("Evidence run"))
+        .context("live TextValueRun")?;
+    assert_eq!(
+        run.with_downcast::<TextValueRun, _>(|run| run.text().to_owned())
+            .as_deref(),
+        Some("")
     );
-    instance.advance(0.0);
+    assert_eq!(
+        run.with_downcast_mut::<TextValueRun, _>(TextValueRun::length),
+        Some(0)
+    );
 
-    let resolved = instance.raw_mut().semantic_text_with_bounds();
-    assert_eq!(resolved.len(), 1);
-    assert_eq!(resolved[0].value, "");
-    // Runtime local 1 is the Text record. Empty shaping retains only the
-    // insertion boundary; offset 1 would prove a synthesized character.
-    assert!(instance.raw_mut().text_caret(1, 0).is_some());
-    assert!(instance.raw_mut().text_caret(1, 1).is_none());
-
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
-    instance.draw(&mut factory, &mut renderer)?;
-    let draw = factory.canonical_recording();
+    let mut renderer = factory.borrow().make_renderer();
+    instance.draw(&mut renderer);
+    let draw = factory.borrow().canonical_recording();
     assert!(
         !draw.stream().contains("drawPath "),
         "an explicitly empty source-first text run emitted glyph paths:\n{}",

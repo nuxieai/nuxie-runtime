@@ -45,7 +45,10 @@ impl ViewModelPropertyEnumSystemBase {
             return;
         }
         callbacks.enum_type_changed();
-        callbacks.notify_property_changed(Self::ENUM_TYPE_PROPERTY_KEY);
+        ViewModelPropertyEnumSystemBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ENUM_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_enum_type_value(&mut self, value: u32) -> bool {

@@ -27,7 +27,9 @@ impl ListenerInputTypeTextBase {
     }
     pub fn clone_into(&self) -> ListenerInputTypeText {
         let mut cloned = ListenerInputTypeText::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

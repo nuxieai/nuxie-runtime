@@ -29,14 +29,14 @@ impl KeyFrame {
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
-        let Some(importer) = import_stack.latest::<KeyedPropertyImporter>(KeyedProperty::TYPE_KEY)
+        let Some(importer) = import_stack.latest::<KeyedPropertyImporter>(crate::mechanical_port::source::generated::animation::keyed_property_base::KeyedPropertyBase::TYPE_KEY)
         else {
             return StatusCode::MissingObject;
         };
         let Some(this) = self.base.base.handle() else {
             return StatusCode::MissingObject;
         };
-        importer.add_key_frame(this);
+        importer.add_key_frame(this, self);
         self.base.base.import(import_stack)
     }
 }

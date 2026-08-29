@@ -27,7 +27,9 @@ impl BindablePropertyViewModelBase {
     }
     pub fn clone_into(&self) -> BindablePropertyViewModel {
         let mut cloned = BindablePropertyViewModel::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

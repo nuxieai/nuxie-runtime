@@ -16,7 +16,7 @@ struct GlobalSlots {
 
 pub struct DataContext {
     parent: Option<RuntimeDataContextHandle>,
-    instances: Vec<CoreHandle>,
+    instances: Vec<Option<CoreHandle>>,
     dependent_containers: Vec<DataBindContainerDependent>,
     global_slots: Option<GlobalSlots>,
 }
@@ -56,13 +56,13 @@ impl DataContext {
     pub fn new(instance: Option<CoreHandle>) -> Self {
         Self {
             parent: None,
-            instances: instance.into_iter().collect(),
+            instances: instance.into_iter().map(Some).collect(),
             dependent_containers: Vec::new(),
             global_slots: None,
         }
     }
 
-    pub fn from_instances(instances: Vec<CoreHandle>) -> Self {
+    pub fn from_instances(instances: Vec<Option<CoreHandle>>) -> Self {
         Self {
             parent: None,
             instances,
@@ -71,7 +71,10 @@ impl DataContext {
         }
     }
 
-    fn attach_containers(&self, instance: &CoreHandle) {
+    fn attach_containers(&self, instance: &Option<CoreHandle>) {
+        let Some(instance) = instance else {
+            return;
+        };
         for container in &self.dependent_containers {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
@@ -88,7 +91,10 @@ impl DataContext {
         }
     }
 
-    fn detach_containers(&self, instance: &CoreHandle) {
+    fn detach_containers(&self, instance: &Option<CoreHandle>) {
+        let Some(instance) = instance else {
+            return;
+        };
         for container in &self.dependent_containers {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
@@ -142,7 +148,7 @@ impl DataContext {
             return;
         }
         self.dependent_containers.push(container.clone());
-        for instance in &self.instances {
+        for instance in self.instances.iter().flatten() {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
                     match &container {
@@ -159,7 +165,7 @@ impl DataContext {
     }
 
     fn remove_dependent_container_occurrence(&mut self, container: &DataBindContainerDependent) {
-        for instance in &self.instances {
+        for instance in self.instances.iter().flatten() {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
                     match container {
@@ -194,7 +200,7 @@ impl DataContext {
     }
 
     fn insert_instance_at(&mut self, index: usize, value: CoreHandle, slot_key: u32) {
-        self.instances.insert(index, value);
+        self.instances.insert(index, Some(value));
         if let Some(slots) = self.global_slots.as_mut() {
             slots.slot_keys.insert(index, slot_key);
         }
@@ -209,9 +215,9 @@ impl DataContext {
         }
     }
 
-    pub fn set_view_model_instance(&mut self, value: CoreHandle) {
+    pub fn set_view_model_instance(&mut self, value: Option<CoreHandle>) {
         if self.global_slots.is_some() {
-            self.set_main_view_model_instance(Some(value));
+            self.set_main_view_model_instance(value);
             return;
         }
         if self.instances.is_empty() {
@@ -239,7 +245,7 @@ impl DataContext {
             (0..self.instances.len()).find(|index| self.slot_key_at(*index) == slot_key)
         {
             self.detach_containers(&self.instances[index]);
-            self.instances[index] = value;
+            self.instances[index] = Some(value);
             self.global_slots.as_mut().unwrap().slot_keys[index] = slot_key;
             self.attach_containers(&self.instances[index]);
             return;
@@ -260,7 +266,7 @@ impl DataContext {
     pub fn instance_for_slot(&self, slot: u32) -> Option<CoreHandle> {
         (0..self.instances.len())
             .find(|index| self.slot_key_at(*index) == slot)
-            .map(|index| self.instances[index].clone())
+            .and_then(|index| self.instances[index].clone())
     }
 
     pub fn remove_main_view_model_instance(&mut self) {
@@ -284,11 +290,14 @@ impl DataContext {
     pub fn main_view_model_instance(&self) -> Option<CoreHandle> {
         (0..self.instances.len())
             .find(|index| self.slot_key_at(*index) == NO_SLOT)
-            .map(|index| self.instances[index].clone())
+            .and_then(|index| self.instances[index].clone())
     }
 
     pub fn advanced(&self) {
         for instance in &self.instances {
+            let instance = instance
+                .as_ref()
+                .expect("DataContext::advanced requires non-null view model entries");
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
                     instance.advanced();
@@ -397,7 +406,7 @@ impl DataContext {
         if path.is_empty() {
             return None;
         }
-        for instance in &self.instances {
+        for instance in self.instances.iter().flatten() {
             if let Some(value) = Self::try_property(instance.clone(), path) {
                 return Some(value);
             }
@@ -416,7 +425,7 @@ impl DataContext {
         if path.is_empty() {
             return None;
         }
-        for instance in &self.instances {
+        for instance in self.instances.iter().flatten() {
             if let Some(value) = Self::try_relative_property(instance.clone(), path, resolver) {
                 return Some(value);
             }
@@ -430,7 +439,7 @@ impl DataContext {
         if path.is_empty() {
             return None;
         }
-        for instance in &self.instances {
+        for instance in self.instances.iter().flatten() {
             if let Some(value) = Self::try_instance(instance.clone(), path) {
                 return Some(value);
             }
@@ -449,7 +458,7 @@ impl DataContext {
         if path.is_empty() {
             return None;
         }
-        for instance in &self.instances {
+        for instance in self.instances.iter().flatten() {
             if let Some(value) = Self::try_relative_instance(instance.clone(), path, resolver) {
                 return Some(value);
             }
@@ -502,7 +511,7 @@ impl DataContext {
         self.parent.clone()
     }
 
-    pub fn view_model_instances(&self) -> &[CoreHandle] {
+    pub fn view_model_instances(&self) -> &[Option<CoreHandle>] {
         &self.instances
     }
 

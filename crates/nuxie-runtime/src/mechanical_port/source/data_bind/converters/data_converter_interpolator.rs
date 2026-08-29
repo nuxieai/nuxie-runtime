@@ -108,10 +108,17 @@ impl InterpolatorAdvancer {
             } else {
                 self.is_smoothing = false
             }
-            let current_value = self.current_value.as_ref().unwrap();
-            current_value.copy_value(self.current_mut().from.as_deref_mut());
-            input.copy_value(self.current_mut().to.as_deref_mut());
-            self.current_mut().elapsed_seconds = 0.0
+            let current = if self.is_smoothing {
+                &mut self.animation_b
+            } else {
+                &mut self.animation_a
+            };
+            self.current_value
+                .as_ref()
+                .unwrap()
+                .copy_value(current.from.as_deref_mut());
+            input.copy_value(current.to.as_deref_mut());
+            current.elapsed_seconds = 0.0
         }
     }
     fn copy_current_value(&self, output: &mut dyn DataValue) {
@@ -151,10 +158,11 @@ impl Default for DataConverterInterpolator {
 impl DataConverterInterpolator {
     pub fn new(duration: f32) -> Self {
         let mut converter = Self::default();
-        converter.base.set_duration(
-            duration,
-            &mut DataConverterInterpolatorInitializationCallbacks,
-        );
+        if converter.base.set_duration_value(duration) {
+            DataConverterInterpolatorBaseCallbacks::duration_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterInterpolatorBase::DURATION_PROPERTY_KEY);
+        }
         converter
     }
     pub fn output_type(&self) -> DataType {
@@ -192,12 +200,20 @@ impl DataConverterInterpolator {
         if current_to_matches || elapsed == 0.0 {
             return false;
         }
+        // The C++ advancer keeps the selected animationData pointer across
+        // advanceAnimationData even when that call switches smoothing state.
+        let use_animation_b = self.advancer.is_smoothing;
         let previous = self.advancer.current().elapsed_seconds;
         self.advance_animation_data(elapsed);
         if previous < self.base.duration() {
             self.base.base.mark_converter_dirty();
         }
-        self.advancer.current().elapsed_seconds < self.base.duration()
+        let advanced = if use_animation_b {
+            &self.advancer.animation_b
+        } else {
+            &self.advancer.animation_a
+        };
+        advanced.elapsed_seconds < self.base.duration()
     }
     fn advance_animation_data(&mut self, elapsed: f32) {
         let use_animation_b = self.advancer.is_smoothing;
@@ -288,11 +304,10 @@ impl DataConverterInterpolator {
         self.advancer.reset()
     }
     pub fn copy(&mut self, other: &Self) {
-        self.interpolator = other.interpolator;
-        self.base.copy(
-            &other.base,
-            &mut DataConverterInterpolatorInitializationCallbacks,
-        )
+        self.interpolator = other.interpolator.clone();
+        let mut base = std::mem::take(&mut self.base);
+        base.copy(&other.base, self);
+        self.base = base;
     }
     pub fn duration_changed(&mut self) {
         self.base.base.mark_converter_dirty()
@@ -311,12 +326,6 @@ impl DataConverterInterpolatorBaseCallbacks for DataConverterInterpolator {
     fn duration_changed(&mut self) {
         Self::duration_changed(self);
     }
-}
-
-struct DataConverterInterpolatorInitializationCallbacks;
-
-impl DataConverterInterpolatorBaseCallbacks for DataConverterInterpolatorInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }
 
 impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability

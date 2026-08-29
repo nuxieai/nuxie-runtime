@@ -14,6 +14,15 @@ pub struct ViewModelInstanceArtboard {
 }
 
 impl ViewModelInstanceArtboard {
+    pub fn set_property_value(&mut self, value: u32) {
+        if self.base.set_property_value_value(value) {
+            self.property_value_changed();
+            crate::mechanical_port::source::core::CoreObject::core_mut(self)
+                .notify_property_changed(
+                    ViewModelInstanceArtboardBase::PROPERTY_VALUE_PROPERTY_KEY,
+                );
+        }
+    }
     pub(crate) fn restore_host_asset(
         &mut self,
         asset: Option<RuntimeBindableArtboardHandle>,
@@ -44,7 +53,7 @@ impl ViewModelInstanceArtboard {
     }
 
     pub fn set_asset(&mut self, value: Option<RuntimeBindableArtboardHandle>) {
-        self.base.set_property_value(u32::MAX);
+        self.set_property_value(u32::MAX);
         self.bindable_artboard = value;
         self.base.add_dirt(ComponentDirt::BINDINGS);
     }
@@ -62,7 +71,7 @@ impl ViewModelInstanceArtboard {
     }
 
     pub fn apply_value(&mut self, data_value: &DataValueInteger) {
-        self.base.set_property_value(data_value.value());
+        self.set_property_value(data_value.value());
     }
 
     pub fn advanced(&mut self) {

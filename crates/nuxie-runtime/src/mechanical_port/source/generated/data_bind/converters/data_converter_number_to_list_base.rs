@@ -44,7 +44,10 @@ impl DataConverterNumberToListBase {
             return;
         }
         callbacks.view_model_id_changed();
-        callbacks.notify_property_changed(Self::VIEW_MODEL_ID_PROPERTY_KEY);
+        DataConverterNumberToListBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VIEW_MODEL_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_view_model_id_value(&mut self, value: u32) -> bool {
@@ -68,7 +71,7 @@ impl DataConverterNumberToListBase {
         callbacks: &mut impl DataConverterNumberToListBaseCallbacks,
     ) {
         self.view_model_id = object.view_model_id;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,

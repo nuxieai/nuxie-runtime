@@ -58,8 +58,8 @@ where
 }
 pub struct BlendStateDirectInstance<K, T>
 where
-    K: BlendStateDefinition<T>,
-    T: BlendAnimationDirectDefinition,
+    K: BlendStateDefinition<T> + std::any::Any,
+    T: BlendAnimationDirectDefinition + std::any::Any,
 {
     pub base: BlendStateInstance<K, T>,
 }
@@ -87,19 +87,19 @@ where
                 });
             if blend_source == DirectBlendSource::MixValue as u32 {
                 let value = mix_value;
-                animation.mix((value / 100.0).clamp(0.0, 1.0));
+                animation.mix((value / 100.0).max(0.0).min(1.0));
             } else if blend_source == DirectBlendSource::DataBindId as u32 {
                 let Some(bindable_property) = bindable_property else {
                     continue;
                 };
                 if let Some(value) = machine.bindable_property_number_value(&bindable_property) {
-                    animation.mix((value / 100.0).clamp(0.0, 1.0));
+                    animation.mix((value / 100.0).max(0.0).min(1.0));
                 }
             } else {
                 let value = machine
                     .number_input_value(input_id)
                     .expect("inputId direct blends are validated as number inputs during import");
-                animation.mix((value / 100.0).clamp(0.0, 1.0));
+                animation.mix((value / 100.0).max(0.0).min(1.0));
             }
         }
     }

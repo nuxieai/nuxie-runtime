@@ -44,7 +44,10 @@ impl DataConverterRounderBase {
             return;
         }
         callbacks.decimals_changed();
-        callbacks.notify_property_changed(Self::DECIMALS_PROPERTY_KEY);
+        DataConverterRounderBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DECIMALS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_decimals_value(&mut self, value: u32) -> bool {
@@ -64,7 +67,7 @@ impl DataConverterRounderBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl DataConverterRounderBaseCallbacks) {
         self.decimals = object.decimals;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,

@@ -58,7 +58,7 @@ impl FeatherBase {
             return;
         }
         callbacks.space_value_changed();
-        callbacks.notify_property_changed(Self::SPACE_VALUE_PROPERTY_KEY);
+        FeatherBaseCallbacks::notify_property_changed(callbacks, Self::SPACE_VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_space_value_value(&mut self, value: u32) -> bool {
@@ -76,7 +76,7 @@ impl FeatherBase {
             return;
         }
         callbacks.strength_changed();
-        callbacks.notify_property_changed(Self::STRENGTH_PROPERTY_KEY);
+        FeatherBaseCallbacks::notify_property_changed(callbacks, Self::STRENGTH_PROPERTY_KEY);
     }
 
     pub(crate) fn set_strength_value(&mut self, value: f32) -> bool {
@@ -94,7 +94,7 @@ impl FeatherBase {
             return;
         }
         callbacks.offset_x_changed();
-        callbacks.notify_property_changed(Self::OFFSET_X_PROPERTY_KEY);
+        FeatherBaseCallbacks::notify_property_changed(callbacks, Self::OFFSET_X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_offset_x_value(&mut self, value: f32) -> bool {
@@ -112,7 +112,7 @@ impl FeatherBase {
             return;
         }
         callbacks.offset_y_changed();
-        callbacks.notify_property_changed(Self::OFFSET_Y_PROPERTY_KEY);
+        FeatherBaseCallbacks::notify_property_changed(callbacks, Self::OFFSET_Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_offset_y_value(&mut self, value: f32) -> bool {
@@ -130,7 +130,7 @@ impl FeatherBase {
             return;
         }
         callbacks.inner_changed();
-        callbacks.notify_property_changed(Self::INNER_PROPERTY_KEY);
+        FeatherBaseCallbacks::notify_property_changed(callbacks, Self::INNER_PROPERTY_KEY);
     }
 
     pub(crate) fn set_inner_value(&mut self, value: bool) -> bool {

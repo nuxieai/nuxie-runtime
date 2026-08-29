@@ -1,7 +1,6 @@
-use super::{glyph_lookup::GlyphLookup, text_value_run::TextValueRun};
+use super::{glyph_lookup::GlyphLookup, text::Text, text_value_run::TextValueRun};
 use crate::mechanical_port::source::{
     animation::cubic_interpolator_component::CubicInterpolatorComponent,
-    component::Component,
     core::CoreHandle,
     core_context::CoreContext,
     generated::text::text_modifier_range_base::TextModifierRangeBase,
@@ -168,6 +167,24 @@ impl RangeMapper {
         self.unit_character_indices.push(end);
     }
 }
+impl std::ops::Deref for TextModifierRange {
+    type Target = TextModifierRangeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextModifierRange {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextModifierRange {
+    pub const TYPE_KEY: u16 = TextModifierRangeBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct TextModifierRange {
     pub base: TextModifierRangeBase,
     mapper: RangeMapper,
@@ -184,10 +201,9 @@ impl TextModifierRange {
         if code != StatusCode::Ok {
             return code;
         }
-        if self.base.run_id() != crate::mechanical_port::source::core::EMPTY_ID {
+        if self.base.run_id() != crate::mechanical_port::source::core::Core::EMPTY_ID {
             let Some(run) = context.resolve(self.base.run_id()).filter(|run| {
-                run.with(|run| run.as_text_value_run().is_some())
-                    .unwrap_or(false)
+                run.is_type_of(crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBase::TYPE_KEY)
             }) else {
                 return StatusCode::MissingObject;
             };
@@ -209,14 +225,10 @@ impl TextModifierRange {
         }
         StatusCode::Ok
     }
-    pub fn add_child(&mut self, component: &mut Component) {
-        let Some(component) = component.handle() else {
-            return;
-        };
+    pub fn add_child(&mut self, component: CoreHandle) {
         self.base.add_child(component.clone());
         if component
-            .with_downcast::<CubicInterpolatorComponent, _>(|_| ())
-            .is_some()
+            .is_type_of(crate::mechanical_port::source::generated::animation::cubic_interpolator_component_base::CubicInterpolatorComponentBase::TYPE_KEY)
         {
             self.interpolator = Some(component);
         }
@@ -253,6 +265,7 @@ impl TextModifierRange {
     }
     pub fn compute_range(
         &mut self,
+        owner_text: &Text,
         text: &[u32],
         shape: &[Paragraph],
         lines: &[Vec<GlyphLine>],
@@ -266,7 +279,7 @@ impl TextModifierRange {
             if let Some((offset, length)) = run
                 .with_mut(|run| {
                     run.as_text_value_run_mut()
-                        .map(|run| (run.offset(), run.length()))
+                        .map(|run| (run.offset_with_borrowed_text(owner_text), run.length()))
                 })
                 .flatten()
             {
@@ -427,5 +440,30 @@ impl TextModifierRange {
     }
     pub fn needs_shape(&self) -> bool {
         self.units() == TextRangeUnits::Lines
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TextModifierRange;
+    use crate::mechanical_port::source::{
+        animation::cubic_interpolator_component::CubicInterpolatorComponent, component::Component,
+        core::CoreArena,
+    };
+
+    #[test]
+    fn specialized_child_dispatch_captures_cubic_interpolator() {
+        let arena = CoreArena::default();
+        let range = arena.insert(TextModifierRange::default());
+        let interpolator = arena.insert(CubicInterpolatorComponent::default());
+
+        assert!(Component::add_child_to_parent(&range, interpolator.clone()));
+
+        range
+            .with_downcast::<TextModifierRange, _>(|range| {
+                assert_eq!(range.interpolator.as_ref(), Some(&interpolator));
+                assert_eq!(range.base.children(), &[interpolator]);
+            })
+            .expect("live TextModifierRange");
     }
 }

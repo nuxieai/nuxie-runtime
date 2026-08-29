@@ -58,7 +58,7 @@ impl ViewModel {
                 property
                     .with(|property| {
                         property.as_view_model_property().is_some_and(|property| {
-                            property.base.symbol_type_value() == symbol_type as i32
+                            property.base.symbol_type_value() == symbol_type as u32
                         })
                     })
                     .unwrap_or(false)
@@ -66,15 +66,10 @@ impl ViewModel {
             .cloned()
     }
 
-    pub fn add_instance(&mut self, value: CoreHandle) {
-        if let Some(view_model) = self.handle() {
-            value.with_mut(|value| {
-                if let Some(value) = value.as_view_model_instance_mut() {
-                    value.view_model(view_model);
-                }
-            });
-        }
-        self.instances.push(value);
+    pub fn add_instance(&mut self, value: &mut super::viewmodel_instance::ViewModelInstance) {
+        self.instances
+            .push(value.handle().expect("ViewModel instances are arena-owned"));
+        value.view_model(self.handle().expect("ViewModel is arena-owned"));
     }
 
     pub fn instance_at(&self, index: usize) -> Option<CoreHandle> {
@@ -111,6 +106,19 @@ impl ViewModel {
             .flatten()
     }
 
+    pub fn create_instance_handle(owner: &CoreHandle) -> Option<CoreHandle> {
+        let file = owner.with_downcast::<Self, _>(Self::file_handle)?;
+        file.with_file_mut(|file| file.create_view_model_instance(owner.clone()))
+            .flatten()
+    }
+
+    pub fn create_from_instance_handle(owner: &CoreHandle, name: &str) -> Option<CoreHandle> {
+        let (file, model_name) = owner
+            .with_downcast::<Self, _>(|model| (model.file.clone(), model.base.name().to_owned()))?;
+        file.with_file(|file| file.create_view_model_instance_named(&model_name, name))
+            .flatten()
+    }
+
     pub fn create_from_instance(&mut self, instance_name: &str) -> Option<CoreHandle> {
         let name = self.base.name().to_owned();
         self.file
@@ -120,6 +128,10 @@ impl ViewModel {
 
     pub fn set_file(&mut self, file: RuntimeFileWeakHandle) {
         self.file = file;
+    }
+
+    pub(crate) fn file_handle(&self) -> RuntimeFileWeakHandle {
+        self.file.clone()
     }
 
     #[cfg(feature = "tools")]

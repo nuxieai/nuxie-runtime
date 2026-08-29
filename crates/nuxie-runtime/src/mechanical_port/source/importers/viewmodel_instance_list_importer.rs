@@ -1,8 +1,12 @@
 use std::any::Any;
 
 use crate::mechanical_port::source::{
-    core::CoreHandle, status_code::StatusCode,
-    viewmodel::viewmodel_instance_list::ViewModelInstanceList,
+    core::CoreHandle,
+    status_code::StatusCode,
+    viewmodel::{
+        viewmodel_instance_list::ViewModelInstanceList,
+        viewmodel_instance_list_item::ViewModelInstanceListItem,
+    },
 };
 
 use super::import_stack::ImportStackObject;
@@ -15,9 +19,11 @@ impl ViewModelInstanceListImporter {
     pub fn new(list: CoreHandle) -> Self {
         Self { list }
     }
-    pub fn add_item(&mut self, item: CoreHandle) {
+    pub fn add_item(&mut self, item: &ViewModelInstanceListItem) {
         self.list
-            .with_downcast_mut::<ViewModelInstanceList, _>(|list| list.internal_add_item(item))
+            .with_downcast_mut::<ViewModelInstanceList, _>(|list| {
+                list.internal_add_item_borrowed(item)
+            })
             .expect("ViewModelInstanceListImporter retains a ViewModelInstanceList");
     }
 }

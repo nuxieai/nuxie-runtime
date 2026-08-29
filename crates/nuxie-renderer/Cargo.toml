@@ -86,8 +86,6 @@ web-time = { version = "1.1.0", optional = true }
 web-sys = { version = "0.3", optional = true, features = ["Event", "EventTarget", "HtmlCanvasElement", "WebGl2RenderingContext"] }
 
 [dev-dependencies]
-nuxie-binary = { path = "../nuxie-binary" }
-nuxie-graph = { path = "../nuxie-graph" }
 nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-runtime = { path = "../nuxie-runtime" }
 

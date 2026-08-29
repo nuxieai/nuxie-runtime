@@ -35,6 +35,11 @@ impl RuntimeSemanticManagerHandle {
         Rc::ptr_eq(&self.0, &other.0)
     }
 
+    pub fn request_focus(&self, node_id: u32) -> bool {
+        let data = self.with_semantic_manager(|manager| manager.focus_data_for_node(node_id));
+        request_data_focus(data)
+    }
+
     pub fn downgrade(&self) -> RuntimeSemanticManagerWeakHandle {
         RuntimeSemanticManagerWeakHandle(Rc::downgrade(&self.0))
     }
@@ -81,7 +86,6 @@ pub struct SemanticManager {
     dirty_boundary_ids: HashSet<u32>,
     derived_labels: HashMap<u32, String>,
     excluded_ids: HashSet<u32>,
-    frame_number: u64,
 }
 impl Default for SemanticManager {
     fn default() -> Self {
@@ -98,7 +102,6 @@ impl Default for SemanticManager {
             dirty_boundary_ids: HashSet::new(),
             derived_labels: HashMap::new(),
             excluded_ids: HashSet::new(),
-            frame_number: 0,
         }
     }
 }
@@ -107,9 +110,6 @@ impl SemanticManager {
         Self::default()
     }
 
-    pub fn set_frame_number(&mut self, value: u64) {
-        self.frame_number = value;
-    }
     pub fn mark_dirty(&mut self, dirt: SemanticDirt) {
         self.dirt |= dirt;
     }
@@ -137,6 +137,50 @@ impl SemanticManager {
     pub fn mark_boundary_dirty(&mut self, id: u32) {
         self.dirty_boundary_ids.insert(id);
         self.mark_dirty(SemanticDirt::BOUNDS);
+    }
+    fn reconcile_bounds_for_subtree(&mut self, node: &SemanticNodeRef) {
+        use crate::mechanical_port::source::{
+            artboard::Artboard,
+            generated::component_base::ComponentBase,
+            semantic::{
+                semantic_provider::{root_transform_aabb, semantic_bounds},
+                semantic_snapshot::Bounds,
+            },
+        };
+        let (boundary, artboard, owner) = {
+            let node = node.borrow();
+            (
+                node.is_boundary_node,
+                node.boundary_artboard.clone(),
+                node.core_owner.clone(),
+            )
+        };
+        let bounds = if boundary {
+            artboard.and_then(|artboard| {
+                let rect = artboard.with_downcast::<Artboard, _>(|artboard| Bounds {
+                    min_x: 0.0,
+                    min_y: 0.0,
+                    max_x: artboard.width(),
+                    max_y: artboard.height(),
+                })?;
+                Some(root_transform_aabb(&artboard, rect))
+            })
+        } else {
+            owner
+                .filter(|owner| owner.is_type_of(ComponentBase::TYPE_KEY))
+                .map(|owner| semantic_bounds(Some(&owner)))
+        };
+        if let Some(bounds) = bounds {
+            let mut node = node.borrow_mut();
+            if node.bounds != bounds {
+                node.bounds = bounds;
+                self.dirty_bounds_nodes.insert(node.id);
+            }
+        }
+        let children = node.borrow().children.clone();
+        for child in children {
+            self.reconcile_bounds_for_subtree(&child);
+        }
     }
     fn ensure_node_id(&mut self, node: &mut SemanticNode) {
         if node.id == 0 {
@@ -451,7 +495,7 @@ impl SemanticManager {
     }
     fn patch_incremental(&mut self) -> SemanticsDiff {
         let mut d = SemanticsDiff {
-            frame_number: self.frame_number,
+            frame_number: crate::mechanical_port::source::artboard::Artboard::frame_id(),
             ..Default::default()
         };
         for entry in &mut self.last_flat_snapshot {
@@ -496,8 +540,19 @@ impl SemanticManager {
     }
     fn refresh(&mut self) {
         let structure = self.dirt.contains(SemanticDirt::STRUCTURE);
-        let bounds = self.dirt.contains(SemanticDirt::BOUNDS);
+        let mut bounds = self.dirt.contains(SemanticDirt::BOUNDS);
         let content = self.dirt.contains(SemanticDirt::CONTENT);
+        if !self.dirty_boundary_ids.is_empty() {
+            for id in self.dirty_boundary_ids.iter().copied().collect::<Vec<_>>() {
+                if let Some(node) = self.nodes_by_id.get(&id).cloned() {
+                    self.reconcile_bounds_for_subtree(&node);
+                }
+            }
+            self.dirty_boundary_ids.clear();
+            if !self.dirty_bounds_nodes.is_empty() {
+                bounds = true;
+            }
+        }
         if !structure && !bounds && !content {
             return;
         }
@@ -546,7 +601,7 @@ impl SemanticManager {
                 &flat,
                 &self.last_flat_snapshot,
                 self.version.wrapping_add(1),
-                self.frame_number,
+                crate::mechanical_port::source::artboard::Artboard::frame_id(),
             );
             if !diff.is_empty() {
                 self.version = self.version.wrapping_add(1);
@@ -568,7 +623,9 @@ impl SemanticManager {
     }
 
     fn nodes_in_visual_order(nodes: &[SemanticNodeRef]) -> bool {
-        let mut previous = None;
+        let mut previous: Option<
+            crate::mechanical_port::source::semantic::semantic_snapshot::Bounds,
+        > = None;
         for node in nodes {
             let bounds = node.borrow().bounds;
             if bounds.is_empty_or_nan() {
@@ -586,8 +643,27 @@ impl SemanticManager {
         }
         true
     }
+    fn focus_data_for_node(
+        &self,
+        node_id: u32,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.node_by_id(node_id)?.borrow().semantic_data.clone()
+    }
+
+    pub fn request_focus(&self, node_id: u32) -> bool {
+        request_data_focus(self.focus_data_for_node(node_id))
+    }
+
     pub fn drain_diff(&mut self) -> SemanticsDiff {
         self.refresh();
         std::mem::take(&mut self.last_diff)
     }
+}
+
+fn request_data_focus(data: Option<crate::mechanical_port::source::core::CoreHandle>) -> bool {
+    data.is_some_and(|data| {
+        crate::mechanical_port::source::semantic::semantic_data::SemanticData::request_focus_handle(
+            &data,
+        )
+    })
 }

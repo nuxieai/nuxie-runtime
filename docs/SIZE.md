@@ -7,11 +7,10 @@ the portable `nux-capi` ABI with the pure-Rust `nuxie-renderer` and vendored
 enabled.
 
 **Budget (decided 2026-07-21, user-approved): 9 MiB = 9,437,184 B,
-blocking for BOTH scripting variants.** `make size-report` fails when either
-link closure exceeds it, and `make parity-scorecard` validates the recorded
-evidence against `size.budget_bytes` in `parity-scorecard.toml`. A breach
-reopens the budget USER-GATE with fresh measurements — the constant is never
-silently raised.
+blocking for BOTH scripting variants.** `make size-report` is the authority and
+fails when either link closure exceeds the `BUDGET_BYTES` constant in
+`tools/size-report.sh`. A breach reopens the budget USER-GATE with fresh
+measurements — the constant is never silently raised.
 
 **Suspension (coordinator decision, 2026-07-30, user-directed): the hard
 gate above is suspended until the FL series (through FL-E) is complete.**
@@ -191,8 +190,8 @@ Mach-Os that contain neither wgpu nor runtime Naga/WGSL machinery.
 ## Budget status
 
 The budget decision is recorded at the top of this document: 9 MiB, blocking
-for both scripting variants, enforced by `make size-report` and validated by
-`make parity-scorecard` against `size.budget_bytes` in `parity-scorecard.toml`.
+for both scripting variants, enforced directly by `make size-report` and the
+canonical `BUDGET_BYTES` value in `tools/size-report.sh`.
 
 The renderer-excluded recommendation that preceded it (**≤2.75 MiB per
 architecture**, 3.0 MiB alert) tracked a different artifact and is historical;

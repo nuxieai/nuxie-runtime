@@ -9,6 +9,24 @@ use crate::mechanical_port::source::{
     },
     status_code::StatusCode,
 };
+impl std::ops::Deref for TextFollowPathModifier {
+    type Target = TextFollowPathModifierBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextFollowPathModifier {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextFollowPathModifier {
+    pub const TYPE_KEY: u16 = TextFollowPathModifierBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct TextFollowPathModifier {
     pub base: TextFollowPathModifierBase,
     world_path: RawPath,
@@ -37,9 +55,13 @@ impl TextFollowPathModifier {
         if let Some(target) = self.base.target() {
             target.with_mut(|target| {
                 if let Some(shape) = target.as_shape_mut() {
-                    shape.add_follow_path_flag();
+                    shape.add_flags(
+                        crate::mechanical_port::source::shapes::path_flags::PathFlags::FOLLOW_PATH,
+                    );
                 } else if let Some(path) = target.as_path_mut() {
-                    path.add_follow_path_flag();
+                    path.add_flags(
+                        crate::mechanical_port::source::shapes::path_flags::PathFlags::FOLLOW_PATH,
+                    );
                 }
             });
         }
@@ -51,16 +73,16 @@ impl TextFollowPathModifier {
             target.with(|target| {
                 if let Some(shape) = target.as_shape() {
                     for path in shape.paths() {
-                        path.with(|path| {
-                            if let Some(path) = path.as_path() {
-                                self.world_path
-                                    .add_path(path.raw_path(), Some(path.path_transform()));
+                        path.with(|owner| {
+                            if let Some(path) = owner.as_path() {
+                                let transform = crate::mechanical_port::source::shapes::path::Path::path_transform_for(owner);
+                                self.world_path.add_path(path.raw_path(), Some(&transform));
                             }
                         });
                     }
                 } else if let Some(path) = target.as_path() {
-                    self.world_path
-                        .add_path(path.raw_path(), Some(path.path_transform()));
+                    let transform = crate::mechanical_port::source::shapes::path::Path::path_transform_for(target);
+                    self.world_path.add_path(path.raw_path(), Some(&transform));
                 }
             });
         }
@@ -100,7 +122,7 @@ impl TextFollowPathModifier {
         self.local_path.rewind();
         self.local_path
             .add_path(&self.world_path, Some(inverse_text));
-        self.path_measure = PathMeasure::new(&self.local_path, 0.1);
+        self.path_measure = PathMeasure::from_path(&self.local_path, 0.1);
     }
     pub fn transform_glyph(
         &self,
@@ -121,24 +143,26 @@ impl TextFollowPathModifier {
         end += offset;
         let (position, tangent) = if (!can_wrap && position_on_path.x < 0.0) || start == end {
             let result = self.path_measure.at_percentage(start);
-            let tangent = result.tangent.normalized();
-            (result.position - tangent * (-position_on_path.x), tangent)
+            let tangent = result.tan.normalized();
+            (result.pos - tangent * (-position_on_path.x), tangent)
         } else if !can_wrap && position_on_path.x > valid_length {
             let result = self.path_measure.at_percentage(end);
-            let tangent = result.tangent.normalized();
+            let tangent = result.tan.normalized();
             (
-                result.position + tangent * (position_on_path.x - valid_length),
+                result.pos + tangent * (position_on_path.x - valid_length),
                 tangent,
             )
         } else {
             let result = self
                 .path_measure
                 .at_percentage(start + position_on_path.x / length);
-            (result.position, result.tangent.normalized())
+            (result.pos, result.tan.normalized())
         };
         let line = arg.line_index_in_paragraph;
         let last_baseline = if line > 0 {
-            arg.paragraph_lines[(line - 1) as usize].baseline
+            arg.paragraph_lines
+                .get((line - 1) as usize)
+                .map_or(0.0, |line| line.baseline)
         } else {
             0.0
         };
@@ -163,10 +187,10 @@ impl TextFollowPathModifier {
         };
         let t = self.base.strength().clamp(0.0, 1.0);
         let ti = 1.0 - t;
-        TransformComponents::from_xy_rotation(
-            translation.x * t + current.x() * ti,
-            translation.y * t + current.y() * ti,
-            rotation * t + current.rotation() * ti,
-        )
+        let mut result = TransformComponents::default();
+        result.set_x(translation.x * t + current.x() * ti);
+        result.set_y(translation.y * t + current.y() * ti);
+        result.set_rotation(rotation * t + current.rotation() * ti);
+        result
     }
 }

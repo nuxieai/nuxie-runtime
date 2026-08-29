@@ -3,17 +3,18 @@ use crate::mechanical_port::source::{
         draggable_constraint::DraggableProxy, scrolling::scroll_bar_constraint::ScrollBarConstraint,
     },
     core::CoreHandle,
+    drawable::RuntimeDrawableOccurrence,
     math::vec2d::Vec2D,
 };
 
 pub struct ThumbDraggableProxy {
     constraint: CoreHandle,
-    hittable: CoreHandle,
+    hittable: RuntimeDrawableOccurrence,
     last_position: Vec2D,
 }
 
 impl ThumbDraggableProxy {
-    pub fn new(constraint: CoreHandle, hittable: CoreHandle) -> Self {
+    pub fn new(constraint: CoreHandle, hittable: RuntimeDrawableOccurrence) -> Self {
         Self {
             constraint,
             hittable,
@@ -51,17 +52,17 @@ impl DraggableProxy for ThumbDraggableProxy {
             .expect("live ScrollBarConstraint occurrence");
         true
     }
-    fn hittable(&self) -> Option<CoreHandle> {
+    fn hittable(&self) -> Option<RuntimeDrawableOccurrence> {
         Some(self.hittable.clone())
     }
 }
 
 pub struct TrackDraggableProxy {
     constraint: CoreHandle,
-    hittable: CoreHandle,
+    hittable: RuntimeDrawableOccurrence,
 }
 impl TrackDraggableProxy {
-    pub fn new(constraint: CoreHandle, hittable: CoreHandle) -> Self {
+    pub fn new(constraint: CoreHandle, hittable: RuntimeDrawableOccurrence) -> Self {
         Self {
             constraint,
             hittable,
@@ -83,7 +84,7 @@ impl DraggableProxy for TrackDraggableProxy {
     fn end_drag(&mut self, _mouse_position: Vec2D, _time_stamp: f32) -> bool {
         true
     }
-    fn hittable(&self) -> Option<CoreHandle> {
+    fn hittable(&self) -> Option<RuntimeDrawableOccurrence> {
         Some(self.hittable.clone())
     }
 }

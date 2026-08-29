@@ -14,6 +14,19 @@ use crate::mechanical_port::source::{
     math::{aabb::Aabb, mat2d::Mat2D, n_slicer_helpers::NSlicerHelpers, vec2d::Vec2D},
 };
 
+impl std::ops::Deref for NSlicedNode {
+    type Target = NSlicedNodeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NSlicedNode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
 pub struct NSlicedNode {
     pub base: NSlicedNodeBase,
     details: NSlicerDetailsState,
@@ -30,31 +43,42 @@ impl NSlicedNode {
         }
     }
     fn mark_path_dirty_recursive(&mut self, send_to_layout: bool) {
-        self.base.add_dirt_recursive(ComponentDirt::N_SLICER);
+        self.base.add_dirt(ComponentDirt::N_SLICER, true);
         if send_to_layout {
             let mut parent = self.base.parent_handle();
             while let Some(owner) = parent {
-                let mut next = None;
-                let found = owner
-                    .with_mut(|component| {
-                        if let Some(layout) = component.as_layout_component_mut() {
-                            layout.mark_layout_node_dirty(false);
-                            true
-                        } else {
-                            next = component.component_parent_handle();
-                            false
-                        }
-                    })
-                    .unwrap_or(false);
-                if found {
+                if owner.is_type_of(
+                    crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
+                ) {
+                    crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(&owner, false);
                     break;
                 }
-                parent = next;
+                parent = owner
+                    .with(|component| component.component_parent_handle())
+                    .flatten();
             }
         }
     }
     pub fn width_changed(&mut self) {
         self.mark_path_dirty_recursive(true);
+    }
+    pub fn set_width(&mut self, value: f32) {
+        if self.base.set_width_value(value) {
+            self.width_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                NSlicedNodeBase::WIDTH_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_height(&mut self, value: f32) {
+        if self.base.set_height_value(value) {
+            self.height_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                NSlicedNodeBase::HEIGHT_PROPERTY_KEY,
+            );
+        }
     }
     pub fn height_changed(&mut self) {
         self.mark_path_dirty_recursive(true);
@@ -77,10 +101,11 @@ impl NSlicedNode {
     }
     fn update_map_world_point(&mut self) {
         let world = *self.base.world_transform();
-        let Some(inverse_world) = world.inverted() else {
+        let mut inverse_world = Mat2D::default();
+        if !world.invert(&mut inverse_world) {
             self.map_world_point = Box::new(|_point| {});
             return;
-        };
+        }
         if self.base.initial_height() <= 0.0 || self.base.initial_width() <= 0.0 {
             self.map_world_point = Box::new(|_point| {});
             return;
@@ -102,13 +127,13 @@ impl NSlicedNode {
                 if scale.x == 0.0 {
                     0.0
                 } else {
-                    NSlicerHelpers::map_value(&x_px_stops, &x_scale_info, resolved_width, local.x)
+                    NSlicerHelpers::map_value(&x_px_stops, x_scale_info, resolved_width, local.x)
                         * 1.0_f32.copysign(scale.x)
                 },
                 if scale.y == 0.0 {
                     0.0
                 } else {
-                    NSlicerHelpers::map_value(&y_px_stops, &y_scale_info, resolved_height, local.y)
+                    NSlicerHelpers::map_value(&y_px_stops, y_scale_info, resolved_height, local.y)
                         * 1.0_f32.copysign(scale.y)
                 },
             );
@@ -116,7 +141,7 @@ impl NSlicedNode {
         });
     }
     pub fn as_component(&mut self) -> &mut Component {
-        self.base.as_component_mut()
+        self
     }
     pub fn deform_world_render_path(&self, path: &mut RawPath) {
         NSlicerHelpers::deform_world_render_path_with_n_slicer(self, path);
@@ -172,8 +197,8 @@ impl NSlicedNode {
         _height_scale_type: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
-        self.base.set_width(size.x);
-        self.base.set_height(size.y);
+        self.set_width(size.x);
+        self.set_height(size.y);
         self.base.mark_world_transform_dirty();
         self.mark_path_dirty_recursive(false);
     }
@@ -221,7 +246,16 @@ fn axis_stops(axes: &[CoreHandle], size: f32, normalized_output: bool) -> Vec<f3
     stops
 }
 
+impl crate::mechanical_port::source::math::n_slicer_helpers::NSlicedNode for NSlicedNode {
+    fn map_world_point(&self, point: &mut Vec2D) {
+        (self.map_world_point)(point);
+    }
+}
+
 impl NSlicerDetails for NSlicedNode {
+    fn details_state_ref(&self) -> &NSlicerDetailsState {
+        &self.details
+    }
     fn details_state(&mut self) -> &mut NSlicerDetailsState {
         &mut self.details
     }

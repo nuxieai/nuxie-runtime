@@ -117,6 +117,14 @@ fn generate(options: Options) -> Result<()> {
         if previous.is_some_and(|entry| entry.semantic_side_channel_only) {
             output.push_str("semantic_side_channel_only = true\n");
         }
+        if let Some(signature) =
+            previous.and_then(|entry| entry.semantic_divergence_signature.as_ref())
+        {
+            output.push_str(&format!(
+                "semantic_divergence_signature = {}\n",
+                quoted(signature)
+            ));
+        }
         let samples = previous
             .map(|entry| entry.samples.clone())
             .unwrap_or_else(|| vec!["0.0".to_owned()]);
@@ -231,6 +239,7 @@ struct ExistingEntry {
     rust_execute_scripts: bool,
     semantic_default_view_model: bool,
     semantic_side_channel_only: bool,
+    semantic_divergence_signature: Option<String>,
     samples: Vec<String>,
     status: String,
     divergence_signature: Option<String>,
@@ -291,6 +300,9 @@ fn parse_existing(path: &Path) -> Result<BTreeMap<String, ExistingEntry>> {
             "rust_execute_scripts" => entry.rust_execute_scripts = parse_bool(value)?,
             "semantic_default_view_model" => entry.semantic_default_view_model = parse_bool(value)?,
             "semantic_side_channel_only" => entry.semantic_side_channel_only = parse_bool(value)?,
+            "semantic_divergence_signature" => {
+                entry.semantic_divergence_signature = Some(parse_string(value)?)
+            }
             "samples" => entry.samples = parse_array(value).unwrap_or_default(),
             "status" => entry.status = parse_string(value)?,
             "divergence_signature" => entry.divergence_signature = Some(parse_string(value)?),
@@ -512,6 +524,7 @@ samples = [0.0]
 status = "diverges"
 divergence_signature = "line 1: rust `text=#a` vs c++ `text=#b`" # real comment
 scripted_divergence_signature = "line 2: rust `path=#c` vs c++ `path=#d`"
+semantic_divergence_signature = "line 3: rust `semantics value=2` vs c++ `semantics value=1`"
 features = ["scripted-status:diverges"]
 "#,
         )
@@ -534,6 +547,10 @@ features = ["scripted-status:diverges"]
         assert_eq!(
             gap.scripted_divergence_signature.as_deref(),
             Some("line 2: rust `path=#c` vs c++ `path=#d`")
+        );
+        assert_eq!(
+            gap.semantic_divergence_signature.as_deref(),
+            Some("line 3: rust `semantics value=2` vs c++ `semantics value=1`")
         );
 
         std::fs::remove_dir_all(test_dir).ok();

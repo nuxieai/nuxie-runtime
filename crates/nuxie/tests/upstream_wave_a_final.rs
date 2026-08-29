@@ -1,16 +1,30 @@
 //! Final executable Wave A ports whose first review found empty or narrower evidence.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
-use nuxie::File;
+use nuxie::{
+    File, PersistentFactory, RuntimeFactoryHandle, RuntimeViewModelInstanceHandle,
+    ViewModelInstanceRuntime,
+};
 use nuxie_render_api::SerializingFactory;
+use nuxie_runtime::RuntimeBlobAsset;
+use silver_corpus::{compare_sriv, parse_sriv};
 
-fn pinned_bytes(name: &str) -> Vec<u8> {
+fn pinned(relative: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
-    std::fs::read(root.join("tests/unit_tests/assets").join(name))
-        .unwrap_or_else(|error| panic!("read pinned fixture {name}: {error}"))
+    let path = root.join("tests/unit_tests").join(relative);
+    std::fs::read(&path)
+        .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
+}
+
+fn compare_silver(name: &str, actual: &[u8]) {
+    let expected =
+        parse_sriv(&pinned(&format!("silvers/{name}.sriv"))).expect("pinned SRIV parses");
+    let actual = parse_sriv(actual).expect("Rust SRIV parses");
+    compare_sriv(&expected, &actual)
+        .unwrap_or_else(|difference| panic!("{name} differs: {difference}"));
 }
 
 fn close(actual: f32, expected: f32, margin: f32, label: &str) {
@@ -20,136 +34,162 @@ fn close(actual: f32, expected: f32, margin: f32, label: &str) {
     );
 }
 
-fn number(view_model: &nuxie::ViewModelInstance, name: &str) -> f32 {
+fn number(view_model: &RuntimeViewModelInstanceHandle, name: &str) -> f32 {
     view_model
-        .raw()
-        .number_value_by_property_name_path(name)
+        .property_number(name)
         .unwrap_or_else(|| panic!("computed number property {name}"))
+        .value()
 }
 
 #[test]
-#[ignore = "expected-red: live Image computedWidth/Height remains 0 instead of pinned initial 150"]
 fn image_computed_width_height_tracks_layout_resize_complete_port() {
-    let file = File::import(&pinned_bytes("image_computed_transform_bind.riv"))
-        .expect("import image computed transform fixture");
-    let mut artboard = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate default artboard");
-    let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = artboard
-        .instantiate_default_view_model_instance()
+    let mut silver = PersistentFactory::new(SerializingFactory::new());
+    let factory = RuntimeFactoryHandle::from_factory(&mut silver).expect("retained factory");
+    let file = File::import(
+        &pinned("assets/image_computed_transform_bind.riv"),
+        factory,
+        None,
+        None,
+        None,
+    )
+    .expect("import image computed transform fixture");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
+    silver.borrow_mut().frame_size(width as u32, height as u32);
+    let machine = artboard.state_machine_at(0).expect("state machine 0");
+    let view_model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
         .expect("default view-model instance");
-    let _ = artboard.bind_view_model(&view_model);
-    let _ = machine.bind_owned_view_model_handle(view_model.handle());
+    machine.with_instance_mut(|machine| {
+        machine.bind_view_model_instance(view_model.instance());
+    });
 
-    let mut silver = SerializingFactory::new();
-    let (width, height) = artboard.artboard_dimensions();
-    silver.frame_size(width as u32, height as u32);
-    let mut renderer = silver.make_renderer();
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.0,
-        &mut view_model,
-    );
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.016,
-        &mut view_model,
-    );
-    artboard
-        .draw(&mut silver, &mut renderer)
-        .expect("draw initial computed values frame");
+    let mut renderer = silver.borrow().make_renderer();
+    machine.advance_and_apply(0.0);
+    machine.advance_and_apply(0.016);
+    artboard.draw(&mut renderer);
 
-    close(number(&view_model, "img1Width"), 150.0, 5.0, "initial img1Width");
-    close(number(&view_model, "img1Height"), 150.0, 5.0, "initial img1Height");
-    close(number(&view_model, "img2Width"), 150.0, 5.0, "initial img2Width");
-    close(number(&view_model, "img2Height"), 150.0, 5.0, "initial img2Height");
+    close(
+        number(&view_model, "img1Width"),
+        150.0,
+        5.0,
+        "initial img1Width",
+    );
+    close(
+        number(&view_model, "img1Height"),
+        150.0,
+        5.0,
+        "initial img1Height",
+    );
+    close(
+        number(&view_model, "img2Width"),
+        150.0,
+        5.0,
+        "initial img2Width",
+    );
+    close(
+        number(&view_model, "img2Height"),
+        150.0,
+        5.0,
+        "initial img2Height",
+    );
 
     for _ in 0..(2.0_f32 / 0.032_f32) as usize {
-        silver.add_frame();
-        artboard.advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut machine),
-            0.032,
-            &mut view_model,
-        );
-        artboard
-            .draw(&mut silver, &mut renderer)
-            .expect("draw computed values animation frame");
+        silver.borrow_mut().add_frame();
+        machine.advance_and_apply(0.032);
+        artboard.draw(&mut renderer);
     }
 
-    close(number(&view_model, "img1Width"), 200.0, 0.01, "settled img1Width");
-    close(number(&view_model, "img1Height"), 200.0, 0.01, "settled img1Height");
-    close(number(&view_model, "img2Width"), 250.0, 0.01, "settled img2Width");
-    close(number(&view_model, "img2Height"), 250.0, 0.01, "settled img2Height");
-    assert!(silver.bytes().len() > 16, "translated silver stream is non-empty");
+    close(
+        number(&view_model, "img1Width"),
+        200.0,
+        0.01,
+        "settled img1Width",
+    );
+    close(
+        number(&view_model, "img1Height"),
+        200.0,
+        0.01,
+        "settled img1Height",
+    );
+    close(
+        number(&view_model, "img2Width"),
+        250.0,
+        0.01,
+        "settled img2Width",
+    );
+    close(
+        number(&view_model, "img2Height"),
+        250.0,
+        0.01,
+        "settled img2Height",
+    );
+    compare_silver("image_computed_transform_bind", &silver.borrow().bytes());
 }
 
 #[test]
-#[ignore = "expected-red: pinned SRIV comparator is not wired into nuxie integration tests"]
+#[ignore = "expected-red: data_bind_blob_test frame 0 op 24 expected makeRenderPaint, got save"]
 fn data_bind_blobs_internal_external_complete_action_flow() {
-    let file = File::import(&pinned_bytes("data_bind_blob_test.riv"))
-        .expect("import data-bind blob fixture");
-    let mut artboard = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate default artboard");
-    let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = artboard
-        .instantiate_default_view_model_instance()
-        .expect("default view-model instance");
-    let _ = artboard.bind_view_model(&view_model);
-    let _ = machine.bind_owned_view_model_handle(view_model.handle());
+    let mut silver = PersistentFactory::new(SerializingFactory::new());
+    let factory = RuntimeFactoryHandle::from_factory(&mut silver).expect("retained factory");
+    let file = File::import(
+        &pinned("assets/data_bind_blob_test.riv"),
+        factory,
+        None,
+        None,
+        None,
+    )
+    .expect("import data-bind blob fixture");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
+    silver.borrow_mut().frame_size(width as u32, height as u32);
+    let mut renderer = silver.borrow().make_renderer();
+    let machine = artboard.state_machine_at(0).expect("state machine 0");
+    let model_id = artboard.with_artboard(|artboard| artboard.view_model_id());
+    assert_ne!(model_id, u32::MAX);
+    let view_model = file
+        .with_file(|file| file.create_view_model_instance_at(model_id as usize, 0))
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
+        .expect("authored view-model instance 0");
+    let blob = view_model.property_blob("xml").expect("xml blob property");
+    machine.with_instance_mut(|machine| {
+        machine.bind_view_model_instance(view_model.instance());
+    });
 
-    let mut silver = SerializingFactory::new();
-    let (width, height) = artboard.artboard_dimensions();
-    silver.frame_size(width as u32, height as u32);
-    let mut renderer = silver.make_renderer();
-    for elapsed in [0.1, 0.1, 0.5, 0.5, 0.5, 0.5] {
-        if silver.bytes().len() > 16 {
-            silver.add_frame();
-        }
-        artboard.advance_with_state_machines_and_view_model(
-            std::slice::from_mut(&mut machine),
-            elapsed,
-            &mut view_model,
-        );
-        artboard
-            .draw(&mut silver, &mut renderer)
-            .expect("draw blob data-bind frame");
+    machine.advance_and_apply(0.1);
+    artboard.draw(&mut renderer);
+    silver.borrow_mut().add_frame();
+    machine.advance_and_apply(0.1);
+    artboard.draw(&mut renderer);
+    for _ in 0..(2.0_f32 / 0.5_f32) as usize {
+        silver.borrow_mut().add_frame();
+        machine.advance_and_apply(0.5);
+        artboard.draw(&mut renderer);
     }
 
-    let external = pinned_bytes("data_enum_roundtrip.rml");
-    let asset = std::sync::Arc::new(nuxie_runtime::RuntimeBlobAsset::new(
+    let external = pinned("assets/data_enum_roundtrip.rml");
+    let asset = Arc::new(RuntimeBlobAsset::new(
         "data_enum_roundtrip.rml",
-        std::sync::Arc::from(external.clone()),
+        Arc::from(external.clone().into_boxed_slice()),
     ));
-    assert!(
-        view_model
-            .raw_mut()
-            .set_live_blob_asset_by_property_name_path("xml", Some(asset.clone()))
-    );
-    let applied = view_model
-        .raw()
-        .blob_asset_value_by_property_name_path("xml")
-        .expect("xml blob property after external assignment");
-    assert!(
-        applied
-            .live_blob_asset()
-            .is_some_and(|current| std::sync::Arc::ptr_eq(current, &asset))
-    );
-    assert_eq!(applied.live_blob_bytes().map(<[u8]>::len), Some(external.len()));
-    silver.add_frame();
-    artboard.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut machine),
-        0.5,
-        &mut view_model,
-    );
-    artboard
-        .draw(&mut silver, &mut renderer)
-        .expect("draw external blob frame");
-    assert!(silver.bytes().len() > 16, "complete live action stream executed");
-    panic!("expected-red: pinned data_bind_blob_test SRIV comparator is unavailable");
+    blob.set_value(Some(asset.clone()));
+    let applied = blob
+        .testing_value()
+        .expect("xml blob after external assignment");
+    assert!(Arc::ptr_eq(&applied, &asset));
+    assert_eq!(applied.bytes().len(), external.len());
+    silver.borrow_mut().add_frame();
+    machine.advance_and_apply(0.5);
+    artboard.draw(&mut renderer);
+
+    compare_silver("data_bind_blob_test", &silver.borrow().bytes());
 }

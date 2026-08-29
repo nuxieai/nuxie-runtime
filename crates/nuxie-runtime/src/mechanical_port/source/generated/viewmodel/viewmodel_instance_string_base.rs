@@ -45,7 +45,10 @@ impl ViewModelInstanceStringBase {
             return;
         }
         callbacks.property_value_changed();
-        callbacks.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+        ViewModelInstanceStringBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PROPERTY_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_property_value_value(&mut self, value: String) -> bool {

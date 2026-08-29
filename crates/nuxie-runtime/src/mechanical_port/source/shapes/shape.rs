@@ -4,12 +4,14 @@ use crate::mechanical_port::source::{
     component::{Component, ComponentDirt, ComponentOccurrenceHandle, has_dirt},
     core::{Core, CoreHandle},
     core_context::CoreContext,
-    drawable::DrawableFlag,
-    generated::shapes::shape_base::ShapeBase,
+    drawable_flag::DrawableFlag,
+    generated::{core_registry::CoreCapabilities, shapes::shape_base::ShapeBase},
     hit_info::HitInfo,
     hittest_command_path::HitTestCommandPath,
     layout::{
-        LayoutDirection, LayoutMeasureMode, LayoutScaleType, layout_participant::LayoutParticipant,
+        layout_enums::{LayoutDirection, LayoutScaleType},
+        layout_measure_mode::LayoutMeasureMode,
+        layout_participant::LayoutParticipant,
     },
     math::{
         aabb::Aabb, contour_measure::ContourMeasureIter, mat2d::Mat2D, raw_path::RawPath,
@@ -17,7 +19,7 @@ use crate::mechanical_port::source::{
     },
     renderer::{RenderPath, Renderer},
     shapes::{
-        deformer::RenderPathDeformer,
+        deformer::render_path_deformer_from,
         paint::{shape_paint::ShapePaintPathKind, shape_paint_path::ShapePaintPath},
         parametric_path::ParametricPath,
         path::Path,
@@ -40,9 +42,6 @@ pub struct Shape {
 }
 
 impl Shape {
-    fn get_artboard(&self) -> &Artboard {
-        self.base.artboard()
-    }
     pub fn shape_world_transform(&self) -> &Mat2D {
         self.base.world_transform()
     }
@@ -81,16 +80,32 @@ impl Shape {
     }
 
     pub fn can_defer_path_update(&self) -> bool {
+        self.can_defer_path_update_with_active_path(None)
+    }
+    pub(crate) fn can_defer_path_update_with_active_path(
+        &self,
+        active_points_path: Option<(&CoreHandle, bool)>,
+    ) -> bool {
         let can_defer = self.base.render_opacity() == 0.0
             && !self.is_flagged(PathFlags::CLIPPING | PathFlags::NEVER_DEFER_UPDATE);
         if can_defer
             && self.base.dependents().iter().any(|d| {
-                d.authored()
-                    .and_then(|handle| {
-                        handle.with(|object| {
-                            object.as_points_path().is_some_and(|p| p.skin().is_some())
-                        })
-                    })
+                let Some(handle) = d.authored() else {
+                    return false;
+                };
+                if !handle.is_type_of(
+                    crate::mechanical_port::source::generated::shapes::points_path_base::PointsPathBase::TYPE_KEY,
+                ) {
+                    return false;
+                }
+                if let Some((active, has_skin)) = active_points_path {
+                    if active == handle {
+                        return has_skin;
+                    }
+                }
+                handle.with(|object| {
+                    object.as_points_path().expect("PointsPath type predicate").skin().is_some()
+                })
                     .unwrap_or(false)
             })
         {
@@ -123,8 +138,8 @@ impl Shape {
             let mut length = 0.0;
             for path in self.paths() {
                 length += path
-                    .with(|path| {
-                        let path = path.as_path()?;
+                    .with(|object| {
+                        let path = object.as_path()?;
                         let dirty = path.base.has_dirt(
                             ComponentDirt::PATH
                                 | ComponentDirt::WORLD_TRANSFORM
@@ -132,14 +147,18 @@ impl Shape {
                         );
                         let mut temporary = RawPath::default();
                         let base = if dirty {
-                            path.build_path(&mut temporary);
+                            path.build_path_from_shape(
+                                &mut temporary,
+                                Path::is_path_closed_for(object),
+                                self,
+                            );
                             &temporary
                         } else {
                             path.raw_path()
                         };
-                        let source = base.transform(path.path_transform());
+                        let source = base.transform(Path::path_transform_for(object));
                         let mut length = 0.0;
-                        let mut iter = ContourMeasureIter::new(&source);
+                        let mut iter = ContourMeasureIter::new(&source, 0.5);
                         while let Some(contour) = iter.next() {
                             length += contour.length();
                         }
@@ -162,8 +181,10 @@ impl Shape {
         self.world_length = -1.0;
         self.invalidate_intrinsic_bounds();
         for constraint in self.base.constraints().to_vec() {
-            constraint
-                .with_mut(|constraint| constraint.component_add_dirt(ComponentDirt::PATH, false));
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                constraint,
+            )
+            .add_dirt_from_shape(self, ComponentDirt::PATH, false);
         }
         self.paint_container.invalidate_stroke_effects();
     }
@@ -243,11 +264,11 @@ impl Shape {
         .round();
         let mut tester = HitTestCommandPath::new(area);
         for path in self.paths() {
-            path.with(|path| {
-                if let Some(path) = path.as_path()
+            path.with(|object| {
+                if let Some(path) = object.as_path()
                     && !path.base.is_collapsed()
                 {
-                    tester.set_xform(path.path_transform());
+                    tester.set_xform(Path::path_transform_for(object));
                     path.raw_path().add_to(&mut tester);
                 }
             });
@@ -261,31 +282,46 @@ impl Shape {
         }
         let shape_local = self.is_flagged(PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE);
         for paint in self.paint_container.shape_paints().iter().rev() {
-            if paint.is_translucent() || !paint.base.is_visible() {
+            let Some((translucent, visible, flags)) = paint
+                .with_mut(|object| {
+                    object.as_shape_paint_behavior_mut().map(|paint| {
+                        (
+                            paint.is_translucent(),
+                            paint.is_visible(),
+                            paint.path_flags(),
+                        )
+                    })
+                })
+                .flatten()
+            else {
+                continue;
+            };
+            if translucent || !visible {
                 continue;
             }
-            let paint_local = paint.is_flagged(PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE);
+            let paint_local = !(flags & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE)).is_empty();
             let matrix = if paint_local {
-                xform * self.base.world_transform()
+                xform * *self.base.world_transform()
             } else {
                 xform
             };
-            let mut tester = HitTestCommandPath::new(hinfo.area());
+            let mut tester = HitTestCommandPath::new(hinfo.area);
             for path in self.paths() {
-                path.with(|path| {
-                    let Some(path) = path.as_path() else {
+                path.with(|object| {
+                    let Some(path) = object.as_path() else {
                         return;
                     };
+                    let path_transform = Path::path_transform_for(object);
                     tester.set_xform(if shape_local {
-                        xform * path.path_transform()
+                        xform * path_transform
                     } else {
-                        matrix * path.path_transform()
+                        matrix * path_transform
                     });
                     path.raw_path().add_to(&mut tester);
                 });
             }
             if tester.was_hit() {
-                return Some(self.base.as_core());
+                return Some(self);
             }
         }
         None
@@ -327,7 +363,7 @@ impl Shape {
             paint.with_mut(|paint| {
                 paint
                     .as_shape_paint_mut()
-                    .map(|paint| paint.blend_mode(blend))
+                    .map(|paint| paint.blend_mode(blend.into()))
             });
         }
     }
@@ -352,12 +388,7 @@ impl Shape {
         let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
             if current
-                .with(|current| {
-                    current
-                        .as_component()
-                        .and_then(render_path_deformer_from)
-                        .is_some()
-                })
+                .with(|current| render_path_deformer_from(current).is_some())
                 .unwrap_or(false)
             {
                 self.deformer = Some(current);
@@ -395,21 +426,23 @@ impl Shape {
     }
 
     pub fn world_bounds(&mut self) -> Aabb {
-        if self.base.drawable_flags() & DrawableFlag::WORLD_BOUNDS_CLEAN.bits() == 0 {
-            self.base.set_drawable_flags(
-                self.base.drawable_flags() | DrawableFlag::WORLD_BOUNDS_CLEAN.bits(),
+        if self.base.drawable_flags() & u32::from(DrawableFlag::WORLD_BOUNDS_CLEAN.0) == 0 {
+            self.set_drawable_flags(
+                self.base.drawable_flags() | u32::from(DrawableFlag::WORLD_BOUNDS_CLEAN.0),
             );
             self.world_bounds = self.compute_world_bounds(None);
         }
         self.world_bounds
     }
     pub fn mark_bounds_dirty(&mut self) {
-        self.base.set_drawable_flags(
-            self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.bits(),
+        self.set_drawable_flags(
+            self.base.drawable_flags() & !u32::from(DrawableFlag::WORLD_BOUNDS_CLEAN.0),
         );
         self.world_length = -1.0;
-        if let Some(participant) = self.layout_participant_mut() {
-            participant.mark_layout_node_dirty();
+        if let Some(participant) = self.layout_participant() {
+            participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+                participant.mark_layout_node_dirty_from_host(self, false)
+            });
         }
     }
 
@@ -417,17 +450,16 @@ impl Shape {
         let mut result = Aabb::for_expansion();
         let mut first = true;
         for path in self.paths() {
-            path.with(|path| {
-                let Some(path) = path.as_path() else {
+            path.with(|object| {
+                let Some(path) = object.as_path() else {
                     return;
                 };
                 if path.base.is_collapsed() {
                     return;
                 }
                 let mut raw = path.raw_path().clone();
-                let matrix = xform
-                    .map(|x| path.path_transform() * x)
-                    .unwrap_or_else(|| path.path_transform());
+                let path_transform = Path::path_transform_for(object);
+                let matrix = xform.map(|x| path_transform * x).unwrap_or(path_transform);
                 raw.transform_in_place(matrix);
                 let bounds = raw.bounds();
                 if first {
@@ -449,15 +481,23 @@ impl Shape {
 
     pub fn compute_intrinsic_bounds(&self) -> Aabb {
         let participant = self.layout_participant();
-        if participant.is_some_and(LayoutParticipant::host_bounds_valid) {
-            return participant.unwrap().host_bounds();
+        if let Some(bounds) = participant.as_ref().and_then(|participant| {
+            participant
+                .with_downcast::<LayoutParticipant, _>(|participant| {
+                    participant
+                        .host_bounds_valid()
+                        .then(|| *participant.host_bounds())
+                })
+                .flatten()
+        }) {
+            return bounds;
         }
         let mut first = true;
         let mut result = Aabb::for_expansion();
         let mut used_pending = false;
         for path in self.paths() {
-            path.with(|path| {
-                let Some(path) = path.as_path() else {
+            path.with(|object| {
+                let Some(path) = object.as_path() else {
                     return;
                 };
                 if path.base.is_collapsed() {
@@ -465,17 +505,27 @@ impl Shape {
                 }
                 let bounds = if !path.needs_path_build() {
                     let mut raw = path.raw_path().clone();
-                    raw.transform_in_place(path.base.transform());
+                    raw.transform_in_place(*path.base.transform());
                     raw.precise_bounds()
                 } else {
                     let mut property = Aabb::default();
                     used_pending = true;
-                    if path.try_property_bounds(&mut property) {
+                    let has_property_bounds = if let Some(parametric) = object.as_parametric_path()
+                    {
+                        parametric.try_property_bounds(&mut property)
+                    } else {
+                        path.try_property_bounds(&mut property)
+                    };
+                    if has_property_bounds {
                         path.base.transform().map_bounding_box(property)
                     } else {
                         let mut pending = RawPath::default();
-                        path.build_path(&mut pending);
-                        pending.transform_in_place(path.base.transform());
+                        path.build_path_from_shape(
+                            &mut pending,
+                            Path::is_path_closed_for(object),
+                            self,
+                        );
+                        pending.transform_in_place(*path.base.transform());
                         pending.precise_bounds()
                     }
                 };
@@ -492,14 +542,18 @@ impl Shape {
         }
         let bounds = if first { Aabb::default() } else { result };
         if let Some(participant) = participant {
-            participant.set_host_bounds(bounds, !used_pending);
+            participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+                participant.set_host_bounds(bounds, !used_pending)
+            });
         }
         bounds
     }
 
     fn invalidate_intrinsic_bounds(&mut self) {
-        if let Some(participant) = self.layout_participant_mut() {
-            participant.invalidate_host_bounds();
+        if let Some(participant) = self.layout_participant() {
+            participant.with_downcast_mut::<LayoutParticipant, _>(
+                LayoutParticipant::invalidate_host_bounds,
+            );
         }
     }
     pub fn measure_layout(
@@ -531,24 +585,43 @@ impl Shape {
         height: LayoutScaleType,
         direction: LayoutDirection,
     ) {
+        if let Some(path) = self.prepare_control_size(size) {
+            path.with_mut(|path| {
+                path.as_parametric_path_mut()
+                    .expect("firstParametricPath selects a ParametricPath")
+                    .control_size(size, width, height, direction);
+            });
+        }
+    }
+    pub fn control_size_occurrence(
+        owner: &CoreHandle,
+        size: Vec2D,
+        width: LayoutScaleType,
+        height: LayoutScaleType,
+        direction: LayoutDirection,
+    ) {
+        let path = owner
+            .with_downcast_mut::<Shape, _>(|shape| shape.prepare_control_size(size))
+            .flatten();
+        // ParametricPath's width/height callbacks synchronously call back into
+        // this Shape. Its owning arena borrow must end before that virtual call.
+        if let Some(path) = path {
+            path.with_mut(|path| {
+                path.as_parametric_path_mut()
+                    .expect("firstParametricPath selects a ParametricPath")
+                    .control_size(size, width, height, direction);
+            });
+        }
+    }
+    fn prepare_control_size(&mut self, size: Vec2D) -> Option<CoreHandle> {
         if self.is_participating_in_layout() {
             self.update_layout_scale(size);
-            return;
+            return None;
         }
-        for path in self.paths() {
-            let controlled = path
-                .with_mut(|path| {
-                    let Some(path) = path.as_parametric_path_mut() else {
-                        return false;
-                    };
-                    path.control_size(size, width, height, direction);
-                    true
-                })
-                .unwrap_or(false);
-            if controlled {
-                break;
-            }
-        }
+        self.paths()
+            .iter()
+            .find(|path| path.is_type_of(crate::mechanical_port::source::generated::shapes::parametric_path_base::ParametricPathBase::TYPE_KEY))
+            .cloned()
     }
     fn update_layout_scale(&mut self, size: Vec2D) {
         let bounds = self.compute_intrinsic_bounds();
@@ -557,25 +630,43 @@ impl Shape {
             if width > 0.0 { size.x / width } else { 1.0 },
             if height > 0.0 { size.y / height } else { 1.0 },
         );
-        let Some(participant) = self.layout_participant_mut() else {
+        let Some(participant) = self.layout_participant() else {
             return;
         };
-        if sx != participant.host_scale_x() || sy != participant.host_scale_y() {
-            participant.set_host_scale(sx, sy);
-            self.base.mark_world_transform_dirty();
+        let changed = participant
+            .with_downcast_mut::<LayoutParticipant, _>(|participant| {
+                if sx != participant.host_scale_x() || sy != participant.host_scale_y() {
+                    participant.set_host_scale(sx, sy);
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false);
+        if changed {
+            CoreCapabilities::world_transform_mark_dirty(self);
         }
     }
-    pub fn layout_participant(&self) -> Option<&LayoutParticipant> {
+    pub fn layout_participant(&self) -> Option<CoreHandle> {
         self.base
             .children()
             .iter()
-            .find_map(Core::as_layout_participant)
+            .find(|child| {
+                child.is_type_of(crate::mechanical_port::source::generated::layout::layout_participant_base::LayoutParticipantBase::TYPE_KEY)
+            })
+            .cloned()
     }
-    pub fn layout_participant_mut(&mut self) -> Option<&mut LayoutParticipant> {
-        self.base
-            .children_mut()
-            .iter_mut()
-            .find_map(Core::as_layout_participant_mut)
+    fn set_drawable_flags(&mut self, value: u32) {
+        if self.base.set_drawable_flags_value(value) {
+            use crate::mechanical_port::source::generated::drawable_base::{
+                DrawableBase, DrawableBaseCallbacks,
+            };
+            DrawableBaseCallbacks::drawable_flags_changed(self);
+            DrawableBaseCallbacks::notify_property_changed(
+                self,
+                DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY,
+            );
+        }
     }
     pub fn is_participating_in_layout(&self) -> bool {
         self.layout_participant().is_some()
@@ -610,9 +701,9 @@ impl Shape {
                 left - intrinsic.left() * sx,
                 top - intrinsic.top() * sy,
             ));
-            self.base.set_world_transform(
-                parent_world * base * *self.base.transform() * Mat2D::from_scale(sx, sy),
-            );
+            let transform = *self.base.transform();
+            self.base
+                .set_world_transform(parent_world * base * transform * Mat2D::from_scale(sx, sy));
             return true;
         }
         false

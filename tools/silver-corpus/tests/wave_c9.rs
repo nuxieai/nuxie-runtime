@@ -45,7 +45,6 @@ fn wave_c9_state_machine_009_transition_with_list_index_compares_to_number() {
 }
 
 #[test]
-#[ignore = "expected-red: sorted_listeners frame 5, op 134 (addRawPath): expected 180 fields, got 337"]
 fn wave_c9_state_machine_010_listeners_are_sorted_in_the_right_order() {
     replay("sorted_listeners");
 }
@@ -81,7 +80,6 @@ fn wave_c9_state_machine_018_transitions_and_layers_trigger_actions() {
 }
 
 #[test]
-#[ignore = "expected-red: paused_nested_artboard_opacity frame 1, op 103 (rewind): expected rewind, got drawPath"]
 fn wave_c9_state_machine_019_paused_machine_updates_opacity_and_layout() {
     replay("paused_nested_artboard_opacity");
 }

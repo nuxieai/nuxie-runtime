@@ -52,7 +52,7 @@ impl WeightBase {
             return;
         }
         callbacks.values_changed();
-        callbacks.notify_property_changed(Self::VALUES_PROPERTY_KEY);
+        WeightBaseCallbacks::notify_property_changed(callbacks, Self::VALUES_PROPERTY_KEY);
     }
 
     pub(crate) fn set_values_value(&mut self, value: u32) -> bool {
@@ -68,7 +68,7 @@ impl WeightBase {
             return;
         }
         callbacks.indices_changed();
-        callbacks.notify_property_changed(Self::INDICES_PROPERTY_KEY);
+        WeightBaseCallbacks::notify_property_changed(callbacks, Self::INDICES_PROPERTY_KEY);
     }
 
     pub(crate) fn set_indices_value(&mut self, value: u32) -> bool {

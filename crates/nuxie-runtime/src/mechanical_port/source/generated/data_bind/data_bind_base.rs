@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, core::Core, data_bind::data_bind::DataBind,
+    core::Core, core::binary_reader::BinaryReader, data_bind::data_bind::DataBind,
 };
 
 pub trait DataBindBaseCallbacks {
@@ -20,7 +20,7 @@ impl Default for DataBindBase {
     fn default() -> Self {
         Self {
             base: Core::default(),
-            property_key: Core::invalidPropertyKey,
+            property_key: Core::INVALID_PROPERTY_KEY as u32,
             flags: 0,
             converter_id: u32::MAX,
         }

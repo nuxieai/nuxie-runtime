@@ -41,10 +41,37 @@ impl CursorVisualPosition {
         self.bottom
     }
 }
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct CursorPosition {
     line_index: u32,
     code_point_index: u32,
+}
+impl PartialOrd for CursorPosition {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.code_point_index.cmp(&other.code_point_index))
+    }
+}
+impl std::ops::Add<i32> for CursorPosition {
+    type Output = Self;
+    fn add(self, offset: i32) -> Self {
+        Self::unresolved(self.code_point_index_offset(offset))
+    }
+}
+impl std::ops::Sub<i32> for CursorPosition {
+    type Output = Self;
+    fn sub(self, offset: i32) -> Self {
+        Self::unresolved(self.code_point_index_offset(-offset))
+    }
+}
+impl std::ops::AddAssign<u32> for CursorPosition {
+    fn add_assign(&mut self, offset: u32) {
+        self.code_point_index = self.code_point_index.wrapping_add(offset);
+    }
+}
+impl std::ops::SubAssign<u32> for CursorPosition {
+    fn sub_assign(&mut self, offset: u32) {
+        self.code_point_index = self.code_point_index.saturating_sub(offset);
+    }
 }
 impl CursorPosition {
     pub fn new(line: u32, index: u32) -> Self {
@@ -95,17 +122,16 @@ impl CursorPosition {
         let glyph_line = line.glyph_line();
         let mut x = glyph_line.start_x;
         let (mut first, mut last, mut have) = (0, 0, false);
-        for glyph in line.iter() {
-            let run = glyph.run;
-            let i = glyph.glyph_index as usize;
+        for (run, glyph_index) in line {
+            let i = glyph_index as usize;
             let advance = run.advances[i];
             if advance != 0.0 && target == lookup.get(run.text_indices[i]) {
                 x += advance
                     * lookup.advance_factor(
                         self.code_point_index as i32,
-                        run.direction() == TextDirection::Rtl,
+                        run.dir() == TextDirection::Rtl,
                     );
-                let font = &run.font;
+                let font = run.font.as_ref().expect("shaped text retains its font");
                 return CursorVisualPosition::new(
                     x,
                     line.y() + font.ascent(run.size),
@@ -130,8 +156,18 @@ impl CursorPosition {
             };
         CursorVisualPosition::new(
             final_x,
-            line.y() + run.font.ascent(run.size),
-            line.y() + run.font.descent(run.size),
+            line.y()
+                + run
+                    .font
+                    .as_ref()
+                    .expect("shaped text retains its font")
+                    .ascent(run.size),
+            line.y()
+                + run
+                    .font
+                    .as_ref()
+                    .expect("shaped text retains its font")
+                    .descent(run.size),
         )
     }
     pub fn from_translation(p: Vec2D, shape: &FullyShapedText) -> Self {
@@ -157,10 +193,9 @@ impl CursorPosition {
         let lookup = shape.glyph_lookup();
         let mut x = line.glyph_line().start_x;
         let mut last = None;
-        for glyph in line.iter() {
-            last = Some(glyph);
-            let run = glyph.run;
-            let i = glyph.glyph_index as usize;
+        for (run, glyph_index) in line {
+            last = Some((run, glyph_index));
+            let i = glyph_index as usize;
             let advance = run.advances[i];
             if x_target <= x + advance {
                 let ratio = if advance == 0.0 {
@@ -178,7 +213,7 @@ impl CursorPosition {
                 let part = (ratio * (next - text) as f32).round() as u32;
                 return Self::new(
                     line_index,
-                    if run.direction() == TextDirection::Ltr {
+                    if run.dir() == TextDirection::Ltr {
                         text + part
                     } else {
                         next.saturating_sub(part)
@@ -188,9 +223,8 @@ impl CursorPosition {
             }
             x += advance;
         }
-        let glyph = last.expect("OrderedLine has a glyph");
-        let run = glyph.run;
-        let text = run.text_indices[glyph.glyph_index as usize];
+        let (run, glyph_index) = last.expect("OrderedLine has a glyph");
+        let text = run.text_indices[glyph_index as usize];
         let absolute = lookup.get(text);
         let mut next = text;
         while next != lookup.size().saturating_sub(1) as u32 && lookup.get(next) == absolute {
@@ -198,7 +232,7 @@ impl CursorPosition {
         }
         Self::new(
             line_index,
-            if run.direction() == TextDirection::Ltr {
+            if run.dir() == TextDirection::Ltr {
                 next
             } else {
                 text
@@ -289,10 +323,18 @@ impl Cursor {
         self.end
     }
     pub fn first(&self) -> CursorPosition {
-        self.start.min(self.end)
+        if self.start < self.end {
+            self.start
+        } else {
+            self.end
+        }
     }
     pub fn last(&self) -> CursorPosition {
-        self.start.max(self.end)
+        if self.start < self.end {
+            self.end
+        } else {
+            self.start
+        }
     }
     pub fn is_collapsed(&self) -> bool {
         self.start == self.end
@@ -329,9 +371,8 @@ impl Cursor {
         for line_index in first.line_index..=last.line_index {
             let line = &shape.ordered_lines()[line_index as usize];
             let mut x = line.glyph_line().start_x;
-            for glyph in line.iter() {
-                let run = glyph.run;
-                let i = glyph.glyph_index as usize;
+            for (run, glyph_index) in line {
+                let i = glyph_index as usize;
                 let advance = run.advances[i];
                 let index = run.text_indices[i];
                 let count = lookup.count(index);
@@ -343,7 +384,7 @@ impl Cursor {
                         after as f32 / count as f32,
                         (count - before) as f32 / count as f32,
                     );
-                    if run.direction() == TextDirection::Rtl {
+                    if run.dir() == TextDirection::Rtl {
                         sf = 1.0 - sf;
                         ef = 1.0 - ef;
                     }
@@ -353,9 +394,19 @@ impl Cursor {
                     }
                     rects.push(Aabb::new(
                         left,
-                        line.y() + run.font.ascent(run.size),
+                        line.y()
+                            + run
+                                .font
+                                .as_ref()
+                                .expect("shaped text retains its font")
+                                .ascent(run.size),
                         right,
-                        line.y() + run.font.descent(run.size),
+                        line.y()
+                            + run
+                                .font
+                                .as_ref()
+                                .expect("shaped text retains its font")
+                                .descent(run.size),
                     ));
                 }
                 x += advance;

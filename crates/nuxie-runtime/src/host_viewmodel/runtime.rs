@@ -731,7 +731,7 @@ impl std::fmt::Debug for RuntimeBindableArtboard {
 }
 impl RuntimeBindableArtboard {
     pub fn from_native(file: RuntimeFileHandle, native: RuntimeBindableArtboardHandle) -> Self {
-        let name = native.with_artboard(|artboard| artboard.name().to_owned());
+        let name = native.with_artboard(|artboard| artboard.base.base.name().to_owned());
         Self { native, file, name }
     }
     pub fn native_handle(&self) -> RuntimeBindableArtboardHandle {

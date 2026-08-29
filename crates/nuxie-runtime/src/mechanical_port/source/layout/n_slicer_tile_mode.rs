@@ -4,12 +4,36 @@ use crate::mechanical_port::source::{
     layout::n_slicer_details,
 };
 
-#[repr(i32)]
-#[derive(Clone, Copy)]
-pub enum NSlicerTileModeType {
-    Stretch = 0,
-    Repeat = 1,
-    Hidden = 2,
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct NSlicerTileModeType(i32);
+#[allow(non_upper_case_globals)]
+impl NSlicerTileModeType {
+    pub const Stretch: Self = Self(0);
+    pub const Repeat: Self = Self(1);
+    pub const Hidden: Self = Self(2);
+}
+impl From<u32> for NSlicerTileModeType {
+    fn from(value: u32) -> Self {
+        Self(value as i32)
+    }
+}
+
+impl std::ops::Deref for NSlicerTileMode {
+    type Target = NSlicerTileModeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for NSlicerTileMode {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl NSlicerTileMode {
+    pub const TYPE_KEY: u16 = NSlicerTileModeBase::TYPE_KEY;
 }
 
 #[derive(Default)]
@@ -27,7 +51,7 @@ impl NSlicerTileMode {
         };
         if !n_slicer_details::add_tile_mode(
             &parent,
-            self.base.patch_index(),
+            self.base.patch_index() as i32,
             NSlicerTileModeType::from(self.base.style()),
         ) {
             return StatusCode::MissingObject;

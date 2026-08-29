@@ -78,7 +78,10 @@ impl TextModifierGroupBase {
             return;
         }
         callbacks.modifier_flags_changed();
-        callbacks.notify_property_changed(Self::MODIFIER_FLAGS_PROPERTY_KEY);
+        TextModifierGroupBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MODIFIER_FLAGS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_modifier_flags_value(&mut self, value: u32) -> bool {
@@ -100,7 +103,10 @@ impl TextModifierGroupBase {
             return;
         }
         callbacks.origin_x_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+        TextModifierGroupBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ORIGIN_X_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
@@ -122,7 +128,10 @@ impl TextModifierGroupBase {
             return;
         }
         callbacks.origin_y_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+        TextModifierGroupBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ORIGIN_Y_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
@@ -140,7 +149,10 @@ impl TextModifierGroupBase {
             return;
         }
         callbacks.opacity_changed();
-        callbacks.notify_property_changed(Self::OPACITY_PROPERTY_KEY);
+        TextModifierGroupBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OPACITY_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_opacity_value(&mut self, value: f32) -> bool {
@@ -158,7 +170,7 @@ impl TextModifierGroupBase {
             return;
         }
         callbacks.x_changed();
-        callbacks.notify_property_changed(Self::X_PROPERTY_KEY);
+        TextModifierGroupBaseCallbacks::notify_property_changed(callbacks, Self::X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
@@ -176,7 +188,7 @@ impl TextModifierGroupBase {
             return;
         }
         callbacks.y_changed();
-        callbacks.notify_property_changed(Self::Y_PROPERTY_KEY);
+        TextModifierGroupBaseCallbacks::notify_property_changed(callbacks, Self::Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_y_value(&mut self, value: f32) -> bool {
@@ -198,7 +210,10 @@ impl TextModifierGroupBase {
             return;
         }
         callbacks.rotation_changed();
-        callbacks.notify_property_changed(Self::ROTATION_PROPERTY_KEY);
+        TextModifierGroupBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ROTATION_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_rotation_value(&mut self, value: f32) -> bool {
@@ -216,7 +231,10 @@ impl TextModifierGroupBase {
             return;
         }
         callbacks.scale_x_changed();
-        callbacks.notify_property_changed(Self::SCALE_X_PROPERTY_KEY);
+        TextModifierGroupBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SCALE_X_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_scale_x_value(&mut self, value: f32) -> bool {
@@ -234,7 +252,10 @@ impl TextModifierGroupBase {
             return;
         }
         callbacks.scale_y_changed();
-        callbacks.notify_property_changed(Self::SCALE_Y_PROPERTY_KEY);
+        TextModifierGroupBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SCALE_Y_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_scale_y_value(&mut self, value: f32) -> bool {

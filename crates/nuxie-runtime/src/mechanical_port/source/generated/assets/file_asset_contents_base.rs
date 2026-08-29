@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     assets::file_asset_contents::FileAssetContents,
-    core::{binary_reader::BinaryReader, field_types::core_bytes_type::CoreBytesType, Core},
+    core::{Core, binary_reader::BinaryReader, field_types::core_bytes_type::CoreBytesType},
 };
 
 pub trait FileAssetContentsBaseCallbacks {

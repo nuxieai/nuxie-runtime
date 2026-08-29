@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::mechanical_port::source::animation::{
-    keyed_property::KeyedProperty, linear_animation::LinearAnimation,
+    keyed_property::KeyedProperty, keyframe::KeyFrame, linear_animation::LinearAnimation,
 };
 use crate::mechanical_port::source::core::CoreHandle;
 
@@ -20,17 +20,17 @@ impl KeyedPropertyImporter {
         }
     }
 
-    pub fn add_key_frame(&mut self, key_frame: CoreHandle) {
+    pub fn add_key_frame(&mut self, owner: CoreHandle, key_frame: &mut KeyFrame) {
         let fps = self
             .animation
             .with_downcast::<LinearAnimation, _>(|animation| animation.base.fps())
             .expect("KeyedPropertyImporter retains a LinearAnimation");
-        key_frame
-            .with_mut(|key_frame| key_frame.keyframe_compute_seconds(fps))
-            .filter(|computed| *computed)
-            .expect("imported key frame derives from KeyFrame");
+        // KeyFrame::import already borrows this same occurrence. Use its actual
+        // embedded base for computeSeconds before transferring its handle to
+        // the property, matching upstream without borrowing the arena slot again.
+        key_frame.compute_seconds(fps as i32);
         self.keyed_property
-            .with_downcast_mut::<KeyedProperty, _>(|property| property.add_key_frame(key_frame))
+            .with_downcast_mut::<KeyedProperty, _>(|property| property.add_key_frame(owner))
             .expect("KeyedPropertyImporter retains a KeyedProperty");
     }
 }

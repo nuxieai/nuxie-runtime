@@ -28,17 +28,25 @@ impl Default for DataConverterOperationViewModel {
 impl DataConverterOperationViewModel {
     pub fn new(operation: ArithmeticOperation) -> Self {
         let mut converter = Self::default();
-        converter.base.base.base.set_operation_type(
-            operation as u32,
-            &mut DataConverterOperationViewModelInitializationCallbacks,
-        );
+        if converter
+            .base
+            .base
+            .base
+            .set_operation_type_value(operation as u32)
+        {
+            DataConverterOperationBaseCallbacks::operation_type_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(crate::mechanical_port::source::generated::data_bind::converters::data_converter_operation_base::DataConverterOperationBase::OPERATION_TYPE_PROPERTY_KEY);
+        }
         converter
     }
     fn resolve_value(&self) -> f32 {
         self.source
             .as_ref()
             .and_then(|source| {
-                source.with_downcast::<ViewModelInstanceNumber, _>(|source| source.property_value())
+                source.with_downcast::<ViewModelInstanceNumber, _>(|source| {
+                    source.base.property_value()
+                })
             })
             .unwrap_or(0.0)
     }
@@ -195,12 +203,4 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     fn advance(&mut self, elapsed: f32) -> bool {
         self.base.base.base.base.advance(elapsed)
     }
-}
-
-struct DataConverterOperationViewModelInitializationCallbacks;
-
-impl DataConverterOperationBaseCallbacks
-    for DataConverterOperationViewModelInitializationCallbacks
-{
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }

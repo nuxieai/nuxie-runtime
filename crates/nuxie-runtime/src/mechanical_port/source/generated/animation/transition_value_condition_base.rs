@@ -44,7 +44,10 @@ impl TransitionValueConditionBase {
             return;
         }
         callbacks.op_value_changed();
-        callbacks.notify_property_changed(Self::OP_VALUE_PROPERTY_KEY);
+        TransitionValueConditionBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OP_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_op_value_value(&mut self, value: u32) -> bool {

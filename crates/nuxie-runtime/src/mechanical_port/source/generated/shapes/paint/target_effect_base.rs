@@ -42,7 +42,7 @@ impl TargetEffectBase {
             return;
         }
         callbacks.target_id_changed();
-        callbacks.notify_property_changed(Self::TARGET_ID_PROPERTY_KEY);
+        TargetEffectBaseCallbacks::notify_property_changed(callbacks, Self::TARGET_ID_PROPERTY_KEY);
     }
 
     pub(crate) fn set_target_id_value(&mut self, value: u32) -> bool {

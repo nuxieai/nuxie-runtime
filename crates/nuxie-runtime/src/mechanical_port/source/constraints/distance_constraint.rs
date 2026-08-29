@@ -66,10 +66,10 @@ impl DistanceConstraint {
     }
 
     pub fn distance_changed(&mut self) {
-        self.mark_constraint_dirty();
+        self.base.mark_constraint_dirty();
     }
 
     pub fn mode_value_changed(&mut self) {
-        self.mark_constraint_dirty();
+        self.base.mark_constraint_dirty();
     }
 }

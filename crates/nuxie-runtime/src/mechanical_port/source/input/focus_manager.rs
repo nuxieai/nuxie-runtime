@@ -4,17 +4,78 @@ use crate::mechanical_port::source::input::{
 };
 use crate::mechanical_port::source::semantic::semantic_snapshot::Bounds;
 use crate::mechanical_port::source::{
-    animation::listener_invocation::ListenerInvocation, core::CoreHandle,
+    animation::listener_invocation::ListenerInvocation, artboard::Artboard, core::CoreHandle,
 };
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::cell::{Cell, Ref, RefCell};
+use std::rc::{Rc, Weak};
 
 #[derive(Clone)]
-pub struct RuntimeFocusManagerHandle(Rc<RefCell<FocusManager>>);
+pub struct RuntimeFocusManagerHandle(Rc<RefCell<FocusManager>>, Rc<Cell<bool>>);
+
+#[derive(Clone, Default)]
+pub struct RuntimeFocusManagerWeakHandle {
+    manager: Weak<RefCell<FocusManager>>,
+    focusable_content_dirty: Weak<Cell<bool>>,
+    root_nodes: Weak<RefCell<Vec<FocusNodeRef>>>,
+}
+
+impl RuntimeFocusManagerWeakHandle {
+    pub fn upgrade(&self) -> Option<RuntimeFocusManagerHandle> {
+        let manager = self.manager.upgrade()?;
+        let dirty = self
+            .focusable_content_dirty
+            .upgrade()
+            .expect("live FocusManager owns its content dirty flag");
+        Some(RuntimeFocusManagerHandle(manager, dirty))
+    }
+
+    pub(crate) fn invalidate_focusable_content(&self) {
+        if let Some(dirty) = self.focusable_content_dirty.upgrade() {
+            dirty.set(true);
+        }
+    }
+
+    fn ptr_eq(&self, other: &Self) -> bool {
+        Weak::ptr_eq(&self.root_nodes, &other.root_nodes)
+    }
+
+    fn is_attached(&self) -> bool {
+        self.root_nodes.strong_count() != 0
+    }
+
+    fn erase_root(&self, child: &FocusNodeRef) {
+        let Some(root_nodes) = self.root_nodes.upgrade() else {
+            return;
+        };
+        let mut root_nodes = root_nodes.borrow_mut();
+        if let Some(index) = root_nodes.iter().position(|node| Rc::ptr_eq(node, child)) {
+            root_nodes.remove(index);
+            self.invalidate_focusable_content();
+        }
+    }
+}
 
 impl RuntimeFocusManagerHandle {
-    pub fn new(manager: FocusManager) -> Self {
-        Self(Rc::new(RefCell::new(manager)))
+    pub fn new(mut manager: FocusManager) -> Self {
+        let dirty = manager.focusable_content_dirty.clone();
+        let owner = Rc::new_cyclic(|owner| {
+            manager.runtime_self = RuntimeFocusManagerWeakHandle {
+                manager: owner.clone(),
+                focusable_content_dirty: Rc::downgrade(&dirty),
+                root_nodes: Rc::downgrade(&manager.root_nodes),
+            };
+            RefCell::new(manager)
+        });
+        Self(owner, dirty)
+    }
+
+    pub fn downgrade(&self) -> RuntimeFocusManagerWeakHandle {
+        let root_nodes = Rc::downgrade(&self.0.borrow().root_nodes);
+        RuntimeFocusManagerWeakHandle {
+            manager: Rc::downgrade(&self.0),
+            focusable_content_dirty: Rc::downgrade(&self.1),
+            root_nodes,
+        }
     }
 
     pub fn with_focus_manager<R>(&self, use_manager: impl FnOnce(&FocusManager) -> R) -> R {
@@ -38,20 +99,38 @@ pub enum Direction {
     Down,
 }
 
+#[cfg(feature = "tools")]
+pub type FocusChangedCallback = fn();
+
+#[cfg(feature = "tools")]
+pub type ScrollIntoViewCallback = fn(&Bounds, &CoreHandle);
+
 pub struct FocusManager {
+    runtime_self: RuntimeFocusManagerWeakHandle,
     primary_focus: Option<FocusNodeRef>,
-    root_nodes: Vec<FocusNodeRef>,
+    root_nodes: Rc<RefCell<Vec<FocusNodeRef>>>,
     has_focusable_content: bool,
-    focusable_content_dirty: bool,
+    // The same canonical flag is reachable by attached nodes even while a
+    // manager method is mutably borrowed; invalidation has no user callbacks.
+    focusable_content_dirty: Rc<Cell<bool>>,
+    #[cfg(feature = "tools")]
+    focus_changed_callback: Option<FocusChangedCallback>,
+    #[cfg(feature = "tools")]
+    scroll_into_view_callback: Option<ScrollIntoViewCallback>,
 }
 
 impl Default for FocusManager {
     fn default() -> Self {
         Self {
+            runtime_self: RuntimeFocusManagerWeakHandle::default(),
             primary_focus: None,
-            root_nodes: Vec::new(),
+            root_nodes: Rc::new(RefCell::new(Vec::new())),
             has_focusable_content: false,
-            focusable_content_dirty: true,
+            focusable_content_dirty: Rc::new(Cell::new(true)),
+            #[cfg(feature = "tools")]
+            focus_changed_callback: None,
+            #[cfg(feature = "tools")]
+            scroll_into_view_callback: None,
         }
     }
 }
@@ -144,6 +223,21 @@ fn root_bounds(node: &FocusNodeRef) -> Option<Bounds> {
     node.focusable
         .as_ref()
         .and_then(|focusable| focusable.borrow().world_bounds())
+}
+
+fn root_artboard(mut artboard: CoreHandle) -> CoreHandle {
+    loop {
+        let host = artboard
+            .with_downcast::<Artboard, _>(Artboard::host)
+            .flatten();
+        let Some(host) = host else { break };
+        let parent = host
+            .with(|host| host.as_artboard_host()?.parent_artboard())
+            .flatten();
+        let Some(parent) = parent else { break };
+        artboard = parent;
+    }
+    artboard
 }
 
 fn root_position(node: &FocusNodeRef) -> Option<(f32, f32)> {
@@ -270,12 +364,40 @@ fn score_candidate_point(current: (f32, f32), candidate: (f32, f32), direction: 
 }
 
 impl FocusManager {
+    fn node_manager_handle(&self) -> RuntimeFocusManagerWeakHandle {
+        RuntimeFocusManagerWeakHandle {
+            manager: self.runtime_self.manager.clone(),
+            focusable_content_dirty: Rc::downgrade(&self.focusable_content_dirty),
+            root_nodes: Rc::downgrade(&self.root_nodes),
+        }
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn primary_focus(&self) -> Option<FocusNodeRef> {
         self.primary_focus.clone()
+    }
+
+    pub fn primary_focus_immediate_artboard(&self) -> Option<CoreHandle> {
+        let focusable = self.primary_focus.as_ref()?.borrow().focusable()?;
+        let artboard = focusable.borrow().focusable_artboard();
+        artboard
+    }
+
+    pub fn primary_focus_artboard(&self) -> Option<CoreHandle> {
+        self.primary_focus_immediate_artboard().map(root_artboard)
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn set_focus_changed_callback(&mut self, callback: Option<FocusChangedCallback>) {
+        self.focus_changed_callback = callback;
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn set_scroll_into_view_callback(&mut self, callback: Option<ScrollIntoViewCallback>) {
+        self.scroll_into_view_callback = callback;
     }
 
     pub fn primary_focus_bounds(&self) -> Option<Bounds> {
@@ -384,6 +506,27 @@ impl FocusManager {
             }
             current = node.borrow().parent();
         }
+
+        #[cfg(feature = "tools")]
+        {
+            if let Some(callback) = self.focus_changed_callback {
+                callback();
+            }
+
+            if let (Some(callback), Some(new_focus)) = (self.scroll_into_view_callback, new_focus)
+                && let Some(bounds) = root_bounds(new_focus)
+                && let Some(focusable) = new_focus.borrow().focusable()
+                && let Some(artboard) = focusable.borrow().focusable_artboard()
+            {
+                let artboard = root_artboard(artboard);
+                let is_hostless = artboard
+                    .with_downcast::<Artboard, _>(|artboard| artboard.host().is_none())
+                    .unwrap_or(false);
+                if is_hostless {
+                    callback(&bounds, &artboard);
+                }
+            }
+        }
     }
 
     pub fn add_child(
@@ -392,16 +535,34 @@ impl FocusManager {
         child: FocusNodeRef,
         index: Option<usize>,
     ) {
-        self.focusable_content_dirty = true;
-        self.detach_child(&child);
+        let manager = self.node_manager_handle();
+        let index = index.unwrap_or_else(|| {
+            parent.as_ref().map_or_else(
+                || self.root_nodes.borrow().len(),
+                |parent| parent.borrow().children().len(),
+            )
+        });
+        self.mark_focusable_content_dirty();
+        let (previous_parent, previous_manager) = {
+            let child = child.borrow();
+            (child.parent(), child.manager.clone())
+        };
+        if previous_parent.is_some() {
+            FocusNode::remove_from_parent(&child);
+        } else if previous_manager.is_attached() && !previous_manager.ptr_eq(&manager) {
+            previous_manager.erase_root(&child);
+        } else {
+            self.erase_root(&child);
+        }
+        // Source assigns only this child. Do not recursively rewrite its
+        // descendants' manager identities during a hierarchy reorder.
+        child.borrow_mut().manager = manager;
         if let Some(parent) = parent {
-            let index = index.unwrap_or_else(|| parent.borrow().children().len());
             FocusNode::insert_child(&parent, index, child);
         } else {
-            let index = index
-                .unwrap_or(self.root_nodes.len())
-                .min(self.root_nodes.len());
-            self.root_nodes.insert(index, child);
+            let mut root_nodes = self.root_nodes.borrow_mut();
+            let index = index.min(root_nodes.len());
+            root_nodes.insert(index, child);
         }
     }
 
@@ -413,31 +574,51 @@ impl FocusManager {
     }
 
     pub fn detach_child(&mut self, child: &FocusNodeRef) {
-        self.focusable_content_dirty = true;
-        if let Some(parent) = child.borrow().parent() {
-            FocusNode::remove_child(&parent, child);
-        } else if let Some(index) = self
-            .root_nodes
-            .iter()
-            .position(|node| Rc::ptr_eq(node, child))
-        {
-            self.root_nodes.remove(index);
-            self.focusable_content_dirty = true;
+        self.mark_focusable_content_dirty();
+        Self::remove_manager(child);
+        let has_parent = child.borrow().parent().is_some();
+        if has_parent {
+            FocusNode::remove_from_parent(child);
+        } else {
+            self.erase_root(child);
         }
     }
 
-    pub fn root_nodes(&self) -> &[FocusNodeRef] {
-        &self.root_nodes
+    fn remove_manager(node: &FocusNodeRef) {
+        let children = node.borrow().children().to_vec();
+        for child in children {
+            Self::remove_manager(&child);
+        }
+        node.borrow_mut().manager = RuntimeFocusManagerWeakHandle::default();
+    }
+
+    fn erase_root(&mut self, child: &FocusNodeRef) {
+        let removed = {
+            let mut root_nodes = self.root_nodes.borrow_mut();
+            if let Some(index) = root_nodes.iter().position(|node| Rc::ptr_eq(node, child)) {
+                root_nodes.remove(index);
+                true
+            } else {
+                false
+            }
+        };
+        if removed {
+            self.mark_focusable_content_dirty();
+        }
+    }
+
+    pub fn root_nodes(&self) -> Ref<'_, [FocusNodeRef]> {
+        Ref::map(self.root_nodes.borrow(), Vec::as_slice)
     }
 
     pub fn mark_focusable_content_dirty(&mut self) {
-        self.focusable_content_dirty = true;
+        self.focusable_content_dirty.set(true);
     }
 
     pub fn has_focusable_content(&mut self) -> bool {
-        if self.focusable_content_dirty {
-            self.has_focusable_content = subtree_has_focusable_content(&self.root_nodes);
-            self.focusable_content_dirty = false;
+        if self.focusable_content_dirty.get() {
+            self.has_focusable_content = subtree_has_focusable_content(&self.root_nodes.borrow());
+            self.focusable_content_dirty.set(false);
         }
         self.has_focusable_content
     }
@@ -453,6 +634,7 @@ impl FocusManager {
                 .collect(),
             None => self
                 .root_nodes
+                .borrow()
                 .iter()
                 .filter(|child| focus_node_traversable(child))
                 .cloned()
@@ -519,7 +701,7 @@ impl FocusManager {
                 .iter()
                 .position(|node| Rc::ptr_eq(node, current))
         });
-        let mut next = if let Some(index) = current_index {
+        let next = if let Some(index) = current_index {
             let direct = if forward {
                 traversable[index + 1..]
                     .iter()
@@ -550,6 +732,7 @@ impl FocusManager {
                         wrapped.or_else(|| self.first_eligible_leaf_from(&traversable, forward))
                     }
                     EdgeBehavior::Stop => current.clone(),
+                    EdgeBehavior::Unknown => None,
                     EdgeBehavior::ParentScope => {
                         if scope.is_some() {
                             return self.find_next_focusable(scope, forward);
@@ -562,14 +745,20 @@ impl FocusManager {
             self.first_eligible_leaf_from(&traversable, forward)
         };
 
-        if next.as_ref().is_some_and(|next| {
-            current
-                .as_ref()
-                .is_none_or(|current| !Rc::ptr_eq(next, current))
-        }) {
-            let next_node = next.take().expect("the candidate was just tested");
-            self.set_focus(next_node.clone());
-            Some(next_node)
+        let changed = match (next.as_ref(), current.as_ref()) {
+            (Some(next), Some(current)) => !Rc::ptr_eq(next, current),
+            (None, None) => false,
+            _ => true,
+        };
+        if changed {
+            if let Some(next_node) = next.as_ref() {
+                self.set_focus(next_node.clone());
+            } else {
+                // Source setFocus(nullptr) at the root edge still clears the
+                // previous focus, although focusNext/Previous returns false.
+                self.clear_focus();
+            }
+            next
         } else {
             None
         }
@@ -593,7 +782,7 @@ impl FocusManager {
         direction: Direction,
     ) -> Option<FocusNodeRef> {
         let mut candidates = Vec::new();
-        collect_all_traversable_nodes(&self.root_nodes, &mut candidates);
+        collect_all_traversable_nodes(&self.root_nodes.borrow(), &mut candidates);
         let current_bounds = root_bounds(current);
         let current_position = if current_bounds.is_none() {
             Some(root_position(current)?)
@@ -722,6 +911,11 @@ impl FocusManager {
 
 impl Drop for FocusManager {
     fn drop(&mut self) {
+        let root_nodes = self.root_nodes.borrow().clone();
+        for node in &root_nodes {
+            Self::remove_manager(node);
+        }
+        // No focus/blur notifications during destruction, as in the source.
         self.primary_focus = None;
     }
 }

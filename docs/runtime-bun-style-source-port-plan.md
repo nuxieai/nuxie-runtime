@@ -109,10 +109,28 @@ it is never resolved by silently copying the old behavior.
 ## Integration
 
 Apply both review passes, then make the mirrored owners live. Move or route the
-translated modules into their final crates, preserve required public Rust
-interfaces, and delete the superseded packed implementations. The old parity
+translated modules into their final crates and delete the superseded packed
+implementations. The old parity
 implementation may help diagnose integration failures, but a disagreement is
 resolved from pinned upstream source or an approved adaptation.
+
+### Factory and public API decision (2026-08-28)
+
+Mirror upstream rather than preserving the old public facade. `File::import`
+requires a retained renderer factory; artboards draw through the renderer using
+the factory/resources retained from import. Do not provide factory-free imports,
+late factory attachment, renderer-switching reconstruction, or backwards-
+compatibility wrappers. Headless callers must supply an explicit suitable factory.
+
+Expose the translated owners directly. Keep approved host authorization and
+resource-limit enforcement at the import boundary without reintroducing a second
+execution graph or the old lazy lifecycle. This decision supersedes the earlier
+public-API-continuity requirement where it conflicts with upstream.
+
+Consumer migration is deferred by explicit user direction. Do not expand this
+pass into updating the editor, C bindings, applications, or legacy callers; report
+their API breakages separately. Preserved tests remain part of the validation
+work, not a reason to restore old runtime behavior or hide failing assertions.
 
 Only after a translated owner is live may its old implementation be removed.
 Do not retain the old path as a hidden fallback.

@@ -39,22 +39,22 @@ impl RuntimeHeader {
             }
         }
 
-        header.major_version = reader.read_var_uint_as_i32();
+        header.major_version = reader.read_var_uint_as::<i32>();
         if reader.did_overflow() {
             return false;
         }
-        header.minor_version = reader.read_var_uint_as_i32();
+        header.minor_version = reader.read_var_uint_as::<i32>();
         if reader.did_overflow() {
             return false;
         }
-        header.file_id = reader.read_var_uint_as_i32();
+        header.file_id = reader.read_var_uint_as::<i32>();
         if reader.did_overflow() {
             return false;
         }
 
         let mut property_keys = Vec::new();
         loop {
-            let property_key = reader.read_var_uint_as_i32();
+            let property_key = reader.read_var_uint_as::<i32>();
             if property_key == 0 {
                 break;
             }

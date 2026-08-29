@@ -40,7 +40,7 @@ impl Default for BlendState1DViewModel {
 impl BlendState1DViewModel {
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         if import_stack
-            .latest::<StateMachineImporter>(StateMachine::TYPE_KEY)
+            .latest::<StateMachineImporter>(crate::mechanical_port::source::generated::animation::state_machine_base::StateMachineBase::TYPE_KEY)
             .is_none()
         {
             return StatusCode::MissingObject;
@@ -95,5 +95,17 @@ impl BlendState1DDefinition<BlendAnimation1D> for BlendState1DViewModel {
             .clone()
             .map(BlendState1DValueSource::ViewModel)
             .unwrap_or(BlendState1DValueSource::Default)
+    }
+}
+
+impl std::ops::Deref for BlendState1DViewModel {
+    type Target = BlendState1DViewModelBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for BlendState1DViewModel {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

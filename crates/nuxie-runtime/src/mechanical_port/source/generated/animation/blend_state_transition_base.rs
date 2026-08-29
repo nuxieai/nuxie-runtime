@@ -44,7 +44,10 @@ impl BlendStateTransitionBase {
             return;
         }
         callbacks.exit_blend_animation_id_changed();
-        callbacks.notify_property_changed(Self::EXIT_BLEND_ANIMATION_ID_PROPERTY_KEY);
+        BlendStateTransitionBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::EXIT_BLEND_ANIMATION_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_exit_blend_animation_id_value(&mut self, value: u32) -> bool {

@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
     artboard::{Artboard, RuntimeArtboardInstanceWeakHandle},
+    component::Component,
     core::CoreHandle,
 };
 
@@ -14,6 +15,16 @@ pub struct ParentTraversal {
 }
 
 impl ParentTraversal {
+    /// Source constructor when its Component is the already-borrowed callback receiver.
+    pub fn from_component(start: &Component) -> Self {
+        Self {
+            current: start.parent_handle(),
+            current_artboard: start.artboard_handle(),
+            did_cross_boundary: false,
+            crossing_host: None,
+            source_artboard: None,
+        }
+    }
     pub fn new(start: Option<CoreHandle>) -> Self {
         let current = start
             .as_ref()

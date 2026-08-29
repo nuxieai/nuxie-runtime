@@ -44,7 +44,10 @@ fn exact_grid_stack_actions() -> Vec<Action> {
     actions
 }
 
-fn replay(id: &str, participant_actions: bool) {
+fn replay_result(
+    id: &str,
+    participant_actions: bool,
+) -> (Status, Result<(), silver_corpus::Difference>) {
     let runtime = runtime_root();
     let manifest = read_manifest(&workspace_root().join("silver-corpus.toml"))
         .expect("read silver corpus manifest");
@@ -70,6 +73,7 @@ fn replay(id: &str, participant_actions: bool) {
             source: manifest_case.source.clone(),
             dependencies: manifest_case.dependencies.clone(),
             artboard: manifest_case.artboard.clone(),
+            clone_artboard_instance: manifest_case.clone_artboard_instance,
             animation: manifest_case.animation.clone(),
             state_machine: manifest_case.state_machine.clone(),
             lane: Lane::Runtime,
@@ -101,19 +105,38 @@ fn replay(id: &str, participant_actions: bool) {
         parse_sriv(&std::fs::read(resolve_expected(&runtime, case)).expect("read pinned SRIV"))
             .expect("parse pinned SRIV");
     let actual = parse_sriv(actual.bytes()).expect("parse Rust SRIV");
-    compare_sriv(&expected, &actual).unwrap_or_else(|difference| panic!("{id}: {difference}"));
+    (case.status, compare_sriv(&expected, &actual))
+}
+
+fn replay(id: &str, participant_actions: bool) {
+    let (status, result) = replay_result(id, participant_actions);
+    assert_eq!(status, Status::Exact, "{id} must remain classified exact");
+    result.unwrap_or_else(|difference| panic!("{id}: {difference}"));
+}
+
+fn replay_build_mode_divergence(id: &str) {
+    let (status, result) = replay_result(id, false);
+    assert_eq!(
+        status,
+        Status::Diverges,
+        "{id} must retain its signed producer-build-mode classification",
+    );
+    assert_eq!(
+        result
+            .expect_err("the --no_ffp_contract silver must differ from default FMA")
+            .to_string(),
+        "frame 76, op 4246 (rewind): expected rewind, got drawPath",
+    );
 }
 
 #[test]
-#[ignore = "expected-red: exact grid-with-layouts SRIV diverges at frame 1 operation 228"]
 fn wave_c1_layout_grid_stack_001_grid_with_layouts() {
-    replay("layout_grid_stack_grid_with_layouts", false);
+    replay_build_mode_divergence("layout_grid_stack_grid_with_layouts");
 }
 
 #[test]
-#[ignore = "expected-red: exact stack-with-layouts SRIV diverges at frame 1 operation 228"]
 fn wave_c1_layout_grid_stack_002_stack_with_layouts() {
-    replay("layout_grid_stack_stack_with_layouts", false);
+    replay_build_mode_divergence("layout_grid_stack_stack_with_layouts");
 }
 
 #[test]
@@ -122,13 +145,11 @@ fn wave_c1_layout_grid_stack_003_grid_with_layouts_size_changing() {
 }
 
 #[test]
-#[ignore = "expected-red: exact grid-with-layouts-span SRIV diverges at frame 34 operation 1116"]
 fn wave_c1_layout_grid_stack_004_grid_with_layouts_span() {
     replay("layout_grid_stack_grid_with_layouts_span", false);
 }
 
 #[test]
-#[ignore = "expected-red: exact size-span-changing SRIV diverges at frame 32 operation 1592"]
 fn wave_c1_layout_grid_stack_005_grid_with_layouts_size_span_changing() {
     replay(
         "layout_grid_stack_grid_with_layouts_size_span_changing",

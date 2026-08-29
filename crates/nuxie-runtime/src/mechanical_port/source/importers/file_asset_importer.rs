@@ -2,7 +2,8 @@ use std::any::Any;
 
 use crate::mechanical_port::source::{
     assets::file_asset_contents::FileAssetContents, core::CoreHandle,
-    factory::RuntimeFactoryHandle, file_asset_loader::FileAssetLoaderRef, status_code::StatusCode,
+    factory::RuntimeFactoryHandle, file::ImportAdmissionRef, file_asset_loader::FileAssetLoaderRef,
+    status_code::StatusCode,
 };
 
 use super::import_stack::ImportStackObject;
@@ -16,6 +17,7 @@ pub struct FileAssetImporter {
     pub(crate) file_asset_loader: Option<FileAssetLoaderRef>,
     pub(crate) factory: RuntimeFactoryHandle,
     pub(crate) content: Option<CoreHandle>,
+    admission: Option<ImportAdmissionRef>,
 }
 
 impl FileAssetImporter {
@@ -29,7 +31,13 @@ impl FileAssetImporter {
             file_asset_loader,
             factory,
             content: None,
+            admission: None,
         }
+    }
+
+    pub fn with_admission(mut self, admission: Option<ImportAdmissionRef>) -> Self {
+        self.admission = admission;
+        self
     }
 
     fn retain_file_asset_contents(&mut self, contents: CoreHandle) {
@@ -53,13 +61,28 @@ impl ImportStackObject for FileAssetImporter {
                 })
                 .expect("FileAssetImporter content is FileAssetContents")
         });
+        if self
+            .admission
+            .as_ref()
+            .is_some_and(|policy| !policy.admit_asset_bytes(&self.file_asset, &bytes))
+        {
+            return StatusCode::InvalidObject;
+        }
         let loaded = self.file_asset_loader.as_ref().is_some_and(|loader| {
             loader.with_loader_mut(|loader| {
                 loader.load_contents(self.file_asset.clone(), &bytes, &self.factory)
             })
         });
         if loaded {
-            return StatusCode::Ok;
+            return if self
+                .admission
+                .as_ref()
+                .is_some_and(|policy| !policy.admit_loaded_asset(&self.file_asset))
+            {
+                StatusCode::InvalidObject
+            } else {
+                StatusCode::Ok
+            };
         } else if !bytes.is_empty() {
             self.file_asset
                 .with_mut(|file_asset| {
@@ -69,6 +92,13 @@ impl ImportStackObject for FileAssetImporter {
                         .file_asset_decode(&mut bytes, &self.factory);
                 })
                 .expect("FileAssetImporter file asset remains live");
+        }
+        if self
+            .admission
+            .as_ref()
+            .is_some_and(|policy| !policy.admit_loaded_asset(&self.file_asset))
+        {
+            return StatusCode::InvalidObject;
         }
         StatusCode::Ok
     }

@@ -18,16 +18,68 @@ pub fn most_significant_bit(value: u32) -> u32 {
 pub fn rotate_left32(value: u32, amount: i32) -> u32 {
     value.rotate_left(amount as u32)
 }
-pub const fn count_set_bits_fallback(mut value: u64) -> u32 {
-    let mut count = 0;
-    while value != 0 {
-        count += 1;
-        value &= value - 1;
-    }
-    count
+pub trait CountSetBits: Copy {
+    fn count_set_bits(self) -> u32;
+    fn count_set_bits_fallback(self) -> u32;
 }
-pub fn count_set_bits<T: Into<u64>>(value: T) -> u32 {
-    value.into().count_ones()
+
+macro_rules! count_set_bits_unsigned {
+    ($($ty:ty => $builtin:ty),* $(,)?) => {$(
+        impl CountSetBits for $ty {
+            fn count_set_bits(self) -> u32 {
+                (self as $builtin).count_ones()
+            }
+
+            fn count_set_bits_fallback(mut self) -> u32 {
+                let mut count = 0;
+                while self != 0 {
+                    count += 1;
+                    self &= self - 1;
+                }
+                count
+            }
+        }
+    )*};
+}
+
+macro_rules! count_set_bits_signed {
+    ($($ty:ty => $unsigned:ty => $builtin:ty),* $(,)?) => {$(
+        impl CountSetBits for $ty {
+            fn count_set_bits(self) -> u32 {
+                (self as $builtin).count_ones()
+            }
+
+            fn count_set_bits_fallback(self) -> u32 {
+                let mut value = self as $unsigned;
+                let mut count = 0;
+                while value != 0 {
+                    count += 1;
+                    value &= value - 1;
+                }
+                count
+            }
+        }
+    )*};
+}
+
+count_set_bits_unsigned!(u8 => u32, u16 => u32, u32 => u32, u64 => u64, u128 => u32);
+count_set_bits_signed!(i8 => u8 => u32, i16 => u16 => u32, i32 => u32 => u32, i64 => u64 => u64, i128 => u128 => u32);
+
+#[cfg(target_pointer_width = "64")]
+count_set_bits_unsigned!(usize => u64);
+#[cfg(target_pointer_width = "64")]
+count_set_bits_signed!(isize => usize => u64);
+#[cfg(target_pointer_width = "32")]
+count_set_bits_unsigned!(usize => u32);
+#[cfg(target_pointer_width = "32")]
+count_set_bits_signed!(isize => usize => u32);
+
+pub fn count_set_bits_fallback<T: CountSetBits>(value: T) -> u32 {
+    value.count_set_bits_fallback()
+}
+
+pub fn count_set_bits<T: CountSetBits>(value: T) -> u32 {
+    value.count_set_bits()
 }
 pub const fn compact_bitmask_value(value: u32, mask: u32) -> u32 {
     let mut compacted = 0;
@@ -77,21 +129,16 @@ pub struct BitCombinationIterator<T: BitMask> {
     current: T,
     mask: T,
     was_advanced: bool,
-    end: bool,
 }
 impl<T: BitMask> Iterator for BitCombinationIterator<T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
-        if self.end {
+        if self.was_advanced && self.current == self.mask {
             return None;
         }
         let result = self.current;
-        if self.was_advanced && self.current.to_u128() == 0 {
-            self.end = true;
-        } else {
-            self.was_advanced = true;
-            self.current = T::from_u128(self.current.to_u128().wrapping_sub(1)) & self.mask;
-        }
+        self.was_advanced = true;
+        self.current = T::from_u128(self.current.to_u128().wrapping_sub(1)) & self.mask;
         Some(result)
     }
 }
@@ -103,7 +150,6 @@ impl<T: BitMask> IntoIterator for BitCombinationIterable<T> {
             current: self.mask,
             mask: self.mask,
             was_advanced: false,
-            end: false,
         }
     }
 }

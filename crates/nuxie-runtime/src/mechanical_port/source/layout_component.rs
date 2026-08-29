@@ -2,7 +2,7 @@ use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::AdvancingComponent,
     artboard::Artboard,
-    component::Component,
+    component::{Component, ComponentOccurrenceHandle},
     component_dirt::ComponentDirt,
     core::CoreHandle,
     core_context::CoreContext,
@@ -19,7 +19,9 @@ use crate::mechanical_port::source::{
             LayoutAnimationStyle, LayoutDirection, LayoutScaleType, LayoutStyleInterpolation,
         },
         layout_measure_mode::LayoutMeasureMode,
-        layout_node_provider::{LayoutNodeKey, LayoutNodeProvider, LayoutNodeProviderState},
+        layout_node_provider::{
+            LayoutNodeKey, LayoutNodeProvider, LayoutNodeProviderState, layout_node_owner_for,
+        },
         layout_style_applier::{
             LayoutStyleApplier, LayoutSyncContext, YGAlign, YGDimension, YGDirection, YGDisplay,
             YGFlexDirection, YGFloatOptional, YGPositionType, YGStyle, YGUnit, YGValue,
@@ -125,13 +127,34 @@ impl LayoutAnimationData {
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
+enum LayoutMeasureContext {
+    Layout(CoreHandle),
+    Participant(CoreHandle),
+}
+
+struct CachedLayoutNode {
+    owner: CoreHandle,
+    node: taffy::prelude::NodeId,
+    children: Vec<usize>,
+    measure: Option<LayoutMeasureContext>,
+}
+
+struct LayoutTreeCache {
+    tree: taffy::prelude::TaffyTree<LayoutMeasureContext>,
+    nodes: Vec<CachedLayoutNode>,
+    root: usize,
+}
+
 pub struct LayoutComponent {
     pub base: LayoutComponentBase,
     paints: ShapePaintContainer,
     provider: LayoutNodeProviderState,
     style: Option<CoreHandle>,
-    layout_data: Box<LayoutData>,
+    pub(crate) layout_data: Box<LayoutData>,
     layout_children: Vec<LayoutNodeKey>,
+    layout_tree_cache: Option<LayoutTreeCache>,
+    layout_tree_topology_dirty: bool,
     layout: Layout,
     layout_padding: LayoutPadding,
     solved_padding: LayoutPadding,
@@ -146,7 +169,7 @@ pub struct LayoutComponent {
     local_path: ShapePaintPath,
     world_path: ShapePaintPath,
     proxy: Option<Rc<RefCell<DrawableProxy>>>,
-    just_added_to_host: bool,
+    pub(crate) just_added_to_host: bool,
     width_override: f32,
     width_unit_value_override: i32,
     height_override: f32,
@@ -171,6 +194,8 @@ impl Default for LayoutComponent {
             style: None,
             layout_data: Box::new(LayoutData::default()),
             layout_children: Vec::new(),
+            layout_tree_cache: None,
+            layout_tree_topology_dirty: true,
             layout: Layout::default(),
             layout_padding: LayoutPadding::default(),
             solved_padding: LayoutPadding::default(),
@@ -216,7 +241,7 @@ impl ProxyDrawing for LayoutProxy {
     }
     fn is_proxy_hidden(&self) -> bool {
         self.owner
-            .with(|owner| owner.as_drawable().is_none_or(Drawable::is_hidden))
+            .with(|owner| owner.drawable_is_hidden())
             .unwrap_or(true)
     }
     fn owner_handle(&self) -> CoreHandle {
@@ -234,8 +259,19 @@ impl LayoutComponent {
         from: &CoreHandle,
         nested: bool,
     ) -> Vec<(CoreHandle, CoreHandle)> {
-        let children = from
-            .with(|object| {
+        Self::layout_providers_nested_with_solo(from, nested, None)
+    }
+    fn layout_providers_nested_with_solo(
+        from: &CoreHandle,
+        nested: bool,
+        active_solo: Option<&crate::mechanical_port::source::solo::Solo>,
+    ) -> Vec<(CoreHandle, CoreHandle)> {
+        let children = if let Some(solo) =
+            active_solo.filter(|solo| solo.base.handle().as_ref() == Some(from))
+        {
+            solo.active_component().into_iter().collect()
+        } else {
+            from.with(|object| {
                 if let Some(solo) = object
                     .as_any()
                     .downcast_ref::<crate::mechanical_port::source::solo::Solo>()
@@ -249,26 +285,49 @@ impl LayoutComponent {
                         .to_vec()
                 }
             })
-            .unwrap_or_default();
-        Self::layout_providers_children(&children, nested)
+            .unwrap_or_default()
+        };
+        Self::layout_providers_children_with_solo(&children, nested, active_solo)
     }
     fn layout_providers_children(
         children: &[CoreHandle],
         nested: bool,
     ) -> Vec<(CoreHandle, CoreHandle)> {
+        Self::layout_providers_children_with_solo(children, nested, None)
+    }
+    fn layout_providers_children_with_solo(
+        children: &[CoreHandle],
+        nested: bool,
+        active_solo: Option<&crate::mechanical_port::source::solo::Solo>,
+    ) -> Vec<(CoreHandle, CoreHandle)> {
         let mut result = Vec::new();
         for child in children {
-            let Some((provider, transparent, joins)) = child.with(|object| {
-                    let is_list = object.as_any().is::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>();
-                    let joins = !is_list || object.as_drawable().is_some_and(|drawable| drawable.base.drawable_flags() & u32::from(crate::mechanical_port::source::drawable_flag::DrawableFlag::PARTICIPATES_IN_LAYOUT.0) != 0);
-                    (object.layout_provider_handle(), object.core_type() == crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY || object.as_any().is::<crate::mechanical_port::source::solo::Solo>(), joins)
-                }) else { continue; };
-            if let Some(provider) = provider {
-                if !nested || joins {
+            // LayoutNodeProvider::from uses the immutable core type before
+            // reading provider state. In particular, an attached style may be
+            // actively setting a property while this traversal visits children.
+            if let Some(provider) =
+                crate::mechanical_port::source::layout::layout_node_provider::from_component(child)
+            {
+                let joins = !nested
+                    || !child.is_type_of(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY)
+                    || child.with(|object| {
+                        let drawable = object.as_drawable().expect("component list Drawable");
+                        drawable.base.drawable_flags() & u32::from(crate::mechanical_port::source::drawable_flag::DrawableFlag::PARTICIPATES_IN_LAYOUT.0) != 0
+                    }).expect("live component list");
+                if joins {
                     result.push((child.clone(), provider));
                 }
-            } else if transparent {
-                result.extend(Self::layout_providers_nested_occurrence(child, true));
+            } else if child.core_type()
+                == Some(crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY)
+                || child.is_type_of(
+                    crate::mechanical_port::source::generated::solo_base::SoloBase::TYPE_KEY,
+                )
+            {
+                result.extend(Self::layout_providers_nested_with_solo(
+                    child,
+                    true,
+                    active_solo,
+                ));
             }
         }
         result
@@ -299,6 +358,39 @@ impl LayoutComponent {
     }
 
     pub fn mark_layout_node_dirty_occurrence(owner: &CoreHandle, force: bool) {
+        Self::mark_layout_node_dirty_with_host_occurrence(owner, force, None);
+    }
+
+    /// `YGNode::markDirtyAndPropagate` reaches every ancestor in the retained
+    /// Yoga tree. The Taffy adaptation retains only the calculation root's
+    /// materialized tree, so a child-list mutation must invalidate that same
+    /// ancestor chain before the next solve.
+    fn mark_layout_tree_topology_dirty_occurrence(owner: &CoreHandle) {
+        let mut current = Some(owner.clone());
+        let mut active = Vec::new();
+        while let Some(node_owner) = current {
+            assert!(
+                !active.contains(&node_owner),
+                "cyclic layout node ownership"
+            );
+            active.push(node_owner.clone());
+            current = node_owner
+                .with_mut(|object| {
+                    let layout = object.as_layout_component_mut().expect("Layout owner");
+                    layout.layout_tree_topology_dirty = true;
+                    let node = layout.layout_node_key(0)?;
+                    let parent = node.owner.borrow().clone();
+                    parent
+                })
+                .flatten();
+        }
+    }
+
+    fn mark_layout_node_dirty_with_host_occurrence(
+        owner: &CoreHandle,
+        force: bool,
+        host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
+    ) {
         let artboard = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().expect("Layout owner");
@@ -308,13 +400,75 @@ impl LayoutComponent {
             })
             .flatten();
         if let Some(artboard) = artboard {
-            artboard.with_mut(|object| {
-                object
-                    .as_artboard_mut()
-                    .expect("owning Artboard")
-                    .mark_layout_dirty(owner.clone())
-            });
+            Artboard::mark_layout_dirty_occurrence(&artboard, owner.clone(), host);
         }
+    }
+
+    pub(crate) fn set_parent_is_row_with_host_occurrence(
+        owner: &CoreHandle,
+        row: bool,
+        host: &mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost,
+    ) {
+        owner.with_mut(|object| {
+            object
+                .as_layout_component_mut()
+                .expect("Layout owner")
+                .parent_is_row = row;
+        });
+        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, Some(host));
+    }
+
+    pub(crate) fn set_clip_occurrence(owner: &CoreHandle, value: bool) {
+        let changed = owner
+            .with_mut(|object| {
+                object
+                    .as_layout_component_mut()
+                    .expect("Layout owner")
+                    .base
+                    .set_clip_value(value)
+            })
+            .expect("live Layout owner");
+        if !changed {
+            return;
+        }
+        Self::mark_layout_node_dirty_occurrence(owner, false);
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+            owner.clone(),
+        )
+        .add_dirt(ComponentDirt::PATH, false);
+        owner.with_mut(|object| {
+            object
+                .core_mut()
+                .notify_property_changed(LayoutComponentBase::CLIP_PROPERTY_KEY);
+        });
+    }
+
+    pub(crate) fn set_dimension_occurrence(owner: &CoreHandle, key: u16, value: f32) -> bool {
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut()?;
+                match key {
+                    LayoutComponentBase::WIDTH_PROPERTY_KEY => {
+                        Some(layout.base.set_width_value(value))
+                    }
+                    LayoutComponentBase::HEIGHT_PROPERTY_KEY => {
+                        Some(layout.base.set_height_value(value))
+                    }
+                    _ => None,
+                }
+            })
+            .flatten();
+        let Some(changed) = changed else {
+            return false;
+        };
+        if changed {
+            // The generated setter invokes width/heightChanged before the
+            // property notification. Release the owner for its root-layout
+            // callback; for an Artboard, that root is this same occurrence.
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            owner.with_mut(|object| object.core_mut().notify_property_changed(key));
+        }
+        true
     }
 
     pub fn mark_layout_style_dirty_occurrence(owner: &CoreHandle) {
@@ -332,51 +486,116 @@ impl LayoutComponent {
     }
 
     pub fn sync_layout_children_occurrence(owner: &CoreHandle) {
-        let mut children = Vec::new();
-        for (_, provider) in Self::layout_providers_occurrence(owner) {
-            let count = provider
-                .with_mut(|object| {
-                    object
-                        .as_layout_node_provider_mut()
-                        .expect("layout provider")
-                        .num_layout_nodes()
-                })
-                .unwrap_or(0);
+        Self::sync_layout_children_with_participant_occurrence(owner, None);
+    }
+
+    pub(crate) fn sync_layout_children_with_participant_occurrence(
+        owner: &CoreHandle,
+        active_participant: Option<
+            &crate::mechanical_port::source::layout::layout_participant::LayoutParticipant,
+        >,
+    ) {
+        Self::sync_layout_children_with_active_owners(owner, active_participant, None);
+    }
+    pub(crate) fn sync_layout_children_from_solo(
+        owner: &CoreHandle,
+        solo: &crate::mechanical_port::source::solo::Solo,
+    ) {
+        Self::sync_layout_children_with_active_owners(owner, None, Some(solo));
+    }
+    fn sync_layout_children_with_active_owners(
+        owner: &CoreHandle,
+        active_participant: Option<
+            &crate::mechanical_port::source::layout::layout_participant::LayoutParticipant,
+        >,
+        active_solo: Option<&crate::mechanical_port::source::solo::Solo>,
+    ) {
+        let detached = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                #[cfg(feature = "tools")]
+                layout.layout_data.clear_children();
+                std::mem::take(&mut layout.layout_children)
+            })
+            .expect("live Layout owner");
+        Self::clear_detached_layout_ownership(Some(owner), &detached);
+        for (_, provider) in Self::layout_providers_nested_with_solo(owner, false, active_solo) {
+            let active = active_participant
+                .filter(|participant| participant.base.handle().as_ref() == Some(&provider));
+            let count = if let Some(participant) = active {
+                participant.num_layout_nodes()
+            } else {
+                provider
+                    .with_mut(|object| {
+                        object
+                            .as_layout_node_provider_mut()
+                            .expect("layout provider")
+                            .num_layout_nodes()
+                    })
+                    .expect("live layout provider")
+            };
             for index in 0..count {
-                children.push(LayoutNodeKey {
-                    provider: provider.clone(),
-                    index,
+                let node = if let Some(participant) = active {
+                    participant.layout_node_key(index)
+                } else {
+                    crate::mechanical_port::source::layout::layout_node_provider::layout_node_for(
+                        &provider, index,
+                    )
+                };
+                let Some(node) = node else {
+                    continue;
+                };
+                *node.owner.borrow_mut() = Some(owner.clone());
+                owner.with_mut(|object| {
+                    let layout = object.as_layout_component_mut().expect("Layout owner");
+                    #[cfg(feature = "tools")]
+                    layout.layout_data.children.push(node.provider.clone());
+                    layout.layout_children.push(node);
                 });
             }
         }
-        owner.with_mut(|object| {
-            let layout = object.as_layout_component_mut().unwrap();
-            layout.clear_layout_children();
-            #[cfg(feature = "tools")]
-            {
-                layout.layout_data.children =
-                    children.iter().map(|node| node.provider.clone()).collect();
-            }
-            layout.layout_children = children;
-        });
+        Self::mark_layout_tree_topology_dirty_occurrence(owner);
         Self::mark_layout_node_dirty_occurrence(owner, false);
     }
 
     pub fn propagate_collapse_occurrence(owner: &CoreHandle, value: bool) {
-        let Some((collapsed, children, own_collapsed, collapsables)) = owner.with(|object| {
-            let layout = object.as_layout_component().unwrap();
+        let own_collapsed =
+            owner.with(|object| object.as_layout_component().unwrap().is_collapsed());
+        if let Some(own_collapsed) = own_collapsed {
+            Self::propagate_resolved_collapse_occurrence(
+                owner,
+                value || own_collapsed,
+                own_collapsed,
+                None,
+            );
+        }
+    }
+    fn propagate_resolved_collapse_occurrence(
+        owner: &CoreHandle,
+        collapsed: bool,
+        own_collapsed: bool,
+        mut active_style: Option<&mut LayoutComponentStyle>,
+    ) {
+        let Some((children, collapsables)) = owner.with(|object| {
             let component = object.as_component().unwrap();
             (
-                value || layout.is_collapsed(),
                 object.as_container_component().unwrap().children().to_vec(),
-                component.is_collapsed(),
                 component.collapsables_snapshot(),
             )
         }) else {
             return;
         };
         for child in children {
-            child.with_mut(|object| object.component_collapse(collapsed));
+            if let Some(style) = active_style
+                .as_deref_mut()
+                .filter(|style| style.handle().as_ref() == Some(&child))
+            {
+                // The source calls this same child while its style setter is
+                // active. Use that actual owner, not a second arena borrow.
+                CoreCapabilities::component_collapse(style, collapsed);
+            } else {
+                ComponentOccurrenceHandle::Authored(child).collapse(collapsed);
+            }
         }
         for collapsable in collapsables {
             collapsable.with_mut(|object| {
@@ -388,10 +607,16 @@ impl LayoutComponent {
     }
 
     pub fn sync_style_occurrence(owner: &CoreHandle) {
+        Self::sync_style_with_parent_style_occurrence(owner, None);
+    }
+    pub(crate) fn sync_style_with_parent_style_occurrence(
+        owner: &CoreHandle,
+        parent_style: Option<&crate::mechanical_port::source::layout::layout_style_applier::LayoutParentStyleSnapshot>,
+    ) {
         let Some((mut style, context, appliers)) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
-                let context = layout.style_sync_context()?;
+                let context = layout.style_sync_context(parent_style)?;
                 Some((
                     std::mem::take(&mut layout.layout_data.style),
                     context,
@@ -438,33 +663,41 @@ impl LayoutComponent {
         for (child, provider) in Self::layout_providers_occurrence(owner) {
             let excluded = matches!(child.core_type(), Some(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY | crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::TYPE_KEY | crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY));
             if !excluded {
-                Self::sync_provider_style_occurrence(&provider);
+                Self::sync_provider_style_with_parent_style_occurrence(&provider, parent_style);
             }
         }
     }
 
     fn sync_provider_style_occurrence(provider: &CoreHandle) -> bool {
-        let kind = provider
-            .with(|object| {
-                (
-                    object.as_artboard().is_some(),
-                    object.as_layout_component().is_some(),
-                )
-            })
-            .unwrap_or_default();
+        Self::sync_provider_style_with_parent_style_occurrence(provider, None)
+    }
+    fn sync_provider_style_with_parent_style_occurrence(
+        provider: &CoreHandle,
+        parent_style: Option<&crate::mechanical_port::source::layout::layout_style_applier::LayoutParentStyleSnapshot>,
+    ) -> bool {
+        let kind = (
+            provider.is_type_of(crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY),
+            provider.is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY),
+        );
         if kind.0 {
-            return Artboard::sync_style_changes_handle(provider);
+            return Artboard::sync_style_changes_with_parent_style_handle(provider, parent_style);
         }
         if kind.1 {
-            Self::sync_style_occurrence(provider);
+            Self::sync_style_with_parent_style_occurrence(provider, parent_style);
             return true;
         }
         if let Some((_, roots)) = Self::hosted_layout_roots(provider) {
             let mut changed = false;
             for (_, root) in roots {
-                changed |= Artboard::sync_style_changes_handle(&root);
+                changed |=
+                    Artboard::sync_style_changes_with_parent_style_handle(&root, parent_style);
             }
             return changed;
+        }
+        if provider.is_type_of(
+            crate::mechanical_port::source::layout::layout_participant::LayoutParticipant::TYPE_KEY,
+        ) {
+            return crate::mechanical_port::source::layout::layout_participant::LayoutParticipant::sync_style_changes_occurrence(provider, parent_style);
         }
         provider
             .with_mut(|object| object.layout_provider_sync_style_changes())
@@ -473,11 +706,16 @@ impl LayoutComponent {
     }
 
     pub fn sync_child_provider_styles_occurrence(owner: &CoreHandle) {
+        Self::sync_child_provider_styles_with_parent_style_occurrence(owner, None);
+    }
+    fn sync_child_provider_styles_with_parent_style_occurrence(
+        owner: &CoreHandle,
+        parent_style: Option<&crate::mechanical_port::source::layout::layout_style_applier::LayoutParentStyleSnapshot>,
+    ) {
         for (_, provider) in Self::layout_providers_occurrence(owner) {
-            Self::sync_provider_style_occurrence(&provider);
+            Self::sync_provider_style_with_parent_style_occurrence(&provider, parent_style);
             if provider
-                .with(|object| object.as_layout_component().is_some())
-                .unwrap_or(false)
+                .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)
             {
                 Self::mark_layout_node_dirty_occurrence(&provider, false);
             } else {
@@ -490,8 +728,7 @@ impl LayoutComponent {
         let mut parent = self.base.base.base.base.base.parent_handle();
         while let Some(value) = parent {
             if value
-                .with(|value| value.as_layout_component().is_some())
-                .unwrap_or(false)
+                .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)
             {
                 return Some(value);
             }
@@ -679,7 +916,7 @@ impl LayoutComponent {
         for paint in self.paints.shape_paints().iter().cloned() {
             paint.with_mut(|paint| {
                 if let Some(paint) = paint.as_shape_paint_mut() {
-                    paint.blend_mode(blend);
+                    paint.blend_mode(blend.into());
                 }
             });
         }
@@ -693,27 +930,23 @@ impl LayoutComponent {
         skip_on_unclipped: bool,
         primary: bool,
     ) -> bool {
-        let inverse = self
-            .base
-            .base
-            .base
-            .base
-            .world_transform()
-            .invert_or_identity();
-        if inverse == Mat2D::identity()
-            && self.base.base.base.base.world_transform() != Mat2D::identity()
-        {
+        self.hit_test_point_with_origin(position, skip_on_unclipped, primary, None)
+    }
+    pub(crate) fn hit_test_point_with_origin(
+        &mut self,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        primary: bool,
+        root_origin: Option<Vec2D>,
+    ) -> bool {
+        let mut inverse = Mat2D::default();
+        if !self.base.world_transform().invert(&mut inverse) {
             return false;
         }
         if !(skip_on_unclipped && !self.base.clip()) {
             let mut local = inverse * *position;
-            if let Some(artboard) = self.base.base.base.base.base.as_artboard_mut() {
-                if artboard.origin_x() != 0.0 || artboard.origin_y() != 0.0 {
-                    local += Vec2D::new(
-                        artboard.origin_x() * artboard.layout_width(),
-                        artboard.origin_y() * artboard.layout_height(),
-                    );
-                }
+            if let Some(origin) = root_origin {
+                local += origin;
             }
             if !self.local_bounds().contains(local) {
                 return false;
@@ -800,6 +1033,60 @@ impl LayoutComponent {
         self.width_unit_value_override = unit;
         self.parent_is_row = row;
         self.mark_layout_node_dirty(false);
+    }
+    pub(crate) fn width_override_occurrence(
+        owner: &CoreHandle,
+        width: f32,
+        unit: i32,
+        row: bool,
+        host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
+    ) {
+        owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut().expect("Layout owner");
+            layout.width_override = width;
+            layout.width_unit_value_override = unit;
+            layout.parent_is_row = row;
+        });
+        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+    }
+    pub(crate) fn height_override_occurrence(
+        owner: &CoreHandle,
+        height: f32,
+        unit: i32,
+        row: bool,
+        host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
+    ) {
+        owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut().expect("Layout owner");
+            layout.height_override = height;
+            layout.height_unit_value_override = unit;
+            layout.parent_is_row = row;
+        });
+        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+    }
+    pub(crate) fn set_width_intrinsically_size_override_occurrence(
+        owner: &CoreHandle,
+        intrinsic: bool,
+        host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
+    ) {
+        owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut().expect("Layout owner");
+            layout.width_intrinsically_size_override = intrinsic;
+            layout.width_unit_value_override = if intrinsic { 3 } else { 1 };
+        });
+        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+    }
+    pub(crate) fn set_height_intrinsically_size_override_occurrence(
+        owner: &CoreHandle,
+        intrinsic: bool,
+        host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
+    ) {
+        owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut().expect("Layout owner");
+            layout.height_intrinsically_size_override = intrinsic;
+            layout.height_unit_value_override = if intrinsic { 3 } else { 1 };
+        });
+        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
     }
     pub fn height_override(&mut self, height: f32, unit: i32, row: bool) {
         self.height_override = height;
@@ -896,12 +1183,12 @@ impl LayoutComponent {
         }
         let Some(style) = context.resolve(self.base.style_id()).filter(|style| {
             style
-                .with_downcast::<LayoutComponentStyle, _>(|_| ())
-                .is_some()
+                .is_type_of(crate::mechanical_port::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase::TYPE_KEY)
         }) else {
             return StatusCode::MissingObject;
         };
         self.style = Some(style.clone());
+        self.base.add_child(style.clone());
         let Some(this) = self.base.base.base.base.base.handle() else {
             return StatusCode::MissingObject;
         };
@@ -929,7 +1216,9 @@ impl LayoutComponent {
             renderer.clip_path(self.world_path.render_path(&factory));
         }
         let world = self.shape_world_transform();
-        for paint in self.paints.shape_paints().to_vec() {
+        let mut paint_index = 0;
+        while let Some(paint) = self.paints.shape_paints().get(paint_index).cloned() {
+            paint_index += 1;
             paint.with_mut(|paint| {
                 let Some(paint) = paint.as_shape_paint_behavior_mut() else {
                     return;
@@ -1002,13 +1291,18 @@ impl LayoutComponent {
                 Some(self.base.base.base.base.world_transform()),
             );
             for paint in self.paints.shape_paints().iter().cloned() {
-                paint.with_mut(|paint| {
-                    if let Some(paint) = paint.as_shape_paint_behavior_mut() {
-                        if paint.should_draw() {
-                            paint.shape_paint_mut().invalidate_effects();
-                        }
-                    }
-                });
+                let should_draw = paint
+                    .with_mut(|paint| {
+                        paint
+                            .as_shape_paint_behavior_mut()
+                            .is_some_and(|paint| paint.should_draw())
+                    })
+                    .unwrap_or(false);
+                if should_draw {
+                    crate::mechanical_port::source::shapes::paint::effects_container::invalidate_effects_handle(
+                        &paint, None,
+                    );
+                }
             }
         }
     }
@@ -1073,14 +1367,19 @@ impl LayoutComponent {
     }
     pub fn layout_node_key(&self, index: usize) -> Option<LayoutNodeKey> {
         let provider = self.base.base.base.base.base.handle()?;
-        (index == 0).then_some(LayoutNodeKey { provider, index })
+        (index == 0).then(|| self.provider.node_key(provider, index))
     }
     pub fn is_leaf(&self) -> bool {
         Self::layout_providers_children(self.base.children(), false).is_empty()
     }
-    fn style_sync_context(&mut self) -> Option<LayoutSyncContext> {
+    fn style_sync_context(
+        &mut self,
+        active_parent_style: Option<&crate::mechanical_port::source::layout::layout_style_applier::LayoutParentStyleSnapshot>,
+    ) -> Option<LayoutSyncContext> {
         let style = self.style_handle()?;
         let parent = self.layout_parent_handle();
+        let active_parent_style =
+            active_parent_style.filter(|snapshot| parent.as_ref() == Some(&snapshot.owner));
         let parent_style = parent.as_ref().and_then(|parent| {
             parent
                 .with(|parent| {
@@ -1090,22 +1389,30 @@ impl LayoutComponent {
                 })
                 .flatten()
         });
-        let (parent_is_grid, parent_is_stack, container_justify_items) = parent_style
-            .as_ref()
-            .and_then(|style| {
-                style.with_downcast::<LayoutComponentStyle, _>(|style| {
-                    (
-                        style.is_grid(),
-                        style.is_stack(),
-                        style.base.justify_items_value(),
-                    )
+        let (parent_is_grid, parent_is_stack, container_justify_items) = active_parent_style
+            .map(|snapshot| {
+                (
+                    snapshot.is_grid,
+                    snapshot.is_stack,
+                    snapshot.justify_items as u8,
+                )
+            })
+            .or_else(|| {
+                parent_style.as_ref().and_then(|style| {
+                    style.with_downcast::<LayoutComponentStyle, _>(|style| {
+                        (
+                            style.is_grid(),
+                            style.is_stack(),
+                            style.base.justify_items_value(),
+                        )
+                    })
                 })
             })
             .unwrap_or((
                 false,
                 false,
                 crate::mechanical_port::source::layout::layout_style_applier::YGJustify::Stretch
-                    as u32,
+                    as u8,
             ));
         let inline_hugs = style
             .with_downcast::<LayoutComponentStyle, _>(|style| {
@@ -1115,15 +1422,21 @@ impl LayoutComponent {
         Some(LayoutSyncContext {
             parent_is_grid,
             parent_is_stack,
-            container_justify_items,
+            container_justify_items: u32::from(container_justify_items),
             inline_hugs,
-            parent_is_row: self.effective_parent_is_row(),
+            parent_is_row: if self.can_have_overrides() {
+                self.parent_is_row
+            } else if let Some(snapshot) = active_parent_style {
+                snapshot.is_row
+            } else {
+                self.effective_parent_is_row()
+            },
             is_ltr: self.actual_direction() != LayoutDirection::Rtl,
             has_layout_parent: parent.is_some(),
         })
     }
     pub fn sync_style(&mut self) {
-        let Some(context) = self.style_sync_context() else {
+        let Some(context) = self.style_sync_context(None) else {
             return;
         };
         let mut taffy_style = std::mem::take(&mut self.layout_data.style);
@@ -1167,7 +1480,7 @@ impl LayoutComponent {
     pub fn is_intrinsic_leaf(&self) -> bool {
         self.is_leaf()
             && self
-                .with_style(|style| style.base.intrinsically_sized())
+                .with_style(|style| style.intrinsically_sized())
                 .unwrap_or(false)
     }
     pub fn set_solved_layout(&mut self, layout: Layout, padding: LayoutPadding) {
@@ -1176,9 +1489,72 @@ impl LayoutComponent {
         self.layout_data.has_new_layout = true;
     }
     pub fn clear_layout_children(&mut self) {
-        self.layout_children.clear();
+        self.mark_layout_tree_topology_dirty();
+        let detached = std::mem::take(&mut self.layout_children);
         #[cfg(feature = "tools")]
         self.layout_data.clear_children();
+        let owner = self.base.base.base.base.base.handle();
+        Self::clear_detached_layout_ownership(owner.as_ref(), &detached);
+    }
+    fn mark_layout_tree_topology_dirty(&mut self) {
+        self.layout_tree_topology_dirty = true;
+        let this = self.base.base.base.base.base.handle();
+        let mut active = this.into_iter().collect::<Vec<_>>();
+        let mut current = self
+            .layout_node_key(0)
+            .and_then(|node| node.owner.borrow().clone());
+        while let Some(node_owner) = current {
+            assert!(
+                !active.contains(&node_owner),
+                "cyclic layout node ownership"
+            );
+            active.push(node_owner.clone());
+            current = node_owner
+                .with_mut(|object| {
+                    let layout = object.as_layout_component_mut().expect("Layout owner");
+                    layout.layout_tree_topology_dirty = true;
+                    let node = layout.layout_node_key(0)?;
+                    let parent = node.owner.borrow().clone();
+                    parent
+                })
+                .flatten();
+        }
+    }
+    fn clear_detached_layout_ownership(owner: Option<&CoreHandle>, nodes: &[LayoutNodeKey]) {
+        let owns_children = owner.is_some_and(|owner| {
+            nodes.first().is_some_and(|first| {
+                first
+                    .owner
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|value| value == owner)
+            })
+        });
+        if !owns_children {
+            return;
+        }
+        for node in nodes {
+            *node.owner.borrow_mut() = None;
+            let Some(node_owner) = layout_node_owner_for(node) else {
+                continue;
+            };
+            node_owner.with_mut(|object| {
+                if let Some(layout) = object.as_layout_component_mut() {
+                    // YGNodeRemoveAllChildren replaces the cached YGLayout with
+                    // a default layout while deliberately retaining hasNewLayout.
+                    layout.layout_data.solved_layout =
+                        Layout::new(0.0, 0.0, f32::NAN, f32::NAN);
+                    layout.solved_padding = LayoutPadding::default();
+                } else if let Some(participant) = object
+                    .as_any_mut()
+                    .downcast_mut::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()
+                {
+                    if let Some(data) = participant.native_layout_data_mut() {
+                        data.solved_layout = Layout::new(0.0, 0.0, f32::NAN, f32::NAN);
+                    }
+                }
+            });
+        }
     }
     pub fn sync_layout_children(&mut self) {
         self.clear_layout_children();
@@ -1192,10 +1568,16 @@ impl LayoutComponent {
                 })
                 .unwrap_or(0);
             for index in 0..count {
-                self.layout_children.push(LayoutNodeKey {
-                    provider: provider.clone(),
-                    index,
-                });
+                if let Some(node) =
+                    crate::mechanical_port::source::layout::layout_node_provider::layout_node_for(
+                        &provider, index,
+                    )
+                {
+                    if let Some(owner) = self.base.base.base.base.base.handle() {
+                        *node.owner.borrow_mut() = Some(owner);
+                    }
+                    self.layout_children.push(node);
+                }
             }
         }
         #[cfg(feature = "tools")]
@@ -1245,17 +1627,23 @@ impl LayoutComponent {
             if skip {
                 continue;
             }
-            let propagate = child
-                .with_mut(|child| {
-                    let Some(sizeable) = child.as_intrinsically_sizeable_mut() else {
-                        return true;
-                    };
-                    if let Some((width, height, direction)) = style {
-                        sizeable.control_size(size, width, height, direction);
-                    }
-                    sizeable.should_propagate_size_to_children()
-                })
-                .unwrap_or(false);
+            let propagate = if let Some((width, height, direction)) = style {
+                let controlled =
+                    crate::mechanical_port::source::intrinsically_sizeable::control_size_handle(
+                        &child, size, width, height, direction,
+                    );
+                !controlled
+                    || child
+                        .with_mut(|child| {
+                            child
+                                .as_intrinsically_sizeable_mut()
+                                .expect("controlSize resolved an IntrinsicallySizeable")
+                                .should_propagate_size_to_children()
+                        })
+                        .unwrap_or(false)
+            } else {
+                true
+            };
             if propagate {
                 if let Some(children) = child
                     .with(|object| {
@@ -1272,6 +1660,12 @@ impl LayoutComponent {
     }
 
     pub fn propagate_size_occurrence(owner: &CoreHandle) {
+        if owner.is_type_of(
+            crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
+        ) {
+            Artboard::propagate_size_handle(owner);
+            return;
+        }
         let Some((children, hidden, size, style)) = owner.with(|object| {
             let layout = object.as_layout_component().unwrap();
             (
@@ -1297,7 +1691,7 @@ impl LayoutComponent {
         available_height: f32,
     ) -> Vec2D {
         let intrinsically_sized = self
-            .with_style(|style| style.base.intrinsically_sized())
+            .with_style(|style| style.intrinsically_sized())
             .unwrap_or(false);
         Vec2D::new(
             if available_width.is_nan() && intrinsically_sized {
@@ -1321,115 +1715,107 @@ impl LayoutComponent {
         available_width: f32,
         available_height: f32,
     ) {
-        use crate::mechanical_port::source::{
-            artboard_component_list::ArtboardComponentList,
-            layout::layout_participant::LayoutParticipant,
-            nested_artboard_layout::NestedArtboardLayout,
-        };
-        use taffy::prelude::{AvailableSpace, NodeId, Size, TaffyTree};
+        use crate::mechanical_port::source::layout::layout_participant::LayoutParticipant;
+        use taffy::prelude::{AvailableSpace, Dimension, Display, Size, TaffyTree};
 
-        #[derive(Clone)]
-        enum Measure {
-            Layout(CoreHandle),
-            Participant(CoreHandle),
-        }
-        struct SolvedNode {
+        struct TopologyNode {
             owner: CoreHandle,
-            node: NodeId,
-            subtree_dirty: bool,
+            children: Vec<usize>,
+            measure: Option<LayoutMeasureContext>,
         }
 
-        fn target(key: &LayoutNodeKey) -> Option<CoreHandle> {
-            key.provider
-                .with(|object| {
-                    if object.as_layout_component().is_some()
-                        || object.as_any().is::<LayoutParticipant>()
-                    {
-                        assert_eq!(key.index, 0);
-                        Some(key.provider.clone())
-                    } else if let Some(nested) =
-                        object.as_any().downcast_ref::<NestedArtboardLayout>()
-                    {
-                        nested
-                            .base
-                            .base
-                            .artboard_instance_handle(key.index as i32)
-                            .map(|instance| instance.core_handle())
-                    } else if let Some(list) =
-                        object.as_any().downcast_ref::<ArtboardComponentList>()
-                    {
-                        list.item(key.index as i32)
-                            .map(|instance| instance.core_handle())
-                    } else {
-                        panic!("layout provider lacks a native node owner")
-                    }
-                })
-                .flatten()
-        }
-
-        fn build(
+        fn node_state(
             owner: CoreHandle,
-            tree: &mut TaffyTree<Measure>,
-            nodes: &mut Vec<SolvedNode>,
+        ) -> Option<(taffy::style::Style, Option<LayoutMeasureContext>, bool)> {
+            owner.with(|object| {
+                if let Some(layout) = object.as_layout_component() {
+                    let measure = layout
+                        .is_intrinsic_leaf()
+                        .then(|| LayoutMeasureContext::Layout(owner.clone()));
+                    (layout.taffy_style(), measure, layout.layout_data.dirty)
+                } else {
+                    let participant = object
+                        .as_any()
+                        .downcast_ref::<LayoutParticipant>()
+                        .expect("native layout node owner");
+                    let data = participant
+                        .native_layout_data()
+                        .expect("participating node");
+                    let host = participant
+                        .measurement_host_handle()
+                        .expect("participant host");
+                    (
+                        data.style.taffy_style(),
+                        Some(LayoutMeasureContext::Participant(host)),
+                        data.dirty,
+                    )
+                }
+            })
+        }
+
+        fn collect_topology(
+            owner: CoreHandle,
+            nodes: &mut Vec<TopologyNode>,
             active: &mut Vec<CoreHandle>,
-        ) -> (NodeId, bool) {
+        ) -> usize {
             assert!(!active.contains(&owner), "cyclic layout node ownership");
             active.push(owner.clone());
-            let (style, children, measure, dirty) = owner
+            let children = owner
                 .with(|object| {
                     if let Some(layout) = object.as_layout_component() {
-                        let measure = layout
-                            .is_intrinsic_leaf()
-                            .then(|| Measure::Layout(owner.clone()));
-                        (
-                            layout.taffy_style(),
-                            layout.layout_children.clone(),
-                            measure,
-                            layout.layout_data.dirty,
-                        )
+                        layout.layout_children.clone()
                     } else {
-                        let participant = object
-                            .as_any()
-                            .downcast_ref::<LayoutParticipant>()
-                            .expect("native layout node owner");
-                        let data = participant
-                            .native_layout_data()
-                            .expect("participating node");
-                        let host = participant
-                            .measurement_host_handle()
-                            .expect("participant host");
-                        (
-                            data.style.taffy_style(),
-                            Vec::new(),
-                            Some(Measure::Participant(host)),
-                            data.dirty,
-                        )
+                        Vec::new()
                     }
                 })
                 .expect("live layout node");
-            let mut child_nodes = Vec::new();
-            let mut subtree_dirty = dirty;
+            let mut child_indices = Vec::new();
             for child in children {
-                if let Some(child) = target(&child) {
-                    let (node, dirty) = build(child, tree, nodes, active);
-                    child_nodes.push(node);
-                    subtree_dirty |= dirty;
+                if let Some(child) = layout_node_owner_for(&child) {
+                    child_indices.push(collect_topology(child, nodes, active));
                 }
             }
-            let node = if let Some(measure) = measure {
-                assert!(child_nodes.is_empty(), "a measured Rive layout is a leaf");
-                tree.new_leaf_with_context(style, measure)
-            } else {
-                tree.new_with_children(style, &child_nodes)
-            }
-            .expect("valid native layout node");
-            nodes.push(SolvedNode {
-                owner: owner.clone(),
-                node,
-                subtree_dirty,
+            let measure = node_state(owner.clone()).expect("live layout node").1;
+            assert!(
+                measure.is_none() || child_indices.is_empty(),
+                "a measured Rive layout is a leaf"
+            );
+            let index = nodes.len();
+            nodes.push(TopologyNode {
+                owner,
+                children: child_indices,
+                measure,
             });
             active.pop();
-            (node, subtree_dirty)
+            index
+        }
+
+        fn build_cache(owner: CoreHandle) -> LayoutTreeCache {
+            let mut topology = Vec::new();
+            let root = collect_topology(owner, &mut topology, &mut Vec::new());
+            let mut tree = TaffyTree::<LayoutMeasureContext>::new();
+            tree.disable_rounding();
+            let mut nodes: Vec<CachedLayoutNode> = Vec::with_capacity(topology.len());
+            for entry in topology {
+                let children = entry
+                    .children
+                    .iter()
+                    .map(|index| nodes[*index].node)
+                    .collect::<Vec<_>>();
+                let node = if let Some(measure) = entry.measure.clone() {
+                    tree.new_leaf_with_context(taffy::style::Style::default(), measure)
+                } else {
+                    tree.new_with_children(taffy::style::Style::default(), &children)
+                }
+                .expect("valid native layout node");
+                nodes.push(CachedLayoutNode {
+                    owner: entry.owner,
+                    node,
+                    children: entry.children,
+                    measure: entry.measure,
+                });
+            }
+            LayoutTreeCache { tree, nodes, root }
         }
 
         fn axis(known: Option<f32>, available: AvailableSpace) -> (f32, LayoutMeasureMode) {
@@ -1467,11 +1853,104 @@ impl LayoutComponent {
                     .layout_solve_available_size(available_width, available_height)
             })
             .expect("layout calculation owner");
-        let mut tree = TaffyTree::<Measure>::new();
-        tree.disable_rounding();
-        let mut nodes = Vec::new();
-        let (root, _) = build(owner.clone(), &mut tree, &mut nodes, &mut Vec::new());
-        tree.compute_layout_with_measure(
+        let (cached, topology_dirty) = owner
+            .with_mut(|object| {
+                let layout = object
+                    .as_layout_component_mut()
+                    .expect("layout calculation owner");
+                let topology_dirty = layout.layout_tree_topology_dirty;
+                layout.layout_tree_topology_dirty = false;
+                (layout.layout_tree_cache.take(), topology_dirty)
+            })
+            .expect("layout calculation owner");
+        let mut cache = if topology_dirty {
+            build_cache(owner.clone())
+        } else {
+            cached.unwrap_or_else(|| build_cache(owner.clone()))
+        };
+
+        let mut read_states = |cache: &LayoutTreeCache| {
+            let mut styles = Vec::with_capacity(cache.nodes.len());
+            let mut measures = Vec::with_capacity(cache.nodes.len());
+            let mut dirty = Vec::with_capacity(cache.nodes.len());
+            for entry in &cache.nodes {
+                let (style, measure, node_dirty) = node_state(entry.owner.clone())?;
+                styles.push(style);
+                measures.push(measure);
+                dirty.push(node_dirty);
+            }
+            Some((styles, measures, dirty))
+        };
+        let (mut styles, measures, dirty) = if let Some(states) = read_states(&cache) {
+            states
+        } else {
+            // A dynamic list can retire an occurrence between topology sync and
+            // the owning root's solve. A Yoga node is destroyed with that
+            // occurrence, so discard the corresponding retained Taffy tree.
+            cache = build_cache(owner.clone());
+            read_states(&cache).expect("rebuilt layout topology contains live nodes")
+        };
+        for parent in 0..cache.nodes.len() {
+            if styles[parent].display != Display::Flex {
+                continue;
+            }
+            for child in &cache.nodes[parent].children {
+                // Yoga's flex YGNodeBoundAxis enforces explicit min dimensions
+                // and padding/border only. Taffy's Auto instead imposes a
+                // content-based minimum, preventing a fill viewport from
+                // shrinking below its scrolling contents. Adapt this solve
+                // node only: Yoga's grid algorithm does have automatic minima.
+                if styles[*child].min_size.width.is_auto() {
+                    styles[*child].min_size.width = Dimension::length(0.0);
+                }
+                if styles[*child].min_size.height.is_auto() {
+                    styles[*child].min_size.height = Dimension::length(0.0);
+                }
+            }
+        }
+        for index in 0..cache.nodes.len() {
+            let entry = &mut cache.nodes[index];
+            if entry.measure != measures[index] {
+                cache
+                    .tree
+                    .set_node_context(entry.node, measures[index].clone())
+                    .expect("valid native measure context");
+                entry.measure = measures[index].clone();
+            }
+            if cache.tree.style(entry.node).expect("valid native node") != &styles[index] {
+                cache
+                    .tree
+                    .set_style(entry.node, styles[index].clone())
+                    .expect("valid native style");
+            }
+            if dirty[index] {
+                cache
+                    .tree
+                    .mark_dirty(entry.node)
+                    .expect("valid dirty native node");
+            }
+        }
+
+        let root = cache.nodes[cache.root].node;
+        let root_style = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .expect("layout calculation owner")
+                    .layout_data
+                    .style
+                    .taffy_calculation_root_style(size.x, size.y)
+            })
+            .expect("live layout calculation owner");
+        if cache.tree.style(root).expect("valid calculation root") != &root_style {
+            cache
+                .tree
+                .set_style(root, root_style)
+                .expect("valid calculation root");
+        }
+        cache
+            .tree
+            .compute_layout_with_measure(
             root,
             Size {
                 width: if size.x.is_nan() {
@@ -1489,10 +1968,10 @@ impl LayoutComponent {
                 let (width, width_mode) = axis(known.width, available.width);
                 let (height, height_mode) = axis(known.height, available.height);
                 let measured = match context {
-                    Some(Measure::Participant(host)) => {
+                    Some(LayoutMeasureContext::Participant(host)) => {
                         measure_host(host, width, width_mode, height, height_mode)
                     }
-                    Some(Measure::Layout(owner)) => {
+                    Some(LayoutMeasureContext::Layout(owner)) => {
                         let children = owner
                             .with(|object| {
                                 object.as_container_component().unwrap().children().to_vec()
@@ -1501,8 +1980,7 @@ impl LayoutComponent {
                         let mut measured = Vec2D::default();
                         for child in children {
                             let is_layout = child
-                                .with(|object| object.as_layout_component().is_some())
-                                .unwrap_or(false);
+                                .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY);
                             if is_layout {
                                 continue;
                             }
@@ -1525,8 +2003,17 @@ impl LayoutComponent {
             },
         )
         .expect("valid native layout calculation");
-        for entry in nodes {
-            let output = tree.layout(entry.node).expect("solved native node");
+
+        let mut subtree_dirty = dirty.clone();
+        for index in 0..cache.nodes.len() {
+            subtree_dirty[index] |= cache.nodes[index]
+                .children
+                .iter()
+                .any(|child| subtree_dirty[*child]);
+        }
+        let mut outputs = Vec::with_capacity(cache.nodes.len());
+        for (index, entry) in cache.nodes.iter().enumerate() {
+            let output = cache.tree.layout(entry.node).expect("solved native node");
             let next = Layout::new(
                 output.location.x,
                 output.location.y,
@@ -1539,7 +2026,16 @@ impl LayoutComponent {
                 output.padding.right,
                 output.padding.bottom,
             );
-            entry.owner.with_mut(|object| {
+            outputs.push((entry.owner.clone(), next, padding, subtree_dirty[index]));
+        }
+        owner.with_mut(|object| {
+            object
+                .as_layout_component_mut()
+                .expect("layout calculation owner")
+                .layout_tree_cache = Some(cache);
+        });
+        for (owner, next, padding, subtree_dirty) in outputs {
+            owner.with_mut(|object| {
                 let data = if let Some(layout) = object.as_layout_component_mut() {
                     layout.layout_data.has_new_layout |= layout.solved_padding != padding;
                     layout.solved_padding = padding;
@@ -1552,7 +2048,10 @@ impl LayoutComponent {
                         .native_layout_data_mut()
                         .unwrap()
                 };
-                data.has_new_layout |= entry.subtree_dirty || data.solved_layout != next;
+                // Yoga publishes a new layout only for a visited subtree or a
+                // changed cached result. Taffy's retained cache now supplies the
+                // same visit boundary across root calculations.
+                data.has_new_layout |= subtree_dirty || data.solved_layout != next;
                 data.solved_layout = next;
                 data.dirty = false;
             });
@@ -1640,9 +2139,10 @@ impl LayoutComponent {
     }
 
     fn update_provider_layout_bounds(provider: &CoreHandle, animate: bool) {
-        if provider
-            .with(|object| object.as_layout_component().is_some())
-            .unwrap_or(false)
+        if provider.is_type_of(crate::mechanical_port::source::generated::layout::layout_participant_base::LayoutParticipantBase::TYPE_KEY) {
+            crate::mechanical_port::source::layout::layout_participant::LayoutParticipant::update_layout_bounds_occurrence(provider, animate);
+        } else if provider
+            .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)
         {
             Self::update_layout_bounds_occurrence(provider, animate);
         } else if let Some((is_list, roots)) = Self::hosted_layout_roots(provider) {
@@ -1656,7 +2156,7 @@ impl LayoutComponent {
                 }
             }
             if is_list {
-                provider.with_mut(|object| object.as_any_mut().downcast_mut::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>().unwrap().finish_layout_bounds());
+                crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::finish_layout_bounds_occurrence(provider);
             }
         } else {
             provider.with_mut(|object| object.layout_provider_update_layout_bounds(animate));
@@ -1736,7 +2236,10 @@ impl LayoutComponent {
         }
         if changed {
             Self::propagate_size_occurrence(owner);
-            owner.with_mut(|object| object.world_transform_mark_dirty());
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            )
+            .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
         }
         owner.with_mut(|object| {
             object
@@ -1796,8 +2299,7 @@ impl LayoutComponent {
             .unwrap();
         for (_, provider) in Self::layout_providers_occurrence(owner) {
             if provider
-                .with(|object| object.as_layout_component().is_some())
-                .unwrap_or(false)
+                .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)
             {
                 Self::cascade_layout_style_occurrence(
                     &provider,
@@ -1853,10 +2355,8 @@ impl LayoutComponent {
         let Some((time, interpolation, interpolator, smoothing, data_a)) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
-                if !animate
-                    || !layout.animates()
-                    || layout.current_animation_data().to == layout.layout
-                {
+                let target = layout.layout;
+                if !animate || !layout.animates() || layout.current_animation_data().to == target {
                     return None;
                 }
                 Some((
@@ -1919,7 +2419,10 @@ impl LayoutComponent {
                 layout.animation_data_a.elapsed_seconds = 0.0;
             });
             Self::propagate_size_occurrence(owner);
-            owner.with_mut(|object| object.world_transform_mark_dirty());
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            )
+            .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
             return false;
         }
         let f = factor(data.elapsed_seconds);
@@ -1930,7 +2433,10 @@ impl LayoutComponent {
             if resized {
                 Self::propagate_size_occurrence(owner);
             }
-            owner.with_mut(|object| object.world_transform_mark_dirty());
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            )
+            .add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
         }
         owner.with_mut(|object| {
             object
@@ -2007,7 +2513,8 @@ impl LayoutComponent {
         }
     }
     pub fn apply_interpolation(&mut self, elapsed: f32, animate: bool) -> bool {
-        if !animate || !self.animates() || self.current_animation_data().to == self.layout {
+        let target = self.layout;
+        if !animate || !self.animates() || self.current_animation_data().to == target {
             return false;
         }
         let time = self.interpolation_time();
@@ -2101,9 +2608,7 @@ impl LayoutComponent {
             self.base.base.base.base.base.artboard_handle(),
             self.base.base.base.base.base.handle(),
         ) {
-            artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-                artboard.mark_layout_dirty(this);
-            });
+            Artboard::mark_layout_dirty_occurrence(&artboard, this, None);
         }
     }
     pub fn mark_layout_style_dirty(&mut self) {
@@ -2181,8 +2686,7 @@ impl LayoutComponent {
         );
         for (_, provider) in Self::layout_providers_children(self.base.children(), false) {
             if provider
-                .with(|object| object.as_layout_component().is_some())
-                .unwrap_or(false)
+                .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)
             {
                 Self::cascade_layout_style_occurrence(
                     &provider,
@@ -2222,60 +2726,163 @@ impl LayoutComponent {
             });
         }
     }
-    pub fn position_type_changed(&mut self) {
-        let left = self.layout.left();
-        let top = self.layout.top();
-        let position_left_changed = self.position_left_changed;
-        let position_top_changed = self.position_top_changed;
-        let changed = self.with_style_mut(|style| {
+    fn with_callback_style<R>(
+        owner: &CoreHandle,
+        active_style: &mut LayoutComponentStyle,
+        f: impl FnOnce(&mut LayoutComponentStyle) -> R,
+    ) -> Option<R> {
+        let style = owner
+            .with(|object| object.as_layout_component().and_then(Self::style_handle))
+            .flatten()?;
+        if active_style.handle().as_ref() == Some(&style) {
+            Some(f(active_style))
+        } else {
+            style.with_downcast_mut::<LayoutComponentStyle, _>(f)
+        }
+    }
+    pub(crate) fn position_type_changed_from_style(
+        owner: &CoreHandle,
+        active_style: &mut LayoutComponentStyle,
+    ) {
+        let changed = Self::with_callback_style(owner, active_style, |style| {
             if style.position_type() == YGPositionType::Absolute {
-                if !position_left_changed {
-                    style.base.set_position_left(left);
+                let (left_changed, left) = owner
+                    .with(|object| {
+                        let layout = object.as_layout_component().expect("style layout owner");
+                        (layout.position_left_changed, layout.layout.left())
+                    })
+                    .expect("live style layout owner");
+                if !left_changed {
+                    style.set_position_left(left);
                 }
-                if !position_top_changed {
-                    style.base.set_position_top(top);
+                let (top_changed, top) = owner
+                    .with(|object| {
+                        let layout = object.as_layout_component().expect("style layout owner");
+                        (layout.position_top_changed, layout.layout.top())
+                    })
+                    .expect("live style layout owner");
+                if !top_changed {
+                    style.set_position_top(top);
                 }
-                style.set_absolute_point_units();
+                style.set_position_right(0.0);
+                style.set_position_bottom(0.0);
+                style.set_position_left_units_value(YGUnit::Point as u8);
+                style.set_position_top_units_value(YGUnit::Point as u8);
+                style.set_position_right_units_value(YGUnit::Undefined as u8);
+                style.set_position_bottom_units_value(YGUnit::Undefined as u8);
             } else {
-                style.clear_position();
+                style.set_position_left(0.0);
+                style.set_position_top(0.0);
+                style.set_position_right(0.0);
+                style.set_position_bottom(0.0);
+                style.set_position_left_units_value(YGUnit::Undefined as u8);
+                style.set_position_top_units_value(YGUnit::Undefined as u8);
+                style.set_position_right_units_value(YGUnit::Undefined as u8);
+                style.set_position_bottom_units_value(YGUnit::Undefined as u8);
             }
         });
         if changed.is_some() {
-            self.mark_layout_node_dirty(false);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
         }
     }
-    pub fn scale_type_changed(&mut self) {
-        let changed = self.with_style_mut(|style| {
-            style.base.set_intrinsically_sized_value(
+    pub(crate) fn scale_type_changed_from_style(
+        owner: &CoreHandle,
+        active_style: &mut LayoutComponentStyle,
+    ) {
+        let changed = Self::with_callback_style(owner, active_style, |style| {
+            style.set_intrinsically_sized_value(
                 style.width_scale_type() == LayoutScaleType::Hug
                     || style.height_scale_type() == LayoutScaleType::Hug,
             );
         });
         if changed.is_some() {
-            self.mark_layout_node_dirty(false);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
         }
     }
-    pub fn display_changed(&mut self) {
-        if self.style.is_some() {
-            self.collapse_after_component(self.is_collapsed());
-            self.mark_layout_node_dirty(false);
+    pub(crate) fn display_changed_from_style(
+        owner: &CoreHandle,
+        active_style: &mut LayoutComponentStyle,
+    ) {
+        if let Some(display_hidden) = Self::with_callback_style(owner, active_style, |style| {
+            style.display() == YGDisplay::None
+        }) {
+            let collapsed = owner
+                .with(|object| {
+                    object
+                        .as_component()
+                        .expect("layout component")
+                        .is_collapsed()
+                        || display_hidden
+                })
+                .expect("live layout owner");
+            Self::propagate_resolved_collapse_occurrence(
+                owner,
+                collapsed,
+                collapsed,
+                Some(active_style),
+            );
+            Self::mark_layout_node_dirty_occurrence(owner, false);
         }
     }
-    pub fn flex_direction_changed(&mut self) {
-        self.mark_layout_node_dirty(false);
-        self.sync_child_provider_styles();
+    pub(crate) fn flow_style_changed_from_style(
+        owner: &CoreHandle,
+        active_style: &mut LayoutComponentStyle,
+    ) {
+        Self::mark_layout_node_dirty_occurrence(owner, false);
+        let snapshot = Self::with_callback_style(owner, active_style, |style| {
+            let inherited_direction = owner
+                .with(|object| {
+                    object
+                        .as_layout_component()
+                        .expect("layout style owner")
+                        .inherited_direction
+                })
+                .expect("live layout owner");
+            crate::mechanical_port::source::layout::layout_style_applier::LayoutParentStyleSnapshot {
+                owner: owner.clone(),
+                is_grid: style.is_grid(),
+                is_stack: style.is_stack(),
+                justify_items: u32::from(style.base.justify_items_value()),
+                is_row: matches!(style.flex_direction(), YGFlexDirection::Row | YGFlexDirection::RowReverse),
+                is_ltr: match style.direction() { YGDirection::Ltr => true, YGDirection::Rtl => false, _ => inherited_direction != LayoutDirection::Rtl },
+            }
+        });
+        Self::sync_child_provider_styles_with_parent_style_occurrence(owner, snapshot.as_ref());
     }
-    pub fn layout_type_changed(&mut self) {
-        self.mark_layout_node_dirty(false);
-        self.sync_child_provider_styles();
-    }
-    pub fn direction_changed(&mut self) {
-        self.mark_layout_style_dirty();
-        self.mark_layout_node_dirty(true);
+    pub(crate) fn direction_changed_occurrence(owner: &CoreHandle) {
+        Self::mark_layout_style_dirty_occurrence(owner);
+        Self::mark_layout_node_dirty_occurrence(owner, true);
     }
     pub fn clip_changed(&mut self) {
         self.mark_layout_node_dirty(false);
         CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
+    }
+    pub fn set_clip(&mut self, value: bool) {
+        if self.base.set_clip_value(value) {
+            self.clip_changed();
+            LayoutComponentBaseCallbacks::notify_property_changed(
+                self,
+                LayoutComponentBase::CLIP_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_width(&mut self, value: f32) {
+        if self.base.set_width_value(value) {
+            self.width_changed();
+            LayoutComponentBaseCallbacks::notify_property_changed(
+                self,
+                LayoutComponentBase::WIDTH_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_height(&mut self, value: f32) {
+        if self.base.set_height_value(value) {
+            self.height_changed();
+            LayoutComponentBaseCallbacks::notify_property_changed(
+                self,
+                LayoutComponentBase::HEIGHT_PROPERTY_KEY,
+            );
+        }
     }
     pub fn width_changed(&mut self) {
         self.mark_layout_node_dirty(false);
@@ -2302,7 +2909,7 @@ impl LayoutComponent {
         &mut self.local_path
     }
     pub fn path_builder(&mut self) -> &mut Component {
-        self.base.base.base.base.base.as_component_mut()
+        self
     }
     pub fn mark_world_transform_dirty(&mut self) {
         CoreCapabilities::world_transform_mark_dirty(self);
@@ -2325,7 +2932,9 @@ impl LayoutComponent {
         });
         if let Some(Some(justify)) = justify {
             crate::mechanical_port::source::layout::grid_track::GridTrack::sync_container_style(
-                style, self, justify,
+                style,
+                self,
+                u32::from(justify),
             );
         }
     }
@@ -2340,17 +2949,21 @@ impl LayoutComponent {
             stored_height_scale,
             stored_width_units,
             stored_height_units,
+            flex_basis,
+            flex_basis_units,
         )) = component_style.with_downcast::<LayoutComponentStyle, _>(|component_style| {
             (
                 component_style.position_type() == YGPositionType::Absolute,
                 component_style.width_scale_type() == LayoutScaleType::Fixed
                     && component_style.height_scale_type() == LayoutScaleType::Fixed
-                    && component_style.base.intrinsically_sized()
+                    && component_style.intrinsically_sized()
                     && self.is_leaf(),
                 component_style.width_scale_type(),
                 component_style.height_scale_type(),
                 component_style.width_units(),
                 component_style.height_units(),
+                component_style.base.flex_basis(),
+                component_style.flex_basis_units(),
             )
         })
         else {
@@ -2383,7 +2996,7 @@ impl LayoutComponent {
                 height = self.height_override;
             }
             if self.width_unit_value_override != -1 {
-                width_units = YGUnit::from(self.width_unit_value_override);
+                width_units = YGUnit::from(self.width_unit_value_override as u32);
                 width_scale = if width_units == YGUnit::Auto {
                     if self.width_intrinsically_size_override {
                         LayoutScaleType::Hug
@@ -2395,7 +3008,7 @@ impl LayoutComponent {
                 };
             }
             if self.height_unit_value_override != -1 {
-                height_units = YGUnit::from(self.height_unit_value_override);
+                height_units = YGUnit::from(self.height_unit_value_override as u32);
                 height_scale = if height_units == YGUnit::Auto {
                     if self.height_intrinsically_size_override {
                         LayoutScaleType::Hug
@@ -2454,10 +3067,12 @@ impl LayoutComponent {
                 LayoutScaleType::Fill => {
                     style.set_flex_grow(YGFloatOptional::new(fraction));
                     style.set_flex_shrink(YGFloatOptional::new(fraction));
+                    style.set_flex_basis(YGValue::new(flex_basis, flex_basis_units));
                 }
                 _ => {
                     style.set_flex_grow(YGFloatOptional::new(0.0));
                     style.set_flex_shrink(YGFloatOptional::new(0.0));
+                    style.set_flex_basis(YGValue::new(flex_basis, YGUnit::Auto));
                 }
             }
             let cross_scale = if context.parent_is_row {

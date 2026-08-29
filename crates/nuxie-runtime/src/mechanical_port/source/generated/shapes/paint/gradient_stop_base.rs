@@ -46,7 +46,10 @@ impl GradientStopBase {
             return;
         }
         callbacks.color_value_changed();
-        callbacks.notify_property_changed(Self::COLOR_VALUE_PROPERTY_KEY);
+        GradientStopBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::COLOR_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_color_value_value(&mut self, value: i32) -> bool {
@@ -64,7 +67,7 @@ impl GradientStopBase {
             return;
         }
         callbacks.position_changed();
-        callbacks.notify_property_changed(Self::POSITION_PROPERTY_KEY);
+        GradientStopBaseCallbacks::notify_property_changed(callbacks, Self::POSITION_PROPERTY_KEY);
     }
 
     pub(crate) fn set_position_value(&mut self, value: f32) -> bool {

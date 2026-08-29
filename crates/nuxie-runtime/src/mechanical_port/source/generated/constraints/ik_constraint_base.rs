@@ -48,7 +48,10 @@ impl IKConstraintBase {
             return;
         }
         callbacks.invert_direction_changed();
-        callbacks.notify_property_changed(Self::INVERT_DIRECTION_PROPERTY_KEY);
+        IKConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INVERT_DIRECTION_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_invert_direction_value(&mut self, value: bool) -> bool {
@@ -70,7 +73,10 @@ impl IKConstraintBase {
             return;
         }
         callbacks.parent_bone_count_changed();
-        callbacks.notify_property_changed(Self::PARENT_BONE_COUNT_PROPERTY_KEY);
+        IKConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PARENT_BONE_COUNT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_parent_bone_count_value(&mut self, value: u32) -> bool {

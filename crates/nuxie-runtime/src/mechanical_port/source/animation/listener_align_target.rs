@@ -73,3 +73,15 @@ impl ListenerAlignTarget {
         }
     }
 }
+
+impl std::ops::Deref for ListenerAlignTarget {
+    type Target = ListenerAlignTargetBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ListenerAlignTarget {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

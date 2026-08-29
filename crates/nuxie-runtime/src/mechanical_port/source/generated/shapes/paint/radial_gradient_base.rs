@@ -26,7 +26,9 @@ impl RadialGradientBase {
     }
     pub fn clone_into(&self) -> RadialGradient {
         let mut cloned = RadialGradient::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

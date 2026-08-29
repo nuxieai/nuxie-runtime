@@ -88,6 +88,7 @@ impl RuntimeOwnedViewModelContext {
             .with_context(|context| context.view_model_instances().to_vec());
         instances
             .into_iter()
+            .flatten()
             .map(|instance| {
                 RuntimeOwnedViewModelHandle::from_native(
                     self.file
@@ -106,6 +107,7 @@ impl RuntimeOwnedViewModelContext {
             .with_context(|context| context.view_model_instances().to_vec());
         instances
             .into_iter()
+            .flatten()
             .map(|instance| {
                 RuntimeOwnedViewModelInstance::from_native(
                     self.file

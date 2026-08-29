@@ -1,11 +1,12 @@
 use crate::mechanical_port::source::{
     constraints::constraint::get_parent_world,
+    core::CoreObject,
     generated::{
-        constraints::translation_constraint_base::{TransformSpace, TranslationConstraintBase},
+        constraints::translation_constraint_base::TranslationConstraintBase,
         core_registry::CoreCapabilities,
     },
     math::{mat2d::Mat2D, vec2d::Vec2D},
-    transform_component::TransformComponent,
+    transform_space::TransformSpace,
 };
 
 #[derive(Default)]
@@ -18,7 +19,7 @@ impl TranslationConstraint {
         false
     }
 
-    pub fn constrain(&mut self, component: &mut TransformComponent) {
+    pub fn constrain(&mut self, component: &mut dyn CoreObject) {
         let target_state = self.base.target().map(|target| {
             target
                 .with(|target| {
@@ -36,7 +37,10 @@ impl TranslationConstraint {
         if target_state.is_some_and(|target| target.0) {
             return;
         }
-        let transform_a = component.mutable_world_transform();
+        let transform_a = *component
+            .as_transform_component()
+            .expect("constraint TransformComponent")
+            .world_transform();
         let translation_a = Vec2D::new(transform_a[4], transform_a[5]);
         let mut translation_b;
         if target_state.is_none() {
@@ -44,9 +48,10 @@ impl TranslationConstraint {
         } else {
             let (_, mut transform_b, target_parent_world) = target_state.unwrap();
             if self.base.source_space() == TransformSpace::Local {
-                let Some(inverse) = target_parent_world.inverted() else {
+                let mut inverse = Mat2D::default();
+                if !target_parent_world.invert(&mut inverse) {
                     return;
-                };
+                }
                 transform_b = inverse * transform_b;
             }
             translation_b = transform_b.translation();
@@ -59,7 +64,7 @@ impl TranslationConstraint {
             } else {
                 translation_b.x *= self.base.copy_factor();
                 if self.base.offset() {
-                    translation_b.x += component.x();
+                    translation_b.x += component.transform_component_translation().x;
                 }
             }
             if !self.base.does_copy_y() {
@@ -71,18 +76,29 @@ impl TranslationConstraint {
             } else {
                 translation_b.y *= self.base.copy_factor_y();
                 if self.base.offset() {
-                    translation_b.y += component.y();
+                    translation_b.y += component.transform_component_translation().y;
                 }
             }
             if self.base.dest_space() == TransformSpace::Local {
-                translation_b = get_parent_world(component) * translation_b;
+                translation_b = get_parent_world(
+                    component
+                        .as_transform_component()
+                        .expect("constraint TransformComponent"),
+                ) * translation_b;
             }
         }
         let clamp_local = self.base.min_max_space() == TransformSpace::Local;
         if clamp_local {
-            let Some(inverse) = get_parent_world(component).inverted() else {
+            let mut inverse = Mat2D::default();
+            if !get_parent_world(
+                component
+                    .as_transform_component()
+                    .expect("constraint TransformComponent"),
+            )
+            .invert(&mut inverse)
+            {
                 return;
-            };
+            }
             translation_b = inverse * translation_b;
         }
         if self.base.max() && translation_b.x > self.base.max_value() {
@@ -98,10 +114,18 @@ impl TranslationConstraint {
             translation_b.y = self.base.min_value_y();
         }
         if clamp_local {
-            translation_b = get_parent_world(component) * translation_b;
+            translation_b = get_parent_world(
+                component
+                    .as_transform_component()
+                    .expect("constraint TransformComponent"),
+            ) * translation_b;
         }
         let t = self.base.strength();
         let ti = 1.0 - t;
+        let transform_a = component
+            .as_transform_component_mut()
+            .expect("constraint TransformComponent")
+            .mutable_world_transform();
         transform_a[4] = translation_a.x * ti + translation_b.x * t;
         transform_a[5] = translation_a.y * ti + translation_b.y * t;
     }

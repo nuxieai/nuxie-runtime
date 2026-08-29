@@ -48,7 +48,10 @@ impl CustomPropertyTriggerBase {
             return;
         }
         c.property_value_changed();
-        c.notify_property_changed(Self::PROPERTY_VALUE_PROPERTY_KEY);
+        CustomPropertyTriggerBaseCallbacks::notify_property_changed(
+            c,
+            Self::PROPERTY_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_property_value_value(&mut self, value: u32) -> bool {

@@ -30,3 +30,15 @@ impl ListenerNumberChange {
         }
     }
 }
+
+impl std::ops::Deref for ListenerNumberChange {
+    type Target = ListenerNumberChangeBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ListenerNumberChange {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

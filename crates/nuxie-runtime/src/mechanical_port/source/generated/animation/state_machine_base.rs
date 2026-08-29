@@ -26,7 +26,9 @@ impl StateMachineBase {
     }
     pub fn clone_into(&self) -> StateMachine {
         let mut cloned = StateMachine::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

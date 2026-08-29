@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::cubic_interpolator_solver::CubicInterpolatorSolver,
+    core_context::CoreContext,
     generated::animation::cubic_value_interpolator_base::CubicValueInterpolatorBase,
     status_code::StatusCode,
 };
@@ -10,7 +10,6 @@ pub struct CubicValueInterpolator {
     c: f32,
     d: f32,
     value_to: f32,
-    solver: CubicInterpolatorSolver,
 }
 impl Default for CubicValueInterpolator {
     fn default() -> Self {
@@ -21,7 +20,6 @@ impl Default for CubicValueInterpolator {
             c: 0.0,
             d: 0.0,
             value_to: 0.0,
-            solver: CubicInterpolatorSolver::default(),
         };
         value.compute_parameters();
         value
@@ -46,17 +44,15 @@ impl CubicValueInterpolator {
             self.value_to = to;
             self.compute_parameters();
         }
-        let t = self.solver.get_t(factor);
+        let t = self.base.base.solver.get_t(factor);
         ((self.a * t + self.b) * t + self.c) * t + self.d
     }
     pub fn transform(&self, factor: f32) -> f32 {
         debug_assert!(false);
         factor
     }
-    pub fn on_added_dirty(&mut self) -> StatusCode {
+    pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         self.compute_parameters();
-        self.solver
-            .build(self.base.base.base.x1(), self.base.base.base.x2());
-        StatusCode::Ok
+        self.base.base.on_added_dirty(context)
     }
 }

@@ -43,13 +43,15 @@ impl ScriptInputViewModelProperty {
         self.data_bind_path_referencer.decode_data_bind_path(value);
     }
 
+    pub fn copy_data_bind_path_ids(&mut self, object: &ScriptInputViewModelProperty) {
+        self.data_bind_path_referencer
+            .copy_data_bind_path(&object.data_bind_path_referencer);
+    }
+
     pub fn clone_core(&self) -> Self {
         let mut cloned = Self::default();
-        cloned
-            .data_bind_path_referencer
-            .copy_data_bind_path(&self.data_bind_path_referencer);
         let mut base = std::mem::take(&mut cloned.base);
-        base.copy(&self.base, &mut cloned);
+        base.copy(self, &mut cloned);
         cloned.base = base;
         cloned
     }
@@ -89,14 +91,12 @@ impl ScriptInputViewModelProperty {
         else {
             return false;
         };
-        let Some(data_bind_path) = self
+        let Some(instance_value) = self
             .data_bind_path_referencer
-            .with_data_bind_path(|path| path.path().to_vec())
-        else {
-            return false;
-        };
-        let Some(instance_value) =
-            data_context.with_context(|context| context.get_view_model_property(&data_bind_path))
+            .with_data_bind_path_mut(|path| {
+                data_context.with_context(|context| context.get_property_from_path(path))
+            })
+            .flatten()
         else {
             return false;
         };
@@ -124,14 +124,12 @@ impl ScriptInputViewModelProperty {
         else {
             return false;
         };
-        let Some(data_bind_path) = self
+        let Some(instance_value) = self
             .data_bind_path_referencer
-            .with_data_bind_path(|path| path.path().to_vec())
-        else {
-            return false;
-        };
-        let Some(instance_value) =
-            data_context.with_context(|context| context.get_view_model_property(&data_bind_path))
+            .with_data_bind_path_mut(|path| {
+                data_context.with_context(|context| context.get_property_from_path(path))
+            })
+            .flatten()
         else {
             return false;
         };
@@ -161,7 +159,11 @@ impl ScriptInputViewModelProperty {
         let Some(this) = self.base.handle() else {
             return StatusCode::MissingObject;
         };
-        importer.add_input(this, ScriptInputViewModelPropertyBase::TYPE_KEY.into());
+        importer.add_input(
+            this,
+            ScriptInputViewModelPropertyBase::TYPE_KEY.into(),
+            &mut self.script_input,
+        );
 
         if self.script_input.scripted_object().is_some_and(|object| {
             object
@@ -180,7 +182,9 @@ impl ScriptInputViewModelProperty {
         }
 
         if let (Some(this), Some(parent)) = (self.base.handle(), self.base.parent_handle()) {
-            parent.with_mut(|parent| parent.scripted_object_add_property(this));
+            parent.with_mut(|parent| {
+                parent.scripted_object_add_property_from_input(this, &mut self.script_input)
+            });
         }
         StatusCode::Ok
     }
@@ -221,14 +225,8 @@ impl ScriptInputViewModelPropertyBaseCallbacks for ScriptInputViewModelProperty 
         ScriptInputViewModelProperty::decode_data_bind_path_ids(self, value);
     }
 
-    fn notify_property_changed(&mut self, property_key: u16) {
-        self.base
-            .base
-            .base
-            .base
-            .base
-            .base
-            .notify_property_changed(property_key);
+    fn copy_data_bind_path_ids(&mut self, object: &ScriptInputViewModelProperty) {
+        ScriptInputViewModelProperty::copy_data_bind_path_ids(self, object);
     }
 }
 

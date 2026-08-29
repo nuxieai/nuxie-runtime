@@ -28,11 +28,11 @@ impl ListenerInputTypeKeyboard {
             return false;
         }
         if pressed && repeat {
-            mask & 4 != 0
+            mask & 2 != 0
         } else if pressed {
             mask & 1 != 0
         } else {
-            mask & 2 != 0
+            mask & 4 != 0
         }
     }
     pub fn keyboard_input_matches(

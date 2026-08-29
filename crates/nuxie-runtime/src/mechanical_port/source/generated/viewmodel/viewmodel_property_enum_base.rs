@@ -27,7 +27,9 @@ impl ViewModelPropertyEnumBase {
     }
     pub fn clone_into(&self) -> ViewModelPropertyEnum {
         let mut cloned = ViewModelPropertyEnum::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

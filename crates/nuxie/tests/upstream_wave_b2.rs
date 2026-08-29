@@ -3,7 +3,8 @@
 
 use std::path::PathBuf;
 
-use nuxie::{File, RecordingFactory};
+use nuxie::{File, PersistentFactory, RecordingFactory, RuntimeFactoryHandle};
+use nuxie_runtime::source::shapes::shape::Shape;
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -17,30 +18,32 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 
 #[test]
 fn wave_b2_draw_rules_load_and_sort_correctly() {
-    let file = File::import(&pinned_fixture("draw_rule_cycle.riv"))
-        .expect("draw-rule cycle fixture imports");
-    let artboard = file.default_artboard().expect("default artboard");
-    let blue = artboard.graph().component_named("Blue").expect("Blue node");
-    assert_eq!(blue.type_name, "Shape");
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &pinned_fixture("draw_rule_cycle.riv"),
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("draw-rule cycle fixture imports");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    assert!(
+        artboard.with_artboard(|artboard| artboard.base.find_handle::<Shape>("Blue").is_some())
+    );
 
-    let mut instance = artboard.instantiate().expect("artboard instance");
-    instance.advance(0.0);
-    assert_eq!(artboard.animation_count(), 1);
-    let mut animation = instance
-        .linear_animation_instance(0)
-        .expect("ping-pong animation");
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
+    artboard.advance_default(0.0);
+    assert_eq!(
+        artboard.with_artboard(|artboard| artboard.base.animation_count()),
+        1
+    );
+    let mut animation = artboard.animation_at(0).expect("ping-pong animation");
+    let mut renderer = factory.borrow().make_renderer();
 
     for _ in 0..10 {
-        instance
-            .raw()
-            .advance_linear_animation_instance(&mut animation, 1.0);
-        instance
-            .raw_mut()
-            .apply_linear_animation_instance(&animation, 1.0);
-        instance
-            .draw(&mut factory, &mut renderer)
-            .expect("draw sorted artboard");
+        animation.advance_and_apply(1.0);
+        artboard.draw(&mut renderer);
     }
 }

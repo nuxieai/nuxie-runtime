@@ -8,6 +8,7 @@ use crate::mechanical_port::source::{
 };
 
 #[repr(i32)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum AxisType {
     X = 0,
     Y = 1,
@@ -29,6 +30,24 @@ impl ComponentBaseCallbacks for Axis {
     }
 }
 
+impl std::ops::Deref for Axis {
+    type Target = AxisBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Axis {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Axis {
+    pub const TYPE_KEY: u16 = AxisBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct Axis {
     pub base: AxisBase,
 }

@@ -4,7 +4,7 @@ use crate::mechanical_port::source::input::{
     },
     standard_gamepad::{StandardGamepadAxis, StandardGamepadButton},
 };
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap};
 pub const GAMEPAD_BATCH_WIRE_VERSION: u32 = 2;
 pub const GAMEPAD_BATCH_MAX_BUTTONS: u8 = 32;
 pub const GAMEPAD_BATCH_MAX_AXES: u8 = 16;
@@ -32,12 +32,12 @@ pub trait GamepadDispatcher {
     fn dispatch(&mut self, invocation: GamepadInvocation);
 }
 pub struct GamepadBatchState {
-    pub gamepads: HashMap<i32, GamepadSnapshot>,
+    gamepads: RefCell<HashMap<i32, GamepadSnapshot>>,
 }
 impl Default for GamepadBatchState {
     fn default() -> Self {
         Self {
-            gamepads: HashMap::new(),
+            gamepads: RefCell::new(HashMap::new()),
         }
     }
 }
@@ -69,7 +69,7 @@ fn mask(s: &mut GamepadSnapshot) {
     }
 }
 impl GamepadBatchState {
-    pub fn submit(&mut self, data: Option<&[u8]>, dispatcher: &mut dyn GamepadDispatcher) -> bool {
+    pub fn submit(&self, data: Option<&[u8]>, dispatcher: &mut dyn GamepadDispatcher) -> bool {
         let Some(data) = data else { return false };
         let mut r = Reader { b: data, p: 0 };
         if r.u32() != Some(GAMEPAD_BATCH_WIRE_VERSION) {
@@ -105,14 +105,14 @@ impl GamepadBatchState {
                         s.axes.push(v)
                     }
                     mask(&mut s);
-                    self.gamepads.insert(s.device_id, s.clone());
+                    self.gamepads.borrow_mut().insert(s.device_id, s.clone());
                     dispatcher.dispatch(GamepadInvocation::Connected(s));
                 }
                 Some(1) => {
                     let (Some(id), Some(n)) = (r.u32(), r.u8()) else {
                         return false;
                     };
-                    if !self.gamepads.contains_key(&(id as i32)) {
+                    if !self.gamepads.borrow().contains_key(&(id as i32)) {
                         return false;
                     }
                     let mut changes = Vec::new();
@@ -130,7 +130,8 @@ impl GamepadBatchState {
                             value: v,
                         });
                     }
-                    let s = self.gamepads.get_mut(&(id as i32)).unwrap();
+                    let mut gamepads = self.gamepads.borrow_mut();
+                    let s = gamepads.get_mut(&(id as i32)).unwrap();
                     for c in &changes {
                         match c.kind {
                             GamepadInputChangeKind::Button => {
@@ -155,6 +156,10 @@ impl GamepadBatchState {
                         }
                     }
                     let final_s = s.clone();
+                    // The source finishes mutating the stored snapshot before
+                    // dispatch. Callbacks may synchronously submit another
+                    // batch against this same canonical device map.
+                    drop(gamepads);
                     for c in changes {
                         let (sb, sa) = if final_s.mapping == GamepadMappingKind::Standard {
                             match c.kind {
@@ -179,7 +184,7 @@ impl GamepadBatchState {
                 }
                 Some(2) => {
                     let Some(id) = r.u32() else { return false };
-                    self.gamepads.remove(&(id as i32));
+                    self.gamepads.borrow_mut().remove(&(id as i32));
                     dispatcher.dispatch(GamepadInvocation::Disconnected(id as i32));
                 }
                 _ => return false,

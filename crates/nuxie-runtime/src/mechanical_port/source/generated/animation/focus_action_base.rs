@@ -26,7 +26,9 @@ impl FocusActionBase {
     }
     pub fn clone_into(&self) -> FocusAction {
         let mut cloned = FocusAction::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

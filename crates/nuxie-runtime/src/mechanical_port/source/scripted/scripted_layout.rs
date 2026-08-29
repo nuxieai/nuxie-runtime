@@ -118,6 +118,14 @@ impl ScriptedLayout {
         self.base.base.add_property(property);
     }
 
+    pub(crate) fn add_property_from_input(
+        &mut self,
+        property: CoreHandle,
+        input: &mut crate::mechanical_port::source::assets::script_asset::ScriptInput,
+    ) {
+        self.base.base.add_property_from_input(property, input);
+    }
+
     pub fn remove_property(&mut self, property: &CoreHandle) {
         self.base.base.remove_property(property);
     }

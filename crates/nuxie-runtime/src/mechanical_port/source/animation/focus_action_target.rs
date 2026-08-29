@@ -2,7 +2,6 @@ use crate::mechanical_port::source::{
     animation::{
         listener_invocation::ListenerInvocation, state_machine_instance::StateMachineInstance,
     },
-    focus_data::FocusData,
     generated::animation::focus_action_target_base::FocusActionTargetBase,
 };
 
@@ -27,11 +26,24 @@ impl FocusActionTarget {
                     .as_node()?
                     .children()
                     .iter()
-                    .find_map(|child| child.with_downcast::<FocusData, _>(|_| child.clone()))
+                    .find(|child| child.is_type_of(crate::mechanical_port::source::generated::focus_data_base::FocusDataBase::TYPE_KEY))
+                    .cloned()
             })
             .flatten();
         if let Some(focus_data) = focus_data {
             state_machine_instance.set_focus(Some(focus_data));
         }
+    }
+}
+
+impl std::ops::Deref for FocusActionTarget {
+    type Target = FocusActionTargetBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for FocusActionTarget {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

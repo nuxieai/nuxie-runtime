@@ -77,10 +77,7 @@ pub(crate) fn comparators_for_condition<'a>(
     let Some(condition_file_index) = usize::try_from(condition.id).ok() else {
         return RuntimeTransitionViewModelConditionComparators::default();
     };
-    let Some(target_condition) = objects
-        .get(condition_file_index)
-        .and_then(Option::as_ref)
-    else {
+    let Some(target_condition) = objects.get(condition_file_index).and_then(Option::as_ref) else {
         return RuntimeTransitionViewModelConditionComparators::default();
     };
     let mut latest = None::<TransitionViewModelConditionImporter<'a>>;

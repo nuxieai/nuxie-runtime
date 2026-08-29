@@ -8,19 +8,14 @@ repository.workspace = true
 [features]
 tools = []
 threading = []
-# Exposes a deliberately narrow, doc-hidden seam into production-compiled path
-# measurement for Criterion. The opt-in API is a permanent maintenance cost.
-upstream-microbenchmarks = []
+# Mirrors upstream WITH_RIVE_TEST_SIGNATURE, independently of WITH_RIVE_TOOLS.
+# Accepts the public sample signing key; never enable in a shipping build.
+test-script-signature = []
 # The pinned C++ browser build seeds nondeterministic randomness from
 # performance.now() through a JS host. Host-free wasm embedders (the cold
 # publisher) must stay import-free, so the JS seed is a default-on feature.
 js-host-seed = ["dep:js-sys", "dep:wasm-bindgen"]
 default = ["js-host-seed"]
-
-[[test]]
-name = "cpp_probe"
-path = "tests/cpp_probe.rs"
-required-features = ["tools"]
 
 [dependencies]
 anyhow = "1"
@@ -28,31 +23,23 @@ harfrust = "0.12"
 libhydrogen = "=0.4.6"
 nuxie-audio = { path = "../nuxie-audio" }
 nuxie-binary = { path = "../nuxie-binary" }
-nuxie-graph = { path = "../nuxie-graph" }
 nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-render-api = { path = "../nuxie-render-api" }
 nuxie-schema = { path = "../nuxie-schema" }
 skrifa = "0.45.1"
-taffy = "0.12.1"
+taffy = "=0.12.1"
 unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
 unicode-bidi = "0.3.18"
 unicode-script = "0.5.8"
 
-[build-dependencies]
-nuxie-schema = { path = "../nuxie-schema" }
-
 [dev-dependencies]
-criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
+nuxie-scripting = { path = "../nuxie-scripting" }
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
+nuxie-sriv = { path = "../nuxie-sriv" }
 png = "0.18"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-
-[[bench]]
-name = "upstream_microbenchmarks"
-harness = false
-required-features = ["upstream-microbenchmarks"]
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 libc = "0.2"

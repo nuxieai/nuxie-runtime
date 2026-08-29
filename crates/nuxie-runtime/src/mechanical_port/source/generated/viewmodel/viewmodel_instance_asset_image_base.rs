@@ -27,7 +27,9 @@ impl ViewModelInstanceAssetImageBase {
     }
     pub fn clone_into(&self) -> ViewModelInstanceAssetImage {
         let mut cloned = ViewModelInstanceAssetImage::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

@@ -61,22 +61,20 @@ pub trait CubicVertexBehavior: VertexBehavior {
         self.cubic_vertex_mut().state.out_valid = true;
     }
     fn render_in(&mut self) -> Vec2D {
-        self.cubic_vertex()
-            .base
-            .weight_handle()
-            .and_then(|weight| {
-                weight.with_downcast_mut::<CubicWeight, _>(|weight| *weight.in_translation())
-            })
-            .unwrap_or_else(|| self.in_point())
+        if let Some(weight) = self.cubic_vertex().base.weight_handle() {
+            return weight
+                .with_downcast_mut::<CubicWeight, _>(|weight| *weight.in_translation())
+                .expect("a weighted cubic vertex retains its CubicWeight");
+        }
+        self.in_point()
     }
     fn render_out(&mut self) -> Vec2D {
-        self.cubic_vertex()
-            .base
-            .weight_handle()
-            .and_then(|weight| {
-                weight.with_downcast_mut::<CubicWeight, _>(|weight| *weight.out_translation())
-            })
-            .unwrap_or_else(|| self.out_point())
+        if let Some(weight) = self.cubic_vertex().base.weight_handle() {
+            return weight
+                .with_downcast_mut::<CubicWeight, _>(|weight| *weight.out_translation())
+                .expect("a weighted cubic vertex retains its CubicWeight");
+        }
+        self.out_point()
     }
     fn x_changed(&mut self) {
         VertexBehavior::x_changed(self);
@@ -92,8 +90,13 @@ pub trait CubicVertexBehavior: VertexBehavior {
         VertexBehavior::deform(self, world, bones);
         let in_point = self.in_point();
         let out_point = self.out_point();
-        if let Some(weight) = self.cubic_vertex().base.weight_handle() {
-            weight.with_downcast_mut::<CubicWeight, _>(|weight| {
+        let weight = self
+            .cubic_vertex()
+            .base
+            .weight_handle()
+            .expect("a skin-deformed cubic vertex has a CubicWeight");
+        weight
+            .with_downcast_mut::<CubicWeight, _>(|weight| {
                 *weight.in_translation() = Weight::deform(
                     in_point,
                     weight.in_indices(),
@@ -108,8 +111,8 @@ pub trait CubicVertexBehavior: VertexBehavior {
                     world,
                     bones,
                 );
-            });
-        }
+            })
+            .expect("a weighted cubic vertex retains its CubicWeight");
     }
 }
 

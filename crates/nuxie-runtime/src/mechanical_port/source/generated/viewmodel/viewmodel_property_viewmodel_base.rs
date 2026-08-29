@@ -45,7 +45,10 @@ impl ViewModelPropertyViewModelBase {
             return;
         }
         callbacks.view_model_reference_id_changed();
-        callbacks.notify_property_changed(Self::VIEW_MODEL_REFERENCE_ID_PROPERTY_KEY);
+        ViewModelPropertyViewModelBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VIEW_MODEL_REFERENCE_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_view_model_reference_id_value(&mut self, value: u32) -> bool {

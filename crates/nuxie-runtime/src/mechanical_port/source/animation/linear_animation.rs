@@ -193,3 +193,15 @@ impl Drop for LinearAnimation {
         DELETE_COUNT.fetch_add(1, Ordering::Relaxed);
     }
 }
+
+impl std::ops::Deref for LinearAnimation {
+    type Target = LinearAnimationBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for LinearAnimation {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

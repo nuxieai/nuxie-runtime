@@ -1,12 +1,29 @@
 use crate::mechanical_port::source::core::CoreHandle;
 pub use crate::mechanical_port::source::generated::shapes::paint::group_effect_base::GroupEffectBase;
 use crate::mechanical_port::source::shapes::paint::{
-    effects_container::{EffectsContainer, EffectsContainerState},
+    effects_container::{self, EffectsContainer, EffectsContainerState},
     shape_paint::ShapePaint,
     shape_paint_path::ShapePaintPath,
     stroke_effect::{PathProvider, StrokeEffect, StrokeEffectState},
     target_effect::TargetEffect,
 };
+impl std::ops::Deref for GroupEffect {
+    type Target = GroupEffectBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for GroupEffect {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl GroupEffect {
+    pub const TYPE_KEY: u16 = GroupEffectBase::TYPE_KEY;
+}
+
 pub struct GroupEffect {
     pub base: GroupEffectBase,
     effects: EffectsContainerState,
@@ -24,13 +41,33 @@ impl Default for GroupEffect {
     }
 }
 impl GroupEffect {
+    pub(crate) fn target_effect_handles(&self) -> Vec<CoreHandle> {
+        self.target_effects.clone()
+    }
+
+    pub(crate) fn invalidate_effect_handle_with_active(
+        handle: &CoreHandle,
+        provider: Option<PathProvider>,
+        active: &mut Option<effects_container::ActiveStrokeEffect<'_>>,
+    ) {
+        let effects = handle
+            .with_downcast_mut::<GroupEffect, _>(|group| {
+                group.stroke.invalidate_effect(provider.as_ref());
+                group.effects.effects.clone()
+            })
+            .unwrap_or_default();
+        for effect in effects {
+            effects_container::invalidate_effect_handle_with_active(&effect, provider, active);
+        }
+    }
+
     pub fn update_effect(
         &mut self,
         provider: &PathProvider,
         source: &ShapePaintPath,
         paint: &ShapePaint,
     ) {
-        let mut current = None;
+        let mut current: Option<std::rc::Rc<std::cell::RefCell<ShapePaintPath>>> = None;
         for effect in self.effects.effects.iter().cloned() {
             effect.with_mut(|effect| {
                 let Some(effect) = effect.as_stroke_effect_mut() else {
@@ -53,13 +90,14 @@ impl GroupEffect {
                 target.invalidate_effect_from_local()
             });
         }
-        EffectsContainer::invalidate_effects(self, effect);
+        self.effects.invalidate_effects(effect);
     }
     pub fn add_target_effect(&mut self, effect: CoreHandle) {
         self.target_effects.push(effect);
     }
     pub fn add_path_provider(&mut self, provider: &PathProvider) {
-        StrokeEffect::add_path_provider(self, provider);
+        let path = self.create_effect_path();
+        self.stroke.add_path_provider(provider, path);
         for effect in self.effects.effects.iter() {
             effect.with_mut(|effect| {
                 if let Some(effect) = effect.as_stroke_effect_mut() {
@@ -68,19 +106,15 @@ impl GroupEffect {
             });
         }
     }
-    pub fn add_stroke_effect_direct(&mut self, effect: CoreHandle) {
-        EffectsContainer::add_stroke_effect(self, effect.clone());
+    pub fn add_stroke_effect(&mut self, identity: CoreHandle, effect: &mut dyn StrokeEffect) {
+        self.effects.add_stroke_effect(identity);
         for provider in self.stroke.effect_paths.keys().copied() {
             let provider = PathProvider::with_identity(provider);
-            effect.with_mut(|effect| {
-                if let Some(effect) = effect.as_stroke_effect_mut() {
-                    effect.add_path_provider(&provider);
-                }
-            });
+            effect.add_path_provider(&provider);
         }
     }
     pub fn invalidate_effect(&mut self, provider: Option<&PathProvider>) {
-        StrokeEffect::invalidate_effect(self, provider);
+        self.stroke.invalidate_effect(provider);
         for effect in self.effects.effects.iter() {
             effect.with_mut(|effect| {
                 if let Some(effect) = effect.as_stroke_effect_mut() {
@@ -107,8 +141,8 @@ impl EffectsContainer for GroupEffect {
     fn invalidate_effects(&mut self, effect: Option<&CoreHandle>) {
         self.invalidate_effects_from(effect);
     }
-    fn add_stroke_effect(&mut self, effect: CoreHandle) {
-        self.add_stroke_effect_direct(effect);
+    fn add_stroke_effect(&mut self, identity: CoreHandle, effect: &mut dyn StrokeEffect) {
+        GroupEffect::add_stroke_effect(self, identity, effect);
     }
 }
 impl StrokeEffect for GroupEffect {
@@ -122,6 +156,12 @@ impl StrokeEffect for GroupEffect {
         GroupEffect::update_effect(self, p, s, paint);
     }
     fn parent_paint_handle(&self) -> Option<CoreHandle> {
-        self.base.parent_handle()
+        None
+    }
+    fn add_path_provider(&mut self, provider: &PathProvider) {
+        GroupEffect::add_path_provider(self, provider);
+    }
+    fn invalidate_effect(&mut self, provider: Option<&PathProvider>) {
+        GroupEffect::invalidate_effect(self, provider);
     }
 }

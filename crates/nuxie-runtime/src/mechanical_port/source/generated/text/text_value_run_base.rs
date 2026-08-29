@@ -45,7 +45,7 @@ impl TextValueRunBase {
             return;
         }
         callbacks.style_id_changed();
-        callbacks.notify_property_changed(Self::STYLE_ID_PROPERTY_KEY);
+        TextValueRunBaseCallbacks::notify_property_changed(callbacks, Self::STYLE_ID_PROPERTY_KEY);
     }
 
     pub(crate) fn set_style_id_value(&mut self, value: u32) -> bool {
@@ -63,7 +63,7 @@ impl TextValueRunBase {
             return;
         }
         callbacks.text_changed();
-        callbacks.notify_property_changed(Self::TEXT_PROPERTY_KEY);
+        TextValueRunBaseCallbacks::notify_property_changed(callbacks, Self::TEXT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_text_value(&mut self, value: String) -> bool {

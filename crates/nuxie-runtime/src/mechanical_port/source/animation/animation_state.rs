@@ -50,3 +50,15 @@ impl AnimationState {
         AnimationStateInstance::new(state, instance)
     }
 }
+
+impl std::ops::Deref for AnimationState {
+    type Target = AnimationStateBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for AnimationState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

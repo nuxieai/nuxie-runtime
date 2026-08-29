@@ -26,7 +26,9 @@ impl ContourMeshVertexBase {
     }
     pub fn clone_into(&self) -> ContourMeshVertex {
         let mut cloned = ContourMeshVertex::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

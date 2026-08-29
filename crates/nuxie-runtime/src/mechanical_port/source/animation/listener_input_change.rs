@@ -42,7 +42,7 @@ impl ListenerInputChange {
             })
             .flatten();
         if let Some(nested) =
-            nested.filter(|nested| nested.with_downcast::<NestedInput, _>(|_| ()).is_some())
+            nested.filter(|nested| nested.is_type_of(crate::mechanical_port::source::generated::animation::nested_input_base::NestedInputBase::TYPE_KEY))
         {
             let valid = nested
                 .with_downcast::<NestedInput, _>(|nested| {

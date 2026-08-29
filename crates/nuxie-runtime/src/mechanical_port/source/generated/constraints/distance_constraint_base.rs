@@ -48,7 +48,10 @@ impl DistanceConstraintBase {
             return;
         }
         callbacks.distance_changed();
-        callbacks.notify_property_changed(Self::DISTANCE_PROPERTY_KEY);
+        DistanceConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DISTANCE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_distance_value(&mut self, value: f32) -> bool {
@@ -70,7 +73,10 @@ impl DistanceConstraintBase {
             return;
         }
         callbacks.mode_value_changed();
-        callbacks.notify_property_changed(Self::MODE_VALUE_PROPERTY_KEY);
+        DistanceConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MODE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_mode_value_value(&mut self, value: u32) -> bool {

@@ -159,3 +159,59 @@ impl Hash for Vec2D {
         (x ^ y.wrapping_shl(1)).hash(state);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn length_squared_matches_pinned_fused_product_sum() {
+        let point = Vec2D::new(96.2807, 71.687096);
+
+        assert_eq!(point.length_squared().to_bits(), 0x4661_240d);
+        assert_ne!(
+            point.length_squared().to_bits(),
+            (point.x * point.x + point.y * point.y).to_bits()
+        );
+    }
+
+    #[test]
+    fn scale_and_add_matches_pinned_fused_rounding() {
+        let position = Vec2D::new(-0.914693355, -65.6048279);
+        let direction = Vec2D::new(-0.215356767, 0.976535439);
+
+        let result = Vec2D::scale_and_add(position, direction, 15.8580017);
+
+        assert_eq!(result.x.to_bits(), 0xc08a_8de5);
+        assert_eq!(result.y.to_bits(), 0xc248_79c8);
+        assert_ne!(
+            result.x.to_bits(),
+            (position.x + direction.x * 15.8580017).to_bits()
+        );
+    }
+
+    #[test]
+    fn dot_matches_pinned_fused_product_sum() {
+        let to_previous = Vec2D::new(-0.998617827, 0.0525590144);
+        let to_next = Vec2D::new(-0.694725275, 0.719275176);
+
+        let result = Vec2D::dot(to_previous, to_next);
+
+        assert_eq!(result.to_bits(), 0x3f3b_4823);
+        assert_ne!(
+            result.to_bits(),
+            (to_previous.x * to_next.x + to_previous.y * to_next.y).to_bits()
+        );
+    }
+
+    #[test]
+    fn cross_matches_pinned_fused_product_difference() {
+        let a = Vec2D::new(-191.26535, -64.03908);
+        let b = Vec2D::new(-9.758596, -185.07193);
+
+        let result = Vec2D::cross(a, b);
+
+        assert_eq!(result.to_bits(), 0x4707_d4ea);
+        assert_ne!(result.to_bits(), (a.x * b.y - a.y * b.x).to_bits());
+    }
+}

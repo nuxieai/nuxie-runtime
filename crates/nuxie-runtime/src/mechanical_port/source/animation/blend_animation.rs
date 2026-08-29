@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
-    core::CoreHandle,
+    animation::linear_animation::LinearAnimation,
+    core::{CoreArena, CoreHandle},
     generated::{
         animation::{blend_animation_base::BlendAnimationBase, layer_state_base::LayerStateBase},
         artboard_base::ArtboardBase,
@@ -10,6 +11,17 @@ use crate::mechanical_port::source::{
     },
     status_code::StatusCode,
 };
+
+thread_local! {
+    // Pinned BlendAnimation::m_EmptyAnimation is a shared, default-constructed
+    // LinearAnimation. Native Core owners are thread-local; retain its arena
+    // alongside the handle so every unassigned blend on this thread shares it.
+    static EMPTY_ANIMATION: (CoreArena, CoreHandle) = {
+        let arena = CoreArena::default();
+        let animation = arena.insert(LinearAnimation::default());
+        (arena, animation)
+    };
+}
 
 pub struct BlendAnimation {
     pub base: BlendAnimationBase,
@@ -27,7 +39,11 @@ impl Default for BlendAnimation {
 
 impl BlendAnimation {
     pub fn animation(&self) -> Option<CoreHandle> {
-        self.animation.clone()
+        Some(
+            self.animation
+                .clone()
+                .unwrap_or_else(|| EMPTY_ANIMATION.with(|(_, animation)| animation.clone())),
+        )
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
@@ -35,7 +51,7 @@ impl BlendAnimation {
         else {
             return StatusCode::MissingObject;
         };
-        let Some(this) = self.base.base.base.base.handle() else {
+        let Some(this) = self.base.base.handle() else {
             return StatusCode::MissingObject;
         };
         if !importer.add_blend_animation(this) {

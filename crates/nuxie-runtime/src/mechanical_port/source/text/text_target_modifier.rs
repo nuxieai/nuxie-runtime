@@ -3,6 +3,24 @@ use crate::mechanical_port::source::{
     generated::text::text_target_modifier_base::TextTargetModifierBase, status_code::StatusCode,
 };
 
+impl std::ops::Deref for TextTargetModifier {
+    type Target = TextTargetModifierBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextTargetModifier {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextTargetModifier {
+    pub const TYPE_KEY: u16 = TextTargetModifierBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct TextTargetModifier {
     pub base: TextTargetModifierBase,
     target: Option<CoreHandle>,
@@ -15,8 +33,7 @@ impl TextTargetModifier {
         }
         self.target = context.resolve(self.base.target_id()).filter(|target| {
             target
-                .with(|target| target.as_transform_component().is_some())
-                .unwrap_or(false)
+                .is_type_of(crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::TYPE_KEY)
         });
         StatusCode::Ok
     }

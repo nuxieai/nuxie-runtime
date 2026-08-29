@@ -1,5 +1,5 @@
 use std::ops::{BitAnd, BitOr, BitOrAssign, Not};
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::factory::RuntimeFactoryHandle;
 use crate::mechanical_port::source::math::aabb::Aabb;
@@ -131,7 +131,7 @@ pub struct RawTextInput {
     wrap: TextWrap,
     max_width: f32,
     max_height: f32,
-    clip_render_path: Option<Box<RenderPath>>,
+    clip_render_path: Option<Rc<RefCell<Box<RenderPath>>>>,
     ideal_cursor_x: f32,
     cursor_visual_position: CursorVisualPosition,
     selection_rects: Vec<Aabb>,
@@ -201,7 +201,7 @@ impl RawTextInput {
     ) {
         if self.overflow == TextOverflow::Clipped && self.clip_render_path.is_some() {
             renderer.save();
-            renderer.clip_path(self.clip_render_path.as_ref().unwrap().as_ref());
+            renderer.clip_path(self.clip_render_path.as_ref().unwrap().borrow().as_ref());
         }
         if self.cursor.has_selection() {
             let render_path = self.selection_path.path.render_path(factory);
@@ -346,7 +346,7 @@ impl RawTextInput {
         &mut self.selection_path
     }
 
-    pub fn clip_render_path(&self) -> Option<Rc<RenderPath>> {
+    pub fn clip_render_path(&self) -> Option<Rc<RefCell<Box<RenderPath>>>> {
         self.clip_render_path.clone()
     }
 
@@ -368,7 +368,7 @@ impl RawTextInput {
         assert!(self.cursor.is_collapsed());
         let index = self.cursor.start().code_point_index() as usize;
         self.text.insert(index, code_point);
-        let position = CursorPosition::new(self.cursor.first().code_point_index_offset(1));
+        let position = CursorPosition::unresolved(self.cursor.first().code_point_index_offset(1));
         self.cursor = Cursor::collapsed(position);
         self.capture_journal_entry(starting_cursor);
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
@@ -384,7 +384,7 @@ impl RawTextInput {
             self.text.insert(code_point_index as usize, code_point);
             code_point_index += 1;
         }
-        self.cursor = Cursor::collapsed(CursorPosition::new(code_point_index));
+        self.cursor = Cursor::collapsed(CursorPosition::unresolved(code_point_index));
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
         self.capture_journal_entry(starting_cursor);
     }
@@ -399,7 +399,7 @@ impl RawTextInput {
         let start = self.cursor.first().code_point_index();
         let end = self.cursor.last().code_point_index();
         self.text.drain(start as usize..end as usize);
-        self.cursor = Cursor::collapsed(CursorPosition::new(start));
+        self.cursor = Cursor::collapsed(CursorPosition::unresolved(start));
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
 
@@ -421,7 +421,7 @@ impl RawTextInput {
             let cluster_count = glyph_lookup.count(index);
             self.text
                 .drain(index as usize..(index + cluster_count) as usize);
-            self.cursor = Cursor::collapsed(CursorPosition::new(index));
+            self.cursor = Cursor::collapsed(CursorPosition::unresolved(index));
         } else {
             let index = self.cursor.first().code_point_index();
             if index == 0 {
@@ -431,7 +431,7 @@ impl RawTextInput {
             let cluster_count = glyph_lookup.count(cluster_start);
             self.text
                 .drain(cluster_start as usize..(cluster_start + cluster_count) as usize);
-            self.cursor = Cursor::collapsed(CursorPosition::new(cluster_start));
+            self.cursor = Cursor::collapsed(CursorPosition::unresolved(cluster_start));
         }
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
         self.capture_journal_entry(starting_cursor);
@@ -492,8 +492,8 @@ impl RawTextInput {
         if self.unflag(Flags::ShapeDirty as u8) {
             self.text_run.unichar_count = self.text.len() as u32;
             self.shape.shape(
-                &self.text,
-                std::slice::from_ref(&self.text_run),
+                &mut self.text,
+                std::slice::from_mut(&mut self.text_run),
                 self.sizing,
                 self.max_width,
                 self.max_height,
@@ -522,9 +522,15 @@ impl RawTextInput {
         if self.overflow == TextOverflow::Clipped {
             if self.clip_render_path.is_none() {
                 self.clip_render_path =
-                    Some(factory.with_factory_mut(|factory| factory.make_empty_render_path()));
+                    Some(Rc::new(RefCell::new(factory.with_factory_mut(|factory| {
+                        factory.make_empty_render_path()
+                    }))));
             } else {
-                self.clip_render_path.as_mut().unwrap().rewind();
+                self.clip_render_path
+                    .as_ref()
+                    .unwrap()
+                    .borrow_mut()
+                    .rewind();
             }
             let bounds = self.shape.bounds();
             let mut raw = nuxie_render_api::RawPath::new();
@@ -534,7 +540,11 @@ impl RawTextInput {
                 bounds.right(),
                 bounds.bottom(),
             ));
-            self.clip_render_path.as_mut().unwrap().add_raw_path(&raw);
+            self.clip_render_path
+                .as_ref()
+                .unwrap()
+                .borrow_mut()
+                .add_raw_path(&raw);
         } else {
             self.clip_render_path = None;
         }
@@ -604,7 +614,7 @@ impl RawTextInput {
         let mut search_position = self.cursor.start();
         let mut classification = self.classify_position(search_position);
         if (classification & Delineator::Word) == Delineator::Unknown {
-            let previous_position = search_position.offset(-1);
+            let previous_position = search_position - 1;
             let previous_classification = self.classify_position(previous_position);
             if (previous_classification & Delineator::Word) != Delineator::Unknown {
                 search_position = previous_position;
@@ -616,7 +626,7 @@ impl RawTextInput {
         }
         let start = self.find_position(!classification, search_position, -1);
         let mut end = self.find_position(!classification, search_position, 1);
-        end = end.offset(1);
+        end = end + 1;
         self.cursor = Cursor::new(start, end);
         self.flag(Flags::SelectionDirty as u8);
     }
@@ -639,11 +649,11 @@ impl RawTextInput {
             return;
         };
         let glyph_lookup = self.shape.glyph_lookup();
-        let start = CursorPosition::with_line(
+        let start = CursorPosition::new(
             cursor.line_index(),
             line.first_code_point_index(glyph_lookup),
         );
-        let end = CursorPosition::with_line(
+        let end = CursorPosition::new(
             cursor.line_index(),
             line.last_code_point_index(glyph_lookup),
         );
@@ -701,12 +711,12 @@ impl RawTextInput {
                     } else {
                         line.last_code_point_index(self.shape.glyph_lookup())
                     };
-                    position = CursorPosition::with_line(end.line_index(), code_point_index);
+                    position = CursorPosition::new(end.line_index(), code_point_index);
                 }
             }
             CursorBoundary::Word | CursorBoundary::SubWord => {
                 let mut classification =
-                    self.classify_position(position.offset(if offset < 0 { -1 } else { 0 }));
+                    self.classify_position(position + if offset < 0 { -1 } else { 0 });
                 if classification == Delineator::Whitespace
                     || classification == Delineator::Underscore
                 {
@@ -721,7 +731,7 @@ impl RawTextInput {
                             let non_lowercase =
                                 self.find(!Delineator::Lowercase, &mut position, offset);
                             if offset == -1 && non_lowercase == Delineator::Uppercase {
-                                position = position.offset(-1);
+                                position = position - 1;
                             }
                         } else {
                             self.find(
@@ -739,7 +749,7 @@ impl RawTextInput {
                             let non_uppercase =
                                 self.find(!Delineator::Uppercase, &mut position, offset);
                             if offset == 1 && non_uppercase == Delineator::Lowercase {
-                                position = position.offset(-1);
+                                position = position - 1;
                                 if position.code_point_index() == start_position.code_point_index()
                                 {
                                     self.find(!Delineator::Lowercase, &mut position, offset);
@@ -805,13 +815,13 @@ impl RawTextInput {
     ) -> Delineator {
         let mut last_classification = Delineator::Unknown;
         loop {
-            let next_position = position.offset(direction);
+            let next_position = *position + direction;
             if next_position.code_point_index() == position.code_point_index() {
                 break;
             }
             *position = next_position;
             last_classification =
-                self.classify_position(next_position.offset(if direction < 0 { -1 } else { 0 }));
+                self.classify_position(next_position + if direction < 0 { -1 } else { 0 });
             if last_classification & delineator_mask != 0 {
                 break;
             }
@@ -827,7 +837,7 @@ impl RawTextInput {
     ) -> CursorPosition {
         let mut result = position;
         loop {
-            let next_position = result.offset(direction);
+            let next_position = result + direction;
             if next_position.code_point_index() == result.code_point_index()
                 || next_position.code_point_index() as usize >= self.length()
             {
@@ -872,9 +882,9 @@ impl RawTextInput {
         let next_line_index = self.cursor.end().line_index_offset(1);
         let position = if self.shape.line_count() != 0
             && self.text.len() > 1
-            && next_line_index as usize >= self.shape.line_count()
+            && next_line_index >= self.shape.line_count()
         {
-            CursorPosition::with_line(
+            CursorPosition::new(
                 self.shape.line_count() as u32 - 1,
                 self.text.len() as u32 - 1,
             )
@@ -911,10 +921,10 @@ impl RawTextInput {
             return String::new();
         }
         let code_points = &self.text[..size - 1];
-        let mut buffer = vec![0; Utf::count_code_point_length(code_points)];
+        let mut buffer = vec![0; Utf::count_code_point_length(code_points) as usize];
         let mut encoded = 0;
         for code_point in code_points {
-            encoded += Utf::encode(&mut buffer[encoded..], *code_point);
+            encoded += Utf::encode(&mut buffer[encoded..], *code_point) as usize;
         }
         String::from_utf8(buffer).unwrap()
     }
@@ -941,8 +951,10 @@ impl RawTextInput {
         self.ideal_cursor_x = -1.0;
         self.set_text_private(value);
         let max_index = self.length() as u32;
-        let start = CursorPosition::new(starting_cursor.start().code_point_index().min(max_index));
-        let end = CursorPosition::new(starting_cursor.end().code_point_index().min(max_index));
+        let start =
+            CursorPosition::unresolved(starting_cursor.start().code_point_index().min(max_index));
+        let end =
+            CursorPosition::unresolved(starting_cursor.end().code_point_index().min(max_index));
         self.cursor = Cursor::new(start, end);
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
         self.capture_journal_entry(starting_cursor);
@@ -1004,8 +1016,8 @@ impl RawTextInput {
         if self.unflag(Flags::MeasureDirty as u8) || force {
             self.text_run.unichar_count = self.text.len() as u32;
             self.measuring_shape.as_mut().unwrap().shape(
-                &self.text,
-                std::slice::from_ref(&self.text_run),
+                &mut self.text,
+                std::slice::from_mut(&mut self.text_run),
                 self.sizing,
                 max_width,
                 max_height,

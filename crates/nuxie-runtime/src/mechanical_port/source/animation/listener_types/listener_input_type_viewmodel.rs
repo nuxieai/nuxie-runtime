@@ -21,7 +21,19 @@ impl ListenerInputTypeViewModel {
 
     pub fn view_model_path_ids_buffer(&self) -> Vec<u32> {
         self.data_bind_path_referencer
-            .with_data_bind_path(|path| path.path().clone())
+            .with_data_bind_path(|path| path.path().to_vec())
             .expect("listener input type data-bind path must exist")
+    }
+}
+
+impl std::ops::Deref for ListenerInputTypeViewModel {
+    type Target = ListenerInputTypeViewModelBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ListenerInputTypeViewModel {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

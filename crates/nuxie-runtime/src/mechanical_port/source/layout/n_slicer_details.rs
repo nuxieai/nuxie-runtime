@@ -16,10 +16,20 @@ pub struct NSlicerDetailsState {
 }
 
 pub trait NSlicerDetails {
+    fn details_state_ref(&self) -> &NSlicerDetailsState;
     fn details_state(&mut self) -> &mut NSlicerDetailsState;
     fn axis_changed(&mut self);
-    fn patch_index(&mut self, patch_x: i32, patch_y: i32) -> i32 {
-        patch_y * (self.details_state().xs.len() as i32 + 1) + patch_x
+    fn patch_index(&self, patch_x: i32, patch_y: i32) -> i32 {
+        patch_y * (self.details_state_ref().xs.len() as i32 + 1) + patch_x
+    }
+    fn xs(&self) -> &[CoreHandle] {
+        &self.details_state_ref().xs
+    }
+    fn ys(&self) -> &[CoreHandle] {
+        &self.details_state_ref().ys
+    }
+    fn tile_modes(&self) -> &HashMap<i32, NSlicerTileModeType> {
+        &self.details_state_ref().tile_modes
     }
     fn add_axis_x(&mut self, axis: CoreHandle) {
         self.details_state().xs.push(axis);
@@ -33,8 +43,7 @@ pub trait NSlicerDetails {
 }
 
 pub fn is_details(component: &CoreHandle) -> bool {
-    component.with_downcast::<NSlicer, _>(|_| ()).is_some()
-        || component.with_downcast::<NSlicedNode, _>(|_| ()).is_some()
+    matches!(component.core_type(), Some(crate::mechanical_port::source::generated::layout::n_slicer_base::NSlicerBase::TYPE_KEY | crate::mechanical_port::source::generated::layout::n_sliced_node_base::NSlicedNodeBase::TYPE_KEY))
 }
 
 pub fn axis_changed(component: &CoreHandle) -> bool {

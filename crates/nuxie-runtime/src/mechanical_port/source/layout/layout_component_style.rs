@@ -16,6 +16,29 @@ use crate::mechanical_port::source::{
     layout_component::LayoutComponent,
 };
 
+impl std::ops::Deref for LayoutComponentStyle {
+    type Target = LayoutComponentStyleBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LayoutComponentStyle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl LayoutComponentStyle {
+    fn layout_owner(&self) -> Option<CoreHandle> {
+        self.base.parent_handle().filter(|parent| {
+            parent
+                .is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY)
+        })
+    }
+    pub const TYPE_KEY: u16 = LayoutComponentStyleBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct LayoutComponentStyle {
     pub base: LayoutComponentStyleBase,
@@ -23,8 +46,9 @@ pub struct LayoutComponentStyle {
 }
 
 impl LayoutStyleApplier for LayoutComponentStyle {
-    fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
-        self.base.apply_sizing_base_style(style, context);
+    fn apply_base_style(&self, style: &mut YGStyle, _context: &LayoutSyncContext) {
+        self.base
+            .apply_base_style_with_display(style, self.display());
     }
 
     fn apply_container_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
@@ -37,6 +61,87 @@ impl LayoutStyleApplier for LayoutComponentStyle {
 }
 
 impl LayoutComponentStyle {
+    pub fn set_position_left(&mut self, value: f32) {
+        if self.base.set_position_left_value(value) {
+            self.position_left_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                LayoutComponentStyleBase::POSITION_LEFT_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_position_right(&mut self, value: f32) {
+        if self.base.set_position_right_value(value) {
+            self.position_right_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                LayoutComponentStyleBase::POSITION_RIGHT_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_position_top(&mut self, value: f32) {
+        if self.base.set_position_top_value(value) {
+            self.position_top_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                LayoutComponentStyleBase::POSITION_TOP_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_position_bottom(&mut self, value: f32) {
+        if self.base.set_position_bottom_value(value) {
+            self.position_bottom_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                LayoutComponentStyleBase::POSITION_BOTTOM_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_position_left_units_value(&mut self, value: u8) {
+        if self.base.set_position_left_units_value_value(value) {
+            self.position_left_units_value_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                LayoutComponentStyleBase::POSITION_LEFT_UNITS_VALUE_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_position_top_units_value(&mut self, value: u8) {
+        if self.base.set_position_top_units_value_value(value) {
+            self.position_top_units_value_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                LayoutComponentStyleBase::POSITION_TOP_UNITS_VALUE_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_position_right_units_value(&mut self, value: u8) {
+        if self.base.set_position_right_units_value_value(value) {
+            self.position_right_units_value_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                LayoutComponentStyleBase::POSITION_RIGHT_UNITS_VALUE_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_position_bottom_units_value(&mut self, value: u8) {
+        if self.base.set_position_bottom_units_value_value(value) {
+            self.position_bottom_units_value_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                LayoutComponentStyleBase::POSITION_BOTTOM_UNITS_VALUE_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_intrinsically_sized_value(&mut self, value: bool) {
+        if self.base.set_intrinsically_sized_value_value(value) {
+            self.intrinsically_sized_value_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                LayoutComponentStyleBase::INTRINSICALLY_SIZED_VALUE_PROPERTY_KEY,
+            );
+        }
+    }
     fn with_layout_mut<R>(&mut self, f: impl FnOnce(&mut LayoutComponent) -> R) -> Option<R> {
         self.base
             .parent_handle()?
@@ -156,7 +261,10 @@ impl LayoutComponentStyle {
         style.padding_mut()[YGEdge::Bottom] =
             YGValue::new(self.base.padding_bottom(), self.padding_bottom_units());
         if self.is_stack() {
-            GridTrack::sync_stack_container_style(style, self.base.justify_items_value());
+            GridTrack::sync_stack_container_style(
+                style,
+                u32::from(self.base.justify_items_value()),
+            );
             Self::apply_stack_alignment(style, self.alignment_type());
             return;
         }
@@ -296,7 +404,7 @@ impl LayoutComponentStyle {
         YGOverflow::from(self.base.overflow_value())
     }
     pub fn intrinsically_sized(&self) -> bool {
-        self.base.intrinsically_sized_value() == 1
+        self.base.intrinsically_sized_value()
     }
 
     pub fn width_units(&self) -> YGUnit {
@@ -364,25 +472,39 @@ impl LayoutComponentStyle {
     }
 
     pub fn mark_layout_node_dirty(&mut self) {
-        self.with_layout_mut(|layout| layout.mark_layout_node_dirty(false));
+        if let Some(parent) = self.layout_owner() {
+            LayoutComponent::mark_layout_node_dirty_occurrence(&parent, false);
+        }
     }
     pub fn mark_layout_style_dirty(&mut self) {
-        self.with_layout_mut(LayoutComponent::mark_layout_style_dirty);
+        if let Some(parent) = self.layout_owner() {
+            LayoutComponent::mark_layout_style_dirty_occurrence(&parent);
+        }
     }
     pub fn scale_type_changed(&mut self) {
-        self.with_layout_mut(LayoutComponent::scale_type_changed);
+        if let Some(parent) = self.layout_owner() {
+            LayoutComponent::scale_type_changed_from_style(&parent, self);
+        }
     }
     pub fn display_changed(&mut self) {
-        self.with_layout_mut(LayoutComponent::display_changed);
+        if let Some(parent) = self.layout_owner() {
+            LayoutComponent::display_changed_from_style(&parent, self);
+        }
     }
     pub fn position_type_value_changed(&mut self) {
-        self.with_layout_mut(LayoutComponent::position_type_changed);
+        if let Some(parent) = self.layout_owner() {
+            LayoutComponent::position_type_changed_from_style(&parent, self);
+        }
     }
     pub fn flex_direction_value_changed(&mut self) {
-        self.with_layout_mut(LayoutComponent::flex_direction_changed);
+        if let Some(parent) = self.layout_owner() {
+            LayoutComponent::flow_style_changed_from_style(&parent, self);
+        }
     }
     pub fn direction_value_changed(&mut self) {
-        self.with_layout_mut(LayoutComponent::direction_changed);
+        if let Some(parent) = self.layout_owner() {
+            LayoutComponent::direction_changed_occurrence(&parent);
+        }
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_dirty(context);
@@ -415,7 +537,9 @@ impl LayoutComponentStyle {
         self.display_changed();
     }
     pub fn layout_type_value_changed(&mut self) {
-        self.with_layout_mut(LayoutComponent::layout_type_changed);
+        if let Some(parent) = self.layout_owner() {
+            LayoutComponent::flow_style_changed_from_style(&parent, self);
+        }
     }
     pub fn justify_items_value_changed(&mut self) {
         self.mark_layout_node_dirty();

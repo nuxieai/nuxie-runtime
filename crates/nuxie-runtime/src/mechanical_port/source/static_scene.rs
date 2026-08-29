@@ -41,8 +41,9 @@ impl StaticScene {
     pub fn advance_and_apply(&mut self, _seconds: f32) -> bool {
         self.scene
             .artboard_instance()
-            .with_artboard_mut(|artboard| artboard.advance(0.0))
-            .expect("StaticScene outlived its ArtboardInstance");
+            .upgrade()
+            .expect("StaticScene outlived its ArtboardInstance")
+            .advance_default(0.0);
         true
     }
 }

@@ -1,19 +1,25 @@
 //! One-for-one scripted silver ports of pinned
 //! `tests/unit_tests/runtime/scripting/scripting_properties_test.cpp#9-#16`.
 //!
-//! Each test spells out its own upstream action sequence. The shared runner
-//! uses `nuxie::ArtboardInstance`, the production facade owner for the genuine
-//! mount, attach, and fail-closed verification lifecycle. Before the first
-//! behavioral action it binds the pinned ViewModel, mounts the selected
-//! Artboard's scripts, and proves every concrete `ScriptedDrawable` global is
-//! backed by an attached live `ScriptInstance`.
+//! Import and instance construction use the same native File-owned ScriptVm
+//! registration and occurrence lifecycle as the silver runner. The test reads
+//! live owners; it never mounts or hydrates a second script graph.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
-use nuxie::{File, PersistentFactory, ScriptExecutionLimits, ViewModelInstance};
-use nuxie_render_api::SerializingFactory;
+use nuxie_render_api::{PersistentFactory, SerializingFactory};
+use nuxie_runtime::source::{
+    math::vec2d::Vec2D, scripted::scripted_drawable::ScriptedDrawable,
+    viewmodel::runtime::viewmodel_instance_runtime::ViewModelInstanceRuntime,
+};
+use nuxie_runtime::{
+    Artboard, CoreHandle, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
+};
 use silver_corpus::{Action, ActionTarget, PointerCoordinate, compare_sriv, parse_sriv};
+
+#[path = "../src/scripting.rs"]
+mod native_scripting;
 
 fn runtime_root() -> PathBuf {
     std::env::var_os("RIVE_RUNTIME_DIR")
@@ -40,32 +46,21 @@ fn run_exact_scripted_silver(
     let fixture_path = runtime.join("tests/unit_tests/assets").join(fixture);
     let bytes = std::fs::read(&fixture_path)
         .with_context(|| format!("read pinned fixture {}", fixture_path.display()))?;
-    let file = File::import_with_trusted_scripts(&bytes, ScriptExecutionLimits::new())
-        .with_context(|| format!("import pinned fixture {fixture}"))?;
-    let selected = file
-        .default_artboard()
-        .context("missing default artboard")?;
-    let scripted_drawable_globals = selected
-        .graph()
-        .components
-        .iter()
-        .filter(|component| component.type_name == "ScriptedDrawable")
-        .map(|component| component.global_id)
-        .collect::<Vec<_>>();
-    if scripted_drawable_globals.is_empty() {
-        bail!("{fixture} default artboard has no concrete ScriptedDrawable");
-    }
-    let mut artboard = selected
-        .instantiate()
-        .context("instantiate default artboard")?;
     let mut factory = PersistentFactory::new(SerializingFactory::new());
-    artboard
-        .initialize_renderer(&mut factory)
-        .context("initialize renderer and File script VM")?;
-    let (width, height) = artboard.artboard_dimensions();
+    let file = native_scripting::import_file(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).context("retained serializing factory")?,
+    )
+    .with_context(|| format!("import pinned fixture {fixture}"))?;
+    let source = file
+        .with_file(|file| file.artboard())
+        .context("missing default artboard")?;
+    let artboard =
+        Artboard::instance_from_handle(&source).context("instantiate default artboard")?;
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
     factory.borrow_mut().frame_size(width as u32, height as u32);
-    let mut machine = artboard
-        .state_machine_instance(0)
+    let machine = artboard
+        .state_machine_instance_handle(0)
         .context("missing state machine 0")?;
 
     let mut actions = actions.into_iter();
@@ -73,30 +68,46 @@ fn run_exact_scripted_silver(
         Some(Action::BindDefaultViewModel) => {}
         other => bail!("{id} exact stream must begin with BindDefaultViewModel, got {other:?}"),
     }
-    let mut view_model = exact_view_model(&artboard, ordinal)
+    let view_model_owner = exact_view_model(&file, &artboard, ordinal)
         .with_context(|| format!("{id} has no exact pinned ViewModel instance"))?;
-    artboard.bind_view_model(&view_model);
-    let context = artboard
-        .owned_view_model_context()
-        .and_then(|context| context.main_handle())
+    let view_model = ViewModelInstanceRuntime::new(view_model_owner.clone());
+    // The reset case retains this property before binding, exactly as C++.
+    let reset_trigger = if ordinal == 16 {
+        Some(
+            view_model
+                .property_trigger("tri1")
+                .context("missing trigger property tri1")?,
+        )
+    } else {
+        None
+    };
+    // These two cases construct the renderer before bind; 9/10/11 do so
+    // after bind, and 12/14/15 do so after their first advance.
+    let mut renderer = matches!(ordinal, 13 | 16).then(|| factory.borrow().make_renderer());
+    machine.with_instance_mut(|machine| {
+        machine.bind_view_model_instance(view_model_owner.clone());
+    });
+    let context = machine
+        .with_instance(|machine| machine.data_context())
         .context("exact bound ViewModel context was not retained")?;
-    let context_identity = context.instance_identity();
-    if context_identity != view_model.identity() {
+    let context_owner = context.with_context(|context| context.main_view_model_instance());
+    if context_owner.as_ref() != Some(&view_model_owner) {
         bail!("bound ViewModel context is not the exact live owner");
     }
-    if !artboard
-        .mount_scripted_drawables(&mut factory)
-        .context("mount selected-artboard ScriptedDrawables")?
-    {
-        bail!("selected artboard reported no script mount target");
+    if matches!(ordinal, 9..=11) {
+        renderer = Some(factory.borrow().make_renderer());
     }
-    for global_id in &scripted_drawable_globals {
-        if !artboard.raw().has_script_instance_for_global(*global_id) {
-            bail!("ScriptedDrawable global {global_id} has no attached live ScriptInstance");
-        }
+    let scripted_drawables = artboard.with_artboard(|artboard| {
+        artboard.objects().iter().flatten()
+            .filter(|owner| owner.is_type_of(
+                nuxie_runtime::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY,
+            ))
+            .cloned().collect::<Vec<_>>()
+    });
+    if scripted_drawables.is_empty() {
+        bail!("{fixture} default artboard has no concrete ScriptedDrawable");
     }
 
-    let mut renderer = factory.borrow().make_renderer();
     let mut observed_times = Vec::new();
     for action in actions {
         match action {
@@ -104,31 +115,55 @@ fn run_exact_scripted_silver(
                 target: ActionTarget::StateMachine,
                 seconds,
             } => {
-                artboard
-                    .try_advance_with_state_machines_and_view_model_and_factory(
-                        std::slice::from_mut(&mut machine),
-                        seconds,
-                        &mut view_model,
-                        &mut factory,
-                    )
-                    .with_context(|| format!("{id} advance {seconds}"))?;
+                machine.advance_and_apply(seconds);
+                // The pinned native lifecycle, not a harness mount step,
+                // initializes the actual scripted occurrences on advance.
+                if observed_times.is_empty() {
+                    for owner in &scripted_drawables {
+                        if !owner
+                            .with_downcast::<ScriptedDrawable, _>(|drawable| {
+                                drawable.scripted.self_ref() != 0
+                            })
+                            .unwrap_or(false)
+                        {
+                            bail!("{id} ScriptedDrawable {owner:?} has no live ScriptInstance");
+                        }
+                    }
+                }
                 observed_times.push(seconds);
             }
-            Action::Draw => artboard
-                .draw(&mut factory, &mut renderer)
-                .with_context(|| format!("{id} draw"))?,
+            Action::Draw => {
+                let renderer = renderer.get_or_insert_with(|| factory.borrow().make_renderer());
+                artboard.draw(renderer);
+            }
             Action::Frame => factory.borrow_mut().add_frame(),
             Action::PointerDown { x, y, pointer_id } => {
+                let (width, height) =
+                    artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
                 let (x, y) = resolve_pointer_pair(&x, &y, width, height)?;
-                machine.pointer_down(artboard.raw_mut(), x, y, pointer_id);
+                machine.with_instance_mut(|machine| {
+                    machine.pointer_down(Vec2D::new(x, y), pointer_id);
+                });
             }
             Action::PointerUp { x, y, pointer_id } => {
+                let (width, height) =
+                    artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
                 let (x, y) = resolve_pointer_pair(&x, &y, width, height)?;
-                machine.pointer_up(artboard.raw_mut(), x, y, pointer_id);
+                machine.with_instance_mut(|machine| {
+                    machine.pointer_up(Vec2D::new(x, y), pointer_id);
+                });
             }
             Action::FireViewModelTrigger { property } => {
-                if !view_model.fire_trigger(&property) {
-                    bail!("{id} missing trigger property {property}");
+                if ordinal == 16 && property == "tri1" {
+                    reset_trigger
+                        .as_ref()
+                        .expect("retained reset trigger")
+                        .trigger();
+                } else {
+                    view_model
+                        .property_trigger(&property)
+                        .with_context(|| format!("{id} missing trigger property {property}"))?
+                        .trigger();
                 }
             }
             other => bail!("{id} unsupported exact action {other:?}"),
@@ -147,17 +182,21 @@ fn run_exact_scripted_silver(
 }
 
 fn exact_view_model(
-    artboard: &nuxie::ArtboardInstance<'_>,
+    file: &RuntimeFileHandle,
+    artboard: &RuntimeArtboardInstanceHandle,
     ordinal: usize,
-) -> Option<ViewModelInstance> {
+) -> Option<CoreHandle> {
+    let root = artboard.core_handle();
     match ordinal {
-        // These two pinned cases call createViewModelInstance(viewModelId, 0)
-        // when the selected artboard declares a schema.
-        9 | 12 if artboard.view_model_index().is_some() => {
-            artboard.instantiate_view_model_instance(0)
+        9 | 12 => {
+            let model_id = artboard.with_artboard(|artboard| artboard.view_model_id());
+            if model_id == u32::MAX {
+                file.with_file_mut(|file| file.create_view_model_instance_for_artboard(root))
+            } else {
+                file.with_file(|file| file.create_view_model_instance_at(model_id as usize, 0))
+            }
         }
-        // All other C12 Silver cases call createDefaultViewModelInstance.
-        _ => artboard.instantiate_default_view_model_instance(),
+        _ => file.with_file_mut(|file| file.create_default_view_model_instance_for_artboard(root)),
     }
 }
 
@@ -200,7 +239,6 @@ fn wave_c12_silver_009_access_view_model_properties_and_enum_properties() {
 }
 
 #[test]
-#[ignore = "expected-red: viewmodel_from_instance frame 0 op 8 expects makeRenderPaint, live scripted SRIV emits frameSize"]
 fn wave_c12_silver_010_creates_view_models_from_specified_named_instances() {
     run_exact_scripted_silver(
         &runtime_root(),
@@ -221,7 +259,6 @@ fn wave_c12_silver_010_creates_view_models_from_specified_named_instances() {
 }
 
 #[test]
-#[ignore = "expected-red: realized replace_view_model frame 1 op 93 expects color, live scripted SRIV emits save"]
 fn wave_c12_silver_011_replace_a_view_model_property_value_from_a_script() {
     run_exact_scripted_silver(
         &runtime_root(),
@@ -258,7 +295,6 @@ fn wave_c12_silver_011_replace_a_view_model_property_value_from_a_script() {
 }
 
 #[test]
-#[ignore = "expected-red: realized remove_from_list frame 1 op 195 expects rewind, live scripted SRIV emits drawPath"]
 fn wave_c12_silver_012_scripts_can_remove_items_from_lists() {
     let mut actions = vec![
         Action::BindDefaultViewModel,
@@ -292,7 +328,6 @@ fn wave_c12_silver_012_scripts_can_remove_items_from_lists() {
 }
 
 #[test]
-#[ignore = "pending: genuine mount cannot attach nested occurrence graph 84 without retained source File authority"]
 fn wave_c12_silver_013_expose_list_index_to_scripts_and_ensure_type_is_correct() {
     run_exact_scripted_silver(
         &runtime_root(),
@@ -313,7 +348,6 @@ fn wave_c12_silver_013_expose_list_index_to_scripts_and_ensure_type_is_correct()
 }
 
 #[test]
-#[ignore = "expected-red: realized scripted_property_image frame 0 op 21 expects save, live scripted SRIV emits restore"]
 fn wave_c12_silver_014_scripted_image_properties() {
     run_exact_scripted_silver(
         &runtime_root(),
@@ -334,7 +368,6 @@ fn wave_c12_silver_014_scripted_image_properties() {
 }
 
 #[test]
-#[ignore = "expected-red: realized image_scripting_property_value frame 0 op 1 expects decodeImage, live scripted SRIV emits makeRenderPaint"]
 fn wave_c12_silver_015_image_read_from_property_value() {
     run_exact_scripted_silver(
         &runtime_root(),
@@ -361,7 +394,6 @@ fn wave_c12_silver_015_image_read_from_property_value() {
 }
 
 #[test]
-#[ignore = "expected-red: reset_shared_viewmodel_instance_test frame 0 op 10 expects makeRenderPaint, live scripted SRIV emits frameSize"]
 fn wave_c12_silver_016_reset_detached_view_model_instances_at_end_of_frame() {
     run_exact_scripted_silver(
         &runtime_root(),

@@ -46,7 +46,11 @@ impl ScriptInputTrigger {
         let Some(this) = self.base.handle() else {
             return StatusCode::MissingObject;
         };
-        importer.add_input(this, ScriptInputTriggerBase::TYPE_KEY.into());
+        importer.add_input(
+            this,
+            ScriptInputTriggerBase::TYPE_KEY.into(),
+            &mut self.script_input,
+        );
 
         if self.script_input.scripted_object().is_some_and(|object| {
             object
@@ -65,7 +69,9 @@ impl ScriptInputTrigger {
         }
 
         if let (Some(this), Some(parent)) = (self.base.handle(), self.base.parent_handle()) {
-            parent.with_mut(|parent| parent.scripted_object_add_property(this));
+            parent.with_mut(|parent| {
+                parent.scripted_object_add_property_from_input(this, &mut self.script_input)
+            });
         }
         StatusCode::Ok
     }

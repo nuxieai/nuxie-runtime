@@ -27,11 +27,12 @@ impl ArtboardListMapRule {
         if code != StatusCode::Ok {
             return code;
         }
-        let Some(parent) = self.base.parent_mut().as_artboard_component_list_mut() else {
+        let Some(parent) = self.base.parent_handle() else {
             return StatusCode::MissingObject;
         };
-        parent.add_map_rule(self);
-        StatusCode::Ok
+        parent
+            .with_downcast_mut::<ArtboardComponentList, _>(|parent| parent.add_map_rule(self))
+            .map_or(StatusCode::MissingObject, |_| StatusCode::Ok)
     }
 }
 

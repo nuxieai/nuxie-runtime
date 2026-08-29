@@ -4,18 +4,19 @@ use crate::mechanical_port::source::{
         scrolling::scroll_constraint::ScrollConstraint,
     },
     core::CoreHandle,
+    drawable::RuntimeDrawableOccurrence,
     math::vec2d::Vec2D,
 };
 
 pub struct ViewportDraggableProxy {
     constraint: CoreHandle,
-    hittable: CoreHandle,
+    hittable: RuntimeDrawableOccurrence,
     last_position: Vec2D,
     is_dragging: bool,
 }
 
 impl ViewportDraggableProxy {
-    pub fn new(constraint: CoreHandle, hittable: CoreHandle) -> Self {
+    pub fn new(constraint: CoreHandle, hittable: RuntimeDrawableOccurrence) -> Self {
         Self {
             constraint,
             hittable,
@@ -40,19 +41,22 @@ impl DraggableProxy for ViewportDraggableProxy {
                 if !self.is_dragging {
                     let crossed = match constraint.direction() {
                         DraggableConstraintDirection::Vertical => {
-                            delta_position.y.abs() > constraint.threshold()
+                            Some(delta_position.y.abs() > constraint.threshold())
                         }
                         DraggableConstraintDirection::Horizontal => {
-                            delta_position.x.abs() > constraint.threshold()
+                            Some(delta_position.x.abs() > constraint.threshold())
                         }
                         DraggableConstraintDirection::All => {
-                            delta_position.length() > constraint.threshold()
+                            Some(delta_position.length() > constraint.threshold())
                         }
+                        _ => None,
                     };
-                    if crossed {
-                        self.is_dragging = true;
-                    } else {
-                        return false;
+                    if let Some(crossed) = crossed {
+                        if crossed {
+                            self.is_dragging = true;
+                        } else {
+                            return false;
+                        }
                     }
                 }
                 constraint.drag_view(delta_position, time_stamp);
@@ -86,7 +90,7 @@ impl DraggableProxy for ViewportDraggableProxy {
             })
             .expect("live ScrollConstraint occurrence")
     }
-    fn hittable(&self) -> Option<CoreHandle> {
+    fn hittable(&self) -> Option<RuntimeDrawableOccurrence> {
         Some(self.hittable.clone())
     }
 }

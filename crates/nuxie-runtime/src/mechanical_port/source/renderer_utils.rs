@@ -2,7 +2,7 @@ pub struct AutoStArray<T, const N: usize> {
     values: Vec<T>,
 }
 
-impl<T: Default> AutoStArray<T, N> {
+impl<T: Default, const N: usize> AutoStArray<T, N> {
     pub fn new(count: usize) -> Self {
         let mut values = Vec::with_capacity(if count > N { count } else { N });
         values.resize_with(count, T::default);

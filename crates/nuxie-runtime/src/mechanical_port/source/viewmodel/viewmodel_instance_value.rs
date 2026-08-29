@@ -71,6 +71,35 @@ impl ValueDependentHandle {
         }
     }
 
+    fn add_dirt_from_number(&self, value: ComponentDirt, source: &CoreHandle, number_value: f32) {
+        match self {
+            Self::Core(_) => self.add_dirt(value),
+            Self::Runtime(dependent) => {
+                if let Some(dependent) = dependent.upgrade() {
+                    dependent
+                        .borrow_mut()
+                        .add_dirt_from_number(value, true, source, number_value);
+                }
+            }
+        }
+    }
+
+    fn add_dirt_from_trigger(&self, value: ComponentDirt, source: &CoreHandle, trigger_value: u32) {
+        match self {
+            Self::Core(_) => self.add_dirt(value),
+            Self::Runtime(dependent) => {
+                if let Some(dependent) = dependent.upgrade() {
+                    dependent.borrow_mut().add_dirt_from_trigger(
+                        value,
+                        true,
+                        source,
+                        trigger_value,
+                    );
+                }
+            }
+        }
+    }
+
     pub(crate) fn relink(&self) {
         let dependent = self.clone();
         if crate::view_model_cell::defer_transaction_notification(move || dependent.relink()) {
@@ -153,7 +182,7 @@ impl Default for ViewModelInstanceValue {
 }
 
 impl ViewModelInstanceValue {
-    fn handle(&self) -> Option<CoreHandle> {
+    pub(crate) fn handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.handle()
     }
 
@@ -162,11 +191,26 @@ impl ViewModelInstanceValue {
         if result != StatusCode::Ok {
             return result;
         }
+        if let Some(parent) = self.base.parent_handle()
+            && parent.is_type_of(
+                crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase::TYPE_KEY,
+            )
+        {
+            // Stateful values are cloned separately in the artboard's object
+            // list. Register this same occurrence after Component links its
+            // parent, just as ViewModelInstanceValue::onAddedDirty does.
+            parent
+                .with_downcast_mut::<
+                    super::viewmodel_instance::ViewModelInstance,
+                    _,
+                >(|instance| instance.add_value_borrowed(self))
+                .expect("a ViewModelInstance parent is retained by its artboard");
+        }
         StatusCode::Ok
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
-        let Some(value) = self.handle() else {
+        let Some(_) = self.handle() else {
             return StatusCode::MissingObject;
         };
         let Some(importer) = import_stack.latest::<ViewModelInstanceImporter>(
@@ -174,7 +218,7 @@ impl ViewModelInstanceValue {
         ) else {
             return StatusCode::MissingObject;
         };
-        importer.add_value(value);
+        importer.add_value(self);
         if import_stack
             .latest::<ArtboardImporter>(
                 crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
@@ -183,7 +227,7 @@ impl ViewModelInstanceValue {
         {
             self.base.import(import_stack)
         } else {
-            self.base.core_import(import_stack)
+            crate::mechanical_port::source::core::CoreObject::core_mut(self).import(import_stack)
         }
     }
 
@@ -191,30 +235,31 @@ impl ViewModelInstanceValue {
         self.has_flag(ValueFlags::ValueChanged)
     }
 
-    fn register_symbol(&mut self) {
-        let (Some(property), Some(instance), Some(value)) = (
-            self.view_model_property.as_ref(),
-            self.view_model_instance.as_ref(),
-            self.handle(),
-        ) else {
-            return;
-        };
+    fn registration_symbol(&self) -> Option<SymbolType> {
+        let property = self.view_model_property.as_ref()?;
         let (is_list_index, symbol) = property
             .with(|property| {
                 let property = property.as_view_model_property()?;
                 Some((
                     property.is_symbol_list_index(),
-                    SymbolType::from_i32(property.base.symbol_type_value()),
+                    SymbolType::from_i32(property.base.symbol_type_value() as i32),
                 ))
             })
             .flatten()
             .unwrap_or((false, None));
-        let symbol = if is_list_index {
+        if is_list_index {
             Some(SymbolType::ItemIndex)
         } else {
             symbol.filter(|symbol| *symbol != SymbolType::None)
+        }
+    }
+
+    fn register_symbol(&mut self) {
+        let (Some(instance), Some(value)) = (self.view_model_instance.as_ref(), self.handle())
+        else {
+            return;
         };
-        if let Some(symbol) = symbol {
+        if let Some(symbol) = self.registration_symbol() {
             instance.with_mut(|instance| {
                 if let Some(instance) = instance.as_view_model_instance_mut() {
                     instance.set_property_symbol(symbol, value);
@@ -259,6 +304,51 @@ impl ViewModelInstanceValue {
         }
         for dependent in &self.dependents {
             dependent.add_dirt(value);
+        }
+    }
+
+    pub(crate) fn add_dirt_from_number(&mut self, value: ComponentDirt, number_value: f32) {
+        self.dependents.retain(ValueDependentHandle::is_alive);
+        if self.dependents.is_empty() {
+            return;
+        }
+        let source = self
+            .handle()
+            .expect("a dependent-backed number has its native Core owner");
+        let dependents = self.dependents.clone();
+        if crate::view_model_cell::defer_transaction_notification(move || {
+            for dependent in dependents {
+                // The existing host transaction has released its source borrow
+                // when draining. Preserve its ordinary live-value observation.
+                dependent.add_dirt(value);
+            }
+        }) {
+            return;
+        }
+        for dependent in &self.dependents {
+            dependent.add_dirt_from_number(value, &source, number_value);
+        }
+    }
+
+    pub(crate) fn add_dirt_from_trigger(&mut self, value: ComponentDirt, trigger_value: u32) {
+        self.dependents.retain(ValueDependentHandle::is_alive);
+        if self.dependents.is_empty() {
+            return;
+        }
+        let source = self
+            .handle()
+            .expect("a dependent-backed trigger has its native Core owner");
+        let deferred_source = source.clone();
+        let dependents = self.dependents.clone();
+        if crate::view_model_cell::defer_transaction_notification(move || {
+            for dependent in dependents {
+                dependent.add_dirt_from_trigger(value, &deferred_source, trigger_value);
+            }
+        }) {
+            return;
+        }
+        for dependent in &self.dependents {
+            dependent.add_dirt_from_trigger(value, &source, trigger_value);
         }
     }
 
@@ -313,6 +403,21 @@ impl ViewModelInstanceValue {
         self.register_symbol();
     }
 
+    pub(crate) fn set_view_model_instance_borrowed(
+        &mut self,
+        instance: &mut super::viewmodel_instance::ViewModelInstance,
+    ) {
+        self.view_model_instance =
+            Some(instance.handle().expect("ViewModelInstance is arena-owned"));
+        if let Some(symbol) = self.registration_symbol() {
+            instance.set_property_symbol(
+                symbol,
+                self.handle()
+                    .expect("ViewModelInstanceValue is arena-owned"),
+            );
+        }
+    }
+
     pub fn view_model_instance(&self) -> Option<CoreHandle> {
         self.view_model_instance.clone()
     }
@@ -332,7 +437,7 @@ impl ViewModelInstanceValue {
         }
     }
 
-    fn suppress_delegation(&mut self) -> bool {
+    pub(crate) fn suppress_delegation(&mut self) -> bool {
         if self.has_flag(ValueFlags::Delegating) {
             return false;
         }
@@ -340,7 +445,7 @@ impl ViewModelInstanceValue {
         true
     }
 
-    fn restore_delegation(&mut self) {
+    pub(crate) fn restore_delegation(&mut self) {
         self.clear_flag(ValueFlags::Delegating);
     }
 

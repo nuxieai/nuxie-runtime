@@ -38,7 +38,9 @@ impl ViewModelInstanceNumber {
                 crate::RuntimeViewModelChangeValue::Number(self.base.property_value()),
             );
         }
-        self.base.add_dirt(ComponentDirt::BINDINGS);
+        let value = self.base.property_value();
+        self.base
+            .add_dirt_from_number(ComponentDirt::BINDINGS, value);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             let value = self.base.property_value();

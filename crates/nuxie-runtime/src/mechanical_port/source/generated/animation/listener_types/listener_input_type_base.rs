@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
-    animation::listener_types::listener_input_type::ListenerInputType,
-    core::binary_reader::BinaryReader, core::Core,
+    animation::listener_types::listener_input_type::ListenerInputType, core::Core,
+    core::binary_reader::BinaryReader,
 };
 
 pub trait ListenerInputTypeBaseCallbacks {

@@ -26,7 +26,9 @@ impl StateMachineTriggerBase {
     }
     pub fn clone_into(&self) -> StateMachineTrigger {
         let mut cloned = StateMachineTrigger::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

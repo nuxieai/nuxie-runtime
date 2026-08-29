@@ -5,7 +5,7 @@ use std::{
 
 use crate::mechanical_port::source::{
     animation::{
-        state_machine_instance::StateMachineInstance, state_machine_listener::ListenerType,
+        state_machine_instance::StateMachineInstance,
         state_machine_listener_single::StateMachineListenerSingle,
     },
     component::Component,
@@ -20,7 +20,9 @@ use crate::mechanical_port::source::{
             },
         },
     },
-    listener_group::{GestureClickPhase, HitTarget, ListenerGroup, ListenerGroupWithTargets},
+    gesture_click_phase::GestureClickPhase,
+    listener_group::{HitTarget, ListenerGroup, ListenerGroupWithTargets},
+    listener_type::ListenerType,
     math::vec2d::Vec2D,
     process_event_result::ProcessEventResult,
 };
@@ -47,12 +49,21 @@ impl DraggableConstraintBaseCallbacks for DraggableConstraint {
     }
 }
 
-#[repr(u8)]
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum DraggableConstraintDirection {
-    Horizontal,
-    Vertical,
-    All,
+pub struct DraggableConstraintDirection(u8);
+
+#[allow(non_upper_case_globals)]
+impl DraggableConstraintDirection {
+    pub const Horizontal: Self = Self(0);
+    pub const Vertical: Self = Self(1);
+    pub const All: Self = Self(2);
+}
+
+impl From<u32> for DraggableConstraintDirection {
+    fn from(value: u32) -> Self {
+        Self(value as u8)
+    }
 }
 
 pub trait DraggableProxy {
@@ -62,7 +73,7 @@ pub trait DraggableProxy {
     fn start_drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool;
     fn drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool;
     fn end_drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool;
-    fn hittable(&self) -> Option<CoreHandle>;
+    fn hittable(&self) -> Option<RuntimeDrawableOccurrence>;
 }
 
 #[derive(Default)]
@@ -99,11 +110,7 @@ impl DraggableConstraint {
     }
 
     pub fn direction(&self) -> DraggableConstraintDirection {
-        match self.direction_value() {
-            0 => DraggableConstraintDirection::Horizontal,
-            1 => DraggableConstraintDirection::Vertical,
-            _ => DraggableConstraintDirection::All,
-        }
+        DraggableConstraintDirection::from(self.direction_value())
     }
 
     pub fn constrains_horizontal(&self) -> bool {
@@ -127,7 +134,17 @@ impl DraggableConstraint {
         let mut result = Vec::new();
         for drag_proxy in draggables {
             let mut listener = StateMachineListenerSingle::default();
-            listener.set_listener_type_value(ListenerType::ComponentProvided as u32);
+            if listener
+                .base
+                .set_listener_type_value_value(ListenerType::ComponentProvided as u32)
+            {
+                use crate::mechanical_port::source::generated::animation::state_machine_listener_single_base::{StateMachineListenerSingleBase, StateMachineListenerSingleBaseCallbacks};
+                StateMachineListenerSingleBaseCallbacks::listener_type_value_changed(&mut listener);
+                crate::mechanical_port::source::core::CoreObject::core_mut(&mut listener)
+                    .notify_property_changed(
+                        StateMachineListenerSingleBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
+                    );
+            }
             let Some(listener) = constraint.insert_sibling(listener) else {
                 continue;
             };

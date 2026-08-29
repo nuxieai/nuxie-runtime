@@ -112,7 +112,10 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.scroll_offset_x_changed();
-        callbacks.notify_property_changed(Self::SCROLL_OFFSET_X_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SCROLL_OFFSET_X_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_scroll_offset_x_value(&mut self, value: f32) -> bool {
@@ -134,7 +137,10 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.scroll_offset_y_changed();
-        callbacks.notify_property_changed(Self::SCROLL_OFFSET_Y_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SCROLL_OFFSET_Y_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_scroll_offset_y_value(&mut self, value: f32) -> bool {
@@ -152,7 +158,7 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.snap_changed();
-        callbacks.notify_property_changed(Self::SNAP_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(callbacks, Self::SNAP_PROPERTY_KEY);
     }
 
     pub(crate) fn set_snap_value(&mut self, value: bool) -> bool {
@@ -174,7 +180,10 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.physics_type_value_changed();
-        callbacks.notify_property_changed(Self::PHYSICS_TYPE_VALUE_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PHYSICS_TYPE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_physics_type_value_value(&mut self, value: u32) -> bool {
@@ -196,7 +205,10 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.physics_id_changed();
-        callbacks.notify_property_changed(Self::PHYSICS_ID_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PHYSICS_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_physics_id_value(&mut self, value: u32) -> bool {
@@ -218,7 +230,10 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.virtualize_changed();
-        callbacks.notify_property_changed(Self::VIRTUALIZE_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VIRTUALIZE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_virtualize_value(&mut self, value: bool) -> bool {
@@ -240,7 +255,10 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.infinite_changed();
-        callbacks.notify_property_changed(Self::INFINITE_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INFINITE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_infinite_value(&mut self, value: bool) -> bool {
@@ -262,7 +280,10 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.interactive_changed();
-        callbacks.notify_property_changed(Self::INTERACTIVE_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INTERACTIVE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_interactive_value(&mut self, value: bool) -> bool {
@@ -284,7 +305,10 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.threshold_changed();
-        callbacks.notify_property_changed(Self::THRESHOLD_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::THRESHOLD_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_threshold_value(&mut self, value: f32) -> bool {
@@ -306,7 +330,10 @@ impl ScrollConstraintBase {
             return;
         }
         callbacks.drag_multiplier_changed();
-        callbacks.notify_property_changed(Self::DRAG_MULTIPLIER_PROPERTY_KEY);
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DRAG_MULTIPLIER_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_drag_multiplier_value(&mut self, value: f32) -> bool {

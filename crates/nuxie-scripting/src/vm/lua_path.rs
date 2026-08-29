@@ -1,18 +1,25 @@
 // Translated from:
 // /Users/levi/dev/oss/rive-runtime/src/lua/renderer/lua_path.cpp
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use luaur_rt::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
     Value, Vector as LuaVector,
 };
 use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
-use nuxie_render_api::{
-    Factory as RenderFactory, FillRule, Mat2D, PathVerb, RawPath, RenderPath, Vec2D,
-};
-use nuxie_runtime::{
-    RuntimeContourMeasure, RuntimePathMeasure, ScriptNode, artboard_draw_frame_id,
-    runtime_path_commands_from_raw_path,
+use nuxie_render_api::{Factory as RenderFactory, FillRule, RawPath as RenderRawPath, RenderPath};
+use nuxie_runtime::ScriptNode;
+use nuxie_runtime::mechanical_port::source::{
+    artboard::Artboard,
+    math::{
+        contour_measure::{ContourMeasure, ContourMeasureIter, RefCntContourMeasureIter},
+        mat2d::Mat2D,
+        path_measure::PathMeasure,
+        path_types::{PathVerb, path_verb_to_point_count},
+        raw_path::RawPath,
+        vec2d::Vec2D,
+    },
+    renderer::{from_render_raw_path, to_render_raw_path},
 };
 
 use super::lua_artboards::ScriptedNode as LuaScriptedNode;
@@ -28,16 +35,16 @@ pub(super) struct ScriptedPath {
 impl ScriptedPath {
     fn new() -> Self {
         Self {
-            raw_path: RawPath::new(),
+            raw_path: RawPath::default(),
             dirty: true,
             render_path: None,
             render_frame_id: 0,
         }
     }
 
-    pub(super) fn from_raw_path(raw_path: RawPath) -> Self {
+    pub(super) fn from_render_raw_path(raw_path: RenderRawPath) -> Self {
         Self {
-            raw_path,
+            raw_path: from_render_raw_path(&raw_path),
             dirty: true,
             render_path: None,
             render_frame_id: 0,
@@ -48,12 +55,22 @@ impl ScriptedPath {
         self.dirty = true;
     }
 
+    pub(super) fn with_render_raw_path_mut<R>(
+        &mut self,
+        f: impl FnOnce(&mut RenderRawPath) -> R,
+    ) -> R {
+        let mut render_path = to_render_raw_path(&self.raw_path);
+        let result = f(&mut render_path);
+        self.raw_path = from_render_raw_path(&render_path);
+        result
+    }
+
     pub(super) fn render_path(&mut self, factory: &mut dyn RenderFactory) -> &dyn RenderPath {
         if self.dirty {
             self.dirty = false;
             // Pinned lua_path.cpp replaces a path rebuilt in the same frame:
             // the renderer may retain the first backend path until submission.
-            let render_frame_id = artboard_draw_frame_id();
+            let render_frame_id = Artboard::frame_id();
             let same_frame_rebuild =
                 self.render_path.is_some() && self.render_frame_id == render_frame_id;
             self.render_frame_id = render_frame_id;
@@ -67,16 +84,12 @@ impl ScriptedPath {
             self.render_path
                 .as_mut()
                 .expect("render path is initialized")
-                .add_raw_path(&self.raw_path);
+                .add_raw_path(&to_render_raw_path(&self.raw_path));
         }
         self.render_path
             .as_ref()
             .expect("render path is initialized")
             .as_ref()
-    }
-
-    fn commands(&self) -> Vec<nuxie_runtime::RuntimePathCommand> {
-        runtime_path_commands_from_raw_path(&self.raw_path)
     }
 
     fn command(&self, lua_index: i64) -> ScriptedPathCommand {
@@ -92,9 +105,9 @@ impl ScriptedPath {
 
         let point_index = self.raw_path.verbs()[..verb_index]
             .iter()
-            .map(|verb| path_verb_point_count(*verb))
+            .map(|verb| path_verb_to_point_count(*verb))
             .sum::<usize>();
-        let point_count = path_verb_point_count(verb);
+        let point_count = path_verb_to_point_count(verb);
         let points = self
             .raw_path
             .points()
@@ -111,15 +124,6 @@ impl ScriptedPath {
             },
             points,
         }
-    }
-}
-
-fn path_verb_point_count(verb: PathVerb) -> usize {
-    match verb {
-        PathVerb::Move | PathVerb::Line => 1,
-        PathVerb::Quad => 2,
-        PathVerb::Cubic => 3,
-        PathVerb::Close => 0,
     }
 }
 
@@ -263,7 +267,7 @@ impl UserData for ScriptedPath {
             Ok(())
         });
         methods.add_method_mut("reset", |_, this, ()| {
-            this.raw_path.rewind();
+            this.raw_path.reset();
             this.mark_dirty();
             Ok(())
         });
@@ -273,39 +277,46 @@ impl UserData for ScriptedPath {
             };
             let path = path.borrow::<ScriptedPath>()?;
             let transform = match args.get(1) {
-                Some(Value::UserData(matrix)) => matrix.borrow::<ScriptedMat2D>()?.0,
-                Some(Value::Nil) | None => Mat2D::IDENTITY,
+                Some(Value::UserData(matrix)) => {
+                    let [a, b, c, d, x, y] = matrix.borrow::<ScriptedMat2D>()?.0.0;
+                    Some(Mat2D::new(a, b, c, d, x, y))
+                }
+                None => None,
                 _ => return Err(Error::runtime("Path.add transform must be a Mat2D")),
             };
-            this.raw_path.add_path(&path.raw_path, transform);
+            this.raw_path.add_path(&path.raw_path, transform.as_ref());
             this.mark_dirty();
             Ok(())
         });
         methods.add_method("contours", |lua, this, ()| {
-            let contours = Rc::new(RuntimeContourMeasure::from_commands(&this.commands()));
-            Ok(match contours.is_empty() {
-                true => Value::Nil,
-                false => Value::UserData(
-                    lua.create_userdata(ScriptedContourMeasure { contours, index: 0 })?,
-                ),
+            let iter = Rc::new(RefCell::new(RefCntContourMeasureIter::new(
+                &this.raw_path,
+                ContourMeasureIter::DEFAULT_TOLERANCE,
+            )));
+            let first = iter.borrow_mut().get().next();
+            Ok(match first {
+                None => Value::Nil,
+                Some(measure) => {
+                    Value::UserData(lua.create_userdata(ScriptedContourMeasure { measure, iter })?)
+                }
             })
         });
         methods.add_method("measure", |lua, this, ()| {
             lua.create_userdata(ScriptedPathMeasure {
-                measure: RuntimePathMeasure::from_commands(&this.commands()),
+                measure: PathMeasure::from_path_default(&this.raw_path),
             })
         });
     }
 }
 
 struct ScriptedContourMeasure {
-    contours: Rc<Vec<RuntimeContourMeasure>>,
-    index: usize,
+    measure: Rc<ContourMeasure>,
+    iter: Rc<RefCell<RefCntContourMeasureIter>>,
 }
 
 impl ScriptedContourMeasure {
-    fn measure(&self) -> &RuntimeContourMeasure {
-        &self.contours[self.index]
+    fn measure(&self) -> &ContourMeasure {
+        &self.measure
     }
 }
 
@@ -314,32 +325,28 @@ impl UserData for ScriptedContourMeasure {
         fields.add_field_method_get("length", |_, this| Ok(this.measure().length()));
         fields.add_field_method_get("isClosed", |_, this| Ok(this.measure().is_closed()));
         fields.add_field_method_get("next", |lua, this| {
-            let next = this.index + 1;
-            Ok(match next < this.contours.len() {
-                true => Value::UserData(lua.create_userdata(Self {
-                    contours: Rc::clone(&this.contours),
-                    index: next,
+            let next = this.iter.borrow_mut().get().next();
+            Ok(match next {
+                Some(measure) => Value::UserData(lua.create_userdata(Self {
+                    measure,
+                    iter: Rc::clone(&this.iter),
                 })?),
-                false => Value::Nil,
+                None => Value::Nil,
             })
         });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("positionAndTangent", |_, this, distance: f32| {
-            let sample = this.measure().at_distance(distance);
+            let sample = this.measure().get_pos_tan(distance);
             Ok((
-                LuaVector::new(sample.pos.0, sample.pos.1, 0.0),
-                LuaVector::new(sample.tan.0, sample.tan.1, 0.0),
+                LuaVector::new(sample.pos.x, sample.pos.y, 0.0),
+                LuaVector::new(sample.tan.x, sample.tan.y, 0.0),
             ))
         });
         methods.add_method("warp", |_, this, point: LuaVector| {
-            let sample = this.measure().at_distance(point.x());
-            Ok(LuaVector::new(
-                sample.pos.0 - sample.tan.1 * point.y(),
-                sample.pos.1 + sample.tan.0 * point.y(),
-                0.0,
-            ))
+            let result = this.measure().warp(Vec2D::new(point.x(), point.y()));
+            Ok(LuaVector::new(result.x, result.y, 0.0))
         });
         methods.add_method("extract", |_, this, args: MultiValue| {
             let start = number_arg(args.front(), "startDistance")?;
@@ -347,14 +354,14 @@ impl UserData for ScriptedContourMeasure {
             let start_with_move = bool_arg_or(args.get(3), true)?;
             extract_measure_segment(args.get(2), |destination| {
                 this.measure()
-                    .append_segment(start, end, destination, start_with_move);
+                    .get_segment(start, end, destination, start_with_move);
             })
         });
     }
 }
 
 struct ScriptedPathMeasure {
-    measure: RuntimePathMeasure,
+    measure: PathMeasure,
 }
 
 impl UserData for ScriptedPathMeasure {
@@ -367,15 +374,15 @@ impl UserData for ScriptedPathMeasure {
         methods.add_method("positionAndTangent", |_, this, distance: f32| {
             let sample = this.measure.at_distance(distance);
             Ok((
-                LuaVector::new(sample.pos.0, sample.pos.1, 0.0),
-                LuaVector::new(sample.tan.0, sample.tan.1, 0.0),
+                LuaVector::new(sample.pos.x, sample.pos.y, 0.0),
+                LuaVector::new(sample.tan.x, sample.tan.y, 0.0),
             ))
         });
         methods.add_method("warp", |_, this, point: LuaVector| {
             let sample = this.measure.at_distance(point.x());
             Ok(LuaVector::new(
-                sample.pos.0 - sample.tan.1 * point.y(),
-                sample.pos.1 + sample.tan.0 * point.y(),
+                sample.pos.x - sample.tan.y * point.y(),
+                sample.pos.y + sample.tan.x * point.y(),
                 0.0,
             ))
         });
@@ -385,7 +392,7 @@ impl UserData for ScriptedPathMeasure {
             let start_with_move = bool_arg_or(args.get(3), true)?;
             extract_measure_segment(args.get(2), |destination| {
                 this.measure
-                    .append_segment(start, end, destination, start_with_move);
+                    .get_segment(start, end, Some(destination), start_with_move);
             })
         });
     }
@@ -408,24 +415,23 @@ fn extract_measure_segment(
 
 fn bool_arg_or(value: Option<&Value>, fallback: bool) -> Result<bool> {
     match value {
-        None | Some(Value::Nil) => Ok(fallback),
         Some(Value::Boolean(value)) => Ok(*value),
-        _ => Err(Error::runtime("expected boolean")),
+        _ => Ok(fallback),
     }
 }
 
 pub(super) fn call_path_effect_update(
     table: &Table,
-    source: RawPath,
+    source: RenderRawPath,
     node: ScriptNode,
-) -> Result<RawPath> {
+) -> Result<RenderRawPath> {
     let lua = table.lua();
     let function: luaur_rt::Function = table.get("update")?;
-    let source = create_scripted_path(&lua, ScriptedPath::from_raw_path(source))?;
+    let source = create_scripted_path(&lua, ScriptedPath::from_render_raw_path(source))?;
     let node = lua.create_userdata(LuaScriptedNode::new(node))?;
     let output: AnyUserData = function.call((table.clone(), source, node))?;
     let output = output.borrow::<ScriptedPath>()?;
-    Ok(output.raw_path.clone())
+    Ok(to_render_raw_path(&output.raw_path))
 }
 
 pub(super) fn install_path_global(lua: &Lua) -> Result<()> {

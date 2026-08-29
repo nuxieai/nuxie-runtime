@@ -8,6 +8,7 @@ pub trait ScriptInputViewModelPropertyBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn decode_data_bind_path_ids(&mut self, value: &[u8]);
+    fn copy_data_bind_path_ids(&mut self, object: &ScriptInputViewModelProperty);
     fn data_bind_path_ids_changed(&mut self) {}
 }
 
@@ -30,8 +31,13 @@ impl ScriptInputViewModelPropertyBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub fn copy<C: ScriptInputViewModelPropertyBaseCallbacks>(&mut self, object: &Self, c: &mut C) {
-        self.base.base.copy(&object.base.base, c);
+    pub fn copy<C: ScriptInputViewModelPropertyBaseCallbacks>(
+        &mut self,
+        object: &ScriptInputViewModelProperty,
+        c: &mut C,
+    ) {
+        c.copy_data_bind_path_ids(object);
+        self.base.base.copy(&object.base.base.base, c);
     }
     pub fn deserialize<C: ScriptInputViewModelPropertyBaseCallbacks>(
         &mut self,
@@ -47,12 +53,11 @@ impl ScriptInputViewModelPropertyBase {
             _ => self.base.base.deserialize(key, reader, c),
         }
     }
-    pub fn clone_into<C: ScriptInputViewModelPropertyBaseCallbacks>(
-        &self,
-        c: &mut C,
-    ) -> ScriptInputViewModelProperty {
+    pub fn clone_into(source: &ScriptInputViewModelProperty) -> ScriptInputViewModelProperty {
         let mut cloned = ScriptInputViewModelProperty::default();
-        cloned.base.copy(self, c);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(source, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

@@ -1,8 +1,15 @@
 use std::{any::Any, collections::VecDeque};
 
-#[derive(Default)]
 pub struct ObjectStream<T> {
     stream: VecDeque<T>,
+}
+
+impl<T> Default for ObjectStream<T> {
+    fn default() -> Self {
+        Self {
+            stream: VecDeque::new(),
+        }
+    }
 }
 
 impl<T> ObjectStream<T> {

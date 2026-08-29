@@ -2,7 +2,6 @@
 members = [
     "crates/nuxie-audio",
     "crates/nuxie-binary",
-    "crates/nuxie-graph",
     "crates/nuxie-image-codec",
     "crates/nuxie-ore-metal",
     "crates/nuxie-render-api",
@@ -15,6 +14,7 @@ members = [
     "crates/nux-capi",
     "crates/nuxie-runtime",
     "crates/nuxie-schema",
+    "crates/nuxie-sriv",
     "crates/nuxie-scripting",
     "tools/golden-compare",
     "tools/luaur-rt-test-harness",
@@ -67,6 +67,14 @@ luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
 # libjpeg v9f component-scaling and integer-IDCT behavior.
 jpeg-decoder = { path = "vendor/jpeg-decoder-0.3.2-rive-v9f" }
 
+# Runtime layout parity fork: Taffy 0.12.1 with flex-grow arithmetic ordered
+# like the pinned Yoga owner so intermediate f32 rounding remains identical.
+taffy = { path = "vendor/taffy-0.12.1-rive-yoga-order" }
+
+# Runtime text parity fork: Skrifa 0.45.1 with composite offsets placed in the
+# same requested-em coordinate space as pinned HarfBuzz 13.1.1.
+skrifa = { path = "vendor/skrifa-0.45.1-rive-harfbuzz" }
+
 # Metadata-free audio fork (docs/symphonia-fork.md): the Apple runtime decodes
 # audio samples but never exposes container tags or artwork. These component
 # patches keep the exact Symphonia decoders while allowing that unused metadata
@@ -82,7 +90,7 @@ vk-mem = { path = "vendor/vk-mem-0.5.0" }
 
 # Panic-freedom lint discipline for the runtime crates.
 # Opted into per-crate via `lints.workspace = true` by the SDK runtime crates
-# only (nuxie-audio, nuxie-runtime, nuxie-binary, nuxie-graph, nuxie-ore-metal,
+# only (nuxie-audio, nuxie-runtime, nuxie-binary, nuxie-ore-metal,
 # nuxie-schema, nuxie, nux-capi) --
 # NOT the tools/ crates and NOT nuxie-scripting (active external work area).
 # These are `[lints.clippy]` entries, so they fire only under `cargo clippy`

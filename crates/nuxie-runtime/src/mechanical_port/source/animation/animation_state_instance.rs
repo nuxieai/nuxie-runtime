@@ -77,7 +77,7 @@ impl AnimationStateInstance {
             .expect("AnimationStateInstance retains an AnimationState");
         self.keep_going = self
             .animation_instance
-            .advance(seconds * speed, state_machine_instance);
+            .advance(seconds * speed, Some(state_machine_instance));
     }
 
     pub fn apply(&mut self, _instance: &RuntimeArtboardInstanceWeakHandle, mix: f32) {

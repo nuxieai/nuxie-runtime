@@ -25,8 +25,7 @@ impl TextInputDrawable {
     pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
         if self.base.parent_handle().is_some_and(|parent| {
             parent
-                .with(|parent| parent.as_text_input().is_some())
-                .unwrap_or(false)
+                .is_type_of(crate::mechanical_port::source::generated::text::text_input_base::TextInputBase::TYPE_KEY)
         }) {
             StatusCode::Ok
         } else {

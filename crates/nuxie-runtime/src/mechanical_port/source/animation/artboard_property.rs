@@ -5,3 +5,14 @@ pub enum ArtboardProperty {
     Height = 1,
     Ratio = 2,
 }
+
+impl ArtboardProperty {
+    pub fn from_u32(value: u32) -> Option<Self> {
+        match value {
+            0 => Some(Self::Width),
+            1 => Some(Self::Height),
+            2 => Some(Self::Ratio),
+            _ => None,
+        }
+    }
+}

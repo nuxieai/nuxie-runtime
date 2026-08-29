@@ -126,8 +126,7 @@ impl SemanticData {
                             return None;
                         }
                         child
-                            .with(|child| child.as_semantic_data().is_some())
-                            .unwrap_or(false)
+                            .is_type_of(SemanticDataBase::TYPE_KEY)
                             .then(|| child.clone())
                     })
                 })
@@ -140,6 +139,21 @@ impl SemanticData {
                 .flatten();
         }
         None
+    }
+
+    pub(crate) fn find_closest_semantic_node_from_node(
+        node: &crate::mechanical_port::source::node::Node,
+    ) -> Option<SemanticNodeRef> {
+        // The starting non-Artboard Node may be the active callback receiver.
+        // Read its real children before walking the retained parent chain.
+        for child in node.children() {
+            if child.is_type_of(crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBase::TYPE_KEY) {
+                return child.with_mut(|child| {
+                    child.as_semantic_data_mut().expect("SemanticData descendant").semantic_node()
+                });
+            }
+        }
+        Self::find_closest_semantic_node_handle(node.parent_handle())
     }
 
     pub fn find_closest_semantic_node_handle(start: Option<CoreHandle>) -> Option<SemanticNodeRef> {
@@ -157,8 +171,7 @@ impl SemanticData {
                     });
                 if let Some(host_component) = host_component
                     && host_component
-                        .with(|host| host.as_container_component().is_some())
-                        .unwrap_or(false)
+                        .is_type_of(crate::mechanical_port::source::generated::container_component_base::ContainerComponentBase::TYPE_KEY)
                 {
                     current = Some(host_component);
                     continue;
@@ -170,8 +183,7 @@ impl SemanticData {
                 .with(|component| {
                     component.as_node()?.children().iter().find_map(|child| {
                         child
-                            .with(|child| child.as_semantic_data().is_some())
-                            .unwrap_or(false)
+                            .is_type_of(SemanticDataBase::TYPE_KEY)
                             .then(|| child.clone())
                     })
                 })
@@ -256,21 +268,29 @@ impl SemanticData {
         self.mark_content_dirty();
     }
 
-    pub fn request_focus(&mut self) -> bool {
-        let Some(focus_data) = self.sibling_focus_data() else {
+    pub fn request_focus_handle(owner: &CoreHandle) -> bool {
+        let Some(focus_data) = owner
+            .with_downcast::<Self, _>(Self::sibling_focus_data)
+            .flatten()
+        else {
+            return false;
+        };
+        let Some(focus_manager) = owner
+            .with_downcast::<Self, _>(|data| {
+                data.component()
+                    .with_artboard(Artboard::focus_manager_handle)
+                    .flatten()
+            })
+            .flatten()
+        else {
             return false;
         };
         let Some(focus_node) = focus_data.with_downcast_mut::<FocusData, _>(FocusData::focus_node)
         else {
             return false;
         };
-        let Some(focus_manager) = self
-            .component()
-            .with_artboard(Artboard::focus_manager_handle)
-            .flatten()
-        else {
-            return false;
-        };
+        // setFocus synchronously calls FocusData::focused, which writes this
+        // same SemanticData. No semantic owner borrow may cross that callback.
         focus_manager.with_focus_manager_mut(|manager| manager.set_focus(focus_node));
         true
     }
@@ -419,10 +439,8 @@ impl SemanticData {
         };
         parent
             .with(|parent| {
-                parent.as_component().is_some_and(Component::is_collapsed)
-                    || parent
-                        .as_drawable()
-                        .is_some_and(|drawable| drawable.is_hidden())
+                parent.component_is_collapsed()
+                    || (parent.as_drawable().is_some() && parent.drawable_is_hidden())
             })
             .unwrap_or(true)
     }

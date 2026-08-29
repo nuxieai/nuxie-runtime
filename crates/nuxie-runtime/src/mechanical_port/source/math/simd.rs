@@ -28,7 +28,9 @@ pub trait Truthy {
     fn truthy(self) -> bool;
 }
 macro_rules! truthy{($($ty:ty),*$(,)?)=>{$(impl Truthy for $ty{fn truthy(self)->bool{self!=0}})*};}
-truthy!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+truthy!(
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
+);
 pub fn any<T: Copy + Truthy, const N: usize>(x: GVec<T, N>) -> bool {
     x.data.into_iter().any(Truthy::truthy)
 }
@@ -41,13 +43,15 @@ pub trait NotBits {
     fn not_bits(self) -> Self;
 }
 macro_rules! not_bits{($($ty:ty),*$(,)?)=>{$(impl NotBits for $ty{fn not_bits(self)->Self{!self}})*};}
-not_bits!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+not_bits!(
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
+);
 pub fn isnan<const N: usize>(x: GVec<f32, N>) -> GVec<i32, N> {
     GVec {
         data: x.data.map(|value| if value.is_nan() { -1 } else { 0 }),
     }
 }
-pub fn if_then_else<T: Copy, M: Truthy, const N: usize>(
+pub fn if_then_else<T: Copy, M: Truthy + Copy, const N: usize>(
     mask: GVec<M, N>,
     then_values: GVec<T, N>,
     else_values: GVec<T, N>,
@@ -64,18 +68,10 @@ pub fn if_then_else<T: Copy, M: Truthy, const N: usize>(
 }
 pub trait SimdMinMax: Copy + PartialOrd {
     fn simd_min(self, other: Self) -> Self {
-        if other < self {
-            other
-        } else {
-            self
-        }
+        if other < self { other } else { self }
     }
     fn simd_max(self, other: Self) -> Self {
-        if self < other {
-            other
-        } else {
-            self
-        }
+        if self < other { other } else { self }
     }
 }
 impl SimdMinMax for f32 {
@@ -106,8 +102,39 @@ impl SimdMinMax for f32 {
         }
     }
 }
+impl SimdMinMax for f64 {
+    fn simd_min(self, other: Self) -> Self {
+        if self.is_nan() {
+            other
+        } else if other.is_nan() {
+            self
+        } else if self == 0.0 && other == 0.0 {
+            Self::from_bits(self.to_bits() | other.to_bits())
+        } else if other < self {
+            other
+        } else {
+            self
+        }
+    }
+
+    fn simd_max(self, other: Self) -> Self {
+        if self.is_nan() {
+            other
+        } else if other.is_nan() {
+            self
+        } else if self == 0.0 && other == 0.0 {
+            Self::from_bits(self.to_bits() & other.to_bits())
+        } else if self < other {
+            other
+        } else {
+            self
+        }
+    }
+}
 macro_rules! minmax{($($ty:ty),*$(,)?)=>{$(impl SimdMinMax for $ty{})*};}
-minmax!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+minmax!(
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
+);
 pub fn min<T: SimdMinMax, const N: usize>(a: GVec<T, N>, b: GVec<T, N>) -> GVec<T, N> {
     GVec {
         data: core::array::from_fn(|i| a[i].simd_min(b[i])),
@@ -329,30 +356,21 @@ pub fn cross(a: Float2, b: Float2) -> f32 {
     let c = a * b.yx();
     c[0] - c[1]
 }
-pub fn mul_add<const N: usize>(
-    a: GVec<f32, N>,
-    b: GVec<f32, N>,
-    addend: GVec<f32, N>,
-) -> GVec<f32, N> {
-    GVec {
-        data: core::array::from_fn(|i| a[i].mul_add(b[i], addend[i])),
-    }
-}
 pub fn mix<const N: usize>(a: GVec<f32, N>, b: GVec<f32, N>, t: GVec<f32, N>) -> GVec<f32, N> {
     assert!(t.data.iter().all(|v| *v >= 0.0 && *v < 1.0));
-    mul_add(b - a, t, a)
+    (b - a) * t + a
 }
 pub fn unchecked_mix<const N: usize>(
     a: GVec<f32, N>,
     b: GVec<f32, N>,
     t: GVec<f32, N>,
 ) -> GVec<f32, N> {
-    mul_add(b - a, t, a)
+    (b - a) * t + a
 }
 pub fn precise_mix<const N: usize>(
     a: GVec<f32, N>,
     b: GVec<f32, N>,
     t: GVec<f32, N>,
 ) -> GVec<f32, N> {
-    mul_add(a, GVec::splat(1.0) - t, b * t)
+    a * (GVec::splat(1.0) - t) + b * t
 }

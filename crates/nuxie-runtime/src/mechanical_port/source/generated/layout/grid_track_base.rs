@@ -57,7 +57,7 @@ impl GridTrackBase {
             return;
         }
         callbacks.track_value_changed();
-        callbacks.notify_property_changed(Self::TRACK_VALUE_PROPERTY_KEY);
+        GridTrackBaseCallbacks::notify_property_changed(callbacks, Self::TRACK_VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_track_value_value(&mut self, value: f32) -> bool {
@@ -75,7 +75,10 @@ impl GridTrackBase {
             return;
         }
         callbacks.track_max_value_changed();
-        callbacks.notify_property_changed(Self::TRACK_MAX_VALUE_PROPERTY_KEY);
+        GridTrackBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TRACK_MAX_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_track_max_value_value(&mut self, value: f32) -> bool {
@@ -93,7 +96,7 @@ impl GridTrackBase {
             return;
         }
         callbacks.collection_changed();
-        callbacks.notify_property_changed(Self::COLLECTION_PROPERTY_KEY);
+        GridTrackBaseCallbacks::notify_property_changed(callbacks, Self::COLLECTION_PROPERTY_KEY);
     }
 
     pub(crate) fn set_collection_value(&mut self, value: u8) -> bool {
@@ -111,7 +114,7 @@ impl GridTrackBase {
             return;
         }
         callbacks.track_type_changed();
-        callbacks.notify_property_changed(Self::TRACK_TYPE_PROPERTY_KEY);
+        GridTrackBaseCallbacks::notify_property_changed(callbacks, Self::TRACK_TYPE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_track_type_value(&mut self, value: u8) -> bool {
@@ -129,7 +132,10 @@ impl GridTrackBase {
             return;
         }
         callbacks.track_max_type_changed();
-        callbacks.notify_property_changed(Self::TRACK_MAX_TYPE_PROPERTY_KEY);
+        GridTrackBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TRACK_MAX_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_track_max_type_value(&mut self, value: u8) -> bool {
@@ -168,15 +174,15 @@ impl GridTrackBase {
                 true
             }
             Self::COLLECTION_PROPERTY_KEY => {
-                self.collection = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.collection = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::TRACK_TYPE_PROPERTY_KEY => {
-                self.track_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.track_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::TRACK_MAX_TYPE_PROPERTY_KEY => {
-                self.track_max_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.track_max_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

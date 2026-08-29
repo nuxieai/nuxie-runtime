@@ -509,6 +509,82 @@ pub fn with_rive_profile<R>(operation: impl FnOnce(&mut RiveProfile) -> R) -> R 
     result
 }
 
+pub(crate) fn global_transition_enabled() -> bool {
+    GLOBAL_RECORD_FLAGS.load(Ordering::Acquire) & PROFILE_LOG_TRANSITION_RECORDS != 0
+}
+
+pub(crate) fn global_listener_enabled() -> bool {
+    GLOBAL_RECORD_FLAGS.load(Ordering::Acquire) & PROFILE_LOG_LISTENER_PERFORM_CHANGES != 0
+}
+
+/// The same leaf-to-root host walk as upstream buildArtboardPath. The returned
+/// names remain unresolved until record_transition samples its tick.
+pub(crate) fn artboard_path(
+    root: &crate::mechanical_port::source::core::CoreHandle,
+) -> Vec<ProfilePathSegment> {
+    use crate::mechanical_port::source::{
+        artboard::Artboard,
+        generated::{
+            artboard_component_list_base::ArtboardComponentListBase,
+            nested_artboard_base::NestedArtboardBase,
+        },
+    };
+    let mut path = Vec::new();
+    let mut current = Some(root.clone());
+    while let Some(artboard) = current {
+        let (host, name, instance) = artboard
+            .with_downcast::<Artboard, _>(|artboard| {
+                (
+                    artboard.host(),
+                    artboard.base.name().to_owned(),
+                    artboard.is_instance().then(|| {
+                        artboard
+                            .runtime_weak_handle()
+                            .upgrade()
+                            .expect("live ArtboardInstance")
+                    }),
+                )
+            })
+            .expect("profile Artboard");
+        let Some(host) = host else { break };
+        let segment = host
+            .with(|object| {
+                let host = object.as_artboard_host().expect("ArtboardHost");
+                let name = object
+                    .as_component()
+                    .expect("host Component")
+                    .name()
+                    .to_owned();
+                let segment = match host.type_() {
+                    value if value == i32::from(NestedArtboardBase::TYPE_KEY) => {
+                        ProfilePathSegment::nested_artboard(name)
+                    }
+                    value if value == i32::from(ArtboardComponentListBase::TYPE_KEY) => {
+                        let index = instance.as_ref().map_or(-1, |instance| {
+                            object
+                                .as_any()
+                                .downcast_ref::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>()
+                                .expect("ArtboardComponentList")
+                                .index_of_artboard_instance(instance)
+                        });
+                        ProfilePathSegment::component_list(name, index)
+                    }
+                    _ => return None,
+                };
+                Some((segment, host.parent_artboard()))
+            })
+            .flatten();
+        let Some((segment, parent)) = segment else {
+            break;
+        };
+        path.push(segment);
+        path.push(ProfilePathSegment::nested_artboard(name));
+        current = parent;
+    }
+    path.reverse();
+    path
+}
+
 pub(crate) fn record_global_transition(
     artboard_name: &str,
     state_machine_name: &str,

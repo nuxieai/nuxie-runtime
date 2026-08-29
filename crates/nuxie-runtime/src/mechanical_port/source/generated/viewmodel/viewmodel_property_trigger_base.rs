@@ -27,7 +27,9 @@ impl ViewModelPropertyTriggerBase {
     }
     pub fn clone_into(&self) -> ViewModelPropertyTrigger {
         let mut cloned = ViewModelPropertyTrigger::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

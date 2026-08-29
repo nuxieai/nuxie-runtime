@@ -60,6 +60,7 @@ pub mod state_machine_base;
 pub mod state_machine_bool_base;
 pub mod state_machine_component_base;
 pub mod state_machine_fire_action_base;
+pub mod state_machine_fire_event;
 pub mod state_machine_fire_event_base;
 pub mod state_machine_fire_trigger_base;
 pub mod state_machine_input_base;

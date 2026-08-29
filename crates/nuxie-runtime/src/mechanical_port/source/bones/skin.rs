@@ -136,6 +136,10 @@ impl Skin {
         self.tendons.push(tendon);
     }
 
+    pub fn tendons(&self) -> &[CoreHandle] {
+        &self.tendons
+    }
+
     pub fn on_added_dirty(
         &mut self,
         this: CoreHandle,
@@ -196,7 +200,7 @@ impl Skin {
                     )
                     .expect("a retained Tendon must remain a Tendon"),
             );
-            let world = bone_world.multiply(&inverse_bind);
+            let world = bone_world * inverse_bind;
             for coefficient in world.values() {
                 bone_transforms[transform_index] = *coefficient;
                 transform_index += 1;
@@ -229,7 +233,7 @@ impl Skin {
                         constraint
                             .as_component()
                             .expect("a retained Constraint must remain a Component")
-                            .parent()
+                            .parent_handle()
                     })
                     .flatten()
                     .expect("a peer Constraint must have a parent");
@@ -263,10 +267,18 @@ impl Skin {
         for vertex_handle in vertices.iter().cloned() {
             vertex_handle
                 .with_mut(|vertex| {
-                    vertex
-                        .as_vertex_mut()
-                        .expect("a retained Vertex must remain a Vertex")
-                        .deform(&self.world_transform, bone_transforms);
+                    if let Some(cubic) = vertex.as_cubic_vertex_behavior_mut() {
+                        crate::mechanical_port::source::shapes::cubic_vertex::CubicVertexBehavior::deform(
+                            cubic,
+                            &self.world_transform,
+                            bone_transforms,
+                        );
+                    } else {
+                        vertex
+                            .as_vertex_behavior_mut()
+                            .expect("a retained Vertex must remain a Vertex")
+                            .deform(&self.world_transform, bone_transforms);
+                    }
                 })
                 .expect("a retained Vertex must remain live");
         }
@@ -275,14 +287,43 @@ impl Skin {
     pub fn on_dirty(&mut self, _dirt: ComponentDirt) {
         if let Some(skinnable) = self.skinnable.clone() {
             skinnable
-                .with_mut(|skinnable| {
-                    skinnable
-                        .as_skinnable_behavior_mut()
-                        .expect("the retained Skinnable must retain its capability")
-                        .mark_skin_dirty();
+                .with_mut(|object| {
+                    if let Some(path) = object.as_points_path_mut() {
+                        path.mark_skin_dirty_from_skin(self);
+                    } else {
+                        object
+                            .as_skinnable_behavior_mut()
+                            .expect("the retained Skinnable must retain its capability")
+                            .mark_skin_dirty();
+                    }
                 })
                 .expect("the retained Skinnable must remain live");
         }
+    }
+
+    pub(crate) fn add_dirt_from_points_path(
+        &mut self,
+        path: &mut crate::mechanical_port::source::shapes::points_path::PointsPath,
+    ) -> bool {
+        if self
+            .component_mut()
+            .add_dirt_state(ComponentDirt::SKIN)
+            .is_none()
+        {
+            return false;
+        }
+        assert_eq!(self.skinnable.as_ref(), path.base.handle().as_ref());
+        // Skin::onDirty calls this same PointsPath synchronously. Retain the
+        // actual borrowed owners across the callback; the already-set Skin
+        // bit terminates the recursive addDirt exactly as in Component.cpp.
+        path.mark_skin_dirty_from_skin(self);
+        let component = self.component();
+        if let Some(artboard) = component.artboard_handle()
+            && let Some(dirty) = artboard.artboard_dirty_handle()
+        {
+            dirty.on_component_dirty_at(component.graph_order());
+        }
+        true
     }
 
     #[cfg(test)]

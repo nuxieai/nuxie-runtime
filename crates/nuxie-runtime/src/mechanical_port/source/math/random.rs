@@ -1,8 +1,5 @@
 use std::collections::VecDeque;
-use std::sync::{
-    LazyLock, Mutex, MutexGuard,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::{LazyLock, Mutex, MutexGuard};
 
 pub struct RandomProvider;
 
@@ -20,7 +17,6 @@ struct RandomState {
 
 static RANDOM_STATE: LazyLock<Mutex<RandomState>> =
     LazyLock::new(|| Mutex::new(RandomState::default()));
-static DETERMINISTIC_MODE: AtomicBool = AtomicBool::new(false);
 
 /// Set the process-wide deterministic flag owned by pinned `File`.
 ///
@@ -28,11 +24,11 @@ static DETERMINISTIC_MODE: AtomicBool = AtomicBool::new(false);
 /// owners without a services reference (notably scroll physics) read the same
 /// process-wide value as upstream `File::deterministicMode`.
 pub fn set_runtime_deterministic_mode(enabled: bool) {
-    DETERMINISTIC_MODE.store(enabled, Ordering::SeqCst);
+    crate::mechanical_port::source::file::File::set_deterministic_mode(enabled);
 }
 
 pub(crate) fn runtime_deterministic_mode() -> bool {
-    DETERMINISTIC_MODE.load(Ordering::SeqCst)
+    crate::mechanical_port::source::file::File::deterministic_mode()
 }
 
 impl RandomProvider {

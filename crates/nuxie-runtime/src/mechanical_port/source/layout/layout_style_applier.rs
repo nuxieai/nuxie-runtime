@@ -1,9 +1,10 @@
 use std::ops::{Index, IndexMut};
+use taffy::geometry::MinMax;
 use taffy::prelude::{
     AlignContent, AlignItems, AlignSelf, Dimension, Display, FlexDirection, FlexWrap,
     GridPlacement, GridTemplateComponent, LengthPercentage, LengthPercentageAuto, Line,
-    MaxTrackSizingFunction, MinMax, MinTrackSizingFunction, Position, Rect, Size, Style,
-    TaffyGridLine, TrackSizingFunction,
+    MaxTrackSizingFunction, MinTrackSizingFunction, Position, Rect, Size, Style, TaffyGridLine,
+    TrackSizingFunction,
 };
 use taffy::style::Direction;
 
@@ -15,6 +16,12 @@ pub enum YGUnit {
     Percent,
     Auto,
 }
+impl From<u8> for YGUnit {
+    fn from(value: u8) -> Self {
+        Self::from(u32::from(value))
+    }
+}
+
 impl From<u32> for YGUnit {
     fn from(v: u32) -> Self {
         match v {
@@ -71,6 +78,12 @@ pub enum YGDisplay {
     None,
     Grid,
 }
+impl From<u8> for YGDisplay {
+    fn from(value: u8) -> Self {
+        Self::from(u32::from(value))
+    }
+}
+
 impl From<u32> for YGDisplay {
     fn from(v: u32) -> Self {
         match v {
@@ -94,6 +107,12 @@ pub enum YGAlign {
     Start,
     End,
 }
+impl From<u8> for YGAlign {
+    fn from(value: u8) -> Self {
+        Self::from(u32::from(value))
+    }
+}
+
 impl From<u32> for YGAlign {
     fn from(v: u32) -> Self {
         match v {
@@ -111,6 +130,7 @@ impl From<u32> for YGAlign {
     }
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(u8)]
 pub enum YGJustify {
     #[default]
     FlexStart,
@@ -119,11 +139,17 @@ pub enum YGJustify {
     SpaceBetween,
     SpaceAround,
     SpaceEvenly,
+    Auto,
+    Stretch,
     Start,
     End,
-    Stretch,
-    Auto,
 }
+impl From<u8> for YGJustify {
+    fn from(value: u8) -> Self {
+        Self::from(u32::from(value))
+    }
+}
+
 impl From<u32> for YGJustify {
     fn from(v: u32) -> Self {
         match v {
@@ -132,22 +158,28 @@ impl From<u32> for YGJustify {
             3 => Self::SpaceBetween,
             4 => Self::SpaceAround,
             5 => Self::SpaceEvenly,
-            6 => Self::Start,
-            7 => Self::End,
-            8 => Self::Stretch,
-            9 => Self::Auto,
+            6 => Self::Auto,
+            7 => Self::Stretch,
+            8 => Self::Start,
+            9 => Self::End,
             _ => Self::FlexStart,
         }
     }
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum YGFlexDirection {
+    #[default]
     Column,
     ColumnReverse,
-    #[default]
     Row,
     RowReverse,
 }
+impl From<u8> for YGFlexDirection {
+    fn from(value: u8) -> Self {
+        Self::from(u32::from(value))
+    }
+}
+
 impl From<u32> for YGFlexDirection {
     fn from(v: u32) -> Self {
         match v {
@@ -165,6 +197,12 @@ pub enum YGDirection {
     Ltr,
     Rtl,
 }
+impl From<u8> for YGDirection {
+    fn from(value: u8) -> Self {
+        Self::from(u32::from(value))
+    }
+}
+
 impl From<u32> for YGDirection {
     fn from(v: u32) -> Self {
         match v {
@@ -181,6 +219,12 @@ pub enum YGWrap {
     Wrap,
     WrapReverse,
 }
+impl From<u8> for YGWrap {
+    fn from(value: u8) -> Self {
+        Self::from(u32::from(value))
+    }
+}
+
 impl From<u32> for YGWrap {
     fn from(v: u32) -> Self {
         match v {
@@ -197,6 +241,12 @@ pub enum YGOverflow {
     Hidden,
     Scroll,
 }
+impl From<u8> for YGOverflow {
+    fn from(value: u8) -> Self {
+        Self::from(u32::from(value))
+    }
+}
+
 impl From<u32> for YGOverflow {
     fn from(v: u32) -> Self {
         match v {
@@ -207,17 +257,26 @@ impl From<u32> for YGOverflow {
     }
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(u8)]
 pub enum YGPositionType {
+    Static = 0,
     #[default]
-    Relative,
-    Absolute,
+    Relative = 1,
+    Absolute = 2,
 }
+impl From<u8> for YGPositionType {
+    fn from(value: u8) -> Self {
+        Self::from(u32::from(value))
+    }
+}
+
 impl From<u32> for YGPositionType {
     fn from(v: u32) -> Self {
-        if v == 1 {
-            Self::Absolute
-        } else {
-            Self::Relative
+        match v {
+            0 => Self::Static,
+            1 => Self::Relative,
+            2 => Self::Absolute,
+            _ => panic!("invalid YGPositionType value: {v}"),
         }
     }
 }
@@ -334,7 +393,13 @@ pub struct YGStyle {
 impl Default for YGStyle {
     fn default() -> Self {
         Self {
-            taffy: Style::default(),
+            // Yoga's non-web default is Column. A styleless LayoutComponent
+            // never runs its style appliers, so this initial value is live.
+            // Authored LayoutComponentStyle still supplies its own direction.
+            taffy: Style {
+                flex_direction: FlexDirection::Column,
+                ..Style::default()
+            },
             dimensions: YGDimensions::default(),
             min_dimensions: YGDimensions::default(),
             max_dimensions: YGDimensions::default(),
@@ -431,6 +496,8 @@ impl YGStyle {
         }
     }
     pub fn set_position_type(&mut self, v: YGPositionType) {
+        // The pinned Yoga treats Static like Relative, including insets
+        // (YGNode::setPosition explicitly leaves static inset handling TODO).
         self.taffy.position = if v == YGPositionType::Absolute {
             Position::Absolute
         } else {
@@ -479,6 +546,58 @@ impl YGStyle {
     pub fn is_stack(&self) -> bool {
         self.stack
     }
+    pub(crate) fn taffy_calculation_root_style(
+        &self,
+        owner_width: f32,
+        owner_height: f32,
+    ) -> Style {
+        fn resolve(value: YGValue, owner: f32) -> Option<f32> {
+            let value = match value.unit {
+                YGUnit::Point => value.value,
+                YGUnit::Percent => value.value * owner / 100.0,
+                YGUnit::Auto | YGUnit::Undefined => return None,
+            };
+            (!value.is_nan()).then_some(value)
+        }
+
+        let mut style = self.taffy_style();
+        for (index, owner, edges) in [(0, owner_width, [0, 2]), (1, owner_height, [1, 3])] {
+            let dimension = self.dimensions.0[index];
+            let maximum = self.max_dimensions.0[index];
+            let minimum = self.min_dimensions.0[index];
+            let resolved_dimension = if maximum.unit != YGUnit::Undefined
+                && maximum.unit == minimum.unit
+                && maximum.value == minimum.value
+            {
+                maximum
+            } else {
+                dimension
+            };
+            let style_defined = match resolved_dimension.unit {
+                YGUnit::Auto | YGUnit::Undefined => false,
+                YGUnit::Point => !(resolved_dimension.value < 0.0),
+                YGUnit::Percent => !(resolved_dimension.value < 0.0 || owner.is_nan()),
+            };
+            // YGNodeCalculateLayout uses Exactly for a defined owner size when
+            // the root has neither a style dimension nor a maximum. Taffy's
+            // flex root otherwise treats this only as available space. Adapt
+            // the transient solve node, never the authored Rive dimensions.
+            if !style_defined && resolve(maximum, owner).is_none() && !owner.is_nan() {
+                let margin = edges
+                    .into_iter()
+                    .map(|edge| resolve(self.margin.0[edge], owner_width).unwrap_or(0.0))
+                    .sum::<f32>();
+                let exact = Dimension::length((owner - margin).max(0.0));
+                if index == 0 {
+                    style.size.width = exact;
+                } else {
+                    style.size.height = exact;
+                }
+            }
+        }
+        style
+    }
+
     pub fn taffy_style(&self) -> Style {
         let mut s = self.taffy.clone();
         s.size = Size {
@@ -493,7 +612,15 @@ impl YGStyle {
             width: dimension(self.max_dimensions.0[0]),
             height: dimension(self.max_dimensions.0[1]),
         };
-        s.margin = rect_auto(self.margin.0);
+        // Yoga resolves an unspecified margin to zero; only an explicitly
+        // authored Auto margin participates in free-space distribution.
+        s.margin = rect_auto(self.margin.0.map(|value| {
+            if value.unit == YGUnit::Undefined {
+                YGValue::new(0.0, YGUnit::Point)
+            } else {
+                value
+            }
+        }));
         s.inset = rect_auto(self.position.0);
         s.padding = rect(self.padding.0);
         s.border = rect(self.border.0);
@@ -590,7 +717,10 @@ impl IndexMut<YGGutter> for YGGaps {
 fn dimension(v: YGValue) -> Dimension {
     match v.unit {
         YGUnit::Point => Dimension::length(v.value),
-        YGUnit::Percent => Dimension::percent(v.value / 100.0),
+        // The pinned Yoga owner resolves percentages as
+        // `value * owner_size * 0.01f`; retain the authored percentage so the
+        // vendored Taffy seam can preserve that exact `f32` operation order.
+        YGUnit::Percent => Dimension::rive_yoga_percent(v.value),
         YGUnit::Auto => Dimension::auto(),
         YGUnit::Undefined => Dimension::auto(),
     }
@@ -642,11 +772,11 @@ fn max_track(v: &YGStyleSizeLength) -> MaxTrackSizingFunction {
 fn align_items(v: YGAlign) -> Option<AlignItems> {
     match v {
         YGAlign::Auto => None,
-        YGAlign::FlexStart | YGAlign::Start => Some(AlignItems::FlexStart),
-        YGAlign::Center => Some(AlignItems::Center),
-        YGAlign::FlexEnd | YGAlign::End => Some(AlignItems::FlexEnd),
-        YGAlign::Baseline => Some(AlignItems::Baseline),
-        _ => Some(AlignItems::Stretch),
+        YGAlign::FlexStart | YGAlign::Start => Some(AlignItems::FLEX_START),
+        YGAlign::Center => Some(AlignItems::CENTER),
+        YGAlign::FlexEnd | YGAlign::End => Some(AlignItems::FLEX_END),
+        YGAlign::Baseline => Some(AlignItems::BASELINE),
+        _ => Some(AlignItems::STRETCH),
     }
 }
 fn align_self(v: YGAlign) -> Option<AlignSelf> {
@@ -654,22 +784,22 @@ fn align_self(v: YGAlign) -> Option<AlignSelf> {
 }
 fn align_content(v: YGAlign) -> Option<AlignContent> {
     match v {
-        YGAlign::FlexStart | YGAlign::Start => Some(AlignContent::FlexStart),
-        YGAlign::Center => Some(AlignContent::Center),
-        YGAlign::FlexEnd | YGAlign::End => Some(AlignContent::FlexEnd),
-        YGAlign::SpaceBetween => Some(AlignContent::SpaceBetween),
-        YGAlign::SpaceAround => Some(AlignContent::SpaceAround),
-        YGAlign::Stretch => Some(AlignContent::Stretch),
+        YGAlign::FlexStart | YGAlign::Start => Some(AlignContent::FLEX_START),
+        YGAlign::Center => Some(AlignContent::CENTER),
+        YGAlign::FlexEnd | YGAlign::End => Some(AlignContent::FLEX_END),
+        YGAlign::SpaceBetween => Some(AlignContent::SPACE_BETWEEN),
+        YGAlign::SpaceAround => Some(AlignContent::SPACE_AROUND),
+        YGAlign::Stretch => Some(AlignContent::STRETCH),
         _ => None,
     }
 }
 fn justify_items(v: YGJustify) -> Option<AlignItems> {
     match v {
         YGJustify::Auto => None,
-        YGJustify::FlexStart | YGJustify::Start => Some(AlignItems::FlexStart),
-        YGJustify::Center => Some(AlignItems::Center),
-        YGJustify::FlexEnd | YGJustify::End => Some(AlignItems::FlexEnd),
-        _ => Some(AlignItems::Stretch),
+        YGJustify::FlexStart | YGJustify::Start => Some(AlignItems::FLEX_START),
+        YGJustify::Center => Some(AlignItems::CENTER),
+        YGJustify::FlexEnd | YGJustify::End => Some(AlignItems::FLEX_END),
+        _ => Some(AlignItems::STRETCH),
     }
 }
 fn justify_self(v: YGJustify) -> Option<AlignSelf> {
@@ -677,13 +807,22 @@ fn justify_self(v: YGJustify) -> Option<AlignSelf> {
 }
 fn justify_content(v: YGJustify) -> Option<taffy::prelude::JustifyContent> {
     Some(match v {
-        YGJustify::Center => taffy::prelude::JustifyContent::Center,
-        YGJustify::FlexEnd | YGJustify::End => taffy::prelude::JustifyContent::FlexEnd,
-        YGJustify::SpaceBetween => taffy::prelude::JustifyContent::SpaceBetween,
-        YGJustify::SpaceAround => taffy::prelude::JustifyContent::SpaceAround,
-        YGJustify::SpaceEvenly => taffy::prelude::JustifyContent::SpaceEvenly,
-        _ => taffy::prelude::JustifyContent::FlexStart,
+        YGJustify::Center => taffy::prelude::JustifyContent::CENTER,
+        YGJustify::FlexEnd | YGJustify::End => taffy::prelude::JustifyContent::FLEX_END,
+        YGJustify::SpaceBetween => taffy::prelude::JustifyContent::SPACE_BETWEEN,
+        YGJustify::SpaceAround => taffy::prelude::JustifyContent::SPACE_AROUND,
+        YGJustify::SpaceEvenly => taffy::prelude::JustifyContent::SPACE_EVENLY,
+        _ => taffy::prelude::JustifyContent::FLEX_START,
     })
+}
+
+pub(crate) struct LayoutParentStyleSnapshot {
+    pub owner: crate::mechanical_port::source::core::CoreHandle,
+    pub is_grid: bool,
+    pub is_stack: bool,
+    pub justify_items: u32,
+    pub is_row: bool,
+    pub is_ltr: bool,
 }
 
 #[derive(Default, Clone, Copy)]

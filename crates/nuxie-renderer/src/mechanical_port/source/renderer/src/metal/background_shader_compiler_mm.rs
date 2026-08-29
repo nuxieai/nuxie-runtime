@@ -98,6 +98,21 @@ static BACKGROUND_OWNER_DETAIL_EVENTS: std::sync::OnceLock<
 > = std::sync::OnceLock::new();
 
 #[cfg(test)]
+static BACKGROUND_OWNER_TEST_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
+    std::sync::OnceLock::new();
+
+/// Serializes tests that clear and consume the process-global owner streams.
+/// The production compiler remains fully concurrent; only the test probe has
+/// a single consumer transaction at a time.
+#[cfg(test)]
+pub(crate) fn owner_event_test_guard() -> MutexGuard<'static, ()> {
+    BACKGROUND_OWNER_TEST_LOCK
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+}
+
+#[cfg(test)]
 fn owner_event(ledger_id: &'static str, phase: BackgroundOwnerPhase, identity: usize) {
     if let Ok(mut events) = BACKGROUND_OWNER_EVENTS
         .get_or_init(|| std::sync::Mutex::new(Vec::new()))
@@ -2367,6 +2382,8 @@ mod tests {
         use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::{MetalFeatures, Retained};
         use objc2::rc::Retained as ObjcRetained;
 
+        let _owner_guard = super::owner_event_test_guard();
+
         objc2::rc::autoreleasepool(|_| {
             let device =
                 objc2_metal::MTLCreateSystemDefaultDevice().expect("native Metal device required");
@@ -2518,6 +2535,7 @@ mod tests {
     fn native_append_format_sequence_matches_the_pinned_source_bytes() {
         use super::{NativeCompileIteration, take_owner_detail_events};
 
+        let _owner_guard = super::owner_event_test_guard();
         objc2::rc::autoreleasepool(|_| {
             let _ = take_owner_detail_events();
             let iteration = NativeCompileIteration::new("metal-seed\n");
@@ -2581,6 +2599,8 @@ mod tests {
     fn native_iteration_uses_its_exact_dictionary_source_and_options_owners() {
         use super::{MetalCompileOptions, MetalLanguageVersion, NativeCompileIteration};
 
+        let _owner_guard = super::owner_event_test_guard();
+
         objc2::rc::autoreleasepool(|_| {
             let mut iteration = NativeCompileIteration::new("using namespace metal;\n");
             iteration.define_static(
@@ -2628,6 +2648,7 @@ mod tests {
             take_owner_detail_events,
         };
 
+        let _owner_guard = super::owner_event_test_guard();
         let _ = take_owner_detail_events();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut iteration = NativeCompileIteration::new("metal-seed\n");
@@ -2669,6 +2690,7 @@ mod tests {
             native_new_library_with_source, take_owner_detail_events,
         };
 
+        let _owner_guard = super::owner_event_test_guard();
         objc2::rc::autoreleasepool(|_| {
             let _ = take_owner_detail_events();
             let device = objc2_metal::MTLCreateSystemDefaultDevice()
@@ -2793,6 +2815,7 @@ mod tests {
         use objc2::rc::Retained as ObjcRetained;
         use objc2_foundation::NSObjectProtocol;
 
+        let _owner_guard = super::owner_event_test_guard();
         objc2::rc::autoreleasepool(|_| {
             let _ = take_owner_events();
             let _ = take_owner_detail_events();
@@ -3045,6 +3068,7 @@ mod tests {
         use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::{MetalFeatures, Retained};
         use objc2::rc::Retained as ObjcRetained;
 
+        let _owner_guard = super::owner_event_test_guard();
         objc2::rc::autoreleasepool(|_| {
             let _ = take_owner_detail_events();
             let device =
@@ -3128,6 +3152,7 @@ mod tests {
         use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::{MetalFeatures, Retained};
         use objc2::rc::Retained as ObjcRetained;
 
+        let _owner_guard = super::owner_event_test_guard();
         objc2::rc::autoreleasepool(|_| {
             let _ = take_owner_detail_events();
             let device =

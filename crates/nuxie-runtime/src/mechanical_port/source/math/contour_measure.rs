@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
+use super::math_types;
 use super::path_types::PathVerb;
 use super::raw_path::RawPath;
-use super::raw_path_utils::{EvalCubic, EvalQuad, cubic_extract, quad_extract};
+use super::raw_path_utils::{EvalCubic, EvalQuad, cubic_extract, line_extract, quad_extract};
 use super::vec2d::Vec2D;
 
 const MAX_DOT30: u32 = (1 << 30) - 1;
@@ -10,6 +11,7 @@ const INV_SCALE_D30: f32 = 1.0 / MAX_DOT30 as f32;
 const EPSILON: f32 = 1.0 / 4096.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(i32)]
 enum SegmentType {
     Line,
     Quad,
@@ -40,10 +42,9 @@ impl Segment {
         let points = &points[self.point_index as usize..];
         match self.segment_type {
             SegmentType::Line => {
-                let extracted = [
-                    Vec2D::lerp(points[0], points[1], from_t),
-                    Vec2D::lerp(points[0], points[1], to_t),
-                ];
+                let source: &[Vec2D; 2] = points[..2].try_into().unwrap();
+                let mut extracted = [Vec2D::default(); 2];
+                line_extract(source, from_t, to_t, &mut extracted);
                 if move_to {
                     dst.move_to_point(extracted[0]);
                 }
@@ -68,6 +69,43 @@ impl Segment {
                 dst.cubic_to_points(extracted[1], extracted[2], extracted[3]);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn line_segment_extract_matches_pinned_generic_lerp_grouping() {
+        let segment = Segment {
+            distance: 1.0,
+            point_index: 0,
+            t_value: MAX_DOT30,
+            segment_type: SegmentType::Line,
+        };
+        let points = [
+            Vec2D::new(39.608627, -64.03908),
+            Vec2D::new(12.428378, -185.07193),
+        ];
+        let mut path = RawPath::default();
+
+        segment.extract(&mut path, 0.37239173, 0.97299224, &points, true);
+
+        assert_eq!(
+            path.points()
+                .iter()
+                .map(|point| point.x.to_bits())
+                .collect::<Vec<_>>(),
+            [0x41eb_e53b, 0x4152_996b]
+        );
+        assert_eq!(
+            path.points()
+                .iter()
+                .map(|point| point.y.to_bits())
+                .collect::<Vec<_>>(),
+            [0xc2da_38b0, 0xc335_cd98]
+        );
     }
 }
 
@@ -169,7 +207,7 @@ impl ContourMeasure {
         } else {
             0.0
         };
-        let t = previous_t.mul_add(1.0 - relative_distance, segment.get_t() * relative_distance);
+        let t = previous_t * (1.0 - relative_distance) + segment.get_t() * relative_distance;
         assert!((0.0..=1.0).contains(&t));
         if segment.segment_type == SegmentType::Quad {
             eval_quad(
@@ -194,8 +232,8 @@ impl ContourMeasure {
         dst: &mut RawPath,
         start_with_move: bool,
     ) {
-        start_distance = start_distance.max(0.0);
-        end_distance = end_distance.min(self.length);
+        start_distance = cpp_max(0.0, start_distance);
+        end_distance = cpp_min(self.length, end_distance);
         if start_distance >= end_distance {
             return;
         }
@@ -239,32 +277,94 @@ impl ContourMeasure {
             (0.0, 0.0)
         };
         let ratio = (distance - previous_distance) / (segment.distance - previous_distance);
-        let t = previous_t.mul_add(1.0 - ratio, segment.get_t() * ratio);
-        clamp(t, previous_t, segment.get_t())
+        let t = previous_t * (1.0 - ratio) + segment.get_t() * ratio;
+        math_types::clamp(t, previous_t, segment.get_t())
     }
     pub fn warp(&self, source: Vec2D) -> Vec2D {
         let result = self.get_pos_tan(source.x);
         Vec2D::new(
-            (-result.tan.y).mul_add(source.y, result.pos.x),
-            result.tan.x.mul_add(source.y, result.pos.y),
+            result.pos.x - result.tan.y * source.y,
+            result.pos.y + result.tan.x * source.y,
         )
     }
     pub fn dump(&self) {
-        println!(
-            "length {} pts {} segs {}",
-            self.length,
-            self.points.len(),
-            self.segments.len()
-        );
-        for segment in &self.segments {
-            println!(
-                " {} {} {} {:?}",
-                segment.distance,
-                segment.point_index,
-                segment.get_t(),
-                segment.segment_type
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        unsafe {
+            libc::printf(
+                b"length %g pts %zu segs %zu\n\0".as_ptr().cast(),
+                self.length as f64,
+                self.points.len(),
+                self.segments.len(),
             );
+            for segment in &self.segments {
+                libc::printf(
+                    b" %g %d %g %d\n\0".as_ptr().cast(),
+                    segment.distance as f64,
+                    segment.point_index as i32,
+                    segment.get_t() as f64,
+                    segment.segment_type as i32,
+                );
+            }
         }
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        {
+            println!(
+                "length {} pts {} segs {}",
+                cpp_g(self.length),
+                self.points.len(),
+                self.segments.len()
+            );
+            for segment in &self.segments {
+                println!(
+                    " {} {} {} {}",
+                    cpp_g(segment.distance),
+                    segment.point_index as i32,
+                    cpp_g(segment.get_t()),
+                    segment.segment_type as i32
+                );
+            }
+        }
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn cpp_g(value: f32) -> String {
+    if value.is_nan() {
+        return if value.is_sign_negative() {
+            "-nan".to_owned()
+        } else {
+            "nan".to_owned()
+        };
+    }
+    if value == f32::INFINITY {
+        return "inf".to_owned();
+    }
+    if value == f32::NEG_INFINITY {
+        return "-inf".to_owned();
+    }
+    if value == 0.0 {
+        return if value.is_sign_negative() {
+            "-0".to_owned()
+        } else {
+            "0".to_owned()
+        };
+    }
+    let scientific = format!("{value:.5e}");
+    let (mantissa, exponent) = scientific
+        .split_once('e')
+        .expect("Rust scientific formatting includes an exponent");
+    let exponent: i32 = exponent.parse().expect("Rust formats a numeric exponent");
+    if !(-4..6).contains(&exponent) {
+        let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+        let sign = if exponent < 0 { '-' } else { '+' };
+        return format!("{mantissa}e{sign}{:02}", exponent.unsigned_abs());
+    }
+    let precision = usize::try_from(5 - exponent).expect("fixed %g precision is nonnegative");
+    let fixed = format!("{value:.precision$}");
+    if fixed.contains('.') {
+        fixed.trim_end_matches('0').trim_end_matches('.').to_owned()
+    } else {
+        fixed
     }
 }
 
@@ -355,7 +455,7 @@ impl ContourMeasureIter {
     pub fn rewind(&mut self, path: &RawPath, tolerance: f32) {
         self.contours = collect_contours(path);
         self.index = 0;
-        self.inverse_tolerance = 1.0 / tolerance.max(1.0 / 16.0);
+        self.inverse_tolerance = 1.0 / cpp_max(tolerance, 1.0 / 16.0);
         self.segment_counts.resize(path.verbs().len(), 0);
     }
     fn try_next(&mut self) -> Option<Rc<ContourMeasure>> {
@@ -583,28 +683,19 @@ fn add_cubic_segments(
 }
 fn quadratic_wangs(points: &[Vec2D; 3], precision: f32) -> f32 {
     let v = points[0] - 2.0 * points[1] + points[2];
-    (v.length_squared() * (1.0 / 16.0) * precision * precision)
-        .sqrt()
-        .sqrt()
+    let length_term_pow2 = (1.0 / 16.0) * (precision * precision);
+    (v.length_squared() * length_term_pow2).sqrt().sqrt()
 }
 fn cubic_wangs(points: &[Vec2D; 4], precision: f32) -> f32 {
     let v0 = points[0] - 2.0 * points[1] + points[2];
     let v1 = points[1] - 2.0 * points[2] + points[3];
-    (cpp_max(v0.length_squared(), v1.length_squared()) * (9.0 / 16.0) * precision * precision)
+    let length_term_pow2 = (9.0 / 16.0) * (precision * precision);
+    (cpp_max(v0.length_squared(), v1.length_squared()) * length_term_pow2)
         .sqrt()
         .sqrt()
 }
-fn clamp(value: f32, low: f32, high: f32) -> f32 {
-    let value = if low < value || low.is_nan() {
-        value
-    } else {
-        low
-    };
-    if high < value || value.is_nan() {
-        high
-    } else {
-        value
-    }
+fn cpp_min(first: f32, second: f32) -> f32 {
+    if second < first { second } else { first }
 }
 fn cpp_max(first: f32, second: f32) -> f32 {
     if first < second { second } else { first }

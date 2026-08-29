@@ -1,8 +1,11 @@
 #![cfg(feature = "scripting")]
 
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf};
 
-use nuxie::{File, OwnedArtboardInstance, PersistentFactory};
+use nuxie::{
+    FileImportLimits, PersistentFactory, ScriptExecutionLimits, ViewModelInstanceRuntime,
+    import_unsigned_scripted,
+};
 use nuxie_render_api::SerializingFactory;
 use silver_corpus::{OpKind, Value, parse_sriv};
 
@@ -195,67 +198,59 @@ fn semantic_draws(bytes: &[u8]) -> Vec<DrawSnapshot> {
 
 #[test]
 fn layout_grid_script_reacts_to_rows_and_columns_like_the_upstream_silver_scenario() {
-    let file = Arc::new(
-        File::import_with_unsigned_scripts(&pinned_fixture("script_layout_test.riv"))
-            .expect("script_layout_test.riv imports with trusted scripts"),
-    );
-    let artboard_index = file
-        .artboard_named("LayoutScript")
-        .expect("LayoutScript artboard")
-        .index();
-    let mut instance =
-        OwnedArtboardInstance::instantiate(Arc::clone(&file), artboard_index).expect("instance");
-    let mut machine = instance
-        .default_state_machine_instance()
-        .expect("default state machine");
-    let mut view_model = instance
-        .instantiate_default_view_model_instance()
-        .or_else(|| instance.instantiate_view_model())
-        .expect("layout view model");
     let mut factory = PersistentFactory::new(SerializingFactory::new());
+    let scripted = import_unsigned_scripted(
+        &pinned_fixture("script_layout_test.riv"),
+        &mut factory,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .expect("script_layout_test.riv imports with trusted scripts");
+    let file = scripted.native_file();
+    let artboard = file
+        .with_file(|file| file.artboard_named("LayoutScript"))
+        .expect("LayoutScript artboard");
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
+    factory.borrow_mut().frame_size(width as u32, height as u32);
+    let machine = artboard.state_machine_at(0).expect("default state machine");
+    let model_id = artboard.with_artboard(|artboard| artboard.view_model_id());
+    let view_model = file
+        .with_file(|file| {
+            if model_id == u32::MAX {
+                file.create_view_model_instance_for_artboard(artboard.core_handle())
+            } else {
+                file.create_view_model_instance_at(model_id as usize, 0)
+            }
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
+        .expect("layout view model");
+    machine.with_instance_mut(|machine| {
+        machine.bind_view_model_instance(view_model.instance());
+    });
+    let rows = view_model.property_number("Rows").expect("Rows number");
+    assert_eq!(rows.value(), 5.0);
+    let columns = view_model
+        .property_number("Columns")
+        .expect("Columns number");
+    assert_eq!(columns.value(), 5.0);
+    machine.advance_and_apply(0.1);
     let mut renderer = factory.borrow().make_renderer();
-
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut machine),
-            0.1,
-            &mut view_model,
-            &mut factory,
-        )
-        .expect("initialize layout script");
-    factory.borrow_mut().frame_size(500, 500);
-    instance
-        .draw(&mut factory, &mut renderer)
-        .expect("draw initialized grid");
+    artboard.draw(&mut renderer);
     for _ in 0..20 {
         factory.borrow_mut().add_frame();
-        instance
-            .try_advance_with_state_machines_and_view_model_and_factory(
-                std::slice::from_mut(&mut machine),
-                0.016,
-                &mut view_model,
-                &mut factory,
-            )
-            .expect("advance initial grid");
-        instance
-            .draw(&mut factory, &mut renderer)
-            .expect("draw initial grid frame");
+        machine.advance_and_apply(0.016);
+        artboard.draw(&mut renderer);
     }
-    assert!(view_model.set_number("Rows", 8.0));
-    assert!(view_model.set_number("Columns", 7.0));
+    rows.set_value(8.0);
+    assert_eq!(rows.value(), 8.0);
+    columns.set_value(7.0);
+    assert_eq!(columns.value(), 7.0);
     for _ in 0..20 {
         factory.borrow_mut().add_frame();
-        instance
-            .try_advance_with_state_machines_and_view_model_and_factory(
-                std::slice::from_mut(&mut machine),
-                0.016,
-                &mut view_model,
-                &mut factory,
-            )
-            .expect("advance resized grid");
-        instance
-            .draw(&mut factory, &mut renderer)
-            .expect("draw resized grid frame");
+        machine.advance_and_apply(0.016);
+        artboard.draw(&mut renderer);
     }
     let actual = semantic_draws(&factory.borrow().bytes());
     let expected = semantic_draws(&pinned_silver("script_layout_grid.sriv"));

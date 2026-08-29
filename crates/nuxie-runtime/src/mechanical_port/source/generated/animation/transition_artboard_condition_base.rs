@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::{
     animation::transition_artboard_condition::TransitionArtboardCondition,
-    core::binary_reader::BinaryReader,
     animation::transition_viewmodel_condition::TransitionViewModelCondition,
+    core::binary_reader::BinaryReader,
 };
 
 pub struct TransitionArtboardConditionBase {
@@ -27,7 +27,9 @@ impl TransitionArtboardConditionBase {
     }
     pub fn clone_into(&self) -> TransitionArtboardCondition {
         let mut cloned = TransitionArtboardCondition::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

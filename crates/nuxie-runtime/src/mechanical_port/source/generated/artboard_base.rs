@@ -53,7 +53,7 @@ impl ArtboardBase {
             return;
         }
         callbacks.origin_x_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+        ArtboardBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
@@ -71,7 +71,7 @@ impl ArtboardBase {
             return;
         }
         callbacks.origin_y_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+        ArtboardBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {
@@ -93,7 +93,10 @@ impl ArtboardBase {
             return;
         }
         callbacks.default_state_machine_id_changed();
-        callbacks.notify_property_changed(Self::DEFAULT_STATE_MACHINE_ID_PROPERTY_KEY);
+        ArtboardBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DEFAULT_STATE_MACHINE_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_default_state_machine_id_value(&mut self, value: u32) -> bool {
@@ -111,7 +114,7 @@ impl ArtboardBase {
             return;
         }
         callbacks.view_model_id_changed();
-        callbacks.notify_property_changed(Self::VIEW_MODEL_ID_PROPERTY_KEY);
+        ArtboardBaseCallbacks::notify_property_changed(callbacks, Self::VIEW_MODEL_ID_PROPERTY_KEY);
     }
 
     pub(crate) fn set_view_model_id_value(&mut self, value: u32) -> bool {

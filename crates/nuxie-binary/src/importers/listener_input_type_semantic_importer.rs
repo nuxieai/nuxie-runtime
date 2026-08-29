@@ -19,9 +19,7 @@ impl ListenerInputTypeSemanticImporter {
     }
 
     /// Mechanical translation of `listenerInputTypeSemantic()`.
-    pub(super) fn listener_input_type_semantic(
-        &self,
-    ) -> RuntimeStateMachineListenerInputTypeOwner {
+    pub(super) fn listener_input_type_semantic(&self) -> RuntimeStateMachineListenerInputTypeOwner {
         self.listener_input_type_semantic
     }
 

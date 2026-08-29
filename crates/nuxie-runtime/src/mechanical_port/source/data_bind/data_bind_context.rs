@@ -23,6 +23,17 @@ impl Default for DataBindContext {
     }
 }
 impl DataBindContext {
+    pub(crate) fn clone_core(&self) -> Self {
+        let mut cloned = Self::default();
+        cloned.copy_source_path_ids(self);
+        // Keep the source-path receiver in place while copying the scalar
+        // generated base. Its callback-owned data belongs to this clone.
+        let mut base = std::mem::take(&mut cloned.base.base.base);
+        base.copy(&self.base.base.base, &mut cloned);
+        cloned.base.base.base = base;
+        cloned
+    }
+
     pub fn bind_from_context_handle(
         owner: &CoreHandle,
         data_context: Option<RuntimeDataContextHandle>,
@@ -127,7 +138,6 @@ impl DataBindContext {
                             resolver.resolve_path(id as i32).to_vec()
                         })
                 })
-                .flatten()
                 .flatten();
             if let Some(path) = resolved.filter(|path| !path.is_empty()) {
                 self.base.source_path_ids_buffer = path;

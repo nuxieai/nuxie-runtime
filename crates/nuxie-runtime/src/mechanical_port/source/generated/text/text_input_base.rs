@@ -49,7 +49,7 @@ impl TextInputBase {
             return;
         }
         callbacks.text_changed();
-        callbacks.notify_property_changed(Self::TEXT_PROPERTY_KEY);
+        TextInputBaseCallbacks::notify_property_changed(callbacks, Self::TEXT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_text_value(&mut self, value: String) -> bool {
@@ -71,7 +71,10 @@ impl TextInputBase {
             return;
         }
         callbacks.selection_radius_changed();
-        callbacks.notify_property_changed(Self::SELECTION_RADIUS_PROPERTY_KEY);
+        TextInputBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SELECTION_RADIUS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_selection_radius_value(&mut self, value: f32) -> bool {
@@ -89,7 +92,7 @@ impl TextInputBase {
             return;
         }
         callbacks.multiline_changed();
-        callbacks.notify_property_changed(Self::MULTILINE_PROPERTY_KEY);
+        TextInputBaseCallbacks::notify_property_changed(callbacks, Self::MULTILINE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_multiline_value(&mut self, value: bool) -> bool {

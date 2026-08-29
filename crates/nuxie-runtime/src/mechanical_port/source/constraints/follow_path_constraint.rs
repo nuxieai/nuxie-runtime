@@ -3,10 +3,11 @@ use std::ops::{Deref, DerefMut};
 use crate::mechanical_port::source::{
     component::ComponentDirt,
     constraints::constraint::get_parent_world,
+    core::CoreHandle,
     core_context::{CoreContext, StatusCode},
     generated::{
         constraints::follow_path_constraint_base::{
-            FollowPathConstraintBase, FollowPathConstraintBaseCallbacks, TransformSpace,
+            FollowPathConstraintBase, FollowPathConstraintBaseCallbacks,
         },
         core_registry::CoreCapabilities,
     },
@@ -16,6 +17,7 @@ use crate::mechanical_port::source::{
     },
     shapes::{path::Path, path_flags::PathFlags, shape::Shape},
     transform_component::TransformComponent,
+    transform_space::TransformSpace,
 };
 
 #[derive(Default)]
@@ -40,6 +42,85 @@ impl DerefMut for FollowPathConstraint {
 }
 
 impl FollowPathConstraint {
+    pub(crate) fn set_double_occurrence(owner: &CoreHandle, key: u16, value: f32) -> bool {
+        use crate::mechanical_port::source::{
+            constraints::list_follow_path_constraint::ListFollowPathConstraint,
+            generated::constraints::{
+                constraint_base::ConstraintBase,
+                list_follow_path_constraint_base::ListFollowPathConstraintBase,
+            },
+        };
+        let Some(changed) = owner.with_mut(|object| {
+            let follow = if object.as_any().is::<ListFollowPathConstraint>() {
+                let list = object
+                    .as_any_mut()
+                    .downcast_mut::<ListFollowPathConstraint>()
+                    .unwrap();
+                match key {
+                    ListFollowPathConstraintBase::DISTANCE_END_PROPERTY_KEY => {
+                        return list.base.set_distance_end_value(value);
+                    }
+                    ListFollowPathConstraintBase::DISTANCE_OFFSET_PROPERTY_KEY => {
+                        return list.base.set_distance_offset_value(value);
+                    }
+                    _ => &mut list.base.base,
+                }
+            } else {
+                object
+                    .as_any_mut()
+                    .downcast_mut::<Self>()
+                    .expect("FollowPathConstraint owner")
+            };
+            match key {
+                FollowPathConstraintBase::DISTANCE_PROPERTY_KEY => {
+                    follow.base.set_distance_value(value)
+                }
+                ConstraintBase::STRENGTH_PROPERTY_KEY => follow.base.set_strength_value(value),
+                _ => unreachable!("FollowPathConstraint numeric property"),
+            }
+        }) else {
+            return false;
+        };
+        if changed {
+            // Each of these source changed callbacks calls markConstraintDirty.
+            // Its parent/path callbacks can dirty this same constraint again.
+            super::constraint::Constraint::mark_constraint_dirty_occurrence(owner);
+            owner.with_mut(|object| object.core_mut().notify_property_changed(key));
+        }
+        true
+    }
+
+    pub(crate) fn set_orient_occurrence(owner: &CoreHandle, value: bool) -> bool {
+        use crate::mechanical_port::source::constraints::list_follow_path_constraint::ListFollowPathConstraint;
+        let Some(changed) = owner.with_mut(|object| {
+            let follow = if object.as_any().is::<ListFollowPathConstraint>() {
+                &mut object
+                    .as_any_mut()
+                    .downcast_mut::<ListFollowPathConstraint>()
+                    .unwrap()
+                    .base
+                    .base
+            } else {
+                object
+                    .as_any_mut()
+                    .downcast_mut::<Self>()
+                    .expect("FollowPathConstraint owner")
+            };
+            follow.base.set_orient_value(value)
+        }) else {
+            return false;
+        };
+        if changed {
+            super::constraint::Constraint::mark_constraint_dirty_occurrence(owner);
+            owner.with_mut(|object| {
+                object
+                    .core_mut()
+                    .notify_property_changed(FollowPathConstraintBase::ORIENT_PROPERTY_KEY)
+            });
+        }
+        true
+    }
+
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl FollowPathConstraintBaseCallbacks) {
         self.base.copy(&object.base, callbacks);
     }
@@ -134,7 +215,7 @@ impl FollowPathConstraint {
             &mut transform_b,
             &target_parent_world,
         );
-        *component.mutable_world_transform() = Mat2D::compose(components);
+        *component.mutable_world_transform() = Mat2D::compose(&components);
     }
 
     pub fn constrain_helper(
@@ -153,9 +234,10 @@ impl FollowPathConstraint {
                 })
                 .flatten()
                 .expect("validated FollowPathConstraint target");
-            let Some(inverse) = target_parent_world.inverted() else {
+            let mut inverse = Mat2D::default();
+            if !target_parent_world.invert(&mut inverse) {
                 return TransformComponents::default();
-            };
+            }
             *transform_b = inverse * *transform_b;
         }
         if self.base.dest_space() == TransformSpace::Local {
@@ -192,14 +274,14 @@ impl FollowPathConstraint {
         if !paths.is_empty() {
             self.raw_path.rewind();
             for path in paths {
-                path.with(|path| {
-                    let path = path.as_path().expect("Shape paths remain Path-derived");
+                path.with(|owner| {
+                    let path = owner.as_path().expect("Shape paths remain Path-derived");
                     self.raw_path
-                        .add_path(path.raw_path(), Some(path.path_transform()));
+                        .add_path(path.raw_path(), Some(&Path::path_transform_for(owner)));
                 })
                 .expect("Shape retains live paths");
             }
-            self.path_measure = PathMeasure::new(&self.raw_path);
+            self.path_measure = PathMeasure::from_path_default(&self.raw_path);
         }
     }
 

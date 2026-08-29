@@ -1,32 +1,33 @@
 use crate::mechanical_port::source::{
-    artboard::NestedArtboard,
     artboard_component_list::ArtboardComponentList,
-    component::Component,
+    core::CoreObject,
     custom_property_trigger::CustomPropertyTrigger,
     generated::{
         artboard_component_list_base::ArtboardComponentListBase,
         custom_property_trigger_base::CustomPropertyTriggerBase,
+        nested_artboard_base::NestedArtboardBase,
+        nested_artboard_layout_base::NestedArtboardLayoutBase,
+        nested_artboard_leaf_base::NestedArtboardLeafBase,
     },
-    nested_artboard_layout::NestedArtboardLayout,
-    nested_artboard_leaf::NestedArtboardLeaf,
 };
 
 pub trait ResettingComponent {
     fn reset(&mut self);
 }
 
-pub fn from(component: &mut Component) -> Option<&mut dyn ResettingComponent> {
+pub fn from(component: &mut dyn CoreObject) -> Option<&mut dyn ResettingComponent> {
     match component.core_type() {
-        NestedArtboardLeaf::TYPE_KEY
-        | NestedArtboardLayout::TYPE_KEY
-        | NestedArtboard::TYPE_KEY => component
+        NestedArtboardLeafBase::TYPE_KEY
+        | NestedArtboardLayoutBase::TYPE_KEY
+        | NestedArtboardBase::TYPE_KEY => component
             .as_nested_artboard_mut()
             .map(|component| component as &mut dyn ResettingComponent),
         ArtboardComponentListBase::TYPE_KEY => component
             .as_artboard_component_list_mut()
             .map(|component: &mut ArtboardComponentList| component as &mut dyn ResettingComponent),
         CustomPropertyTriggerBase::TYPE_KEY => component
-            .as_custom_property_trigger_mut()
+            .as_any_mut()
+            .downcast_mut::<CustomPropertyTrigger>()
             .map(|component: &mut CustomPropertyTrigger| component as &mut dyn ResettingComponent),
         _ => None,
     }

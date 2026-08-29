@@ -45,7 +45,10 @@ impl TransitionNumberConditionBase {
             return;
         }
         callbacks.value_changed();
-        callbacks.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+        TransitionNumberConditionBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_value_value(&mut self, value: f32) -> bool {

@@ -1,4 +1,4 @@
-use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
+use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
 
 pub struct KeyFrameInterpolatorBase {
     pub base: Core,

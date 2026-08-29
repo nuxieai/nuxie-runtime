@@ -1,7 +1,11 @@
 use std::any::Any;
 
 use crate::mechanical_port::source::{
-    core::CoreHandle, status_code::StatusCode, viewmodel::viewmodel_instance::ViewModelInstance,
+    core::CoreHandle,
+    status_code::StatusCode,
+    viewmodel::{
+        viewmodel_instance::ViewModelInstance, viewmodel_instance_value::ViewModelInstanceValue,
+    },
 };
 
 use super::import_stack::ImportStackObject;
@@ -16,9 +20,11 @@ impl ViewModelInstanceImporter {
             view_model_instance: instance,
         }
     }
-    pub fn add_value(&mut self, value: CoreHandle) {
+    pub fn add_value(&mut self, value: &mut ViewModelInstanceValue) {
         self.view_model_instance
-            .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.add_value(value))
+            .with_downcast_mut::<ViewModelInstance, _>(|instance| {
+                instance.add_value_borrowed(value)
+            })
             .expect("ViewModelInstanceImporter retains a ViewModelInstance");
     }
     pub fn view_model_instance(&self) -> CoreHandle {

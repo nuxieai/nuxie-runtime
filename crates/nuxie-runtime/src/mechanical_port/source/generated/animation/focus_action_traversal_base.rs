@@ -44,7 +44,10 @@ impl FocusActionTraversalBase {
             return;
         }
         callbacks.traversal_kind_changed();
-        callbacks.notify_property_changed(Self::TRAVERSAL_KIND_PROPERTY_KEY);
+        FocusActionTraversalBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TRAVERSAL_KIND_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_traversal_kind_value(&mut self, value: u32) -> bool {

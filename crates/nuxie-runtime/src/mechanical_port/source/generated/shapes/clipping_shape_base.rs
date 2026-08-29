@@ -49,7 +49,10 @@ impl ClippingShapeBase {
             return;
         }
         callbacks.source_id_changed();
-        callbacks.notify_property_changed(Self::SOURCE_ID_PROPERTY_KEY);
+        ClippingShapeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SOURCE_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_source_id_value(&mut self, value: u32) -> bool {
@@ -67,7 +70,10 @@ impl ClippingShapeBase {
             return;
         }
         callbacks.fill_rule_changed();
-        callbacks.notify_property_changed(Self::FILL_RULE_PROPERTY_KEY);
+        ClippingShapeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FILL_RULE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_fill_rule_value(&mut self, value: u32) -> bool {
@@ -85,7 +91,10 @@ impl ClippingShapeBase {
             return;
         }
         callbacks.is_visible_changed();
-        callbacks.notify_property_changed(Self::IS_VISIBLE_PROPERTY_KEY);
+        ClippingShapeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::IS_VISIBLE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_is_visible_value(&mut self, value: bool) -> bool {

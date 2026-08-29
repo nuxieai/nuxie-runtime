@@ -23,10 +23,21 @@ impl Default for DataConverterStringPad {
 impl DataConverterStringPad {
     pub fn new(length: usize, pad_type: u32, text: String) -> Self {
         let mut converter = Self::default();
-        let mut callbacks = DataConverterStringPadInitializationCallbacks;
-        converter.base.set_length(length as u32, &mut callbacks);
-        converter.base.set_pad_type(pad_type, &mut callbacks);
-        converter.base.set_text(text, &mut callbacks);
+        if converter.base.set_length_value(length as u32) {
+            DataConverterStringPadBaseCallbacks::length_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterStringPadBase::LENGTH_PROPERTY_KEY);
+        }
+        if converter.base.set_pad_type_value(pad_type) {
+            DataConverterStringPadBaseCallbacks::pad_type_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterStringPadBase::PAD_TYPE_PROPERTY_KEY);
+        }
+        if converter.base.set_text_value(text) {
+            DataConverterStringPadBaseCallbacks::text_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterStringPadBase::TEXT_PROPERTY_KEY);
+        }
         converter
     }
     pub fn output_type(&self) -> DataType {
@@ -97,12 +108,6 @@ impl DataConverterStringPadBaseCallbacks for DataConverterStringPad {
     fn text_changed(&mut self) {
         Self::text_changed(self);
     }
-}
-
-struct DataConverterStringPadInitializationCallbacks;
-
-impl DataConverterStringPadBaseCallbacks for DataConverterStringPadInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }
 
 crate::impl_data_converter_capability_forward!(DataConverterStringPad, base.base);

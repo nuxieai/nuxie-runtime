@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::animation::Animation, core::binary_reader::BinaryReader, core::Core,
+    animation::animation::Animation, core::Core, core::binary_reader::BinaryReader,
 };
 
 pub trait AnimationBaseCallbacks {

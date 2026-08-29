@@ -19,7 +19,7 @@ pub struct TransitionComparator {
 impl TransitionComparator {
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let Some(importer) = import_stack
-            .latest::<TransitionViewModelConditionImporter>(TransitionViewModelCondition::TYPE_KEY)
+            .latest::<TransitionViewModelConditionImporter>(crate::mechanical_port::source::generated::animation::transition_viewmodel_condition_base::TransitionViewModelConditionBase::TYPE_KEY)
         else {
             return StatusCode::MissingObject;
         };

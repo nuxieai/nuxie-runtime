@@ -1,4 +1,4 @@
-use crate::{definition_by_type_key, RuntimeObject};
+use crate::{RuntimeObject, definition_by_type_key};
 use serde::Serialize;
 
 /// Direct representation of C++ `ViewModelProperty::Direction`.

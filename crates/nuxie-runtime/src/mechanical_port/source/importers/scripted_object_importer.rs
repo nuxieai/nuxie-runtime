@@ -19,10 +19,10 @@ impl ScriptedObjectImporter {
         }
     }
 
-    pub fn add_input(&mut self, value: CoreHandle, type_key: CoreTypeKey) {
+    pub fn add_input(&mut self, value: CoreHandle, type_key: CoreTypeKey, input: &mut ScriptInput) {
         if ScriptInput::from(value.clone(), type_key).is_some() {
             self.scripted_object
-                .with_mut(|object| object.scripted_object_add_property(value))
+                .with_mut(|object| object.scripted_object_add_property_from_input(value, input))
                 .filter(|added| *added)
                 .expect("imported owner derives from ScriptedObject");
         }

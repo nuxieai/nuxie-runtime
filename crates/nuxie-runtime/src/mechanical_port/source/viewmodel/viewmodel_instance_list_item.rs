@@ -37,10 +37,10 @@ impl ViewModelInstanceListItem {
         ) else {
             return StatusCode::MissingObject;
         };
-        let Some(item) = self.base.base.handle() else {
+        let Some(_) = self.base.base.handle() else {
             return StatusCode::MissingObject;
         };
-        importer.add_item(item);
+        importer.add_item(self);
         self.base.import(import_stack)
     }
 }

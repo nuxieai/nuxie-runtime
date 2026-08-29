@@ -19,7 +19,7 @@ impl DataConverterListToLength {
             .as_any()
             .downcast_ref::<DataValueList>()
             .map_or(DataValueNumber::DEFAULT_VALUE, |list| {
-                list.value().len() as f32
+                list.items().len() as f32
             });
         self.output.set_value(value);
         &self.output

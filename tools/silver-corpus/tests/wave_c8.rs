@@ -1,8 +1,21 @@
 //! Exact pinned Silver replays for executable Wave C8 rendering cases.
 
-use nuxie_runtime::{runtime_random_call_count, set_runtime_random_test_values};
-use silver_corpus::{compare_sriv, parse_sriv, read_manifest, resolve_expected, Execution};
+use nuxie_runtime::source::math::random::RandomProvider;
+use silver_corpus::{
+    Difference, Execution, Status, compare_sriv, parse_sriv, read_manifest, resolve_expected,
+};
 use std::path::{Path, PathBuf};
+
+// Pinned RandomProvider is process-global. Serialize this binary's fixture
+// replays so a TESTING FIFO cannot affect another concurrently running case.
+static REPLAY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+struct TestingRandom;
+impl Drop for TestingRandom {
+    fn drop(&mut self) {
+        RandomProvider::clear_testing_mode();
+    }
+}
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -19,6 +32,34 @@ fn runtime_root() -> PathBuf {
 }
 
 fn replay(id: &str) {
+    let _lock = REPLAY_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let (_, result) = replay_locked(id);
+    result.unwrap_or_else(|difference| panic!("{id}: {difference}"));
+}
+
+fn replay_exact_locked(id: &str) {
+    let (status, result) = replay_locked(id);
+    assert_eq!(status, Status::Exact, "{id} should be classified exact");
+    result.unwrap_or_else(|difference| panic!("{id}: {difference}"));
+}
+
+fn replay_divergence(id: &str, expected: &str) {
+    let _lock = REPLAY_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let (status, result) = replay_locked(id);
+    assert_eq!(
+        status,
+        Status::Diverges,
+        "{id} should be classified diverges"
+    );
+    let difference = result.expect_err("signed divergence should remain present");
+    assert_eq!(difference.to_string(), expected);
+}
+
+fn replay_locked(id: &str) -> (Status, Result<(), Difference>) {
     let runtime = runtime_root();
     let manifest = read_manifest(&workspace_root().join("silver-corpus.toml"))
         .expect("read Silver corpus manifest");
@@ -36,7 +77,7 @@ fn replay(id: &str) {
         parse_sriv(&std::fs::read(resolve_expected(&runtime, case)).expect("read pinned SRIV"))
             .expect("parse pinned SRIV");
     let actual = parse_sriv(actual.bytes()).expect("parse Rust SRIV");
-    compare_sriv(&expected, &actual).unwrap_or_else(|difference| panic!("{id}: {difference}"));
+    (case.status, compare_sriv(&expected, &actual))
 }
 
 #[test]
@@ -65,31 +106,29 @@ fn wave_c8_render_006_validate_text_with_modifiers_and_dashes() {
 }
 
 #[test]
-#[ignore = "expected-red: superbowl frame 0, op 2825 (color), field paint_id: expected 220, got 208"]
 fn wave_c8_render_007_superbowl_data_binding() {
     replay("superbowl");
 }
 
 #[test]
-#[ignore = "expected-red: bankcard frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint"]
 fn wave_c8_render_009_bank_card_data_binding() {
     replay("bankcard");
 }
 
 #[test]
-#[ignore = "expected-red: ai_assitant frame 0, op 82 (makeLinearGradient): expected makeLinearGradient, got feather"]
 fn wave_c8_render_010_ai_assistant_data_binding() {
     replay("ai_assitant");
 }
 
 #[test]
-#[ignore = "expected-red: rewards_demo frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint"]
 fn wave_c8_render_012_rewards_demo_data_binding() {
-    replay("rewards_demo");
+    replay_divergence(
+        "rewards_demo",
+        "frame 0, op 1461 (addRawPath): expected 44 fields, got 46",
+    );
 }
 
 #[test]
-#[ignore = "expected-red: spotify_kids_demo frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint"]
 fn wave_c8_render_013_spotify_kids_demo_data_binding() {
     replay("spotify_kids_demo");
 }
@@ -100,15 +139,19 @@ fn wave_c8_render_014_spotify_kids_app_icon_data_binding() {
 }
 
 #[test]
-#[ignore = "expected-red: hunter_x_demo frame 0, op 488 (blendMode): expected blendMode, got makeRenderPaint"]
 fn wave_c8_render_015_hunter_x_demo_data_binding() {
-    replay("hunter_x_demo");
+    replay_divergence(
+        "hunter_x_demo",
+        "frame 0, op 5055 (addRawPath): expected 20 fields, got 22",
+    );
 }
 
 #[test]
-#[ignore = "expected-red: car_widgets_v01 frame 0, op 222 (blendMode): expected blendMode, got makeRenderPaint"]
 fn wave_c8_render_017_car_widgets_data_binding() {
-    replay("car_widgets_v01");
+    replay_divergence(
+        "car_widgets_v01",
+        "frame 0, op 10306 (addRawPath): expected 60 fields, got 56",
+    );
 }
 
 #[test]
@@ -122,13 +165,14 @@ fn wave_c8_render_019_event_triggers_another_event() {
 }
 
 #[test]
-#[ignore = "expected-red: collapse_data_binds-test_1 frame 10, op 760 (rewind): expected rewind, got drawPath"]
 fn wave_c8_render_020_collapsed_data_binds_hidden_layout() {
-    replay("collapse_data_binds-test_1");
+    replay_divergence(
+        "collapse_data_binds-test_1",
+        "frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672",
+    );
 }
 
 #[test]
-#[ignore = "expected-red: collapse_data_binds-test_2 frame 15, op 315 (addRawPath): expected 151 fields, got 256"]
 fn wave_c8_render_021_collapsed_data_binds_property_group_solo() {
     replay("collapse_data_binds-test_2");
 }
@@ -144,13 +188,11 @@ fn wave_c8_render_026_target_to_source_different_types() {
 }
 
 #[test]
-#[ignore = "expected-red: interactive_scrolling frame 0, op 42 (transform), field xy: expected -0.0 (0x80000000), got 0"]
 fn wave_c8_render_027_interactive_and_non_interactive_scrolling() {
     replay("interactive_scrolling");
 }
 
 #[test]
-#[ignore = "expected-red: drag_event frame 23, op 602 (save): expected save, got color"]
 fn wave_c8_render_032_pointer_drag_event() {
     replay("drag_event");
 }
@@ -161,27 +203,33 @@ fn wave_c8_render_033_recursive_data_binding_artboards_skipped() {
 }
 
 #[test]
-#[ignore = "expected-red: collapsable_data_binding frame 0, op 14 (save): expected save, got color"]
 fn wave_c8_render_034_collapsable_data_binds_added_when_uncollapsed() {
     replay("collapsable_data_binding");
 }
 
 #[test]
 fn wave_c8_render_036_advance_blend_modes_inputs() {
-    let _random_values = set_runtime_random_test_values(&[]);
-    assert_eq!(runtime_random_call_count(), 0);
-    replay("advance_blend_mode-inputs");
+    let _lock = REPLAY_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    RandomProvider::clear_randoms();
+    let _random_values = TestingRandom;
+    assert_eq!(RandomProvider::total_calls(), 0);
+    replay_exact_locked("advance_blend_mode-inputs");
 }
 
 #[test]
 fn wave_c8_render_037_advance_blend_modes_view_model() {
-    let _random_values = set_runtime_random_test_values(&[]);
-    assert_eq!(runtime_random_call_count(), 0);
-    replay("advance_blend_mode-vms");
+    let _lock = REPLAY_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    RandomProvider::clear_randoms();
+    let _random_values = TestingRandom;
+    assert_eq!(RandomProvider::total_calls(), 0);
+    replay_exact_locked("advance_blend_mode-vms");
 }
 
 #[test]
-#[ignore = "expected-red: transition_artboard_condition_test frame 0, op 16 (frameSize), field width: expected 983, got 984"]
 fn wave_c8_render_038_transition_conditions_based_on_artboards() {
     replay("transition_artboard_condition_test");
 }

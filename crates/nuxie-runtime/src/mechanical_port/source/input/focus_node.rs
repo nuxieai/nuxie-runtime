@@ -1,5 +1,8 @@
 use crate::mechanical_port::source::{
-    input::focusable::{Focusable, Key, KeyModifiers},
+    input::{
+        focus_manager::{RuntimeFocusManagerHandle, RuntimeFocusManagerWeakHandle},
+        focusable::{Focusable, Key, KeyModifiers},
+    },
     semantic::semantic_snapshot::Bounds,
 };
 use std::{
@@ -15,10 +18,12 @@ pub enum EdgeBehavior {
     ParentScope = 0,
     ClosedLoop = 1,
     Stop = 2,
+    Unknown = 3,
 }
 pub struct FocusNode {
     pub(crate) focusable: Option<FocusableRef>,
     pub(crate) parent: Weak<RefCell<FocusNode>>,
+    pub(crate) manager: RuntimeFocusManagerWeakHandle,
     pub(crate) children: Vec<FocusNodeRef>,
     pub name: String,
     pub world_bounds: Bounds,
@@ -36,6 +41,7 @@ impl FocusNode {
         Rc::new(RefCell::new(Self {
             focusable,
             parent: Weak::new(),
+            manager: RuntimeFocusManagerWeakHandle::default(),
             children: Vec::new(),
             name: String::new(),
             world_bounds: Bounds::default(),
@@ -59,7 +65,11 @@ impl FocusNode {
         self.focusable.clone()
     }
     pub fn set_focusable(&mut self, focusable: Option<FocusableRef>) {
+        let backing_changed = self.focusable.is_none() != focusable.is_none();
         self.focusable = focusable;
+        if backing_changed {
+            self.invalidate_focusable_content();
+        }
     }
     pub fn clear_focusable(&mut self) {
         self.set_focusable(None);
@@ -74,7 +84,10 @@ impl FocusNode {
         self.flag(Self::CAN_FOCUS)
     }
     pub fn set_can_focus(&mut self, v: bool) {
-        self.set_flag(Self::CAN_FOCUS, v)
+        if self.can_focus() != v {
+            self.set_flag(Self::CAN_FOCUS, v);
+            self.invalidate_focusable_content();
+        }
     }
     pub fn can_touch(&self) -> bool {
         self.flag(Self::CAN_TOUCH)
@@ -98,11 +111,15 @@ impl FocusNode {
         match (self.flags >> 3) & 3 {
             1 => EdgeBehavior::ClosedLoop,
             2 => EdgeBehavior::Stop,
+            3 => EdgeBehavior::Unknown,
             _ => EdgeBehavior::ParentScope,
         }
     }
     pub fn set_edge_behavior(&mut self, v: EdgeBehavior) {
-        self.flags = (self.flags & !(3 << 3)) | ((v as u8) << 3)
+        self.set_edge_behavior_raw(v as u8)
+    }
+    pub(crate) fn set_edge_behavior_raw(&mut self, value: u8) {
+        self.flags = (self.flags & !(3 << 3)) | (value << 3)
     }
     pub fn tab_index(&self) -> i32 {
         self.tab_index as i32
@@ -122,19 +139,26 @@ impl FocusNode {
     pub fn children(&self) -> &[FocusNodeRef] {
         &self.children
     }
+    pub fn manager(&self) -> Option<RuntimeFocusManagerHandle> {
+        self.manager.upgrade()
+    }
+    fn invalidate_focusable_content(&self) {
+        self.manager.invalidate_focusable_content();
+    }
     pub fn is_scope(&self) -> bool {
         !self.children.is_empty()
     }
     pub fn add_child(parent: &FocusNodeRef, child: FocusNodeRef) {
-        Self::insert_child(parent, parent.borrow().children.len(), child)
+        let index = parent.borrow().children.len();
+        Self::insert_child(parent, index, child)
     }
     pub fn insert_child(parent: &FocusNodeRef, index: usize, child: FocusNodeRef) {
-        if let Some(old) = child.borrow().parent() {
-            old.borrow_mut().children.retain(|n| !Rc::ptr_eq(n, &child));
-        }
+        Self::remove_from_parent(&child);
         child.borrow_mut().parent = Rc::downgrade(parent);
-        let i = index.min(parent.borrow().children.len());
-        parent.borrow_mut().children.insert(i, child)
+        let mut parent = parent.borrow_mut();
+        let index = index.min(parent.children.len());
+        parent.children.insert(index, child);
+        parent.invalidate_focusable_content();
     }
     pub fn remove_child(parent: &FocusNodeRef, child: &FocusNodeRef) {
         if child
@@ -145,11 +169,18 @@ impl FocusNode {
         {
             return;
         }
-        parent
-            .borrow_mut()
-            .children
-            .retain(|n| !Rc::ptr_eq(n, child));
-        child.borrow_mut().parent = Weak::new()
+        child.borrow_mut().parent = Weak::new();
+        let mut parent = parent.borrow_mut();
+        if let Some(index) = parent.children.iter().position(|n| Rc::ptr_eq(n, child)) {
+            parent.children.remove(index);
+        }
+        parent.invalidate_focusable_content();
+    }
+    pub fn remove_from_parent(child: &FocusNodeRef) {
+        let parent = child.borrow().parent();
+        if let Some(parent) = parent {
+            Self::remove_child(&parent, child);
+        }
     }
     pub fn key_input(&mut self, k: Key, m: KeyModifiers, p: bool, r: bool) -> bool {
         self.focusable

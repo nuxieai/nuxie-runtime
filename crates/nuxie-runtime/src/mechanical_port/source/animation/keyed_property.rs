@@ -128,8 +128,7 @@ impl KeyedProperty {
     pub fn on_added_dirty(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
         for frame in &self.keyframes {
             let s = frame
-                .with_mut(|frame| frame.keyframe_on_added_dirty(context))
-                .flatten()
+                .with_mut(|frame| frame.on_added_dirty(context))
                 .unwrap_or(StatusCode::MissingObject);
             if s != StatusCode::Ok {
                 return s;
@@ -140,8 +139,7 @@ impl KeyedProperty {
     pub fn on_added_clean(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
         for frame in &self.keyframes {
             let s = frame
-                .with_mut(|frame| frame.keyframe_on_added_clean(context))
-                .flatten()
+                .with_mut(|frame| frame.on_added_clean(context))
                 .unwrap_or(StatusCode::MissingObject);
             if s != StatusCode::Ok {
                 return s;
@@ -170,5 +168,17 @@ impl KeyedProperty {
     }
     pub fn is_callback(&self) -> bool {
         CoreRegistry::is_callback(self.base.property_key())
+    }
+}
+
+impl std::ops::Deref for KeyedProperty {
+    type Target = KeyedPropertyBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for KeyedProperty {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
     }
 }

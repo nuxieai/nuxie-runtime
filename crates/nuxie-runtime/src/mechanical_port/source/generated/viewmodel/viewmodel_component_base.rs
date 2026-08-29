@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_component::ViewModelComponent;
 
-use crate::mechanical_port::source::{core::binary_reader::BinaryReader, core::Core};
+use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
 
 pub trait ViewModelComponentBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);

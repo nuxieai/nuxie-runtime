@@ -4,7 +4,11 @@
 
 use std::path::PathBuf;
 
-use nuxie::{File, PersistentFactory, ViewModelInstance};
+use nuxie::{
+    FileImportLimits, PersistentFactory, RuntimeArtboardInstanceHandle,
+    RuntimeStateMachineInstanceHandle, RuntimeViewModelInstanceHandle, ScriptExecutionLimits,
+    ScriptedFile, ViewModelInstanceRuntime, import_unsigned_scripted,
+};
 use nuxie_render_api::SerializingFactory;
 use silver_corpus::{compare_sriv, parse_sriv};
 
@@ -28,244 +32,151 @@ fn pinned_silver(name: &str) -> Vec<u8> {
         .unwrap_or_else(|error| panic!("read pinned silver {}: {error}", silver.display()))
 }
 
-fn fire_button(view_model: &mut ViewModelInstance, button: &str, count: usize) {
-    let trigger = format!("{button}/onClick");
-    for _ in 0..count {
-        assert!(view_model.fire_trigger(&trigger), "trigger {trigger}");
+struct Fixture {
+    _file: ScriptedFile,
+    artboard: RuntimeArtboardInstanceHandle,
+    machine: RuntimeStateMachineInstanceHandle,
+    view_model: RuntimeViewModelInstanceHandle,
+    silver: PersistentFactory<SerializingFactory>,
+}
+
+impl Fixture {
+    fn new() -> Self {
+        let mut silver = PersistentFactory::new(SerializingFactory::new());
+        let file = import_unsigned_scripted(
+            &pinned_fixture("script_create_text_runs.riv"),
+            &mut silver,
+            None,
+            FileImportLimits::new(),
+            ScriptExecutionLimits::new(),
+        )
+        .expect("script_create_text_runs.riv imports with trusted scripts");
+        let artboard = file
+            .native_file()
+            .with_file(|file| file.artboard_named("main"))
+            .expect("main artboard");
+        let machine = artboard.state_machine_at(0).expect("state machine 0");
+        let view_model = file
+            .native_file()
+            .with_file_mut(|file| {
+                file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+                    .or_else(|| {
+                        file.create_view_model_instance_for_artboard(artboard.core_handle())
+                    })
+            })
+            .map(ViewModelInstanceRuntime::new)
+            .map(ViewModelInstanceRuntime::into_handle)
+            .expect("main view-model instance");
+        machine
+            .with_instance_mut(|machine| machine.bind_view_model_instance(view_model.instance()));
+        artboard.bind_view_model_instance(Some(view_model.instance()));
+        Self {
+            _file: file,
+            artboard,
+            machine,
+            view_model,
+            silver,
+        }
+    }
+
+    fn advance(&self) {
+        self.machine.advance_and_apply(0.1);
+    }
+
+    fn draw(&mut self) {
+        let mut renderer = self.silver.borrow().make_renderer();
+        self.artboard.draw(&mut renderer);
+    }
+
+    fn fire_button(&self, button: &str, count: usize) {
+        let trigger = format!("{button}/onClick");
+        let trigger = self
+            .view_model
+            .property_trigger(&trigger)
+            .unwrap_or_else(|| panic!("trigger {trigger}"));
+        for _ in 0..count {
+            trigger.trigger();
+        }
+    }
+
+    fn list(&self) -> nuxie::runtime::viewmodel::runtime::viewmodel_instance_list_runtime::ViewModelInstanceListRuntime{
+        self.view_model
+            .property_list("settings/lis")
+            .expect("scripted list remains addressable")
     }
 }
 
 #[test]
 fn scripted_text_run_view_model_inputs_hydrate_before_user_init() {
-    let file = File::import_with_unsigned_scripts(&pinned_fixture("script_create_text_runs.riv"))
-        .expect("script_create_text_runs.riv imports with trusted scripts");
-    let artboard = file.artboard_named("main").expect("main artboard");
-    let mut instance = artboard.instantiate().expect("main artboard instantiates");
-    let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = if instance.view_model_index().is_none() {
-        instance.instantiate_view_model()
-    } else {
-        instance.instantiate_view_model_instance(0)
-    }
-    .expect("main view-model instance");
-    let mut factory = PersistentFactory::new(SerializingFactory::new());
-    instance
-        .initialize_renderer(&mut factory)
-        .expect("main renderer initializes at the import boundary");
-
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut factory,
-        )
-        .expect("authored ViewModel inputs are present when user init runs");
+    let fixture = Fixture::new();
+    fixture.advance();
 }
 
 #[test]
 fn scripted_text_run_new_button_pushes_one_list_item() {
-    let file = File::import_with_unsigned_scripts(&pinned_fixture("script_create_text_runs.riv"))
-        .expect("script_create_text_runs.riv imports with trusted scripts");
-    let artboard = file.artboard_named("main").expect("main artboard");
-    let mut instance = artboard.instantiate().expect("main artboard instantiates");
-    let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = if instance.view_model_index().is_none() {
-        instance.instantiate_view_model()
-    } else {
-        instance.instantiate_view_model_instance(0)
-    }
-    .expect("main view-model instance");
-    let mut factory = PersistentFactory::new(SerializingFactory::new());
-    instance
-        .initialize_renderer(&mut factory)
-        .expect("main renderer initializes at the import boundary");
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut factory,
-        )
-        .expect("initial scripted advance");
+    let fixture = Fixture::new();
+    fixture.advance();
 
     assert_eq!(
-        view_model
-            .raw()
-            .list_item_count_by_property_name_path("settings/lis"),
-        Some(1),
-        "authored list starts with one item",
+        fixture.list().size(),
+        1,
+        "authored list starts with one item"
     );
-    fire_button(&mut view_model, "newButton", 1);
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut factory,
-        )
-        .expect("push scripted advance");
+    fixture.fire_button("newButton", 1);
+    fixture.advance();
+    let list = fixture.list();
     assert_eq!(
-        view_model
-            .raw()
-            .list_item_count_by_property_name_path("settings/lis"),
-        Some(2),
-        "ScriptedViewModel.new feeds ScriptedPropertyList.push",
+        list.size(),
+        2,
+        "ScriptedViewModel.new feeds ScriptedPropertyList.push"
     );
-    let items = view_model
-        .handle()
-        .list_items_by_property_name_path("settings/lis")
-        .expect("scripted list remains addressable");
+    let item = list.instance_at(1).expect("pushed list item");
     assert_eq!(
-        items[1]
-            .borrow()
-            .string_value_by_property_name_path("textContent")
-            .as_deref(),
-        Some(b"label for 2".as_slice()),
-        "the pushed instance retains the authored TextValueRun schema and script write",
+        item.property_string("textContent")
+            .expect("textContent")
+            .value(),
+        "label for 2",
+        "the pushed instance retains the authored TextValueRun schema and script write"
     );
     assert_eq!(
-        items[1]
-            .borrow()
-            .string_value_by_property_name_path("textStyle")
-            .as_deref(),
-        Some(b"style2".as_slice()),
-        "the pushed instance retains the authored style selection",
+        item.property_string("textStyle")
+            .expect("textStyle")
+            .value(),
+        "style2",
+        "the pushed instance retains the authored style selection"
     );
 }
 
 #[test]
 fn script_creates_view_models_that_map_to_text_runs() {
-    let file = File::import_with_unsigned_scripts(&pinned_fixture("script_create_text_runs.riv"))
-        .expect("script_create_text_runs.riv imports with trusted scripts");
-    let artboard = file.artboard_named("main").expect("main artboard");
-    let mut instance = artboard.instantiate().expect("main artboard instantiates");
-    let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = if instance.view_model_index().is_none() {
-        instance.instantiate_view_model()
-    } else {
-        instance.instantiate_view_model_instance(0)
+    let mut fixture = Fixture::new();
+    let (width, height) = fixture
+        .artboard
+        .with_artboard(|artboard| (artboard.width(), artboard.height()));
+    fixture
+        .silver
+        .borrow_mut()
+        .frame_size(width as u32, height as u32);
+
+    fixture.advance();
+    fixture.draw();
+
+    for (button, count) in [
+        ("newButton", 1),
+        ("newAtButton", 1),
+        ("swapButton", 1),
+        ("shiftButton", 1),
+        ("popButton", 1),
+        ("popButton", 4),
+        ("newButton", 2),
+    ] {
+        fixture.silver.borrow_mut().add_frame();
+        fixture.fire_button(button, count);
+        fixture.advance();
+        fixture.draw();
     }
-    .expect("main view-model instance");
-    let mut silver = PersistentFactory::new(SerializingFactory::new());
-    instance
-        .initialize_renderer(&mut silver)
-        .expect("main renderer initializes at the import boundary");
-    let (width, height) = instance.artboard_dimensions();
-    silver.borrow_mut().frame_size(width as u32, height as u32);
 
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("initial scripted advance");
-    let mut renderer = silver.borrow().make_renderer();
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("initial text-run draw");
-
-    silver.borrow_mut().add_frame();
-    fire_button(&mut view_model, "newButton", 1);
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("push scripted advance");
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("push text-run draw");
-
-    silver.borrow_mut().add_frame();
-    fire_button(&mut view_model, "newAtButton", 1);
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("indexed-push scripted advance");
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("indexed-push text-run draw");
-
-    silver.borrow_mut().add_frame();
-    fire_button(&mut view_model, "swapButton", 1);
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("swap scripted advance");
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("swap text-run draw");
-
-    silver.borrow_mut().add_frame();
-    fire_button(&mut view_model, "shiftButton", 1);
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("shift scripted advance");
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("shift text-run draw");
-
-    silver.borrow_mut().add_frame();
-    fire_button(&mut view_model, "popButton", 1);
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("pop scripted advance");
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("pop text-run draw");
-
-    silver.borrow_mut().add_frame();
-    fire_button(&mut view_model, "popButton", 4);
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("pop-through-empty scripted advance");
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("pop-through-empty text-run draw");
-
-    silver.borrow_mut().add_frame();
-    fire_button(&mut view_model, "newButton", 2);
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("double-push scripted advance");
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("double-push text-run draw");
-
-    let actual = parse_sriv(&silver.borrow().bytes()).expect("valid Rust SRIV stream");
+    let actual = parse_sriv(&fixture.silver.borrow().bytes()).expect("valid Rust SRIV stream");
     let expected = parse_sriv(&pinned_silver("script_create_text_runs.sriv"))
         .expect("valid pinned SRIV stream");
     compare_sriv(&expected, &actual)

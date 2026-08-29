@@ -3,6 +3,23 @@ use crate::mechanical_port::source::{
     shapes::vertex::{Vertex, VertexBehavior},
 };
 
+impl std::ops::Deref for ContourMeshVertex {
+    type Target = ContourMeshVertexBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for ContourMeshVertex {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl ContourMeshVertex {
+    pub const TYPE_KEY: u16 = ContourMeshVertexBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct ContourMeshVertex {
     pub base: ContourMeshVertexBase,

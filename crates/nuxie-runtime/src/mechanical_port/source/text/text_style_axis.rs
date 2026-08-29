@@ -3,6 +3,24 @@ use crate::mechanical_port::source::{
     generated::text::text_style_axis_base::TextStyleAxisBase, status_code::StatusCode,
 };
 
+impl std::ops::Deref for TextStyleAxis {
+    type Target = TextStyleAxisBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextStyleAxis {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextStyleAxis {
+    pub const TYPE_KEY: u16 = TextStyleAxisBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct TextStyleAxis {
     pub base: TextStyleAxisBase,
 }

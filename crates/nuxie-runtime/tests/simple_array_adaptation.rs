@@ -1,162 +1,157 @@
-//! API-contract coverage for the AF-7 `SimpleArray<T>` ownership adaptation.
-//!
-//! Pinned C++ keeps the production implementation in `simple_array.hpp`; its
-//! `simple_array.cpp` translation unit only defines `TESTING` allocator
-//! counters. Runtime-loaded Rust data uses `Vec<T>`, borrowed slices, and
-//! `Arc<[T]>` instead. Exact malloc/realloc/free counts are allocator-specific
-//! and intentionally have no Rust parity contract.
-
-use nuxie_binary::read_runtime_file;
-use nuxie_graph::GraphFile;
-use nuxie_runtime::{ArtboardInstance, ScriptCoreString};
-use std::mem::size_of_val;
-use std::path::PathBuf;
-use std::sync::Arc;
-
-fn upstream_fixture(name: &str) -> PathBuf {
-    PathBuf::from(
-        std::env::var_os("RIVE_RUNTIME_DIR")
-            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
-    )
-    .join("tests/unit_tests/assets")
-    .join(name)
-}
-
-fn state_machine_fixture() -> ArtboardInstance {
-    let bytes = std::fs::read(upstream_fixture("state_machine_transition.riv"))
-        .expect("read pinned state-machine fixture");
-    let file = read_runtime_file(&bytes).expect("import pinned state-machine fixture");
-    let graph = GraphFile::from_runtime_file(&file).expect("build state-machine graph");
-    ArtboardInstance::from_graph_with_artboards(&file, &graph.artboards[0], &graph.artboards)
-        .expect("instantiate state-machine fixture")
-}
+//! The translated SimpleArray/Builder own every array under test. Rust's
+//! allocator does not promise C++ malloc/realloc/free call counts.
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::source::animation::state_machine::StateMachine;
+use nuxie_runtime::source::simple_array::{SimpleArray, SimpleArrayBuilder};
+use nuxie_runtime::{Artboard, File, RuntimeFactoryHandle};
+use std::{mem::size_of_val, path::PathBuf};
 
 #[test]
 fn empty_owned_and_borrowed_storage_has_the_simple_array_empty_contract() {
-    // `array initializes as expected` and the safe-Rust projection of
-    // `delegating ctor accepts (nullptr, 0) without UB`.
-    let owned = ScriptCoreString::default();
-    let borrowed = owned.as_bytes();
-
-    assert!(owned.as_bytes().is_empty());
-    assert_eq!(size_of_val(owned.as_bytes()), 0);
-    assert_eq!(owned.as_bytes().iter().count(), 0);
+    let owned = SimpleArray::<u8>::default();
+    let borrowed = owned.as_slice();
+    assert!(owned.is_empty());
+    assert_eq!(owned.size_bytes(), 0);
+    assert_eq!(owned.as_slice().iter().count(), 0);
     assert!(borrowed.is_empty());
-    assert_eq!(ScriptCoreString::from_bytes(borrowed), owned);
+    assert_eq!(
+        SimpleArray::from_slice(borrowed).as_slice(),
+        owned.as_slice()
+    );
 }
-
 #[test]
 fn owned_storage_preserves_size_bytes_order_and_iteration() {
-    // `simple array can be created` and `can iterate simple array`.
     let source = (0..10).collect::<Vec<u8>>();
-    let owned = ScriptCoreString::from_bytes(source.clone());
-
-    assert_eq!(owned.as_bytes().len(), 10);
-    assert_eq!(size_of_val(owned.as_bytes()), 10 * size_of::<u8>());
-    assert_eq!(owned.as_bytes().iter().copied().sum::<u8>(), 45);
-    assert_eq!(owned.as_bytes(), source.as_slice());
-
-    let powers = ScriptCoreString::from_bytes([2, 4, 8, 16]);
-    let powers = powers.into_bytes();
-    assert_eq!(powers.into_iter().collect::<Vec<_>>(), [2, 4, 8, 16]);
+    let owned = SimpleArray::from_slice(&source);
+    assert_eq!(owned.size(), 10);
+    assert_eq!(owned.size_bytes(), 10 * size_of::<u8>());
+    assert_eq!(owned.as_slice().iter().copied().sum::<u8>(), 45);
+    assert_eq!(owned.as_slice(), source.as_slice());
+    let powers = SimpleArray::from_slice(&[2, 4, 8, 16]);
+    assert_eq!(
+        powers.as_slice().iter().copied().collect::<Vec<_>>(),
+        [2, 4, 8, 16]
+    );
 }
-
 #[test]
 fn vec_builder_and_reset_preserve_only_initialized_values() {
-    // Meaningful API portions of `can build up a simple array` and
-    // `builders can be reset`; capacity and allocator counts are inapplicable.
-    let mut builder = Vec::with_capacity(2);
-    builder.push(1);
-    builder.push(2);
-    builder.push(3);
-
+    let mut builder = SimpleArrayBuilder::with_reserve(2);
+    builder.add(1);
+    builder.add(2);
+    builder.add(3);
     assert_eq!(builder.as_slice(), [1, 2, 3]);
-    assert_eq!(builder.iter().count(), 3);
-
-    let compact = ScriptCoreString::from_bytes(builder);
-    assert_eq!(compact.as_bytes(), [1, 2, 3]);
-
-    let mut resettable = vec![1_u32, 2, 3];
-    resettable = Vec::with_capacity(4);
-    resettable.extend([3, 2]);
-    let reset = resettable.into_iter().map(f64::from).collect::<Vec<_>>();
-    assert_eq!(reset, [3.0, 2.0]);
+    assert_eq!(builder.as_slice().iter().count(), 3);
+    let compact = builder.into_simple_array();
+    assert_eq!(compact.as_slice(), [1, 2, 3]);
+    let mut resettable = SimpleArrayBuilder::new();
+    for value in [1_u32, 2, 3] {
+        resettable.add(value);
+    }
+    resettable = SimpleArrayBuilder::with_reserve(4);
+    resettable.add(3);
+    resettable.add(2);
+    let reset = resettable.into_simple_array();
+    assert_eq!(
+        reset
+            .as_slice()
+            .iter()
+            .copied()
+            .map(f64::from)
+            .collect::<Vec<_>>(),
+        [3.0, 2.0]
+    );
 }
-
 #[test]
 fn nested_owned_storage_moves_without_aliasing_payloads() {
-    // Meaningful API portions of `arrays of arrays work` and
-    // `builder arrays of arrays work`; allocation counts are inapplicable.
-    let mut numbers_a = vec![33.0, 22.0, 44.0, 66.0];
-    let mut numbers_b = vec![1.0, 2.0, 3.0];
-    let nested = vec![
-        std::mem::take(&mut numbers_a),
-        std::mem::take(&mut numbers_b),
-    ];
-
+    let mut numbers_a = SimpleArray::from_slice(&[33.0, 22.0, 44.0, 66.0]);
+    let mut numbers_b = SimpleArray::from_slice(&[1.0, 2.0, 3.0]);
+    let mut nested = SimpleArrayBuilder::new();
+    nested.add(std::mem::take(&mut numbers_a));
+    nested.add(std::mem::take(&mut numbers_b));
+    let nested = nested.into_simple_array();
     assert!(numbers_a.is_empty());
     assert!(numbers_b.is_empty());
-    assert_eq!(nested.len(), 2);
-    assert_eq!(nested[0], [33.0, 22.0, 44.0, 66.0]);
+    assert_eq!(nested.size(), 2);
+    assert_eq!(nested[0].as_slice(), [33.0, 22.0, 44.0, 66.0]);
 
-    // Exercise a production Arc<Vec<T>> owner and its borrowed-slice view.
-    // A clone must retain the exact immutable definition allocation.
-    let artboard = state_machine_fixture();
-    let borrowed = artboard.state_machines();
+    // Preserve the additional runtime ownership assertion against the actual
+    // immutable StateMachine definition handles, not a parallel Arc<Vec> graph.
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let bytes = std::fs::read(
+        PathBuf::from(root).join("tests/unit_tests/assets/state_machine_transition.riv"),
+    )
+    .expect("fixture");
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("import");
+    let artboard = file.with_file(|file| file.artboard()).expect("Artboard");
+    let borrowed = artboard
+        .with_downcast::<Artboard, _>(|artboard| artboard.state_machine_handles().to_vec())
+        .unwrap();
     assert!(!borrowed.is_empty());
     let definition = borrowed[0].clone();
-    assert!(Arc::ptr_eq(&definition.inputs, &borrowed[0].inputs));
-    assert!(Arc::ptr_eq(&definition.layers, &borrowed[0].layers));
-    assert_eq!(definition.input_count(), borrowed[0].input_count());
-    assert_eq!(definition.layer_count(), borrowed[0].layer_count());
+    assert_eq!(definition, borrowed[0]);
+    let contents = |owner: &nuxie_runtime::CoreHandle| {
+        owner
+            .with_downcast::<StateMachine, _>(|machine| {
+                (
+                    machine.input_count(),
+                    machine.layer_count(),
+                    (0..machine.input_count())
+                        .map(|index| machine.input(index))
+                        .collect::<Vec<_>>(),
+                    (0..machine.layer_count())
+                        .map(|index| machine.layer(index))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .unwrap()
+    };
+    let original = contents(&borrowed[0]);
+    let cloned = contents(&definition);
+    assert_eq!(cloned.2, original.2, "exact native input identities");
+    assert_eq!(cloned.3, original.3, "exact native layer identities");
+    assert_eq!(cloned.0, original.0);
+    assert_eq!(cloned.1, original.1);
 }
-
 #[test]
 fn upstream_builder_arrays_of_arrays_work_under_the_rust_allocator_adaptation() {
-    let mut structs = Vec::with_capacity(2);
+    let mut structs = SimpleArrayBuilder::with_reserve(2);
     for _ in 0..3 {
-        let numbers = vec![33_u32, 22, 44, 66];
-        structs.push(numbers);
+        structs.add(SimpleArray::from_slice(&[33_u32, 22, 44, 66]));
     }
-
-    assert_eq!(structs.len(), 3);
-    assert!(structs.iter().all(|numbers| numbers == &[33, 22, 44, 66]));
+    assert_eq!(structs.size(), 3);
+    assert!(
+        structs
+            .as_slice()
+            .iter()
+            .all(|numbers| numbers.as_slice() == [33, 22, 44, 66])
+    );
 }
-
 #[test]
 fn upstream_oom_construction_returns_empty_under_the_rust_allocator_adaptation() {
-    // Rust cannot safely request C++'s infallible SIZE_MAX allocation. Its
-    // exact native counterpart is the fallible reservation API: rejection
-    // leaves the owner valid, empty, and with a null dangling-free slice.
-    let mut array = Vec::<u8>::new();
-    assert!(array.try_reserve_exact(usize::MAX).is_err());
+    let array = SimpleArray::<u8>::new(usize::MAX);
     assert!(array.is_empty());
-    assert_eq!(array.len(), 0);
+    assert_eq!(array.size(), 0);
     assert!(array.as_slice().is_empty());
 }
-
 #[test]
 fn fallible_growth_rejects_overflow_and_leaves_storage_composable() {
-    // `ctor returns empty array on size*sizeof(T) overflow`, `delegating ctor
-    // stays safe on overflow`, and `overflow-failed array stays composable`.
-    // A slice cannot encode C++'s invalid `(pointer, huge_len)` pair, so the
-    // separately fallible allocation preflight is the safe-Rust contract.
-    let mut failed = Vec::<u64>::new();
-    let huge = usize::MAX / 4;
-    assert!(failed.try_reserve_exact(huge).is_err());
+    let failed = SimpleArray::<u64>::new(usize::MAX / 4);
     assert!(failed.is_empty());
-    assert_eq!(failed.iter().count(), 0);
-
-    let moved = failed
-        .into_iter()
-        .map(|value| value as f64)
-        .collect::<Vec<_>>();
+    assert_eq!(failed.as_slice().iter().count(), 0);
+    let moved = failed;
     assert!(moved.is_empty());
     let copied = moved.clone();
     assert!(copied.is_empty());
-
-    // `ctor still works for normal sizes after overflow guard`.
-    let normal = ScriptCoreString::from_bytes(vec![0_u8; 8]);
-    assert_eq!(normal.as_bytes().len(), 8);
-    assert_eq!(size_of_val(normal.as_bytes()), 8 * size_of::<u8>());
+    let normal = SimpleArray::<u8>::new(8);
+    assert_eq!(normal.size(), 8);
+    assert_eq!(size_of_val(normal.as_slice()), 8 * size_of::<u8>());
 }

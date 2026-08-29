@@ -6,6 +6,7 @@ use std::sync::Arc;
 use luaur_rt::{Function, Table};
 use nuxie_runtime::{RuntimeBlobAsset, ScriptViewModel, ScriptViewModelProperty};
 
+use super::tests::{native_instance_names, native_test_file};
 use super::{ScriptedPropertyBlob, create_scripted_view_model};
 use crate::vm::{ScriptVm, ScriptingLogLevel};
 
@@ -17,7 +18,7 @@ fn fixture_models(asset: &str) -> BTreeMap<String, ScriptViewModel> {
         .join(asset);
     let bytes = std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
-    let file = nuxie_binary::read_runtime_file(&bytes).expect("pinned fixture parses");
+    let file = native_test_file(&bytes);
     nuxie_runtime::script_view_models(&file)
 }
 
@@ -29,22 +30,10 @@ fn first_authored_instance(asset: &str, view_model_name: &str) -> ScriptViewMode
         .join(asset);
     let bytes = std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
-    let file = nuxie_binary::read_runtime_file(&bytes).expect("pinned fixture parses");
-    let instance_name = file
-        .view_models()
+    let file = native_test_file(&bytes);
+    let instance_name = native_instance_names(&file, view_model_name)
         .into_iter()
-        .find_map(|view_model| {
-            (view_model.object.string_property("name") == Some(view_model_name))
-                .then(|| {
-                    view_model
-                        .instances
-                        .first()?
-                        .object
-                        .string_property("name")
-                        .map(ToOwned::to_owned)
-                })
-                .flatten()
-        })
+        .next()
         .unwrap_or_else(|| panic!("{asset} has no authored {view_model_name} instance"));
     nuxie_runtime::script_view_models(&file)
         .remove(view_model_name)
@@ -76,7 +65,6 @@ fn call_with_model(vm: &ScriptVm, function: &str, model: &Table) {
 }
 
 #[test]
-#[ignore = "expected-red: live ScriptedProperty listeners invoke newest-first, but pinned scripting_properties_test.cpp#2 requires registration order"]
 fn wave_c12_scalar_002_scripted_properties_can_be_passed_to_luau() {
     let mut models = fixture_models("data_binding_test.riv");
     let model_definition = models.remove("vm1").expect("pinned vm1 definition");
@@ -449,7 +437,7 @@ fn wave_c12_scalar_017_scripted_blob_property_reads_and_writes_bytes() {
         .join("../../fixtures/sync/data_bind_blob_test.riv");
     let bytes = std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
-    let file = nuxie_binary::read_runtime_file(&bytes).expect("blob owner fixture parses");
+    let file = native_test_file(&bytes);
     let mut models = nuxie_runtime::script_view_models(&file);
     let (model, property_name) = models
         .values_mut()
@@ -497,6 +485,7 @@ end
             .create_userdata(ScriptedPropertyBlob::new(
                 model.clone(),
                 property_name.clone(),
+                None,
             ))
             .expect("scripted blob property")
     };

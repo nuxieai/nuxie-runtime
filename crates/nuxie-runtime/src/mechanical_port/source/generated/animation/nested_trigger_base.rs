@@ -1,6 +1,7 @@
 use crate::mechanical_port::source::{
-    animation::nested_input::NestedInput, animation::nested_trigger::NestedTrigger,
-    core::binary_reader::BinaryReader,
+    animation::nested_input::NestedInput,
+    animation::nested_trigger::NestedTrigger,
+    core::{binary_reader::BinaryReader, field_types::core_callback_type::CallbackData},
 };
 
 pub trait NestedTriggerBaseCallbacks:

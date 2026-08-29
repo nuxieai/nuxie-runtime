@@ -54,7 +54,6 @@ fn wave_c5_apply_group_effect_with_missing_items() {
 }
 
 #[test]
-#[ignore = "expected-red: exact path-effect feathers SRIV diverges at frame 0 operation 21 feather paint_id (expected 8, got 5)"]
 fn wave_c5_path_effects_with_inner_and_outer_feathers() {
     replay("path_effect_with_feathers");
 }

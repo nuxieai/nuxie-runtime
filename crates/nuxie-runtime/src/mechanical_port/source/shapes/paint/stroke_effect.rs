@@ -1,7 +1,11 @@
 use crate::mechanical_port::source::core::CoreHandle;
 use crate::mechanical_port::source::shapes::paint::{
-    dash_path::DashEffectPath, effects_container::EffectsContainer, shape_paint::ShapePaint,
-    shape_paint_path::ShapePaintPath, target_effect::TargetEffectPath, trim_path::TrimEffectPath,
+    dash_path::DashEffectPath,
+    effects_container::{self, EffectsContainer},
+    shape_paint::ShapePaint,
+    shape_paint_path::ShapePaintPath,
+    target_effect::TargetEffectPath,
+    trim_path::TrimEffectPath,
 };
 use std::{
     cell::RefCell,
@@ -53,6 +57,23 @@ impl EffectPath for EmptyEffectPath {}
 pub struct StrokeEffectState {
     pub effect_paths: HashMap<u64, Box<dyn EffectPath>>,
 }
+impl StrokeEffectState {
+    pub fn add_path_provider(&mut self, provider: &PathProvider, path: Box<dyn EffectPath>) {
+        self.effect_paths.insert(provider.identity(), path);
+    }
+
+    pub fn invalidate_effect(&mut self, provider: Option<&PathProvider>) {
+        if let Some(provider) = provider {
+            if let Some(path) = self.effect_paths.get_mut(&provider.identity()) {
+                path.invalidate_effect();
+            }
+        } else {
+            for path in self.effect_paths.values_mut() {
+                path.invalidate_effect();
+            }
+        }
+    }
+}
 pub trait StrokeEffect {
     fn stroke_effect_state(&mut self) -> &mut StrokeEffectState;
     fn stroke_effect_handle(&self) -> Option<CoreHandle>;
@@ -69,23 +90,10 @@ pub trait StrokeEffect {
     fn add_path_provider(&mut self, component: &PathProvider) {
         let path = self.create_effect_path();
         self.stroke_effect_state()
-            .effect_paths
-            .insert(component.identity(), path);
+            .add_path_provider(component, path);
     }
     fn invalidate_effect(&mut self, provider: Option<&PathProvider>) {
-        if let Some(provider) = provider {
-            if let Some(path) = self
-                .stroke_effect_state()
-                .effect_paths
-                .get_mut(&provider.identity())
-            {
-                path.invalidate_effect();
-            }
-        } else {
-            for path in self.stroke_effect_state().effect_paths.values_mut() {
-                path.invalidate_effect();
-            }
-        }
+        self.stroke_effect_state().invalidate_effect(provider);
     }
     fn effect_path(&mut self, provider: &PathProvider) -> Option<Rc<RefCell<ShapePaintPath>>> {
         self.stroke_effect_state()
@@ -93,7 +101,10 @@ pub trait StrokeEffect {
             .get_mut(&provider.identity())
             .and_then(|path| path.path())
     }
-    fn invalidate_effect_from_local(&mut self) {
+    fn invalidate_effect_from_local(&mut self)
+    where
+        Self: Sized,
+    {
         let invalidating = self.stroke_effect_handle();
         for path in self.stroke_effect_state().effect_paths.values_mut() {
             path.invalidate_effect();
@@ -101,11 +112,15 @@ pub trait StrokeEffect {
         if let (Some(parent), Some(invalidating)) =
             (self.parent_paint_handle(), invalidating.as_ref())
         {
-            parent.with_mut(|parent| {
-                if let Some(parent) = parent.as_effects_container_mut() {
-                    parent.invalidate_effects(Some(invalidating));
-                }
-            });
+            let mut active = Some(effects_container::ActiveStrokeEffect::new(
+                invalidating.clone(),
+                self,
+            ));
+            effects_container::invalidate_effects_handle_with_active(
+                &parent,
+                Some(invalidating.clone()),
+                &mut active,
+            );
         }
     }
 }

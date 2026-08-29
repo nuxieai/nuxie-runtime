@@ -55,6 +55,19 @@ impl AnimationReset {
         }
     }
 
+    fn read_float32(bytes: &[u8], position: &mut usize) -> f32 {
+        let Some(end) = position.checked_add(4) else {
+            *position = bytes.len();
+            return 0.0;
+        };
+        let Some(encoded) = bytes.get(*position..end) else {
+            *position = bytes.len();
+            return 0.0;
+        };
+        *position = end;
+        f32::from_le_bytes(encoded.try_into().unwrap())
+    }
+
     pub fn apply<T: AnimationResetTarget>(&self, artboard: &mut T) {
         if self.write_buffer.is_empty() {
             return;
@@ -70,20 +83,18 @@ impl AnimationReset {
             let property_count = Self::read_var_uint(&self.write_buffer, &mut position);
             for _ in 0..property_count {
                 let property_key = Self::read_var_uint(&self.write_buffer, &mut position);
-                let value = f32::from_le_bytes(
-                    self.write_buffer[position..position + 4]
-                        .try_into()
-                        .unwrap(),
-                );
-                position += 4;
+                let value = Self::read_float32(&self.write_buffer[..end], &mut position);
                 let field_id = T::property_field_id(property_key);
-                if !artboard.resolves(object_id) {
-                    continue;
-                }
+                assert!(
+                    artboard.resolves(object_id),
+                    "AnimationReset resolved a missing object"
+                );
                 if field_id == 2 {
                     artboard.set_double(object_id, property_key, value);
                 } else if field_id == 3 {
-                    artboard.set_color(object_id, property_key, value as u32);
+                    // CoreRegistry::setColor accepts a signed C++ int. Preserve
+                    // that conversion before returning the packed color bits.
+                    artboard.set_color(object_id, property_key, value as i32 as u32);
                 }
             }
         }

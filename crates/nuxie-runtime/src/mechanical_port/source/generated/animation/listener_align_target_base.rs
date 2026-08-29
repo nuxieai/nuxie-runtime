@@ -48,7 +48,10 @@ impl ListenerAlignTargetBase {
             return;
         }
         callbacks.target_id_changed();
-        callbacks.notify_property_changed(Self::TARGET_ID_PROPERTY_KEY);
+        ListenerAlignTargetBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TARGET_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_target_id_value(&mut self, value: u32) -> bool {
@@ -70,7 +73,10 @@ impl ListenerAlignTargetBase {
             return;
         }
         callbacks.preserve_offset_changed();
-        callbacks.notify_property_changed(Self::PRESERVE_OFFSET_PROPERTY_KEY);
+        ListenerAlignTargetBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PRESERVE_OFFSET_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_preserve_offset_value(&mut self, value: bool) -> bool {

@@ -1,7 +1,8 @@
 use crate::mechanical_port::source::viewmodel::viewmodel_property_symbol_list_index::ViewModelPropertySymbolListIndex;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, viewmodel::viewmodel_property_symbol::ViewModelPropertySymbol,
+    core::binary_reader::BinaryReader,
+    viewmodel::viewmodel_property_symbol::ViewModelPropertySymbol,
 };
 
 pub struct ViewModelPropertySymbolListIndexBase {
@@ -27,7 +28,9 @@ impl ViewModelPropertySymbolListIndexBase {
     }
     pub fn clone_into(&self) -> ViewModelPropertySymbolListIndex {
         let mut cloned = ViewModelPropertySymbolListIndex::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

@@ -45,7 +45,7 @@ impl DashBase {
             return;
         }
         callbacks.length_changed();
-        callbacks.notify_property_changed(Self::LENGTH_PROPERTY_KEY);
+        DashBaseCallbacks::notify_property_changed(callbacks, Self::LENGTH_PROPERTY_KEY);
     }
 
     pub(crate) fn set_length_value(&mut self, value: f32) -> bool {
@@ -67,7 +67,10 @@ impl DashBase {
             return;
         }
         callbacks.length_is_percentage_changed();
-        callbacks.notify_property_changed(Self::LENGTH_IS_PERCENTAGE_PROPERTY_KEY);
+        DashBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::LENGTH_IS_PERCENTAGE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_length_is_percentage_value(&mut self, value: bool) -> bool {

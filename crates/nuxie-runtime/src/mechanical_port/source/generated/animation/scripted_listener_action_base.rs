@@ -44,7 +44,10 @@ impl ScriptedListenerActionBase {
             return;
         }
         callbacks.script_asset_id_changed();
-        callbacks.notify_property_changed(Self::SCRIPT_ASSET_ID_PROPERTY_KEY);
+        ScriptedListenerActionBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SCRIPT_ASSET_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_script_asset_id_value(&mut self, value: u32) -> bool {

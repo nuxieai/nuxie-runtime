@@ -25,7 +25,7 @@ impl DashEffectPath {
         }
     }
     pub fn create_path_measure(&mut self, source: &RawPath) {
-        self.path_measure = PathMeasure::new(source);
+        self.path_measure = PathMeasure::from_path_default(source);
     }
 }
 impl EffectPath for DashEffectPath {
@@ -90,15 +90,15 @@ pub trait PathDasher {
                     end -= measure.length();
                     if draw {
                         if distance < measure.length() {
-                            measure.get_segment(distance, measure.length(), raw, true);
-                            measure.get_segment(0.0, end, raw, !measure.is_closed());
+                            measure.get_segment(distance, measure.length(), Some(&mut *raw), true);
+                            measure.get_segment(0.0, end, Some(&mut *raw), !measure.is_closed());
                         } else {
-                            measure.get_segment(0.0, end, raw, true);
+                            measure.get_segment(0.0, end, Some(&mut *raw), true);
                         }
                     }
                     distance = end - length;
                 } else if draw {
-                    measure.get_segment(distance, end, raw, true);
+                    measure.get_segment(distance, end, Some(&mut *raw), true);
                 }
                 distance += length;
                 dashed += length;
@@ -108,6 +108,23 @@ pub trait PathDasher {
         destination
     }
 }
+impl std::ops::Deref for DashPath {
+    type Target = DashPathBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for DashPath {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl DashPath {
+    pub const TYPE_KEY: u16 = DashPathBase::TYPE_KEY;
+}
+
 pub struct DashPath {
     pub base: DashPathBase,
     stroke: StrokeEffectState,
@@ -132,8 +149,9 @@ impl DashPath {
             .with_mut(|parent| {
                 parent
                     .as_effects_container_mut()
-                    .map(|container| container.add_stroke_effect(this.clone()))
+                    .map(|container| container.add_stroke_effect(this.clone(), self))
             })
+            .flatten()
             .is_some();
         if !added {
             return StatusCode::InvalidObject;

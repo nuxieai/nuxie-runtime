@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::CoreHandle,
+    core::{CoreHandle, CoreObject},
     generated::animation::keyframe_interpolator_base::KeyFrameInterpolatorBase,
     importers::{
         artboard_importer::ArtboardImporter, backboard_importer::BackboardImporter,
@@ -34,8 +34,8 @@ impl KeyFrameInterpolator {
             )
             .then_some(component)
     }
-    pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
-        let Some(handle) = self.base.base.handle() else {
+    pub fn import(owner: &mut dyn CoreObject, stack: &mut ImportStack) -> StatusCode {
+        let Some(handle) = owner.core().handle() else {
             return StatusCode::MissingObject;
         };
         if let Some(importer) = stack.latest::<ArtboardImporter>(
@@ -45,11 +45,11 @@ impl KeyFrameInterpolator {
         } else if let Some(importer) = stack.latest::<BackboardImporter>(
             crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
         ) {
-            importer.add_interpolator(handle);
+            importer.add_interpolator(owner);
         } else {
             return StatusCode::MissingObject;
         }
-        self.base.base.import(stack)
+        owner.core_mut().import(stack)
     }
     pub fn initialize(&mut self) {}
 }

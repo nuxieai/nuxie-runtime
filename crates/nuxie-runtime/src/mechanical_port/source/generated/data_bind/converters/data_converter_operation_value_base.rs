@@ -45,7 +45,10 @@ impl DataConverterOperationValueBase {
             return;
         }
         callbacks.operation_value_changed();
-        callbacks.notify_property_changed(Self::OPERATION_VALUE_PROPERTY_KEY);
+        DataConverterOperationValueBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OPERATION_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_operation_value_value(&mut self, value: f32) -> bool {

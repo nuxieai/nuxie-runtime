@@ -64,7 +64,7 @@ impl ScriptedInterpolatorBase {
     }
     pub fn copy<C: ScriptedInterpolatorBaseCallbacks>(&mut self, object: &Self, c: &mut C) {
         self.script_asset_id = object.script_asset_id;
-        self.base.base.copy(&object.base.base, c);
+        self.base.base.copy(&object.base.base);
     }
     pub fn deserialize<C: ScriptedInterpolatorBaseCallbacks>(
         &mut self,
@@ -77,7 +77,7 @@ impl ScriptedInterpolatorBase {
                 self.script_asset_id = CoreUintType::deserialize(reader);
                 true
             }
-            _ => self.base.base.deserialize(key, reader, c),
+            _ => self.base.base.deserialize(key, reader),
         }
     }
 }

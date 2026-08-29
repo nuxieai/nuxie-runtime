@@ -53,7 +53,10 @@ impl NSlicedNodeBase {
             return;
         }
         callbacks.initial_width_changed();
-        callbacks.notify_property_changed(Self::INITIAL_WIDTH_PROPERTY_KEY);
+        NSlicedNodeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INITIAL_WIDTH_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_initial_width_value(&mut self, value: f32) -> bool {
@@ -75,7 +78,10 @@ impl NSlicedNodeBase {
             return;
         }
         callbacks.initial_height_changed();
-        callbacks.notify_property_changed(Self::INITIAL_HEIGHT_PROPERTY_KEY);
+        NSlicedNodeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INITIAL_HEIGHT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_initial_height_value(&mut self, value: f32) -> bool {
@@ -93,7 +99,7 @@ impl NSlicedNodeBase {
             return;
         }
         callbacks.width_changed();
-        callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+        NSlicedNodeBaseCallbacks::notify_property_changed(callbacks, Self::WIDTH_PROPERTY_KEY);
     }
 
     pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
@@ -111,7 +117,7 @@ impl NSlicedNodeBase {
             return;
         }
         callbacks.height_changed();
-        callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+        NSlicedNodeBaseCallbacks::notify_property_changed(callbacks, Self::HEIGHT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_height_value(&mut self, value: f32) -> bool {

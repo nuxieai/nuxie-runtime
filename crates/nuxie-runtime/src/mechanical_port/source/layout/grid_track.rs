@@ -2,23 +2,55 @@ use crate::mechanical_port::source::layout::layout_style_applier::{
     GridTrackList, YGGridLine, YGGridTrackSize, YGJustify, YGStyle, YGStyleSizeLength,
 };
 use crate::mechanical_port::source::{
-    component::ContainerComponent, generated::layout::grid_track_base::GridTrackBase,
+    container_component::ContainerComponent, generated::layout::grid_track_base::GridTrackBase,
 };
 
-#[repr(u8)]
-pub enum GridTrackCollection {
-    TemplateColumns,
-    TemplateRows,
-    AutoColumns,
-    AutoRows,
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct GridTrackCollection(u8);
+#[allow(non_upper_case_globals)]
+impl GridTrackCollection {
+    pub const TemplateColumns: Self = Self(0);
+    pub const TemplateRows: Self = Self(1);
+    pub const AutoColumns: Self = Self(2);
+    pub const AutoRows: Self = Self(3);
 }
-#[repr(u8)]
-#[derive(Clone, Copy)]
-pub enum GridTrackSizeType {
-    AutoSize,
-    Points,
-    Percent,
-    Fr,
+impl From<u8> for GridTrackCollection {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
+}
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct GridTrackSizeType(u8);
+#[allow(non_upper_case_globals)]
+impl GridTrackSizeType {
+    pub const AutoSize: Self = Self(0);
+    pub const Points: Self = Self(1);
+    pub const Percent: Self = Self(2);
+    pub const Fr: Self = Self(3);
+}
+impl From<u8> for GridTrackSizeType {
+    fn from(value: u8) -> Self {
+        Self(value)
+    }
+}
+
+impl std::ops::Deref for GridTrack {
+    type Target = GridTrackBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for GridTrack {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl GridTrack {
+    pub const TYPE_KEY: u16 = GridTrackBase::TYPE_KEY;
 }
 
 #[derive(Default)]
@@ -31,11 +63,11 @@ impl GridTrack {
     }
     fn mark_layout_dirty(&mut self) {
         if let Some(parent) = self.base.parent_handle() {
-            parent.with_mut(|parent| {
-                if let Some(layout) = parent.as_layout_component_mut() {
-                    layout.mark_layout_node_dirty(false);
-                }
-            });
+            if parent.is_type_of(
+                crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
+            ) {
+                crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(&parent, false);
+            }
         }
     }
     pub fn collection_changed(&mut self) {
@@ -59,7 +91,7 @@ impl GridTrack {
             GridTrackSizeType::Points => YGStyleSizeLength::points(value),
             GridTrackSizeType::Percent => YGStyleSizeLength::percent(value),
             GridTrackSizeType::Fr => YGStyleSizeLength::stretch(value),
-            GridTrackSizeType::AutoSize => YGStyleSizeLength::auto(),
+            _ => YGStyleSizeLength::auto(),
         }
     }
     fn grid_track_size(track: &GridTrack) -> YGGridTrackSize {
@@ -77,7 +109,7 @@ impl GridTrack {
             GridTrackSizeType::Points => YGGridTrackSize::length(track.base.track_value()),
             GridTrackSizeType::Percent => YGGridTrackSize::percent(track.base.track_value()),
             GridTrackSizeType::Fr => YGGridTrackSize::fr(track.base.track_value()),
-            GridTrackSizeType::AutoSize => YGGridTrackSize::auto(),
+            _ => YGGridTrackSize::auto(),
         }
     }
     fn grid_line(cell: i32) -> YGGridLine {

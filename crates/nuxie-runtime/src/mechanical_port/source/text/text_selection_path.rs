@@ -20,22 +20,21 @@ impl TextSelectionPath {
             self.rectangles.add_rect(*rect);
         }
         self.rectangles.compute_contours();
-        let contours: Vec<_> = self.rectangles.iter().cloned().collect();
-        for contour in &contours {
-            Self::add_rounded_path(contour, radius, self.path.mutable_raw_path());
+        for contour in self.rectangles.contours() {
+            Self::add_rounded_path(&contour, radius, self.path.mutable_raw_path());
         }
     }
     fn add_rounded_path(contour: &Contour, radius: f32, raw: &mut RawPath) {
         let clockwise = contour.is_clockwise();
-        let len = contour.len();
+        let len = contour.size();
         if len < 2 {
             return;
         }
         for i in 0..len {
-            let pos = contour.point(i, !clockwise);
+            let pos = contour.point_reversed(i, !clockwise);
             if radius > 0.0 {
-                let prev = contour.point((i + len - 1) % len, !clockwise);
-                let next = contour.point((i + 1) % len, !clockwise);
+                let prev = contour.point_reversed((i + len - 1) % len, !clockwise);
+                let next = contour.point_reversed((i + 1) % len, !clockwise);
                 let mut to_prev = prev - pos;
                 let lp = to_prev.length();
                 to_prev /= lp;

@@ -4,7 +4,6 @@ use crate::mechanical_port::source::{
     layout_component::Layout,
 };
 
-#[derive(Default)]
 pub struct LayoutData {
     #[cfg(feature = "tools")]
     pub children: Vec<CoreHandle>,
@@ -13,6 +12,22 @@ pub struct LayoutData {
     pub has_new_layout: bool,
     pub dirty: bool,
     pub appliers: Option<Box<Vec<CoreHandle>>>,
+}
+
+impl Default for LayoutData {
+    fn default() -> Self {
+        Self {
+            #[cfg(feature = "tools")]
+            children: Vec::new(),
+            style: YGStyle::default(),
+            // YGNode starts with a default YGLayout: positions are zero and
+            // dimensions are undefined until the first layout calculation.
+            solved_layout: Layout::new(0.0, 0.0, f32::NAN, f32::NAN),
+            has_new_layout: true,
+            dirty: false,
+            appliers: None,
+        }
+    }
 }
 
 impl LayoutData {
@@ -29,21 +44,21 @@ impl LayoutData {
         if appliers.is_empty() {
             return;
         }
-        for applier in appliers {
+        for applier in appliers.iter() {
             applier.with(|applier| {
                 if let Some(applier) = applier.as_layout_style_applier() {
                     applier.apply_base_style(style, context);
                 }
             });
         }
-        for applier in appliers {
+        for applier in appliers.iter() {
             applier.with(|applier| {
                 if let Some(applier) = applier.as_layout_style_applier() {
                     applier.apply_container_style(style, context);
                 }
             });
         }
-        for applier in appliers {
+        for applier in appliers.iter() {
             applier.with(|applier| {
                 if let Some(applier) = applier.as_layout_style_applier() {
                     applier.apply_item_style(style, context);

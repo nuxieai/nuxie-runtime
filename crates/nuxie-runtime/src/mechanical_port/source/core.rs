@@ -22,6 +22,15 @@ pub mod vector_binary_writer;
 
 pub type CoreTypeKey = u16;
 
+/// The generated C++ `T::typeKey` used by `Core::is<T>()`.
+///
+/// This belongs to source types, including abstract base owners, rather than
+/// object instances. Type queries can therefore use an occurrence's cached
+/// subtype predicate without constructing or borrowing an owner.
+pub trait CoreType {
+    const TYPE_KEY: CoreTypeKey;
+}
+
 /// Dynamic behavior retained by one arena-owned Rive object occurrence.
 ///
 /// Concrete owners implement this together with `CoreRegistryObject`. The
@@ -32,6 +41,10 @@ pub trait CoreObject: CoreRegistryObject + Any {
     fn core_mut(&mut self) -> &mut Core;
     fn core_type(&self) -> CoreTypeKey;
     fn is_type_of(&self, type_key: CoreTypeKey) -> bool;
+    /// The generated type test is immutable vtable metadata. Retaining its
+    /// function permits a base method to query its dynamic type while the
+    /// concrete owner is already borrowed for that same method invocation.
+    fn type_predicate(&self) -> fn(CoreTypeKey) -> bool;
     fn deserialize(&mut self, property_key: u16, reader: &mut BinaryReader<'_>) -> bool;
     fn clone_boxed(&self) -> Option<Box<dyn CoreObject>> {
         None
@@ -44,6 +57,25 @@ pub trait CoreObject: CoreRegistryObject + Any {
         .unwrap_or_else(|| self.core_mut().validate(context))
     }
     fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        // C++ permits a malformed-but-valid ContainerComponent to name itself
+        // as its parent. Component::onAddedDirty installs that self edge before
+        // the derived lifecycle method continues. Do the same through the
+        // already-borrowed concrete owner: following its CoreHandle here would
+        // reborrow this arena slot and panic instead of preserving the C++
+        // object graph.
+        if let Some(this) = self
+            .as_component_mut()
+            .and_then(|component| component.prepare_self_parent_on_added_dirty(context))
+        {
+            if let Some(range) = self
+                .as_registry_any_mut()
+                .downcast_mut::<crate::mechanical_port::source::text::text_modifier_range::TextModifierRange>()
+            {
+                range.add_child(this);
+            } else if let Some(container) = self.as_container_component_mut() {
+                container.add_child(this);
+            }
+        }
         crate::mechanical_port::source::generated::core_registry::CoreCapabilities::lifecycle_on_added_dirty(
             self,
             context,
@@ -90,6 +122,7 @@ struct CoreArenaSlot {
     generation: Cell<u64>,
     occupied: Cell<bool>,
     core_type: Cell<CoreTypeKey>,
+    type_predicate: Cell<Option<fn(CoreTypeKey) -> bool>>,
     component_graph_order: Cell<Option<u32>>,
     artboard_dirty:
         RefCell<Option<crate::mechanical_port::source::artboard::RuntimeArtboardDirtyHandle>>,
@@ -107,6 +140,7 @@ impl CoreArenaSlot {
             generation: Cell::new(0),
             occupied: Cell::new(false),
             core_type: Cell::new(0),
+            type_predicate: Cell::new(None),
             component_graph_order: Cell::new(None),
             artboard_dirty: RefCell::new(None),
             data_bind_container: RefCell::new(None),
@@ -173,6 +207,9 @@ impl CoreArena {
         let slot = Rc::new(CoreArenaSlot::vacant());
         slot.core_type
             .set(crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY);
+        slot.type_predicate.set(Some(
+            crate::mechanical_port::source::generated::artboard_base::ArtboardBase::is_type_of,
+        ));
         slot.occupied.set(true);
         if let Some(root) = artboard.upgrade() {
             let root = root.borrow();
@@ -183,6 +220,7 @@ impl CoreArena {
         inner.slots.push(slot);
         CoreHandle {
             arena: self.inner.clone(),
+            slot: Rc::downgrade(&inner.slots[index]),
             index,
             generation: 0,
         }
@@ -207,10 +245,12 @@ impl CoreArena {
         let generation = slot.generation.get();
         let handle = CoreHandle {
             arena: self.inner.clone(),
+            slot: Rc::downgrade(&slot),
             index,
             generation,
         };
         slot.core_type.set(value.core_type());
+        slot.type_predicate.set(Some(value.type_predicate()));
         slot.component_graph_order.set(
             value
                 .as_component()
@@ -297,6 +337,7 @@ impl CoreArena {
 #[derive(Clone)]
 pub struct CoreHandle {
     arena: Weak<RefCell<CoreArenaInner>>,
+    slot: Weak<CoreArenaSlot>,
     index: usize,
     generation: u64,
 }
@@ -337,9 +378,7 @@ impl CoreHandle {
     }
 
     fn slot(&self) -> Option<Rc<CoreArenaSlot>> {
-        let arena = self.arena.upgrade()?;
-        let inner = arena.borrow();
-        let slot = Rc::clone(inner.slots.get(self.index)?);
+        let slot = self.slot.upgrade()?;
         (slot.generation.get() == self.generation).then_some(slot)
     }
 
@@ -355,13 +394,43 @@ impl CoreHandle {
     }
 
     pub fn is_type_of(&self, type_key: CoreTypeKey) -> bool {
-        self.with(|object| object.is_type_of(type_key))
-            .unwrap_or(false)
+        let Some(slot) = self.slot() else {
+            return false;
+        };
+        let is_alive = slot.occupied.get()
+            && slot
+                .runtime_artboard
+                .borrow()
+                .as_ref()
+                .is_none_or(|root| root.strong_count() > 0);
+        if !is_alive {
+            return false;
+        }
+        slot.type_predicate
+            .get()
+            .is_some_and(|predicate| predicate(type_key))
     }
 
     pub fn core_type(&self) -> Option<CoreTypeKey> {
         let slot = self.slot()?;
         slot.occupied.get().then(|| slot.core_type.get())
+    }
+
+    /// Retain the existing artboard occurrence represented by this arena slot.
+    /// This does not instantiate or copy a definition.
+    pub(crate) fn runtime_artboard_instance(
+        &self,
+    ) -> Option<crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle> {
+        let slot = self.slot()?;
+        if !slot.occupied.get() {
+            return None;
+        }
+        let instance = slot.runtime_artboard.borrow().as_ref()?.upgrade()?;
+        Some(
+            crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(
+                instance,
+            ),
+        )
     }
 
     pub fn with<R>(&self, f: impl FnOnce(&dyn CoreObject) -> R) -> Option<R> {
@@ -471,6 +540,7 @@ impl std::fmt::Debug for CoreHandle {
 
 pub struct Core {
     handle: Option<CoreHandle>,
+    type_metadata: Option<(CoreTypeKey, fn(CoreTypeKey) -> bool)>,
     observers: Vec<CoreHandle>,
 }
 
@@ -478,6 +548,7 @@ impl Default for Core {
     fn default() -> Self {
         Self {
             handle: None,
+            type_metadata: None,
             observers: Vec::new(),
         }
     }
@@ -498,15 +569,27 @@ impl Core {
     }
 
     pub fn set_handle(&mut self, handle: CoreHandle) {
+        let slot = handle
+            .slot()
+            .expect("installing a concrete Core occurrence");
+        self.type_metadata = Some((
+            slot.core_type.get(),
+            slot.type_predicate.get().expect("concrete type predicate"),
+        ));
         self.handle = Some(handle);
     }
 
     pub fn core_type(&self) -> u16 {
-        panic!("abstract Core::core_type");
+        self.type_metadata
+            .expect("dynamic type requires a concrete Core occurrence")
+            .0
     }
 
-    pub fn is_type_of(&self, _type_key: u16) -> bool {
-        panic!("abstract Core::is_type_of");
+    pub fn is_type_of(&self, type_key: u16) -> bool {
+        let (_, predicate) = self
+            .type_metadata
+            .expect("dynamic type requires a concrete Core occurrence");
+        predicate(type_key)
     }
 
     pub fn deserialize(&mut self, _property_key: u16, _reader: &mut BinaryReader<'_>) -> bool {

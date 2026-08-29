@@ -108,53 +108,51 @@ run the canonical performance acceptance once against the complete port.
 
 ## 1. Ownership & Type Mappings
 
-### 1.1 `rcp<T>` / reference counting → arena ownership + dense slots
+### 1.1 `rcp<T>` / reference counting → `CoreArena` ownership
 
-C++ heap objects are `rcp<Core>` with per-object reference counting. In Rust the
-`ArtboardInstance` is the **sole owner** of a flat arena; objects are plain `Vec`
-entries addressed by a dense `local_id` index. No `Rc`/`Arc` per object.
+C++ heap objects are `rcp<Core>` with per-object reference counting. Rust keeps
+each imported occurrence in a `CoreArena` slot and refers to it through a
+`CoreHandle`. A handle contains a weak arena reference, slot index, and
+generation; it cannot keep an object cycle alive, and a handle to a retired slot
+stays stale even if the slot is reused.
 
 ```rust
-// crates/nuxie-runtime/src/objects.rs:61
-pub(crate) struct InstanceObjectArena {
-    objects: Vec<Option<InstanceObjectStorage>>,   // indexed by dense local_id
+// crates/nuxie-runtime/src/mechanical_port/source/core.rs
+pub struct CoreHandle {
+    arena: Weak<RefCell<CoreArenaInner>>,
+    index: usize,
+    generation: u64,
 }
 ```
 
-`ArtboardInstance` (`crates/nuxie-runtime/src/artboard.rs:61`) holds `slots`,
-`objects`, and `components` side by side, each a `Vec` indexed by `local_id`.
-Lifetime is the arena's lifetime; there is no shared ownership to reason about.
+Each slot owns one source-shaped `CoreObject`. Runtime artboard instances retain
+the arena strongly while cross-object relationships retain handles. This is the
+live native object model; the old `GraphFile` projection is validation debt and
+must not be used when porting runtime behavior.
 
-**Rule:** when C++ hands out an `rcp<T>` or stores a `T*`, store the object in
-the arena and pass its `local_id` (see 1.2). Cloning an artboard clones the
-arena, not a graph of refcounts.
+**Rule:** when C++ retains an `rcp<T>` or `T*`, resolve whether the source owner
+retains the occurrence. Store imported occurrences in the arena, keep a
+`CoreHandle` for cross-object identity, and preserve source nullability with
+`Option<CoreHandle>` where the generated/source owner permits null.
 
-### 1.2 Raw pointer graphs → typed indices (`local_id` / `global_id`)
+### 1.2 Raw pointer relationships → `CoreHandle`
 
-C++ `Component* parent()`, `std::vector<Component*> children`, and `m_Dependents`
-back-references become index fields. There are two id spaces:
-
-- **`local_id: usize`** — dense index within one artboard's arena.
-- **`global_id: u32`** — index into the whole file's object table.
+C++ `Component* parent()`, child vectors, constraints, dependents, and authored
+object references become handles to occurrences in the same arena. Serialized
+object ids remain `u32` fields on generated bases during decode, then importers
+resolve them through `CoreContext::resolve_handle` into live `CoreHandle`
+relationships.
 
 ```rust
-// crates/nuxie-graph/src/lib.rs:325
-pub struct ComponentNode {
-    pub local_id: usize,
-    pub global_id: u32,
-    pub parent_local: Option<usize>,     // was: Component* parent()
-    pub children: Vec<usize>,            // was: std::vector<Component*>
-    pub constraint_locals: Vec<usize>,
-    pub dependent_locals: Vec<usize>,    // was: m_Dependents
-    ...
-}
+// crates/nuxie-runtime/src/mechanical_port/source/component.rs
+self.parent = context.resolve(self.base.parent_id());
 ```
 
-These are plain `usize`/`u32`, **not** distinct newtypes — the `local_`/`global_`
-prefix and field position encode which table each index addresses. A null pointer
-becomes `Option<usize>`; an empty child list becomes an empty `Vec`. When you
-port a C++ traversal, translate `->` chases into arena lookups by the stored
-index, and translate `nullptr` checks into `Option` matches (see 3.1).
+A null pointer becomes `Option<CoreHandle>` and an empty pointer vector becomes
+an empty handle vector. Port traversals by calling the corresponding
+source-shaped owner method and borrowing the resolved handle with `with` or
+`with_mut`; do not reconstruct a parallel graph projection or treat serialized
+ids as runtime occurrence identities (see 3.1).
 
 ### 1.3 Virtual dispatch → enum+match *or* trait
 
@@ -1394,6 +1392,13 @@ lifecycle. They apply to the complete runtime frame loop through the existing
   visitation and keeps the context-install and init passes separate
   (`include/rive/animation/state_machine_instance.hpp:399-402`;
   `src/animation/state_machine_instance.cpp:2072-2082,2886-2913`).
+The following preserved decision identifiers are defined locally now that the
+superseded parity register is gone: **D3** is the approved Taffy/layout-engine
+adaptation, **D16** is the pluggable Rust profiler-capture backend, **D17** is
+the Symphonia/native-audio decoded-PCM and resampling adaptation, and **D18**
+is the concrete Lua GPU platform adapter. Their exact ceilings are defined
+below; the identifiers remain stable citations and do not imply a live ledger.
+
 - **FLR-20 Declare support ceilings as decisions; never call them faithful.**
   A direct Rust owner can close a file-correspondence row even when the product
   intentionally stops below the complete pinned C++ surface, but only as

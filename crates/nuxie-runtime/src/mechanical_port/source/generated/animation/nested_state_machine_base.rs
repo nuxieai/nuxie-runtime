@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
-    animation::nested_state_machine::NestedStateMachine, core::binary_reader::BinaryReader,
     animation::nested_animation::NestedAnimation,
+    animation::nested_state_machine::NestedStateMachine, core::binary_reader::BinaryReader,
 };
 
 pub struct NestedStateMachineBase {
@@ -26,7 +26,9 @@ impl NestedStateMachineBase {
     }
     pub fn clone_into(&self) -> NestedStateMachine {
         let mut cloned = NestedStateMachine::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

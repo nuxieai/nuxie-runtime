@@ -40,7 +40,7 @@ impl ListPathBase {
             return;
         }
         callbacks.list_source_changed();
-        callbacks.notify_property_changed(Self::LIST_SOURCE_PROPERTY_KEY);
+        ListPathBaseCallbacks::notify_property_changed(callbacks, Self::LIST_SOURCE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_list_source_value(&mut self, value: u32) -> bool {

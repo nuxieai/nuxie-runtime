@@ -43,7 +43,7 @@ impl AxisBase {
             return;
         }
         callbacks.offset_changed();
-        callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+        AxisBaseCallbacks::notify_property_changed(callbacks, Self::OFFSET_PROPERTY_KEY);
     }
 
     pub(crate) fn set_offset_value(&mut self, value: f32) -> bool {
@@ -61,7 +61,7 @@ impl AxisBase {
             return;
         }
         callbacks.normalized_changed();
-        callbacks.notify_property_changed(Self::NORMALIZED_PROPERTY_KEY);
+        AxisBaseCallbacks::notify_property_changed(callbacks, Self::NORMALIZED_PROPERTY_KEY);
     }
 
     pub(crate) fn set_normalized_value(&mut self, value: bool) -> bool {

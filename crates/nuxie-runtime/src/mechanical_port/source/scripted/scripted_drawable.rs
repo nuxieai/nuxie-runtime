@@ -141,9 +141,7 @@ impl ScriptedDrawable {
     }
 
     pub fn will_draw(&self) -> bool {
-        self.base.base.will_draw()
-            && self.scripted.runtime_instance().is_some()
-            && self.scripted.draws()
+        self.base.base.will_draw() && self.scripted.draws()
     }
 
     pub fn advance_occurrence(
@@ -204,7 +202,21 @@ impl ScriptedDrawable {
     pub fn add_property(&mut self, property: CoreHandle) {
         let owner = CoreObject::core(self).handle();
         property.with_mut(|property| property.script_input_set_scripted_object(owner));
-        self.properties.push(property);
+        if !self.properties.contains(&property) {
+            self.properties.push(property);
+        }
+    }
+
+    pub(crate) fn add_property_from_input(
+        &mut self,
+        property: CoreHandle,
+        input: &mut crate::mechanical_port::source::assets::script_asset::ScriptInput,
+    ) {
+        input.attach_to_container(
+            CoreObject::core(self).handle(),
+            property,
+            &mut self.properties,
+        );
     }
     pub fn remove_property(&mut self, property: &CoreHandle) {
         self.properties.retain(|item| item != property)

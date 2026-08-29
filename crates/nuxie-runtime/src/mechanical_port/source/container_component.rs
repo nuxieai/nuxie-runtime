@@ -28,6 +28,12 @@ impl ContainerComponent {
         &self.children
     }
 
+    pub fn children_typed<T: crate::mechanical_port::source::core::CoreType>(
+        &self,
+    ) -> crate::mechanical_port::source::typed_children::TypedChildren<'_, T> {
+        crate::mechanical_port::source::typed_children::TypedChildren::from_handles(&self.children)
+    }
+
     pub fn add_child(&mut self, component: CoreHandle) {
         self.component_children.push(component.clone().into());
         self.children.push(component);
@@ -52,34 +58,37 @@ impl ContainerComponent {
         }
     }
 
-    pub fn for_all(&mut self, mut predicate: impl FnMut(CoreHandle) -> bool) -> bool {
-        let Some(this) = self.base.base.base.base.handle() else {
-            return false;
-        };
-        if !predicate(this) {
+    pub fn for_all(this: &CoreHandle, mut predicate: impl FnMut(CoreHandle) -> bool) -> bool {
+        if !predicate(this.clone()) {
             return false;
         }
-        self.for_each_child(predicate);
+        Self::for_each_child(this, predicate);
         true
     }
 
-    pub fn for_each_child(&mut self, mut predicate: impl FnMut(CoreHandle) -> bool) {
-        Self::for_each_child_with(&self.children, &mut predicate);
+    pub fn for_each_child(this: &CoreHandle, mut predicate: impl FnMut(CoreHandle) -> bool) {
+        Self::for_each_child_with(this, &mut predicate);
     }
 
-    fn for_each_child_with(
-        children: &[CoreHandle],
-        predicate: &mut impl FnMut(CoreHandle) -> bool,
-    ) {
-        for child in children.iter().cloned() {
+    fn for_each_child_with(this: &CoreHandle, predicate: &mut impl FnMut(CoreHandle) -> bool) {
+        // C++ callbacks may mutate the visited object. Release its arena borrow
+        // before invoking them, retaining only the ordered child identities.
+        let children = this
+            .with(|object| {
+                object
+                    .as_container_component()
+                    .expect("ContainerComponent traversal owner")
+                    .children
+                    .clone()
+            })
+            .expect("live ContainerComponent traversal owner");
+        for child in children {
             if !predicate(child.clone()) {
                 continue;
             }
-            child.with_mut(|child| {
-                if let Some(container) = child.as_container_component_mut() {
-                    Self::for_each_child_with(&container.children, predicate);
-                }
-            });
+            if child.is_type_of(ContainerComponentBase::TYPE_KEY) {
+                Self::for_each_child_with(&child, predicate);
+            }
         }
     }
 

@@ -47,7 +47,10 @@ impl ListenerInputChangeBase {
             return;
         }
         callbacks.input_id_changed();
-        callbacks.notify_property_changed(Self::INPUT_ID_PROPERTY_KEY);
+        ListenerInputChangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::INPUT_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_input_id_value(&mut self, value: u32) -> bool {
@@ -69,7 +72,10 @@ impl ListenerInputChangeBase {
             return;
         }
         callbacks.nested_input_id_changed();
-        callbacks.notify_property_changed(Self::NESTED_INPUT_ID_PROPERTY_KEY);
+        ListenerInputChangeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::NESTED_INPUT_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_nested_input_id_value(&mut self, value: u32) -> bool {

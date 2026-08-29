@@ -9,6 +9,10 @@ pub struct FileAssetReferencer {
 }
 
 impl FileAssetReferencer {
+    pub fn has_asset(&self) -> bool {
+        self.file_asset.is_some()
+    }
+
     pub fn asset(&self) -> Option<CoreHandle> {
         self.file_asset.clone()
     }

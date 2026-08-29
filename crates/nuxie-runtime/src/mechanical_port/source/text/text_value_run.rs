@@ -1,5 +1,10 @@
-use super::{text::Text, text_style_paint::TextStylePaint, utf::Utf};
+use super::{
+    text::{Text, TextValueRunHandle},
+    text_style_paint::TextStylePaint,
+    utf::Utf,
+};
 use crate::mechanical_port::source::{
+    command_path::CommandPath,
     component::Component,
     core::CoreHandle,
     core_context::CoreContext,
@@ -8,6 +13,23 @@ use crate::mechanical_port::source::{
     math::{aabb::Aabb, mat2d::Mat2D, rectangles_to_contour::RectanglesToContour, vec2d::Vec2D},
     status_code::StatusCode,
 };
+impl std::ops::Deref for TextValueRun {
+    type Target = TextValueRunBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextValueRun {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextValueRun {
+    pub const TYPE_KEY: u16 = TextValueRunBase::TYPE_KEY;
+}
+
 pub struct TextValueRun {
     pub base: TextValueRunBase,
     rectangles: Option<Box<RectanglesToContour>>,
@@ -64,6 +86,18 @@ impl TextValueRun {
             .base
             .notify_property_changed(TextValueRunBase::TEXT_PROPERTY_KEY);
     }
+    pub fn set_bound_text_with_borrowed_text(&mut self, value: String, text: &mut Text) {
+        if !self.base.set_text_value(value) {
+            return;
+        }
+        self.length = u32::MAX;
+        text.mark_shape_dirty();
+        self.base
+            .base
+            .base
+            .base
+            .notify_property_changed(TextValueRunBase::TEXT_PROPERTY_KEY);
+    }
     pub fn text_changed(&mut self) {
         self.length = u32::MAX;
         if let Some(text) = self.text_component() {
@@ -77,9 +111,9 @@ impl TextValueRun {
     pub fn text_component(&self) -> Option<CoreHandle> {
         self.text_component.clone().or_else(|| {
             self.base.parent_handle().filter(|parent| {
-                parent
-                    .with(|parent| parent.as_text().is_some())
-                    .unwrap_or(false)
+                parent.is_type_of(
+                    crate::mechanical_port::source::generated::text::text_base::TextBase::TYPE_KEY,
+                )
             })
         })
     }
@@ -110,8 +144,7 @@ impl TextValueRun {
         }
         let Some(style) = context.resolve(self.base.style_id()).filter(|style| {
             style
-                .with(|style| style.as_text_style().is_some())
-                .unwrap_or(false)
+                .is_type_of(crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY)
         }) else {
             return StatusCode::MissingObject;
         };
@@ -124,8 +157,7 @@ impl TextValueRun {
             .with_artboard(|artboard| {
                 artboard.resolve(self.base.style_id()).filter(|style| {
                     style
-                        .with(|style| style.as_text_style().is_some())
-                        .unwrap_or(false)
+                        .is_type_of(crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY)
                 })
             })
             .flatten()
@@ -159,29 +191,43 @@ impl TextValueRun {
         self.length
     }
     pub fn offset(&mut self) -> u32 {
-        let Some(this) = self.base.handle() else {
+        if self.base.handle().is_none() {
             return 0;
-        };
-        let mut offset = 0;
+        }
         let runs = self
             .text_component()
             .and_then(|text| text.with(|text| text.as_text().map(|text| text.runs().to_vec())))
             .flatten()
             .unwrap_or_default();
+        self.offset_in_runs(&runs)
+    }
+    pub fn offset_with_borrowed_text(&mut self, text: &Text) -> u32 {
+        if matches!((self.text_component(), text.base.handle()), (Some(run_text), Some(owner)) if run_text == owner)
+        {
+            // Text is already updating this modifier. Read that same owner's
+            // run list directly, preserving the source's immediate length walk.
+            self.offset_in_runs(text.runs())
+        } else {
+            // A range may reference a run belonging to a different Text owner.
+            self.offset()
+        }
+    }
+    fn offset_in_runs(&mut self, runs: &[TextValueRunHandle]) -> u32 {
+        let Some(this) = self.base.handle() else {
+            return 0;
+        };
+        let mut offset = 0;
         for run in runs {
-            if run == this {
+            if matches!(run, TextValueRunHandle::Core(handle) if handle == &this) {
                 break;
             }
-            offset += run
-                .with_mut(|run| run.as_text_value_run_mut().map(TextValueRun::length))
-                .flatten()
-                .unwrap_or(0);
+            offset += run.with_mut(TextValueRun::length).unwrap_or(0);
         }
         offset
     }
     fn can_hit_test(&self) -> bool {
         self.is_hit_target
-            && (self.text_component.is_some() || self.base.parent_as_text().is_some())
+            && self.text_component().is_some()
             && !self.local_bounds.is_empty_or_nan()
     }
     pub fn reset_hit_test(&mut self) {
@@ -189,8 +235,8 @@ impl TextValueRun {
         self.local_bounds = Aabb::for_expansion();
     }
     pub fn add_hit_rect(&mut self, rect: Aabb) {
-        Aabb::expand_to(&mut self.local_bounds, rect.min());
-        Aabb::expand_to(&mut self.local_bounds, rect.max());
+        Aabb::expand_to_point(&mut self.local_bounds, rect.min());
+        Aabb::expand_to_point(&mut self.local_bounds, rect.max());
         self.glyph_hit_rects.push(rect);
     }
     pub fn compute_hit_contours(&mut self) {
@@ -212,20 +258,19 @@ impl TextValueRun {
                 text.with(|text| {
                     let text = text.as_text()?;
                     if !text.overflow_visible() {
-                        let inv = text.world_transform().inverse()?;
+                        let mut inv = Mat2D::default();
+                        if !text.world_transform().invert(&mut inv) {
+                            return Some(false);
+                        }
                         if !text.local_bounds().contains(inv * position) {
                             return Some(false);
                         }
                     }
                     let world = *text.world_transform() * text.internal_transform();
-                    Some(
-                        world
-                            .inverse()
-                            .is_some_and(|inv| self.local_bounds.contains(inv * position)),
-                    )
+                    let mut inv = Mat2D::default();
+                    Some(world.invert(&mut inv) && self.local_bounds.contains(inv * position))
                 })
             })
-            .flatten()
             .flatten()
             .unwrap_or(false)
     }
@@ -258,10 +303,10 @@ impl TextValueRun {
             .rectangles
             .as_ref()
             .expect("computed hit contours")
-            .iter()
+            .contours()
         {
             let mut points = contour.iter();
-            let first = *points.next().expect("non-empty hit contour");
+            let first = points.next().expect("non-empty hit contour");
             tester.move_to(first.x, first.y);
             for point in points {
                 tester.line_to(point.x, point.y);

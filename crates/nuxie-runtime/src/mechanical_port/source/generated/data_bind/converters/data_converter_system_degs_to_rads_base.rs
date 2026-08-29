@@ -27,7 +27,9 @@ impl DataConverterSystemDegsToRadsBase {
     }
     pub fn clone_into(&self) -> DataConverterSystemDegsToRads {
         let mut cloned = DataConverterSystemDegsToRads::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

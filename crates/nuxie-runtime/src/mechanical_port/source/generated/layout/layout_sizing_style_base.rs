@@ -95,7 +95,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.min_width_changed();
-        callbacks.notify_property_changed(Self::MIN_WIDTH_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_WIDTH_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_min_width_value(&mut self, value: f32) -> bool {
@@ -117,7 +120,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.max_width_changed();
-        callbacks.notify_property_changed(Self::MAX_WIDTH_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_WIDTH_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_max_width_value(&mut self, value: f32) -> bool {
@@ -139,7 +145,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.min_height_changed();
-        callbacks.notify_property_changed(Self::MIN_HEIGHT_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_HEIGHT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_min_height_value(&mut self, value: f32) -> bool {
@@ -161,7 +170,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.max_height_changed();
-        callbacks.notify_property_changed(Self::MAX_HEIGHT_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_HEIGHT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_max_height_value(&mut self, value: f32) -> bool {
@@ -183,7 +195,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.layout_width_scale_type_changed();
-        callbacks.notify_property_changed(Self::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_layout_width_scale_type_value(&mut self, value: u8) -> bool {
@@ -205,7 +220,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.layout_height_scale_type_changed();
-        callbacks.notify_property_changed(Self::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_layout_height_scale_type_value(&mut self, value: u8) -> bool {
@@ -227,7 +245,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.width_units_value_changed();
-        callbacks.notify_property_changed(Self::WIDTH_UNITS_VALUE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::WIDTH_UNITS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_width_units_value_value(&mut self, value: u8) -> bool {
@@ -249,7 +270,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.height_units_value_changed();
-        callbacks.notify_property_changed(Self::HEIGHT_UNITS_VALUE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::HEIGHT_UNITS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_height_units_value_value(&mut self, value: u8) -> bool {
@@ -271,7 +295,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.min_width_units_value_changed();
-        callbacks.notify_property_changed(Self::MIN_WIDTH_UNITS_VALUE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_WIDTH_UNITS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_min_width_units_value_value(&mut self, value: u8) -> bool {
@@ -293,7 +320,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.max_width_units_value_changed();
-        callbacks.notify_property_changed(Self::MAX_WIDTH_UNITS_VALUE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_WIDTH_UNITS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_max_width_units_value_value(&mut self, value: u8) -> bool {
@@ -315,7 +345,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.min_height_units_value_changed();
-        callbacks.notify_property_changed(Self::MIN_HEIGHT_UNITS_VALUE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_HEIGHT_UNITS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_min_height_units_value_value(&mut self, value: u8) -> bool {
@@ -337,7 +370,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.max_height_units_value_changed();
-        callbacks.notify_property_changed(Self::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_max_height_units_value_value(&mut self, value: u8) -> bool {
@@ -359,7 +395,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.justify_self_value_changed();
-        callbacks.notify_property_changed(Self::JUSTIFY_SELF_VALUE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::JUSTIFY_SELF_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_justify_self_value_value(&mut self, value: u8) -> bool {
@@ -381,7 +420,10 @@ impl LayoutSizingStyleBase {
             return;
         }
         callbacks.display_value_changed();
-        callbacks.notify_property_changed(Self::DISPLAY_VALUE_PROPERTY_KEY);
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DISPLAY_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_display_value_value(&mut self, value: u8) -> bool {
@@ -432,43 +474,43 @@ impl LayoutSizingStyleBase {
                 true
             }
             Self::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY => {
-                self.layout_width_scale_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.layout_width_scale_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY => {
-                self.layout_height_scale_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.layout_height_scale_type = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::WIDTH_UNITS_VALUE_PROPERTY_KEY => {
-                self.width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::HEIGHT_UNITS_VALUE_PROPERTY_KEY => {
-                self.height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::MIN_WIDTH_UNITS_VALUE_PROPERTY_KEY => {
-                self.min_width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.min_width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::MAX_WIDTH_UNITS_VALUE_PROPERTY_KEY => {
-                self.max_width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.max_width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::MIN_HEIGHT_UNITS_VALUE_PROPERTY_KEY => {
-                self.min_height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.min_height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY => {
-                self.max_height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.max_height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::JUSTIFY_SELF_VALUE_PROPERTY_KEY => {
-                self.justify_self_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.justify_self_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::DISPLAY_VALUE_PROPERTY_KEY => {
-                self.display_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.display_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

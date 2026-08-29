@@ -54,7 +54,7 @@ impl StrokeBase {
             return;
         }
         callbacks.thickness_changed();
-        callbacks.notify_property_changed(Self::THICKNESS_PROPERTY_KEY);
+        StrokeBaseCallbacks::notify_property_changed(callbacks, Self::THICKNESS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_thickness_value(&mut self, value: f32) -> bool {
@@ -72,7 +72,7 @@ impl StrokeBase {
             return;
         }
         callbacks.cap_changed();
-        callbacks.notify_property_changed(Self::CAP_PROPERTY_KEY);
+        StrokeBaseCallbacks::notify_property_changed(callbacks, Self::CAP_PROPERTY_KEY);
     }
 
     pub(crate) fn set_cap_value(&mut self, value: u32) -> bool {
@@ -90,7 +90,7 @@ impl StrokeBase {
             return;
         }
         callbacks.join_changed();
-        callbacks.notify_property_changed(Self::JOIN_PROPERTY_KEY);
+        StrokeBaseCallbacks::notify_property_changed(callbacks, Self::JOIN_PROPERTY_KEY);
     }
 
     pub(crate) fn set_join_value(&mut self, value: u32) -> bool {
@@ -112,7 +112,10 @@ impl StrokeBase {
             return;
         }
         callbacks.transform_affects_stroke_changed();
-        callbacks.notify_property_changed(Self::TRANSFORM_AFFECTS_STROKE_PROPERTY_KEY);
+        StrokeBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TRANSFORM_AFFECTS_STROKE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_transform_affects_stroke_value(&mut self, value: bool) -> bool {

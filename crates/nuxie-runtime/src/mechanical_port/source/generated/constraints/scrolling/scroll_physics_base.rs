@@ -43,7 +43,10 @@ impl ScrollPhysicsBase {
             return;
         }
         callbacks.constraint_id_changed();
-        callbacks.notify_property_changed(Self::CONSTRAINT_ID_PROPERTY_KEY);
+        ScrollPhysicsBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::CONSTRAINT_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_constraint_id_value(&mut self, value: u32) -> bool {

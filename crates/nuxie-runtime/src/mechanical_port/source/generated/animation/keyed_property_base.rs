@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    animation::keyed_property::KeyedProperty, core::binary_reader::BinaryReader, core::Core,
+    animation::keyed_property::KeyedProperty, core::Core, core::binary_reader::BinaryReader,
 };
 
 pub trait KeyedPropertyBaseCallbacks {
@@ -16,7 +16,7 @@ impl Default for KeyedPropertyBase {
     fn default() -> Self {
         Self {
             base: Core::default(),
-            property_key: Core::invalidPropertyKey,
+            property_key: Core::INVALID_PROPERTY_KEY as u32,
         }
     }
 }

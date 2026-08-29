@@ -7,7 +7,24 @@ use crate::mechanical_port::source::{
     generated::shapes::points_path_base::PointsPathBase,
     math::mat2d::Mat2D,
 };
-static IDENTITY: Mat2D = Mat2D::IDENTITY;
+static IDENTITY: Mat2D = Mat2D::identity();
+impl std::ops::Deref for PointsPath {
+    type Target = PointsPathBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for PointsPath {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl PointsPath {
+    pub const TYPE_KEY: u16 = PointsPathBase::TYPE_KEY;
+}
+
 pub struct PointsPath {
     pub base: PointsPathBase,
     skinnable: Skinnable,
@@ -68,13 +85,14 @@ impl PointsPath {
     }
     pub fn mark_path_dirty(&mut self, _send_to_layout: bool) {
         if let Some(skin) = self.skin() {
-            skin.with_mut(|skin| {
-                if let Some(skin) = skin.as_component_mut() {
-                    skin.add_dirt(ComponentDirt::SKIN, true);
-                }
-            });
+            skin.with_downcast_mut::<Skin, _>(|skin| skin.add_dirt_from_points_path(self))
+                .expect("a retained PointsPath skin remains a Skin");
         }
-        self.base.super_mark_path_dirty();
+        self.base.base.base.mark_path_dirty(true);
+    }
+    pub(crate) fn mark_skin_dirty_from_skin(&mut self, skin: &mut Skin) {
+        skin.add_dirt_from_points_path(self);
+        self.base.base.base.mark_path_dirty(true);
     }
     pub fn mark_skin_dirty(&mut self) {
         self.mark_path_dirty(true);

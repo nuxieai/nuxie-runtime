@@ -1,192 +1,195 @@
-//! Direct ports of both cases in pinned
-//! `tests/unit_tests/runtime/data_binding_fonts_test.cpp`.
+//! Direct ports of both pinned `data_binding_fonts_test.cpp` cases.
+use std::{path::PathBuf, rc::Rc};
 
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-
-use nuxie_binary::{RuntimeFile, read_runtime_file};
-use nuxie_graph::{ArtboardGraph, GraphFile};
-use nuxie_render_api::RecordingFactory;
+use nuxie_render_api::{Factory, PersistentFactory, SerializingFactory};
+use nuxie_runtime::source::{
+    animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
+    math::vec2d::Vec2D,
+    text::font_hb::HbFont,
+    text_engine::FontRef,
+    viewmodel::{
+        viewmodel_instance::ViewModelInstance,
+        viewmodel_instance_asset_font::ViewModelInstanceAssetFont,
+    },
+};
 use nuxie_runtime::{
-    ArtboardInstance, RuntimeFileAssetOwners, RuntimeOwnedViewModelHandle,
-    RuntimeOwnedViewModelInstance,
+    CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
 };
 
-fn pinned_fixture(name: &str) -> Vec<u8> {
+use nuxie_sriv as sriv;
+
+fn pinned_path(relative: &str) -> PathBuf {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
-    let fixture = PathBuf::from(root)
-        .join("tests/unit_tests/assets")
-        .join(name);
-    std::fs::read(&fixture)
-        .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", fixture.display()))
+    PathBuf::from(root).join("tests/unit_tests").join(relative)
+}
+fn pinned_fixture(name: &str) -> Vec<u8> {
+    let path = pinned_path(&format!("assets/{name}"));
+    std::fs::read(&path)
+        .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
 }
 
-fn fixture() -> (RuntimeFile, GraphFile) {
-    let file = read_runtime_file(&pinned_fixture("data_bind_font_test.riv"))
-        .expect("data_bind_font_test.riv imports");
-    let graphs = GraphFile::from_runtime_file(&file).expect("data_bind_font_test.riv graph builds");
-    (file, graphs)
+struct Fixture {
+    _file: RuntimeFileHandle,
+    silver: PersistentFactory<SerializingFactory>,
+    artboard: RuntimeArtboardInstanceHandle,
+    machine: RuntimeStateMachineInstanceHandle,
+    view_model: CoreHandle,
 }
-
-fn default_context(file: &RuntimeFile) -> RuntimeOwnedViewModelHandle {
-    RuntimeOwnedViewModelHandle::new(
-        RuntimeOwnedViewModelInstance::from_instance(file, 0, 0)
-            .expect("default view-model instance builds"),
+fn fixture() -> Fixture {
+    let mut silver = PersistentFactory::new(SerializingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut silver).expect("retained factory");
+    let file = File::import(
+        &pinned_fixture("data_bind_font_test.riv"),
+        retained,
+        None,
+        None,
+        None,
     )
+    .expect("native font binding import");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let machine = artboard.state_machine_at(0).expect("state machine 0");
+    let view_model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+        })
+        .expect("default view-model instance");
+    Fixture {
+        _file: file,
+        silver,
+        artboard,
+        machine,
+        view_model,
+    }
 }
-
-fn draw(
-    artboard: &mut ArtboardInstance,
-    file: &RuntimeFile,
-    graph: &ArtboardGraph,
-    graphs: &GraphFile,
-    factory: &mut RecordingFactory,
-) {
-    let mut renderer = factory.make_renderer();
-    artboard
-        .draw_artboard(
-            file,
-            graph,
-            &graphs.artboards,
-            factory,
-            &mut renderer,
-            &BTreeMap::new(),
-            None,
-            true,
-        )
-        .expect("font-bound artboard draws");
+impl Fixture {
+    fn bind(&self) {
+        self.machine
+            .with_instance_mut(|machine| machine.bind_view_model_instance(self.view_model.clone()));
+    }
+    fn advance(&self, seconds: f32) {
+        self.machine.advance_and_apply(seconds);
+    }
+    fn property(&self) -> CoreHandle {
+        let property = self
+            .view_model
+            .with_downcast::<ViewModelInstance, _>(|instance| {
+                instance.property_value_named("fontProperty")
+            })
+            .flatten()
+            .expect("fontProperty");
+        assert!(
+            property
+                .with_downcast::<ViewModelInstanceAssetFont, _>(|_| ())
+                .is_some()
+        );
+        property
+    }
 }
-
-fn missing_silver_match(_: &str, _: &str) -> bool {
-    panic!("recording renderer has no pinned C++ silver matcher for this case")
+fn set_font(property: &CoreHandle, font: Option<FontRef>) {
+    property
+        .with_downcast_mut::<ViewModelInstanceAssetFont, _>(|property| property.set_value(font))
+        .expect("native font property");
+}
+fn stored_font(property: &CoreHandle) -> Option<FontRef> {
+    property
+        .with_downcast::<ViewModelInstanceAssetFont, _>(|property| property.asset().font())
+        .expect("native backing FontAsset")
+}
+fn source_bytes(font: &FontRef) -> std::sync::Arc<[u8]> {
+    font.as_any()
+        .downcast_ref::<HbFont>()
+        .expect("approved native font backend")
+        .source_bytes()
 }
 
 #[test]
-#[ignore = "expected-red: pinned data_bind_font_test silver matcher is not wired"]
 fn data_bind_font() {
-    let (file, graphs) = fixture();
-    let graph = graphs.artboards.first().expect("default artboard graph");
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("default artboard instantiates");
-    let context = default_context(&file);
-    assert!(artboard.bind_owned_view_model_artboard_handle(&file, &context));
-    let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
-    state_machine.bind_owned_view_model_handle(&context);
+    let fixture = fixture();
+    let (width, height) = fixture
+        .artboard
+        .with_artboard(|artboard| (artboard.width(), artboard.height()));
+    fixture
+        .silver
+        .borrow_mut()
+        .frame_size(width as u32, height as u32);
+    let mut renderer = fixture.silver.borrow().make_renderer();
+    fixture.bind();
+    fixture.advance(0.0);
+    fixture.artboard.draw(&mut renderer);
+    fixture.silver.borrow_mut().add_frame();
+    fixture.advance(0.016);
+    fixture.artboard.draw(&mut renderer);
+    fixture.silver.borrow_mut().add_frame();
 
-    let mut factory = RecordingFactory::new();
-    let (width, height) = artboard.artboard_dimensions();
-    factory.frame_size(width as u32, height as u32);
+    // The same factory retained by native File admits the font bytes. HbFont
+    // then owns those bytes at the approved Rust-native shaping boundary.
+    let bytes = pinned_fixture("kablammo.ttf");
+    let decoded = fixture
+        .silver
+        .borrow_mut()
+        .decode_font(&bytes)
+        .expect("factory decoded font");
+    let font = HbFont::decode(decoded.bytes()).expect("native decoded font");
+    set_font(&fixture.property(), Some(font));
+    fixture.advance(0.016);
+    fixture.artboard.draw(&mut renderer);
+    fixture.silver.borrow_mut().add_frame();
 
-    state_machine
-        .advance_and_apply(&mut artboard, 0.0)
-        .expect("initial state-machine advance");
-    draw(&mut artboard, &file, graph, &graphs, &mut factory);
-    factory.add_frame();
-    state_machine
-        .advance_and_apply(&mut artboard, 0.016)
-        .expect("second state-machine advance");
-    draw(&mut artboard, &file, graph, &graphs, &mut factory);
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_down(Vec2D::new(490.0, 490.0), 0);
+        machine.pointer_up(Vec2D::new(490.0, 490.0), 0);
+    });
+    fixture.advance(0.016);
+    fixture.artboard.draw(&mut renderer);
+    fixture.silver.borrow_mut().add_frame();
 
-    factory.add_frame();
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_down(Vec2D::new(490.0, 20.0), 0);
+        machine.pointer_up(Vec2D::new(490.0, 20.0), 0);
+    });
+    fixture.advance(0.016);
+    fixture.artboard.draw(&mut renderer);
 
-    let kablammo: Arc<[u8]> = pinned_fixture("kablammo.ttf").into();
-    assert!(
-        context
-            .borrow_mut()
-            .set_live_font_bytes_by_property_name("fontProperty", Some(kablammo))
-    );
-    state_machine
-        .advance_and_apply(&mut artboard, 0.016)
-        .expect("live-font state-machine advance");
-    draw(&mut artboard, &file, graph, &graphs, &mut factory);
-    factory.add_frame();
-
-    state_machine.pointer_down(&mut artboard, 490.0, 490.0, 0);
-    state_machine.pointer_up(&mut artboard, 490.0, 490.0, 0);
-    state_machine
-        .advance_and_apply(&mut artboard, 0.016)
-        .expect("first listener state-machine advance");
-    draw(&mut artboard, &file, graph, &graphs, &mut factory);
-
-    factory.add_frame();
-    state_machine.pointer_down(&mut artboard, 490.0, 20.0, 0);
-    state_machine.pointer_up(&mut artboard, 490.0, 20.0, 0);
-    state_machine
-        .advance_and_apply(&mut artboard, 0.016)
-        .expect("second listener state-machine advance");
-    draw(&mut artboard, &file, graph, &graphs, &mut factory);
-    assert!(missing_silver_match(
-        "data_bind_font_test",
-        &factory.stream()
-    ));
+    let expected =
+        std::fs::read(pinned_path("silvers/data_bind_font_test.sriv")).expect("pinned font silver");
+    let actual = fixture.silver.borrow().bytes().to_vec();
+    assert_eq!(actual.len(), expected.len(), "pinned SRIV byte length");
+    let expected = sriv::parse_sriv(&expected).expect("valid pinned SRIV");
+    let actual = sriv::parse_sriv(&actual).expect("valid native SRIV");
+    sriv::compare_sriv(&expected, &actual).expect("pinned font silver");
 }
 
 #[test]
-#[ignore = "expected-red: live font assignment does not replace the decoded font retained by the property backing FontAsset owner"]
 fn font_data_bind_stores_and_clears_the_font_on_the_property() {
-    let (file, graphs) = fixture();
-    let graph = graphs.artboards.first().expect("default artboard graph");
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("default artboard instantiates");
-    let file_asset_owners = RuntimeFileAssetOwners::from_runtime(&file, None);
-    let font_assets = file_asset_owners.font_assets();
-    artboard.attach_runtime_file_asset_owners(&file_asset_owners);
-    let context = default_context(&file);
-    assert!(artboard.bind_owned_view_model_artboard_handle(&file, &context));
-    let mut state_machine = artboard.state_machine_instance(0).expect("state machine 0");
-    state_machine.bind_owned_view_model_handle(&context);
-    state_machine
-        .advance_and_apply(&mut artboard, 0.0)
-        .expect("initial state-machine advance");
+    let fixture = fixture();
+    fixture.bind();
+    fixture.advance(0.0);
+    let property = fixture.property();
 
-    let backing_asset_index = context
-        .borrow()
-        .font_asset_value_by_property_name("fontProperty")
-        .expect("fontProperty")
-        .file_asset_index();
-    let backing_asset_global = file
-        .file_asset(usize::try_from(backing_asset_index).expect("font asset index fits usize"))
-        .expect("fontProperty backing FontAsset")
-        .id;
-
-    let kablammo: Arc<[u8]> = pinned_fixture("kablammo.ttf").into();
-    assert!(
-        context
-            .borrow_mut()
-            .set_live_font_bytes_by_property_name("fontProperty", Some(Arc::clone(&kablammo)))
+    let kablammo = pinned_fixture("kablammo.ttf");
+    let font = HbFont::decode(&kablammo).expect("kablammo decoded");
+    set_font(&property, Some(font.clone()));
+    fixture.advance(0.0);
+    let installed_kablammo = stored_font(&property).expect("backing FontAsset retains kablammo");
+    assert!(Rc::ptr_eq(&installed_kablammo, &font));
+    assert_eq!(
+        source_bytes(&installed_kablammo).as_ref(),
+        kablammo.as_slice()
     );
-    state_machine
-        .advance_and_apply(&mut artboard, 0.0)
-        .expect("kablammo state-machine advance");
-    let installed_kablammo = font_assets
-        .get(backing_asset_global)
-        .expect("backing FontAsset retains the assigned decoded kablammo font");
-    assert_eq!(installed_kablammo.as_ref(), kablammo.as_ref());
 
-    let nabla: Arc<[u8]> = pinned_fixture("nabla.ttf").into();
-    assert!(
-        context
-            .borrow_mut()
-            .set_live_font_bytes_by_property_name("fontProperty", Some(Arc::clone(&nabla)))
-    );
-    state_machine
-        .advance_and_apply(&mut artboard, 0.0)
-        .expect("nabla state-machine advance");
-    let installed_nabla = font_assets
-        .get(backing_asset_global)
-        .expect("backing FontAsset retains the assigned decoded nabla font");
-    assert_eq!(installed_nabla.as_ref(), nabla.as_ref());
-    assert!(!Arc::ptr_eq(&installed_kablammo, &installed_nabla));
+    let nabla = pinned_fixture("nabla.ttf");
+    let font2 = HbFont::decode(&nabla).expect("nabla decoded");
+    set_font(&property, Some(font2.clone()));
+    fixture.advance(0.0);
+    let installed_nabla = stored_font(&property).expect("backing FontAsset retains nabla");
+    assert!(Rc::ptr_eq(&installed_nabla, &font2));
+    assert_eq!(source_bytes(&installed_nabla).as_ref(), nabla.as_slice());
+    assert!(!Rc::ptr_eq(&installed_kablammo, &installed_nabla));
 
-    assert!(
-        context
-            .borrow_mut()
-            .set_live_font_bytes_by_property_name("fontProperty", None)
-    );
-    state_machine
-        .advance_and_apply(&mut artboard, 0.0)
-        .expect("clear-font state-machine advance");
-    assert!(font_assets.get(backing_asset_global).is_none());
+    set_font(&property, None);
+    fixture.advance(0.0);
+    assert!(stored_font(&property).is_none());
 }

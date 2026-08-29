@@ -45,7 +45,7 @@ impl OpenUrlEventBase {
             return;
         }
         callbacks.url_changed();
-        callbacks.notify_property_changed(Self::URL_PROPERTY_KEY);
+        OpenUrlEventBaseCallbacks::notify_property_changed(callbacks, Self::URL_PROPERTY_KEY);
     }
 
     pub(crate) fn set_url_value(&mut self, value: String) -> bool {
@@ -63,7 +63,10 @@ impl OpenUrlEventBase {
             return;
         }
         callbacks.target_value_changed();
-        callbacks.notify_property_changed(Self::TARGET_VALUE_PROPERTY_KEY);
+        OpenUrlEventBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TARGET_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_target_value_value(&mut self, value: u32) -> bool {
@@ -81,7 +84,7 @@ impl OpenUrlEventBase {
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl OpenUrlEventBaseCallbacks) {
         self.url.clone_from(&object.url);
         self.target_value = object.target_value;
-        self.base.copy(&object.base, callbacks);
+        self.base.base.copy(&object.base.base);
     }
     pub fn deserialize(
         &mut self,

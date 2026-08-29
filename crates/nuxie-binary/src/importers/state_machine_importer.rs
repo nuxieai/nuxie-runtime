@@ -36,9 +36,7 @@ pub(super) fn dispatch_update_input_context(
     }
 }
 
-pub(super) fn read_null_object_context(
-    inputs: &mut Vec<Option<StateMachineInputKind>>,
-) -> bool {
+pub(super) fn read_null_object_context(inputs: &mut Vec<Option<StateMachineInputKind>>) -> bool {
     read_null_object_into(inputs)
 }
 

@@ -1,16 +1,20 @@
 use super::{
-    glyph_lookup::GlyphLookup, text::Text, text_follow_path_modifier::TextFollowPathModifier,
-    text_modifier_flags::TextModifierFlags, text_modifier_range::TextModifierRange,
+    glyph_lookup::GlyphLookup,
+    text::{StyledText, Text},
+    text_follow_path_modifier::TextFollowPathModifier,
+    text_modifier_flags::TextModifierFlags,
+    text_modifier_range::TextModifierRange,
     text_variation_modifier::TextVariationModifier,
 };
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt,
     core::CoreHandle,
     core_context::CoreContext,
+    generated::core_registry::CoreCapabilities,
     generated::text::text_modifier_group_base::TextModifierGroupBase,
     math::{mat2d::Mat2D, transform_components::TransformComponents, vec2d::Vec2D},
     status_code::StatusCode,
-    text_engine::{FontCoord, FontRef, GlyphLine, Paragraph, StyledText, TextRun},
+    text_engine::{FontCoord, FontRef, GlyphLine, Paragraph, TextRun},
 };
 use std::collections::HashMap;
 pub struct TransformGlyphArg<'a> {
@@ -33,6 +37,24 @@ impl<'a> TransformGlyphArg<'a> {
         }
     }
 }
+impl std::ops::Deref for TextModifierGroup {
+    type Target = TextModifierGroupBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextModifierGroup {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextModifierGroup {
+    pub const TYPE_KEY: u16 = TextModifierGroupBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct TextModifierGroup {
     pub base: TextModifierGroupBase,
     ranges: Vec<CoreHandle>,
@@ -47,9 +69,9 @@ pub struct TextModifierGroup {
 impl TextModifierGroup {
     pub fn text_component(&self) -> Option<CoreHandle> {
         self.base.parent_handle().filter(|parent| {
-            parent
-                .with(|parent| parent.as_text().is_some())
-                .unwrap_or(false)
+            parent.is_type_of(
+                crate::mechanical_port::source::generated::text::text_base::TextBase::TYPE_KEY,
+            )
         })
     }
     pub fn on_added_dirty(&mut self, c: &mut dyn CoreContext) -> StatusCode {
@@ -75,14 +97,12 @@ impl TextModifierGroup {
     pub fn add_modifier(&mut self, modifier: CoreHandle) {
         self.modifiers.push(modifier.clone());
         if modifier
-            .with_downcast::<TextVariationModifier, _>(|_| ())
-            .is_some()
+            .is_type_of(crate::mechanical_port::source::generated::text::text_shape_modifier_base::TextShapeModifierBase::TYPE_KEY)
         {
             self.shape_modifiers.push(modifier.clone());
         }
         if modifier
-            .with_downcast::<TextFollowPathModifier, _>(|_| ())
-            .is_some()
+            .is_type_of(crate::mechanical_port::source::generated::text::text_follow_path_modifier_base::TextFollowPathModifierBase::TYPE_KEY)
         {
             self.follow_path_modifiers.push(modifier);
         }
@@ -110,6 +130,7 @@ impl TextModifierGroup {
     }
     pub fn compute_range_map(
         &mut self,
+        owner_text: &Text,
         text: &[u32],
         shape: &[Paragraph],
         lines: &[Vec<GlyphLine>],
@@ -117,7 +138,7 @@ impl TextModifierGroup {
     ) {
         for r in &mut self.ranges {
             r.with_downcast_mut::<TextModifierRange, _>(|range| {
-                range.compute_range(text, shape, lines, lookup)
+                range.compute_range(owner_text, text, shape, lines, lookup)
             });
         }
     }
@@ -145,30 +166,42 @@ impl TextModifierGroup {
         }
         c / count as f32
     }
-    pub fn on_text_world_transform_dirty(&mut self) {
-        if !self.follow_path_modifiers.is_empty() {
-            if let Some(text) = self.text_component() {
-                text.with_mut(|text| {
-                    if let Some(text) = text.as_text_mut() {
-                        text.base.add_dirt(ComponentDirt::PATH, true);
-                    }
-                });
-            }
+    pub fn on_text_world_transform_dirty(owner: &CoreHandle, parent_text: &mut Text) {
+        let (follows_path, text) = owner
+            .with(|owner| {
+                let group = owner
+                    .as_text_modifier_group()
+                    .expect("TextModifierGroup owner");
+                (
+                    !group.follow_path_modifiers.is_empty(),
+                    group.text_component(),
+                )
+            })
+            .expect("live TextModifierGroup");
+        if follows_path {
+            assert_eq!(
+                parent_text.base.handle(),
+                text,
+                "actual TextModifierGroup parent"
+            );
+            // addDirt can re-enter Text::onDirty and this same modifier group.
+            // Keep the live Text borrow, but release the group before callback.
+            parent_text.component_add_dirt(ComponentDirt::PATH, false);
         }
     }
-    pub fn reset_text_follow_path(&mut self) {
+    pub fn reset_text_follow_path(&mut self, parent_text: &Text) {
         let Some(text) = self.text_component() else {
             return;
         };
-        let Some(inverse) = text
-            .with(|text| {
-                text.as_text()
-                    .and_then(|text| text.base.world_transform().inverse())
-            })
-            .flatten()
-        else {
+        assert_eq!(
+            parent_text.base.handle().as_ref(),
+            Some(&text),
+            "resetTextFollowPath receives its actual parent Text"
+        );
+        let mut inverse = Mat2D::default();
+        if !parent_text.base.world_transform().invert(&mut inverse) {
             return;
-        };
+        }
         for modifier in &mut self.follow_path_modifiers {
             modifier.with_downcast_mut::<TextFollowPathModifier, _>(|modifier| {
                 modifier.reset(&inverse)
@@ -209,7 +242,9 @@ impl TextModifierGroup {
         }
         let mut parts = TransformComponents::default();
         if follows {
-            let mut tc = TransformComponents::from_xy(arg.origin_position.x, arg.origin_position.y);
+            let mut tc = TransformComponents::default();
+            tc.set_x(arg.origin_position.x);
+            tc.set_y(arg.origin_position.y);
             if self.has(TextModifierFlags::MODIFY_TRANSLATION) {
                 arg.offset = Vec2D::new(self.base.x(), self.base.y());
             }
@@ -236,7 +271,7 @@ impl TextModifierGroup {
         if self.has(TextModifierFlags::MODIFY_ROTATION) {
             parts.set_rotation(parts.rotation() + self.base.rotation() * amount);
         }
-        let transform = Mat2D::compose(parts);
+        let transform = Mat2D::compose(&parts);
         let origin = self.has(TextModifierFlags::MODIFY_ORIGIN);
         if origin {
             ctm[4] += self.base.origin_x();
@@ -312,7 +347,7 @@ impl TextModifierGroup {
             return run;
         };
         let Some(font) = style
-            .with(|style| style.as_text_style().and_then(|style| style.font()))
+            .with_mut(|style| style.as_text_style_mut().and_then(|style| style.font()))
             .flatten()
         else {
             return run;
@@ -322,7 +357,7 @@ impl TextModifierGroup {
         for modifier in &self.shape_modifiers {
             size = modifier
                 .with_downcast::<TextVariationModifier, _>(|modifier| {
-                    modifier.modify(&font, &mut variations, size, strength)
+                    modifier.modify(font.as_ref(), &mut variations, size, strength)
                 })
                 .unwrap_or(size);
         }
@@ -334,9 +369,9 @@ impl TextModifierGroup {
         for (tag, value) in variations {
             self.variation_coords.push(FontCoord { axis: tag, value });
         }
-        self.variable_font = font.make_at_coords(&self.variation_coords);
+        self.variable_font = Some(font.make_at_coords(&self.variation_coords));
         TextRun {
-            font: self.variable_font.clone().expect("variable font"),
+            font: self.variable_font.clone(),
             ..run
         }
     }

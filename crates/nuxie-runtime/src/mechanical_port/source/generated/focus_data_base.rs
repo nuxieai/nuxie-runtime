@@ -51,7 +51,7 @@ impl FocusDataBase {
             return;
         }
         callbacks.focus_flags_changed();
-        callbacks.notify_property_changed(Self::FOCUS_FLAGS_PROPERTY_KEY);
+        FocusDataBaseCallbacks::notify_property_changed(callbacks, Self::FOCUS_FLAGS_PROPERTY_KEY);
     }
 
     pub(crate) fn set_focus_flags_value(&mut self, value: u32) -> bool {
@@ -73,7 +73,10 @@ impl FocusDataBase {
             return;
         }
         callbacks.edge_behavior_value_changed();
-        callbacks.notify_property_changed(Self::EDGE_BEHAVIOR_VALUE_PROPERTY_KEY);
+        FocusDataBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::EDGE_BEHAVIOR_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_edge_behavior_value_value(&mut self, value: u32) -> bool {

@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     backboard::Backboard,
-    core::{binary_reader::BinaryReader, Core},
+    core::{Core, binary_reader::BinaryReader},
 };
 
 #[derive(Default)]

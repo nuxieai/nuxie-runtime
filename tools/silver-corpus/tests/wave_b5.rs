@@ -58,7 +58,6 @@ fn wave_b5_shape_clipped_by_parent_and_grand_parent_artboard() {
 }
 
 #[test]
-#[ignore = "expected-red: exact non-virtualized list hit-test stream diverges at frame 0 op 198 (expected color, got save)"]
 fn wave_b5_artboard_list_component_with_scrolling_behavior() {
     replay(
         "hittest_ab_2_non_virtualized",
@@ -67,7 +66,6 @@ fn wave_b5_artboard_list_component_with_scrolling_behavior() {
 }
 
 #[test]
-#[ignore = "expected-red: exact virtualized carousel hit-test stream diverges at frame 0 op 132 (expected color, got save)"]
 fn wave_b5_artboard_list_component_with_scrolling_behavior_virtualized_and_carousel() {
     replay(
         "hittest_ab_2_virtualized",
@@ -84,7 +82,6 @@ fn wave_b5_hit_testing_text_in_multiple_layouts_rotated_and_scaled() {
 }
 
 #[test]
-#[ignore = "expected-red: exact layout-shape hit-test stream diverges at frame 3 op 353 (expected save, got color)"]
 fn wave_b5_hit_testing_shapes_in_layouts() {
     replay("hittest_ab_shape_parent", "Hit testing shapes in layouts");
 }
@@ -95,7 +92,6 @@ fn wave_b5_hit_testing_objects_inside_shapes() {
 }
 
 #[test]
-#[ignore = "expected-red: exact pointer-exit stream diverges at frame 31 op 1173 (expected save, got color)"]
 fn wave_b5_pointer_exit_works_correctly() {
     replay("pointer_exit", "Pointer exit works correctly");
 }
@@ -114,7 +110,6 @@ fn wave_b5_multitouch_with_nested_artboard_and_pointer_exit_event() {
 }
 
 #[test]
-#[ignore = "expected-red: exact list multitouch stream diverges at frame 1 op 179 (expected color, got save)"]
 fn wave_b5_multitouch_with_list_and_pointer_exit_event() {
     replay(
         "multitouch_enter-MainList",
@@ -123,7 +118,6 @@ fn wave_b5_multitouch_with_list_and_pointer_exit_event() {
 }
 
 #[test]
-#[ignore = "expected-red: exact multi-scroll multitouch stream emits positive zero instead of pinned negative zero at frame 0 op 95 transform.xy"]
 fn wave_b5_multitouch_with_multi_scroll() {
     replay(
         "multitouch_enter-MultiScroll",

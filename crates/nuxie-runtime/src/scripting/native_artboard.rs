@@ -11,7 +11,10 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::data_context::{DataContext, RuntimeDataContextHandle},
     file::RuntimeFileHandle,
-    generated::core_registry::CoreField,
+    generated::{
+        core_registry::{CoreField, CoreRegistry},
+        layout_component_base::LayoutComponentBase,
+    },
     input::{
         gamepad_snapshot::{
             GamepadInputChange, GamepadInputChangeKind, GamepadMappingKind, GamepadSnapshot,
@@ -43,20 +46,15 @@ struct NativeScriptArtboard {
     parent_context: Option<RuntimeDataContextHandle>,
 }
 
-pub(crate) fn native_script_artboard(
+pub fn native_script_artboard(
     file: RuntimeFileHandle,
-    source: CoreHandle,
+    artboard: RuntimeArtboardInstanceHandle,
     view_model: Option<CoreHandle>,
     parent_context: Option<RuntimeDataContextHandle>,
 ) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
-    let artboard = Artboard::instance_from_handle(&source)
-        .ok_or_else(|| ScriptError::new("script artboard instance initialization failed"))?;
-    artboard.with_artboard_mut(|artboard| artboard.base.set_frame_origin(false));
     let machine = artboard.default_state_machine_handle();
     let view_model = view_model.or_else(|| {
-        file.with_file_mut(|file| {
-            file.create_view_model_instance_for_artboard(artboard.core_handle())
-        })
+        file.with_file(|file| file.create_view_model_instance_for_artboard(artboard.core_handle()))
     });
     if let (Some(machine), Some(instance)) = (&machine, &view_model) {
         if let Some(parent) = &parent_context {
@@ -118,14 +116,18 @@ impl ScriptArtboard for NativeScriptArtboard {
             .with_artboard(|artboard| artboard.base.frame_origin())
     }
     fn set_width(&mut self, value: f32) {
-        self.owner
-            .artboard
-            .with_artboard_mut(|artboard| artboard.base.set_width(value));
+        CoreRegistry::set_double_handle(
+            &self.owner.artboard.core_handle(),
+            LayoutComponentBase::WIDTH_PROPERTY_KEY.into(),
+            value,
+        );
     }
     fn set_height(&mut self, value: f32) {
-        self.owner
-            .artboard
-            .with_artboard_mut(|artboard| artboard.base.set_height(value));
+        CoreRegistry::set_double_handle(
+            &self.owner.artboard.core_handle(),
+            LayoutComponentBase::HEIGHT_PROPERTY_KEY.into(),
+            value,
+        );
     }
     fn set_frame_origin(&mut self, value: bool) {
         self.owner
@@ -147,9 +149,12 @@ impl ScriptArtboard for NativeScriptArtboard {
                 })
             })
             .transpose()?;
+        let artboard = Artboard::instance_from_handle(&self.owner.artboard.core_handle())
+            .ok_or_else(|| ScriptError::new("script artboard instance initialization failed"))?;
+        artboard.with_artboard_mut(|artboard| artboard.base.set_frame_origin(false));
         native_script_artboard(
             self.owner.file.clone(),
-            self.owner.artboard.core_handle(),
+            artboard,
             view_model,
             self.parent_context.clone(),
         )
@@ -157,8 +162,7 @@ impl ScriptArtboard for NativeScriptArtboard {
 
     fn advance(&mut self, seconds: f32) -> Result<bool, ScriptError> {
         Ok(match &self.owner.machine {
-            Some(machine) => machine
-                .with_instance_mut(|machine| machine.advance_and_apply_view_models(seconds, false)),
+            Some(machine) => machine.advance_and_apply_view_models(seconds, false),
             None => self.owner.artboard.advance_default(seconds),
         })
     }
@@ -299,9 +303,10 @@ impl ScriptArtboard for NativeScriptArtboard {
         focus.with_focus_manager_mut(|focus| {
             focus.gamepad_dispatch(&invocation, Some(&mut dispatched));
         });
-        Ok(machine.with_instance_mut(|machine| {
+        Ok(
             machine.broadcast_gamepad_to_scripted_drawables(&invocation, dispatched.as_ref())
-        }) as u32)
+                as u32,
+        )
     }
 }
 

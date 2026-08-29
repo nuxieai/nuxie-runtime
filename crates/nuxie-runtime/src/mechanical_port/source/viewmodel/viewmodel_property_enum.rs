@@ -2,8 +2,6 @@ use crate::mechanical_port::source::{
     core::CoreHandle, generated::viewmodel::viewmodel_property_enum_base::ViewModelPropertyEnumBase,
 };
 
-use super::data_enum::DataEnum;
-
 #[derive(Default)]
 pub struct ViewModelPropertyEnum {
     pub base: ViewModelPropertyEnumBase,
@@ -33,13 +31,25 @@ impl ViewModelPropertyEnum {
 
     pub fn value_named(&self, name: &str) -> String {
         self.data_enum()
-            .and_then(|data| data.with_downcast::<DataEnum, _>(|data| data.value_by_name(name)))
+            .and_then(|data| {
+                data.with(|data| {
+                    data.as_data_enum()
+                        .expect("authored enum")
+                        .value_by_name(name)
+                })
+            })
             .unwrap_or_default()
     }
 
     pub fn value_at(&self, index: u32) -> String {
         self.data_enum()
-            .and_then(|data| data.with_downcast::<DataEnum, _>(|data| data.value_by_index(index)))
+            .and_then(|data| {
+                data.with(|data| {
+                    data.as_data_enum()
+                        .expect("authored enum")
+                        .value_by_index(index)
+                })
+            })
             .unwrap_or_default()
     }
 
@@ -47,7 +57,11 @@ impl ViewModelPropertyEnum {
         self.data_enum
             .as_ref()
             .and_then(|data| {
-                data.with_downcast_mut::<DataEnum, _>(|data| data.set_value_by_name(name, value))
+                data.with_mut(|data| {
+                    data.as_data_enum_mut()
+                        .expect("authored enum")
+                        .set_value_by_name(name, value)
+                })
             })
             .unwrap_or(false)
     }
@@ -56,7 +70,11 @@ impl ViewModelPropertyEnum {
         self.data_enum
             .as_ref()
             .and_then(|data| {
-                data.with_downcast_mut::<DataEnum, _>(|data| data.set_value_by_index(index, value))
+                data.with_mut(|data| {
+                    data.as_data_enum_mut()
+                        .expect("authored enum")
+                        .set_value_by_index(index, value)
+                })
             })
             .unwrap_or(false)
     }
@@ -64,14 +82,24 @@ impl ViewModelPropertyEnum {
     pub fn value_index_named(&self, name: &str) -> i32 {
         self.data_enum()
             .and_then(|data| {
-                data.with_downcast::<DataEnum, _>(|data| data.value_index_by_name(name))
+                data.with(|data| {
+                    data.as_data_enum()
+                        .expect("authored enum")
+                        .value_index_by_name(name)
+                })
             })
             .unwrap_or(-1)
     }
 
     pub fn value_index_at(&self, index: u32) -> i32 {
         self.data_enum()
-            .and_then(|data| data.with_downcast::<DataEnum, _>(|data| data.value_index(index)))
+            .and_then(|data| {
+                data.with(|data| {
+                    data.as_data_enum()
+                        .expect("authored enum")
+                        .value_index(index)
+                })
+            })
             .unwrap_or(-1)
     }
 }

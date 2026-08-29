@@ -46,8 +46,7 @@ impl StateMachineLayer {
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         for state in self.states.iter().cloned() {
             let code = state
-                .with_mut(|state| state.layer_state_on_added_dirty(context))
-                .flatten()
+                .with_mut(|state| state.on_added_dirty(context))
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
@@ -68,8 +67,7 @@ impl StateMachineLayer {
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         for state in self.states.iter().cloned() {
             let code = state
-                .with_mut(|state| state.layer_state_on_added_clean(context))
-                .flatten()
+                .with_mut(|state| state.on_added_clean(context))
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;

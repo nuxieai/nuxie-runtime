@@ -488,13 +488,8 @@ impl StateMachineInstance {
         seconds: f32,
         advance_view_models: bool,
     ) -> bool {
-        advance_native_state_machines(
-            &self.artboard,
-            std::slice::from_ref(&self.native),
-            seconds,
-            advance_view_models,
-        )
-        .keep_going
+        self.native
+            .advance_and_apply_view_models(seconds, advance_view_models)
     }
 
     pub fn advance_and_apply_batch(
@@ -557,6 +552,7 @@ impl StateMachineInstance {
             .with_downcast::<StateMachine, _>(|machine| machine.layer_count())
             .unwrap_or(0)
     }
+    #[cfg(test)]
     pub fn layer_state(&self, index: usize) -> Option<RuntimeLayerState> {
         let handle = self
             .native

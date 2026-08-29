@@ -39,7 +39,7 @@ impl NestedInputBase {
             return;
         }
         callbacks.input_id_changed();
-        callbacks.notify_property_changed(Self::INPUT_ID_PROPERTY_KEY);
+        NestedInputBaseCallbacks::notify_property_changed(callbacks, Self::INPUT_ID_PROPERTY_KEY);
     }
 
     pub(crate) fn set_input_id_value(&mut self, value: u32) -> bool {

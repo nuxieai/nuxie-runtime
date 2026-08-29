@@ -51,7 +51,7 @@ impl ParametricPathBase {
             return;
         }
         callbacks.width_changed();
-        callbacks.notify_property_changed(Self::WIDTH_PROPERTY_KEY);
+        ParametricPathBaseCallbacks::notify_property_changed(callbacks, Self::WIDTH_PROPERTY_KEY);
     }
 
     pub(crate) fn set_width_value(&mut self, value: f32) -> bool {
@@ -69,7 +69,7 @@ impl ParametricPathBase {
             return;
         }
         callbacks.height_changed();
-        callbacks.notify_property_changed(Self::HEIGHT_PROPERTY_KEY);
+        ParametricPathBaseCallbacks::notify_property_changed(callbacks, Self::HEIGHT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_height_value(&mut self, value: f32) -> bool {
@@ -87,7 +87,10 @@ impl ParametricPathBase {
             return;
         }
         callbacks.origin_x_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_X_PROPERTY_KEY);
+        ParametricPathBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ORIGIN_X_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_origin_x_value(&mut self, value: f32) -> bool {
@@ -105,7 +108,10 @@ impl ParametricPathBase {
             return;
         }
         callbacks.origin_y_changed();
-        callbacks.notify_property_changed(Self::ORIGIN_Y_PROPERTY_KEY);
+        ParametricPathBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ORIGIN_Y_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_origin_y_value(&mut self, value: f32) -> bool {

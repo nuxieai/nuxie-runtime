@@ -54,7 +54,7 @@ impl TextStyleBase {
             return;
         }
         callbacks.font_size_changed();
-        callbacks.notify_property_changed(Self::FONT_SIZE_PROPERTY_KEY);
+        TextStyleBaseCallbacks::notify_property_changed(callbacks, Self::FONT_SIZE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_font_size_value(&mut self, value: f32) -> bool {
@@ -72,7 +72,7 @@ impl TextStyleBase {
             return;
         }
         callbacks.line_height_changed();
-        callbacks.notify_property_changed(Self::LINE_HEIGHT_PROPERTY_KEY);
+        TextStyleBaseCallbacks::notify_property_changed(callbacks, Self::LINE_HEIGHT_PROPERTY_KEY);
     }
 
     pub(crate) fn set_line_height_value(&mut self, value: f32) -> bool {
@@ -90,7 +90,10 @@ impl TextStyleBase {
             return;
         }
         callbacks.letter_spacing_changed();
-        callbacks.notify_property_changed(Self::LETTER_SPACING_PROPERTY_KEY);
+        TextStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::LETTER_SPACING_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_letter_spacing_value(&mut self, value: f32) -> bool {
@@ -108,7 +111,10 @@ impl TextStyleBase {
             return;
         }
         callbacks.font_asset_id_changed();
-        callbacks.notify_property_changed(Self::FONT_ASSET_ID_PROPERTY_KEY);
+        TextStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FONT_ASSET_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_font_asset_id_value(&mut self, value: u32) -> bool {

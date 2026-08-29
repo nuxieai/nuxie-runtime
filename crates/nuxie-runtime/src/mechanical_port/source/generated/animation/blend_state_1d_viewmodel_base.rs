@@ -27,7 +27,9 @@ impl BlendState1DViewModelBase {
     }
     pub fn clone_into(&self) -> BlendState1DViewModel {
         let mut cloned = BlendState1DViewModel::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

@@ -13,11 +13,18 @@ impl ViewModelInstanceAssetBlobRuntime {
         (base.data_type() == DataType::AssetBlob).then_some(Self { base })
     }
     pub fn set_value(&self, value: Option<Arc<RuntimeBlobAsset>>) {
+        // The pinned setter publishes listeners synchronously after the value
+        // is committed. Release the Rust Core borrow before those listeners
+        // can read the same property, matching the other host mutation seams.
+        let notifications = crate::view_model_cell::RuntimeHostMutationNotifications::begin();
         self.base.handle().with_mut(|property| {
             if let Some(property) = property.as_view_model_instance_asset_blob_mut() {
                 property.set_value(value);
             }
         });
+        if let Some(notifications) = notifications {
+            notifications.commit();
+        }
     }
     #[cfg(any(test, feature = "tools"))]
     pub fn testing_value(&self) -> Option<Arc<RuntimeBlobAsset>> {

@@ -88,10 +88,11 @@ impl Default for DataConverterOperation {
 impl DataConverterOperation {
     pub fn new(operation: ArithmeticOperation) -> Self {
         let mut converter = Self::default();
-        converter.base.set_operation_type(
-            operation as u32,
-            &mut DataConverterOperationInitializationCallbacks,
-        );
+        if converter.base.set_operation_type_value(operation as u32) {
+            DataConverterOperationBaseCallbacks::operation_type_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterOperationBase::OPERATION_TYPE_PROPERTY_KEY);
+        }
         converter
     }
     pub fn output_type(&self) -> DataType {
@@ -212,10 +213,4 @@ impl DataConverterOperationBaseCallbacks for DataConverterOperation {
             .base
             .notify_property_changed(property_key);
     }
-}
-
-struct DataConverterOperationInitializationCallbacks;
-
-impl DataConverterOperationBaseCallbacks for DataConverterOperationInitializationCallbacks {
-    fn notify_property_changed(&mut self, _property_key: u16) {}
 }

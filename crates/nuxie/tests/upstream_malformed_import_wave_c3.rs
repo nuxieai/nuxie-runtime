@@ -1,6 +1,7 @@
 //! Exact safe-Rust port of pinned `malformed_file_import_test.cpp`.
 
-use nuxie::File;
+use nuxie::{File, ImportResult, PersistentFactory, RuntimeFactoryHandle};
+use nuxie_render_api::RecordingFactory;
 use std::path::PathBuf;
 
 fn fixture() -> Vec<u8> {
@@ -15,23 +16,33 @@ fn fixture() -> Vec<u8> {
 #[test]
 fn wave_c3_malformed_import_001_truncated_file_never_crashes() {
     let bytes = fixture();
-    let mut full_file = None;
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
 
-    // Rust's `Result<File>` makes the upstream result/file nullability
-    // invariant unrepresentable: an error cannot retain a partially-built
-    // File. Still execute every exact prefix so each failed import drops all
-    // partially-owned state before the next iteration.
     for length in 0..=bytes.len() {
-        match File::import(&bytes[..length]) {
-            Ok(file) if length == bytes.len() => full_file = Some(file),
-            Ok(file) => drop(file),
-            Err(_) => {}
-        }
+        let mut result = ImportResult::Success;
+        let file = File::import(
+            &bytes[..length],
+            factory.clone(),
+            Some(&mut result),
+            None,
+            None,
+        );
+        assert_eq!(
+            file.is_some(),
+            result == ImportResult::Success,
+            "prefix length {length}: success and file nullability agree"
+        );
     }
 }
 
 #[test]
 fn wave_c3_malformed_import_002_full_file_still_imports() {
-    let file = File::import(&fixture()).expect("full pinned file imports after the guards");
-    assert!(file.default_artboard().is_some());
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let mut result = ImportResult::Malformed;
+    let file = File::import(&fixture(), factory, Some(&mut result), None, None);
+    assert_eq!(result, ImportResult::Success);
+    let file = file.expect("full pinned file imports after the guards");
+    assert!(file.with_file(File::artboard).is_some());
 }

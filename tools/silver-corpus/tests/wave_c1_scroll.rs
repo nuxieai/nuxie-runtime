@@ -29,6 +29,14 @@ fn replay(id: &str, expected_actions: usize) {
         .find(|case| case.id == id)
         .expect("Wave C1 layout-scroll case");
     assert_eq!(case.provenance_file, PROVENANCE);
+    if id.starts_with("layout_scroll_drag_multiplier")
+        || id.starts_with("layout_scroll_snap_padding")
+    {
+        assert!(
+            case.clone_artboard_instance,
+            "pinned helper calls artboardNamed() and then instance()"
+        );
+    }
     assert_eq!(
         case.actions
             .executable()
@@ -45,55 +53,46 @@ fn replay(id: &str, expected_actions: usize) {
 }
 
 #[test]
-#[ignore = "expected-red: exact carousel swipe diverges at frame 1/op145 (expected rewind, got drawPath)"]
 fn carousel_snap_swipe_right_settles_past_index_zero() {
     replay("layout_scroll_snap_carousel", 23);
 }
 
 #[test]
-#[ignore = "expected-red: exact layout snap-padding diverges at frame 0/op38 (expected makeRenderPaint, got frameSize)"]
 fn scroll_snap_respects_viewport_padding_layouts() {
     replay("layout_scroll_snap_padding_layouts", 23);
 }
 
 #[test]
-#[ignore = "expected-red: exact list snap-padding diverges at frame 0/op24 (expected makeRenderPaint, got frameSize)"]
 fn scroll_snap_respects_viewport_padding_list() {
     replay("layout_scroll_snap_padding_list", 23);
 }
 
 #[test]
-#[ignore = "expected-red: exact virtualized snap-padding diverges at frame 0/op24 (expected makeRenderPaint, got frameSize)"]
 fn scroll_snap_respects_viewport_padding_virtualized_list() {
     replay("layout_scroll_snap_padding_virtualized", 23);
 }
 
 #[test]
-#[ignore = "expected-red: exact layout drag-multiplier diverges at frame 0/op38 (expected makeRenderPaint, got frameSize)"]
 fn scroll_drag_multiplier_layouts() {
     replay("layout_scroll_drag_multiplier_layouts", 39);
 }
 
 #[test]
-#[ignore = "expected-red: exact list drag-multiplier diverges at frame 0/op24 (expected makeRenderPaint, got frameSize)"]
 fn scroll_drag_multiplier_list() {
     replay("layout_scroll_drag_multiplier_list", 39);
 }
 
 #[test]
-#[ignore = "expected-red: exact virtualized drag-multiplier diverges at frame 0/op24 (expected makeRenderPaint, got frameSize)"]
 fn scroll_drag_multiplier_virtualized_list() {
     replay("layout_scroll_drag_multiplier_virtualized", 39);
 }
 
 #[test]
-#[ignore = "expected-red: exact hidden-item stream diverges at frame 0/op130 (expected negative-zero xy, got positive-zero)"]
 fn scroll_constraint_scroll_index_with_hidden_items() {
     replay("layout_scroll_visibility", 910);
 }
 
 #[test]
-#[ignore = "expected-red: exact index-intent stream diverges at frame 0/op69 (expected negative-zero xy, got positive-zero)"]
 fn scroll_constraint_index_intent_across_hidden_layout() {
     replay("scroll_intent", 114);
 }

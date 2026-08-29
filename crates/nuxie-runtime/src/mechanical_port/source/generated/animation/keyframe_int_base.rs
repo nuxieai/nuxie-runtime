@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::animation::keyframe_int::KeyFrameInt;
 
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, animation::interpolating_keyframe::InterpolatingKeyFrame,
+    animation::interpolating_keyframe::InterpolatingKeyFrame, core::binary_reader::BinaryReader,
 };
 
 pub trait KeyFrameIntBaseCallbacks: crate::mechanical_port::source::generated::animation::interpolating_keyframe_base::InterpolatingKeyFrameBaseCallbacks {
@@ -41,7 +41,7 @@ impl KeyFrameIntBase {
             return;
         }
         callbacks.value_changed();
-        callbacks.notify_property_changed(Self::VALUE_PROPERTY_KEY);
+        KeyFrameIntBaseCallbacks::notify_property_changed(callbacks, Self::VALUE_PROPERTY_KEY);
     }
 
     pub(crate) fn set_value_value(&mut self, value: i32) -> bool {

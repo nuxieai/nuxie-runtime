@@ -15,3 +15,9 @@ impl std::ops::DerefMut for FocusAction {
         &mut self.base
     }
 }
+
+impl crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks for FocusAction {
+    fn notify_property_changed(&mut self, key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(self, key);
+    }
+}

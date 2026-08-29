@@ -27,7 +27,9 @@ impl ViewModelPropertyColorBase {
     }
     pub fn clone_into(&self) -> ViewModelPropertyColor {
         let mut cloned = ViewModelPropertyColor::default();
-        cloned.base.copy(self);
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
         cloned
     }
 }

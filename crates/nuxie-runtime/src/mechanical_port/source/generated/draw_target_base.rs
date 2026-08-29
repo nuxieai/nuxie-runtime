@@ -45,7 +45,7 @@ impl DrawTargetBase {
             return;
         }
         callbacks.drawable_id_changed();
-        callbacks.notify_property_changed(Self::DRAWABLE_ID_PROPERTY_KEY);
+        DrawTargetBaseCallbacks::notify_property_changed(callbacks, Self::DRAWABLE_ID_PROPERTY_KEY);
     }
 
     pub(crate) fn set_drawable_id_value(&mut self, value: u32) -> bool {
@@ -67,7 +67,10 @@ impl DrawTargetBase {
             return;
         }
         callbacks.placement_value_changed();
-        callbacks.notify_property_changed(Self::PLACEMENT_VALUE_PROPERTY_KEY);
+        DrawTargetBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PLACEMENT_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_placement_value_value(&mut self, value: u32) -> bool {

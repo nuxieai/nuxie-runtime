@@ -4,6 +4,7 @@ use crate::mechanical_port::source::{
     component::{ComponentDirt, has_dirt},
     core::CoreHandle,
     core_context::CoreContext,
+    generated::shapes::path_base::PathBase,
     math::{aabb::Aabb, mat2d::Mat2D, math_types::PI, raw_path::RawPath, vec2d::Vec2D},
     shapes::{
         cubic_detached_vertex::CubicDetachedVertex, cubic_vertex::CubicVertexBehavior,
@@ -64,6 +65,24 @@ impl RenderVertex {
     }
 }
 
+impl std::ops::Deref for Path {
+    type Target = PathBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for Path {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Path {
+    pub const TYPE_KEY: u16 = PathBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct Path {
     pub base: PathBase,
     shape: Option<CoreHandle>,
@@ -104,10 +123,9 @@ impl Path {
         };
         let mut parent = self.base.parent_handle();
         while let Some(current) = parent {
-            if current
-                .with(|current| current.as_shape().is_some())
-                .unwrap_or(false)
-            {
+            if current.is_type_of(
+                crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY,
+            ) {
                 self.shape = Some(current.clone());
                 current.with_mut(|shape| {
                     if let Some(shape) = shape.as_shape_mut() {
@@ -152,14 +170,16 @@ impl Path {
     pub fn is_flagged(&self, flags: PathFlags) -> bool {
         !(self.path_flags & flags).is_empty()
     }
-    pub fn can_defer_path_update(&self) -> bool {
+    pub fn can_defer_path_update(&self, active_points_path_has_skin: Option<bool>) -> bool {
+        let active_handle = self.base.handle();
         self.shape
             .as_ref()
             .and_then(|shape| {
                 shape.with(|shape| {
                     shape.as_shape().is_some_and(|shape| {
-                        shape.can_defer_path_update()
-                            && !shape.is_flagged(PathFlags::FOLLOW_PATH)
+                        shape.can_defer_path_update_with_active_path(
+                            active_handle.as_ref().zip(active_points_path_has_skin),
+                        ) && !shape.is_flagged(PathFlags::FOLLOW_PATH)
                             && !self.is_flagged(PathFlags::FOLLOW_PATH | PathFlags::CLIPPING)
                     })
                 })
@@ -170,7 +190,19 @@ impl Path {
         self.shape.clone()
     }
     pub fn path_transform(&self) -> Mat2D {
-        self.base.world_transform()
+        *self.base.world_transform()
+    }
+    pub(crate) fn path_transform_for(
+        owner: &dyn crate::mechanical_port::source::core::CoreObject,
+    ) -> Mat2D {
+        if let Some(points) = owner.as_points_path() {
+            *points.path_transform()
+        } else {
+            owner
+                .as_path()
+                .expect("pathTransform is called on a Path owner")
+                .path_transform()
+        }
     }
     pub fn local_bounds(&self) -> Aabb {
         self.raw_path.precise_bounds()
@@ -186,6 +218,38 @@ impl Path {
     }
     pub fn is_path_closed(&self) -> bool {
         true
+    }
+    pub(crate) fn is_path_closed_for(
+        owner: &dyn crate::mechanical_port::source::core::CoreObject,
+    ) -> bool {
+        if let Some(path) = owner.as_points_path() {
+            path.is_path_closed()
+        } else if let Some(path) = owner
+            .as_any()
+            .downcast_ref::<crate::mechanical_port::source::shapes::list_path::ListPath>(
+        ) {
+            path.is_path_closed()
+        } else {
+            owner
+                .as_path()
+                .expect("Path virtual receiver")
+                .is_path_closed()
+        }
+    }
+    pub(crate) fn mark_path_dirty_for(
+        owner: &mut dyn crate::mechanical_port::source::core::CoreObject,
+        send_to_layout: bool,
+    ) {
+        if let Some(path) = owner.as_points_path_mut() {
+            path.mark_path_dirty(send_to_layout);
+        } else if let Some(path) = owner.as_parametric_path_mut() {
+            path.mark_path_dirty(send_to_layout);
+        } else {
+            owner
+                .as_path_mut()
+                .expect("Path virtual receiver")
+                .mark_path_dirty(send_to_layout);
+        }
     }
     pub fn is_hidden(&self) -> bool {
         self.base.path_flags() & 1 == 1
@@ -269,9 +333,9 @@ impl Path {
                 let enter = Vec2D::scale_and_add(position, to_prev, radius);
                 if index == 0 {
                     start = enter;
-                    raw_path.move_to(enter);
+                    raw_path.move_to_point(enter);
                 } else {
-                    raw_path.line_to(enter);
+                    raw_path.line_to_point(enter);
                 }
                 let mut out = Vec2D::scale_and_add(position, to_prev, radius - ideal);
                 let mut incoming = Vec2D::scale_and_add(position, to_next, radius - ideal);
@@ -279,20 +343,37 @@ impl Path {
                 if authored_radius < 0.0 {
                     rotate_points(exit, enter, position, &mut out, &mut incoming);
                 }
-                raw_path.cubic_to(out, incoming, exit);
+                raw_path.cubic_to_points(out, incoming, exit);
             } else if index == 0 {
                 start = position;
-                raw_path.move_to(position);
+                raw_path.move_to_point(position);
             } else {
-                raw_path.line_to(position);
+                raw_path.line_to_point(position);
             }
         }
-        raw_path.line_to(start);
+        raw_path.line_to_point(start);
         raw_path.close();
     }
 
-    pub fn build_path(&self, raw_path: &mut RawPath) {
-        let closed = self.is_path_closed();
+    pub fn build_path(&self, raw_path: &mut RawPath, closed: bool) {
+        self.build_path_with_host(raw_path, closed, None);
+    }
+
+    pub(crate) fn build_path_from_shape(
+        &self,
+        raw_path: &mut RawPath,
+        closed: bool,
+        shape: &Shape,
+    ) {
+        self.build_path_with_host(raw_path, closed, Some(shape));
+    }
+
+    fn build_path_with_host(
+        &self,
+        raw_path: &mut RawPath,
+        closed: bool,
+        active_shape: Option<&Shape>,
+    ) {
         let Some(vertices) = self
             .vertices
             .iter()
@@ -322,7 +403,7 @@ impl Path {
             start_in = in_point;
             out = out_point;
             start = translation;
-            raw_path.move_to(start);
+            raw_path.move_to_point(start);
         } else {
             start_cubic = false;
             previous_cubic = false;
@@ -346,19 +427,19 @@ impl Path {
                     Self::compute_ideal_control_point_distance(to_prev, to_next, render_radius);
                 start = Vec2D::scale_and_add(position, to_prev, render_radius);
                 start_in = start;
-                raw_path.move_to(start_in);
+                raw_path.move_to_point(start_in);
                 let mut out_point = Vec2D::scale_and_add(position, to_prev, render_radius - ideal);
                 let mut in_point = Vec2D::scale_and_add(position, to_next, render_radius - ideal);
                 out = Vec2D::scale_and_add(position, to_next, render_radius);
                 if radius < 0.0 {
                     rotate_points(out, start_in, position, &mut out_point, &mut in_point);
                 }
-                raw_path.cubic_to(out_point, in_point, out);
+                raw_path.cubic_to_points(out_point, in_point, out);
             } else {
                 out = position;
                 start = out;
                 start_in = out;
-                raw_path.move_to(out);
+                raw_path.move_to_point(out);
             }
         }
         for index in 1..length {
@@ -369,7 +450,7 @@ impl Path {
                 out_point,
             } = vertex
             {
-                raw_path.cubic_to(out, incoming, translation);
+                raw_path.cubic_to_points(out, incoming, translation);
                 previous_cubic = true;
                 out = out_point;
             } else {
@@ -393,9 +474,9 @@ impl Path {
                         Self::compute_ideal_control_point_distance(to_prev, to_next, render_radius);
                     let translation = Vec2D::scale_and_add(position, to_prev, render_radius);
                     if previous_cubic {
-                        raw_path.cubic_to(out, translation, translation);
+                        raw_path.cubic_to_points(out, translation, translation);
                     } else {
-                        raw_path.line_to(translation);
+                        raw_path.line_to_point(translation);
                     }
                     let mut out_point =
                         Vec2D::scale_and_add(position, to_prev, render_radius - ideal);
@@ -405,27 +486,33 @@ impl Path {
                     if radius < 0.0 {
                         rotate_points(out, translation, position, &mut out_point, &mut in_point);
                     }
-                    raw_path.cubic_to(out_point, in_point, out);
+                    raw_path.cubic_to_points(out_point, in_point, out);
                     previous_cubic = false;
                 } else if previous_cubic {
-                    raw_path.cubic_to(out, position, position);
+                    raw_path.cubic_to_points(out, position, position);
                     previous_cubic = false;
                     out = position;
                 } else {
                     out = position;
-                    raw_path.line_to(out);
+                    raw_path.line_to_point(out);
                 }
             }
         }
         if closed {
             if previous_cubic || start_cubic {
-                raw_path.cubic_to(out, start_in, start);
+                raw_path.cubic_to_points(out, start_in, start);
             } else {
-                raw_path.line_to(start);
+                raw_path.line_to_point(start);
             }
             raw_path.close();
         }
-        if let Some(deformer) = self.deformer() {
+        // Intrinsic measurement can be inside the owning Shape's callback.
+        // Read that actual host directly at the source's deformer boundary.
+        let deformer = match active_shape {
+            Some(shape) => shape.deformer(),
+            None => self.deformer(),
+        };
+        if let Some(deformer) = deformer {
             let transform = self.path_transform();
             deformer.with(|deformer| {
                 deformer.render_path_deformer_deform_local(
@@ -444,7 +531,7 @@ impl Path {
             .flatten()
     }
     pub fn mark_path_dirty(&mut self, _send_to_layout: bool) {
-        self.base.add_dirt(ComponentDirt::PATH);
+        self.base.add_dirt(ComponentDirt::PATH, false);
         if let Some(shape) = self.shape.as_ref() {
             shape.with_mut(|shape| {
                 if let Some(shape) = shape.as_shape_mut() {
@@ -467,22 +554,64 @@ impl Path {
             }
         }
         if self.deferred_path_dirt {
-            self.base.add_dirt(ComponentDirt::PATH);
+            self.base.add_dirt(ComponentDirt::PATH, false);
         }
     }
-    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
+    pub(crate) fn on_dirty_from_shape(
+        owner: &CoreHandle,
+        value: ComponentDirt,
+        active_shape: &mut Shape,
+    ) {
+        if has_dirt(
+            value,
+            ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
+        ) {
+            let shape = owner
+                .with(|owner| owner.as_path().and_then(Path::shape_handle))
+                .flatten();
+            if let Some(shape) = shape {
+                if active_shape.base.handle().as_ref() == Some(&shape) {
+                    active_shape.path_changed();
+                } else {
+                    shape.with_mut(|shape| shape.as_shape_mut().map(|shape| shape.path_changed()));
+                }
+            }
+        }
+        let deferred = owner
+            .with(|owner| {
+                owner
+                    .as_path()
+                    .expect("Path onDirty occurrence")
+                    .deferred_path_dirt
+            })
+            .expect("live Path onDirty occurrence");
+        if deferred {
+            // Source addDirt runs synchronously after pathChanged, including
+            // the recursive onDirty call if this adds the Path dirt bit.
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            )
+            .add_dirt_from_shape(active_shape, ComponentDirt::PATH, false);
+        }
+    }
+    pub(crate) fn update_after_transform_super(
+        &mut self,
+        value: ComponentDirt,
+        closed: bool,
+        active_points_path_has_skin: Option<bool>,
+    ) {
         let changed = has_dirt(value, ComponentDirt::PATH);
         let world_changed = has_dirt(value, ComponentDirt::WORLD_TRANSFORM);
         let deformer_changed = has_dirt(value, ComponentDirt::N_SLICER);
         if changed || deformer_changed || (self.deformer().is_some() && world_changed) {
-            if self.can_defer_path_update() {
+            if self.can_defer_path_update(active_points_path_has_skin) {
                 self.deferred_path_dirt = true;
                 return;
             }
             self.deferred_path_dirt = false;
             let mut path = std::mem::take(&mut self.raw_path);
             path.rewind();
-            self.build_path(&mut path);
+            self.build_path(&mut path, closed);
             self.raw_path = path;
         }
     }
@@ -518,24 +647,124 @@ fn rotate_points(
     let v1 = previous - next;
     let v2 = point - next;
     let angle = Vec2D::cross(v1, v2).atan2(Vec2D::dot(v1, v2));
-    let (s, c) = (angle * 2.0).sin_cos();
+    let s = (angle * 2.0).sin();
+    let c = (angle * 2.0).cos();
     *out -= previous;
-    *out = Vec2D::new(out.x * c - out.y * s, out.x * s + out.y * c) + previous;
-    let (s, c) = (-angle * 2.0).sin_cos();
+    *out = Vec2D::new(out.x.mul_add(c, -(out.y * s)), out.x.mul_add(s, out.y * c)) + previous;
+    let s = (-angle * 2.0).sin();
+    let c = (-angle * 2.0).cos();
     *incoming -= next;
     *incoming = Vec2D::new(
-        incoming.x * c - incoming.y * s,
-        incoming.x * s + incoming.y * c,
+        incoming.x.mul_add(c, -(incoming.y * s)),
+        incoming.x.mul_add(s, incoming.y * c),
     ) + next;
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rotate_points_matches_pinned_fused_rotation() {
+        let next = Vec2D::new(29.2390594, 22.256197);
+        let previous = Vec2D::new(36.3585854, -2.2231946);
+        let point = Vec2D::new(26.3485889, 8.14053153);
+        let mut out = Vec2D::new(26.895485, 7.57431);
+        let mut incoming = Vec2D::new(26.50651, 8.91174);
+
+        rotate_points(next, previous, point, &mut out, &mut incoming);
+
+        assert_eq!(out.x.to_bits(), 0x421c_5d52);
+        assert_eq!(out.y.to_bits(), 0x4131_f0b0);
+        assert_eq!(incoming.x.to_bits(), 0x421a_cf03);
+        assert_eq!(incoming.y.to_bits(), 0x4147_56ce);
+    }
+}
+
+#[cfg(feature = "tools")]
+pub struct DisplayCubicVertex {
+    pub base: crate::mechanical_port::source::shapes::cubic_vertex::CubicVertex,
+}
+#[cfg(feature = "tools")]
+impl DisplayCubicVertex {
+    fn new(in_point: Vec2D, out_point: Vec2D, translation: Vec2D) -> Self {
+        let mut vertex = Self {
+            base: Default::default(),
+        };
+        vertex.base.state.in_point = in_point;
+        vertex.base.state.out_point = out_point;
+        vertex.base.state.in_valid = true;
+        vertex.base.state.out_valid = true;
+        if vertex.vertex_mut().base.set_x_value(translation.x) {
+            CubicVertexBehavior::x_changed(&mut vertex);
+            vertex.vertex_mut().notify_property_changed(crate::mechanical_port::source::generated::shapes::vertex_base::VertexBase::X_PROPERTY_KEY);
+        }
+        if vertex.vertex_mut().base.set_y_value(translation.y) {
+            CubicVertexBehavior::y_changed(&mut vertex);
+            vertex.vertex_mut().notify_property_changed(crate::mechanical_port::source::generated::shapes::vertex_base::VertexBase::Y_PROPERTY_KEY);
+        }
+        vertex
+    }
+}
+#[cfg(feature = "tools")]
+impl VertexBehavior for DisplayCubicVertex {
+    fn vertex(&self) -> &crate::mechanical_port::source::shapes::vertex::Vertex {
+        self.base.vertex()
+    }
+    fn vertex_mut(&mut self) -> &mut crate::mechanical_port::source::shapes::vertex::Vertex {
+        self.base.vertex_mut()
+    }
+    fn mark_geometry_dirty(&mut self) {
+        self.base.mark_geometry_dirty();
+    }
+}
+#[cfg(feature = "tools")]
+impl CubicVertexBehavior for DisplayCubicVertex {
+    fn cubic_vertex(&self) -> &crate::mechanical_port::source::shapes::cubic_vertex::CubicVertex {
+        &self.base
+    }
+    fn cubic_vertex_mut(
+        &mut self,
+    ) -> &mut crate::mechanical_port::source::shapes::cubic_vertex::CubicVertex {
+        &mut self.base
+    }
+    // The pinned display owner retains the transformed control points.
+    fn compute_in(&mut self) {}
+    fn compute_out(&mut self) {}
+}
+#[cfg(feature = "tools")]
+pub enum FlattenedPathVertex {
+    Cubic(DisplayCubicVertex),
+    Straight(PathVertex),
+}
+#[cfg(feature = "tools")]
+impl VertexBehavior for FlattenedPathVertex {
+    fn vertex(&self) -> &crate::mechanical_port::source::shapes::vertex::Vertex {
+        match self {
+            Self::Cubic(vertex) => vertex.vertex(),
+            Self::Straight(vertex) => vertex.vertex(),
+        }
+    }
+    fn vertex_mut(&mut self) -> &mut crate::mechanical_port::source::shapes::vertex::Vertex {
+        match self {
+            Self::Cubic(vertex) => vertex.vertex_mut(),
+            Self::Straight(vertex) => vertex.vertex_mut(),
+        }
+    }
+    fn mark_geometry_dirty(&mut self) {
+        match self {
+            Self::Cubic(vertex) => vertex.mark_geometry_dirty(),
+            Self::Straight(vertex) => vertex.mark_geometry_dirty(),
+        }
+    }
+}
 #[cfg(feature = "tools")]
 pub struct FlattenedPath {
-    vertices: Vec<PathVertex>,
+    vertices: Vec<FlattenedPathVertex>,
 }
 #[cfg(feature = "tools")]
 impl FlattenedPath {
-    pub fn vertices(&self) -> &[PathVertex] {
+    pub fn vertices(&self) -> &[FlattenedPathVertex] {
         &self.vertices
     }
     fn add_vertex(&mut self, vertex: RenderVertex, transform: Mat2D) {
@@ -544,15 +773,25 @@ impl FlattenedPath {
                 translation,
                 in_point,
                 out_point,
-            } => self.vertices.push(PathVertex::display_cubic(
-                transform * in_point,
-                transform * out_point,
-                transform * translation,
-            )),
+            } => self
+                .vertices
+                .push(FlattenedPathVertex::Cubic(DisplayCubicVertex::new(
+                    transform * in_point,
+                    transform * out_point,
+                    transform * translation,
+                ))),
             RenderVertex::Straight { translation, .. } => {
                 let translation = transform * translation;
-                self.vertices
-                    .push(PathVertex::new(translation.x, translation.y));
+                let mut vertex = PathVertex::default();
+                if vertex.vertex_mut().base.set_x_value(translation.x) {
+                    VertexBehavior::x_changed(&mut vertex);
+                    vertex.vertex_mut().notify_property_changed(crate::mechanical_port::source::generated::shapes::vertex_base::VertexBase::X_PROPERTY_KEY);
+                }
+                if vertex.vertex_mut().base.set_y_value(translation.y) {
+                    VertexBehavior::y_changed(&mut vertex);
+                    vertex.vertex_mut().notify_property_changed(crate::mechanical_port::source::generated::shapes::vertex_base::VertexBase::Y_PROPERTY_KEY);
+                }
+                self.vertices.push(FlattenedPathVertex::Straight(vertex));
             }
         }
     }
@@ -566,8 +805,16 @@ impl Path {
         }
         let mut transform = self.path_transform();
         if transform_to_parent {
-            if let Some(parent) = self.base.parent().as_transform_component() {
-                transform = parent.world_transform().invert_or_identity() * transform;
+            if let Some(world) = self.base.parent_handle().and_then(|parent| {
+                parent
+                    .with(|object| {
+                        object
+                            .as_transform_component()
+                            .map(|parent| *parent.world_transform())
+                    })
+                    .flatten()
+            }) {
+                transform = world.invert_or_identity() * transform;
             }
         }
         let mut flat = FlattenedPath {

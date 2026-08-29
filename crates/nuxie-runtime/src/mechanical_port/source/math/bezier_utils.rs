@@ -177,7 +177,7 @@ pub fn find_cubic_convex_180_chops(
     let mut a = Vec2D::cross(coeffs.a, coeffs.b);
     let mut b_over_minus_2 = -0.5 * Vec2D::cross(coeffs.a, coeffs.c);
     let mut c = Vec2D::cross(coeffs.b, coeffs.c);
-    let mut discriminant_over_4 = b_over_minus_2.mul_add(b_over_minus_2, -(a * c));
+    let mut discriminant_over_4 = b_over_minus_2 * b_over_minus_2 - a * c;
     let cusp_threshold = (a * (TESS_EPSILON / 2.0)).powi(2);
     if discriminant_over_4 < -cusp_threshold {
         *are_cusps = false;
@@ -213,7 +213,7 @@ pub fn find_cubic_convex_180_chops(
         a = Vec2D::dot(tangent0, coeffs.a);
         b_over_minus_2 = -Vec2D::dot(tangent0, coeffs.b);
         c = Vec2D::dot(tangent0, coeffs.c);
-        discriminant_over_4 = cpp_max(b_over_minus_2.mul_add(b_over_minus_2, -(a * c)), 0.0);
+        discriminant_over_4 = cpp_max(b_over_minus_2 * b_over_minus_2 - a * c, 0.0);
     }
     let mut q = discriminant_over_4.sqrt().copysign(b_over_minus_2);
     q += b_over_minus_2;

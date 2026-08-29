@@ -18,4 +18,3 @@ pub fn from(
     (component.core_type() == ViewModelConsumerCoreType::ViewModelInstanceViewModel)
         .then(|| component.as_view_model_consumer())
 }
-use crate::mechanical_port::source::core::CoreHandle;

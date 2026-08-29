@@ -4,6 +4,23 @@ use crate::mechanical_port::source::{
     shapes::mesh::Mesh,
     shapes::vertex::{Vertex, VertexBehavior},
 };
+impl std::ops::Deref for MeshVertex {
+    type Target = MeshVertexBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for MeshVertex {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl MeshVertex {
+    pub const TYPE_KEY: u16 = MeshVertexBase::TYPE_KEY;
+}
+
 #[derive(Default)]
 pub struct MeshVertex {
     pub base: MeshVertexBase,
@@ -33,6 +50,12 @@ impl MeshVertex {
         let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::MissingObject;
         };
+        // Preserve the pinned C++ order: test the dynamic parent type before
+        // casting/mutating it. Besides being source-exact, this avoids trying
+        // to mutably reborrow a self-parented non-Mesh occurrence.
+        if !parent.is_type_of(Mesh::TYPE_KEY) {
+            return StatusCode::MissingObject;
+        }
         if parent
             .with_downcast_mut::<Mesh, _>(|parent| parent.add_vertex(this))
             .is_none()

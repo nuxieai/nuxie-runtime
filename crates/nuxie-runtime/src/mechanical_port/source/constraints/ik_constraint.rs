@@ -4,10 +4,9 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     core_context::{CoreContext, StatusCode},
     generated::{
-        constraints::ik_constraint_base::IkConstraintBase, core_registry::CoreCapabilities,
+        constraints::ik_constraint_base::IKConstraintBase, core_registry::CoreCapabilities,
     },
     math::{mat2d::Mat2D, math_types, transform_components::TransformComponents, vec2d::Vec2D},
-    transform_component::TransformComponent,
 };
 
 struct BoneChainLink {
@@ -22,7 +21,7 @@ struct BoneChainLink {
 /// spelling used by the mechanical registry.
 #[derive(Default)]
 pub struct IKConstraint {
-    pub base: IkConstraintBase,
+    pub base: IKConstraintBase,
     fk_chain: Vec<BoneChainLink>,
 }
 
@@ -149,7 +148,7 @@ impl IKConstraint {
         let inverse_world = self.fk_chain[first].parent_world_inverse;
         let p_a = Self::with_bone(&self.fk_chain[first].bone, |bone| bone.world_translation());
         let to_target = world_target_translation - p_a;
-        let to_target_local = Vec2D::transform_dir(to_target, inverse_world);
+        let to_target_local = Vec2D::transform_dir(to_target, &inverse_world);
         let rotation = atan2(to_target_local);
         self.constrain_rotation(first, rotation);
         self.fk_chain[first].angle = rotation;
@@ -187,7 +186,7 @@ impl IKConstraint {
             let second_child_inverse = self.fk_chain[second_child_index].parent_world_inverse;
             p_c = Self::with_bone(&first_child, |bone| bone.world_translation());
             p_b = Self::with_bone(&b2, Bone::tip_world_translation);
-            let av_local = Vec2D::transform_dir(p_b - p_c, second_child_inverse);
+            let av_local = Vec2D::transform_dir(p_b - p_c, &second_child_inverse);
             let angle_correction = -atan2(av_local);
             if self.base.invert_direction() {
                 (
@@ -244,7 +243,9 @@ impl IKConstraint {
         });
     }
 
-    pub fn constrain(&mut self, _component: &mut TransformComponent) {
+    // Upstream receives but does not dereference this component. Retaining its
+    // identity avoids borrowing the tip Bone across the in-place chain solve.
+    pub fn constrain(&mut self, _component: &CoreHandle) {
         let Some(target) = self.base.target() else {
             return;
         };

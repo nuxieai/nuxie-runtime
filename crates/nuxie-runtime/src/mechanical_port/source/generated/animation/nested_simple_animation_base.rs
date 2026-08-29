@@ -48,7 +48,10 @@ impl NestedSimpleAnimationBase {
             return;
         }
         callbacks.speed_changed();
-        callbacks.notify_property_changed(Self::SPEED_PROPERTY_KEY);
+        NestedSimpleAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::SPEED_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_speed_value(&mut self, value: f32) -> bool {
@@ -70,7 +73,10 @@ impl NestedSimpleAnimationBase {
             return;
         }
         callbacks.is_playing_changed();
-        callbacks.notify_property_changed(Self::IS_PLAYING_PROPERTY_KEY);
+        NestedSimpleAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::IS_PLAYING_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_is_playing_value(&mut self, value: bool) -> bool {

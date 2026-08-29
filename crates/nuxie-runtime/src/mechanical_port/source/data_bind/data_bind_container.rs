@@ -121,9 +121,7 @@ impl DataBindContainerOwner {
             Self::Authored(owner) => owner
                 .with(|owner| owner.as_artboard().and_then(|owner| owner.data_context()))
                 .flatten(),
-            Self::StateMachine(owner) => owner
-                .with_instance(|owner| owner.data_context_handle())
-                .flatten(),
+            Self::StateMachine(owner) => owner.data_context_handle(),
         };
         DataBindContext::bind_from_context_handle(&bind, context);
     }
@@ -206,8 +204,18 @@ impl DataBindContainer {
     }
 
     pub fn advance_data_binds(&self, elapsed: f32) -> bool {
+        let count = self.0.borrow().data_binds.len();
+        if count == 0 {
+            return false;
+        }
         let mut updated = false;
-        for bind in self.data_binds() {
+        for index in 0..count {
+            // Keep the retained source list in place. The handle clone only
+            // extends this entry's lifetime while advance can call back into
+            // the runtime; it is not a snapshot of the full object list.
+            let Some(bind) = self.0.borrow().data_binds.get(index).cloned() else {
+                break;
+            };
             updated |= DataBind::advance_handle(&bind, elapsed);
         }
         updated
@@ -283,7 +291,7 @@ impl DataBindContainer {
     }
 
     pub fn update_data_binds(&self, apply_target_to_source: bool) {
-        let active = {
+        let (persisting_count, dirty_to_source_count, dirty_count) = {
             let mut state = self.0.borrow_mut();
             if state.is_processing
                 || (state.persisting.is_empty()
@@ -294,12 +302,17 @@ impl DataBindContainer {
             }
             state.is_processing = true;
             (
-                state.persisting.clone(),
-                state.dirty_to_source.clone(),
-                state.dirty.clone(),
+                state.persisting.len(),
+                state.dirty_to_source.len(),
+                state.dirty.len(),
             )
         };
-        for bind in active.0 {
+        for index in 0..persisting_count {
+            // add/remove and new dirt are deferred while is_processing is
+            // true, exactly like the pinned retained-pointer vectors. Borrow
+            // only long enough to retain the current handle, then release it
+            // before update callbacks re-enter the container.
+            let bind = self.0.borrow().persisting[index].clone();
             let can_skip = bind
                 .with(|bind| bind.as_data_bind().unwrap().can_skip())
                 .unwrap_or(false);
@@ -307,7 +320,13 @@ impl DataBindContainer {
                 DataBind::update_data_bind_handle(&bind, apply_target_to_source);
             }
         }
-        for bind in active.1.into_iter().chain(active.2) {
+        for index in 0..dirty_to_source_count {
+            let bind = self.0.borrow().dirty_to_source[index].clone();
+            bind.with_mut(|bind| bind.as_data_bind_mut().unwrap().set_in_dirty_list(false));
+            DataBind::update_data_bind_handle(&bind, apply_target_to_source);
+        }
+        for index in 0..dirty_count {
+            let bind = self.0.borrow().dirty[index].clone();
             bind.with_mut(|bind| bind.as_data_bind_mut().unwrap().set_in_dirty_list(false));
             DataBind::update_data_bind_handle(&bind, apply_target_to_source);
         }

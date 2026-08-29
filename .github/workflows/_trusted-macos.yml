@@ -63,20 +63,6 @@ jobs:
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
 
-      # The scorecard record wrapper (tools/parity-scorecard) needs
-      # Python >= 3.11 (tomllib). setup-python assumes the hosted image's
-      # /Users/runner tool-cache layout and fails on the self-hosted pool, so
-      # persistent runners must provide a system python3 instead.
-      - name: Install Python (hosted)
-        if: runner.environment == 'github-hosted'
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Verify system Python (self-hosted)
-        if: runner.environment != 'github-hosted'
-        run: python3 -c 'import sys, tomllib; assert sys.version_info >= (3, 11), sys.version'
-
       - name: Build reference Rive runtime
         working-directory: ${{ env.RIVE_RUNTIME_DIR }}
         run: |
@@ -87,45 +73,14 @@ jobs:
         working-directory: ${{ github.workspace }}/rive-rust
         run: make fixtures
 
-      # The gate commands below are unchanged; the record wrapper streams
-      # their output, captures the raw summary and exit code as scorecard
-      # evidence, and exits with the gate's own exit code -- the gate stays
-      # exactly as blocking as a bare `make` invocation. This job is the
-      # single source of the oracle floor evidence; ci.yml used to re-run the
-      # same floor on a second hosted runner just to capture these files.
       - name: Run golden compare
         working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate golden-compare \
-            --output target/parity-scorecard/evidence/golden-compare.json \
-            -- make golden-compare
-
-      # Its own step rather than a prerequisite of cpp-oracle-workspace-tests:
-      # an audit drift is a distinct failure and must not stop the workspace
-      # tests below from running and reporting.
-      - name: Verify B-6 audit
-        if: ${{ !cancelled() }}
-        working-directory: ${{ github.workspace }}/rive-rust
-        run: make b6-audit-check
+        run: make golden-compare
 
       - name: Run Rust workspace tests with the pinned C++ oracle
         if: ${{ !cancelled() }}
         working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate cargo-test-workspace \
-            --output target/parity-scorecard/evidence/cargo-test-workspace.json \
-            -- make cpp-oracle-workspace-tests
-
-      - name: Upload oracle scorecard evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-scorecard-evidence-oracle-${{ github.run_attempt }}
-          path: rive-rust/target/parity-scorecard/evidence/*.json
-          if-no-files-found: warn
-          retention-days: 7
+        run: make cpp-oracle-workspace-tests
 
       - name: Upload runtime differential fingerprints
         if: always()
@@ -197,20 +152,12 @@ jobs:
       - name: Run forced-scripted golden compare
         if: matrix.lane == 'scripted-golden'
         working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate scripted-golden-compare \
-            --output target/parity-scorecard/evidence/scripted-golden-compare.json \
-            -- make scripted-golden-compare
+        run: make scripted-golden-compare
 
       - name: Run executable silver corpus
         if: matrix.lane == 'silver'
         working-directory: ${{ github.workspace }}/rive-rust
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate silver-corpus-validate \
-            --output target/parity-scorecard/evidence/silver-corpus-validate.json \
-            -- make silver-corpus-validate
+        run: make silver-corpus-validate
 
       - name: Upload lane differential fingerprints
         if: always()
@@ -220,15 +167,6 @@ jobs:
           path: rive-rust/target/runtime-differentials/*.json
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Upload lane scorecard evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-scorecard-evidence-${{ matrix.lane }}-${{ github.run_attempt }}
-          path: rive-rust/target/parity-scorecard/evidence/*.json
-          if-no-files-found: warn
-          retention-days: 7
 
   capi-smoke:
     name: C ABI smoke test
@@ -248,37 +186,8 @@ jobs:
       - name: Install Rust stable
         run: rustup toolchain install stable --profile minimal --no-self-update
 
-      # The scorecard record wrapper (tools/parity-scorecard) needs
-      # Python >= 3.11 (tomllib). setup-python assumes the hosted image's
-      # /Users/runner tool-cache layout and fails on the self-hosted pool, so
-      # persistent runners must provide a system python3 instead.
-      - name: Install Python (hosted)
-        if: runner.environment == 'github-hosted'
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Verify system Python (self-hosted)
-        if: runner.environment != 'github-hosted'
-        run: python3 -c 'import sys, tomllib; assert sys.version_info >= (3, 11), sys.version'
-
       - name: Fetch pinned test assets
         run: make fixtures
 
-      # Same wrapper contract as the golden-compare job: identical command,
-      # identical exit code, plus the raw evidence file for the scorecard.
       - name: Build and run C smoke test
-        run: |
-          python3 tools/parity-scorecard/parity_scorecard.py record \
-            --gate capi-smoke \
-            --output target/parity-scorecard/evidence/capi-smoke.json \
-            -- make capi-smoke
-
-      - name: Upload C ABI scorecard evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: parity-scorecard-evidence-capi-${{ github.run_attempt }}
-          path: target/parity-scorecard/evidence/capi-smoke.json
-          if-no-files-found: warn
-          retention-days: 7
+        run: make capi-smoke

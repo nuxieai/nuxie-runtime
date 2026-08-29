@@ -52,7 +52,10 @@ impl DataConverterStringPadBase {
             return;
         }
         callbacks.length_changed();
-        callbacks.notify_property_changed(Self::LENGTH_PROPERTY_KEY);
+        DataConverterStringPadBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::LENGTH_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_length_value(&mut self, value: u32) -> bool {
@@ -74,7 +77,10 @@ impl DataConverterStringPadBase {
             return;
         }
         callbacks.text_changed();
-        callbacks.notify_property_changed(Self::TEXT_PROPERTY_KEY);
+        DataConverterStringPadBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::TEXT_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_text_value(&mut self, value: String) -> bool {
@@ -96,7 +102,10 @@ impl DataConverterStringPadBase {
             return;
         }
         callbacks.pad_type_changed();
-        callbacks.notify_property_changed(Self::PAD_TYPE_PROPERTY_KEY);
+        DataConverterStringPadBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::PAD_TYPE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_pad_type_value(&mut self, value: u32) -> bool {
@@ -122,7 +131,7 @@ impl DataConverterStringPadBase {
         self.length = object.length;
         self.text.clone_from(&object.text);
         self.pad_type = object.pad_type;
-        self.base.copy(&object.base, callbacks);
+        self.base.copy(&object.base);
     }
     pub fn deserialize(
         &mut self,

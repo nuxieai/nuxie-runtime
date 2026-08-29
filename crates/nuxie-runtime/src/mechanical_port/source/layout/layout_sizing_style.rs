@@ -13,6 +13,24 @@ use crate::mechanical_port::source::{
     },
 };
 
+impl std::ops::Deref for LayoutSizingStyle {
+    type Target = LayoutSizingStyleBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for LayoutSizingStyle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl LayoutSizingStyle {
+    pub const TYPE_KEY: u16 = LayoutSizingStyleBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct LayoutSizingStyle {
     pub base: LayoutSizingStyleBase,
 }
@@ -67,7 +85,10 @@ impl LayoutSizingStyle {
         YGUnit::from(self.base.min_height_units_value())
     }
     pub fn apply_base_style(&self, style: &mut YGStyle, _context: &LayoutSyncContext) {
-        style.set_display(self.display());
+        self.apply_base_style_with_display(style, self.display());
+    }
+    pub(crate) fn apply_base_style_with_display(&self, style: &mut YGStyle, display: YGDisplay) {
+        style.set_display(display);
         style.min_dimensions_mut()[YGDimension::Width] =
             YGValue::new(self.base.min_width(), self.min_width_units());
         style.min_dimensions_mut()[YGDimension::Height] =
@@ -83,13 +104,13 @@ impl LayoutSizingStyle {
         }
         GridTrack::sync_item_justify_self(
             style,
-            self.base.justify_self_value(),
+            u32::from(self.base.justify_self_value()),
             context.parent_is_stack,
             context.inline_hugs,
             context.container_justify_items,
         );
         if context.parent_is_grid
-            && self.base.layout_width_scale_type() == LayoutScaleType::Fill as u32
+            && self.base.layout_width_scale_type() == LayoutScaleType::Fill as u8
         {
             style.set_justify_self(YGJustify::Stretch);
         }

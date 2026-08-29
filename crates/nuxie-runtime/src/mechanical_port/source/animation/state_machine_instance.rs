@@ -780,6 +780,38 @@ impl StateMachineLayerInstance {
         );
     }
 
+    fn profile_state_name(instance: Option<&RuntimeStateInstanceHandle>) -> String {
+        use crate::mechanical_port::source::generated::animation::{
+            animation_state_base::AnimationStateBase, any_state_base::AnyStateBase,
+            entry_state_base::EntryStateBase, exit_state_base::ExitStateBase,
+        };
+        let Some(instance) = instance else {
+            return "(null)".to_owned();
+        };
+        let state = instance.definition();
+        if state.is_type_of(AnimationStateBase::TYPE_KEY) {
+            return state
+                .with_downcast::<AnimationState, _>(AnimationState::animation)
+                .flatten()
+                .and_then(|animation| {
+                    animation.with_downcast::<LinearAnimation, _>(|animation| {
+                        animation.base.name().to_owned()
+                    })
+                })
+                .unwrap_or_else(|| "Animation".to_owned());
+        }
+        if state.is_type_of(EntryStateBase::TYPE_KEY) {
+            "Entry"
+        } else if state.is_type_of(ExitStateBase::TYPE_KEY) {
+            "Exit"
+        } else if state.is_type_of(AnyStateBase::TYPE_KEY) {
+            "Any"
+        } else {
+            "Blend"
+        }
+        .to_owned()
+    }
+
     fn try_change_state_from(
         &mut self,
         machine: &mut StateMachineInstance,
@@ -798,6 +830,31 @@ impl StateMachineLayerInstance {
             .flatten();
         self.change_state(machine, state_to);
         self.state_machine_changed_on_advance = true;
+        {
+            use crate::mechanical_port::source::profiler::rive_profile;
+            if rive_profile::global_transition_enabled() {
+                let artboard = self
+                    .artboard_instance
+                    .upgrade()
+                    .expect("live layer Artboard");
+                let artboard_name =
+                    artboard.with_artboard(|artboard| artboard.base.name().to_owned());
+                let layer_name = self
+                    .layer
+                    .as_ref()
+                    .expect("layer definition")
+                    .with_downcast::<StateMachineLayer, _>(|layer| layer.base.name().to_owned())
+                    .expect("live StateMachineLayer");
+                rive_profile::record_global_transition(
+                    &artboard_name,
+                    &machine.name(),
+                    &layer_name,
+                    &Self::profile_state_name(out_state.as_ref()),
+                    &Self::profile_state_name(self.current_state.as_ref()),
+                    &rive_profile::artboard_path(&artboard.core_handle()),
+                );
+            }
+        }
         self.transition = Some(transition.clone());
         self.transition_duration_property = machine.find_transition_property_instance(
             &transition,
@@ -843,14 +900,14 @@ impl StateMachineLayerInstance {
                 .flatten()
                 .expect("an authored StateTransition must expose pause-on-exit");
             let applied = if pause_on_exit && use_exit {
-                let flags = transition
+                let exit_time_is_percentage = transition
                     .with(|transition| {
                         transition
                             .as_state_transition()
-                            .map(|transition| transition.base.flags())
+                            .map(|transition| transition.exit_time_is_percentage())
                     })
                     .flatten()
-                    .expect("an authored StateTransition must expose flags");
+                    .expect("an authored StateTransition must expose exit-time units");
                 let authored_exit_time = transition
                     .with(|transition| {
                         transition
@@ -859,7 +916,7 @@ impl StateMachineLayerInstance {
                     })
                     .flatten()
                     .expect("an authored StateTransition must expose exit time");
-                let exit_time = if flags & 32 != 0 {
+                let exit_time = if exit_time_is_percentage {
                     let exit_animation = transition
                         .with_downcast::<crate::mechanical_port::source::animation::blend_state_transition::BlendStateTransition, _>(|transition| transition.exit_time_animation(Some(&out_state)))
                         .unwrap_or_else(|| hold_animation.clone());
@@ -882,7 +939,7 @@ impl StateMachineLayerInstance {
             if applied {
                 self.hold_animation = hold_animation;
                 self.hold_time = out_state
-                    .first_animation(LinearAnimationInstance::time)
+                    .first_animation(|animation| animation.time())
                     .unwrap_or(0.0);
             }
         }
@@ -899,10 +956,9 @@ impl StateMachineLayerInstance {
                 .as_ref()
                 .filter(|from| {
                     from.definition()
-                        .with_downcast::<AnimationState, _>(|_| ())
-                        .is_some()
+                        .is_type_of(crate::mechanical_port::source::generated::animation::animation_state_base::AnimationStateBase::TYPE_KEY)
                 })
-                .and_then(|from| from.first_animation(LinearAnimationInstance::spilled_time))
+                .and_then(|from| from.first_animation(|animation| animation.spilled_time()))
                 .unwrap_or(0.0);
             current.with_state_mut(|state| state.advance(advance_time, machine));
         }
@@ -914,16 +970,21 @@ impl StateMachineLayerInstance {
 
     fn apply(&mut self) {
         if let Some(animation_reset) = self.animation_reset.as_ref() {
-            self.artboard_instance
-                .with_artboard_mut(|artboard| animation_reset.apply(artboard))
+            let mut artboard = self
+                .artboard_instance
+                .upgrade()
                 .expect("a state-machine layer retains its artboard instance");
+            animation_reset.apply(&mut artboard);
         }
-        if let Some(hold_animation) = self.hold_animation.take() {
-            self.artboard_instance.with_artboard_mut(|artboard| {
-                hold_animation.with_downcast_mut::<LinearAnimation, _>(|animation| {
-                    animation.apply(artboard, self.hold_time, self.mix_from, None)
-                });
+        if let Some(hold_animation) = self.hold_animation.clone() {
+            let artboard = self
+                .artboard_instance
+                .upgrade()
+                .expect("a state-machine layer retains its artboard instance");
+            hold_animation.with_downcast_mut::<LinearAnimation, _>(|animation| {
+                artboard.apply_linear_animation(animation, self.hold_time, self.mix_from, None)
             });
+            self.hold_animation = None;
         }
         let interpolator = self.transition.as_ref().and_then(|transition| {
             transition
@@ -971,6 +1032,37 @@ impl StateMachineLayerInstance {
                 .flatten()
                 .is_some()
         })
+    }
+}
+
+impl crate::mechanical_port::source::core::field_types::core_callback_type::CallbackContext
+    for StateMachineInstance
+{
+    fn report_event(
+        &mut self,
+        event: &mut crate::mechanical_port::source::event::Event,
+        seconds_delay: f32,
+    ) {
+        let event = event
+            .base
+            .handle()
+            .expect("a reported Event has authored identity");
+        StateMachineInstance::report_event(self, event, seconds_delay);
+    }
+
+    fn plays_audio(&self) -> bool {
+        true
+    }
+}
+
+impl crate::mechanical_port::source::animation::keyed_callback_reporter::KeyedCallbackReporter
+    for StateMachineInstance
+{
+    fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32) {
+        if let Some(target) = self.resolve_artboard_object(object_id) {
+            let data = crate::mechanical_port::source::core::field_types::core_callback_type::CallbackData::new(Some(self), elapsed_seconds);
+            CoreRegistry::set_callback_handle(&target, property_key as i32, data);
+        }
     }
 }
 
@@ -1071,8 +1163,7 @@ impl TransitionRuntime for DirectTransitionRuntime {
             from.animation_for_blend(self.exit_blend_animation.as_ref()?, use_animation)
         } else if from
             .definition()
-            .with_downcast::<AnimationState, _>(|_| ())
-            .is_some()
+            .is_type_of(crate::mechanical_port::source::generated::animation::animation_state_base::AnimationStateBase::TYPE_KEY)
         {
             from.first_animation(use_animation)
         } else {
@@ -1083,8 +1174,7 @@ impl TransitionRuntime for DirectTransitionRuntime {
     fn set_exit_instance_time(&self, from: &RuntimeStateInstanceHandle, time: f32) {
         if from
             .definition()
-            .with_downcast::<AnimationState, _>(|_| ())
-            .is_some()
+            .is_type_of(crate::mechanical_port::source::generated::animation::animation_state_base::AnimationStateBase::TYPE_KEY)
         {
             from.first_animation(|animation| animation.set_time(time));
         }
@@ -1096,7 +1186,7 @@ pub trait HitComponent {
     fn as_hit_drawable(&self) -> Option<&HitDrawable> {
         None
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     fn early_out_count(&self) -> i32 {
         0
     }
@@ -1209,7 +1299,7 @@ pub struct HitDrawable {
     listeners: RefCell<Vec<RuntimeListenerGroupHandle>>,
     hit_path: bool,
     hit_clip: bool,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     early_out_count: Cell<i32>,
 }
 
@@ -1238,7 +1328,7 @@ impl HitDrawable {
             listeners: RefCell::new(Vec::new()),
             hit_path,
             hit_clip,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "tools"))]
             early_out_count: Cell::new(0),
         }
     }
@@ -1279,7 +1369,7 @@ impl HitComponent for HitDrawable {
         Some(self)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     fn early_out_count(&self) -> i32 {
         self.early_out_count.get()
     }
@@ -1294,7 +1384,7 @@ impl HitComponent for HitDrawable {
             && (hit_type != ListenerType::Down || !self.has_down_listener.get())
             && (hit_type != ListenerType::Up || !self.has_up_listener.get())
         {
-            #[cfg(test)]
+            #[cfg(any(test, feature = "tools"))]
             {
                 self.early_out_count.set(self.early_out_count.get() + 1);
             }
@@ -1460,12 +1550,10 @@ impl HitComponent for HitNestedArtboard {
         for animation in nested_animations(&self.component) {
             if animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY) {
                 if let Some(instance) = nested_state_machine(&animation) {
-                    instance.with_instance_mut(|nested| {
-                        nested.broadcast_gamepad_to_scripted_drawables(
-                            invocation,
-                            already_dispatched,
-                        );
-                    });
+                    instance.broadcast_gamepad_to_scripted_drawables(
+                        invocation,
+                        already_dispatched,
+                    );
                 }
             }
         }
@@ -1581,9 +1669,7 @@ impl HitComponent for HitComponentList {
                 continue;
             };
             let item = if running_can_hit {
-                machine.with_instance_mut(|nested| {
-                    nested.broadcast_gamepad_to_scripted_drawables(invocation, already_dispatched)
-                })
+                machine.broadcast_gamepad_to_scripted_drawables(invocation, already_dispatched)
             } else {
                 HitResult::None
             };
@@ -1632,7 +1718,14 @@ fn data_context_property(
 }
 
 fn trigger_value(value: &CoreHandle) -> Option<u32> {
-    value.with_downcast::<ViewModelInstanceTrigger, _>(|trigger| trigger.base.property_value())
+    if !value.is_type_of(crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY) {
+        return None;
+    }
+    Some(
+        value
+            .with_downcast::<ViewModelInstanceTrigger, _>(|trigger| trigger.base.property_value())
+            .expect("a retained trigger value has its concrete owner"),
+    )
 }
 
 struct ListenerViewModelPropertyBinding {
@@ -1662,8 +1755,11 @@ impl RuntimeListenerViewModelPropertyBindingHandle {
         let erased: Rc<RefCell<dyn ViewModelValueDependent>> = binding.clone();
         let identity = ValueDependentHandle::runtime(&erased);
         binding.borrow_mut().dependent_identity = Some(identity.clone());
-        value.with_downcast_mut::<ViewModelInstanceValue, _>(|value| {
-            value.add_dependent(identity);
+        value.with_mut(|value| {
+            value
+                .as_view_model_instance_value_mut()
+                .expect("a listener binds a ViewModelInstanceValue")
+                .add_dependent(identity);
         });
         let handle = Self(binding);
         handle
@@ -1684,8 +1780,11 @@ impl ListenerViewModelPropertyBinding {
             self.view_model_instance_value.take(),
             self.dependent_identity.as_ref(),
         ) {
-            value.with_downcast_mut::<ViewModelInstanceValue, _>(|value| {
-                value.remove_dependent(identity);
+            value.with_mut(|value| {
+                value
+                    .as_view_model_instance_value_mut()
+                    .expect("a listener retains its ViewModelInstanceValue")
+                    .remove_dependent(identity);
             });
         }
     }
@@ -1702,12 +1801,15 @@ impl ListenerViewModelPropertyBinding {
         if value != self.view_model_instance_value {
             self.clear_data_context();
             if let Some(value) = value {
+                self.view_model_instance_value = Some(value.clone());
                 if let Some(identity) = self.dependent_identity.clone() {
-                    value.with_downcast_mut::<ViewModelInstanceValue, _>(|value| {
-                        value.add_dependent(identity);
+                    value.with_mut(|value| {
+                        value
+                            .as_view_model_instance_value_mut()
+                            .expect("a listener relinks a ViewModelInstanceValue")
+                            .add_dependent(identity);
                     });
                 }
-                self.view_model_instance_value = Some(value);
             }
         }
     }
@@ -1715,7 +1817,7 @@ impl ListenerViewModelPropertyBinding {
     fn add_dirt(&mut self) {
         if let Some(value) = self.view_model_instance_value.clone() {
             self.parent
-                .with_listener_mut(|parent| parent.report_to_state_machine(value));
+                .with_listener_mut(|parent| parent.report_to_state_machine(trigger_value(&value)));
         }
     }
 }
@@ -1736,11 +1838,29 @@ impl ViewModelValueDependent for ListenerViewModelPropertyBinding {
     fn relink_data_bind(&mut self) {
         ListenerViewModelPropertyBinding::relink_data_bind(self);
     }
+
+    fn add_dirt_from_trigger(
+        &mut self,
+        _value: ComponentDirt,
+        _recurse: bool,
+        source: &CoreHandle,
+        trigger_value: u32,
+    ) {
+        if let Some(value) = self.view_model_instance_value.as_ref() {
+            assert_eq!(
+                value, source,
+                "a property binding is notified by its retained source"
+            );
+            self.parent.with_listener_mut(|parent| {
+                parent.report_to_state_machine(Some(trigger_value));
+            });
+        }
+    }
 }
 
 struct ListenerViewModel {
     occurrence: RuntimeListenerViewModelWeakHandle,
-    state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
+    reported_listener_view_models: Rc<RefCell<Vec<RuntimeListenerViewModelWeakHandle>>>,
     listener: CoreHandle,
     data_context: Option<RuntimeDataContextHandle>,
     property_bindings: Vec<RuntimeListenerViewModelPropertyBindingHandle>,
@@ -1790,12 +1910,12 @@ impl RuntimeListenerViewModelWeakHandle {
 
 impl ListenerViewModel {
     fn new(
-        machine: RuntimeStateMachineInstanceWeakHandle,
+        reported_listener_view_models: Rc<RefCell<Vec<RuntimeListenerViewModelWeakHandle>>>,
         listener: CoreHandle,
     ) -> RuntimeListenerViewModelHandle {
         RuntimeListenerViewModelHandle::new(Self {
             occurrence: RuntimeListenerViewModelWeakHandle::default(),
-            state_machine_instance: machine,
+            reported_listener_view_models,
             listener,
             data_context: None,
             property_bindings: Vec::new(),
@@ -1807,16 +1927,14 @@ impl ListenerViewModel {
             binding.with_binding_mut(ListenerViewModelPropertyBinding::clear_data_context);
         }
         self.property_bindings.clear();
-        self.data_context = None;
     }
 
     fn bind_from_context(&mut self, context: RuntimeDataContextHandle) {
-        self.clear_data_context();
         self.data_context = Some(context.clone());
+        self.clear_data_context();
         if self
             .listener
-            .with_downcast::<StateMachineListenerSingle, _>(|_| ())
-            .is_some()
+            .is_type_of(crate::mechanical_port::source::generated::animation::state_machine_listener_single_base::StateMachineListenerSingleBase::TYPE_KEY)
         {
             if let Some(value) = data_context_property(&context, &self.listener) {
                 self.property_bindings
@@ -1834,8 +1952,7 @@ impl ListenerViewModel {
                         .filter_map(|index| listener.listener_input_type(index))
                         .filter(|input| {
                             input
-                                .with_downcast::<ListenerInputTypeViewModel, _>(|_| ())
-                                .is_some()
+                                .is_type_of(crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_viewmodel_base::ListenerInputTypeViewModelBase::TYPE_KEY)
                         })
                         .collect::<Vec<_>>()
                 })
@@ -1861,38 +1978,237 @@ impl ListenerViewModel {
             .filter(|value| trigger_value(value).is_some_and(|value| value != 0))
             .collect();
         for value in pending {
-            self.report_to_state_machine(value);
+            self.report_to_state_machine(trigger_value(&value));
         }
     }
 
-    fn report_to_state_machine(&mut self, value: CoreHandle) {
-        let occurrence = self.occurrence.clone();
-        self.state_machine_instance.with_instance_mut(|machine| {
-            let should_report = trigger_value(&value).is_none_or(|value| value != 0);
-            if should_report {
-                machine.report_listener_view_model(occurrence);
-            }
-        });
+    fn report_to_state_machine(&mut self, trigger_value: Option<u32>) {
+        if trigger_value.is_none_or(|value| value != 0) {
+            self.reported_listener_view_models
+                .borrow_mut()
+                .push(self.occurrence.clone());
+        }
     }
 }
 
 #[derive(Clone)]
-pub struct RuntimeStateMachineInstanceHandle(Rc<RefCell<StateMachineInstance>>, DataBindContainer);
+pub struct RuntimeStateMachineInstanceHandle(
+    Rc<RefCell<StateMachineInstance>>,
+    DataBindContainer,
+    RuntimeArtboardInstanceWeakHandle,
+    Rc<RefCell<Option<RuntimeDataContextHandle>>>,
+    Rc<RefCell<Vec<QueuedFocusEvent>>>,
+    Rc<Cell<bool>>,
+);
 
 #[derive(Clone, Default)]
 pub struct RuntimeStateMachineInstanceWeakHandle(
     Weak<RefCell<StateMachineInstance>>,
     crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerWeak,
+    RuntimeArtboardInstanceWeakHandle,
+    Weak<RefCell<Option<RuntimeDataContextHandle>>>,
+    Weak<RefCell<Vec<QueuedFocusEvent>>>,
+    Weak<Cell<bool>>,
 );
 
 impl RuntimeStateMachineInstanceHandle {
+    pub fn submit_gamepads_from_buffer(&self, data: &[u8]) -> bool {
+        let (gamepads, focus_manager) = self
+            .with_instance(|machine| (machine.embedder_gamepads.clone(), machine.focus_manager()));
+        let mut dispatcher = StateMachineGamepadDispatcher {
+            machine: self.clone(),
+            focus_manager,
+        };
+        gamepads.submit(Some(data), &mut dispatcher)
+    }
+
+    pub fn broadcast_gamepad_to_scripted_drawables(
+        &self,
+        invocation: &ListenerInvocation,
+        already_dispatched: Option<&CoreHandle>,
+    ) -> HitResult {
+        let mut hit_something = false;
+        let mut hit_opaque = false;
+        // Retain the actual hit occurrences without holding the SMI across
+        // nested dispatch or callbacks into its listener actions.
+        let hit_components = self.with_instance(|machine| machine.hit_components.clone());
+        for component in hit_components {
+            let result = component.process_gamepad_invocation(invocation, already_dispatched);
+            hit_something |= result != HitResult::None;
+            hit_opaque |= result == HitResult::HitOpaque;
+        }
+        let drawables = self.with_instance(|machine| machine.gamepad_scripted_drawables.clone());
+        for drawable in drawables {
+            if Some(&drawable) == already_dispatched {
+                continue;
+            }
+            let accepts = drawable
+                .with(|drawable| {
+                    let Some(drawable) = drawable.as_scripted_drawable() else {
+                        return false;
+                    };
+                    match invocation.kind() {
+                        ListenerInvocationKind::GamepadConnected => {
+                            drawable.scripted.wants_gamepad_connect()
+                        }
+                        ListenerInvocationKind::GamepadEvent => {
+                            drawable.scripted.wants_gamepad_event()
+                        }
+                        ListenerInvocationKind::GamepadDisconnected => {
+                            drawable.scripted.wants_gamepad_disconnect()
+                        }
+                        _ => false,
+                    }
+                })
+                .unwrap_or(false);
+            if accepts {
+                hit_something |= crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::gamepad_dispatch_occurrence(&drawable, invocation);
+            }
+        }
+        if !hit_something {
+            HitResult::None
+        } else if hit_opaque {
+            HitResult::HitOpaque
+        } else {
+            HitResult::Hit
+        }
+    }
+
+    pub fn fire_semantic_action(&self, node_id: u32, action_type: u8) {
+        let Some(manager) = self.with_instance(|machine| machine.semantic_manager()) else {
+            return;
+        };
+        let semantic_data = manager
+            .with_semantic_manager(|manager| manager.node_by_id(node_id))
+            .and_then(|node| node.borrow().semantic_data.clone());
+        let Some(semantic_data) = semantic_data else {
+            return;
+        };
+        semantic_data.with_mut(|semantic_data| {
+            let Some(semantic_data) = semantic_data.as_semantic_data_mut() else {
+                return;
+            };
+            match SemanticActionType::from_raw(action_type as u32) {
+                Some(SemanticActionType::Tap) => semantic_data.fire_semantic_tap(),
+                Some(SemanticActionType::Increase) => semantic_data.fire_semantic_increase(),
+                Some(SemanticActionType::Decrease) => semantic_data.fire_semantic_decrease(),
+                None => {}
+            }
+        });
+    }
+
+    pub fn advance_and_apply(&self, seconds: f32) -> bool {
+        self.advance_and_apply_view_models(seconds, true)
+    }
+
+    pub fn advance_and_apply_view_models(&self, seconds: f32, advance_view_models: bool) -> bool {
+        let root_flags = AdvanceFlags(
+            AdvanceFlags::IS_ROOT.0
+                | AdvanceFlags::ANIMATE.0
+                | AdvanceFlags::ADVANCE_NESTED.0
+                | AdvanceFlags::NEW_FRAME.0,
+        );
+        let loop_flags = AdvanceFlags(
+            AdvanceFlags::IS_ROOT.0 | AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0,
+        );
+        let artboard = self.with_instance(|machine| {
+            machine
+                .artboard_instance
+                .upgrade()
+                .expect("live state machine artboard")
+        });
+        let mut keep_going =
+            self.with_instance_mut(|machine| machine.advance(seconds, true)) || seconds == 0.0;
+        let manager = self.with_instance(StateMachineInstance::focus_manager);
+        manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
+        // A nested machine may synchronously notify this machine during each
+        // artboard phase. Retain the actual owners, not their RefMut guards.
+        if artboard.advance_internal(seconds, root_flags) {
+            keep_going = true;
+        }
+        for _ in 0..5 {
+            if artboard.update_pass(true) {
+                keep_going = true;
+            }
+            if self.with_instance_mut(StateMachineInstance::try_change_state) {
+                self.with_instance_mut(|machine| machine.advance(0.0, false));
+                keep_going = true;
+            }
+            if artboard.advance_internal(0.0, loop_flags) {
+                keep_going = true;
+            }
+            if advance_view_models {
+                let context = self.3.borrow().clone();
+                if let Some(context) = context {
+                    context.with_context(DataContext::advanced);
+                }
+            }
+            Artboard::reset_handle(&artboard.core_handle());
+            if !artboard.with_artboard(|artboard| artboard.base.has_component_dirt()) {
+                break;
+            }
+        }
+        if advance_view_models {
+            Artboard::advance_scripted_view_models_handle(&artboard.core_handle());
+        }
+        keep_going
+            || self.with_instance(|machine| {
+                !machine.reported_events.is_empty()
+                    || !machine.reported_listener_view_models.borrow().is_empty()
+            })
+    }
+
+    pub fn set_number(&self, name: &str, value: f32) {
+        let notification = self.with_instance_mut(|instance| {
+            instance
+                .get_number_mut(name)
+                .and_then(|input| input.set_value_capture_notification(value))
+        });
+        if let Some(notification) = notification {
+            notification.notify();
+        }
+    }
+
+    pub fn set_bool(&self, name: &str, value: bool) {
+        let notification = self.with_instance_mut(|instance| {
+            instance
+                .get_bool_mut(name)
+                .and_then(|input| input.set_value_capture_notification(value))
+        });
+        if let Some(notification) = notification {
+            notification.notify();
+        }
+    }
+
+    pub(crate) fn borrow_instance_mut(&self) -> std::cell::RefMut<'_, StateMachineInstance> {
+        self.0.borrow_mut()
+    }
+
     fn new(instance: StateMachineInstance) -> Self {
         let container = instance.data_bind_container.clone();
-        Self(Rc::new(RefCell::new(instance)), container)
+        let artboard = instance.artboard_instance.clone();
+        let context = instance.data_context_handle.clone();
+        let focus_events = instance.queued_focus_events.clone();
+        let needs_advance = instance.needs_advance.clone();
+        Self(
+            Rc::new(RefCell::new(instance)),
+            container,
+            artboard,
+            context,
+            focus_events,
+            needs_advance,
+        )
     }
 
     pub fn downgrade(&self) -> RuntimeStateMachineInstanceWeakHandle {
-        RuntimeStateMachineInstanceWeakHandle(Rc::downgrade(&self.0), self.1.downgrade())
+        RuntimeStateMachineInstanceWeakHandle(
+            Rc::downgrade(&self.0),
+            self.1.downgrade(),
+            self.2.clone(),
+            Rc::downgrade(&self.3),
+            Rc::downgrade(&self.4),
+            Rc::downgrade(&self.5),
+        )
     }
 
     pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> R {
@@ -1912,6 +2228,16 @@ impl RuntimeStateMachineInstanceWeakHandle {
                 self.1
                     .upgrade()
                     .expect("live machine owns its binding container"),
+                self.2.clone(),
+                self.3
+                    .upgrade()
+                    .expect("live machine owns its data-context field"),
+                self.4
+                    .upgrade()
+                    .expect("live machine owns its focus-event queue"),
+                self.5
+                    .upgrade()
+                    .expect("live machine owns its advance flag"),
             )
         })
     }
@@ -1922,6 +2248,38 @@ impl RuntimeStateMachineInstanceWeakHandle {
         } else {
             self.1.upgrade()
         }
+    }
+
+    pub(crate) fn relink_data_context(&self) {
+        // Pinned StateMachineInstance::relinkDataContext only forwards to its
+        // constructor-bound Artboard. Retain the live machine, but do not
+        // borrow it: a listener can replace a view model during pointerUp.
+        let Some(machine) = self.upgrade() else {
+            return;
+        };
+        if let Some(artboard) = machine.2.upgrade() {
+            artboard.relink_data_context();
+        }
+    }
+
+    pub(crate) fn data_context_handle(&self) -> Option<RuntimeDataContextHandle> {
+        let machine = self.upgrade()?;
+        let context = machine.3.borrow().clone();
+        context
+    }
+
+    pub(crate) fn queue_focus_event(&self, group: RuntimeFocusListenerGroupHandle, is_focus: bool) {
+        let Some(machine) = self.upgrade() else {
+            return;
+        };
+        // Focus callbacks can run inside setFocus or gamepad input while the
+        // machine is borrowed. These are its actual queue and advance flag,
+        // so upstream's synchronous enqueue needs no second machine borrow.
+        machine
+            .4
+            .borrow_mut()
+            .push(QueuedFocusEvent { group, is_focus });
+        machine.5.set(true);
     }
 
     pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> Option<R> {
@@ -1954,10 +2312,12 @@ pub struct StateMachineInstance {
     listener_groups: Vec<RuntimeListenerGroupHandle>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
-    data_context_handle: Option<RuntimeDataContextHandle>,
+    // Canonical m_DataContext field. Callback-capable property relinking reads
+    // this same cell without reborrowing the active pointer-event owner.
+    data_context_handle: Rc<RefCell<Option<RuntimeDataContextHandle>>>,
     pub(crate) data_bind_container: DataBindContainer,
     listener_view_models: Vec<RuntimeListenerViewModelHandle>,
-    reported_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
+    reported_listener_view_models: Rc<RefCell<Vec<RuntimeListenerViewModelWeakHandle>>>,
     reporting_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
     bindable_property_instances: HashMap<CoreHandle, CoreHandle>,
     scripted_objects_map: HashMap<CoreHandle, CoreHandle>,
@@ -1972,19 +2332,25 @@ pub struct StateMachineInstance {
     keyboard_listener_groups: Vec<RuntimeKeyboardListenerGroupHandle>,
     gamepad_listener_groups: Vec<RuntimeGamepadListenerGroupHandle>,
     gamepad_scripted_drawables: Vec<CoreHandle>,
-    embedder_gamepads: GamepadBatchState,
+    embedder_gamepads: Rc<GamepadBatchState>,
     semantic_manager: Option<RuntimeSemanticManagerHandle>,
     external_semantic_manager: Option<RuntimeSemanticManagerHandle>,
-    queued_focus_events: Vec<QueuedFocusEvent>,
+    queued_focus_events: Rc<RefCell<Vec<QueuedFocusEvent>>>,
     semantic_listener_groups: Vec<RuntimeSemanticListenerGroupHandle>,
     queued_semantic_events: Vec<QueuedSemanticEvent>,
     nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
     nested_artboard: Option<CoreHandle>,
     #[cfg(feature = "tools")]
-    input_changed_callback: Option<Box<dyn FnMut(RuntimeStateMachineInstanceWeakHandle, u64)>>,
+    input_changed_callback:
+        crate::mechanical_port::source::animation::state_machine_input_instance::InputChangedCallbackSlot,
 }
 
-impl GamepadDispatcher for StateMachineInstance {
+struct StateMachineGamepadDispatcher {
+    machine: RuntimeStateMachineInstanceHandle,
+    focus_manager: RuntimeFocusManagerHandle,
+}
+
+impl GamepadDispatcher for StateMachineGamepadDispatcher {
     fn dispatch(&mut self, invocation: GamepadInvocation) {
         let invocation = match invocation {
             GamepadInvocation::Connected(snapshot) => ListenerInvocation::gamepad_connected(&snapshot),
@@ -1998,10 +2364,11 @@ impl GamepadDispatcher for StateMachineInstance {
                 }),
         };
         let mut dispatched = None;
-        self.focus_manager().with_focus_manager_mut(|manager| {
+        self.focus_manager.with_focus_manager_mut(|manager| {
             manager.gamepad_dispatch(&invocation, Some(&mut dispatched));
         });
-        self.broadcast_gamepad_to_scripted_drawables(&invocation, dispatched.as_ref());
+        self.machine
+            .broadcast_gamepad_to_scripted_drawables(&invocation, dispatched.as_ref());
     }
 }
 
@@ -2016,7 +2383,7 @@ impl StateMachineInstance {
             reporting_events: Vec::new(),
             events_applied_during_loop: Vec::new(),
             machine,
-            artboard_instance,
+            artboard_instance: artboard_instance.clone(),
             needs_advance: Rc::new(Cell::new(false)),
             input_instances: Vec::new(),
             layers: Vec::new(),
@@ -2024,10 +2391,10 @@ impl StateMachineInstance {
             listener_groups: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
-            data_context_handle: None,
+            data_context_handle: Rc::new(RefCell::new(None)),
             data_bind_container: DataBindContainer::default(),
             listener_view_models: Vec::new(),
-            reported_listener_view_models: Vec::new(),
+            reported_listener_view_models: Rc::new(RefCell::new(Vec::new())),
             reporting_listener_view_models: Vec::new(),
             bindable_property_instances: HashMap::new(),
             scripted_objects_map: HashMap::new(),
@@ -2042,16 +2409,16 @@ impl StateMachineInstance {
             keyboard_listener_groups: Vec::new(),
             gamepad_listener_groups: Vec::new(),
             gamepad_scripted_drawables: Vec::new(),
-            embedder_gamepads: GamepadBatchState::default(),
+            embedder_gamepads: Rc::new(GamepadBatchState::default()),
             semantic_manager: None,
             external_semantic_manager: None,
-            queued_focus_events: Vec::new(),
+            queued_focus_events: Rc::new(RefCell::new(Vec::new())),
             semantic_listener_groups: Vec::new(),
             queued_semantic_events: Vec::new(),
             nested_event_listeners: Vec::new(),
             nested_artboard: None,
             #[cfg(feature = "tools")]
-            input_changed_callback: None,
+            input_changed_callback: Default::default(),
         };
         let handle = RuntimeStateMachineInstanceHandle::new(instance);
         handle.with_instance_mut(|instance| {
@@ -2061,7 +2428,7 @@ impl StateMachineInstance {
                 .set_state_machine_owner(handle.downgrade());
             let mut input_notifier = InputInstanceNotifier::new(Rc::clone(&instance.needs_advance));
             #[cfg(feature = "tools")]
-            input_notifier.set_machine(handle.downgrade());
+            input_notifier.set_machine(handle.downgrade(), instance.input_changed_callback.clone());
 
             let input_count = instance
                 .machine
@@ -2114,9 +2481,9 @@ impl StateMachineInstance {
             instance.initialize_scripted_objects();
             instance.sort_hit_components();
             let manager = instance.focus_manager();
-            let _ = artboard_instance.with_artboard_mut(|artboard| {
+            if let Some(artboard) = artboard_instance.upgrade() {
                 artboard.build_focus_tree(Some(manager), None);
-            });
+            }
         });
         handle
     }
@@ -2149,7 +2516,7 @@ impl StateMachineInstance {
             })
             .flatten()?
             .into_iter()
-            .find(|child| child.with_downcast::<FocusData, _>(|_| ()).is_some())
+            .find(|child| child.is_type_of(crate::mechanical_port::source::generated::focus_data_base::FocusDataBase::TYPE_KEY))
     }
 
     fn semantic_data_child(target: &CoreHandle) -> Option<CoreHandle> {
@@ -2326,8 +2693,10 @@ impl StateMachineInstance {
                 continue;
             }
             if self.listener_has(&listener, ListenerType::ViewModel) {
-                self.listener_view_models
-                    .push(ListenerViewModel::new(machine.clone(), listener));
+                self.listener_view_models.push(ListenerViewModel::new(
+                    self.reported_listener_view_models.clone(),
+                    listener,
+                ));
                 continue;
             }
             let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
@@ -2384,7 +2753,13 @@ impl StateMachineInstance {
                         Some(RuntimeDrawableOccurrence::Authored(target.clone()))
                     };
                     if let Some(hit_target) = hit_target {
-                        self.add_to_hit_lookup(hit_target, is_layout, hit_lookup, group, false);
+                        self.add_to_hit_lookup(
+                            hit_target,
+                            is_layout,
+                            hit_lookup,
+                            group.clone(),
+                            false,
+                        );
                     }
                 }
                 self.listener_groups.push(group);
@@ -2425,17 +2800,20 @@ impl StateMachineInstance {
             for group_with_targets in groups {
                 let (group, targets) = group_with_targets.into_parts();
                 for target in targets {
-                    let target_handle = target.component();
-                    let layout = target_handle
-                        .with(|target| {
-                            target.as_layout_component().is_some()
-                                || target
-                                    .as_drawable()
-                                    .is_some_and(|drawable| drawable.is_proxy())
-                        })
-                        .unwrap_or(false);
+                    let target_component = target.component();
+                    let layout = match &target_component {
+                        RuntimeDrawableOccurrence::RuntimeProxy(_) => true,
+                        RuntimeDrawableOccurrence::Authored(target) => target
+                            .with(|target| {
+                                target.as_layout_component().is_some()
+                                    || target
+                                        .as_drawable()
+                                        .is_some_and(|drawable| drawable.is_proxy())
+                            })
+                            .unwrap_or(false),
+                    };
                     self.add_to_hit_lookup(
-                        RuntimeDrawableOccurrence::Authored(target_handle),
+                        target_component,
                         layout,
                         hit_lookup,
                         group.clone(),
@@ -2839,8 +3217,9 @@ impl StateMachineInstance {
     pub fn try_change_state(&mut self) -> bool {
         self.data_bind_container.update_data_binds(false);
         let mut changed = false;
-        let layers = self.layers.clone();
-        for layer in layers {
+        let layer_count = self.layers.len();
+        for index in 0..layer_count {
+            let layer = self.layers[index].clone();
             changed |= layer.with_layer_mut(|layer| layer.update_state(self));
         }
         changed
@@ -2849,22 +3228,34 @@ impl StateMachineInstance {
     pub fn apply_events(&mut self) {
         self.events_applied_during_loop.clear();
         let mut iteration = 0;
-        while (!self.reported_events.is_empty() || !self.reported_listener_view_models.is_empty())
+        while (!self.reported_events.is_empty()
+            || !self.reported_listener_view_models.borrow().is_empty())
             && iteration < 100
         {
             iteration += 1;
             self.data_bind_container.update_data_binds(false);
-            self.reporting_events = std::mem::take(&mut self.reported_events);
-            self.reporting_listener_view_models =
-                std::mem::take(&mut self.reported_listener_view_models);
+
+            // C++ retains separate reported/reporting vectors and reuses both
+            // buffers on every event iteration. Keep the reporting values
+            // local only while callbacks need `&mut self`; restoring them
+            // afterward preserves that two-buffer ownership without cloning
+            // the complete batches solely for Rust's borrow boundary.
+            let mut reporting_events = std::mem::take(&mut self.reporting_events);
+            reporting_events.clear();
+            reporting_events.append(&mut self.reported_events);
+            let mut reporting_listener_view_models =
+                std::mem::take(&mut self.reporting_listener_view_models);
+            reporting_listener_view_models.clear();
+            reporting_listener_view_models
+                .append(&mut self.reported_listener_view_models.borrow_mut());
             if iteration > 1 {
                 self.events_applied_during_loop
-                    .extend(self.reporting_events.iter().cloned());
+                    .extend(reporting_events.iter().cloned());
             }
-            let events = self.reporting_events.clone();
-            let view_models = self.reporting_listener_view_models.clone();
-            self.notify_event_listeners(&events, None);
-            self.notify_listener_view_models(&view_models);
+            self.notify_event_listeners(&reporting_events, None);
+            self.notify_listener_view_models(&reporting_listener_view_models);
+            self.reporting_events = reporting_events;
+            self.reporting_listener_view_models = reporting_listener_view_models;
         }
         if iteration >= 100 {
             eprintln!(
@@ -2886,16 +3277,14 @@ impl StateMachineInstance {
         if unchanged {
             return;
         }
-        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
-            if artboard.focus_manager().is_some() {
-                artboard.cleanup_focus_tree();
-            }
-        });
+        if let Some(artboard) = self.artboard_instance.upgrade() {
+            artboard.cleanup_focus_tree();
+        }
         self.external_focus_manager = manager;
         let focus_manager = self.focus_manager();
-        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
+        if let Some(artboard) = self.artboard_instance.upgrade() {
             artboard.build_focus_tree(Some(focus_manager), None);
-        });
+        }
     }
 
     pub fn set_external_focus_manager_handle(&mut self, manager: RuntimeFocusManagerHandle) {
@@ -2922,9 +3311,9 @@ impl StateMachineInstance {
         }
         self.semantic_manager = Some(RuntimeSemanticManagerHandle::new(SemanticManager::new()));
         let manager = self.semantic_manager();
-        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
+        if let Some(artboard) = self.artboard_instance.upgrade() {
             artboard.build_semantic_tree(manager, None);
-        });
+        }
     }
 
     pub fn semantic_manager(&self) -> Option<RuntimeSemanticManagerHandle> {
@@ -2946,16 +3335,16 @@ impl StateMachineInstance {
         if unchanged {
             return;
         }
-        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
-            if artboard.semantic_manager().is_some() {
+        if let Some(artboard) = self.artboard_instance.upgrade() {
+            if artboard.with_artboard(|artboard| artboard.semantic_manager().is_some()) {
                 artboard.cleanup_semantic_tree();
             }
-        });
+        }
         self.external_semantic_manager = manager;
         let manager = self.semantic_manager();
-        let _ = self.artboard_instance.with_artboard_mut(|artboard| {
+        if let Some(artboard) = self.artboard_instance.upgrade() {
             artboard.build_semantic_tree(manager, parent_node);
-        });
+        }
     }
 
     pub fn set_external_semantic_manager_handle(
@@ -2968,6 +3357,7 @@ impl StateMachineInstance {
 
     pub fn queue_focus_event(&mut self, group: RuntimeFocusListenerGroupHandle, is_focus: bool) {
         self.queued_focus_events
+            .borrow_mut()
             .push(QueuedFocusEvent { group, is_focus });
         self.needs_advance.set(true);
     }
@@ -2998,7 +3388,7 @@ impl StateMachineInstance {
     }
 
     fn process_focus_events(&mut self) {
-        let events = std::mem::take(&mut self.queued_focus_events);
+        let events = std::mem::take(&mut *self.queued_focus_events.borrow_mut());
         for event in events {
             let (listener, listens) = event.group.with_group(|group| {
                 (
@@ -3047,29 +3437,6 @@ impl StateMachineInstance {
         }
     }
 
-    pub fn fire_semantic_action(&mut self, node_id: u32, action_type: u8) {
-        let Some(manager) = self.semantic_manager() else {
-            return;
-        };
-        let semantic_data = manager
-            .with_semantic_manager(|manager| manager.node_by_id(node_id))
-            .and_then(|node| node.borrow().semantic_data.clone());
-        let Some(semantic_data) = semantic_data else {
-            return;
-        };
-        semantic_data.with_mut(|semantic_data| {
-            let Some(semantic_data) = semantic_data.as_semantic_data_mut() else {
-                return;
-            };
-            match SemanticActionType::from_raw(action_type as u32) {
-                Some(SemanticActionType::Tap) => semantic_data.fire_semantic_tap(),
-                Some(SemanticActionType::Increase) => semantic_data.fire_semantic_increase(),
-                Some(SemanticActionType::Decrease) => semantic_data.fire_semantic_decrease(),
-                None => {}
-            }
-        });
-    }
-
     pub fn advance(&mut self, seconds: f32, new_frame: bool) -> bool {
         let counter = self
             .artboard_instance
@@ -3086,8 +3453,12 @@ impl StateMachineInstance {
             self.needs_advance.set(false);
         }
         self.data_bind_container.update_data_binds(false);
-        let layers = self.layers.clone();
-        for layer in layers {
+        // Upstream iterates the retained layer array in place. Retain one
+        // handle at a time so the Rust owner borrow ends before advance can
+        // synchronously call back into this instance.
+        let layer_count = self.layers.len();
+        for index in 0..layer_count {
+            let layer = self.layers[index].clone();
             if layer.with_layer_mut(|layer| layer.advance(self, seconds, new_frame)) {
                 self.needs_advance.set(true);
             }
@@ -3100,7 +3471,7 @@ impl StateMachineInstance {
         }
         self.needs_advance.get()
             || !self.reported_events.is_empty()
-            || !self.reported_listener_view_models.is_empty()
+            || !self.reported_listener_view_models.borrow().is_empty()
     }
 
     pub fn advance_seconds(&mut self, seconds: f32) -> bool {
@@ -3108,7 +3479,7 @@ impl StateMachineInstance {
     }
 
     pub fn advanced_data_context(&mut self) {
-        if let Some(data_context) = self.data_context_handle.as_ref() {
+        if let Some(data_context) = self.data_context() {
             data_context.with_context(DataContext::advanced);
         }
     }
@@ -3117,79 +3488,6 @@ impl StateMachineInstance {
         self.advanced_data_context();
         self.artboard_instance
             .with_artboard_mut(|artboard| artboard.base.reset());
-    }
-
-    pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
-        self.advance_and_apply_view_models(seconds, true)
-    }
-
-    pub fn advance_and_apply_view_models(
-        &mut self,
-        seconds: f32,
-        advance_view_models: bool,
-    ) -> bool {
-        let root_flags = AdvanceFlags(
-            AdvanceFlags::IS_ROOT.0
-                | AdvanceFlags::ANIMATE.0
-                | AdvanceFlags::ADVANCE_NESTED.0
-                | AdvanceFlags::NEW_FRAME.0,
-        );
-        let loop_flags = AdvanceFlags(
-            AdvanceFlags::IS_ROOT.0 | AdvanceFlags::ANIMATE.0 | AdvanceFlags::ADVANCE_NESTED.0,
-        );
-        let mut keep_going = self.advance(seconds, true) || seconds == 0.0;
-        let manager = self.focus_manager();
-        manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
-        if self
-            .artboard_instance
-            .upgrade()
-            .map(|artboard| artboard.advance_internal(seconds, root_flags))
-            .unwrap_or(false)
-        {
-            keep_going = true;
-        }
-        for _ in 0..5 {
-            if self
-                .artboard_instance
-                .upgrade()
-                .map(|artboard| artboard.update_pass(true))
-                .unwrap_or(false)
-            {
-                keep_going = true;
-            }
-            if self.try_change_state() {
-                self.advance(0.0, false);
-                keep_going = true;
-            }
-            if self
-                .artboard_instance
-                .upgrade()
-                .map(|artboard| artboard.advance_internal(0.0, loop_flags))
-                .unwrap_or(false)
-            {
-                keep_going = true;
-            }
-            if advance_view_models {
-                self.reset();
-            } else {
-                self.artboard_instance
-                    .with_artboard_mut(|artboard| artboard.base.reset());
-            }
-            if !self
-                .artboard_instance
-                .with_artboard(|artboard| artboard.base.has_component_dirt())
-                .unwrap_or(false)
-            {
-                break;
-            }
-        }
-        if advance_view_models {
-            self.artboard_instance
-                .with_artboard_mut(|artboard| artboard.base.advance_scripted_view_models());
-        }
-        keep_going
-            || !self.reported_events.is_empty()
-            || !self.reported_listener_view_models.is_empty()
     }
 
     pub fn mark_needs_advance(&mut self) {
@@ -3293,8 +3591,7 @@ impl StateMachineInstance {
     }
 
     pub fn view_model_property(&self, path: &[u32]) -> Option<CoreHandle> {
-        self.data_context_handle
-            .as_ref()?
+        self.data_context()?
             .with_context(|context| context.get_view_model_property(path))
     }
 
@@ -3404,24 +3701,24 @@ impl StateMachineInstance {
         property_key: u32,
     ) -> Option<RuntimeComparisonValue> {
         let object = self.resolve_artboard_object(object_id)?;
-        match CoreRegistry::property_field_id(property_key as i32) as u16 {
-            CoreRegistry::CORE_DOUBLE_TYPE_ID => {
+        match CoreRegistry::property_field_id(property_key as i32) {
+            crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::ID => {
                 CoreRegistry::get_double_handle(&object, property_key as i32)
                     .map(RuntimeComparisonValue::Number)
             }
-            CoreRegistry::CORE_BOOL_TYPE_ID => {
+            crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::ID => {
                 CoreRegistry::get_bool_handle(&object, property_key as i32)
                     .map(RuntimeComparisonValue::Boolean)
             }
-            CoreRegistry::CORE_STRING_TYPE_ID => {
+            crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::ID => {
                 CoreRegistry::get_string_handle(&object, property_key as i32)
                     .map(RuntimeComparisonValue::String)
             }
-            CoreRegistry::CORE_COLOR_TYPE_ID => {
+            crate::mechanical_port::source::core::field_types::core_color_type::CoreColorType::ID => {
                 CoreRegistry::get_color_handle(&object, property_key as i32)
                     .map(RuntimeComparisonValue::Color)
             }
-            CoreRegistry::CORE_UINT_TYPE_ID => {
+            crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::ID => {
                 CoreRegistry::get_uint_handle(&object, property_key as i32)
                     .map(RuntimeComparisonValue::Uint)
             }
@@ -3600,16 +3897,12 @@ impl StateMachineInstance {
         });
     }
 
-    fn report_listener_view_model(&mut self, listener: RuntimeListenerViewModelWeakHandle) {
-        self.reported_listener_view_models.push(listener);
-    }
-
     pub fn reported_event_count(&self) -> usize {
         self.events_applied_during_loop.len() + self.reported_events.len()
     }
 
     pub fn has_pending_listener_view_model_reports(&self) -> bool {
-        !self.reported_listener_view_models.is_empty()
+        !self.reported_listener_view_models.borrow().is_empty()
     }
 
     pub fn has_pending_event_reports(&self) -> bool {
@@ -3850,61 +4143,6 @@ impl StateMachineInstance {
             .with_focus_manager_mut(FocusManager::clear_focus);
     }
 
-    pub fn submit_gamepads_from_buffer(&mut self, data: &[u8]) -> bool {
-        let mut gamepads = std::mem::take(&mut self.embedder_gamepads);
-        let result = gamepads.submit(Some(data), self);
-        self.embedder_gamepads = gamepads;
-        result
-    }
-
-    pub fn broadcast_gamepad_to_scripted_drawables(
-        &mut self,
-        invocation: &ListenerInvocation,
-        already_dispatched: Option<&CoreHandle>,
-    ) -> HitResult {
-        let mut hit_something = false;
-        let mut hit_opaque = false;
-        for component in &mut self.hit_components {
-            let result = component.process_gamepad_invocation(invocation, already_dispatched);
-            hit_something |= result != HitResult::None;
-            hit_opaque |= result == HitResult::HitOpaque;
-        }
-        for drawable in self.gamepad_scripted_drawables.clone() {
-            if Some(&drawable) == already_dispatched {
-                continue;
-            }
-            let accepts = drawable
-                .with(|drawable| {
-                    let Some(drawable) = drawable.as_scripted_drawable() else {
-                        return false;
-                    };
-                    match invocation.kind() {
-                        ListenerInvocationKind::GamepadConnected => {
-                            drawable.scripted.wants_gamepad_connect()
-                        }
-                        ListenerInvocationKind::GamepadEvent => {
-                            drawable.scripted.wants_gamepad_event()
-                        }
-                        ListenerInvocationKind::GamepadDisconnected => {
-                            drawable.scripted.wants_gamepad_disconnect()
-                        }
-                        _ => false,
-                    }
-                })
-                .unwrap_or(false);
-            if accepts {
-                hit_something |= crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::gamepad_dispatch_occurrence(&drawable, invocation);
-            }
-        }
-        if !hit_something {
-            HitResult::None
-        } else if hit_opaque {
-            HitResult::HitOpaque
-        } else {
-            HitResult::Hit
-        }
-    }
-
     pub fn duration_seconds(&self) -> f32 {
         -1.0
     }
@@ -3926,21 +4164,18 @@ impl StateMachineInstance {
     }
 
     pub fn set_view_model_instance(&mut self, view_model_instance: CoreHandle) {
-        if self.data_context_handle.is_none() {
+        if self.data_context().is_none() {
             let data_context =
                 RuntimeDataContextHandle::new(DataContext::new(Some(view_model_instance)));
             data_context.with_context_mut(|context| {
                 context.add_state_machine_dependent_container(self.occurrence.clone());
             });
-            self.data_context_handle = Some(data_context);
+            self.data_context_handle.replace(Some(data_context));
             return;
         }
-        self.data_context_handle
-            .as_ref()
-            .unwrap()
-            .with_context_mut(|context| {
-                context.set_main_view_model_instance(Some(view_model_instance));
-            });
+        self.data_context().unwrap().with_context_mut(|context| {
+            context.set_main_view_model_instance(Some(view_model_instance));
+        });
     }
 
     pub fn set_global_view_model_instance(
@@ -3971,16 +4206,13 @@ impl StateMachineInstance {
         let Some(slot_view_model) = slot_view_model else {
             return false;
         };
-        if slot_view_model
-            .with_downcast::<ViewModel, _>(|view_model| {
-                ViewModelType::from_u32(view_model.base.view_model_type())
-            })
-            .flatten()
-            != Some(ViewModelType::Global)
+        if slot_view_model.with_downcast::<ViewModel, _>(|view_model| {
+            view_model.base.view_model_type() == ViewModelType::Global as u32
+        }) != Some(true)
         {
             return false;
         }
-        if self.data_context_handle.is_none() {
+        if self.data_context().is_none() {
             if view_model_instance.is_none() {
                 return true;
             }
@@ -3988,27 +4220,24 @@ impl StateMachineInstance {
             data_context.with_context_mut(|context| {
                 context.add_state_machine_dependent_container(self.occurrence.clone());
             });
-            self.data_context_handle = Some(data_context);
+            self.data_context_handle.replace(Some(data_context));
         }
-        self.data_context_handle
-            .as_ref()
-            .unwrap()
-            .with_context_mut(|context| {
-                context.set_view_model_instance_for_slot(slot_key, view_model_instance);
-            });
+        self.data_context().unwrap().with_context_mut(|context| {
+            context.set_view_model_instance_for_slot(slot_key, view_model_instance);
+        });
         true
     }
 
     pub fn bind(&mut self) {
-        if self.data_context_handle.is_none() {
+        if self.data_context().is_none() {
             let data_context = RuntimeDataContextHandle::new(DataContext::new(None));
             data_context.with_context_mut(|context| {
                 context.add_state_machine_dependent_container(self.occurrence.clone());
             });
-            self.data_context_handle = Some(data_context);
+            self.data_context_handle.replace(Some(data_context));
         }
         self.complete_view_model_instances();
-        let data_context = self.data_context_handle.as_ref().unwrap().clone();
+        let data_context = self.data_context().unwrap();
         if let Some(artboard) = self.artboard_instance.upgrade() {
             artboard.internal_data_context(data_context.clone());
         }
@@ -4022,7 +4251,7 @@ impl StateMachineInstance {
         else {
             return;
         };
-        let data_context = self.data_context_handle.as_ref().unwrap().clone();
+        let data_context = self.data_context().unwrap();
         if data_context
             .with_context(DataContext::main_view_model_instance)
             .is_none()
@@ -4090,7 +4319,7 @@ impl StateMachineInstance {
     }
 
     pub fn global_view_model_instance(&self, name: &str) -> Option<CoreHandle> {
-        let data_context = self.data_context_handle.as_ref()?;
+        let data_context = self.data_context()?;
         let file = self
             .artboard_instance
             .with_artboard(|artboard| artboard.base.file())?;
@@ -4135,17 +4364,16 @@ impl StateMachineInstance {
     }
 
     pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
-        self.data_context_handle.clone()
+        self.data_context_handle.borrow().clone()
     }
 
     pub fn data_context_handle(&self) -> Option<RuntimeDataContextHandle> {
-        self.data_context_handle.clone()
+        self.data_context()
     }
 
     pub fn internal_data_context_handle(&mut self, data_context: RuntimeDataContextHandle) {
         if self
-            .data_context_handle
-            .as_ref()
+            .data_context()
             .is_some_and(|current| current.ptr_eq(&data_context))
         {
             self.internal_data_context(data_context);
@@ -4173,7 +4401,7 @@ impl StateMachineInstance {
     }
 
     fn internal_data_context(&mut self, data_context: RuntimeDataContextHandle) {
-        self.data_context_handle = Some(data_context.clone());
+        self.data_context_handle.replace(Some(data_context.clone()));
         self.data_bind_container
             .bind_data_binds_from_context(data_context.clone());
         for listener in &self.listener_view_models {
@@ -4190,7 +4418,7 @@ impl StateMachineInstance {
     }
 
     pub fn rebind(&mut self) {
-        let Some(data_context) = self.data_context_handle.clone() else {
+        let Some(data_context) = self.data_context() else {
             return;
         };
         if let Some(artboard) = self.artboard_instance.upgrade() {
@@ -4201,10 +4429,11 @@ impl StateMachineInstance {
     }
 
     pub fn clear_data_context(&mut self) {
-        if let Some(data_context) = self.data_context_handle.take() {
+        if let Some(data_context) = self.data_context() {
             data_context.with_context_mut(|context| {
                 context.remove_state_machine_dependent_container(&self.occurrence);
             });
+            self.data_context_handle.replace(None);
         }
         for listener in &self.listener_view_models {
             listener.with_listener_mut(ListenerViewModel::clear_data_context);
@@ -4218,7 +4447,7 @@ impl StateMachineInstance {
     }
 
     pub fn rebuild_data_bind(&mut self, data_bind: CoreHandle) {
-        crate::mechanical_port::source::data_bind::data_bind_context::DataBindContext::bind_from_context_handle(&data_bind, self.data_context_handle.clone());
+        crate::mechanical_port::source::data_bind::data_bind_context::DataBindContext::bind_from_context_handle(&data_bind, self.data_context());
     }
 
     fn unbind(&mut self) {
@@ -4429,7 +4658,7 @@ impl StateMachineInstance {
                     return None;
                 }
                 let transform = owner.as_world_transform_component()?.world_transform();
-                let mut inverse = crate::mechanical_port::source::math::mat2d::Mat2D::IDENTITY;
+                let mut inverse = crate::mechanical_port::source::math::mat2d::Mat2D::default();
                 if !transform.invert(&mut inverse) {
                     return None;
                 }
@@ -4487,17 +4716,16 @@ impl StateMachineInstance {
         layer.with_layer_mut(|layer| layer.find_allowed_transition(self, state_from))
     }
 
-    #[cfg(test)]
     pub fn hit_components_count(&self) -> usize {
         self.hit_components.len()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     pub fn hit_component(&self, index: usize) -> Option<&dyn HitComponent> {
         self.hit_components.get(index).map(Rc::as_ref)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     pub fn layer_state(&mut self, index: usize) -> Option<CoreHandle> {
         self.layers
             .get(index)
@@ -4535,7 +4763,8 @@ impl StateMachineInstance {
         &mut self,
         callback: Option<Box<dyn FnMut(RuntimeStateMachineInstanceWeakHandle, u64)>>,
     ) {
-        self.input_changed_callback = callback;
+        *self.input_changed_callback.borrow_mut() =
+            callback.map(|callback| Rc::new(RefCell::new(callback)));
     }
 
     #[cfg(feature = "tools")]
@@ -4548,26 +4777,17 @@ impl StateMachineInstance {
     }
 }
 
-#[cfg(feature = "tools")]
-impl StateMachineInstance {
-    pub(crate) fn input_changed(&mut self, index: u64) {
-        if let Some(callback) = self.input_changed_callback.as_mut() {
-            callback(self.occurrence.clone(), index);
-        }
-    }
-}
-
 impl Drop for StateMachineInstance {
     fn drop(&mut self) {
         if self.external_focus_manager.is_none() {
-            let _ = self
-                .artboard_instance
-                .with_artboard_mut(|artboard| artboard.cleanup_focus_tree());
+            if let Some(artboard) = self.artboard_instance.upgrade() {
+                artboard.cleanup_focus_tree();
+            }
         }
         if self.external_semantic_manager.is_none() && self.semantic_manager.is_some() {
-            let _ = self
-                .artboard_instance
-                .with_artboard_mut(|artboard| artboard.cleanup_semantic_tree());
+            if let Some(artboard) = self.artboard_instance.upgrade() {
+                artboard.cleanup_semantic_tree();
+            }
         }
         self.unbind();
         self.input_instances.clear();

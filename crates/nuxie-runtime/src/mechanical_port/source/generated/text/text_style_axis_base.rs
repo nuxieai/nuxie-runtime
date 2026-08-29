@@ -45,7 +45,7 @@ impl TextStyleAxisBase {
             return;
         }
         callbacks.tag_changed();
-        callbacks.notify_property_changed(Self::TAG_PROPERTY_KEY);
+        TextStyleAxisBaseCallbacks::notify_property_changed(callbacks, Self::TAG_PROPERTY_KEY);
     }
 
     pub(crate) fn set_tag_value(&mut self, value: u32) -> bool {
@@ -63,7 +63,10 @@ impl TextStyleAxisBase {
             return;
         }
         callbacks.axis_value_changed();
-        callbacks.notify_property_changed(Self::AXIS_VALUE_PROPERTY_KEY);
+        TextStyleAxisBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::AXIS_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_axis_value_value(&mut self, value: f32) -> bool {

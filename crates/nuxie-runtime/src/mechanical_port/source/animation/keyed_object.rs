@@ -124,3 +124,15 @@ impl KeyedObject {
         self.base.base.import(stack)
     }
 }
+
+impl std::ops::Deref for KeyedObject {
+    type Target = KeyedObjectBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for KeyedObject {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

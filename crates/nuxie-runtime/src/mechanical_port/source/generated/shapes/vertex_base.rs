@@ -45,7 +45,7 @@ impl VertexBase {
             return;
         }
         callbacks.x_changed();
-        callbacks.notify_property_changed(Self::X_PROPERTY_KEY);
+        VertexBaseCallbacks::notify_property_changed(callbacks, Self::X_PROPERTY_KEY);
     }
 
     pub(crate) fn set_x_value(&mut self, value: f32) -> bool {
@@ -63,7 +63,7 @@ impl VertexBase {
             return;
         }
         callbacks.y_changed();
-        callbacks.notify_property_changed(Self::Y_PROPERTY_KEY);
+        VertexBaseCallbacks::notify_property_changed(callbacks, Self::Y_PROPERTY_KEY);
     }
 
     pub(crate) fn set_y_value(&mut self, value: f32) -> bool {

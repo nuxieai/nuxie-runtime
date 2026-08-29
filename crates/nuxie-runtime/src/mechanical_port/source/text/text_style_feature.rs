@@ -3,6 +3,24 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 
+impl std::ops::Deref for TextStyleFeature {
+    type Target = TextStyleFeatureBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextStyleFeature {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextStyleFeature {
+    pub const TYPE_KEY: u16 = TextStyleFeatureBase::TYPE_KEY;
+}
+
+#[derive(Default)]
 pub struct TextStyleFeature {
     pub base: TextStyleFeatureBase,
 }

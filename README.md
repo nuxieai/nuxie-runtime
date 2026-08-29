@@ -14,7 +14,6 @@ commands, a public Rust API, and a C ABI for embedded SDK integrations.
 - `nuxie-renderer`: default pure-Rust renderer with native and browser backends
 - `nuxie-runtime`: artboard, animation, state-machine, and draw runtime
 - `nuxie-binary`: `.riv` importer
-- `nuxie-graph`: imported component graph
 - `nuxie-render-api`: renderer-neutral traits
 - `nuxie-scripting`: optional pure-Rust Luau integration
 - `nux-capi`: the sole static-library distribution root, exposing the portable

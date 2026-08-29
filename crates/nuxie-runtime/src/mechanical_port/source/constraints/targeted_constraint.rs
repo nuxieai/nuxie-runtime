@@ -81,13 +81,13 @@ impl TargetedConstraint {
         self.base.deserialize(property_key, reader, callbacks)
     }
 
-    pub fn validate(&self, context: &dyn CoreContext) -> bool {
+    pub fn validate(&mut self, context: &mut dyn CoreContext) -> bool {
         self.validate_with_requirement(context, true)
     }
 
     pub fn validate_with_requirement(
-        &self,
-        context: &dyn CoreContext,
+        &mut self,
+        context: &mut dyn CoreContext,
         requires_target: bool,
     ) -> bool {
         if !self.base.validate(context) {

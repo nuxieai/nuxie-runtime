@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, core::Core, viewmodel::data_enum::DataEnum,
+    core::Core, core::binary_reader::BinaryReader, viewmodel::data_enum::DataEnum,
 };
 
 pub struct DataEnumBase {

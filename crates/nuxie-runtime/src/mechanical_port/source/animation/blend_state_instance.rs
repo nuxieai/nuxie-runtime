@@ -30,7 +30,7 @@ impl<T: BlendAnimationDefinition + Any> BlendStateAnimationInstance<T> {
         let animation = blend_animation
             .with_downcast::<T, _>(BlendAnimationDefinition::animation)
             .flatten()
-            .expect("a validated BlendAnimation retains a LinearAnimation");
+            .expect("BlendAnimation exposes its authored or shared empty LinearAnimation");
         Self {
             blend_animation,
             animation_instance: LinearAnimationInstance::new(animation, instance, 1.0),
@@ -114,7 +114,7 @@ where
             if animation.animation_instance.keep_going() {
                 animation
                     .animation_instance
-                    .advance(seconds, state_machine_instance);
+                    .advance(seconds, Some(state_machine_instance));
             }
         }
     }

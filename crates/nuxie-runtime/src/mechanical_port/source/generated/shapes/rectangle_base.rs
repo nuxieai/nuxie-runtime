@@ -62,7 +62,10 @@ impl RectangleBase {
             return;
         }
         callbacks.link_corner_radius_changed();
-        callbacks.notify_property_changed(Self::LINK_CORNER_RADIUS_PROPERTY_KEY);
+        RectangleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::LINK_CORNER_RADIUS_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_link_corner_radius_value(&mut self, value: bool) -> bool {
@@ -84,7 +87,10 @@ impl RectangleBase {
             return;
         }
         callbacks.corner_radius_tl_changed();
-        callbacks.notify_property_changed(Self::CORNER_RADIUS_TL_PROPERTY_KEY);
+        RectangleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::CORNER_RADIUS_TL_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_corner_radius_tl_value(&mut self, value: f32) -> bool {
@@ -106,7 +112,10 @@ impl RectangleBase {
             return;
         }
         callbacks.corner_radius_tr_changed();
-        callbacks.notify_property_changed(Self::CORNER_RADIUS_TR_PROPERTY_KEY);
+        RectangleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::CORNER_RADIUS_TR_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_corner_radius_tr_value(&mut self, value: f32) -> bool {
@@ -128,7 +137,10 @@ impl RectangleBase {
             return;
         }
         callbacks.corner_radius_bl_changed();
-        callbacks.notify_property_changed(Self::CORNER_RADIUS_BL_PROPERTY_KEY);
+        RectangleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::CORNER_RADIUS_BL_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_corner_radius_bl_value(&mut self, value: f32) -> bool {
@@ -150,7 +162,10 @@ impl RectangleBase {
             return;
         }
         callbacks.corner_radius_br_changed();
-        callbacks.notify_property_changed(Self::CORNER_RADIUS_BR_PROPERTY_KEY);
+        RectangleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::CORNER_RADIUS_BR_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_corner_radius_br_value(&mut self, value: f32) -> bool {

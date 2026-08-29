@@ -68,13 +68,11 @@ fn wave_b4_follow_path_constraint() {
 }
 
 #[test]
-#[ignore = "expected-red: exact gamepad SRIV diverges at frame 0 operation 38 (expected makeRenderPaint, got frameSize)"]
 fn wave_b4_gamepad_test() {
     replay("gamepad_test", "tests/unit_tests/runtime/gamepad_test.cpp");
 }
 
 #[test]
-#[ignore = "expected-red: exact global-variables SRIV diverges at frame 0 operation 49 (expected makeRenderPaint, got color)"]
 fn wave_b4_global_variables_test() {
     replay(
         "global_variables_test",
@@ -91,7 +89,6 @@ fn wave_b4_global_viewmodels_auto_instance() {
 }
 
 #[test]
-#[ignore = "expected-red: exact set-instance SRIV diverges at frame 1 operation 163 (expected frame, got color)"]
 fn wave_b4_global_viewmodels_set_instance() {
     replay(
         "global_viewmodels_test-set_instance",

@@ -1,8 +1,13 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    cell::RefCell,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     artboard_component_list::ArtboardComponentList,
+    component_dirt::ComponentDirt,
     constraints::{
         draggable_constraint::{DraggableConstraintDirection, DraggableProxy},
         layout_constraint::LayoutConstraint,
@@ -20,13 +25,12 @@ use crate::mechanical_port::source::{
         core_registry::CoreCapabilities,
     },
     importers::import_stack::ImportStack,
-    layout::layout_node_provider::LayoutNodeProvider,
+    layout::layout_node_provider::{self, LayoutNodeProvider},
     layout_component::LayoutComponent,
     math::{
         aabb::Aabb, mat2d::Mat2D, math_types, transform_components::TransformComponents,
         vec2d::Vec2D,
     },
-    transform_component::TransformComponent,
     virtualizing_component::VirtualizedDirection,
 };
 
@@ -38,12 +42,22 @@ enum ScrollSpace {
 }
 
 impl LayoutConstraint for ScrollConstraint {
-    fn constrain_layout_child(&mut self, child: CoreHandle) {
-        self.constrain_child_handle(child);
+    fn constraint_handle(&self) -> CoreHandle {
+        self.handle().expect("arena-owned ScrollConstraint")
+    }
+
+    fn layout_child_constrainer(&self) -> fn(&CoreHandle, CoreHandle) -> bool {
+        Self::constrain_child_occurrence
     }
 
     fn add_layout_child(&mut self, child: CoreHandle) {
         ScrollConstraint::add_layout_child(self, child);
+    }
+}
+
+impl crate::mechanical_port::source::advancing_component::AdvancingComponent for ScrollConstraint {
+    fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
+        ScrollConstraint::advance_component(self, elapsed_seconds, flags)
     }
 }
 
@@ -64,7 +78,7 @@ impl Default for ScrollAxisIntent {
 pub struct ScrollConstraint {
     pub base: ScrollConstraintBase,
     physics: Option<CoreHandle>,
-    virtualizer: Option<Box<ScrollVirtualizer>>,
+    virtualizer: Option<Rc<RefCell<ScrollVirtualizer>>>,
     layout_children: Vec<CoreHandle>,
     components_a: TransformComponents,
     components_b: TransformComponents,
@@ -104,7 +118,7 @@ impl Default for ScrollConstraint {
             layout_children: Vec::new(),
             components_a: TransformComponents::default(),
             components_b: TransformComponents::default(),
-            scroll_transform: Mat2D::IDENTITY,
+            scroll_transform: Mat2D::default(),
             offset_x: 0.0,
             offset_y: 0.0,
             last_frame_offset_x: 0.0,
@@ -146,6 +160,10 @@ impl ScrollConstraint {
         self.base.base.base.base.base.base.handle()
     }
 
+    pub fn physics(&self) -> Option<CoreHandle> {
+        self.physics.clone()
+    }
+
     pub fn content_handle(&self) -> Option<CoreHandle> {
         self.base.parent_handle()
     }
@@ -157,7 +175,7 @@ impl ScrollConstraint {
 
     fn with_content<R>(&self, use_content: impl FnOnce(&LayoutComponent) -> R) -> Option<R> {
         self.content_handle()?
-            .with_downcast::<LayoutComponent, _>(use_content)
+            .with(|content| content.as_layout_component().map(use_content))?
     }
 
     fn with_content_mut<R>(
@@ -165,12 +183,12 @@ impl ScrollConstraint {
         use_content: impl FnOnce(&mut LayoutComponent) -> R,
     ) -> Option<R> {
         self.content_handle()?
-            .with_downcast_mut::<LayoutComponent, _>(use_content)
+            .with_mut(|content| content.as_layout_component_mut().map(use_content))?
     }
 
     fn with_viewport<R>(&self, use_viewport: impl FnOnce(&LayoutComponent) -> R) -> Option<R> {
         self.viewport_handle()?
-            .with_downcast::<LayoutComponent, _>(use_viewport)
+            .with(|viewport| viewport.as_layout_component().map(use_viewport))?
     }
 
     fn with_viewport_mut<R>(
@@ -178,7 +196,7 @@ impl ScrollConstraint {
         use_viewport: impl FnOnce(&mut LayoutComponent) -> R,
     ) -> Option<R> {
         self.viewport_handle()?
-            .with_downcast_mut::<LayoutComponent, _>(use_viewport)
+            .with_mut(|viewport| viewport.as_layout_component_mut().map(use_viewport))?
     }
 
     fn with_physics<R>(
@@ -204,6 +222,22 @@ impl ScrollConstraint {
         use_child: impl FnOnce(&dyn LayoutNodeProvider) -> R,
     ) -> Option<R> {
         child.with(|child| child.as_layout_node_provider().map(use_child))?
+    }
+
+    /// A list asks its registered ScrollConstraint whether it virtualizes.
+    /// Index/snap queries already borrow that exact constraint, so carry it
+    /// through the virtual bounds query rather than rereading its Core slot.
+    fn layout_child_bounds_for_node(&self, child: &CoreHandle, index: usize) -> Aabb {
+        if child.is_type_of(ArtboardComponentList::TYPE_KEY) {
+            child
+                .with_downcast::<ArtboardComponentList, _>(|list| {
+                    list.layout_bounds_for_node_with_scroll(index, Some(self))
+                })
+                .expect("live ArtboardComponentList")
+        } else {
+            Self::with_layout_child(child, |child| child.layout_bounds_for_node(index))
+                .expect("ScrollConstraint layout child remains a LayoutNodeProvider")
+        }
     }
 
     fn with_layout_child_mut<R>(
@@ -400,23 +434,30 @@ impl ScrollConstraint {
             return;
         }
         self.offset_x = value;
-        self.with_content_mut(TransformComponent::mark_world_transform_dirty)
-            .expect("ScrollConstraint content remains LayoutComponent");
+        self.mark_content_transform_dirty();
     }
     pub fn set_offset_y(&mut self, value: f32) {
         if self.offset_y == value {
             return;
         }
         self.offset_y = value;
-        self.with_content_mut(TransformComponent::mark_world_transform_dirty)
+        self.mark_content_transform_dirty();
+    }
+    fn mark_content_transform_dirty(&mut self) {
+        let content = self
+            .content_handle()
             .expect("ScrollConstraint content remains LayoutComponent");
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(content)
+            .add_dirt_from_scroll(self, ComponentDirt::WORLD_TRANSFORM, true);
     }
     pub fn main_axis_is_column(&self) -> bool {
         self.with_content(LayoutComponent::main_axis_is_column)
             .expect("ScrollConstraint content remains LayoutComponent")
     }
 
-    pub fn constrain(&mut self, _component: &mut TransformComponent) {
+    // The source argument is unused; content/viewport access follows the
+    // retained parent pointers without borrowing the supplied component.
+    pub fn constrain(&mut self, _component: &CoreHandle) {
         self.resolve_scroll_intents();
         self.scroll_transform = Mat2D::from_translate(
             if self.base.constrains_horizontal() {
@@ -433,7 +474,7 @@ impl ScrollConstraint {
         self.child_constraint_applied_count = 0;
     }
 
-    pub fn constrain_child_handle(&mut self, provider: CoreHandle) -> bool {
+    pub fn constrain_child_occurrence(scroll: &CoreHandle, provider: CoreHandle) -> bool {
         let Some(owner) = provider
             .with(|provider| {
                 provider
@@ -444,18 +485,28 @@ impl ScrollConstraint {
         else {
             return false;
         };
+        let (scroll_transform, components_a, components_b, strength) = scroll
+            .with_downcast::<Self, _>(|scroll| {
+                (
+                    scroll.scroll_transform,
+                    scroll.components_a,
+                    scroll.components_b,
+                    scroll.base.strength(),
+                )
+            })
+            .expect("live ScrollConstraint");
         let applied = owner
             .with_mut(|owner| {
                 let component = owner.as_transform_component_mut()?;
                 let current = *component.world_transform();
-                let target = Mat2D::multiply(current, self.scroll_transform);
+                let target = Mat2D::multiply(current, scroll_transform);
                 TransformConstraint::constrain_world(
                     component,
                     current,
-                    self.components_a,
+                    components_a,
                     target,
-                    self.components_b,
-                    self.base.strength(),
+                    components_b,
+                    strength,
                 );
                 Some(())
             })
@@ -464,42 +515,44 @@ impl ScrollConstraint {
         if !applied {
             return false;
         }
-        self.child_constraint_applied_count += 1;
-        self.constrain_virtualized(false);
+        scroll
+            .with_downcast_mut::<Self, _>(|scroll| scroll.child_constraint_applied_count += 1)
+            .expect("live ScrollConstraint");
+        Self::constrain_virtualized_occurrence(scroll, false);
         true
     }
 
-    pub fn constrain_child(&mut self, child: &mut dyn LayoutNodeProvider) {
-        let Some(provider) = child.provider_handle() else {
+    pub fn constrain_virtualized_occurrence(owner: &CoreHandle, force: bool) {
+        let Some((virtualizer, children, offset, direction)) = owner
+            .with_downcast::<Self, _>(|scroll| {
+                if !scroll.base.virtualize() {
+                    return None;
+                }
+                let virtualizer = scroll.virtualizer.clone()?;
+                let children = scroll.layout_children.clone();
+                if scroll.child_constraint_applied_count < children.len() as i32 && !force {
+                    return None;
+                }
+                let column = scroll.main_axis_is_column();
+                let direction = if column {
+                    VirtualizedDirection::Vertical
+                } else {
+                    VirtualizedDirection::Horizontal
+                };
+                let offset = if column {
+                    scroll.clamped_offset_y()
+                } else {
+                    scroll.clamped_offset_x()
+                };
+                Some((virtualizer, children, offset, direction))
+            })
+            .expect("live ScrollConstraint")
+        else {
             return;
         };
-        self.constrain_child_handle(provider);
-    }
-
-    pub fn constrain_virtualized(&mut self, force: bool) {
-        if self.base.virtualize() && self.virtualizer.is_some() {
-            if self.child_constraint_applied_count < self.layout_children.len() as i32 && !force {
-                return;
-            }
-            let column = self.main_axis_is_column();
-            let direction = if column {
-                VirtualizedDirection::Vertical
-            } else {
-                VirtualizedDirection::Horizontal
-            };
-            let offset = if column {
-                self.clamped_offset_y()
-            } else {
-                self.clamped_offset_x()
-            };
-            let children = self.layout_children.clone();
-            let mut virtualizer = self
-                .virtualizer
-                .take()
-                .expect("virtualized ScrollConstraint owns its virtualizer");
-            virtualizer.constrain(self, &children, offset, direction);
-            self.virtualizer = Some(virtualizer);
-        }
+        virtualizer
+            .borrow_mut()
+            .constrain(owner, &children, offset, direction);
     }
     pub fn add_layout_child(&mut self, child: CoreHandle) {
         assert!(!self.layout_children.contains(&child));
@@ -542,9 +595,7 @@ impl ScrollConstraint {
             let node_count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                 .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
             for node in 0..node_count {
-                let bounds =
-                    Self::with_layout_child(child, |child| child.layout_bounds_for_node(node))
-                        .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+                let bounds = self.layout_child_bounds_for_node(child, node);
                 if !self.is_bounds_collapsed(bounds) {
                     points.push(Vec2D::new(bounds.left(), bounds.top()));
                 }
@@ -606,7 +657,7 @@ impl ScrollConstraint {
             self.last_frame_offset_x = self.authored_scroll_offset_x();
             self.last_frame_offset_y = self.authored_scroll_offset_y();
         }
-        self.with_physics(ScrollPhysicsRuntime::enabled)
+        self.with_physics(|physics| physics.enabled())
             .expect("ScrollConstraint physics remains ScrollPhysics-derived")
             || self.is_scroll_bar_dragging
             || self.is_dragging
@@ -617,6 +668,14 @@ impl ScrollConstraint {
         let viewport = self
             .viewport_handle()
             .expect("ScrollConstraint viewport was validated");
+        let viewport = viewport
+            .with_mut(|viewport| {
+                viewport
+                    .as_layout_component_mut()
+                    .and_then(LayoutComponent::proxy)
+            })
+            .flatten()
+            .expect("ScrollConstraint viewport retains its drawable proxy");
         vec![Box::new(ViewportDraggableProxy::new(constraint, viewport))]
     }
 
@@ -626,24 +685,21 @@ impl ScrollConstraint {
         let children = self
             .with_content(|content| content.children().to_vec())
             .expect("ScrollConstraint content remains LayoutComponent");
-        let constraint = self.handle().expect("arena-owned ScrollConstraint");
         for child in children {
-            if child.is_type_of(ArtboardComponentList::TYPE_KEY) {
-                self.has_list_children = true;
-            }
-            let is_layout = child
-                .with(|child| child.as_layout_node_provider().is_some())
-                .unwrap_or(false);
-            if is_layout {
+            let layout = layout_node_provider::from_component(&child);
+            if let Some(layout) = layout {
                 self.base.add_dependent(child.clone());
-                child
+                layout
                     .with_mut(|child| {
                         child
                             .as_layout_node_provider_mut()
                             .expect("layout capability remains stable")
-                            .add_layout_constraint(constraint.clone());
+                            .add_layout_constraint(self);
                     })
                     .expect("ScrollConstraint content retains live children");
+            }
+            if child.is_type_of(ArtboardComponentList::TYPE_KEY) {
+                self.has_list_children = true;
             }
         }
     }
@@ -665,7 +721,7 @@ impl ScrollConstraint {
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let result = self.base.on_added_dirty(context);
         if self.base.virtualize() {
-            self.virtualizer = Some(Box::new(ScrollVirtualizer::default()));
+            self.virtualizer = Some(Rc::new(RefCell::new(ScrollVirtualizer::default())));
         }
         self.set_offset_x(self.authored_scroll_offset_x());
         self.set_offset_y(self.authored_scroll_offset_y());
@@ -681,10 +737,10 @@ impl ScrollConstraint {
         self.with_physics_mut(|physics| physics.prepare(direction));
     }
     pub fn stop_physics(&mut self) {
-        self.with_physics_mut(ScrollPhysicsRuntime::reset);
+        self.with_physics_mut(|physics| physics.reset());
     }
     pub fn clear_velocity(&mut self) {
-        self.with_physics_mut(ScrollPhysicsRuntime::clear_velocity);
+        self.with_physics_mut(|physics| physics.clear_velocity());
     }
     fn max_offset_x_for_percent(&self) -> f32 {
         if self.base.infinite() {
@@ -714,7 +770,7 @@ impl ScrollConstraint {
         self.is_dragging
             || self.is_scroll_bar_dragging
             || self
-                .with_physics(ScrollPhysicsRuntime::is_running)
+                .with_physics(|physics| physics.is_running())
                 .unwrap_or(false)
     }
     pub fn set_scroll_active(&mut self, _value: bool) {}
@@ -947,9 +1003,7 @@ impl ScrollConstraint {
             let count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                 .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
             for local in 0..count {
-                let bounds =
-                    Self::with_layout_child(child, |child| child.layout_bounds_for_node(local))
-                        .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+                let bounds = self.layout_child_bounds_for_node(child, local);
                 if flat_index < target_index {
                     if !self.is_bounds_collapsed(bounds) {
                         last_visible = Vec2D::new(-bounds.left(), -bounds.top());
@@ -987,9 +1041,7 @@ impl ScrollConstraint {
                     if flat_index >= target_index {
                         return None;
                     }
-                    let bounds =
-                        Self::with_layout_child(child, |child| child.layout_bounds_for_node(local))
-                            .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+                    let bounds = self.layout_child_bounds_for_node(child, local);
                     if !self.is_bounds_collapsed(bounds) {
                         return Some(Vec2D::new(-bounds.left(), -bounds.top()));
                     }
@@ -1014,10 +1066,7 @@ impl ScrollConstraint {
             let count = self.layout_children.len();
             if self.base.constrains_horizontal() {
                 for index in 0..count {
-                    let bounds = Self::with_layout_child(&self.layout_children[index], |child| {
-                        child.layout_bounds_for_node(0)
-                    })
-                    .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+                    let bounds = self.layout_child_bounds_for_node(&self.layout_children[index], 0);
                     let step = bounds.width() + gap.x;
                     if position.x > -bounds.left() - step {
                         return if step != 0.0 {
@@ -1030,10 +1079,7 @@ impl ScrollConstraint {
                 return count as f32;
             } else if self.base.constrains_vertical() {
                 for index in 0..count {
-                    let bounds = Self::with_layout_child(&self.layout_children[index], |child| {
-                        child.layout_bounds_for_node(0)
-                    })
-                    .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+                    let bounds = self.layout_child_bounds_for_node(&self.layout_children[index], 0);
                     let step = bounds.height() + gap.y;
                     if position.y > -bounds.top() - step {
                         return if step != 0.0 {
@@ -1053,9 +1099,7 @@ impl ScrollConstraint {
                 let count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                     .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
                 for local in 0..count {
-                    let bounds =
-                        Self::with_layout_child(child, |child| child.layout_bounds_for_node(local))
-                            .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+                    let bounds = self.layout_child_bounds_for_node(child, local);
                     let step = bounds.width() + gap.x;
                     if position.x > -bounds.left() - step {
                         return if step != 0.0 {
@@ -1073,9 +1117,7 @@ impl ScrollConstraint {
                 let count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                     .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
                 for local in 0..count {
-                    let bounds =
-                        Self::with_layout_child(child, |child| child.layout_bounds_for_node(local))
-                            .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+                    let bounds = self.layout_child_bounds_for_node(child, local);
                     let step = bounds.height() + gap.y;
                     if position.y > -bounds.top() - step {
                         return if step != 0.0 {
@@ -1112,10 +1154,7 @@ impl ScrollConstraint {
     fn bounds_for_flat_index(&self, index: usize) -> Aabb {
         if !self.has_list_children {
             if index < self.layout_children.len() {
-                return Self::with_layout_child(&self.layout_children[index], |child| {
-                    child.layout_bounds_for_node(0)
-                })
-                .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+                return self.layout_child_bounds_for_node(&self.layout_children[index], 0);
             }
             return Aabb::default();
         }
@@ -1124,10 +1163,7 @@ impl ScrollConstraint {
             let count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                 .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
             if index < flat_index + count {
-                return Self::with_layout_child(child, |child| {
-                    child.layout_bounds_for_node(index - flat_index)
-                })
-                .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
+                return self.layout_child_bounds_for_node(child, index - flat_index);
             }
             flat_index += count;
         }
@@ -1238,7 +1274,7 @@ impl ScrollConstraint {
     }
     pub fn has_layout_parent(&self) -> bool {
         self.content_handle()
-            .is_some_and(|content| content.is_type_of(LayoutComponent::TYPE_KEY))
+            .is_some_and(|content| content.is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY))
     }
     pub fn computed_content_width(&self) -> f32 {
         if self.has_layout_parent() {

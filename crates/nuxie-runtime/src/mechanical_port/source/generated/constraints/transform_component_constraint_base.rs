@@ -72,7 +72,10 @@ impl TransformComponentConstraintBase {
             return;
         }
         callbacks.min_max_space_value_changed();
-        callbacks.notify_property_changed(Self::MIN_MAX_SPACE_VALUE_PROPERTY_KEY);
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_MAX_SPACE_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_min_max_space_value_value(&mut self, value: u32) -> bool {
@@ -94,7 +97,10 @@ impl TransformComponentConstraintBase {
             return;
         }
         callbacks.copy_factor_changed();
-        callbacks.notify_property_changed(Self::COPY_FACTOR_PROPERTY_KEY);
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::COPY_FACTOR_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_copy_factor_value(&mut self, value: f32) -> bool {
@@ -116,7 +122,10 @@ impl TransformComponentConstraintBase {
             return;
         }
         callbacks.min_value_changed();
-        callbacks.notify_property_changed(Self::MIN_VALUE_PROPERTY_KEY);
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_min_value_value(&mut self, value: f32) -> bool {
@@ -138,7 +147,10 @@ impl TransformComponentConstraintBase {
             return;
         }
         callbacks.max_value_changed();
-        callbacks.notify_property_changed(Self::MAX_VALUE_PROPERTY_KEY);
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_VALUE_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_max_value_value(&mut self, value: f32) -> bool {
@@ -160,7 +172,10 @@ impl TransformComponentConstraintBase {
             return;
         }
         callbacks.offset_changed();
-        callbacks.notify_property_changed(Self::OFFSET_PROPERTY_KEY);
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OFFSET_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_offset_value(&mut self, value: bool) -> bool {
@@ -182,7 +197,10 @@ impl TransformComponentConstraintBase {
             return;
         }
         callbacks.does_copy_changed();
-        callbacks.notify_property_changed(Self::DOES_COPY_PROPERTY_KEY);
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DOES_COPY_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_does_copy_value(&mut self, value: bool) -> bool {
@@ -195,6 +213,13 @@ impl TransformComponentConstraintBase {
     pub fn min(&self) -> bool {
         self.min
     }
+    pub(crate) fn set_min_enabled_value(&mut self, value: bool) -> bool {
+        if self.min == value {
+            return false;
+        }
+        self.min = value;
+        true
+    }
     pub fn set_min(
         &mut self,
         value: bool,
@@ -205,10 +230,20 @@ impl TransformComponentConstraintBase {
         }
         self.min = value;
         callbacks.min_changed();
-        callbacks.notify_property_changed(Self::MIN_PROPERTY_KEY);
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_PROPERTY_KEY,
+        );
     }
     pub fn max(&self) -> bool {
         self.max
+    }
+    pub(crate) fn set_max_enabled_value(&mut self, value: bool) -> bool {
+        if self.max == value {
+            return false;
+        }
+        self.max = value;
+        true
     }
     pub fn set_max(
         &mut self,
@@ -220,7 +255,10 @@ impl TransformComponentConstraintBase {
         }
         self.max = value;
         callbacks.max_changed();
-        callbacks.notify_property_changed(Self::MAX_PROPERTY_KEY);
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_PROPERTY_KEY,
+        );
     }
     pub fn copy(
         &mut self,

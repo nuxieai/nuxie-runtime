@@ -22,3 +22,15 @@ impl ListenerFireEvent {
         state_machine_instance.report_event(event, 0.0);
     }
 }
+
+impl std::ops::Deref for ListenerFireEvent {
+    type Target = ListenerFireEventBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for ListenerFireEvent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

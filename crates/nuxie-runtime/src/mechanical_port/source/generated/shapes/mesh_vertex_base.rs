@@ -45,7 +45,7 @@ impl MeshVertexBase {
             return;
         }
         callbacks.u_changed();
-        callbacks.notify_property_changed(Self::U_PROPERTY_KEY);
+        MeshVertexBaseCallbacks::notify_property_changed(callbacks, Self::U_PROPERTY_KEY);
     }
 
     pub(crate) fn set_u_value(&mut self, value: f32) -> bool {
@@ -63,7 +63,7 @@ impl MeshVertexBase {
             return;
         }
         callbacks.v_changed();
-        callbacks.notify_property_changed(Self::V_PROPERTY_KEY);
+        MeshVertexBaseCallbacks::notify_property_changed(callbacks, Self::V_PROPERTY_KEY);
     }
 
     pub(crate) fn set_v_value(&mut self, value: f32) -> bool {

@@ -45,7 +45,10 @@ impl NestedAnimationBase {
             return;
         }
         callbacks.animation_id_changed();
-        callbacks.notify_property_changed(Self::ANIMATION_ID_PROPERTY_KEY);
+        NestedAnimationBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ANIMATION_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_animation_id_value(&mut self, value: u32) -> bool {

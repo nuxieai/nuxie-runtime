@@ -39,7 +39,10 @@ impl SoloBase {
             return;
         }
         callbacks.active_component_id_changed();
-        callbacks.notify_property_changed(Self::ACTIVE_COMPONENT_ID_PROPERTY_KEY);
+        SoloBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ACTIVE_COMPONENT_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_active_component_id_value(&mut self, value: u32) -> bool {

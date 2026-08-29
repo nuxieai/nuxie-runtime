@@ -28,6 +28,23 @@ impl EffectPath for TargetEffectPath {
         Some(self)
     }
 }
+impl std::ops::Deref for TargetEffect {
+    type Target = TargetEffectBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TargetEffect {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TargetEffect {
+    pub const TYPE_KEY: u16 = TargetEffectBase::TYPE_KEY;
+}
+
 pub struct TargetEffect {
     pub base: TargetEffectBase,
     stroke: StrokeEffectState,
@@ -43,6 +60,61 @@ impl Default for TargetEffect {
     }
 }
 impl TargetEffect {
+    pub(crate) fn invalidate_effect_handle_with_active(
+        handle: &CoreHandle,
+        provider: Option<PathProvider>,
+        active: &mut Option<effects_container::ActiveStrokeEffect<'_>>,
+    ) {
+        let (group, proxies) = handle
+            .with_downcast_mut::<TargetEffect, _>(|target| {
+                let group = target.group_effect.clone();
+                let proxies = if let Some(provider) = provider {
+                    target
+                        .stroke
+                        .effect_paths
+                        .get_mut(&provider.identity())
+                        .and_then(|path| path.as_target_mut())
+                        .map(|path| vec![*path.path_provider_proxy()])
+                        .unwrap_or_default()
+                } else {
+                    target
+                        .stroke
+                        .effect_paths
+                        .values_mut()
+                        .filter_map(|path| path.as_target_mut())
+                        .map(|path| *path.path_provider_proxy())
+                        .collect()
+                };
+                (group, proxies)
+            })
+            .unwrap_or_default();
+        let Some(group) = group else {
+            return;
+        };
+        for proxy in proxies {
+            GroupEffect::invalidate_effect_handle_with_active(&group, Some(proxy), active);
+        }
+    }
+
+    pub(crate) fn invalidate_effect_from_handle_with_active(
+        handle: &CoreHandle,
+        active: &mut Option<effects_container::ActiveStrokeEffect<'_>>,
+    ) {
+        let (parent, invalidating) = handle
+            .with_downcast_mut::<TargetEffect, _>(|target| {
+                target.stroke.invalidate_effect(None);
+                (target.base.parent_handle(), target.base.handle())
+            })
+            .unwrap_or_default();
+        if let (Some(parent), Some(invalidating)) = (parent, invalidating) {
+            effects_container::invalidate_effects_handle_with_active(
+                &parent,
+                Some(invalidating),
+                active,
+            );
+        }
+    }
+
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::InvalidObject;
@@ -51,8 +123,9 @@ impl TargetEffect {
             .with_mut(|parent| {
                 parent
                     .as_effects_container_mut()
-                    .map(|container| container.add_stroke_effect(this.clone()))
+                    .map(|container| container.add_stroke_effect(this.clone(), self))
             })
+            .flatten()
             .is_some();
         if !added {
             return StatusCode::InvalidObject;
@@ -104,7 +177,8 @@ impl TargetEffect {
             .flatten()
     }
     pub fn add_path_provider(&mut self, provider: &PathProvider) {
-        StrokeEffect::add_path_provider(self, provider);
+        let path = self.create_effect_path();
+        self.stroke.add_path_provider(provider, path);
         if let Some(path) = self.stroke.effect_paths.get_mut(&provider.identity()) {
             if let Some(group) = self.group_effect.as_ref() {
                 group.with_downcast_mut::<GroupEffect, _>(|group| {

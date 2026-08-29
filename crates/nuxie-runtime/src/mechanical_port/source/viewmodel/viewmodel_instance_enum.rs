@@ -39,7 +39,8 @@ impl ViewModelInstanceEnum {
                     .with(|property| {
                         let property = property.as_view_model_property_enum()?;
                         let data = property.data_enum()?;
-                        data.with_downcast::<super::data_enum::DataEnum, _>(|data| {
+                        data.with(|data| {
+                            let data = data.as_data_enum().expect("authored enum");
                             (0..data.values().len() as u32)
                                 .map(|index| data.value_by_index(index))
                                 .collect()
@@ -58,9 +59,7 @@ impl ViewModelInstanceEnum {
                         property
                             .as_view_model_property_enum()?
                             .data_enum()?
-                            .with_downcast::<super::data_enum::DataEnum, _>(|data| {
-                            data.enum_name().to_owned()
-                        })
+                            .with(|data| data.data_enum_name().expect("authored enum").to_owned())
                     })
                     .flatten()
             })
@@ -101,8 +100,18 @@ impl ViewModelInstanceEnum {
     }
 
     pub fn set_value_named(&mut self, name: &str) -> bool {
-        let enum_property = self.base.view_model_property_enum();
-        let index = enum_property.value_index_named(name);
+        let enum_property = self
+            .base
+            .view_model_property()
+            .expect("enum value has an authored property");
+        let index = enum_property
+            .with(|property| {
+                property
+                    .as_view_model_property_enum()
+                    .expect("enum value uses an enum property")
+                    .value_index_named(name)
+            })
+            .expect("authored enum property remains live");
         if index == -1 {
             return false;
         }
@@ -111,8 +120,19 @@ impl ViewModelInstanceEnum {
     }
 
     pub fn set_value_at(&mut self, index: u32) -> bool {
-        let enum_property = self.base.view_model_property_enum();
-        if enum_property.value_index_at(index) == -1 {
+        let enum_property = self
+            .base
+            .view_model_property()
+            .expect("enum value has an authored property");
+        let value_index = enum_property
+            .with(|property| {
+                property
+                    .as_view_model_property_enum()
+                    .expect("enum value uses an enum property")
+                    .value_index_at(index)
+            })
+            .expect("authored enum property remains live");
+        if value_index == -1 {
             return false;
         }
         self.set_property_value(index);

@@ -160,7 +160,7 @@ impl<'a> AnimationsData<'a> {
                         } else {
                             animation_reset.write_property_value(
                                 artboard.color_value(keyed_object_data.object_id, property_key)
-                                    as f32,
+                                    as i32 as f32,
                             );
                         }
                     }
@@ -291,27 +291,28 @@ impl AnimationResetFactory {
                 };
                 animation_reset.write_property_key(property_key);
                 let field_id = CoreRegistry::property_field_id(property_key as i32);
-                let baseline_value = baseline
-                    .then(|| {
-                        first.and_then(|first| {
-                            first
-                                .with_downcast::<KeyFrameDouble, _>(|frame| frame.base.value())
-                                .or_else(|| {
-                                    first.with_downcast::<KeyFrameColor, _>(|frame| {
-                                        frame.base.value() as f32
-                                    })
+                if baseline {
+                    if let Some(value) = first.and_then(|first| {
+                        first
+                            .with_downcast::<KeyFrameDouble, _>(|frame| frame.base.value())
+                            .or_else(|| {
+                                first.with_downcast::<KeyFrameColor, _>(|frame| {
+                                    frame.base.value() as f32
                                 })
-                        })
-                    })
-                    .flatten();
-                let value = baseline_value.unwrap_or_else(|| {
-                    if field_id == CORE_DOUBLE_TYPE_ID {
+                            })
+                    }) {
+                        animation_reset.write_property_value(value);
+                    }
+                } else {
+                    let value = if field_id == CORE_DOUBLE_TYPE_ID {
                         artboard.double_value(object_id, property_key)
                     } else {
-                        artboard.color_value(object_id, property_key) as f32
-                    }
-                });
-                animation_reset.write_property_value(value);
+                        // Pinned CoreRegistry::getColor returns signed int,
+                        // not an unsigned packed-color magnitude.
+                        artboard.color_value(object_id, property_key) as i32 as f32
+                    };
+                    animation_reset.write_property_value(value);
+                }
             }
         }
         animation_reset.complete();

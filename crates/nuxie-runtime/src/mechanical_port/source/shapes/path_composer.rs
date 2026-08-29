@@ -60,7 +60,7 @@ impl RuntimePathComposerHandle {
                 .with_component(Component::dependents_snapshot)
                 .unwrap_or_default()
             {
-                dependent.add_dirt(value, true);
+                dependent.add_dirt_from_shape(shape, value, true);
             }
         }
         true

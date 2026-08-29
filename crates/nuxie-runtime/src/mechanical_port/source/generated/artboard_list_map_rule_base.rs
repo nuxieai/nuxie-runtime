@@ -50,7 +50,10 @@ impl ArtboardListMapRuleBase {
             return;
         }
         callbacks.artboard_id_changed();
-        callbacks.notify_property_changed(Self::ARTBOARD_ID_PROPERTY_KEY);
+        ArtboardListMapRuleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ARTBOARD_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_artboard_id_value(&mut self, value: u32) -> bool {
@@ -72,7 +75,10 @@ impl ArtboardListMapRuleBase {
             return;
         }
         callbacks.view_model_id_changed();
-        callbacks.notify_property_changed(Self::VIEW_MODEL_ID_PROPERTY_KEY);
+        ArtboardListMapRuleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VIEW_MODEL_ID_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_view_model_id_value(&mut self, value: u32) -> bool {

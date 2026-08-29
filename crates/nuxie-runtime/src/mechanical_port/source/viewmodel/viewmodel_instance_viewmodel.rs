@@ -125,7 +125,7 @@ impl ViewModelInstanceViewModel {
             .is_some()
         {
             let Some(backboard) = import_stack.latest::<BackboardImporter>(
-                crate::mechanical_port::source::backboard::Backboard::TYPE_KEY,
+                crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
             ) else {
                 return StatusCode::MissingObject;
             };
@@ -145,33 +145,27 @@ impl ViewModelInstanceViewModel {
                     })
                     .flatten();
                 let referenced_instance = view_model_id.and_then(|view_model_id| {
-                    file.with_file_mut(|file| {
-                        let view_model = file.view_model(view_model_id as usize)?;
-                        let property = view_model
-                            .with(|view_model| {
-                                view_model.as_view_model().and_then(|view_model| {
-                                    view_model
-                                        .property_at(self.base.view_model_property_id() as usize)
-                                })
+                    // File::read is active during this import callback. Read
+                    // its canonical model table without borrowing File again.
+                    let view_model = file.view_model(view_model_id as usize)?;
+                    let property = view_model
+                        .with(|view_model| {
+                            view_model.as_view_model().and_then(|view_model| {
+                                view_model.property_at(self.base.view_model_property_id() as usize)
                             })
-                            .flatten()?;
-                        let reference_id = property
-                            .with(|property| {
-                                property
-                                    .as_view_model_property()
-                                    .and_then(|property| property.base.as_view_model_reference_id())
+                        })
+                        .flatten()?;
+                    let reference_id = property.with_downcast::<super::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(
+                        |property| property.base.view_model_reference_id(),
+                    )?;
+                    let referenced_view_model = file.view_model(reference_id as usize)?;
+                    referenced_view_model
+                        .with(|view_model| {
+                            view_model.as_view_model().and_then(|view_model| {
+                                view_model.instance_at(self.base.property_value() as usize)
                             })
-                            .flatten()?;
-                        let referenced_view_model = file.view_model(reference_id as usize)?;
-                        referenced_view_model
-                            .with(|view_model| {
-                                view_model.as_view_model().and_then(|view_model| {
-                                    view_model.instance_at(self.base.property_value() as usize)
-                                })
-                            })
-                            .flatten()
-                    })
-                    .flatten()
+                        })
+                        .flatten()
                 });
                 if let Some(referenced_instance) = referenced_instance {
                     self.set_reference_view_model_instance(Some(referenced_instance));

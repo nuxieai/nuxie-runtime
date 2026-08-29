@@ -72,11 +72,10 @@ impl FontAsset {
             })
             .expect("retained FontAsset");
         for referencer in referencers {
-            referencer
-                .with_mut(|referencer| {
-                    referencer.component_add_dirt(ComponentDirt::TEXT_SHAPE, false)
-                })
-                .expect("retained FontAsset referencer");
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                referencer,
+            )
+            .add_dirt(ComponentDirt::TEXT_SHAPE, false);
         }
     }
     pub fn decode(&mut self, data: &[u8], factory: &RuntimeFactoryHandle) -> bool {

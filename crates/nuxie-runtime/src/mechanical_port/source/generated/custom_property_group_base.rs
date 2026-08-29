@@ -23,7 +23,9 @@ impl CustomPropertyGroupBase {
         Self::TYPE_KEY
     }
     pub fn copy(&mut self, object: &Self) {
-        self.base.copy(&object.base);
+        let mut base = std::mem::take(&mut self.base.base.base.base);
+        base.copy(&object.base.base.base.base, &mut self.base.base.base);
+        self.base.base.base.base = base;
     }
     pub fn clone_into(&self) -> CustomPropertyGroup {
         let mut cloned = CustomPropertyGroup::default();

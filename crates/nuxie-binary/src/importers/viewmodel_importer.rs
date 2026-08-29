@@ -94,11 +94,8 @@ impl RuntimeFile {
                 if definition.name == "ViewModelInstanceList" {
                     let (view_model_index, instance_index) =
                         view_model_instance_importer.view_model_instance();
-                    latest_view_model_instance_list = Some((
-                        view_model_index,
-                        instance_index,
-                        value_index,
-                    ));
+                    latest_view_model_instance_list =
+                        Some((view_model_index, instance_index, value_index));
                 }
                 continue;
             }

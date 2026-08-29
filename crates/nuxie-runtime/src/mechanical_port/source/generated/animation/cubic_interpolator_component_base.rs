@@ -58,7 +58,10 @@ impl CubicInterpolatorComponentBase {
             return;
         }
         callbacks.x1_changed();
-        callbacks.notify_property_changed(Self::X1_PROPERTY_KEY);
+        CubicInterpolatorComponentBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::X1_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_x1_value(&mut self, value: f32) -> bool {
@@ -80,7 +83,10 @@ impl CubicInterpolatorComponentBase {
             return;
         }
         callbacks.y1_changed();
-        callbacks.notify_property_changed(Self::Y1_PROPERTY_KEY);
+        CubicInterpolatorComponentBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::Y1_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_y1_value(&mut self, value: f32) -> bool {
@@ -102,7 +108,10 @@ impl CubicInterpolatorComponentBase {
             return;
         }
         callbacks.x2_changed();
-        callbacks.notify_property_changed(Self::X2_PROPERTY_KEY);
+        CubicInterpolatorComponentBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::X2_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_x2_value(&mut self, value: f32) -> bool {
@@ -124,7 +133,10 @@ impl CubicInterpolatorComponentBase {
             return;
         }
         callbacks.y2_changed();
-        callbacks.notify_property_changed(Self::Y2_PROPERTY_KEY);
+        CubicInterpolatorComponentBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::Y2_PROPERTY_KEY,
+        );
     }
 
     pub(crate) fn set_y2_value(&mut self, value: f32) -> bool {

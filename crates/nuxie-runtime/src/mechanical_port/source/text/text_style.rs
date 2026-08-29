@@ -12,6 +12,23 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
     text_engine::{FontCoord, FontFeature, FontRef},
 };
+impl std::ops::Deref for TextStyle {
+    type Target = TextStyleBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TextStyle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl TextStyle {
+    pub const TYPE_KEY: u16 = TextStyleBase::TYPE_KEY;
+}
+
 pub struct TextStyle {
     pub base: TextStyleBase,
     variation_helper: Option<RuntimeTextVariationHelperHandle>,
@@ -43,7 +60,7 @@ impl TextStyle {
     fn font_asset(&self) -> Option<CoreHandle> {
         self.file_asset_referencer
             .asset()
-            .filter(|asset| asset.with_downcast::<FontAsset, _>(|_| ()).is_some())
+            .filter(|asset| asset.is_type_of(crate::mechanical_port::source::generated::assets::font_asset_base::FontAssetBase::TYPE_KEY))
     }
 
     pub fn add_variation(&mut self, axis: CoreHandle) {
@@ -64,8 +81,71 @@ impl TextStyle {
             }
         }
     }
+
+    pub(crate) fn add_dirt_occurrence(
+        owner: &CoreHandle,
+        value: ComponentDirt,
+        recurse: bool,
+    ) -> bool {
+        let changed = owner
+            .with_mut(|object| {
+                let component = object.as_component_mut().expect("TextStyle Component");
+                let dirt = component.add_dirt_state(value)?;
+                Some((dirt, component.artboard_handle(), component.graph_order()))
+            })
+            .expect("live TextStyle");
+        let Some((dirt, artboard, graph_order)) = changed else {
+            return false;
+        };
+        Self::on_dirty_occurrence(owner, dirt);
+        if let Some(dirty) = artboard.and_then(|artboard| artboard.artboard_dirty_handle()) {
+            dirty.on_component_dirty_at(graph_order);
+        }
+        if recurse {
+            let dependents = owner
+                .with(|object| {
+                    object
+                        .as_component()
+                        .expect("TextStyle Component")
+                        .dependents_snapshot()
+                })
+                .expect("live TextStyle");
+            for dependent in dependents {
+                dependent.add_dirt(value, true);
+            }
+        }
+        true
+    }
+
+    fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+        let text = owner
+            .with(|object| object.as_text_style().expect("TextStyle").text.clone())
+            .flatten();
+        if let Some(text) = text.filter(|_| dirt.contains(ComponentDirt::TEXT_SHAPE)) {
+            if text.is_type_of(
+                crate::mechanical_port::source::generated::text::text_base::TextBase::TYPE_KEY,
+            ) {
+                super::text::Text::mark_shape_dirty_occurrence(&text, true);
+            } else {
+                text.with_mut(|object| object.text_interface_mark_shape_dirty());
+            }
+            let helper = owner
+                .with(|object| {
+                    object
+                        .as_text_style()
+                        .expect("TextStyle")
+                        .variation_helper
+                        .as_ref()
+                        .map(|helper| helper.occurrence())
+                })
+                .flatten();
+            if let Some(helper) = helper {
+                helper.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+            }
+        }
+    }
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        self.text = TextInterface::from_core(self.base.parent_handle());
+        self.text = <dyn TextInterface>::from_core(self.base.parent_handle());
         let mut code = self.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
@@ -129,7 +209,7 @@ impl TextStyle {
                     });
                 });
             }
-            self.variable_font = base_font.with_options(&self.coords, &self.features);
+            self.variable_font = Some(base_font.with_options(&self.coords, &self.features));
         } else {
             self.variable_font = None;
         }
@@ -147,18 +227,28 @@ impl TextStyle {
     pub fn asset_id(&self) -> u32 {
         self.base.font_asset_id()
     }
-    pub fn set_asset(&mut self, asset: Option<CoreHandle>) {
-        if asset.as_ref().is_some_and(|asset| {
-            asset
-                .with_downcast::<FontAsset, _>(|_| true)
-                .unwrap_or(false)
+    pub(crate) fn file_asset_referencer_mut(&mut self) -> &mut FileAssetReferencer {
+        &mut self.file_asset_referencer
+    }
+    pub fn set_asset_occurrence(owner: &CoreHandle, asset: Option<CoreHandle>) {
+        if !asset.as_ref().is_some_and(|asset| {
+            asset.is_type_of(crate::mechanical_port::source::generated::assets::font_asset_base::FontAssetBase::TYPE_KEY)
         }) {
-            if let Some(this) = self.base.handle() {
-                self.file_asset_referencer.set_asset(this, asset);
-            }
-            if self.text.is_some() {
-                self.base.add_dirt(ComponentDirt::TEXT_SHAPE);
-            }
+            return;
+        }
+        let has_text = owner
+            .with_mut(|object| {
+                let style = object
+                    .as_text_style_mut()
+                    .expect("TextStyle asset referencer");
+                style.file_asset_referencer.set_asset(owner.clone(), asset);
+                style.text.is_some()
+            })
+            .expect("live TextStyle");
+        if has_text {
+            // Upstream setAsset calls the most-derived onDirty through addDirt.
+            // Release the style before Text dirt traverses its dependents.
+            Self::add_dirt_occurrence(owner, ComponentDirt::TEXT_SHAPE, false);
         }
     }
     pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
@@ -176,6 +266,43 @@ impl TextStyle {
             .as_ref()
             .expect("TextStyle text")
             .with_mut(|text| text.text_interface_mark_shape_dirty());
+    }
+    pub(crate) fn set_double_occurrence(owner: &CoreHandle, key: u16, value: f32) -> bool {
+        let Some(changed) = owner.with_mut(|object| {
+            let style = object
+                .as_text_style_mut()
+                .expect("TextStyle property owner");
+            match key {
+                TextStyleBase::FONT_SIZE_PROPERTY_KEY => style.base.set_font_size_value(value),
+                TextStyleBase::LINE_HEIGHT_PROPERTY_KEY => style.base.set_line_height_value(value),
+                TextStyleBase::LETTER_SPACING_PROPERTY_KEY => {
+                    style.base.set_letter_spacing_value(value)
+                }
+                _ => unreachable!("TextStyle generated numeric property"),
+            }
+        }) else {
+            return false;
+        };
+        if !changed {
+            return true;
+        }
+
+        // All three pinned changed callbacks call m_text->markShapeDirty().
+        // That callback invalidates this same TextStylePaint's stroke effects,
+        // so the property owner borrow must end before entering Text.
+        let text = owner
+            .with(|object| object.as_text_style().expect("TextStyle").text.clone())
+            .flatten()
+            .expect("TextStyle text");
+        if text.is_type_of(
+            crate::mechanical_port::source::generated::text::text_base::TextBase::TYPE_KEY,
+        ) {
+            super::text::Text::mark_shape_dirty_occurrence(&text, true);
+        } else {
+            text.with_mut(|object| object.text_interface_mark_shape_dirty());
+        }
+        owner.with_mut(|object| object.core_mut().notify_property_changed(key));
+        true
     }
     pub fn line_height_changed(&mut self) {
         self.text
@@ -200,6 +327,6 @@ impl TextStyle {
         twin
     }
     pub fn validate(&self, context: &dyn CoreContext) -> bool {
-        TextInterface::from_core(context.resolve(self.base.parent_id())).is_some()
+        <dyn TextInterface>::from_core(context.resolve(self.base.parent_id())).is_some()
     }
 }

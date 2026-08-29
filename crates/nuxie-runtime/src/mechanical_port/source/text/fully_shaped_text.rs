@@ -51,7 +51,11 @@ impl FullyShapedText {
         overflow: TextOverflow,
         paragraph_spacing: f32,
     ) {
-        self.paragraphs = runs[0].font.shape_text(text, runs);
+        self.paragraphs = runs[0]
+            .font
+            .as_ref()
+            .expect("shaped text retains its font")
+            .shape_text(text, runs, -1);
         self.glyph_lookup.compute(text, &self.paragraphs);
         self.paragraph_lines = Text::break_lines(
             &self.paragraphs,
@@ -71,7 +75,7 @@ impl FullyShapedText {
         }
         let mut y = 0.0;
         let mut min_y = 0.0;
-        let mut measured_width = 0.0;
+        let mut measured_width: f32 = 0.0;
         if origin == TextOrigin::Baseline
             && !self.paragraph_lines.is_empty()
             && !self.paragraph_lines[0].is_empty()

@@ -5,11 +5,7 @@
 //! remain product-neutral and cannot assert trusted-exporter provenance.
 
 #[cfg(feature = "android-authored-wgsl")]
-use super::{NuxCapiResult, NuxFile, NuxFileImportConfig, NuxStatus};
-
-pub(crate) fn prepare_configured_import_runtime() {
-    nuxie_project_data::install_runtime_adapter();
-}
+use super::{NuxAndroidVulkanRenderer, NuxCapiResult, NuxFile, NuxFileImportConfig, NuxStatus};
 
 /// Import caller-authenticated product bytes after enabling the authored-data
 /// converter format and trusted WGSL-exporter authority.
@@ -22,25 +18,27 @@ pub(crate) fn prepare_configured_import_runtime() {
 /// # Safety
 ///
 /// The pointers and lengths must satisfy the same contract as
-/// [`super::nux_file_import_configured`].
+/// [`super::nux_file_import_android_vulkan`].
 #[unsafe(no_mangle)]
 #[cfg(feature = "android-authored-wgsl")]
-pub unsafe extern "C" fn nux_file_import_configured_with_trusted_wgsl(
+pub unsafe extern "C" fn nux_file_import_android_vulkan_with_trusted_wgsl(
+    renderer: *mut NuxAndroidVulkanRenderer,
     bytes: *const u8,
     len: usize,
     config: *const NuxFileImportConfig,
     out_file: *mut *mut NuxFile,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
-    prepare_configured_import_runtime();
     unsafe {
-        super::asset_hooks::nux_file_import_configured_with_authority(
+        super::android_vulkan::import_android_vulkan_file_with_authority(
+            renderer,
             bytes,
             len,
             config,
             out_file,
             out_result,
             super::NativeShaderImportAuthority::TrustedExporter,
+            Some(nuxie_project_data_scripting::ProjectDataScriptProgramAdapter::shared()),
         )
     }
 }
@@ -54,20 +52,19 @@ mod tests {
     use std::sync::Arc;
 
     use luaur_compiler::functions::luau_compile::luau_compile;
+    use nuxie::render_api::RawPath;
     use nuxie::{
-        ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasShader, ImageDecodeError,
-        PersistentFactory, RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType,
+        ArtboardInstance, ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasShader,
+        ImageDecodeError, PersistentFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
         RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader,
+        ScriptedDrawable,
     };
     use nuxie_render_api::RecordingFactory;
     use nuxie_schema::definition_by_name;
     use sha2::{Digest, Sha256};
 
     use super::*;
-    use crate::{
-        NuxHostCommandImportConfig, NuxStringView, nux_capi_result_free, nux_file_free,
-        nux_file_import_configured,
-    };
+    use crate::{NativeShaderImportAuthority, NuxHostCommandImportConfig, NuxStringView};
 
     const SCRIPT: &[u8] = br#"
 return function(context)
@@ -317,51 +314,51 @@ end
         }
     }
 
-    unsafe fn import_with(
-        entry: unsafe extern "C" fn(
-            *const u8,
-            usize,
-            *const NuxFileImportConfig,
-            *mut *mut NuxFile,
-            *mut *mut NuxCapiResult,
-        ) -> NuxStatus,
+    fn import_and_draw(
         bytes: &[u8],
-    ) -> *mut NuxFile {
+        authority: NativeShaderImportAuthority,
+    ) -> (Result<bool, String>, usize) {
         let host = NuxHostCommandImportConfig {
             module_name: string_view("bridge"),
             ..NuxHostCommandImportConfig::default()
         };
-        let config = NuxFileImportConfig {
-            host_commands: &host,
-            ..NuxFileImportConfig::default()
-        };
-        let mut file = ptr::null_mut();
-        let mut result = ptr::null_mut();
-        assert_eq!(
-            unsafe { entry(bytes.as_ptr(), bytes.len(), &config, &mut file, &mut result,) },
-            NuxStatus::Ok
-        );
-        unsafe { nux_capi_result_free(result) };
-        file
-    }
-
-    fn draw_imported(file: *mut NuxFile) -> (Result<(), String>, usize) {
-        let file_owner = unsafe { &*file }.file.clone();
-        let mut instance = file_owner
-            .default_artboard()
-            .expect("fixture artboard")
-            .instantiate()
-            .expect("fixture instance");
+        let prepared = unsafe { crate::prepare_optional_host_command_import(&host) }
+            .expect("valid host import config");
         let shader_count = Rc::new(Cell::new(0));
         let mut factory = PersistentFactory::new(ShaderProbeFactory {
             inner: RecordingFactory::new(),
             shader_count: Rc::clone(&shader_count),
         });
+        let imported = match crate::import_file_with_prepared_host_commands(
+            bytes,
+            &mut factory,
+            None,
+            prepared,
+            authority,
+            None,
+        ) {
+            Ok(imported) => imported,
+            Err(error) => return (Err(error), shader_count.get()),
+        };
+        let _scripted = imported.scripted;
+        let mut instance = match ArtboardInstance::from_native(imported.file, 0) {
+            Ok(instance) => instance,
+            Err(error) => return (Err(format!("{error:#}")), shader_count.get()),
+        };
+        let initialized = (0..instance.object_count())
+            .filter_map(|index| instance.object_handle(index))
+            .filter_map(|object| {
+                object.with_downcast::<ScriptedDrawable, _>(|drawable| {
+                    drawable.scripted.self_ref() != 0
+                })
+            })
+            .any(|initialized| initialized);
+        if let Err(error) = instance.advance(0.0) {
+            return (Err(format!("{error:#}")), shader_count.get());
+        }
         let mut renderer = factory.borrow().inner.make_renderer();
-        let result = instance
-            .draw(&mut factory, &mut renderer)
-            .map_err(|error| error.to_string());
-        (result, shader_count.get())
+        instance.draw(&mut renderer);
+        (Ok(initialized), shader_count.get())
     }
 
     #[test]
@@ -390,20 +387,22 @@ end
         );
         let bytes = imported_file();
 
-        let generic = unsafe { import_with(nux_file_import_configured, &bytes) };
-        let (generic_draw, generic_shader_count) = draw_imported(generic);
-        let generic_error = generic_draw.expect_err("generic import must deny the authored shader");
+        let (generic_initialization, generic_shader_count) =
+            import_and_draw(&bytes, NativeShaderImportAuthority::Denied);
         assert_eq!(
-            generic_error, "failed to prepare scripted drawables",
-            "the facade must report the pipeline's denied-Shader preparation failure"
+            generic_initialization.expect("generic exact import must remain script-safe"),
+            false,
+            "the exact runtime must leave a scripted drawable inert when its shader lacks native provenance"
         );
         assert_eq!(generic_shader_count, 0);
-        assert_eq!(unsafe { nux_file_free(generic) }, NuxStatus::Ok);
 
-        let product = unsafe { import_with(nux_file_import_configured_with_trusted_wgsl, &bytes) };
-        let (product_draw, product_shader_count) = draw_imported(product);
-        product_draw.expect("trusted product import must expose a working Shader object");
+        let (product_initialization, product_shader_count) =
+            import_and_draw(&bytes, NativeShaderImportAuthority::TrustedExporter);
+        assert!(
+            product_initialization
+                .expect("trusted product import must expose a working Shader object"),
+            "the exact artboard constructor must initialize the trusted scripted drawable"
+        );
         assert_eq!(product_shader_count, 1);
-        assert_eq!(unsafe { nux_file_free(product) }, NuxStatus::Ok);
     }
 }

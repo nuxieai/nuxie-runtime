@@ -4,11 +4,13 @@
 //! owns `ANativeWindow` and blits the owned CPU frame returned here.
 
 use super::{
-    HandleKind, NuxCapiResult, NuxPlayer, NuxStatus, PendingHandlePublication, RendererDomain,
-    RendererDomainBinding, enter_handle, enter_occurrence, ffi_guard, ffi_guard_with_handle_result,
-    ffi_guard_with_result, publish_result, register_handle, remove_handle,
+    HandleKind, NuxCapiResult, NuxFile, NuxFileImportConfig, NuxPlayer, NuxStatus,
+    PendingHandlePublication, RendererDomain, RendererDomainBinding, enter_handle,
+    enter_occurrence, ffi_guard, ffi_guard_with_handle_result, ffi_guard_with_result,
+    publish_result, register_handle, remove_handle,
 };
-use nuxie::{ImageDecodeError, Mat2D, PersistentFactory, RenderImage, Renderer};
+use nuxie::render_api::Mat2D;
+use nuxie::{ImageDecodeError, PersistentFactory, RenderImage, Renderer};
 use nuxie_renderer::{NativeVulkanFactory, RenderMode, RendererError};
 use std::cell::RefCell;
 use std::ptr;
@@ -27,7 +29,7 @@ pub type NuxAndroidVulkanPixelFormat = u32;
 pub const NUX_ANDROID_VULKAN_PIXEL_FORMAT_RGBA8_PREMULTIPLIED: NuxAndroidVulkanPixelFormat = 1;
 
 struct AndroidVulkanRendererState {
-    factory: PersistentFactory<NativeVulkanFactory>,
+    factory: PersistentFactory<crate::asset_hooks::AssetFactory<NativeVulkanFactory>>,
     pixel_width: u32,
     pixel_height: u32,
 }
@@ -50,6 +52,89 @@ impl crate::asset_hooks::AssetUploadFactory for NativeVulkanFactory {
 pub struct NuxAndroidVulkanRenderer {
     state: RefCell<AndroidVulkanRendererState>,
     domain: Arc<RendererDomain>,
+}
+
+pub(crate) unsafe fn import_android_vulkan_file_with_authority(
+    renderer: *mut NuxAndroidVulkanRenderer,
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+    authority: super::NativeShaderImportAuthority,
+    program_adapter: Option<Arc<dyn nuxie::ScriptProgramAdapter>>,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _renderer_call = match enter_handle(renderer, HandleKind::AndroidVulkanRenderer) {
+            Ok(guard) => guard,
+            Err(status) => {
+                if !out_result.is_null() {
+                    publish_result(out_result, status, "renderer handle is unavailable");
+                }
+                return status;
+            }
+        };
+        let Some(renderer) = (unsafe { renderer.as_ref() }) else {
+            if !out_result.is_null() {
+                publish_result(out_result, NuxStatus::NullArgument, "renderer is null");
+            }
+            return NuxStatus::NullArgument;
+        };
+        let state = match renderer.state.try_borrow() {
+            Ok(state) => state,
+            Err(_) => {
+                if !out_result.is_null() {
+                    publish_result(out_result, NuxStatus::ReentrantCall, "renderer is active");
+                }
+                return NuxStatus::ReentrantCall;
+            }
+        };
+        let factory = state.factory.clone();
+        let generation = renderer.domain.generation.load(Ordering::Relaxed);
+        drop(state);
+        unsafe {
+            super::asset_hooks::nux_file_import_configured_with_factory(
+                bytes,
+                len,
+                config,
+                out_file,
+                out_result,
+                factory,
+                RendererDomainBinding::AndroidVulkan {
+                    domain: Arc::clone(&renderer.domain),
+                    generation,
+                },
+                authority,
+                program_adapter,
+            )
+        }
+    })
+}
+
+/// Imports a file into this renderer's retained factory domain. The returned
+/// file and every occurrence created from it remain bound to this exact Vulkan
+/// renderer generation.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_file_import_android_vulkan(
+    renderer: *mut NuxAndroidVulkanRenderer,
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    unsafe {
+        import_android_vulkan_file_with_authority(
+            renderer,
+            bytes,
+            len,
+            config,
+            out_file,
+            out_result,
+            super::NativeShaderImportAuthority::Denied,
+            None,
+        )
+    }
 }
 
 /// Owned frame pixels returned by the Android Vulkan renderer.
@@ -222,7 +307,9 @@ pub unsafe extern "C" fn nux_renderer_new_android_vulkan(
             let pending = PendingHandlePublication::new(
                 NuxAndroidVulkanRenderer {
                     state: RefCell::new(AndroidVulkanRendererState {
-                        factory: PersistentFactory::new(factory),
+                        factory: PersistentFactory::new(crate::asset_hooks::AssetFactory::new(
+                            factory,
+                        )),
                         pixel_width,
                         pixel_height,
                     }),
@@ -269,51 +356,6 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_resize(
             .map_err(renderer_failure)?;
         state.pixel_width = pixel_width;
         state.pixel_height = pixel_height;
-        Ok(())
-    })
-}
-
-/// Drops renderer-owned resources from the player's retained artboard and
-/// binds it to this renderer's current durable domain.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_renderer_android_vulkan_reset_player_domain(
-    renderer: *const NuxAndroidVulkanRenderer,
-    player: *mut NuxPlayer,
-    out_result: *mut *mut NuxCapiResult,
-) -> NuxStatus {
-    with_result(out_result, || {
-        let _renderer_call = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)
-            .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
-        let _player_call = enter_handle(player, HandleKind::Player)
-            .map_err(|status| ApiFailure::new(status, "player handle is unavailable"))?;
-        let renderer = unsafe { renderer.as_ref() }
-            .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "renderer is null"))?;
-        let player = unsafe { player.as_ref() }
-            .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "player is null"))?;
-        let _state = renderer
-            .state
-            .try_borrow()
-            .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-        let _occurrence_call = enter_occurrence(&player.artboard)
-            .map_err(|status| ApiFailure::new(status, "player occurrence is unavailable"))?;
-        let artboard = player.artboard.instance.try_borrow().map_err(|_| {
-            ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
-        })?;
-        artboard.reset_renderer();
-        let generation = renderer.domain.generation.load(Ordering::Relaxed);
-        *player.artboard.renderer_domain.borrow_mut() =
-            Some(RendererDomainBinding::AndroidVulkan {
-                domain: Arc::clone(&renderer.domain),
-                generation,
-            });
-        player.artboard.observed_renderer_generation.set(generation);
-        player.artboard.invalidate_render().map_err(|status| {
-            player.artboard.poisoned.set(true);
-            ApiFailure::new(
-                status,
-                "player render revision overflowed during domain reset",
-            )
-        })?;
         Ok(())
     })
 }
@@ -367,26 +409,17 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                     .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
 
                 let generation = renderer_ref.domain.generation.load(Ordering::Relaxed);
-                let existing_domain = { player.artboard.renderer_domain.borrow().clone() };
-                match existing_domain {
-                    Some(RendererDomainBinding::AndroidVulkan {
+                match &player.artboard.renderer_domain {
+                    RendererDomainBinding::AndroidVulkan {
                         domain: bound_domain,
                         generation: bound_generation,
-                    }) if bound_domain.id == renderer_ref.domain.id
+                    } if bound_domain.id == renderer_ref.domain.id
                         && Arc::ptr_eq(&bound_domain, &renderer_ref.domain)
-                        && bound_generation == generation => {}
-                    None => {
-                        *player.artboard.renderer_domain.borrow_mut() =
-                            Some(RendererDomainBinding::AndroidVulkan {
-                                domain: Arc::clone(&renderer_ref.domain),
-                                generation,
-                            });
-                        player.artboard.observed_renderer_generation.set(generation);
-                    }
-                    Some(_) => {
+                        && *bound_generation == generation => {}
+                    _ => {
                         return Err(ApiFailure::new(
                             NuxStatus::HandleMismatch,
-                            "player is bound to another renderer domain; reset it explicitly",
+                            "player was not imported through this Vulkan renderer generation",
                         ));
                     }
                 }
@@ -413,24 +446,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                             (state.pixel_width, state.pixel_height),
                         )?);
                     }
-                    // Asset hooks retain canonical CPU pixels at import, not a
-                    // backend RenderImage. This wrapper is consulted when draw
-                    // lazily realizes an occurrence's images: on its first draw
-                    // and after reset_player_domain drops its backend resources.
-                    // Ordinary draws and resize reuse the retained image. This
-                    // mirrors Metal re-realization after migration or reattach.
-                    if let Some(assets) = player.artboard.asset_hooks.as_ref() {
-                        let mut factory = assets.wrap_factory(&mut state.factory);
-                        artboard.draw(&mut factory, &mut frame).map_err(|error| {
-                            ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
-                        })?;
-                    } else {
-                        artboard
-                            .draw(&mut state.factory, &mut frame)
-                            .map_err(|error| {
-                                ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
-                            })?;
-                    }
+                    artboard.draw(&mut frame);
                 }
                 let pixels = frame.finish().map_err(renderer_failure)?;
                 let row_stride_bytes = state.pixel_width.checked_mul(4).ok_or_else(|| {

@@ -12,9 +12,11 @@ extern "C" {
  * data converter format used by published product experiences.
  *
  * Pointer, result, and ownership semantics are identical to
- * nux_file_import_configured.
+ * nux_file_import_metal. The returned file and its occurrences remain bound
+ * to the supplied renderer generation and must be reimported after reattach.
  */
-NuxStatus nux_product_file_import_configured(const uint8_t *bytes,
+NuxStatus nux_product_file_import_configured(NuxRenderer *renderer,
+                                             const uint8_t *bytes,
                                              size_t len,
                                              const NuxFileImportConfig *config,
                                              NuxFile **out_file,

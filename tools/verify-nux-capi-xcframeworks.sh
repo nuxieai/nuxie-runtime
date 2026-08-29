@@ -116,10 +116,10 @@ cat \
     "${repo_root}/crates/nux-apple-product-extension/include/nux_product_extension.h" > "${header_contract}"
 python3 "${script_dir}/apple_runtime_contract.py" header-symbols \
     "${header_contract}" \
-    "portable=${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
-    "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
-    "androidExtension=${repo_root}/crates/nux-capi/exports-v3-android-vulkan-extension.txt" \
-    "androidAuthoredWgslExtension=${repo_root}/crates/nux-capi/exports-v3-android-authored-wgsl-extension.txt" \
+    "portable=${repo_root}/crates/nux-capi/exports-v4-portable.txt" \
+    "appleExtension=${repo_root}/crates/nux-capi/exports-v4-apple-metal-extension.txt" \
+    "androidExtension=${repo_root}/crates/nux-capi/exports-v4-android-vulkan-extension.txt" \
+    "androidAuthoredWgslExtension=${repo_root}/crates/nux-capi/exports-v4-android-authored-wgsl-extension.txt" \
     "productExtension=${repo_root}/crates/nux-apple-product-extension/exports-v1-product-extension.txt"
 
 for library in "${thin_libraries[@]}"; do
@@ -132,8 +132,8 @@ for library in "${thin_libraries[@]}"; do
     "${rust_llvm_nm}" -gjU "${library}" > "${symbols_path}"
     python3 "${script_dir}/apple_runtime_contract.py" symbol-partitions \
         "${symbols_path}" \
-        "portable=${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
-        "appleExtension=${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
+        "portable=${repo_root}/crates/nux-capi/exports-v4-portable.txt" \
+        "appleExtension=${repo_root}/crates/nux-capi/exports-v4-apple-metal-extension.txt" \
         "productExtension=${repo_root}/crates/nux-apple-product-extension/exports-v1-product-extension.txt"
 done
 

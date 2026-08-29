@@ -110,13 +110,28 @@ unsafe fn assert_result(result: *mut NuxCapiResult, expected: NuxStatus) {
     assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
 }
 
-fn player_retaining_released_import_owners(fixture: &str, artboard_index: usize) -> *mut NuxPlayer {
+fn player_retaining_released_import_owners(
+    renderer: *mut NuxRenderer,
+    fixture: &str,
+    artboard_index: usize,
+) -> *mut NuxPlayer {
     let bytes = fixture_bytes(fixture);
     let mut file = ptr::null_mut();
+    let mut result = ptr::null_mut();
     assert_eq!(
-        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &raw mut file) },
+        unsafe {
+            nux_file_import_metal(
+                renderer,
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxFileImportConfig::default(),
+                &raw mut file,
+                &raw mut result,
+            )
+        },
         NuxStatus::Ok
     );
+    unsafe { assert_result(result, NuxStatus::Ok) };
     let mut artboard = ptr::null_mut();
     assert_eq!(
         unsafe { nux_artboard_instance_new(file, artboard_index, &raw mut artboard) },
@@ -127,6 +142,10 @@ fn player_retaining_released_import_owners(fixture: &str, artboard_index: usize)
         unsafe { nux_player_new_static(artboard, &raw mut player) },
         NuxStatus::Ok
     );
+    assert!(
+        scheduling(player, 0.0).render_required,
+        "the exact runtime requires an initial advance before its first draw"
+    );
     assert_eq!(
         unsafe { nux_artboard_instance_free(artboard) },
         NuxStatus::Ok
@@ -135,7 +154,10 @@ fn player_retaining_released_import_owners(fixture: &str, artboard_index: usize)
     player
 }
 
-fn asset_hook_player(fixture: &str) -> (*mut NuxPlayer, Box<AppleDecodeProbe>) {
+fn asset_hook_player(
+    renderer: *mut NuxRenderer,
+    fixture: &str,
+) -> (*mut NuxPlayer, Box<AppleDecodeProbe>) {
     let bytes = fixture_bytes(fixture);
     let mut probe = Box::new(AppleDecodeProbe {
         pixels: Vec::new(),
@@ -151,12 +173,17 @@ fn asset_hook_player(fixture: &str) -> (*mut NuxPlayer, Box<AppleDecodeProbe>) {
     };
     let mut file = ptr::null_mut();
     let mut result = ptr::null_mut();
+    let config = NuxFileImportConfig {
+        asset_hooks: &hooks,
+        ..NuxFileImportConfig::default()
+    };
     assert_eq!(
         unsafe {
-            nux_file_import_with_assets(
+            nux_file_import_metal(
+                renderer,
                 bytes.as_ptr(),
                 bytes.len(),
-                &hooks,
+                &config,
                 &raw mut file,
                 &raw mut result,
             )
@@ -173,6 +200,10 @@ fn asset_hook_player(fixture: &str) -> (*mut NuxPlayer, Box<AppleDecodeProbe>) {
     assert_eq!(
         unsafe { nux_player_new_static(artboard, &raw mut player) },
         NuxStatus::Ok
+    );
+    assert!(
+        scheduling(player, 0.0).render_required,
+        "the exact runtime requires an initial advance before its first draw"
     );
     assert_eq!(
         unsafe { nux_artboard_instance_free(artboard) },
@@ -317,22 +348,6 @@ fn solid_fill_renders_authored_pixels_on_metal() {
     autoreleasepool(|_| {
         let required = live_metal_test_required();
         let bytes = solid_fill_artboard();
-        let mut file = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &raw mut file) },
-            NuxStatus::Ok
-        );
-        let mut artboard = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_artboard_instance_new(file, 0, &raw mut artboard) },
-            NuxStatus::Ok
-        );
-        let mut player = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_player_new_static(artboard, &raw mut player) },
-            NuxStatus::Ok
-        );
-
         let mut renderer = ptr::null_mut();
         let mut result = ptr::null_mut();
         let create_status = unsafe {
@@ -347,16 +362,40 @@ fn solid_fill_renders_authored_pixels_on_metal() {
             if !result.is_null() {
                 assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
             }
-            assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
-            assert_eq!(
-                unsafe { nux_artboard_instance_free(artboard) },
-                NuxStatus::Ok
-            );
-            assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
             return;
         }
         assert_eq!(create_status, NuxStatus::Ok);
         unsafe { assert_result(result, NuxStatus::Ok) };
+        let mut file = ptr::null_mut();
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_file_import_metal(
+                    renderer,
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxFileImportConfig::default(),
+                    &raw mut file,
+                    &raw mut result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, &raw mut artboard) },
+            NuxStatus::Ok
+        );
+        let mut player = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_new_static(artboard, &raw mut player) },
+            NuxStatus::Ok
+        );
+        assert!(
+            scheduling(player, 0.0).render_required,
+            "the exact runtime requires an initial advance before its first draw"
+        );
 
         let surface = readable_layer(renderer, ARTBOARD_SIZE, ARTBOARD_SIZE);
         let Some(drawable) = surface.nextDrawable() else {
@@ -421,8 +460,8 @@ fn solid_fill_renders_authored_pixels_on_metal() {
 #[test]
 fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
     autoreleasepool(|_| {
-        let player = player_retaining_released_import_owners("smi_test.riv", 1);
         let first = renderer(4, 3);
+        let mut player = player_retaining_released_import_owners(first, "smi_test.riv", 1);
         let second = renderer(4, 3);
         let initial_scheduling = scheduling(player, 0.0);
         assert!(initial_scheduling.render_required);
@@ -480,7 +519,7 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
         assert_eq!(unsafe { nux_renderer_free(first) }, NuxStatus::Ok);
 
         // The player's retained domain outlives its public renderer handle; a
-        // different domain stays rejected until the explicit player reset.
+        // different domain stays rejected. Recovery is a fresh import/session.
         let second_layer = layer(second, 4, 3);
         let second_drawable = second_layer.nextDrawable().expect("second drawable");
         let second_pointer = Retained::as_ptr(&second_drawable).cast_mut().cast();
@@ -492,15 +531,11 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
                 NuxStatus::HandleMismatch,
             );
         }
-        let mut result = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_renderer_reset_player_domain(second, player, &raw mut result) },
-            NuxStatus::Ok
-        );
-        unsafe { assert_result(result, NuxStatus::Ok) };
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        player = player_retaining_released_import_owners(second, "smi_test.riv", 1);
         let after_domain_reset = scheduling(player, 1.0);
         assert!(after_domain_reset.render_required);
-        assert!(after_domain_reset.render_revision > after_present.render_revision);
+        assert_ne!(after_domain_reset.render_revision, 0);
 
         let second_drawable = second_layer.nextDrawable().expect("reset drawable");
         let second_pointer = Retained::as_ptr(&second_drawable).cast_mut().cast();
@@ -531,19 +566,12 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
         }
 
         let mut control_outcome = NuxRendererOutcome::default();
-        result = ptr::null_mut();
+        let mut result = ptr::null_mut();
         assert_eq!(
             unsafe { nux_renderer_detach(second, &raw mut control_outcome, &raw mut result) },
             NuxStatus::Ok
         );
         unsafe { assert_result(result, NuxStatus::Ok) };
-        result = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_renderer_reset_player_domain(second, player, &raw mut result) },
-            NuxStatus::InvalidArgument
-        );
-        unsafe { assert_result(result, NuxStatus::InvalidArgument) };
-
         result = ptr::null_mut();
         assert_eq!(
             unsafe {
@@ -575,12 +603,8 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
                 NuxStatus::HandleMismatch,
             );
         }
-        result = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_renderer_reset_player_domain(second, player, &raw mut result) },
-            NuxStatus::Ok
-        );
-        unsafe { assert_result(result, NuxStatus::Ok) };
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        player = player_retaining_released_import_owners(second, "smi_test.riv", 1);
 
         // Zero-sized surfaces are bounded without drawable acquisition.
         result = ptr::null_mut();
@@ -611,8 +635,8 @@ fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
 #[test]
 fn embedded_images_redecode_after_renderer_migration_and_reattach() {
     autoreleasepool(|_| {
-        let player = player_retaining_released_import_owners("walle.riv", 0);
         let first = renderer(32, 32);
+        let mut player = player_retaining_released_import_owners(first, "walle.riv", 0);
         let first_layer = layer(first, 32, 32);
         let drawable = first_layer.nextDrawable().expect("first image drawable");
         let pointer = Retained::as_ptr(&drawable).cast_mut().cast();
@@ -645,12 +669,8 @@ fn embedded_images_redecode_after_renderer_migration_and_reattach() {
             );
         }
 
-        let mut result = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_renderer_reset_player_domain(second, player, &raw mut result) },
-            NuxStatus::Ok
-        );
-        unsafe { assert_result(result, NuxStatus::Ok) };
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        player = player_retaining_released_import_owners(second, "walle.riv", 0);
         let drawable = second_layer
             .nextDrawable()
             .expect("migrated image drawable");
@@ -670,7 +690,7 @@ fn embedded_images_redecode_after_renderer_migration_and_reattach() {
         );
 
         let mut control = NuxRendererOutcome::default();
-        result = ptr::null_mut();
+        let mut result = ptr::null_mut();
         assert_eq!(
             unsafe { nux_renderer_detach(second, &raw mut control, &raw mut result) },
             NuxStatus::Ok
@@ -695,12 +715,8 @@ fn embedded_images_redecode_after_renderer_migration_and_reattach() {
                 NuxStatus::HandleMismatch,
             );
         }
-        result = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_renderer_reset_player_domain(second, player, &raw mut result) },
-            NuxStatus::Ok
-        );
-        unsafe { assert_result(result, NuxStatus::Ok) };
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        player = player_retaining_released_import_owners(second, "walle.riv", 0);
         let drawable = replacement_layer
             .nextDrawable()
             .expect("redecoded image drawable");
@@ -724,7 +740,8 @@ fn embedded_images_redecode_after_renderer_migration_and_reattach() {
 #[test]
 fn apple_decoded_cpu_pixels_survive_file_release_domain_reset_and_reattach() {
     autoreleasepool(|_| {
-        let (player, probe) = asset_hook_player("in_band_asset.riv");
+        let first = renderer(64, 64);
+        let (mut player, probe) = asset_hook_player(first, "in_band_asset.riv");
         assert_eq!(probe.calls, 1);
         assert_eq!((probe.retains, probe.releases), (1, 1));
         assert_eq!(
@@ -732,7 +749,6 @@ fn apple_decoded_cpu_pixels_survive_file_release_domain_reset_and_reattach() {
             "callbacks cannot reenter scalar exports"
         );
 
-        let first = renderer(64, 64);
         let first_layer = layer(first, 64, 64);
         let drawable = first_layer.nextDrawable().expect("first asset drawable");
         let pointer = Retained::as_ptr(&drawable).cast_mut().cast();
@@ -761,12 +777,10 @@ fn apple_decoded_cpu_pixels_survive_file_release_domain_reset_and_reattach() {
                 NuxStatus::HandleMismatch,
             );
         }
-        let mut result = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_renderer_reset_player_domain(second, player, &raw mut result) },
-            NuxStatus::Ok
-        );
-        unsafe { assert_result(result, NuxStatus::Ok) };
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        let (replacement_player, replacement_probe) =
+            asset_hook_player(second, "in_band_asset.riv");
+        player = replacement_player;
         let drawable = second_layer.nextDrawable().expect("reset domain drawable");
         let pointer = Retained::as_ptr(&drawable).cast_mut().cast();
         let reset = unsafe {
@@ -780,7 +794,7 @@ fn apple_decoded_cpu_pixels_survive_file_release_domain_reset_and_reattach() {
         assert!(reset.draw_calls > 0);
 
         let mut control = NuxRendererOutcome::default();
-        result = ptr::null_mut();
+        let mut result = ptr::null_mut();
         assert_eq!(
             unsafe { nux_renderer_detach(second, &raw mut control, &raw mut result) },
             NuxStatus::Ok
@@ -792,12 +806,9 @@ fn apple_decoded_cpu_pixels_survive_file_release_domain_reset_and_reattach() {
             NuxStatus::Ok
         );
         unsafe { assert_result(result, NuxStatus::Ok) };
-        result = ptr::null_mut();
-        assert_eq!(
-            unsafe { nux_renderer_reset_player_domain(second, player, &raw mut result) },
-            NuxStatus::Ok
-        );
-        unsafe { assert_result(result, NuxStatus::Ok) };
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        let (reattached_player, reattached_probe) = asset_hook_player(second, "in_band_asset.riv");
+        player = reattached_player;
         let replacement_layer = layer(second, 64, 64);
         let drawable = replacement_layer
             .nextDrawable()
@@ -812,11 +823,13 @@ fn apple_decoded_cpu_pixels_survive_file_release_domain_reset_and_reattach() {
             )
         };
         assert!(reattached.draw_calls > 0);
-        assert_eq!(
-            probe.calls, 1,
-            "domain changes reupload canonical CPU pixels"
-        );
+        assert_eq!(probe.calls, 1, "the first exact import decodes once");
         assert_eq!((probe.retains, probe.releases), (1, 1));
+        assert_eq!(
+            replacement_probe.calls, 1,
+            "replacement import decodes once"
+        );
+        assert_eq!(reattached_probe.calls, 1, "reattached import decodes once");
         assert_eq!(unsafe { nux_renderer_free(second) }, NuxStatus::Ok);
         assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
     });
@@ -858,6 +871,7 @@ fn string_view(value: &str) -> NuxStringView {
 
 #[cfg(feature = "scripting")]
 fn scripted_asset_import(
+    renderer: *mut NuxRenderer,
     bytes: &[u8],
     host: &NuxHostCommandImportConfig,
     probe: &mut AppleDecodeProbe,
@@ -903,7 +917,14 @@ fn scripted_asset_import(
     let mut result = ptr::null_mut();
     assert_eq!(
         unsafe {
-            nux_file_import_configured(bytes.as_ptr(), bytes.len(), &config, &mut file, &mut result)
+            nux_file_import_metal(
+                renderer,
+                bytes.as_ptr(),
+                bytes.len(),
+                &config,
+                &mut file,
+                &mut result,
+            )
         },
         NuxStatus::Ok
     );
@@ -966,7 +987,8 @@ fn configured_script_and_asset_import_hydrates_steps_and_renders_on_metal() {
             releases: 0,
             nested_abi: NUX_CAPI_ABI_VERSION,
         };
-        let file = scripted_asset_import(&bytes, &host, &mut probe);
+        let renderer = renderer(100, 100);
+        let file = scripted_asset_import(renderer, &bytes, &host, &mut probe);
         assert_eq!(probe.calls, 1);
         assert_eq!((probe.retains, probe.releases), (1, 1));
         assert_eq!(probe.nested_abi, 0, "callback reentry is rejected");
@@ -996,7 +1018,11 @@ fn configured_script_and_asset_import_hydrates_steps_and_renders_on_metal() {
             },
             NuxStatus::Ok
         );
-        let renderer = renderer(100, 100);
+        let initialized = step_scripted_player(player, &[], 0, 0.0);
+        assert_eq!(
+            unsafe { nux_player_step_result_free(initialized) },
+            NuxStatus::Ok
+        );
         let surface = layer(renderer, 100, 100);
         let drawable = surface.nextDrawable().expect("Metal drawable");
         let outcome = unsafe {
@@ -1012,11 +1038,6 @@ fn configured_script_and_asset_import_hydrates_steps_and_renders_on_metal() {
         };
         assert!(outcome.draw_calls > 0);
 
-        let initialized = step_scripted_player(player, &[], 0, 0.0);
-        assert_eq!(
-            unsafe { nux_player_step_result_free(initialized) },
-            NuxStatus::Ok
-        );
         let click = [
             NuxPlayerPointerEvent {
                 kind: NUX_PLAYER_POINTER_KIND_DOWN,

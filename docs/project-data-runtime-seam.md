@@ -1,58 +1,57 @@
 # ProjectData runtime seam
 
-UNIV-1633 moves Nuxie's authored-data converter model, compiler, envelope,
-evaluator, and errors into `nuxie-project-data`. The baseline `nuxie-runtime`
-retains only the Rive bind-graph integration and a product-neutral external-data
-contract. “ProjectData” is the internal crate/type namespace for data authored
-into a Nuxie project; it is unrelated to ProjectDO persistence or networking.
+Nuxie's authored-data converter model, compiler, envelope, evaluator, and
+errors live in the runtime-independent `nuxie-project-data` crate.
+“ProjectData” is the internal crate/type namespace for data authored into a
+Nuxie project; it is unrelated to ProjectDO persistence or networking.
 
 ## Decision
 
-Adopt the registry/program/state seam rather than exposing bind-graph internals
-to a callback adapter. It is deep enough because the baseline owns one coherent
-job: translate between Rive runtime values and an opaque external program. The
-product crate owns durable identities, JSON, evaluation rules, and product
-errors. Neither side needs to know the other's internal graph or model.
+Use the translated `ScriptingVm` boundary. `nuxie-runtime` exposes an opaque
+`ScriptProgramAdapter` hook, while the upper-leaf
+`nuxie-project-data-scripting` crate is the only module that knows both the
+runtime script interface and ProjectData's program model. It recognizes an
+authenticated `NUXPCV1` payload, retains it as a `RuntimeScriptProgram`, and
+creates a stateful `ScriptInstance`. Returning `None` for an unrelated payload
+delegates to the ordinary Luau VM.
 
-The process registry is empty until an authoring/product consumer calls
-`nuxie_project_data::install_runtime_adapter`. The Apple distribution's
-upper-leaf `nux-apple-product-extension` installs it only through the explicit
-`nux_product_file_import_configured` entrypoint before delegating to baseline
-configured import. The Android distribution has no equivalent upper-leaf
-archive and ships `nux-capi`'s portable configured-import symbols directly, so
-the exact `android-vulkan` + `scripting` build installs the adapter at
-`nux_file_import_configured`; `nux_file_import_with_assets` reaches the same
-seam by delegation. Other `nux-capi` feature combinations do not install it.
+There is no process registry and no global installation API. A trusted product
+host passes the adapter as an explicit import capability, so the adapter and
+renderer Factory have the same File-scoped ownership. The Apple product
+extension supplies it through renderer-first
+`nux_product_file_import_configured`. Android supplies it only through
+`nux_file_import_android_vulkan_with_trusted_wgsl`. Ordinary portable, Metal,
+and Android Vulkan imports install neither ProjectData execution nor authored
+native-shader authority.
 
-## Prototype results
+## Implementation results
 
 | Concern | Result |
 | --- | --- |
-| Lifetime | A registry is process-static and installed idempotently by stable id. A decoded program is held by `Arc` in the file's converter cache. Each bind occurrence owns a boxed state created by that program; cloning an occurrence clones its state rather than sharing mutable state. |
-| Allocation | Decode happens once per external script asset in `RuntimeDataBindGraphConverterBuildCache`. Runtime-to-product translation allocates only for owned strings, lists, objects, and value paths; scalar values remain copy-only. List materialization is capped at 10,000 items before allocation. |
-| Dispatch/performance | Payload classification scans the small installed-registry list, then decode and conversion each use one trait-object dispatch. Repeated references to one asset share one decoded `Arc`; the focused cache test observes one scripting catalog build and one external program decode for two converter references. |
-| Errors | An unclaimed payload remains an ordinary script. Once a registry claims a payload, a decode error produces `Unsupported` and never falls through to Luau. Product evaluator errors cross the seam as opaque strings and become a runtime execution failure at the bind boundary. |
-| State retention | `RuntimeExternalDataState` defines clone, clear, and active-state behavior. Project-data adapter tests drive stateful interpolation and idempotent registration, while retained-operand runtime tests separately verify live resolver reads and bind dirt propagation. |
+| Lifetime | The import capability owns an `Arc<dyn ScriptProgramAdapter>`. A decoded backend program is retained by `RuntimeScriptProgram`; each scripted occurrence owns its own `ProjectDataConverterState`. No mutable program state is process-global. |
+| Allocation | Payload decode occurs during exact script-asset registration. Runtime-to-product translation allocates only when crossing the owned-value boundary; scalar converter values remain direct. |
+| Dispatch/performance | One optional adapter dispatch occurs during registration and one backend dispatch occurs for converter execution. Unrelated bytecode goes directly to the configured Luau backend. |
+| Errors | An unrelated payload remains an ordinary script. A claimed but invalid `NUXPCV1` payload returns a script-registration error and never falls through to Luau. Evaluator errors cross the seam as `ScriptError`. |
+| State retention | The `ScriptInstance` owns interpolation time, inputs, and `ProjectDataConverterState`, matching the translated runtime's per-occurrence script lifecycle. |
 
 ## Boundary guarantees
 
 - `nuxie-runtime` and `nuxie` contain no ProjectData types, envelope magic,
   JSON schema, or product converter vocabulary.
-- `nuxie-project-data` depends downward on `nuxie-runtime`; the baseline never
-  depends upward on the product crate. The sole distribution-root exception is
-  an optional `nux-capi` dependency activated only by `android-vulkan`, with
-  adapter installation compiled only at the `android-vulkan` + `scripting`
-  intersection.
-- Pure evaluator tests live with `nuxie-project-data`. Baseline seam tests use a
-  deliberately unrelated fake registry and program.
-- Project-data tests own adapter registration and payload decode; baseline seam
-  tests own output application and retained state through an unrelated fake.
-- `serde` and `serde_json` are no longer production dependencies of
-  `nuxie-runtime`; they remain dev dependencies for C++ oracle tests.
+- `nuxie-project-data` has no runtime dependency. The upper-leaf
+  `nuxie-project-data-scripting` adapter depends on both `nuxie` and
+  `nuxie-project-data`; dependencies never point back down from the runtime.
+- Pure evaluator tests live with `nuxie-project-data`. Adapter registration,
+  payload classification, scalar conversion, and state retention tests live
+  with `nuxie-project-data-scripting`.
+- Product imports pass the adapter explicitly. There is no registry, hidden
+  fallback, or factory-free configured-import path.
+- `serde` and `serde_json` are not production dependencies of
+  `nuxie-runtime`; JSON remains owned by the ProjectData leaf.
 - `serde_json` is absent from the default `nuxie-binary` library closure. Its
   wire-format inspector opts into the non-default `inspect` feature, while
-  differential tests retain a dev-only dependency. The native runtime imports
-  directly into source-shaped `File`/`CoreArena` owners; the legacy graph
-  projection is not part of the product architecture or dependency closure.
-- `make size-report` ratchets the renderer-on, scripting-off SDK dependency
-  closure against `nuxie-project-data`, `serde_json`, and `zmij` regressions.
+  differential tests retain a dev-only dependency. Native runtime import goes
+  directly into source-shaped `File`/`CoreArena` owners.
+- `make size-report` can continue to ratchet renderer-only closures against
+  accidental ProjectData/JSON dependencies; only the product adapter leaf may
+  introduce those crates.

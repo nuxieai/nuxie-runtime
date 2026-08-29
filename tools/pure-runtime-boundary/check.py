@@ -55,10 +55,12 @@ UNPROTECTED_WORKSPACE_PACKAGES = {
     "browser-renderer-smoke",
     "nux-apple-product-extension",
     "nuxie-project-data",
+    "nuxie-project-data-scripting",
 }
 PRODUCT_LAYER_PACKAGES = {
     "nux-apple-product-extension",
     "nuxie-project-data",
+    "nuxie-project-data-scripting",
 }
 EXTERNAL_OWNER_PACKAGES = {"nuxie-browser-adapter"}
 # Exemption means a package is an upward-facing owner or consumer. Protected
@@ -71,9 +73,11 @@ FORBIDDEN_DEPENDENCIES.update(UNPROTECTED_WORKSPACE_PACKAGES)
 # package is protected, while the C consumer is restricted to this exact edge
 # and approved symbols.
 PORTABLE_ABI_FACADE_EDGE = ("nux-capi", "nuxie")
-ANDROID_PRODUCT_DATA_EDGE = ("nux-capi", "nuxie-project-data")
+ANDROID_PRODUCT_DATA_EDGE = ("nux-capi", "nuxie-project-data-scripting")
 ANDROID_PRODUCT_IMPORT_ALLOWED_SYMBOLS = {
-    "crates/nux-capi/src/android_product_import.rs": set(),
+    "crates/nux-capi/src/android_product_import.rs": {
+        "ProjectDataScriptProgramAdapter",
+    },
     "crates/nux-capi/tests/android_project_data_import.rs": {
         "ProjectDataConverterCatalog",
         "ProjectDataConverterDefinition",
@@ -84,10 +88,14 @@ ANDROID_PRODUCT_IMPORT_ALLOWED_SYMBOLS = {
     },
 }
 ANDROID_PRODUCT_IMPORT_ALLOWED_DEBT_MARKERS = {
+    "crates/nux-capi/src/android_product_import.rs": {"ProjectData"},
     "crates/nux-capi/tests/android_project_data_import.rs": {"ProjectData"},
 }
 ANDROID_PRODUCT_IMPORT_ALLOWED_VOCABULARY = {
-    "crates/nux-capi/src/android_product_import.rs": {"nuxie_project_data"},
+    "crates/nux-capi/src/android_product_import.rs": {
+        "nuxie_project_data_scripting",
+        "ProjectDataScriptProgramAdapter",
+    },
     "crates/nux-capi/tests/android_project_data_import.rs": {
         "nuxie_project_data",
         "ProjectDO",
@@ -98,7 +106,7 @@ ANDROID_PRODUCT_IMPORT_ALLOWED_VOCABULARY = {
 }
 ANDROID_PRODUCT_IMPORT_ALLOWED_PRODUCT_LINES = {
     "crates/nux-capi/src/android_product_import.rs": {
-        "nuxie_project_data::install_runtime_adapter();"
+        "Some(nuxie_project_data_scripting::ProjectDataScriptProgramAdapter::shared()),"
     },
     "crates/nux-capi/tests/android_project_data_import.rs": {
         "use nuxie_project_data::{"
@@ -106,17 +114,16 @@ ANDROID_PRODUCT_IMPORT_ALLOWED_PRODUCT_LINES = {
 }
 ANDROID_PRODUCT_IMPORT_EXPECTED_SNIPPETS = {
     "crates/nux-capi/src/lib.rs": (
-        '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+        '#[cfg(all(\n'
+        '    feature = "android-vulkan",\n'
+        '    feature = "scripting",\n'
+        '    feature = "android-authored-wgsl"\n'
+        '))]\n'
         "mod android_product_import;"
     ),
-    "crates/nux-capi/src/asset_hooks.rs": (
-        '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
-        "    super::android_product_import::prepare_configured_import_runtime();"
-    ),
     "crates/nux-capi/src/android_product_import.rs": (
-        "pub(crate) fn prepare_configured_import_runtime() {\n"
-        "    nuxie_project_data::install_runtime_adapter();\n"
-        "}"
+        "Some(nuxie_project_data_scripting::"
+        "ProjectDataScriptProgramAdapter::shared()),"
     ),
     "crates/nux-capi/tests/android_project_data_import.rs": (
         "use nuxie_project_data::{\n"
@@ -128,9 +135,8 @@ ANDROID_PRODUCT_IMPORT_EXPECTED_SNIPPETS = {
     ),
 }
 ANDROID_PRODUCT_IMPORT_EXCLUSIVE_TOKENS = {
-    "crates/nux-capi/src/lib.rs": "android_product_import",
-    "crates/nux-capi/src/asset_hooks.rs": "android_product_import",
-    "crates/nux-capi/src/android_product_import.rs": "nuxie_project_data",
+    "crates/nux-capi/src/lib.rs": "mod android_product_import;",
+    "crates/nux-capi/src/android_product_import.rs": "nuxie_project_data_scripting",
     "crates/nux-capi/tests/android_project_data_import.rs": "nuxie_project_data",
 }
 PORTABLE_ABI_FACADE_ALLOWED_FORWARDED_FEATURES = {
@@ -144,12 +150,16 @@ PORTABLE_ABI_FACADE_ALLOWED_FEATURE_FORWARDINGS = {
     ("apple-authored-msl", "ore-metal-authored-msl"),
 }
 PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
+    "AudioAsset",
     "Artboard",
     "ArtboardInstance",
     "ArtboardTransaction",
     "BlendMode",
     "ColorInt",
     "Factory",
+    "FileAssetLoader",
+    "FileAssetLoaderRef",
+    "FileImportLimits",
     "File",
     "FileAsset",
     "FileAssetKind",
@@ -189,15 +199,27 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "Renderer",
     "RenderShader",
     "RuntimeEventPropertyValue",
+    "RuntimeFactoryHandle",
+    "RuntimeFileHandle",
     "RuntimeHitResult",
     "RuntimeOwnedViewModelGraphTransaction",
+    "RuntimeOwnedViewModelHandle",
+    "RuntimeOwnedViewModelInstance",
+    "RuntimeOwnedViewModelTransaction",
     "RuntimeViewModelChange",
     "RuntimeViewModelChangeCapture",
     "RuntimeViewModelChangeValue",
     "RuntimeViewModelGraphTransactionError",
+    "RuntimeViewModelLinkError",
+    "ScriptAsset",
     "ScriptError",
+    "ScriptExecutionCapability",
     "ScriptExecutionLimits",
     "ScriptHost",
+    "ScriptHostExtension",
+    "ScriptProgramAdapter",
+    "ScriptedDrawable",
+    "ScriptedFile",
     "StateMachineInstance",
     "StateMachineReportedEvent",
     "StrokeCap",
@@ -205,8 +227,20 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "ViewModelInstance",
     "WgpuFactory",
     "WgpuFrame",
+    "CoreHandle",
+    "FontAsset",
+    "ImageAsset",
+    "NoopScriptHostExtension",
+    "import_native",
+    "import_scripted",
 }
 PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS = {
+    "render_api": {
+        "Mat2D",
+        "NullFactory",
+        "RawPath",
+        "RecordingFactory",
+    },
     "host_interfaces": {
         "RuntimeDefaultSceneSelection",
         "RuntimeOwnedViewModelHandle",
@@ -816,14 +850,34 @@ def android_product_data_edge_error(
     specification: object,
     resolved_path: str | None,
 ) -> str | None:
+    if (
+        package_name == "nux-capi"
+        and normalized_package_name(resolved_name) == "nuxie-project-data"
+    ):
+        if table_path != ("dev-dependencies",) or not isinstance(specification, dict):
+            return "direct project-data access is approved only for C API fixture tests"
+        if normalized_package_name(dependency_name) != "nuxie-project-data":
+            return "C API fixture edge must use dependency key 'nuxie-project-data'"
+        if resolved_path != "crates/nuxie-project-data":
+            return "C API fixture edge must resolve to local crates/nuxie-project-data"
+        features = specification.get("features", [])
+        if features not in (None, []) and features != ():
+            return "C API fixture edge cannot enable dependency features"
+        return None
     if (package_name, normalized_package_name(resolved_name)) != ANDROID_PRODUCT_DATA_EDGE:
         return "not-approved"
     if table_path != ("dependencies",) or not isinstance(specification, dict):
         return "Android product-data edge is only approved in [dependencies]"
-    if normalized_package_name(dependency_name) != "nuxie-project-data":
-        return "Android product-data edge must use dependency key 'nuxie-project-data'"
-    if resolved_path != "crates/nuxie-project-data":
-        return "Android product-data edge must resolve to local crates/nuxie-project-data"
+    if normalized_package_name(dependency_name) != "nuxie-project-data-scripting":
+        return (
+            "Android product-data edge must use dependency key "
+            "'nuxie-project-data-scripting'"
+        )
+    if resolved_path != "crates/nuxie-project-data-scripting":
+        return (
+            "Android product-data edge must resolve to local "
+            "crates/nuxie-project-data-scripting"
+        )
     if specification.get("optional") is not True:
         return "Android product-data edge must remain optional"
     features = specification.get("features", [])
@@ -851,8 +905,11 @@ def nuxie_self_test_dependency_error(
         return "nuxie self edge must use dependency key 'nuxie'"
     if specification.get("default-features") is not False:
         return "nuxie self edge must disable default features"
-    if specification.get("features") != ["test-support"]:
-        return "nuxie self edge may enable only the test-support feature"
+    if specification.get("features") not in (
+        ["test-support"],
+        ["scripting", "test-support"],
+    ):
+        return "nuxie self edge may enable only scripting and test-support"
     return None
 
 
@@ -1151,19 +1208,19 @@ def portable_abi_facade_feature_errors(
         feature_name
         for feature_name, activations in features.items()
         if isinstance(activations, list)
-        and "dep:nuxie-project-data" in activations
+        and "dep:nuxie-project-data-scripting" in activations
     }
     dependencies = manifest.get("dependencies", {})
     declares_product_data = isinstance(dependencies, dict) and any(
-        normalized_package_name(name) == "nuxie-project-data"
+        normalized_package_name(name) == "nuxie-project-data-scripting"
         for name in dependencies
     )
     if (declares_product_data or product_data_activations) and product_data_activations != {
-        "android-vulkan"
+        "android-authored-wgsl"
     }:
         errors.append(
-            f"{package}/Cargo.toml: optional nuxie-project-data must be activated "
-            "only by feature 'android-vulkan'"
+            f"{package}/Cargo.toml: optional nuxie-project-data-scripting must be "
+            "activated only by feature 'android-authored-wgsl'"
         )
     for feature_name, activations in features.items():
         if not isinstance(activations, list):
@@ -1195,7 +1252,7 @@ def portable_abi_facade_feature_errors(
 def manifest_declares_android_product_data(manifest: dict[str, object]) -> bool:
     dependencies = manifest.get("dependencies", {})
     return isinstance(dependencies, dict) and any(
-        normalized_package_name(name) == "nuxie-project-data"
+        normalized_package_name(name) == "nuxie-project-data-scripting"
         for name in dependencies
     )
 
@@ -1208,7 +1265,7 @@ def android_product_import_boundary_errors(relative: str, source: str) -> list[s
     if source.count(expected) != 1 or source.count(exclusive) != 1:
         return [
             f"{relative}: Android product import must retain its exact "
-            "android-vulkan + scripting configured-import boundary"
+            "android-vulkan + scripting + authored-WGSL adapter boundary"
         ]
     return []
 
@@ -1283,6 +1340,11 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             body,
             re.DOTALL,
         )
+        nested_direct = re.fullmatch(
+            r"nuxie\s*::\s*([A-Za-z_][A-Za-z0-9_]*)\s*::\s*"
+            r"([A-Za-z_][A-Za-z0-9_]*)",
+            body,
+        )
         allowed_symbols = allowed_root_symbols
         if direct is not None:
             imported_symbols = [direct.group(1)]
@@ -1302,6 +1364,14 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
                 if item
             ):
                 imported_symbols = [item for item in items if item]
+                allowed_symbols = module_symbols
+        elif nested_direct is not None:
+            module = nested_direct.group(1)
+            module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(
+                module
+            ) or file_module_symbols.get(module)
+            if module_symbols is not None:
+                imported_symbols = [nested_direct.group(2)]
                 allowed_symbols = module_symbols
         line = source.count("\n", 0, match.start()) + 1
         if imported_symbols is None:

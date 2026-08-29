@@ -7,6 +7,7 @@ enum ProductExtensionConsumer {
         var result: OpaquePointer?
         let status = nux_product_file_import_configured(
             nil,
+            nil,
             0,
             nil,
             &file,

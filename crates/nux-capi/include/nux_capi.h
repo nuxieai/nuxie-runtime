@@ -27,7 +27,7 @@
  *    and is not an ABA-safe stale-pointer capability.
  * 2. File, artboard, player, state-machine, view-model, and renderer handles may be
  *    released in any order. An artboard occurrence retains its imported file;
- *    a player retains its artboard occurrence and renderer binding. A legacy
+ *    a player retains its artboard occurrence and import-time renderer binding. A legacy
  *    state-machine operation that needs an artboard still requires the exact
  *    originating live artboard handle and reports HANDLE_MISMATCH otherwise.
  * 3. NuxStringView values borrow their documented owner unless their field is
@@ -41,15 +41,16 @@
  *    the same values. Generic file-level instances may bind to a compatible
  *    artboard from that file; legacy artboard-created instances retain their
  *    exact-occurrence restriction.
- * 6. The first accepted draw attempt binds one NuxRenderCallbacks descriptor
- *    address to the occurrence, including when drawing later returns an error;
- *    later draws must pass that same descriptor address.
- *    Its callback functions and user_data must remain valid until the last
- *    artboard or player retaining that occurrence is freed. Calling back into
- *    that active occurrence from a renderer callback returns REENTRANT_CALL.
- * 7. Every caller-sized ABI-v3 struct must set struct_size. A size smaller than
- *    its documented NUX_*_V3_MIN_SIZE is rejected; additive tail bytes from a
- *    larger caller are ignored and preserved.
+ * 6. nux_file_import copies one NuxRenderCallbacks table and binds its Factory
+ *    to the imported File before any occurrence exists. Its callback functions
+ *    and user_data must remain valid until the File and every artboard/player
+ *    retaining it are freed. nux_artboard_instance_draw uses that retained
+ *    binding and accepts no replacement callback table. Calling back into an
+ *    active occurrence from a renderer callback returns REENTRANT_CALL.
+ * 7. Every caller-sized ABI-v4 struct must set struct_size. The unchanged value
+ *    layouts retain their established NUX_*_V3_MIN_SIZE prefix names; a size
+ *    below that prefix is rejected, while additive tail bytes from a larger
+ *    caller are ignored and preserved.
  * 8. NuxCapiResult owns its bounded diagnostic bytes. Diagnostic views borrow
  *    that result and expire when nux_capi_result_free succeeds.
  * 9. NuxPlayerStep input/pointer arrays and their input-name bytes are borrowed
@@ -76,28 +77,32 @@
  *    module name are copied synchronously. It installs no foreign callback;
  *    scripts only enqueue bounded owned values for the active player step.
  *    Ordinary nux_file_import remains script-inert.
- *    On Android, nux_file_import_configured_with_trusted_wgsl is a separate,
+ *    On Android, nux_file_import_android_vulkan_with_trusted_wgsl is a separate,
  *    caller-asserted trust boundary for exporter-authored WGSL. It performs no
  *    signature verification: the product caller must first authenticate the
  *    signed release and establish that every shader came from the trusted
- *    exporter. nux_file_import_configured and nux_file_import_with_assets never
- *    grant shader authority. Android product consumers define both
+ *    exporter. nux_file_import_android_vulkan never grants authored-shader
+ *    authority. Both imports require the renderer whose retained Factory will
+ *    own the File. Android product consumers define both
  *    NUX_CAPI_ANDROID_VULKAN and NUX_CAPI_ANDROID_AUTHORED_WGSL when compiling
  *    against a library built with the matching Cargo features.
- * 12. On Apple, NuxRenderer owns the exact Metal device domain; it never owns a
- *    CAMetalLayer or acquires a drawable. nux_renderer_copy_metal_device gives
+ * 12. On Apple, NuxRenderer owns the exact Metal device and Factory domain;
+ *    nux_file_import_metal requires that renderer and binds the imported File
+ *    to its current generation. The renderer never owns a CAMetalLayer or
+ *    acquires a drawable. nux_renderer_copy_metal_device gives
  *    the caller Objective-C +1 ownership. A non-NULL AVAILABLE drawable is
  *    borrowed only for the synchronous render call. TIMEOUT and OCCLUDED are
  *    explicit caller-reported states and require a NULL drawable. A valid
  *    completion pair is consumed before later validation and runs exactly once
  *    on a system dispatch queue, never inline. A too-short operation prefix
  *    cannot transfer a callback that the runtime cannot safely read.
- * 13. The first drawable-backed Metal draw binds the retained artboard
- *    occurrence to that renderer's durable domain and current generation.
- *    Timeout, occlusion, and zero-size skips do not bind it. Another renderer,
- *    or a reattached generation, returns HANDLE_MISMATCH until
- *    nux_renderer_reset_player_domain succeeds on a healthy attached renderer.
- *    The player retains that binding after the public renderer handle is freed.
+ * 13. Metal ownership is fixed at import, before the first draw. Another
+ *    renderer returns HANDLE_MISMATCH. Detach/reattach advances the renderer
+ *    generation, so every File/artboard/player imported under the previous
+ *    generation also returns HANDLE_MISMATCH. Recovery is a fresh import and
+ *    player session through the reattached renderer; there is no domain-reset
+ *    operation. The imported graph retains its factory/domain after the public
+ *    renderer handle is freed, but it cannot migrate to another generation.
  * 14. nux_renderer_render_player treats out_result as optional and failure-only:
  *    a supplied slot is cleared on entry, remains NULL on success, and owns one
  *    bounded diagnostic on failure. Renderer control APIs require out_result
@@ -127,8 +132,9 @@
  *    encoded dimensions and supplies the exact remaining per-item/aggregate
  *    decode ceiling before invoking the host. Decoded images must be RGBA8
  *    premultiplied-sRGB within every advertised bound.
- *    Canonical CPU pixels remain file/occurrence-owned across renderer resets;
- *    only renderer-domain GPU resources are invalidated and recreated.
+ *    Canonical CPU pixels remain File-owned for that import session. A fresh
+ *    import after renderer reattach invokes the configured hooks again and
+ *    creates resources in the new exact Factory generation.
  * 17. Android Vulkan renderer handles are headless and never retain an
  *    ANativeWindow. Each successful render returns an owned frame handle whose
  *    borrowed data is tightly packed, top-row-first RGBA8 UNORM with

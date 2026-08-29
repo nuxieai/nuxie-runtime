@@ -106,11 +106,11 @@ mkdir -p \
 contract_fingerprint="$({
     shasum -a 256 \
         "${repo_root}/crates/nux-capi/include/nux_capi.generated.h" \
-        "${repo_root}/crates/nux-capi/abi-layout-v3.json" \
-        "${repo_root}/crates/nux-capi/exports-v3-portable.txt" \
-        "${repo_root}/crates/nux-capi/exports-v3-apple-metal-extension.txt" \
-        "${repo_root}/crates/nux-capi/exports-v3-android-vulkan-extension.txt" \
-        "${repo_root}/crates/nux-capi/exports-v3-android-authored-wgsl-extension.txt" \
+        "${repo_root}/crates/nux-capi/abi-layout-v4.json" \
+        "${repo_root}/crates/nux-capi/exports-v4-portable.txt" \
+        "${repo_root}/crates/nux-capi/exports-v4-apple-metal-extension.txt" \
+        "${repo_root}/crates/nux-capi/exports-v4-android-vulkan-extension.txt" \
+        "${repo_root}/crates/nux-capi/exports-v4-android-authored-wgsl-extension.txt" \
         "${repo_root}/crates/nux-apple-product-extension/include/nux_product_extension.h" \
         "${repo_root}/crates/nux-apple-product-extension/include/module.modulemap" \
         "${repo_root}/crates/nux-apple-product-extension/exports-v1-product-extension.txt"

@@ -6,8 +6,9 @@
 //! behind this module's interface.
 
 use super::*;
-use nuxie::host_interfaces::{
-    RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelTransaction, RuntimeViewModelLinkError,
+use nuxie::{
+    RuntimeFileHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelTransaction,
+    RuntimeViewModelLinkError,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -131,7 +132,7 @@ pub const NUX_VIEW_MODEL_VALUE_KIND_FONT: u32 = NuxViewModelValueKind::Font as u
 pub const NUX_VIEW_MODEL_VALUE_KIND_BLOB: u32 = NuxViewModelValueKind::Blob as u32;
 pub const NUX_VIEW_MODEL_VALUE_KIND_ARTBOARD: u32 = NuxViewModelValueKind::Artboard as u32;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct OwnedCatalogSchema {
     name: Box<[u8]>,
     first_property: usize,
@@ -142,7 +143,7 @@ struct OwnedCatalogSchema {
     is_global: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct OwnedCatalogProperty {
     schema_index: usize,
     property_index: usize,
@@ -153,7 +154,7 @@ struct OwnedCatalogProperty {
     enum_label_count: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct OwnedCatalogInstance {
     schema_index: usize,
     instance_index: usize,
@@ -161,6 +162,7 @@ struct OwnedCatalogInstance {
 }
 
 /// Immutable owned projection of every data-binding schema in one file.
+#[derive(Clone)]
 pub struct NuxViewModelCatalog {
     schemas: Vec<OwnedCatalogSchema>,
     properties: Vec<OwnedCatalogProperty>,
@@ -284,8 +286,11 @@ pub const NUX_VIEW_MODEL_AUTHORED_INSTANCE_VIEW_V3_MIN_SIZE: usize =
     std::mem::offset_of!(NuxViewModelAuthoredInstanceView, name)
         + std::mem::size_of::<NuxStringView>();
 
-fn build_catalog(file: &File) -> Result<NuxViewModelCatalog, NuxStatus> {
-    if file.view_model_count() > MAX_CATALOG_ITEMS {
+pub(super) fn build_catalog_from_bytes(bytes: &[u8]) -> Result<NuxViewModelCatalog, NuxStatus> {
+    let file = nuxie_binary::read_runtime_file_with_scripting(bytes)
+        .map_err(|_| NuxStatus::ImportError)?;
+    let source_schemas = file.view_models();
+    if source_schemas.len() > MAX_CATALOG_ITEMS {
         return Err(NuxStatus::LimitExceeded);
     }
     let mut schemas = Vec::new();
@@ -293,11 +298,11 @@ fn build_catalog(file: &File) -> Result<NuxViewModelCatalog, NuxStatus> {
     let mut instances = Vec::new();
     let mut enum_labels = Vec::new();
     let mut content_bytes = 0usize;
-    for schema in file.view_models() {
-        let schema_index = schema.index();
+    for (schema_index, schema) in source_schemas.into_iter().enumerate() {
         let name = schema
-            .name()
-            .unwrap_or("")
+            .object
+            .string_property("name")
+            .unwrap_or_default()
             .as_bytes()
             .to_vec()
             .into_boxed_slice();
@@ -305,21 +310,21 @@ fn build_catalog(file: &File) -> Result<NuxViewModelCatalog, NuxStatus> {
             .checked_add(name.len())
             .ok_or(NuxStatus::LimitExceeded)?;
         let first_property = properties.len();
-        for property in schema.properties() {
+        for (property_index, property) in schema.properties.iter().copied().enumerate() {
             if properties.len() >= MAX_CATALOG_ITEMS {
                 return Err(NuxStatus::LimitExceeded);
             }
             let property_name = property
-                .name()
-                .unwrap_or("")
+                .string_property("name")
+                .unwrap_or_default()
                 .as_bytes()
                 .to_vec()
                 .into_boxed_slice();
             content_bytes = content_bytes
                 .checked_add(property_name.len())
                 .ok_or(NuxStatus::LimitExceeded)?;
-            let descriptor = property.descriptor();
-            let kind = classify_property(property.type_name());
+            let descriptor = property;
+            let kind = classify_property(property.type_name);
             let referenced_schema_index = if kind == NUX_VIEW_MODEL_VALUE_KIND_VIEW_MODEL {
                 descriptor
                     .uint_property("viewModelReferenceId")
@@ -330,13 +335,10 @@ fn build_catalog(file: &File) -> Result<NuxViewModelCatalog, NuxStatus> {
             };
             let first_enum_label = enum_labels.len();
             if kind == NUX_VIEW_MODEL_VALUE_KIND_ENUM {
-                while let Some(label) = file
-                    .runtime()
-                    .view_model_property_enum_value_for_index_object(
-                        descriptor,
-                        enum_labels.len() - first_enum_label,
-                    )
-                {
+                while let Some(label) = file.view_model_property_enum_value_for_index_object(
+                    descriptor,
+                    enum_labels.len() - first_enum_label,
+                ) {
                     if enum_labels.len() >= MAX_CATALOG_ITEMS {
                         return Err(NuxStatus::LimitExceeded);
                     }
@@ -348,7 +350,7 @@ fn build_catalog(file: &File) -> Result<NuxViewModelCatalog, NuxStatus> {
             }
             properties.push(OwnedCatalogProperty {
                 schema_index,
-                property_index: property.index(),
+                property_index,
                 name: property_name,
                 kind,
                 referenced_schema_index,
@@ -357,12 +359,13 @@ fn build_catalog(file: &File) -> Result<NuxViewModelCatalog, NuxStatus> {
             });
         }
         let first_instance = instances.len();
-        for instance_index in 0..schema.instance_count() {
+        for (instance_index, instance) in schema.instances.iter().enumerate() {
             if instances.len() >= MAX_CATALOG_ITEMS {
                 return Err(NuxStatus::LimitExceeded);
             }
-            let authored_name = schema
-                .instance_name(instance_index)
+            let authored_name = instance
+                .object
+                .string_property("name")
                 .map(|name| name.as_bytes().to_vec().into_boxed_slice());
             content_bytes = content_bytes
                 .checked_add(authored_name.as_ref().map_or(0, |name| name.len()))
@@ -384,7 +387,7 @@ fn build_catalog(file: &File) -> Result<NuxViewModelCatalog, NuxStatus> {
             } else {
                 first_instance
             },
-            is_global: schema.is_global(),
+            is_global: schema.object.uint_property("viewModelType") == Some(2),
         });
     }
     if content_bytes > MAX_TOTAL_BYTES {
@@ -412,10 +415,7 @@ pub unsafe extern "C" fn nux_file_view_model_catalog(
         let Some(file) = (unsafe { file.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        let catalog = match build_catalog(&file.file) {
-            Ok(catalog) => catalog,
-            Err(status) => return status,
-        };
+        let catalog = (*file.view_model_catalog).clone();
         let handle = Box::into_raw(Box::new(catalog));
         register_handle(handle, HandleKind::ViewModelCatalog, file.owner_thread);
         unsafe { *out_catalog = handle };
@@ -586,13 +586,15 @@ pub unsafe extern "C" fn nux_view_model_catalog_enum_label(
 fn publish_view_model(
     file: &NuxFile,
     schema_index: usize,
-    instance: ViewModelInstance,
+    instance: nuxie::RuntimeOwnedViewModelInstance,
     out_instance: *mut *mut NuxViewModelInstance,
 ) -> NuxStatus {
-    let identity = instance.identity();
+    let instance = RuntimeOwnedViewModelHandle::new(instance);
+    let identity = instance.instance_identity();
     let handle = Box::into_raw(Box::new(NuxViewModelInstance {
-        instance: RefCell::new(instance),
-        file: Arc::clone(&file.file),
+        instance,
+        file: file.file.clone(),
+        view_model_catalog: Arc::clone(&file.view_model_catalog),
         schema_index,
         identity,
         owner_thread: file.owner_thread,
@@ -620,10 +622,8 @@ pub unsafe extern "C" fn nux_view_model_instance_new(
         let Some(file) = (unsafe { file.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        let Some(instance) = file
-            .file
-            .view_model(schema_index)
-            .and_then(|schema| schema.instantiate())
+        let Some(instance) =
+            nuxie::RuntimeOwnedViewModelInstance::new(file.file.clone(), schema_index)
         else {
             return NuxStatus::NotFound;
         };
@@ -647,11 +647,11 @@ pub unsafe extern "C" fn nux_view_model_instance_new_authored(
         let Some(file) = (unsafe { file.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        let Some(instance) = file
-            .file
-            .view_model(schema_index)
-            .and_then(|schema| schema.instantiate_instance(authored_instance_index))
-        else {
+        let Some(instance) = nuxie::RuntimeOwnedViewModelInstance::from_instance(
+            file.file.clone(),
+            schema_index,
+            authored_instance_index,
+        ) else {
             return NuxStatus::NotFound;
         };
         publish_view_model(file, schema_index, instance, out_instance)
@@ -675,11 +675,20 @@ pub unsafe extern "C" fn nux_view_model_instance_new_schema_default(
         let Some(file) = (unsafe { file.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        let Some(instance) = file
-            .file
-            .view_model(schema_index)
-            .and_then(|schema| schema.instantiate_default())
-        else {
+        let authored = file
+            .view_model_catalog
+            .schemas
+            .get(schema_index)
+            .ok_or(NuxStatus::NotFound);
+        let Ok(authored) = authored else {
+            return NuxStatus::NotFound;
+        };
+        let instance = if authored.instance_count == 0 {
+            nuxie::RuntimeOwnedViewModelInstance::new(file.file.clone(), schema_index)
+        } else {
+            nuxie::RuntimeOwnedViewModelInstance::from_instance(file.file.clone(), schema_index, 0)
+        };
+        let Some(instance) = instance else {
             return NuxStatus::NotFound;
         };
         publish_view_model(file, schema_index, instance, out_instance)
@@ -700,12 +709,10 @@ pub unsafe extern "C" fn nux_view_model_instance_share(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        let Ok(value) = instance.instance.try_borrow() else {
-            return NuxStatus::ReentrantCall;
-        };
         let handle = Box::into_raw(Box::new(NuxViewModelInstance {
-            instance: RefCell::new(value.clone()),
-            file: Arc::clone(&instance.file),
+            instance: instance.instance.clone(),
+            file: instance.file.clone(),
+            view_model_catalog: Arc::clone(&instance.view_model_catalog),
             schema_index: instance.schema_index,
             identity: instance.identity,
             owner_thread: instance.owner_thread,
@@ -713,7 +720,6 @@ pub unsafe extern "C" fn nux_view_model_instance_share(
             binding_provenance: instance.binding_provenance.clone(),
             provenance: Arc::clone(&instance.provenance),
         }));
-        drop(value);
         register_handle(handle, HandleKind::ViewModel, instance.owner_thread);
         unsafe { *out_instance = handle };
         NuxStatus::Ok
@@ -865,7 +871,7 @@ pub const NUX_VIEW_MODEL_SNAPSHOT_VALUE_VIEW_V3_MIN_SIZE: usize =
         + std::mem::size_of::<usize>();
 
 struct SnapshotBuilder<'a> {
-    file: &'a File,
+    catalog: &'a NuxViewModelCatalog,
     handles: Vec<(RuntimeOwnedViewModelHandle, u64)>,
     instances: Vec<OwnedSnapshotInstance>,
     values: Vec<OwnedSnapshotValue>,
@@ -875,9 +881,9 @@ struct SnapshotBuilder<'a> {
 }
 
 impl<'a> SnapshotBuilder<'a> {
-    fn new(file: &'a File) -> Self {
+    fn new(catalog: &'a NuxViewModelCatalog) -> Self {
         Self {
-            file,
+            catalog,
             handles: Vec::new(),
             instances: Vec::new(),
             values: Vec::new(),
@@ -949,24 +955,34 @@ impl<'a> SnapshotBuilder<'a> {
     ) -> Result<(), NuxStatus> {
         let schema_index = handle.borrow().view_model_index();
         let schema = self
-            .file
-            .view_model(schema_index)
+            .catalog
+            .schemas
+            .get(schema_index)
             .ok_or(NuxStatus::RuntimeError)?;
         let first_value = self.values.len();
-        for property in schema.properties() {
+        let property_end = schema
+            .first_property
+            .checked_add(schema.property_count)
+            .ok_or(NuxStatus::LimitExceeded)?;
+        for property in self
+            .catalog
+            .properties
+            .get(schema.first_property..property_end)
+            .ok_or(NuxStatus::RuntimeError)?
+        {
             if self.values.len() >= MAX_SNAPSHOT_VALUES {
                 return Err(NuxStatus::LimitExceeded);
             }
-            let name = property.name().unwrap_or("");
+            let name = std::str::from_utf8(&property.name).map_err(|_| NuxStatus::RuntimeError)?;
             self.content_bytes = self
                 .content_bytes
                 .checked_add(name.len())
                 .ok_or(NuxStatus::LimitExceeded)?;
-            let kind = classify_property(property.type_name());
+            let kind = property.kind;
             let payload = self.snapshot_property(handle, name, kind)?;
             self.values.push(OwnedSnapshotValue {
                 owner_instance_id: id,
-                property_index: property.index(),
+                property_index: property.property_index,
                 name: name.as_bytes().to_vec().into_boxed_slice(),
                 kind,
                 payload,
@@ -1086,16 +1102,12 @@ pub unsafe extern "C" fn nux_view_model_instance_snapshot(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        let Ok(view_model) = instance.instance.try_borrow() else {
-            return NuxStatus::ReentrantCall;
-        };
-        let snapshot = match SnapshotBuilder::new(&instance.file)
-            .snapshot(view_model.handle(), instance.identity)
+        let snapshot = match SnapshotBuilder::new(&instance.view_model_catalog)
+            .snapshot(&instance.instance, instance.identity)
         {
             Ok(snapshot) => snapshot,
             Err(status) => return status,
         };
-        drop(view_model);
         let handle = Box::into_raw(Box::new(snapshot));
         register_handle(handle, HandleKind::ViewModelSnapshot, instance.owner_thread);
         unsafe { *out_snapshot = handle };
@@ -1913,68 +1925,210 @@ fn apply_transaction_mutation(
     transaction: &mut RuntimeOwnedViewModelTransaction,
     instances: &BTreeMap<usize, RuntimeOwnedViewModelHandle>,
     mutation: &ResolvedMutation,
-) -> bool {
+) -> Result<(), NuxStatus> {
     let Some(owner) = instances.get(&mutation.instance) else {
-        return false;
+        return Err(NuxStatus::HandleMismatch);
     };
     match mutation.kind {
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING => transaction
-            .try_set_string(owner, &mutation.path, &mutation.bytes)
-            .is_some(),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER => transaction
-            .try_set_number(owner, &mutation.path, mutation.number)
-            .is_some(),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL => transaction
-            .try_set_boolean(owner, &mutation.path, mutation.boolean)
-            .is_some(),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR => {
-            u32::try_from(mutation.integer).is_ok_and(|value| {
-                transaction
-                    .try_set_color(owner, &mutation.path, value)
-                    .is_some()
-            })
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING => {
+            if owner
+                .borrow()
+                .string_source_handle_by_property_name_path(&mutation.path)
+                .is_none()
+            {
+                return Err(NuxStatus::NotFound);
+            }
+            transaction
+                .try_set_string(owner, &mutation.path, &mutation.bytes)
+                .ok_or(NuxStatus::RuntimeError)?;
+            Ok(())
         }
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM => transaction
-            .try_set_enum(owner, &mutation.path, mutation.integer)
-            .is_some(),
-        NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER => transaction
-            .try_fire_trigger(owner, &mutation.path)
-            .is_some(),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_LIST_INDEX => transaction
-            .try_set_list_index(owner, &mutation.path, mutation.integer)
-            .is_some(),
-        NUX_VIEW_MODEL_MUTATION_KIND_SET_IMAGE => transaction
-            .try_set_asset(owner, &mutation.path, mutation.integer)
-            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER => {
+            if owner
+                .borrow()
+                .number_source_handle_by_property_name_path(&mutation.path)
+                .is_none()
+            {
+                return Err(NuxStatus::NotFound);
+            }
+            transaction
+                .try_set_number(owner, &mutation.path, mutation.number)
+                .ok_or(NuxStatus::RuntimeError)?;
+            Ok(())
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL => {
+            if owner
+                .borrow()
+                .boolean_source_handle_by_property_name_path(&mutation.path)
+                .is_none()
+            {
+                return Err(NuxStatus::NotFound);
+            }
+            transaction
+                .try_set_boolean(owner, &mutation.path, mutation.boolean)
+                .ok_or(NuxStatus::RuntimeError)?;
+            Ok(())
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR => {
+            if owner
+                .borrow()
+                .color_source_handle_by_property_name_path(&mutation.path)
+                .is_none()
+            {
+                return Err(NuxStatus::NotFound);
+            }
+            let value = u32::try_from(mutation.integer).map_err(|_| NuxStatus::InvalidArgument)?;
+            transaction
+                .try_set_color(owner, &mutation.path, value)
+                .ok_or(NuxStatus::RuntimeError)?;
+            Ok(())
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM => {
+            if owner
+                .borrow()
+                .enum_source_handle_by_property_name_path(&mutation.path)
+                .is_none()
+            {
+                return Err(NuxStatus::NotFound);
+            }
+            transaction
+                .try_set_enum(owner, &mutation.path, mutation.integer)
+                .ok_or(NuxStatus::RuntimeError)?;
+            Ok(())
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER => {
+            if owner
+                .borrow()
+                .trigger_source_handle_by_property_name_path(&mutation.path)
+                .is_none()
+            {
+                return Err(NuxStatus::NotFound);
+            }
+            transaction
+                .try_fire_trigger(owner, &mutation.path)
+                .ok_or(NuxStatus::RuntimeError)?;
+            Ok(())
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_LIST_INDEX => {
+            if owner
+                .borrow()
+                .symbol_list_index_source_handle_by_property_name_path(&mutation.path)
+                .is_none()
+            {
+                return Err(NuxStatus::NotFound);
+            }
+            transaction
+                .try_set_list_index(owner, &mutation.path, mutation.integer)
+                .ok_or(NuxStatus::RuntimeError)?;
+            Ok(())
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_IMAGE => {
+            if owner
+                .borrow()
+                .asset_source_handle_by_property_name_path(&mutation.path)
+                .is_none()
+            {
+                return Err(NuxStatus::NotFound);
+            }
+            transaction
+                .try_set_asset(owner, &mutation.path, mutation.integer)
+                .ok_or(NuxStatus::RuntimeError)?;
+            Ok(())
+        }
         NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL => {
             let Some(value) = mutation.related.and_then(|related| instances.get(&related)) else {
-                return false;
+                return Err(NuxStatus::HandleMismatch);
             };
             transaction
                 .link_view_model(owner, &mutation.path, value)
-                .is_ok()
+                .map(|_| ())
+                .map_err(|error| match error {
+                    RuntimeViewModelLinkError::PropertyNotFound => NuxStatus::NotFound,
+                    RuntimeViewModelLinkError::NestedPathUnsupported
+                    | RuntimeViewModelLinkError::SchemaMismatch
+                    | RuntimeViewModelLinkError::Cycle => NuxStatus::InvalidArgument,
+                    RuntimeViewModelLinkError::BorrowConflict => NuxStatus::ReentrantCall,
+                })
         }
-        NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT => mutation
-            .related
-            .and_then(|related| instances.get(&related))
-            .is_some_and(|item| {
-                transaction.list_insert(owner, &mutation.path, mutation.index, item)
-            }),
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT => {
+            let Some(item) = mutation.related.and_then(|related| instances.get(&related)) else {
+                return Err(NuxStatus::HandleMismatch);
+            };
+            let count = owner
+                .list_item_count_by_property_name_path(&mutation.path)
+                .ok_or(NuxStatus::NotFound)?;
+            if count >= MAX_LIST_ITEMS {
+                return Err(NuxStatus::LimitExceeded);
+            }
+            if mutation.index > count {
+                return Err(NuxStatus::InvalidArgument);
+            }
+            transaction
+                .list_insert(owner, &mutation.path, mutation.index, item)
+                .then_some(())
+                .ok_or(NuxStatus::InvalidArgument)
+        }
         NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE => {
-            transaction.list_remove(owner, &mutation.path, mutation.index)
+            let count = owner
+                .list_item_count_by_property_name_path(&mutation.path)
+                .ok_or(NuxStatus::NotFound)?;
+            if mutation.index >= count {
+                return Err(NuxStatus::InvalidArgument);
+            }
+            transaction
+                .list_remove(owner, &mutation.path, mutation.index)
+                .then_some(())
+                .ok_or(NuxStatus::RuntimeError)
         }
         NUX_VIEW_MODEL_MUTATION_KIND_LIST_SWAP => {
-            transaction.list_swap(owner, &mutation.path, mutation.index, mutation.second_index)
+            let count = owner
+                .list_item_count_by_property_name_path(&mutation.path)
+                .ok_or(NuxStatus::NotFound)?;
+            if mutation.index >= count || mutation.second_index >= count {
+                return Err(NuxStatus::InvalidArgument);
+            }
+            transaction
+                .list_swap(owner, &mutation.path, mutation.index, mutation.second_index)
+                .then_some(())
+                .ok_or(NuxStatus::RuntimeError)
         }
         NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE => {
-            transaction.list_move(owner, &mutation.path, mutation.index, mutation.second_index)
+            let count = owner
+                .list_item_count_by_property_name_path(&mutation.path)
+                .ok_or(NuxStatus::NotFound)?;
+            if mutation.index >= count || mutation.second_index >= count {
+                return Err(NuxStatus::InvalidArgument);
+            }
+            transaction
+                .list_move(owner, &mutation.path, mutation.index, mutation.second_index)
+                .then_some(())
+                .ok_or(NuxStatus::RuntimeError)
         }
-        NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET => mutation
-            .related
-            .and_then(|related| instances.get(&related))
-            .is_some_and(|item| transaction.list_set(owner, &mutation.path, mutation.index, item)),
-        NUX_VIEW_MODEL_MUTATION_KIND_LIST_CLEAR => transaction.list_clear(owner, &mutation.path),
-        _ => false,
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET => {
+            let Some(item) = mutation.related.and_then(|related| instances.get(&related)) else {
+                return Err(NuxStatus::HandleMismatch);
+            };
+            let count = owner
+                .list_item_count_by_property_name_path(&mutation.path)
+                .ok_or(NuxStatus::NotFound)?;
+            if mutation.index >= count {
+                return Err(NuxStatus::InvalidArgument);
+            }
+            transaction
+                .list_set(owner, &mutation.path, mutation.index, item)
+                .then_some(())
+                .ok_or(NuxStatus::InvalidArgument)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_CLEAR => {
+            owner
+                .list_item_count_by_property_name_path(&mutation.path)
+                .ok_or(NuxStatus::NotFound)?;
+            transaction
+                .list_clear(owner, &mutation.path)
+                .then_some(())
+                .ok_or(NuxStatus::RuntimeError)
+        }
+        _ => Err(NuxStatus::InvalidArgument),
     }
 }
 
@@ -2175,24 +2329,8 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 );
                 return NuxStatus::ReentrantCall;
             };
-            live.insert(address, value.handle().clone());
-        }
-
-        // Prevalidation runs the exact ordered batch on an identity-preserving
-        // detached graph. No live cell is dirtied unless every operation can
-        // succeed in sequence.
-        let source_handles = live.values().cloned().collect::<Vec<_>>();
-        let candidate_handles = RuntimeOwnedViewModelHandle::detached_graph(&source_handles);
-        let candidates = live
-            .keys()
-            .copied()
-            .zip(candidate_handles)
-            .collect::<BTreeMap<_, _>>();
-        for mutation in &resolved {
-            if let Err((status, message)) = apply_mutation(&candidates, mutation) {
-                publish_mutation_result(out_result, status, 0, message);
-                return status;
-            }
+            drop(value);
+            live.insert(address, instance.instance.clone());
         }
         // The runtime transaction owns each write and captures its exact-cell
         // or exact-topology inverse before mutating. Dirt and listener effects
@@ -2204,9 +2342,7 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 RuntimeViewModelChangeCapture::begin_bounded(MAX_MUTATIONS, MAX_TOTAL_BYTES)
                     .ok_or(NuxStatus::RuntimeError)?;
             for (index, mutation) in resolved.iter().enumerate() {
-                if !apply_transaction_mutation(&mut transaction, &live, mutation) {
-                    return Err(NuxStatus::RuntimeError);
-                }
+                apply_transaction_mutation(&mut transaction, &live, mutation)?;
                 maybe_panic_during_vm_commit(index + 1);
             }
             let roots = live.values().cloned().collect::<Vec<_>>();
@@ -2477,9 +2613,13 @@ pub unsafe extern "C" fn nux_artboard_instance_set_text_runs(
                 _ => return NuxStatus::LimitExceeded,
             };
             let text = if mutation.text.len == 0 {
-                Vec::new()
+                String::new()
             } else {
-                unsafe { slice::from_raw_parts(mutation.text.data, mutation.text.len).to_vec() }
+                let bytes = unsafe { slice::from_raw_parts(mutation.text.data, mutation.text.len) };
+                match str::from_utf8(bytes) {
+                    Ok(text) => text.to_owned(),
+                    Err(_) => return NuxStatus::InvalidArgument,
+                }
             };
             resolved.push((name, text));
         }
@@ -2491,29 +2631,54 @@ pub unsafe extern "C" fn nux_artboard_instance_set_text_runs(
         let Ok(mut artboard) = instance.occurrence.instance.try_borrow_mut() else {
             return NuxStatus::ReentrantCall;
         };
-        let names = resolved
+        // Validate the complete authored-name batch before applying it. The
+        // actual writes then go through the translated TextValueRun owner;
+        // there is no detached text graph or compatibility transaction.
+        let originals = match resolved
             .iter()
-            .map(|(name, _)| name.clone())
-            .collect::<Vec<_>>();
-        let Some(mut transaction) = artboard.raw_mut().root_text_value_run_transaction(&names)
-        else {
-            return NuxStatus::NotFound;
+            .map(|(name, _)| {
+                artboard
+                    .root_text_value_run_text(name)
+                    .map(|text| (name.clone(), text))
+            })
+            .collect::<Option<Vec<_>>>()
+        {
+            Some(originals) => originals,
+            None => return NuxStatus::NotFound,
         };
+        let expected_change = originals
+            .iter()
+            .zip(&resolved)
+            .any(|((_, previous), (_, next))| previous != next);
+        if expected_change && instance.occurrence.render_revision.get() == u64::MAX {
+            return NuxStatus::LimitExceeded;
+        }
         let commit = panic::catch_unwind(AssertUnwindSafe(|| {
             let mut changed = false;
             for (index, (name, text)) in resolved.into_iter().enumerate() {
-                let Some(did_change) = transaction.set(&name, text) else {
+                let Some(did_change) = artboard.set_root_text_value_run(&name, text) else {
                     return Err(());
                 };
                 changed |= did_change;
                 maybe_panic_during_text_commit(index + 1);
             }
-            transaction.commit();
             Ok(changed)
         }));
         let changed = match commit {
             Ok(Ok(changed)) => changed,
-            Ok(Err(())) | Err(_) => return NuxStatus::RuntimeError,
+            Ok(Err(())) | Err(_) => {
+                let restored = panic::catch_unwind(AssertUnwindSafe(|| {
+                    let mut restored = true;
+                    for (name, text) in originals {
+                        restored &= artboard.set_root_text_value_run(&name, text).is_some();
+                    }
+                    restored
+                }));
+                if !matches!(restored, Ok(true)) {
+                    instance.occurrence.poisoned.set(true);
+                }
+                return NuxStatus::RuntimeError;
+            }
         };
         let status = instance.occurrence.commit_runtime_change_or_poison(changed);
         if status != NuxStatus::Ok {
@@ -2555,8 +2720,9 @@ mod transaction_tests {
         )
         .expect("read upstream fixture");
         let mut file = ptr::null_mut();
+        let callbacks = NuxRenderCallbacks::default();
         assert_eq!(
-            unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+            unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
             NuxStatus::Ok
         );
         file
@@ -2587,7 +2753,6 @@ mod transaction_tests {
         instance
             .instance
             .borrow()
-            .raw()
             .number_value_by_property_name_path(path)
             .expect("number value")
     }
@@ -2733,10 +2898,8 @@ mod transaction_tests {
             .occurrence
             .instance
             .borrow()
-            .raw()
-            .root_text_value_run("nameRun")
-            .expect("text run")
-            .to_vec();
+            .root_text_value_run_text("nameRun")
+            .expect("text run");
         let mutations = [first.as_slice(), second.as_slice()].map(|text| NuxTextRunMutation {
             name: NuxStringView {
                 data: name.as_ptr().cast(),
@@ -2763,9 +2926,8 @@ mod transaction_tests {
                 .occurrence
                 .instance
                 .borrow()
-                .raw()
-                .root_text_value_run("nameRun"),
-            Some(original.as_slice())
+                .root_text_value_run_text("nameRun"),
+            Some(original)
         );
 
         let one = NuxTextRunMutationBatch {

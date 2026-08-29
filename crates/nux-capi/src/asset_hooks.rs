@@ -5,16 +5,18 @@ use super::{
     ffi_guard_with_handle_result, publish_result, register_handle, struct_size_supports,
     with_platform_callback,
 };
+use nuxie::render_api::RawPath;
 use nuxie::{
-    ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan,
-    GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderLoad, GpuCanvasShaderProfile,
-    ImageDecodeError, PersistentFactory, PersistentFactoryContext, RawPath, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderCanvas, RenderCanvasError, RenderGpuCanvasShader,
-    RenderImage, RenderPaint, RenderPath, RenderShader,
+    AudioAsset, ColorInt, CoreHandle, Factory, FileAssetLoader, FileAssetLoaderRef, FillRule,
+    FontAsset, GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShader,
+    GpuCanvasShaderArtifact, GpuCanvasShaderLoad, GpuCanvasShaderProfile, ImageAsset,
+    ImageDecodeError, PersistentFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderCanvas, RenderCanvasError, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath,
+    RenderShader, RuntimeFactoryHandle,
 };
-use nuxie::{File, FileAssetKind};
 use std::collections::HashMap;
 use std::ffi::c_void;
+use std::ops::{Deref, DerefMut};
 use std::ptr;
 use std::sync::Arc;
 use std::thread;
@@ -173,28 +175,64 @@ pub(crate) trait AssetUploadFactory: Factory + 'static {
     ) -> Result<Box<dyn RenderImage>, ImageDecodeError>;
 }
 
-pub(crate) struct AssetFactory<'a, F> {
-    inner: &'a mut PersistentFactory<F>,
-    catalog: &'a AssetCatalog,
+// Asset-policy unit tests exercise the same factory-at-import ownership path
+// as production without depending on a host GPU being available. The null
+// factory is test-only; no factory-free C entry point is exported.
+#[cfg(test)]
+impl AssetUploadFactory for nuxie::render_api::NullFactory {
+    fn upload_rgba8_premul_srgb(
+        &mut self,
+        _width: u32,
+        _height: u32,
+        _row_bytes: u32,
+        _pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.decode_image(&[])
+    }
 }
 
-impl AssetCatalog {
-    pub(crate) fn wrap_factory<'a, F: AssetUploadFactory>(
-        &'a self,
-        inner: &'a mut PersistentFactory<F>,
-    ) -> AssetFactory<'a, F> {
-        AssetFactory {
+pub(crate) struct AssetFactory<F> {
+    inner: F,
+    decoded_images: HashMap<Vec<u8>, CanonicalImage>,
+}
+
+impl<F> AssetFactory<F> {
+    pub(crate) fn new(inner: F) -> Self {
+        Self {
             inner,
-            catalog: self,
+            decoded_images: HashMap::new(),
         }
     }
-}
 
-impl<F: AssetUploadFactory> Factory for AssetFactory<'_, F> {
-    fn persistent_context(&self) -> Option<PersistentFactoryContext> {
-        self.inner.persistent_context()
+    pub(crate) fn install_catalog(&mut self, catalog: &AssetCatalog) {
+        self.decoded_images.extend(
+            catalog
+                .decoded_images
+                .iter()
+                .map(|(encoded, image)| (encoded.clone(), image.clone())),
+        );
     }
 
+    pub(crate) fn replace_inner(&mut self, inner: F) {
+        self.inner = inner;
+    }
+}
+
+impl<F> Deref for AssetFactory<F> {
+    type Target = F;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<F> DerefMut for AssetFactory<F> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl<F: AssetUploadFactory> Factory for AssetFactory<F> {
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -243,10 +281,10 @@ impl<F: AssetUploadFactory> Factory for AssetFactory<'_, F> {
     }
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
-        let Some(image) = self.catalog.decoded_images.get(data) else {
+        let Some(image) = self.decoded_images.get(data) else {
             return self.inner.decode_image(data);
         };
-        self.inner.borrow_mut().upload_rgba8_premul_srgb(
+        self.inner.upload_rgba8_premul_srgb(
             image.width,
             image.height,
             image.row_bytes,
@@ -494,12 +532,12 @@ fn string_view(value: &str) -> super::NuxStringView {
     }
 }
 
-fn asset_kind(kind: FileAssetKind) -> Option<NuxAssetKind> {
-    match kind {
-        FileAssetKind::Image => Some(NUX_ASSET_KIND_IMAGE),
-        FileAssetKind::Font => Some(NUX_ASSET_KIND_FONT),
-        FileAssetKind::Audio => Some(NUX_ASSET_KIND_AUDIO),
-        FileAssetKind::Blob | FileAssetKind::Script | FileAssetKind::Shader => None,
+fn asset_kind(type_name: &str) -> Option<NuxAssetKind> {
+    match type_name {
+        "ImageAsset" => Some(NUX_ASSET_KIND_IMAGE),
+        "FontAsset" => Some(NUX_ASSET_KIND_FONT),
+        "AudioAsset" => Some(NUX_ASSET_KIND_AUDIO),
+        _ => None,
     }
 }
 
@@ -516,33 +554,116 @@ fn validate_asset_hook_policy(hooks: NuxAssetHooks) -> Result<NuxAssetHooks, Ass
     Ok(hooks)
 }
 
-fn prepare_assets(file: &mut File, hooks: NuxAssetHooks) -> Result<AssetCatalog, AssetImportError> {
+struct ExternalAssetBytes {
+    kind: NuxAssetKind,
+    authored_id: u32,
+    name: String,
+    bytes: Vec<u8>,
+}
+
+struct HookAssetLoader {
+    external: Vec<ExternalAssetBytes>,
+}
+
+impl FileAssetLoader for HookAssetLoader {
+    fn load_contents(
+        &mut self,
+        asset: CoreHandle,
+        in_band_bytes: &[u8],
+        factory: &RuntimeFactoryHandle,
+    ) -> bool {
+        if !in_band_bytes.is_empty() {
+            return false;
+        }
+        let identity = asset
+            .with_downcast::<ImageAsset, _>(|asset| {
+                let base = asset.base.file_asset();
+                (
+                    NUX_ASSET_KIND_IMAGE,
+                    base.asset_id(),
+                    base.name().to_owned(),
+                )
+            })
+            .or_else(|| {
+                asset.with_downcast::<FontAsset, _>(|asset| {
+                    let base = asset.base.file_asset();
+                    (NUX_ASSET_KIND_FONT, base.asset_id(), base.name().to_owned())
+                })
+            })
+            .or_else(|| {
+                asset.with_downcast::<AudioAsset, _>(|asset| {
+                    let base = asset.base.file_asset();
+                    (
+                        NUX_ASSET_KIND_AUDIO,
+                        base.asset_id(),
+                        base.name().to_owned(),
+                    )
+                })
+            });
+        let Some((kind, authored_id, name)) = identity else {
+            return false;
+        };
+        let Some(index) = self.external.iter().position(|entry| {
+            entry.kind == kind && entry.authored_id == authored_id && entry.name == name
+        }) else {
+            return false;
+        };
+        let mut entry = self.external.swap_remove(index);
+        if kind == NUX_ASSET_KIND_IMAGE {
+            return asset
+                .with_downcast_mut::<ImageAsset, _>(|asset| asset.decode(&entry.bytes, factory))
+                .unwrap_or(false);
+        }
+        if kind == NUX_ASSET_KIND_FONT {
+            return asset
+                .with_downcast_mut::<FontAsset, _>(|asset| asset.decode(&entry.bytes, factory))
+                .unwrap_or(false);
+        }
+        asset
+            .with_downcast_mut::<AudioAsset, _>(|asset| asset.decode(&mut entry.bytes, factory))
+            .unwrap_or(false)
+    }
+}
+
+pub(crate) struct PreparedAssets {
+    pub(crate) catalog: Arc<AssetCatalog>,
+    pub(crate) loader: Option<FileAssetLoaderRef>,
+}
+
+pub(crate) fn prepare_assets(
+    bytes: &[u8],
+    hooks: NuxAssetHooks,
+) -> Result<PreparedAssets, AssetImportError> {
     debug_assert!(validate_asset_hook_policy(hooks).is_ok());
-    let assets = file
-        .assets()
-        .filter_map(|asset| {
-            Some((
-                asset.index(),
-                asset_kind(asset.kind())?,
-                asset.asset_id(),
-                asset.name().unwrap_or_default().to_owned(),
-                asset.file_extension(),
-                asset.contents().map(<[u8]>::to_vec),
-            ))
-        })
-        .collect::<Vec<_>>();
+    let parsed = nuxie_binary::read_runtime_file_with_scripting(bytes)
+        .map_err(|_| AssetImportError::InvalidExternalAsset)?;
+    let assets = parsed.scripting_file_assets_with_contents();
     let mut image_sources = Vec::new();
+    let mut external_assets = Vec::new();
     let mut external_total = 0usize;
-    for (index, kind, asset_id, name, extension, embedded) in assets {
-        let is_external = embedded.is_none();
-        let bytes = if let Some(embedded) = embedded {
-            Some(embedded)
+    for entry in assets {
+        let Some(kind) = asset_kind(entry.asset.type_name) else {
+            continue;
+        };
+        let asset_id = entry
+            .asset
+            .uint_property("assetId")
+            .and_then(|value| u32::try_from(value).ok());
+        let name = entry
+            .asset
+            .string_property("name")
+            .unwrap_or_default()
+            .to_owned();
+        let extension = entry.asset.file_asset_extension().unwrap_or_default();
+        let is_external = entry.contents.is_none();
+        let asset_bytes = if let Some(embedded) = entry.contents {
+            Some(embedded.to_vec())
         } else if let Some(lookup) = hooks.lookup_external_asset {
             let request = NuxExternalAssetRequest {
                 struct_size: u32::try_from(std::mem::size_of::<NuxExternalAssetRequest>())
                     .unwrap_or(u32::MAX),
                 kind,
-                asset_index: index,
+                asset_index: entry.ordinal,
                 asset_id: asset_id.unwrap_or(NUX_ASSET_ID_NONE),
                 name: string_view(&name),
                 file_extension: string_view(extension),
@@ -590,34 +711,34 @@ fn prepare_assets(file: &mut File, hooks: NuxAssetHooks) -> Result<AssetCatalog,
         } else {
             None
         };
-        let Some(bytes) = bytes else { continue };
-        match kind {
-            NUX_ASSET_KIND_IMAGE => {
-                if is_external {
-                    let id = asset_id.ok_or(AssetImportError::InvalidExternalAsset)?;
-                    file.attach_external_image_asset_bytes(id, bytes.clone())
-                        .map_err(|_| AssetImportError::InvalidExternalAsset)?;
-                }
-                image_sources.push(bytes);
-            }
-            NUX_ASSET_KIND_FONT if is_external => {
-                let id = asset_id.ok_or(AssetImportError::InvalidExternalAsset)?;
-                file.attach_external_font_asset_bytes(id, bytes)
-                    .map_err(|_| AssetImportError::InvalidExternalAsset)?;
-            }
-            NUX_ASSET_KIND_AUDIO if is_external => {
-                let id = asset_id.ok_or(AssetImportError::InvalidExternalAsset)?;
-                file.attach_external_audio_asset_bytes(id, bytes)
-                    .map_err(|_| AssetImportError::InvalidExternalAsset)?;
-            }
-            _ => {}
+        let Some(asset_bytes) = asset_bytes else {
+            continue;
+        };
+        if kind == NUX_ASSET_KIND_IMAGE {
+            image_sources.push(asset_bytes.clone());
+        }
+        if is_external {
+            external_assets.push(ExternalAssetBytes {
+                kind,
+                authored_id: asset_id.ok_or(AssetImportError::InvalidExternalAsset)?,
+                name,
+                bytes: asset_bytes,
+            });
         }
     }
 
     let mut catalog = AssetCatalog::default();
     let mut total = 0usize;
     let Some(decode_image) = hooks.decode_image else {
-        return Ok(catalog);
+        let loader = (!external_assets.is_empty()).then(|| {
+            FileAssetLoaderRef::new(Box::new(HookAssetLoader {
+                external: external_assets,
+            }))
+        });
+        return Ok(PreparedAssets {
+            catalog: Arc::new(catalog),
+            loader,
+        });
     };
     for encoded in image_sources {
         let remaining = hooks
@@ -663,7 +784,15 @@ fn prepare_assets(file: &mut File, hooks: NuxAssetHooks) -> Result<AssetCatalog,
         debug_assert!(total <= hooks.maximum_total_decoded_image_bytes);
         catalog.decoded_images.insert(encoded, canonical);
     }
-    Ok(catalog)
+    let loader = (!external_assets.is_empty()).then(|| {
+        FileAssetLoaderRef::new(Box::new(HookAssetLoader {
+            external: external_assets,
+        }))
+    });
+    Ok(PreparedAssets {
+        catalog: Arc::new(catalog),
+        loader,
+    })
 }
 
 /// One deep import surface. Each optional child is copied and validated in
@@ -718,14 +847,20 @@ unsafe fn read_file_import_config(
     Ok(value)
 }
 
-pub(super) unsafe fn nux_file_import_configured_with_authority(
+pub(super) unsafe fn nux_file_import_configured_with_factory<F>(
     bytes: *const u8,
     len: usize,
     config: *const NuxFileImportConfig,
     out_file: *mut *mut NuxFile,
     out_result: *mut *mut NuxCapiResult,
+    factory: PersistentFactory<AssetFactory<F>>,
+    renderer_domain: super::RendererDomainBinding,
     native_shader_authority: super::NativeShaderImportAuthority,
-) -> NuxStatus {
+    program_adapter: Option<Arc<dyn nuxie::ScriptProgramAdapter>>,
+) -> NuxStatus
+where
+    F: AssetUploadFactory,
+{
     ffi_guard_with_handle_result(out_file, out_result, HandleKind::File, || {
         if out_file.is_null() || out_result.is_null() || config.is_null() {
             if !out_result.is_null() {
@@ -790,27 +925,24 @@ pub(super) unsafe fn nux_file_import_configured_with_authority(
         } else {
             unsafe { std::slice::from_raw_parts(bytes, len) }
         };
-        let mut file = match super::import_file_with_prepared_host_commands(
-            bytes,
-            host_commands,
-            native_shader_authority,
-        ) {
-            Ok(file) => file,
-            Err(error) => {
-                publish_result(out_result, NuxStatus::ImportError, error.to_string());
-                return NuxStatus::ImportError;
+        if validates_expected_assets {
+            let metadata = match super::FileMetadataCatalog::assets_only_from_bytes(bytes) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    publish_result(out_result, NuxStatus::ImportError, error);
+                    return NuxStatus::ImportError;
+                }
+            };
+            if let Err(message) =
+                super::asset_catalog::validate_expected_descriptors(&metadata, &expected_assets)
+            {
+                publish_result(out_result, NuxStatus::HandleMismatch, message);
+                return NuxStatus::HandleMismatch;
             }
-        };
-        if validates_expected_assets
-            && let Err(message) =
-                super::asset_catalog::validate_expected_descriptors(&file, &expected_assets)
-        {
-            publish_result(out_result, NuxStatus::HandleMismatch, message);
-            return NuxStatus::HandleMismatch;
         }
-        let assets = match hooks {
-            Some(hooks) => match prepare_assets(&mut file, hooks) {
-                Ok(assets) => Some(Arc::new(assets)),
+        let prepared_assets = match hooks {
+            Some(hooks) => match prepare_assets(bytes, hooks) {
+                Ok(assets) => Some(assets),
                 Err(error) => {
                     let status = error.status();
                     publish_result(
@@ -823,13 +955,52 @@ pub(super) unsafe fn nux_file_import_configured_with_authority(
             },
             None => None,
         };
+        if let Some(assets) = prepared_assets.as_ref() {
+            factory.borrow_mut().install_catalog(&assets.catalog);
+        }
+        let loader = prepared_assets
+            .as_ref()
+            .and_then(|assets| assets.loader.clone());
+        let mut import_factory = factory.clone();
+        let imported = match super::import_file_with_prepared_host_commands(
+            bytes,
+            &mut import_factory,
+            loader,
+            host_commands,
+            native_shader_authority,
+            program_adapter,
+        ) {
+            Ok(file) => file,
+            Err(error) => {
+                publish_result(out_result, NuxStatus::ImportError, error.to_string());
+                return NuxStatus::ImportError;
+            }
+        };
+        let metadata = match super::FileMetadataCatalog::from_file(&imported.file, bytes) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                publish_result(out_result, NuxStatus::ImportError, error);
+                return NuxStatus::ImportError;
+            }
+        };
+        let view_model_catalog = match super::data_binding::build_catalog_from_bytes(bytes) {
+            Ok(catalog) => Arc::new(catalog),
+            Err(status) => {
+                publish_result(out_result, status, "view-model metadata import failed");
+                return status;
+            }
+        };
         let pending = PendingHandlePublication::new(
             NuxFile {
-                file: Arc::new(file),
+                file: imported.file,
+                metadata,
+                view_model_catalog,
+                #[cfg(feature = "scripting")]
+                scripted: imported.scripted.map(std::rc::Rc::new),
                 owner_thread: thread::current().id(),
                 data_binding_provenance: Arc::new(()),
-                script_callback_factory_domain: std::rc::Rc::new(std::cell::RefCell::new(None)),
-                asset_hooks: assets,
+                renderer_domain,
+                asset_hooks: prepared_assets.map(|assets| assets.catalog),
             },
             HandleKind::File,
         );
@@ -839,44 +1010,6 @@ pub(super) unsafe fn nux_file_import_configured_with_authority(
         publish_result(out_result, NuxStatus::Ok, "");
         NuxStatus::Ok
     })
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_file_import_configured(
-    bytes: *const u8,
-    len: usize,
-    config: *const NuxFileImportConfig,
-    out_file: *mut *mut NuxFile,
-    out_result: *mut *mut NuxCapiResult,
-) -> NuxStatus {
-    #[cfg(all(feature = "android-vulkan", feature = "scripting"))]
-    super::android_product_import::prepare_configured_import_runtime();
-    unsafe {
-        nux_file_import_configured_with_authority(
-            bytes,
-            len,
-            config,
-            out_file,
-            out_result,
-            super::NativeShaderImportAuthority::Denied,
-        )
-    }
-}
-
-/// Convenience wrapper for importing a file with portable asset hooks.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_file_import_with_assets(
-    bytes: *const u8,
-    len: usize,
-    hooks: *const NuxAssetHooks,
-    out_file: *mut *mut NuxFile,
-    out_result: *mut *mut NuxCapiResult,
-) -> NuxStatus {
-    let config = NuxFileImportConfig {
-        asset_hooks: hooks,
-        ..NuxFileImportConfig::default()
-    };
-    unsafe { nux_file_import_configured(bytes, len, &config, out_file, out_result) }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -985,6 +1118,63 @@ fn validate_decoded_image(
         row_bytes: tight_row,
         pixels: Arc::from(packed),
     })
+}
+
+// The production ABI has no factory-free configured import. This helper keeps
+// policy/ownership unit tests on the exact factory-at-import path while using
+// a deterministic null factory rather than requiring a platform GPU.
+#[cfg(test)]
+pub(crate) unsafe fn nux_file_import_configured(
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    if super::platform_callback_active() {
+        if !out_file.is_null() {
+            unsafe { *out_file = ptr::null_mut() };
+        }
+        if !out_result.is_null() {
+            unsafe { *out_result = ptr::null_mut() };
+        }
+        return NuxStatus::ReentrantCall;
+    }
+    let callbacks = super::NuxRenderCallbacks::default();
+    let table = Arc::new(callbacks);
+    let callback_factory = PersistentFactory::new(super::CallbackFactory::new(callbacks));
+    let factory = PersistentFactory::new(AssetFactory::new(nuxie::render_api::NullFactory::new()));
+    unsafe {
+        nux_file_import_configured_with_factory(
+            bytes,
+            len,
+            config,
+            out_file,
+            out_result,
+            factory,
+            super::RendererDomainBinding::Callbacks {
+                table,
+                factory: callback_factory,
+            },
+            super::NativeShaderImportAuthority::Denied,
+            None,
+        )
+    }
+}
+
+#[cfg(test)]
+pub(crate) unsafe fn nux_file_import_with_assets(
+    bytes: *const u8,
+    len: usize,
+    hooks: *const NuxAssetHooks,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    let config = NuxFileImportConfig {
+        asset_hooks: hooks,
+        ..NuxFileImportConfig::default()
+    };
+    unsafe { nux_file_import_configured(bytes, len, &config, out_file, out_result) }
 }
 
 #[cfg(test)]
@@ -1633,11 +1823,13 @@ mod tests {
         );
         let bytes = std::fs::read(root.join("tests/unit_tests/assets/in_band_asset.riv"))
             .expect("asset fixture");
-        let imported = File::import(&bytes).expect("fixture imports");
+        let imported = nuxie_binary::read_runtime_file_with_scripting(&bytes)
+            .expect("fixture metadata imports");
         let encoded = imported
-            .assets()
-            .find(|asset| asset.kind() == FileAssetKind::Image)
-            .and_then(|asset| asset.contents())
+            .scripting_file_assets_with_contents()
+            .into_iter()
+            .find(|asset| asset.asset.type_name == "ImageAsset")
+            .and_then(|asset| asset.contents)
             .expect("fixture image bytes");
         let dimensions = nuxie_image_codec::preflight_encoded_image(encoded).expect("dimensions");
         let packed_len = usize::try_from(dimensions.width)
@@ -1882,11 +2074,13 @@ mod tests {
         let png = include_bytes!("../tests/fixtures/external-image.png").to_vec();
         let font = std::fs::read(root.join("fonts/Inter_18pt-Regular.ttf")).expect("font fixture");
         let sound_bytes = std::fs::read(root.join("sound.riv")).expect("sound fixture");
-        let sound = File::import(&sound_bytes).expect("sound imports");
+        let sound = nuxie_binary::read_runtime_file_with_scripting(&sound_bytes)
+            .expect("sound metadata imports");
         let audio = sound
-            .assets()
-            .find(|asset| asset.kind() == FileAssetKind::Audio)
-            .and_then(|asset| asset.contents().map(<[u8]>::to_vec))
+            .scripting_file_assets_with_contents()
+            .into_iter()
+            .find(|asset| asset.asset.type_name == "AudioAsset")
+            .and_then(|asset| asset.contents.map(<[u8]>::to_vec))
             .expect("embedded audio bytes");
 
         for (type_name, kind, payload) in [

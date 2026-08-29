@@ -7,7 +7,7 @@
 
 /* Selects the Apple Metal extension declarations. The linked nux-capi archive
  * must be built with Cargo feature `apple-metal`; the portable archive omits
- * these symbols while retaining the same base ABI-v3 inventory. */
+ * these symbols while retaining the same base ABI-v4 inventory. */
 #define NUX_CAPI_APPLE_METAL 1
 #include "nux_capi.h"
 

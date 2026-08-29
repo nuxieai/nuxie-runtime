@@ -14,7 +14,7 @@ REMOVED_CRATES = (
     "nux-container",
 )
 REMOVED_MIGRATION_FILES = (
-    "crates/nux-capi/exports-v3-legacy-migration.txt",
+    "crates/nux-capi/exports-v4-legacy-migration.txt",
     "crates/nux-capi/include/module.migration.modulemap",
     "crates/nux-capi/smoke/distribution_legacy_consumer.c",
     "tools/build-apple-xcframework.sh",
@@ -38,8 +38,8 @@ class SlimRuntimeSourceTests(unittest.TestCase):
         extension_manifest = (
             REPO_ROOT / "crates/nux-apple-product-extension/Cargo.toml"
         ).read_text()
-        self.assertIn('version = "0.8.0"', capi_manifest)
-        self.assertIn('version = "0.8.0"', extension_manifest)
+        self.assertIn('version = "0.9.0"', capi_manifest)
+        self.assertIn('version = "0.9.0"', extension_manifest)
         self.assertNotIn("legacy-migration", capi_manifest)
         for crate in REMOVED_CRATES:
             self.assertNotIn(crate, capi_manifest)
@@ -85,12 +85,12 @@ class SlimRuntimeSourceTests(unittest.TestCase):
         verifier = (REPO_ROOT / "tools/verify-nux-capi-xcframeworks.sh").read_text()
         self.assertIn(
             '"androidExtension=${repo_root}/crates/nux-capi/'
-            'exports-v3-android-vulkan-extension.txt"',
+            'exports-v4-android-vulkan-extension.txt"',
             verifier,
         )
         self.assertIn(
             '"androidAuthoredWgslExtension=${repo_root}/crates/nux-capi/'
-            'exports-v3-android-authored-wgsl-extension.txt"',
+            'exports-v4-android-authored-wgsl-extension.txt"',
             verifier,
         )
 
@@ -125,10 +125,10 @@ class ShippedSurfaceGuardTests(unittest.TestCase):
             (root / "include/module.modulemap").write_text(
                 'module NuxieRuntimeC { header "nux_capi_apple.h" export * }\n'
             )
-            (root / "exports-v3-portable.txt").write_text(exports)
-            (root / "exports-v3-apple-metal-extension.txt").write_text("")
-            (root / "exports-v3-android-vulkan-extension.txt").write_text("")
-            (root / "exports-v3-android-authored-wgsl-extension.txt").write_text("")
+            (root / "exports-v4-portable.txt").write_text(exports)
+            (root / "exports-v4-apple-metal-extension.txt").write_text("")
+            (root / "exports-v4-android-vulkan-extension.txt").write_text("")
+            (root / "exports-v4-android-authored-wgsl-extension.txt").write_text("")
             return subprocess.run(
                 [
                     "python3",

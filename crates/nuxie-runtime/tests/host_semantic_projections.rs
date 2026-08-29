@@ -99,6 +99,28 @@ fn layout_and_geometry_reads_share_the_settled_native_occurrence() {
 }
 
 #[test]
+fn root_dimension_setters_release_the_occurrence_borrow_before_layout_callbacks() {
+    let (_factory, mut artboard) = import_host_artboard("layout/fixed_participant.riv");
+    let (original_width, original_height) = artboard.artboard_dimensions();
+    assert!(!artboard.set_artboard_dimensions(original_width, original_height));
+
+    artboard.set_width(original_width + 17.0);
+    artboard.advance(0.0).expect("settle width change");
+    assert_eq!(
+        artboard.artboard_dimensions(),
+        (original_width + 17.0, original_height)
+    );
+
+    artboard.set_height(original_height + 23.0);
+    artboard.advance(0.0).expect("settle height change");
+    assert_eq!(
+        artboard.artboard_dimensions(),
+        (original_width + 17.0, original_height + 23.0)
+    );
+    assert!(!artboard.set_artboard_dimensions(original_width + 17.0, original_height + 23.0));
+}
+
+#[test]
 fn static_text_queries_use_the_settled_text_occurrence() {
     let (_factory, mut artboard) = import_host_artboard("hello_world.riv");
     artboard.advance(0.0).expect("initial advance");

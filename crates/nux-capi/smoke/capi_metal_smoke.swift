@@ -124,6 +124,7 @@ func copiedString(_ view: NuxStringView) -> String {
 }
 
 func importConfigured(
+    renderer: OpaquePointer?,
     bytes: Data,
     hooks: inout NuxAssetHooks,
     composed: Bool,
@@ -134,7 +135,8 @@ func importConfigured(
         _ config: inout NuxFileImportConfig
     ) -> UInt32 {
         bytes.withUnsafeBytes { rawBytes in
-            nux_file_import_configured(
+            nux_file_import_metal(
+                renderer,
                 rawBytes.bindMemory(to: UInt8.self).baseAddress,
                 rawBytes.count,
                 &config,
@@ -244,8 +246,13 @@ hooks.maximum_image_dimension = 8192
 hooks.maximum_decoded_image_bytes = 256 * 1024 * 1024
 hooks.maximum_total_decoded_image_bytes = 512 * 1024 * 1024
 var result: OpaquePointer?
+var renderer: OpaquePointer?
+check(nux_renderer_new_metal(4, 3, &renderer, &result) == NUX_STATUS_OK.rawValue, "renderer")
+freeResult(result, NUX_STATUS_OK.rawValue)
+result = nil
 check(
     importConfigured(
+        renderer: renderer,
         bytes: bytes,
         hooks: &hooks,
         composed: composed,
@@ -304,13 +311,13 @@ if composed {
 } else {
     check(nux_player_new_static(artboard, &player) == NUX_STATUS_OK.rawValue, "player")
 }
+var initialStep = NuxPlayerStep()
+initialStep.struct_size = UInt32(MemoryLayout<NuxPlayerStep>.size)
+var initialResult: OpaquePointer?
+check(nux_player_step(player, &initialStep, &initialResult) == NUX_STATUS_OK.rawValue, "initialize player")
+check(nux_player_step_result_free(initialResult) == NUX_STATUS_OK.rawValue, "free initial step")
 check(nux_file_free(file) == NUX_STATUS_OK.rawValue, "release file before player")
 check(nux_artboard_instance_free(artboard) == NUX_STATUS_OK.rawValue, "release artboard before player")
-
-var renderer: OpaquePointer?
-result = nil
-check(nux_renderer_new_metal(4, 3, &renderer, &result) == NUX_STATUS_OK.rawValue, "renderer")
-freeResult(result, NUX_STATUS_OK.rawValue)
 
 var rawDevice: UnsafeMutableRawPointer?
 result = nil
@@ -452,12 +459,7 @@ if composed {
         "free mutation journal"
     )
 
-    var initial = NuxPlayerStep()
-    initial.struct_size = UInt32(MemoryLayout<NuxPlayerStep>.size)
     var stepResult: OpaquePointer?
-    check(nux_player_step(player, &initial, &stepResult) == NUX_STATUS_OK.rawValue, "initialize player")
-    check(nux_player_step_result_free(stepResult) == NUX_STATUS_OK.rawValue, "free initial step")
-
     var down = NuxPlayerPointerEvent()
     down.kind = NUX_PLAYER_POINTER_KIND_DOWN.rawValue
     down.x = 50

@@ -275,10 +275,14 @@ int main(int argc, char** argv)
         .expected_assets = composed ? expected : NULL,
         .expected_asset_count = composed ? 2 : 0,
     };
-    NuxFile* file = NULL;
+    NuxRenderer* renderer = NULL;
     NuxCapiResult* result = NULL;
-    CHECK(nux_file_import_configured(
-              bytes, len, &import_config, &file, &result) == NUX_STATUS_OK);
+    CHECK(nux_renderer_new_metal(4, 3, &renderer, &result) == NUX_STATUS_OK);
+    free_result(result, NUX_STATUS_OK);
+    NuxFile* file = NULL;
+    result = NULL;
+    CHECK(nux_file_import_metal(
+              renderer, bytes, len, &import_config, &file, &result) == NUX_STATUS_OK);
     free_result(result, NUX_STATUS_OK);
     CHECK(decoder.calls == 1);
     CHECK(decoder.retains == 1);
@@ -321,13 +325,15 @@ int main(int argc, char** argv)
     {
         CHECK(nux_player_new_static(artboard, &player) == NUX_STATUS_OK);
     }
+    NuxPlayerStep initial_step = {
+        .struct_size = sizeof(NuxPlayerStep),
+        .elapsed_seconds = 0.0f,
+    };
+    NuxPlayerStepResult* initial_result = NULL;
+    CHECK(nux_player_step(player, &initial_step, &initial_result) == NUX_STATUS_OK);
+    CHECK(nux_player_step_result_free(initial_result) == NUX_STATUS_OK);
     CHECK(nux_file_free(file) == NUX_STATUS_OK);
     CHECK(nux_artboard_instance_free(artboard) == NUX_STATUS_OK);
-
-    NuxRenderer* renderer = NULL;
-    result = NULL;
-    CHECK(nux_renderer_new_metal(4, 3, &renderer, &result) == NUX_STATUS_OK);
-    free_result(result, NUX_STATUS_OK);
 
     void* device = NULL;
     result = NULL;
@@ -419,13 +425,7 @@ int main(int argc, char** argv)
         CHECK(caller_change.number_value == 5.0f);
         CHECK(nux_view_model_mutation_result_free(mutation_result) == NUX_STATUS_OK);
 
-        NuxPlayerStep initial = {
-            .struct_size = sizeof(NuxPlayerStep),
-            .elapsed_seconds = 0.0f,
-        };
         NuxPlayerStepResult* step_result = NULL;
-        CHECK(nux_player_step(player, &initial, &step_result) == NUX_STATUS_OK);
-        CHECK(nux_player_step_result_free(step_result) == NUX_STATUS_OK);
         NuxPlayerPointerEvent pointers[] = {
             {
                 .kind = NUX_PLAYER_POINTER_KIND_DOWN,

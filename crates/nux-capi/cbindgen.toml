@@ -14,7 +14,8 @@ rename_variants = "ScreamingSnakeCase"
 [export]
 exclude = [
     "__nuxie_size_report_renderer_roots",
-    "nux_file_import_configured_with_trusted_native_shaders",
+    "nux_file_import_metal_with_trusted_native_shaders",
+    "nux_file_import_metal_with_trusted_native_shaders_and_program_adapter",
 ]
 
 [parse]

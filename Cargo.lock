@@ -997,25 +997,28 @@ dependencies = [
 
 [[package]]
 name = "nux-apple-product-extension"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "nux-capi",
  "nuxie-project-data",
+ "nuxie-project-data-scripting",
  "nuxie-runtime",
  "nuxie-schema",
 ]
 
 [[package]]
 name = "nux-capi"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "cbindgen",
  "dispatch2",
  "luaur-common",
  "luaur-compiler",
  "nuxie",
+ "nuxie-binary",
  "nuxie-image-codec",
  "nuxie-project-data",
+ "nuxie-project-data-scripting",
  "nuxie-render-api",
  "nuxie-renderer",
  "nuxie-runtime",
@@ -1116,6 +1119,14 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "nuxie-project-data-scripting"
+version = "0.1.0"
+dependencies = [
+ "nuxie",
+ "nuxie-project-data",
 ]
 
 [[package]]

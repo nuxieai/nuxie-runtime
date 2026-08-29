@@ -16,12 +16,11 @@ pub use runtime::{
     advance_flags::AdvanceFlags,
     animation::{
         linear_animation::LinearAnimation,
-        linear_animation_instance::LinearAnimationInstance,
         state_machine::StateMachine,
         state_machine_input_instance::{SMIBool, SMIInput, SMINumber, SMITrigger},
-        state_machine_instance::{RuntimeStateMachineInstanceHandle, StateMachineInstance},
+        state_machine_instance::RuntimeStateMachineInstanceHandle,
     },
-    artboard::{Artboard, ArtboardInstance, RuntimeArtboardInstanceHandle},
+    artboard::{Artboard, RuntimeArtboardInstanceHandle},
     bindable_artboard::RuntimeBindableArtboardHandle,
     command_queue, command_server,
     core::CoreHandle,
@@ -40,7 +39,6 @@ pub use runtime::{
             viewmodel_runtime::RuntimeViewModelHandle,
         },
         viewmodel::ViewModel,
-        viewmodel_instance::ViewModelInstance,
     },
 };
 
@@ -93,9 +91,23 @@ pub use nuxie_renderer::{RenderMode, RendererError};
 pub use nuxie_renderer::{WebGl2Factory, WebGl2Frame};
 
 pub use nuxie_runtime::{
-    AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader, AudioSound,
-    AudioSource, ScriptError, ScriptingVm,
+    ArtboardInstance, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
+    AudioSound, AudioSource, LinearAnimationInstance, RuntimeAudioAssetOwners, RuntimeBlobAsset,
+    RuntimeEventPropertyValue, RuntimeFontAssetOwners, RuntimeHitResult, RuntimeImageAssetOwners,
+    RuntimeOwnedViewModelGraphTransaction, RuntimeOwnedViewModelHandle,
+    RuntimeOwnedViewModelInstance, RuntimeOwnedViewModelTransaction, RuntimeScriptProgram,
+    RuntimeViewModelChange, RuntimeViewModelChangeCapture, RuntimeViewModelChangeValue,
+    RuntimeViewModelGraphTransactionError, RuntimeViewModelLinkError, ScriptAssetRegistration,
+    ScriptAssetRegistrationResult, ScriptDataConverterMethod, ScriptDataConverterOptionalCall,
+    ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptOptionalMethodResult,
+    ScriptProgramAdapter, ScriptValue, ScriptViewModel, ScriptingVm, StateMachineInstance,
+    StateMachineReportedEvent,
 };
+pub use runtime::assets::{
+    audio_asset::AudioAsset, font_asset::FontAsset, image_asset::ImageAsset,
+    script_asset::ScriptAsset,
+};
+pub use runtime::scripted::scripted_drawable::ScriptedDrawable;
 
 mod import_limits;
 mod native_file;

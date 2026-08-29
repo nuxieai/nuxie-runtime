@@ -585,21 +585,15 @@ def check_datasets(repo_root: pathlib.Path, inventory: Inventory) -> None:
 
 
 def check_bench_sources(repo_root: pathlib.Path, inventory: Inventory) -> None:
+    # The Rust Criterion mirror was retired with the packed runtime facade.
+    # Keep validating the pinned upstream inventory and comparison taxonomy;
+    # executable Rust performance coverage lives in the retained perf and
+    # renderer harnesses, not in a synthetic replacement benchmark.
+    del repo_root
     check_case_comparison_contract(inventory)
     expected = {case.name for case in inventory.cases}
     if len(expected) != 20 or len(inventory.cases) != 20:
         raise ContractError("microbenchmark inventory must contain 20 unique cases")
-    registered: set[str] = set()
-    for crate in {case.crate for case in inventory.cases}:
-        source = repo_root / "crates" / crate / "benches" / "upstream_microbenchmarks.rs"
-        if not source.is_file():
-            raise ContractError(f"missing criterion target: {source.relative_to(repo_root)}")
-        text = source.read_text()
-        registered.update(re.findall(r'bench_function\(\s*"([^"]+)"', text))
-    if registered != expected:
-        missing = sorted(expected - registered)
-        extra = sorted(registered - expected)
-        raise ContractError(f"criterion registry mismatch: missing={missing}, extra={extra}")
     comparisons = {case.comparison for case in inventory.cases}
     if not comparisons <= {"ratio", "directional", "blocked"}:
         raise ContractError(f"unsupported comparison classifications: {sorted(comparisons)}")
@@ -1011,132 +1005,6 @@ def stage_upstream_source(
     return source_dir, archive
 
 
-def run_benchmarks(
-    repo_root: pathlib.Path,
-    manifest_path: pathlib.Path,
-    inventory: Inventory,
-    upstream: pathlib.Path,
-    run_dir: pathlib.Path,
-    duration: int,
-    warm_up: int,
-    measurement: int,
-    sample_size: int,
-) -> pathlib.Path:
-    check_case_comparison_contract(inventory)
-    check_runnable_inventory(inventory)
-    if run_dir.exists() and any(run_dir.iterdir()):
-        raise ContractError(f"run directory must be absent or empty: {run_dir}")
-    if command_output(["git", "status", "--porcelain"], repo_root):
-        raise ContractError("benchmark evidence requires a clean committed worktree")
-    check_upstream_ref(upstream, inventory)
-    check_upstream_case_contract(upstream, inventory)
-    check_upstream_datasets(repo_root, upstream, inventory)
-    upstream_status = command_output(
-        ["git", "status", "--porcelain", "--untracked-files=all"], upstream
-    )
-    if upstream_status:
-        raise ContractError("pinned upstream checkout must be clean before the sealed build")
-
-    revision = command_output(["git", "rev-parse", "HEAD"], repo_root)
-    timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
-    run_id = f"{timestamp}-{revision[:12]}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    criterion_base = pathlib.Path(os.environ.get("CRITERION_HOME", run_dir / "criterion-root"))
-    criterion_dir = (criterion_base / "nuxie-upstream-microbenchmarks" / run_id).resolve()
-    if criterion_dir.exists():
-        raise ContractError(f"Criterion run directory already exists: {criterion_dir}")
-    criterion_dir.mkdir(parents=True)
-    cargo_target_dir = pathlib.Path(
-        os.environ.get("CARGO_TARGET_DIR", repo_root / "target")
-    ).resolve()
-    cpp_output = run_dir / "cpp.txt"
-    run_manifest = run_dir / "run.json"
-    cpp_source, cpp_source_archive = stage_upstream_source(
-        upstream, inventory.upstream_ref, run_dir
-    )
-    cpp_bench, cpp_build_log, cpp_build_command, cpp_build_inputs = build_cpp_benchmark(
-        cpp_source, run_dir
-    )
-    check_upstream_datasets(repo_root, upstream, inventory)
-    if command_output(
-        ["git", "status", "--porcelain", "--untracked-files=all"], upstream
-    ):
-        raise ContractError("pinned upstream checkout changed during the sealed build")
-    run: dict = {
-        "schema": RUN_SCHEMA,
-        "status": "running",
-        "run_id": run_id,
-        "repo_revision": revision,
-        "benchmark_content_sha256": benchmark_content_identity(repo_root),
-        "upstream_revision": inventory.upstream_ref,
-        "settings": {
-            "cpp_duration_seconds": duration,
-            "criterion_warm_up_seconds": warm_up,
-            "criterion_measurement_seconds": measurement,
-            "criterion_sample_size": sample_size,
-            "statistic": "minimum individually timed invocation",
-            "criterion_home": str(criterion_dir),
-            "cargo_target_dir": str(cargo_target_dir),
-            "cpp_build_cwd": str((cpp_source / "tests").resolve()),
-            "cpp_build_output_dir": str((run_dir / "cpp-build").resolve()),
-            "cpp_build_command": cpp_build_command,
-        },
-        "tools": {
-            "rustc": command_output(["rustc", "--version"]),
-            "cargo": command_output(["cargo", "--version"]),
-            "cxx": command_output(["c++", "--version"]),
-            "platform": command_output(["uname", "-a"]),
-        },
-        "artifacts": {
-            "inventory": record_artifact(manifest_path),
-            "cpp_source_archive": record_artifact(cpp_source_archive),
-            "cpp_build_inputs": record_artifact(cpp_build_inputs),
-            "cpp_binary": record_artifact(cpp_bench),
-            "cpp_build_log": record_artifact(cpp_build_log),
-        },
-    }
-    run_manifest.write_text(json.dumps(run, indent=2) + "\n")
-    environment = os.environ.copy()
-    environment["CRITERION_HOME"] = str(criterion_dir)
-    environment["CARGO_TARGET_DIR"] = str(cargo_target_dir)
-    criterion_args = [
-        "--",
-        "--warm-up-time",
-        str(warm_up),
-        "--measurement-time",
-        str(measurement),
-        "--sample-size",
-        str(sample_size),
-    ]
-    for package in ("nuxie-runtime", "nuxie-renderer"):
-        subprocess.run(
-            [
-                "cargo",
-                "bench",
-                "-p",
-                package,
-                "--features",
-                "upstream-microbenchmarks",
-                "--bench",
-                "upstream_microbenchmarks",
-                *criterion_args,
-            ],
-            cwd=repo_root,
-            env=environment,
-            check=True,
-        )
-    run_cpp(cpp_bench, inventory, duration, cpp_output)
-    run["artifacts"]["cpp_output"] = record_artifact(cpp_output)
-    for case in inventory.cases:
-        sample = criterion_dir / case.name / "new" / "sample.json"
-        if not sample.is_file():
-            raise ContractError(f"missing run-scoped Criterion sample for {case.name}: {sample}")
-        run["artifacts"][f"criterion:{case.name}"] = record_artifact(sample)
-    run["status"] = "complete"
-    run_manifest.write_text(json.dumps(run, indent=2) + "\n")
-    return run_manifest
-
-
 def load_run(
     repo_root: pathlib.Path,
     manifest_path: pathlib.Path,
@@ -1194,16 +1062,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     cpp.add_argument("--cpp-bench", type=pathlib.Path, required=True)
     cpp.add_argument("--duration", type=int, default=5)
     cpp.add_argument("--output", type=pathlib.Path, required=True)
-    run = commands.add_parser("run")
-    run.add_argument("--upstream", type=pathlib.Path, required=True)
-    run.add_argument("--run-dir", type=pathlib.Path, required=True)
-    run.add_argument("--duration", type=int, default=5)
-    run.add_argument("--warm-up", type=int, default=3)
-    run.add_argument("--measurement", type=int, default=10)
-    run.add_argument("--sample-size", type=int, default=20)
-    compare = commands.add_parser("compare")
-    compare.add_argument("--run-manifest", type=pathlib.Path, required=True)
-    compare.add_argument("--output", type=pathlib.Path)
     return parser.parse_args(argv)
 
 
@@ -1226,30 +1084,6 @@ def main(argv: list[str] | None = None) -> int:
         extract_datasets(repo_root, args.upstream.resolve(), inventory)
     elif args.command == "run-cpp":
         run_cpp(args.cpp_bench.resolve(), inventory, args.duration, args.output)
-    elif args.command == "run":
-        result = run_benchmarks(
-            repo_root,
-            manifest,
-            inventory,
-            args.upstream.resolve(),
-            args.run_dir.resolve(),
-            args.duration,
-            args.warm_up,
-            args.measurement,
-            args.sample_size,
-        )
-        print(result)
-    elif args.command == "compare":
-        run = load_run(repo_root, manifest, args.run_manifest.resolve(), inventory)
-        table = render_report(
-            inventory,
-            load_sealed_cpp_timings(run),
-            load_sealed_criterion_timings(run, inventory),
-        )
-        if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(table)
-        print(table, end="")
     return 0
 
 

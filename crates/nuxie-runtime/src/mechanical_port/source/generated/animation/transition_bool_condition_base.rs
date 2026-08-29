@@ -1,0 +1,49 @@
+use crate::mechanical_port::source::{
+    animation::transition_bool_condition::TransitionBoolCondition,
+    animation::transition_value_condition::TransitionValueCondition,
+    core::binary_reader::BinaryReader,
+};
+
+pub struct TransitionBoolConditionBase {
+    pub base: TransitionValueCondition,
+}
+
+impl Default for TransitionBoolConditionBase {
+    fn default() -> Self {
+        Self {
+            base: TransitionValueCondition::default(),
+        }
+    }
+}
+
+impl TransitionBoolConditionBase {
+    pub const TYPE_KEY: u16 = 71;
+
+    pub fn is_type_of(type_key: u16) -> bool {
+        matches!(type_key, Self::TYPE_KEY | 69 | 67 | 476)
+    }
+    pub fn core_type(&self) -> u16 {
+        Self::TYPE_KEY
+    }
+    pub fn clone_into(&self) -> TransitionBoolCondition {
+        let mut cloned = TransitionBoolCondition::default();
+        let mut base = std::mem::take(&mut cloned.base);
+        base.copy(self, &mut cloned);
+        cloned.base = base;
+        cloned
+    }
+}
+
+impl std::ops::Deref for TransitionBoolConditionBase {
+    type Target = TransitionValueCondition;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransitionBoolConditionBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

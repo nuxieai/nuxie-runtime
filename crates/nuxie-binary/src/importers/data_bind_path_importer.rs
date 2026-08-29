@@ -1,5 +1,25 @@
 use super::*;
 
+/// Rust retains a stable file index instead of the pinned raw `DataBindPath*`.
+struct DataBindPathImporter {
+    data_bind_path: Option<usize>,
+}
+
+impl DataBindPathImporter {
+    /// Mechanical translation of `DataBindPathImporter(DataBindPath*)`.
+    fn new(data_bind_path: usize) -> Self {
+        Self {
+            data_bind_path: Some(data_bind_path),
+        }
+    }
+
+    /// Mechanical translation of `claim()`: return the retained path once and
+    /// leave this importer latest with a null path thereafter.
+    fn claim(&mut self) -> Option<usize> {
+        self.data_bind_path.take()
+    }
+}
+
 pub(super) fn dispatch_imports_successfully(
     object: &RuntimeObject,
     definition: &'static Definition,
@@ -43,7 +63,7 @@ impl RuntimeFile {
         &self,
         referencer_id: usize,
     ) -> Option<&RuntimeObject> {
-        let mut latest_unclaimed_path = None;
+        let mut latest = None::<DataBindPathImporter>;
 
         for (file_index, object) in self.objects.iter().enumerate() {
             let Some(object) = object.as_ref() else {
@@ -52,13 +72,13 @@ impl RuntimeFile {
 
             if object.type_name == "DataBindPath" {
                 if self.import_status(file_index) == Some(RuntimeImportStatus::Imported) {
-                    latest_unclaimed_path = Some(file_index);
+                    latest = Some(DataBindPathImporter::new(file_index));
                 }
                 continue;
             }
 
             if cpp_claims_latest_data_bind_path(object) {
-                let claimed_path = latest_unclaimed_path.take();
+                let claimed_path = latest.as_mut().and_then(DataBindPathImporter::claim);
                 if file_index == referencer_id {
                     return claimed_path.and_then(|path_index| self.object(path_index));
                 }

@@ -1084,26 +1084,7 @@ pub type float4 = [f32; 4];
 pub type Vec2D = [f32; 2];
 pub type AABB = [f32; 4];
 pub use gpu::IAABB;
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct AABBu16 {
-    pub left: u16,
-    pub top: u16,
-    pub right: u16,
-    pub bottom: u16,
-}
-
-impl AABBu16 {
-    pub const fn makeMaximallyNegative() -> Self {
-        Self {
-            left: u16::MAX,
-            top: u16::MAX,
-            right: 0,
-            bottom: 0,
-        }
-    }
-}
+pub use gpu::AABBu16;
 
 pub use gpu::LoadAction;
 // The concrete Gradient owner is declared by the pinned renderer/src/gradient.hpp
@@ -1291,8 +1272,7 @@ impl Draw {
     ) {
         self.clip_rect_inverse_matrix = inverse_matrix;
         self.clipping_pixel_bounds = Some(clipping_pixel_bounds);
-        self.clipped_pixel_bounds =
-            intersect_iaabb(self.clipped_pixel_bounds, clipping_pixel_bounds);
+        self.clipped_pixel_bounds = self.clipped_pixel_bounds.intersect(clipping_pixel_bounds);
     }
     pub fn nextDstRead(&self) -> *const Draw {
         self.next_dst_read
@@ -1314,15 +1294,6 @@ impl Draw {
         subpass: i32,
     ) -> *mut gpu::DrawBatch {
         unsafe { (self.push_to_render_context)(self, flush, subpass) }
-    }
-}
-
-fn intersect_iaabb(a: IAABB, b: IAABB) -> IAABB {
-    IAABB {
-        left: a.left.max(b.left),
-        top: a.top.max(b.top),
-        right: a.right.min(b.right),
-        bottom: a.bottom.min(b.bottom),
     }
 }
 

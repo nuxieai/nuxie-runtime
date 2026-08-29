@@ -1,6 +1,8 @@
 import copy
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import pathlib
@@ -505,18 +507,13 @@ class MicrobenchContractTests(unittest.TestCase):
 
             self.assertEqual(tool.load_criterion_minimum(sample), 6.0)
 
-    def test_all_criterion_cases_use_individually_timed_iterations(self):
+    def test_retired_rust_criterion_commands_are_not_exposed(self):
         tool = load_tool()
-        inventory = tool.load_inventory(REPO_ROOT / "microbenchmarks.toml")
-
-        tool.check_bench_sources(REPO_ROOT, inventory)
-
-        for crate in {case.crate for case in inventory.cases}:
-            source = (
-                REPO_ROOT / "crates" / crate / "benches" / "upstream_microbenchmarks.rs"
-            ).read_text()
-            self.assertNotIn("bench.iter(", source)
-            self.assertIn("iter_individual_minimum", source)
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                tool.parse_args(["run"])
+            with self.assertRaises(SystemExit):
+                tool.parse_args(["compare"])
 
     def test_cpp_benchmark_is_built_in_the_sealed_run_directory(self):
         tool = load_tool()

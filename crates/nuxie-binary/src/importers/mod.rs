@@ -78,7 +78,16 @@ impl ImportContext {
             Some(NullObjectConsumer::Artboard) => {
                 self.artboard_local_nested_inputs.push(None);
             }
-            Some(NullObjectConsumer::StateMachine) => self.state_machine_inputs.push(None),
+            Some(NullObjectConsumer::KeyedProperty) => {
+                let consumed = keyed_property_importer::read_null_object();
+                debug_assert!(consumed);
+            }
+            Some(NullObjectConsumer::StateMachine) => {
+                let consumed = state_machine_importer::read_null_object_context(
+                    &mut self.state_machine_inputs,
+                );
+                debug_assert!(consumed);
+            }
             _ => {}
         }
     }
@@ -91,24 +100,30 @@ impl ImportContext {
 }
 
 pub(crate) mod artboard_importer;
-mod backboard_importer;
+pub(crate) mod backboard_importer;
 mod bindable_property_importer;
+mod dash_importer;
 mod data_bind_path_importer;
 mod data_converter_formula_importer;
 mod data_converter_group_importer;
 mod enum_importer;
 mod file_asset_importer;
 mod keyed_object_importer;
+mod keyed_property_importer;
 mod layer_state_importer;
 mod linear_animation_importer;
+mod listener_input_type;
 mod listener_input_type_gamepad_importer;
 mod listener_input_type_keyboard_importer;
 mod listener_input_type_semantic_importer;
 mod scripted_object_importer;
+mod state_machine_importer;
 mod state_machine_layer_component_importer;
 mod state_machine_layer_importer;
 mod state_machine_listener_importer;
-mod text_asset_importer;
+mod state_transition_importer;
+pub(crate) mod text_asset_importer;
+pub(super) mod transition_viewmodel_condition_importer;
 mod viewmodel_importer;
 mod viewmodel_instance_importer;
 mod viewmodel_instance_list_importer;
@@ -229,6 +244,21 @@ fn object_imports_successfully(
     definition: &'static Definition,
     context: &ImportContext,
 ) -> bool {
+    if !crate::assets::file_asset_referencer::register_referencer_succeeds(definition, context) {
+        return false;
+    }
+
+    // ScriptedListenerAction::import and ScriptedTransitionCondition::import
+    // both require the enclosing StateMachineImporter after registering their
+    // file-asset reference, then continue through their normal Super import.
+    if matches!(
+        definition.name,
+        "ScriptedListenerAction" | "ScriptedTransitionCondition"
+    ) && !context.latest(ImportStackKey::StateMachine)
+    {
+        return false;
+    }
+
     if let Some(decision) =
         enum_importer::dispatch_imports_successfully(object, definition, context)
     {
@@ -244,8 +274,14 @@ fn object_imports_successfully(
             return viewmodel_importer::imports_successfully(object, definition, context)
                 .expect("ViewModel is owned by ViewModelImporter");
         }
-        "KeyedProperty" => return context.latest(ImportStackKey::KeyedObject),
-        "StateMachine" => return context.latest(ImportStackKey::Artboard),
+        "KeyedProperty" => {
+            return keyed_property_importer::imports_successfully(object, definition, context)
+                .expect("KeyedProperty is owned by KeyedPropertyImporter");
+        }
+        "StateMachine" => {
+            return state_machine_importer::imports_successfully(object, definition, context)
+                .expect("StateMachine is owned by StateMachineImporter");
+        }
         "BlendState1DViewModel"
         | "ListenerViewModelChange"
         | "TransitionPropertyViewModelComparator" => {
@@ -312,7 +348,17 @@ fn object_imports_successfully(
         return decision;
     }
     if let Some(decision) =
+        keyed_property_importer::dispatch_imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) =
         state_machine_layer_importer::dispatch_imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+    if let Some(decision) =
+        state_transition_importer::dispatch_imports_successfully(object, definition, context)
     {
         return decision;
     }
@@ -332,17 +378,10 @@ fn object_imports_successfully(
     {
         return decision;
     }
-
-    if definition.is_a("StateTransition") {
-        return context.latest(ImportStackKey::LayerState);
-    }
-
-    if definition.is_a("TransitionCondition") {
-        return context.latest(ImportStackKey::StateTransition);
-    }
-
-    if definition.is_a("TransitionComparator") {
-        return context.latest(ImportStackKey::TransitionViewModelCondition);
+    if let Some(decision) = transition_viewmodel_condition_importer::dispatch_imports_successfully(
+        object, definition, context,
+    ) {
+        return decision;
     }
 
     if let Some(decision) = state_machine_layer_component_importer::dispatch_imports_successfully(
@@ -351,8 +390,14 @@ fn object_imports_successfully(
         return decision;
     }
 
-    if definition.is_a("StateMachineInput") {
-        return context.latest(ImportStackKey::StateMachine);
+    if let Some(decision) =
+        state_machine_importer::dispatch_imports_successfully(object, definition, context)
+    {
+        return decision;
+    }
+
+    if let Some(decision) = listener_input_type::imports_successfully(definition, context) {
+        return decision;
     }
 
     if let Some(decision) =
@@ -414,11 +459,8 @@ pub(crate) fn update_import_context(
 ) {
     match definition.name {
         "Backboard" => backboard_importer::update_context(definition, context),
-        "KeyedProperty" => context.make_latest(ImportStackKey::KeyedProperty),
-        "StateMachine" => {
-            context.state_machine_inputs.clear();
-            context.make_latest(ImportStackKey::StateMachine);
-        }
+        "KeyedProperty" => keyed_property_importer::update_context(definition, context),
+        "StateMachine" => state_machine_importer::update_context(definition, context),
         "ViewModel" => viewmodel_importer::update_context(definition, context),
         "ViewModelInstance" => viewmodel_instance_importer::update_context(definition, context),
         "ViewModelInstanceList" => {
@@ -431,6 +473,7 @@ pub(crate) fn update_import_context(
     linear_animation_importer::dispatch_update_context(definition, context);
     keyed_object_importer::dispatch_update_context(definition, context);
     state_machine_layer_importer::dispatch_update_context(definition, context);
+    state_transition_importer::dispatch_update_context(definition, context);
     enum_importer::dispatch_update_context(definition, context);
     data_converter_group_importer::dispatch_update_context(definition, context);
     data_converter_formula_importer::dispatch_update_context(definition, context);
@@ -443,22 +486,15 @@ pub(crate) fn update_import_context(
     listener_input_type_keyboard_importer::dispatch_update_context(definition, context);
     listener_input_type_semantic_importer::dispatch_update_context(definition, context);
     state_machine_layer_component_importer::dispatch_update_context(definition, context);
-    if definition.is_a("StateTransition") {
-        context.make_latest(ImportStackKey::StateTransition);
-    }
     layer_state_importer::dispatch_update_context(definition, context);
     state_machine_listener_importer::dispatch_update_context(definition, context);
-    if let Some(kind) = state_machine_input_kind(definition) {
-        context.state_machine_inputs.push(Some(kind));
-    }
+    state_machine_importer::dispatch_update_input_context(definition, context);
     if definition_is_cpp_artboard_local(definition) {
         context
             .artboard_local_nested_inputs
             .push(nested_input_kind(definition));
     }
-    if definition.is_a("TransitionViewModelCondition") {
-        context.make_latest(ImportStackKey::TransitionViewModelCondition);
-    }
+    transition_viewmodel_condition_importer::dispatch_update_context(definition, context);
     if definition.is_a("BindableProperty") {
         bindable_property_importer::update_context(definition, context);
     }

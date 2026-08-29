@@ -50,9 +50,9 @@ LEGACY_BUDGET_BYTES=2883584 # 2.75 MiB; informational only, never enforced here.
 # #B-3 decision 2026-07-21 (user-approved after the same-day reopen): both
 # release-size link-closure variants block at 9 MiB. The initial 8 MiB choice
 # predated concurrent main 974aab66; honest re-measurement with the 43-root
-# harness put scripting-ON at 8.70 MiB and reopened the gate. Must match
-# size.budget_bytes in parity-scorecard.toml; a breach reopens the budget
-# USER-GATE instead of raising this constant.
+# harness put scripting-ON at 8.70 MiB and reopened the gate. This is the
+# canonical budget authority; a breach reopens the budget USER-GATE instead
+# of raising this constant.
 BUDGET_BYTES=9437184
 
 for tool in "$CARGO_BIN" "$RUSTC_BIN" "$CC_BIN" git nm shasum strip size; do
@@ -194,7 +194,6 @@ write_symbol_breakdown() { # unstripped dylib, output
         else if (symbol ~ /wgpu_core|wgpu_hal|wgpu_types|naga/) group = "wgpu+naga"
         else if (symbol ~ /nuxie_runtime/) group = "nuxie-runtime"
         else if (symbol ~ /nuxie_binary/) group = "nuxie-binary"
-        else if (symbol ~ /nuxie_graph/) group = "nuxie-graph"
         else if (symbol ~ /nuxie_schema/) group = "nuxie-schema"
         else if (symbol ~ /nuxie_scripting|luaur/) group = "scripting+Luau"
         else if (symbol ~ /skrifa|harfrust|read_fonts/) group = "text-shaping"

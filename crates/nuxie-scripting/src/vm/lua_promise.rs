@@ -624,170 +624,170 @@ mod upstream_promise_tests {
         lua
     }
 
-    macro_rules! number_case {
-        ($name:ident, $source:expr, $expected:expr) => {
-            #[test]
-            fn $name() {
-                let lua = promise_lua();
-                let actual: f64 = lua
-                    .load($source)
-                    .eval()
-                    .expect("evaluate upstream Promise case");
-                assert_eq!(actual, $expected);
-            }
-        };
+    fn eval_number(source: &str) -> f64 {
+        promise_lua()
+            .load(source)
+            .eval()
+            .expect("evaluate upstream Promise case")
     }
 
-    macro_rules! string_case {
-        ($name:ident, $source:expr, $expected:expr) => {
-            #[test]
-            fn $name() {
-                let lua = promise_lua();
-                let actual: String = lua
-                    .load($source)
-                    .eval()
-                    .expect("evaluate upstream Promise case");
-                assert_eq!(actual, $expected);
-            }
-        };
+    fn eval_string(source: &str) -> String {
+        promise_lua()
+            .load(source)
+            .eval()
+            .expect("evaluate upstream Promise case")
     }
 
-    macro_rules! string_contains_case {
-        ($name:ident, $source:expr, [$($expected:expr),+ $(,)?]) => {
-            #[test]
-            fn $name() {
-                let lua = promise_lua();
-                let actual: String = lua.load($source).eval().expect("evaluate upstream Promise case");
-                $(assert!(actual.contains($expected), "{actual:?} does not contain {:?}", $expected);)+
-            }
-        };
+    fn eval_bool(source: &str) -> bool {
+        promise_lua()
+            .load(source)
+            .eval()
+            .expect("evaluate upstream Promise case")
     }
 
-    macro_rules! bool_case {
-        ($name:ident, $source:expr, $expected:expr) => {
-            #[test]
-            fn $name() {
-                let lua = promise_lua();
-                let actual: bool = lua
-                    .load($source)
-                    .eval()
-                    .expect("evaluate upstream Promise case");
-                assert_eq!(actual, $expected);
-            }
-        };
+    #[test]
+    fn promise_resolve_creates_a_fulfilled_promise() {
+        let actual = eval_number(
+            r#"
+                        local p = Promise.resolve(42)
+                        local result = 0
+                        p:andThen(function(v) result = v end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 42.0);
     }
 
-    number_case!(
-        promise_resolve_creates_a_fulfilled_promise,
-        r#"
-            local p = Promise.resolve(42)
-            local result = 0
-            p:andThen(function(v) result = v end)
-            return result
-        "#,
-        42.0
-    );
-    string_case!(
-        promise_reject_creates_a_rejected_promise,
-        r#"
-            local p = Promise.reject("oops")
-            local caught = ""
-            p:catch(function(err) caught = err end)
-            return caught
-        "#,
-        "oops"
-    );
-    string_case!(
-        promise_reject_with_no_args_uses_default_reason,
-        r#"
-            local p = Promise.reject()
-            local caught = ""
-            p:catch(function(err) caught = err end)
-            return caught
-        "#,
-        "rejected"
-    );
-    number_case!(
-        and_then_chains_propagate_values,
-        r#"
-            local result = 0
-            Promise.resolve(10)
-                :andThen(function(v) return v * 2 end)
-                :andThen(function(v) result = v end)
-            return result
-        "#,
-        20.0
-    );
-    string_case!(
-        and_then_propagates_to_catch_on_rejection,
-        r#"
-            local caught = ""
-            Promise.reject("fail")
-                :andThen(function(v) return "should not happen" end)
-                :catch(function(err) caught = err end)
-            return caught
-        "#,
-        "fail"
-    );
-    bool_case!(
-        finally_runs_on_fulfillment,
-        r#"
-            local ran = false
-            Promise.resolve(1):finally(function() ran = true end)
-            return ran
-        "#,
-        true
-    );
-    bool_case!(
-        finally_runs_on_rejection,
-        r#"
-            local ran = false
-            Promise.reject("err"):finally(function() ran = true end)
-            return ran
-        "#,
-        true
-    );
-    number_case!(
-        promise_all_resolves_when_all_resolve,
-        r#"
-            local result = 0
-            Promise.all({Promise.resolve(1), Promise.resolve(2), Promise.resolve(3)})
-                :andThen(function(values) result = values[1] + values[2] + values[3] end)
-            return result
-        "#,
-        6.0
-    );
-    string_case!(
-        promise_all_rejects_if_any_rejects,
-        r#"
-            local caught = ""
-            Promise.all({Promise.resolve(1), Promise.reject("boom"), Promise.resolve(3)})
-                :catch(function(err) caught = err end)
-            return caught
-        "#,
-        "boom"
-    );
-    number_case!(
-        promise_all_with_empty_array_resolves_immediately,
-        r#"
-            local result = nil
-            Promise.all({}):andThen(function(values) result = #values end)
-            return result
-        "#,
-        0.0
-    );
-    number_case!(
-        async_await_with_already_resolved_promise,
-        r#"
-            local result = 0
-            async(function()
-                local ok, v = await(Promise.resolve(99))
-                result = v
-            end)
-            return result
-        "#,
-        99.0
-    );
+    #[test]
+    fn promise_reject_creates_a_rejected_promise() {
+        let actual = eval_string(
+            r#"
+                        local p = Promise.reject("oops")
+                        local caught = ""
+                        p:catch(function(err) caught = err end)
+                        return caught
+                    "#,
+        );
+        assert_eq!(actual, "oops");
+    }
+
+    #[test]
+    fn promise_reject_with_no_args_uses_default_reason() {
+        let actual = eval_string(
+            r#"
+                        local p = Promise.reject()
+                        local caught = ""
+                        p:catch(function(err) caught = err end)
+                        return caught
+                    "#,
+        );
+        assert_eq!(actual, "rejected");
+    }
+
+    #[test]
+    fn and_then_chains_propagate_values() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        Promise.resolve(10)
+                            :andThen(function(v) return v * 2 end)
+                            :andThen(function(v) result = v end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 20.0);
+    }
+
+    #[test]
+    fn and_then_propagates_to_catch_on_rejection() {
+        let actual = eval_string(
+            r#"
+                        local caught = ""
+                        Promise.reject("fail")
+                            :andThen(function(v) return "should not happen" end)
+                            :catch(function(err) caught = err end)
+                        return caught
+                    "#,
+        );
+        assert_eq!(actual, "fail");
+    }
+
+    #[test]
+    fn finally_runs_on_fulfillment() {
+        let actual = eval_bool(
+            r#"
+                        local ran = false
+                        Promise.resolve(1):finally(function() ran = true end)
+                        return ran
+                    "#,
+        );
+        assert_eq!(actual, true);
+    }
+
+    #[test]
+    fn finally_runs_on_rejection() {
+        let actual = eval_bool(
+            r#"
+                        local ran = false
+                        Promise.reject("err"):finally(function() ran = true end)
+                        return ran
+                    "#,
+        );
+        assert_eq!(actual, true);
+    }
+
+    #[test]
+    fn promise_all_resolves_when_all_resolve() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        Promise.all({Promise.resolve(1), Promise.resolve(2), Promise.resolve(3)})
+                            :andThen(function(values) result = values[1] + values[2] + values[3] end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 6.0);
+    }
+
+    #[test]
+    fn promise_all_rejects_if_any_rejects() {
+        let actual = eval_string(
+            r#"
+                        local caught = ""
+                        Promise.all({Promise.resolve(1), Promise.reject("boom"), Promise.resolve(3)})
+                            :catch(function(err) caught = err end)
+                        return caught
+                    "#,
+        );
+        assert_eq!(actual, "boom");
+    }
+
+    #[test]
+    fn promise_all_with_empty_array_resolves_immediately() {
+        let actual = eval_number(
+            r#"
+                        local result = nil
+                        Promise.all({}):andThen(function(values) result = #values end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 0.0);
+    }
+
+    #[test]
+    fn async_await_with_already_resolved_promise() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        async(function()
+                            local ok, v = await(Promise.resolve(99))
+                            result = v
+                        end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 99.0);
+    }
 
     #[test]
     fn async_coroutine_inherits_thread_data_print_works() {
@@ -823,425 +823,587 @@ mod upstream_promise_tests {
         );
     }
 
-    number_case!(
-        async_await_chains_multiple_awaits,
-        r#"
-            local result = 0
-            async(function()
-                local ok1, a = await(Promise.resolve(10))
-                local ok2, b = await(Promise.resolve(20))
-                result = a + b
-            end)
-            return result
-        "#,
-        30.0
-    );
-    string_contains_case!(
-        await_returns_false_error_on_rejection_no_throw,
-        r#"
-            local gotOk = nil
-            local gotErr = ""
-            async(function()
-                local ok, err = await(Promise.reject("async_error"))
-                gotOk = ok
-                gotErr = err
-            end)
-            return tostring(gotOk) .. "," .. gotErr
-        "#,
-        ["false", "async_error"]
-    );
-    string_contains_case!(
-        await_rejection_resumes_coroutine_so_cleanup_code_runs,
-        r#"
-            local cleanupRan = false
-            local caughtErr = ""
-            local p = Promise.new(function(resolve, reject) reject("deferred_fail") end)
-            async(function()
-                local ok, err = await(p)
-                caughtErr = tostring(err)
-                cleanupRan = true
-            end)
-            return tostring(cleanupRan) .. "," .. caughtErr
-        "#,
-        ["true", "deferred_fail"]
-    );
-    string_contains_case!(
-        await_on_cancelled_promise_returns_false_message,
-        r#"
-            local gotOk = nil
-            local gotMsg = ""
-            local p = Promise.new(function() end)
-            p:cancel()
-            async(function()
-                local ok, msg = await(p)
-                gotOk = ok
-                gotMsg = msg
-            end)
-            return tostring(gotOk) .. "," .. gotMsg
-        "#,
-        ["false", "cancelled"]
-    );
-    number_case!(
-        async_returns_a_promise_that_resolves_with_return_value,
-        r#"
-            local result = 0
-            local p = async(function() return 42 end)
-            p:andThen(function(v) result = v end)
-            return result
-        "#,
-        42.0
-    );
-    string_contains_case!(
-        and_then_handler_error_rejects_chained_promise,
-        r#"
-            local caught = ""
-            Promise.resolve(1)
-                :andThen(function(v) error("handler_error") end)
-                :catch(function(err) caught = tostring(err) end)
-            return caught
-        "#,
-        ["handler_error"]
-    );
-    string_contains_case!(
-        finally_error_rejects_chained_promise,
-        r#"
-            local caught = ""
-            Promise.resolve(1)
-                :finally(function() error("finally_boom") end)
-                :catch(function(err) caught = tostring(err) end)
-            return caught
-        "#,
-        ["finally_boom"]
-    );
-    string_case!(
-        cancelled_promise_does_not_fire_then_catch_finally_handlers,
-        r#"
-            local thenRan = false
-            local catchRan = false
-            local finallyRan = false
-            local p = Promise.new(function(resolve, reject, onCancel)
-                onCancel(function() end)
-            end)
-            p:andThen(function(v) thenRan = true end):catch(function(e) catchRan = true end)
-            p:finally(function() finallyRan = true end)
-            p:cancel()
-            return tostring(thenRan) .. "," .. tostring(catchRan) .. "," .. tostring(finallyRan)
-        "#,
-        "false,false,false"
-    );
-    string_case!(
-        promise_new_creates_a_pending_promise,
-        r#"local p = Promise.new(function(resolve, reject, onCancel) end); return p:getStatus()"#,
-        "Pending"
-    );
-    number_case!(
-        promise_new_resolve_settles_the_promise,
-        r#"
-            local result = 0
-            Promise.new(function(resolve, reject, onCancel) resolve(42) end)
-                :andThen(function(v) result = v end)
-            return result
-        "#,
-        42.0
-    );
-    string_case!(
-        promise_new_reject_settles_the_promise,
-        r#"
-            local caught = ""
-            Promise.new(function(resolve, reject, onCancel) reject("oops") end)
-                :catch(function(err) caught = err end)
-            return caught
-        "#,
-        "oops"
-    );
-    string_contains_case!(
-        promise_new_executor_error_rejects_the_promise,
-        r#"
-            local caught = ""
-            Promise.new(function(resolve, reject, onCancel) error("executor_boom") end)
-                :catch(function(err) caught = tostring(err) end)
-            return caught
-        "#,
-        ["executor_boom"]
-    );
-    string_case!(
-        cancel_sets_state_to_cancelled,
-        r#"local p = Promise.new(function() end); p:cancel(); return p:getStatus()"#,
-        "Cancelled"
-    );
-    bool_case!(
-        cancel_fires_on_cancel_hook,
-        r#"
-            local hookFired = false
-            local p = Promise.new(function(resolve, reject, onCancel)
-                onCancel(function() hookFired = true end)
-            end)
-            p:cancel()
-            return hookFired
-        "#,
-        true
-    );
-    string_case!(
-        cancel_propagates_down_to_consumers,
-        r#"
-            local p = Promise.new(function() end)
-            local child = p:andThen(function() end)
-            p:cancel()
-            return child:getStatus()
-        "#,
-        "Cancelled"
-    );
-    string_case!(
-        cancel_propagates_up_when_all_consumers_cancelled,
-        r#"
-            local p = Promise.new(function() end)
-            local c1 = p:andThen(function() end)
-            local c2 = p:andThen(function() end)
-            c1:cancel()
-            local afterFirst = p:getStatus()
-            c2:cancel()
-            return afterFirst .. "," .. p:getStatus()
-        "#,
-        "Pending,Cancelled"
-    );
-    string_case!(
-        cancel_is_noop_on_already_settled_promise,
-        r#"local p = Promise.resolve(1); p:cancel(); return p:getStatus()"#,
-        "Fulfilled"
-    );
-    bool_case!(
-        cancelled_promise_does_not_fire_and_then_callbacks,
-        r#"
-            local called = false
-            local p = Promise.new(function() end)
-            p:andThen(function() called = true end)
-            p:cancel()
-            return called
-        "#,
-        false
-    );
-    string_case!(
-        get_status_returns_correct_strings,
-        r#"
-            local pending = Promise.new(function() end):getStatus()
-            local fulfilled = Promise.resolve(1):getStatus()
-            local rejected = Promise.reject("e"):getStatus()
-            local cancelled = Promise.new(function() end)
-            cancelled:cancel()
-            return pending .. "," .. fulfilled .. "," .. rejected .. "," .. cancelled:getStatus()
-        "#,
-        "Pending,Fulfilled,Rejected,Cancelled"
-    );
-    string_contains_case!(
-        await_on_already_rejected_promise_returns_false_error,
-        r#"
-            local gotOk = nil
-            local gotErr = ""
-            async(function()
-                local ok, err = await(Promise.reject("already_rejected"))
-                gotOk = ok
-                gotErr = err
-            end)
-            return tostring(gotOk) .. "," .. gotErr
-        "#,
-        ["false", "already_rejected"]
-    );
-    string_case!(
-        promise_all_cancels_remaining_on_rejection,
-        r#"
-            local hookFired = false
-            local p1 = Promise.new(function(resolve, reject, onCancel)
-                onCancel(function() hookFired = true end)
-            end)
-            local p2 = Promise.reject("boom")
-            local caught = ""
-            Promise.all({p1, p2}):catch(function(err) caught = err end)
-            return caught .. "," .. tostring(hookFired)
-        "#,
-        "boom,true"
-    );
-    string_case!(
-        await_success_returns_true_value_explicitly,
-        r#"
-            local gotOk = nil
-            local gotVal = nil
-            async(function()
-                local ok, val = await(Promise.resolve(42))
-                gotOk = ok
-                gotVal = val
-            end)
-            return tostring(gotOk) .. "," .. tostring(gotVal)
-        "#,
-        "true,42"
-    );
-    string_case!(
-        await_mixed_success_and_failure_in_sequence,
-        r#"
-            local results = {}
-            async(function()
-                local ok1, v1 = await(Promise.resolve("good"))
-                table.insert(results, tostring(ok1) .. ":" .. tostring(v1))
-                local ok2, v2 = await(Promise.reject("bad"))
-                table.insert(results, tostring(ok2) .. ":" .. tostring(v2))
-                local ok3, v3 = await(Promise.resolve("recovered"))
-                table.insert(results, tostring(ok3) .. ":" .. tostring(v3))
-            end)
-            return table.concat(results, ",")
-        "#,
-        "true:good,false:bad,true:recovered"
-    );
-    number_case!(
-        async_function_handles_rejection_and_returns_recovery_value,
-        r#"
-            local final = 0
-            local p = async(function()
-                local ok, err = await(Promise.reject("oops"))
-                if not ok then return 999 end
-                return 0
-            end)
-            p:andThen(function(v) final = v end)
-            return final
-        "#,
-        999.0
-    );
-    string_case!(
-        await_in_retry_loop_pattern,
-        r#"
-            local attempts = 0
-            local finalVal = nil
-            async(function()
-                for i = 1, 3 do
-                    attempts = i
-                    local p
-                    if i < 3 then p = Promise.reject("retry") else p = Promise.resolve("done") end
-                    local ok, val = await(p)
-                    if ok then finalVal = val; break end
-                end
-            end)
-            return tostring(attempts) .. "," .. tostring(finalVal)
-        "#,
-        "3,done"
-    );
-    bool_case!(
-        on_cancel_via_instance_method,
-        r#"
-            local hookFired = false
-            local p = Promise.new(function() end)
-            p:onCancel(function() hookFired = true end)
-            p:cancel()
-            return hookFired
-        "#,
-        true
-    );
-    number_case!(
-        promise_resolve_flattens_a_fulfilled_promise,
-        r#"
-            local result = 0
-            local inner = Promise.resolve(42)
-            Promise.resolve(inner):andThen(function(v) result = v end)
-            return result
-        "#,
-        42.0
-    );
-    string_case!(
-        promise_resolve_flattens_a_rejected_promise,
-        r#"
-            local caught = ""
-            local inner = Promise.reject("boom")
-            Promise.resolve(inner):catch(function(err) caught = err end)
-            return caught
-        "#,
-        "boom"
-    );
-    number_case!(
-        and_then_flattens_a_returned_promise,
-        r#"
-            local result = 0
-            Promise.resolve(10)
-                :andThen(function(v) return Promise.resolve(v * 3) end)
-                :andThen(function(v) result = v end)
-            return result
-        "#,
-        30.0
-    );
-    string_case!(
-        and_then_flattens_a_returned_rejected_promise,
-        r#"
-            local caught = ""
-            Promise.resolve(1)
-                :andThen(function(v) return Promise.reject("handler-fail") end)
-                :catch(function(err) caught = err end)
-            return caught
-        "#,
-        "handler-fail"
-    );
-    number_case!(
-        recursive_flattening_through_multiple_promise_layers,
-        r#"
-            local result = 0
-            local p = Promise.resolve(Promise.resolve(Promise.resolve(99)))
-            p:andThen(function(v) result = v end)
-            return result
-        "#,
-        99.0
-    );
-    number_case!(
-        promise_new_resolve_callback_flattens_a_promise,
-        r#"
-            local result = 0
-            local p = Promise.new(function(resolve) resolve(Promise.resolve(77)) end)
-            p:andThen(function(v) result = v end)
-            return result
-        "#,
-        77.0
-    );
-    number_case!(
-        catch_handler_returning_a_promise_flattens_for_recovery,
-        r#"
-            local result = 0
-            Promise.reject("err")
-                :catch(function(e) return Promise.resolve(55) end)
-                :andThen(function(v) result = v end)
-            return result
-        "#,
-        55.0
-    );
-    number_case!(
-        flattening_a_pending_promise_adopts_its_eventual_value,
-        r#"
-            local result = 0
-            local innerResolve
-            local inner = Promise.new(function(resolve) innerResolve = resolve end)
-            local outer = Promise.new(function(resolve) resolve(inner) end)
-            outer:andThen(function(v) result = v end)
-            innerResolve(123)
-            return result
-        "#,
-        123.0
-    );
-    string_case!(
-        flattening_a_pending_promise_that_rejects,
-        r#"
-            local caught = ""
-            local innerReject
-            local inner = Promise.new(function(resolve, reject) innerReject = reject end)
-            local outer = Promise.new(function(resolve) resolve(inner) end)
-            outer:catch(function(err) caught = err end)
-            innerReject("deferred-fail")
-            return caught
-        "#,
-        "deferred-fail"
-    );
-    bool_case!(
-        cancelling_adopted_promise_propagates_to_inner,
-        r#"
-            local innerCancelled = false
-            local inner = Promise.new(function() end)
-            inner:onCancel(function() innerCancelled = true end)
-            local outer = Promise.new(function(resolve) resolve(inner) end)
-            outer:cancel()
-            return innerCancelled
-        "#,
-        true
-    );
+    #[test]
+    fn async_await_chains_multiple_awaits() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        async(function()
+                            local ok1, a = await(Promise.resolve(10))
+                            local ok2, b = await(Promise.resolve(20))
+                            result = a + b
+                        end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 30.0);
+    }
+
+    #[test]
+    fn await_returns_false_error_on_rejection_no_throw() {
+        let actual = eval_string(
+            r#"
+                        local gotOk = nil
+                        local gotErr = ""
+                        async(function()
+                            local ok, err = await(Promise.reject("async_error"))
+                            gotOk = ok
+                            gotErr = err
+                        end)
+                        return tostring(gotOk) .. "," .. gotErr
+                    "#,
+        );
+        assert!(
+            actual.contains("false"),
+            "{actual:?} does not contain {:?}",
+            "false"
+        );
+        assert!(
+            actual.contains("async_error"),
+            "{actual:?} does not contain {:?}",
+            "async_error"
+        );
+    }
+
+    #[test]
+    fn await_rejection_resumes_coroutine_so_cleanup_code_runs() {
+        let actual = eval_string(
+            r#"
+                        local cleanupRan = false
+                        local caughtErr = ""
+                        local p = Promise.new(function(resolve, reject) reject("deferred_fail") end)
+                        async(function()
+                            local ok, err = await(p)
+                            caughtErr = tostring(err)
+                            cleanupRan = true
+                        end)
+                        return tostring(cleanupRan) .. "," .. caughtErr
+                    "#,
+        );
+        assert!(
+            actual.contains("true"),
+            "{actual:?} does not contain {:?}",
+            "true"
+        );
+        assert!(
+            actual.contains("deferred_fail"),
+            "{actual:?} does not contain {:?}",
+            "deferred_fail"
+        );
+    }
+
+    #[test]
+    fn await_on_cancelled_promise_returns_false_message() {
+        let actual = eval_string(
+            r#"
+                        local gotOk = nil
+                        local gotMsg = ""
+                        local p = Promise.new(function() end)
+                        p:cancel()
+                        async(function()
+                            local ok, msg = await(p)
+                            gotOk = ok
+                            gotMsg = msg
+                        end)
+                        return tostring(gotOk) .. "," .. gotMsg
+                    "#,
+        );
+        assert!(
+            actual.contains("false"),
+            "{actual:?} does not contain {:?}",
+            "false"
+        );
+        assert!(
+            actual.contains("cancelled"),
+            "{actual:?} does not contain {:?}",
+            "cancelled"
+        );
+    }
+
+    #[test]
+    fn async_returns_a_promise_that_resolves_with_return_value() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        local p = async(function() return 42 end)
+                        p:andThen(function(v) result = v end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 42.0);
+    }
+
+    #[test]
+    fn and_then_handler_error_rejects_chained_promise() {
+        let actual = eval_string(
+            r#"
+                        local caught = ""
+                        Promise.resolve(1)
+                            :andThen(function(v) error("handler_error") end)
+                            :catch(function(err) caught = tostring(err) end)
+                        return caught
+                    "#,
+        );
+        assert!(
+            actual.contains("handler_error"),
+            "{actual:?} does not contain {:?}",
+            "handler_error"
+        );
+    }
+
+    #[test]
+    fn finally_error_rejects_chained_promise() {
+        let actual = eval_string(
+            r#"
+                        local caught = ""
+                        Promise.resolve(1)
+                            :finally(function() error("finally_boom") end)
+                            :catch(function(err) caught = tostring(err) end)
+                        return caught
+                    "#,
+        );
+        assert!(
+            actual.contains("finally_boom"),
+            "{actual:?} does not contain {:?}",
+            "finally_boom"
+        );
+    }
+
+    #[test]
+    fn cancelled_promise_does_not_fire_then_catch_finally_handlers() {
+        let actual = eval_string(
+            r#"
+                        local thenRan = false
+                        local catchRan = false
+                        local finallyRan = false
+                        local p = Promise.new(function(resolve, reject, onCancel)
+                            onCancel(function() end)
+                        end)
+                        p:andThen(function(v) thenRan = true end):catch(function(e) catchRan = true end)
+                        p:finally(function() finallyRan = true end)
+                        p:cancel()
+                        return tostring(thenRan) .. "," .. tostring(catchRan) .. "," .. tostring(finallyRan)
+                    "#,
+        );
+        assert_eq!(actual, "false,false,false");
+    }
+
+    #[test]
+    fn promise_new_creates_a_pending_promise() {
+        let actual = eval_string(
+            r#"local p = Promise.new(function(resolve, reject, onCancel) end); return p:getStatus()"#,
+        );
+        assert_eq!(actual, "Pending");
+    }
+
+    #[test]
+    fn promise_new_resolve_settles_the_promise() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        Promise.new(function(resolve, reject, onCancel) resolve(42) end)
+                            :andThen(function(v) result = v end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 42.0);
+    }
+
+    #[test]
+    fn promise_new_reject_settles_the_promise() {
+        let actual = eval_string(
+            r#"
+                        local caught = ""
+                        Promise.new(function(resolve, reject, onCancel) reject("oops") end)
+                            :catch(function(err) caught = err end)
+                        return caught
+                    "#,
+        );
+        assert_eq!(actual, "oops");
+    }
+
+    #[test]
+    fn promise_new_executor_error_rejects_the_promise() {
+        let actual = eval_string(
+            r#"
+                        local caught = ""
+                        Promise.new(function(resolve, reject, onCancel) error("executor_boom") end)
+                            :catch(function(err) caught = tostring(err) end)
+                        return caught
+                    "#,
+        );
+        assert!(
+            actual.contains("executor_boom"),
+            "{actual:?} does not contain {:?}",
+            "executor_boom"
+        );
+    }
+
+    #[test]
+    fn cancel_sets_state_to_cancelled() {
+        let actual = eval_string(
+            r#"
+                        local p = Promise.new(function(resolve, reject, onCancel) end)
+                        p:cancel()
+                        return p:getStatus()
+                    "#,
+        );
+        assert_eq!(actual, "Cancelled");
+    }
+
+    #[test]
+    fn cancel_fires_on_cancel_hook() {
+        let actual = eval_bool(
+            r#"
+                        local hookFired = false
+                        local p = Promise.new(function(resolve, reject, onCancel)
+                            onCancel(function() hookFired = true end)
+                        end)
+                        p:cancel()
+                        return hookFired
+                    "#,
+        );
+        assert_eq!(actual, true);
+    }
+
+    #[test]
+    fn cancel_propagates_down_to_consumers() {
+        let actual = eval_string(
+            r#"
+                        local p = Promise.new(function(resolve, reject, onCancel) end)
+                        local child = p:andThen(function() end)
+                        p:cancel()
+                        return child:getStatus()
+                    "#,
+        );
+        assert_eq!(actual, "Cancelled");
+    }
+
+    #[test]
+    fn cancel_propagates_up_when_all_consumers_cancelled() {
+        let actual = eval_string(
+            r#"
+                        local p = Promise.new(function(resolve, reject, onCancel) end)
+                        local c1 = p:andThen(function() end)
+                        local c2 = p:andThen(function() end)
+                        c1:cancel()
+                        local afterFirst = p:getStatus()
+                        c2:cancel()
+                        local afterSecond = p:getStatus()
+                        return afterFirst .. "," .. afterSecond
+                    "#,
+        );
+        assert_eq!(actual, "Pending,Cancelled");
+    }
+
+    #[test]
+    fn cancel_is_noop_on_already_settled_promise() {
+        let actual =
+            eval_string(r#"local p = Promise.resolve(1); p:cancel(); return p:getStatus()"#);
+        assert_eq!(actual, "Fulfilled");
+    }
+
+    #[test]
+    fn cancelled_promise_does_not_fire_and_then_callbacks() {
+        let actual = eval_bool(
+            r#"
+                        local called = false
+                        local p = Promise.new(function(resolve, reject, onCancel) end)
+                        p:andThen(function() called = true end)
+                        p:cancel()
+                        return called
+                    "#,
+        );
+        assert_eq!(actual, false);
+    }
+
+    #[test]
+    fn get_status_returns_correct_strings() {
+        let actual = eval_string(
+            r#"
+                        local pending = Promise.new(function() end):getStatus()
+                        local fulfilled = Promise.resolve(1):getStatus()
+                        local rejected = Promise.reject("e"):getStatus()
+                        local cancelled = Promise.new(function() end)
+                        cancelled:cancel()
+                        local cancelledStatus = cancelled:getStatus()
+                        return pending .. "," .. fulfilled .. "," .. rejected .. "," .. cancelledStatus
+                    "#,
+        );
+        assert_eq!(actual, "Pending,Fulfilled,Rejected,Cancelled");
+    }
+
+    #[test]
+    fn await_on_already_rejected_promise_returns_false_error() {
+        let actual = eval_string(
+            r#"
+                        local gotOk = nil
+                        local gotErr = ""
+                        async(function()
+                            local ok, err = await(Promise.reject("already_rejected"))
+                            gotOk = ok
+                            gotErr = err
+                        end)
+                        return tostring(gotOk) .. "," .. gotErr
+                    "#,
+        );
+        assert!(
+            actual.contains("false"),
+            "{actual:?} does not contain {:?}",
+            "false"
+        );
+        assert!(
+            actual.contains("already_rejected"),
+            "{actual:?} does not contain {:?}",
+            "already_rejected"
+        );
+    }
+
+    #[test]
+    fn promise_all_cancels_remaining_on_rejection() {
+        let actual = eval_string(
+            r#"
+                        local hookFired = false
+                        local p1 = Promise.new(function(resolve, reject, onCancel)
+                            onCancel(function() hookFired = true end)
+                        end)
+                        local p2 = Promise.reject("boom")
+                        local caught = ""
+                        Promise.all({p1, p2}):catch(function(err) caught = err end)
+                        return caught .. "," .. tostring(hookFired)
+                    "#,
+        );
+        assert_eq!(actual, "boom,true");
+    }
+
+    #[test]
+    fn await_success_returns_true_value_explicitly() {
+        let actual = eval_string(
+            r#"
+                        local gotOk = nil
+                        local gotVal = nil
+                        async(function()
+                            local ok, val = await(Promise.resolve(42))
+                            gotOk = ok
+                            gotVal = val
+                        end)
+                        return tostring(gotOk) .. "," .. tostring(gotVal)
+                    "#,
+        );
+        assert_eq!(actual, "true,42");
+    }
+
+    #[test]
+    fn await_mixed_success_and_failure_in_sequence() {
+        let actual = eval_string(
+            r#"
+                        local results = {}
+                        async(function()
+                            local ok1, v1 = await(Promise.resolve("good"))
+                            table.insert(results, tostring(ok1) .. ":" .. tostring(v1))
+                            local ok2, v2 = await(Promise.reject("bad"))
+                            table.insert(results, tostring(ok2) .. ":" .. tostring(v2))
+                            local ok3, v3 = await(Promise.resolve("recovered"))
+                            table.insert(results, tostring(ok3) .. ":" .. tostring(v3))
+                        end)
+                        return table.concat(results, ",")
+                    "#,
+        );
+        assert_eq!(actual, "true:good,false:bad,true:recovered");
+    }
+
+    #[test]
+    fn async_function_handles_rejection_and_returns_recovery_value() {
+        let actual = eval_number(
+            r#"
+                        local final = 0
+                        local p = async(function()
+                            local ok, err = await(Promise.reject("oops"))
+                            if not ok then return 999 end
+                            return 0
+                        end)
+                        p:andThen(function(v) final = v end)
+                        return final
+                    "#,
+        );
+        assert_eq!(actual, 999.0);
+    }
+
+    #[test]
+    fn await_in_retry_loop_pattern() {
+        let actual = eval_string(
+            r#"
+                        local attempts = 0
+                        local finalVal = nil
+                        async(function()
+                            for i = 1, 3 do
+                                attempts = i
+                                local p
+                                if i < 3 then p = Promise.reject("retry") else p = Promise.resolve("done") end
+                                local ok, val = await(p)
+                                if ok then finalVal = val; break end
+                            end
+                        end)
+                        return tostring(attempts) .. "," .. tostring(finalVal)
+                    "#,
+        );
+        assert_eq!(actual, "3,done");
+    }
+
+    #[test]
+    fn on_cancel_via_instance_method() {
+        let actual = eval_bool(
+            r#"
+                        local hookFired = false
+                        local p = Promise.new(function() end)
+                        p:onCancel(function() hookFired = true end)
+                        p:cancel()
+                        return hookFired
+                    "#,
+        );
+        assert_eq!(actual, true);
+    }
+
+    #[test]
+    fn promise_resolve_flattens_a_fulfilled_promise() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        local inner = Promise.resolve(42)
+                        local outer = Promise.resolve(inner)
+                        outer:andThen(function(v) result = v end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 42.0);
+    }
+
+    #[test]
+    fn promise_resolve_flattens_a_rejected_promise() {
+        let actual = eval_string(
+            r#"
+                        local caught = ""
+                        local inner = Promise.reject("boom")
+                        local outer = Promise.resolve(inner)
+                        outer:catch(function(err) caught = err end)
+                        return caught
+                    "#,
+        );
+        assert_eq!(actual, "boom");
+    }
+
+    #[test]
+    fn and_then_flattens_a_returned_promise() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        Promise.resolve(10)
+                            :andThen(function(v) return Promise.resolve(v * 3) end)
+                            :andThen(function(v) result = v end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 30.0);
+    }
+
+    #[test]
+    fn and_then_flattens_a_returned_rejected_promise() {
+        let actual = eval_string(
+            r#"
+                        local caught = ""
+                        Promise.resolve(1)
+                            :andThen(function(v) return Promise.reject("handler-fail") end)
+                            :catch(function(err) caught = err end)
+                        return caught
+                    "#,
+        );
+        assert_eq!(actual, "handler-fail");
+    }
+
+    #[test]
+    fn recursive_flattening_through_multiple_promise_layers() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        local p = Promise.resolve(Promise.resolve(Promise.resolve(99)))
+                        p:andThen(function(v) result = v end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 99.0);
+    }
+
+    #[test]
+    fn promise_new_resolve_callback_flattens_a_promise() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        local p = Promise.new(function(resolve) resolve(Promise.resolve(77)) end)
+                        p:andThen(function(v) result = v end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 77.0);
+    }
+
+    #[test]
+    fn catch_handler_returning_a_promise_flattens_for_recovery() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        Promise.reject("err")
+                            :catch(function(e) return Promise.resolve(55) end)
+                            :andThen(function(v) result = v end)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 55.0);
+    }
+
+    #[test]
+    fn flattening_a_pending_promise_adopts_its_eventual_value() {
+        let actual = eval_number(
+            r#"
+                        local result = 0
+                        local innerResolve
+                        local inner = Promise.new(function(resolve) innerResolve = resolve end)
+                        local outer = Promise.new(function(resolve) resolve(inner) end)
+                        outer:andThen(function(v) result = v end)
+                        innerResolve(123)
+                        return result
+                    "#,
+        );
+        assert_eq!(actual, 123.0);
+    }
+
+    #[test]
+    fn flattening_a_pending_promise_that_rejects() {
+        let actual = eval_string(
+            r#"
+                        local caught = ""
+                        local innerReject
+                        local inner = Promise.new(function(resolve, reject) innerReject = reject end)
+                        local outer = Promise.new(function(resolve) resolve(inner) end)
+                        outer:catch(function(err) caught = err end)
+                        innerReject("deferred-fail")
+                        return caught
+                    "#,
+        );
+        assert_eq!(actual, "deferred-fail");
+    }
+
+    #[test]
+    fn cancelling_adopted_promise_propagates_to_inner() {
+        let actual = eval_bool(
+            r#"
+                        local innerCancelled = false
+                        local inner = Promise.new(function() end)
+                        inner:onCancel(function() innerCancelled = true end)
+                        local outer = Promise.new(function(resolve) resolve(inner) end)
+                        outer:cancel()
+                        return innerCancelled
+                    "#,
+        );
+        assert_eq!(actual, true);
+    }
 }

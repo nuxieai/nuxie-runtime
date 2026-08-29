@@ -1071,6 +1071,7 @@ fn parse_benchmark_output(stdout: &[u8]) -> Result<BenchmarkOutput, String> {
     }
 
     let mut total = None;
+    let mut elapsed = None;
     let mut durations: [Option<Duration>; BENCHMARK_PHASES.len()] = [None; BENCHMARK_PHASES.len()];
     for line in lines {
         let Some((key, value)) = line.split_once('=') else {
@@ -1078,6 +1079,10 @@ fn parse_benchmark_output(stdout: &[u8]) -> Result<BenchmarkOutput, String> {
         };
         if key == "total_ms" {
             total = Some(parse_millis(value, key)?);
+            continue;
+        }
+        if key == "elapsed_ms" {
+            elapsed = Some(parse_millis(value, key)?);
             continue;
         }
         let Some(index) = BENCHMARK_PHASES
@@ -1101,7 +1106,10 @@ fn parse_benchmark_output(stdout: &[u8]) -> Result<BenchmarkOutput, String> {
     let advance_draw = phases[0].1 + phases[3].1;
     phases.push(("advance_draw", advance_draw));
 
-    Ok(BenchmarkOutput { total, phases })
+    Ok(BenchmarkOutput {
+        total: total.or(elapsed),
+        phases,
+    })
 }
 
 fn parse_millis(value: &str, key: &str) -> Result<Duration, String> {
@@ -1869,6 +1877,19 @@ status = "exact"
                 ("draw", Duration::from_micros(4_250)),
                 ("advance_draw", Duration::from_micros(5_750)),
             ]
+        );
+    }
+
+    #[test]
+    fn uses_elapsed_when_single_pass_runner_omits_total() {
+        let benchmark = parse_benchmark_output(
+            b"rive-golden-benchmark-v1\nelapsed_ms=8.5\nadvance_ms=1.5\ninput_ms=0.25\nprepare_ms=2.0\ndraw_ms=4.25\nbookkeeping_ms=0.5\nsegments=2\n",
+        )
+        .expect("parse single-pass benchmark");
+        assert_eq!(benchmark.total, Some(Duration::from_micros(8_500)));
+        assert_eq!(
+            benchmark.phases[4],
+            ("advance_draw", Duration::from_micros(5_750))
         );
     }
 

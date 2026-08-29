@@ -35,6 +35,15 @@ fn compare_case(id: &str, runtime: &Path) -> anyhow::Result<()> {
 }
 
 #[test]
+fn text_fit_font_size_source_correction_is_exact() {
+    let Some(runtime) = runtime_root("upstream Text fit-font-size silver assertion") else {
+        return;
+    };
+    compare_case("fit_font_size_test", &runtime)
+        .unwrap_or_else(|error| panic!("fit-font-size source correction regressed: {error:#}"));
+}
+
+#[test]
 fn upstream_fl_bc_exact_silver_assertions() {
     // Literal fixture/action streams from the corresponding upstream
     // TEST_CASEs. The final comparison is the original `silver.matches(...)`
@@ -89,18 +98,17 @@ fn advanced_pin_s4_divergences_are_replayed_and_recorded() {
     // order was fixed (V20/V21/V34/V38): the stateful VMI now binds to the
     // mounted child before its state machine consumes the DataContext, so the
     // frame-3 transform no longer lags a pass behind.
-    compare_case("bidirectional_stateful_property", &runtime)
-        .unwrap_or_else(|error| panic!("promoted fixture regressed: {error:#}"));
-    for (id, expected) in [
-        (
-            "paused_nested_artboard_opacity",
-            "paused_nested_artboard_opacity: frame 1, op 103 (rewind): expected rewind, got drawPath",
-        ),
-        (
-            "layout_text_match",
-            "layout_text_match: frame 0, op 61 (save): expected save, got frame",
-        ),
+    for id in [
+        "bidirectional_stateful_property",
+        "paused_nested_artboard_opacity",
     ] {
+        compare_case(id, &runtime)
+            .unwrap_or_else(|error| panic!("promoted fixture {id} regressed: {error:#}"));
+    }
+    for (id, expected) in [(
+        "layout_text_match",
+        "layout_text_match: frame 0, op 61 (save): expected save, got frame",
+    )] {
         let error =
             compare_case(id, &runtime).expect_err("advanced-pin fixture unexpectedly became exact");
         assert_eq!(format!("{error:#}"), expected);

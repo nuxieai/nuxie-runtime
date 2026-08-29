@@ -28,11 +28,21 @@ source:color_ramp.minified.glsl=6aa0102a8144f8bce2f038b0a427bd79ca0ae1080c21dd69
 source:bezier_utils.minified.glsl=8d4ef7f0d559022ef409dd3198f780d6a3ce07157c7737c8b94add5b191b266d
 source:tessellate.minified.glsl=ec7700f65d09836c8e7fcc4f1fcf6da9ffbb1f0425e072d3cf96e00264b30eb7
 
-# Cargo build authority. `build_script_sha256` covers the target-to-SDK,
-# deployment-target, and Metal-language-standard selection in build.rs.
-build_script=crates/nuxie-renderer/build.rs:1-175
-build_script_sha256=48a44277db2aeb7b3e2c1e9a2c5e524b0d12d747f5d220621fd32baf21b8faac
-compile_command=xcrun -sdk <sdk> metal -c <deployment-target> <metal-standard> -I crates/nuxie-renderer/src/native_metal/shaders -ffast-math -ffp-contract=fast -fpreserve-invariance -fvisibility=hidden <source> -o <air>
+# The byte capture below belongs to the pre-mechanical-port build owner. AIR
+# embeds its absolute source path, target triple, and deployment target, so
+# these hashes are historical evidence for that exact build owner rather than
+# portable hashes for later Cargo OUT_DIRs.
+captured_build_script=crates/nuxie-renderer/build.rs@9d21d936fc:1-175
+captured_build_script_sha256=48a44277db2aeb7b3e2c1e9a2c5e524b0d12d747f5d220621fd32baf21b8faac
+captured_compile_command=xcrun -sdk <sdk> metal -c <captured-deployment-target> <metal-standard> -I crates/nuxie-renderer/src/native_metal/shaders -ffast-math -ffp-contract=fast -fpreserve-invariance -fvisibility=hidden <source> -o <air>
+captured_arguments:macosx=-mmacosx-version-min=12.0 -std=macos-metal2.3
+captured_arguments:iphoneos=-mios-version-min=15.0 -std=ios-metal2.2
+captured_arguments:iphonesimulator=-miphonesimulator-version-min=15.0 -std=ios-metal2.2
+
+# Current Cargo build authority follows the pinned upstream Makefile's exact
+# deployment targets and materializes the translated sources under OUT_DIR.
+build_script=crates/nuxie-renderer/build.rs
+compile_command=xcrun -sdk <sdk> metal -c <deployment-target> <metal-standard> -I <OUT_DIR>/mechanical_shader_generated -ffast-math -ffp-contract=fast -fpreserve-invariance -fvisibility=hidden <OUT_DIR>/mechanical_shader_sources/metal/<source> -o <air>
 link_command=xcrun -sdk <sdk> metallib <color-ramp-air> <tessellate-air> -o <metallib>
 xcode_version=26.6
 xcode_build=17F113
@@ -49,16 +59,16 @@ target:x86_64-apple-ios=iphonesimulator
 sdk:macosx=26.5 (25F70)
 sdk:iphoneos=26.5 (23F81a)
 sdk:iphonesimulator=26.5 (23F81a)
-arguments:macosx=-mmacosx-version-min=12.0 -std=macos-metal2.3
-arguments:iphoneos=-mios-version-min=15.0 -std=ios-metal2.2
-arguments:iphonesimulator=-miphonesimulator-version-min=15.0 -std=ios-metal2.2
-output:macosx:native_metal_color_ramp.air=b3b813765e71d663443d2b8ec3ee3f6e2ef2392739c099c65b8b1ffc8daa8293
-output:macosx:native_metal_tessellate.air=c878f2db92df6d9218d51b497f66b4dd6cc787657858628c7182d1709c5d7738
-output:macosx:native_metal_resources.metallib=7e3a8abdf3857358aba9bf1c66094a569bcee457b1d05dfc8ee251b3de6c4dc6
-output:iphoneos:native_metal_color_ramp.air=0cb5ae35fd4ded323f179653c35d426bba83010a9a5df961f5189c68856e4899
-output:iphoneos:native_metal_tessellate.air=d4f51c0024d04b010dd4ec6d8a038e58d1aac8ca0d36aae8140c2229e3f577a7
-output:iphoneos:native_metal_resources.metallib=064a453f997e0668e1e7cd72f41912513b18f1e9cb9c6b1dd352663e422e5189
-output:iphonesimulator:native_metal_color_ramp.air=65ae7ab4f0249949a02ce0b61df743979a4785985a8afddd26938e06c4c0de0c
-output:iphonesimulator:native_metal_tessellate.air=7220feef30d5abcead1afee02d229cf6c49ac54bf4fc30c5e88e66338b5e2830
-output:iphonesimulator:native_metal_resources.metallib=9e0cb7a47124d4772e952e2e0e905a726d0f3c44b759d5ee61832030a1888f4d
+arguments:macosx=-mmacosx-version-min=11.0 -std=macos-metal2.3
+arguments:iphoneos=-mios-version-min=13 -std=ios-metal2.2
+arguments:iphonesimulator=-miphonesimulator-version-min=13 -std=ios-metal2.2
+captured_output:macosx:native_metal_color_ramp.air=b3b813765e71d663443d2b8ec3ee3f6e2ef2392739c099c65b8b1ffc8daa8293
+captured_output:macosx:native_metal_tessellate.air=c878f2db92df6d9218d51b497f66b4dd6cc787657858628c7182d1709c5d7738
+captured_output:macosx:native_metal_resources.metallib=7e3a8abdf3857358aba9bf1c66094a569bcee457b1d05dfc8ee251b3de6c4dc6
+captured_output:iphoneos:native_metal_color_ramp.air=0cb5ae35fd4ded323f179653c35d426bba83010a9a5df961f5189c68856e4899
+captured_output:iphoneos:native_metal_tessellate.air=d4f51c0024d04b010dd4ec6d8a038e58d1aac8ca0d36aae8140c2229e3f577a7
+captured_output:iphoneos:native_metal_resources.metallib=064a453f997e0668e1e7cd72f41912513b18f1e9cb9c6b1dd352663e422e5189
+captured_output:iphonesimulator:native_metal_color_ramp.air=65ae7ab4f0249949a02ce0b61df743979a4785985a8afddd26938e06c4c0de0c
+captured_output:iphonesimulator:native_metal_tessellate.air=7220feef30d5abcead1afee02d229cf6c49ac54bf4fc30c5e88e66338b5e2830
+captured_output:iphonesimulator:native_metal_resources.metallib=9e0cb7a47124d4772e952e2e0e905a726d0f3c44b759d5ee61832030a1888f4d
 functions=EF,FF,WF,XF

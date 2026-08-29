@@ -570,8 +570,8 @@ fn gamepad_snapshot_and_change_payload_scenario_matches_cpp() {
                         (gamepad.rightShoulder and 1 or 0) +
                         (gamepad.leftTriggerPressed and 1 or 0) +
                         (gamepad.rightTriggerPressed and 1 or 0) +
-                        (gamepad.gamepadBack and 1 or 0) +
-                        (gamepad.gamepadForward and 1 or 0) +
+                        (gamepad.back and 1 or 0) +
+                        (gamepad.forward and 1 or 0) +
                         (gamepad.leftStickButton and 1 or 0) +
                         (gamepad.rightStickButton and 1 or 0) +
                         (gamepad.dpadUp and 1 or 0) +

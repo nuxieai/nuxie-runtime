@@ -3782,9 +3782,12 @@ fn rust_models_cpp_base_data_converter_passthrough_dispatch() {
     };
     let input = RuntimeDataValue::String(b"base");
 
-    assert_eq!(rust.data_converters().len(), 1);
+    // Binary import cannot instantiate this generated abstract record. Exercise
+    // the concrete C++ base-method contract through the direct object APIs,
+    // rather than pretending it was retained by BackboardImporter.
+    let data_converter = rust.object(0).expect("direct base DataConverter object");
     assert_eq!(
-        rust.data_converter_output_type(0),
+        rust.data_converter_output_type_for_object(data_converter),
         Some(RuntimeDataType::None),
         "C++ DataConverter::outputType() base implementation returns none"
     );
@@ -3792,23 +3795,27 @@ fn rust_models_cpp_base_data_converter_passthrough_dispatch() {
     for (label, output) in [
         (
             "forward",
-            rust.data_converter_convert(0, &input)
+            rust.data_converter_convert_for_object(data_converter, &input)
                 .expect("base DataConverter::convert passes through"),
         ),
         (
             "reverse",
-            rust.data_converter_reverse_convert(0, &input)
+            rust.data_converter_reverse_convert_for_object(data_converter, &input)
                 .expect("base DataConverter::reverseConvert passes through"),
         ),
         (
             "stateful forward",
-            rust.data_converter_stateful_convert(0, &mut RuntimeDataConverterState::new(), &input)
-                .expect("stateful forward delegates to base convert"),
+            rust.data_converter_stateful_convert_for_object(
+                data_converter,
+                &mut RuntimeDataConverterState::new(),
+                &input,
+            )
+            .expect("stateful forward delegates to base convert"),
         ),
         (
             "stateful reverse",
-            rust.data_converter_stateful_reverse_convert(
-                0,
+            rust.data_converter_stateful_reverse_convert_for_object(
+                data_converter,
                 &mut RuntimeDataConverterState::new(),
                 &input,
             )
@@ -3825,7 +3832,11 @@ fn rust_models_cpp_base_data_converter_passthrough_dispatch() {
     }
 
     assert_eq!(
-        rust.data_converter_stateful_advance(0, &mut RuntimeDataConverterState::new(), 0.25),
+        rust.data_converter_stateful_advance_for_object(
+            data_converter,
+            &mut RuntimeDataConverterState::new(),
+            0.25,
+        ),
         Some(false),
         "C++ DataConverter::advance() base implementation returns false"
     );
@@ -3867,21 +3878,23 @@ fn rust_models_cpp_data_bind_advance_guards_and_converter_delegation() {
             property_field_ids: BTreeMap::new(),
         },
         objects: vec![
-            Some(runtime_object(0, "DataConverter", Vec::new())),
-            Some(runtime_object(1, "DataConverterInterpolator", Vec::new())),
+            Some(runtime_object(0, "Backboard", Vec::new())),
+            Some(runtime_object(1, "DataConverterBooleanNegate", Vec::new())),
+            Some(runtime_object(2, "DataConverterInterpolator", Vec::new())),
             Some(runtime_object(
-                2,
+                3,
                 "DataBind",
                 vec![uint_property("DataBind", "converterId", 0)],
             )),
             Some(runtime_object(
-                3,
+                4,
                 "DataBind",
                 vec![uint_property("DataBind", "converterId", 1)],
             )),
-            Some(runtime_object(4, "DataBind", Vec::new())),
+            Some(runtime_object(5, "DataBind", Vec::new())),
         ],
         import_statuses: vec![
+            RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,
             RuntimeImportStatus::Imported,
@@ -3893,7 +3906,7 @@ fn rust_models_cpp_data_bind_advance_guards_and_converter_delegation() {
 
     assert_eq!(
         rust.data_bind_update_effect(
-            2,
+            3,
             RuntimeComponentDirt::DEPENDENTS | RuntimeComponentDirt::BINDINGS,
             true,
             true,
@@ -3914,7 +3927,7 @@ fn rust_models_cpp_data_bind_advance_guards_and_converter_delegation() {
         "C++ DataBind::updateDependents calls converter->update() when a converter is resolved"
     );
     assert_eq!(
-        rust.data_bind_update_effect(4, RuntimeComponentDirt::DEPENDENTS, true, true, true, true),
+        rust.data_bind_update_effect(5, RuntimeComponentDirt::DEPENDENTS, true, true, true, true),
         Some(RuntimeDataBindUpdateEffect {
             calls_update_dependents: true,
             updates_converter_dependents: false,
@@ -3930,7 +3943,7 @@ fn rust_models_cpp_data_bind_advance_guards_and_converter_delegation() {
     );
     assert_eq!(
         rust.data_bind_stateful_advance(
-            0,
+            1,
             &mut RuntimeDataConverterState::new(),
             0.25,
             true,
@@ -3941,7 +3954,7 @@ fn rust_models_cpp_data_bind_advance_guards_and_converter_delegation() {
     );
     assert_eq!(
         rust.data_bind_stateful_advance(
-            4,
+            5,
             &mut RuntimeDataConverterState::new(),
             0.25,
             true,
@@ -3952,7 +3965,7 @@ fn rust_models_cpp_data_bind_advance_guards_and_converter_delegation() {
     );
     assert_eq!(
         rust.data_bind_stateful_advance(
-            2,
+            3,
             &mut RuntimeDataConverterState::new(),
             0.25,
             false,
@@ -3962,13 +3975,13 @@ fn rust_models_cpp_data_bind_advance_guards_and_converter_delegation() {
         "C++ DataBind::advance returns false when m_Source is null"
     );
     assert_eq!(
-        rust.data_bind_stateful_advance(2, &mut RuntimeDataConverterState::new(), 0.25, true, true),
+        rust.data_bind_stateful_advance(3, &mut RuntimeDataConverterState::new(), 0.25, true, true),
         Some(false),
         "C++ DataBind::advance returns false while the bind has Flag::Collapsed"
     );
     assert_eq!(
         rust.data_bind_stateful_advance(
-            2,
+            3,
             &mut RuntimeDataConverterState::new(),
             0.25,
             true,
@@ -3979,7 +3992,7 @@ fn rust_models_cpp_data_bind_advance_guards_and_converter_delegation() {
     );
     assert_eq!(
         rust.data_bind_stateful_advance(
-            3,
+            4,
             &mut RuntimeDataConverterState::new(),
             0.25,
             true,
@@ -4871,10 +4884,10 @@ fn cpp_probe_matches_rust_manifest_when_available() {
     let manifest = rust.manifest().expect("decoded manifest data");
     assert_eq!(manifest.resolve_name(7), Some("position"));
     assert_eq!(manifest.resolve_name(u32::MAX), Some("wrapped"));
-    assert_eq!(manifest.resolve_name(404), None);
+    assert_eq!(manifest.resolve_name(404), Some(""));
     assert_eq!(manifest.resolve_path(3), Some(&[7, 9, 11][..]));
     assert_eq!(manifest.resolve_path(u32::MAX), Some(&[13, 21][..]));
-    assert_eq!(manifest.resolve_path(404), None);
+    assert_eq!(manifest.resolve_path(404), Some(&[][..]));
 
     let mut names = Vec::new();
     push_var_uint(&mut names, 1);

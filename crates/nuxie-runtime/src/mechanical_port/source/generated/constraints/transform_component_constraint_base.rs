@@ -1,0 +1,334 @@
+use crate::mechanical_port::source::{
+    constraints::transform_space_constraint::TransformSpaceConstraint,
+    core::binary_reader::BinaryReader,
+};
+
+pub trait TransformComponentConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::transform_space_constraint_base::TransformSpaceConstraintBaseCallbacks {
+    fn notify_property_changed(&mut self, property_key: u16);
+    fn min_max_space_value_changed(&mut self) {}
+    fn copy_factor_changed(&mut self) {}
+    fn min_value_changed(&mut self) {}
+    fn max_value_changed(&mut self) {}
+    fn offset_changed(&mut self) {}
+    fn does_copy_changed(&mut self) {}
+    fn min_changed(&mut self) {}
+    fn max_changed(&mut self) {}
+}
+
+pub struct TransformComponentConstraintBase {
+    pub base: TransformSpaceConstraint,
+    min_max_space_value: u32,
+    copy_factor: f32,
+    min_value: f32,
+    max_value: f32,
+    offset: bool,
+    does_copy: bool,
+    min: bool,
+    max: bool,
+}
+
+impl Default for TransformComponentConstraintBase {
+    fn default() -> Self {
+        Self {
+            base: TransformSpaceConstraint::default(),
+            min_max_space_value: 0,
+            copy_factor: 1.0,
+            min_value: 0.0,
+            max_value: 0.0,
+            offset: false,
+            does_copy: true,
+            min: false,
+            max: false,
+        }
+    }
+}
+
+impl TransformComponentConstraintBase {
+    pub const TYPE_KEY: u16 = 85;
+    pub const MIN_MAX_SPACE_VALUE_PROPERTY_KEY: u16 = 195;
+    pub const COPY_FACTOR_PROPERTY_KEY: u16 = 182;
+    pub const MIN_VALUE_PROPERTY_KEY: u16 = 183;
+    pub const MAX_VALUE_PROPERTY_KEY: u16 = 184;
+    pub const OFFSET_PROPERTY_KEY: u16 = 188;
+    pub const DOES_COPY_PROPERTY_KEY: u16 = 189;
+    pub const MIN_PROPERTY_KEY: u16 = 190;
+    pub const MAX_PROPERTY_KEY: u16 = 191;
+
+    pub fn is_type_of(type_key: u16) -> bool {
+        matches!(type_key, Self::TYPE_KEY | 90 | 80 | 79 | 10)
+    }
+    pub fn core_type(&self) -> u16 {
+        Self::TYPE_KEY
+    }
+    pub fn min_max_space_value(&self) -> u32 {
+        self.min_max_space_value
+    }
+    pub fn set_min_max_space_value(
+        &mut self,
+        value: u32,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) {
+        if !self.set_min_max_space_value_value(value) {
+            return;
+        }
+        callbacks.min_max_space_value_changed();
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_MAX_SPACE_VALUE_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_min_max_space_value_value(&mut self, value: u32) -> bool {
+        if self.min_max_space_value == value {
+            return false;
+        }
+        self.min_max_space_value = value;
+        true
+    }
+    pub fn copy_factor(&self) -> f32 {
+        self.copy_factor
+    }
+    pub fn set_copy_factor(
+        &mut self,
+        value: f32,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) {
+        if !self.set_copy_factor_value(value) {
+            return;
+        }
+        callbacks.copy_factor_changed();
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::COPY_FACTOR_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_copy_factor_value(&mut self, value: f32) -> bool {
+        if self.copy_factor == value {
+            return false;
+        }
+        self.copy_factor = value;
+        true
+    }
+    pub fn min_value(&self) -> f32 {
+        self.min_value
+    }
+    pub fn set_min_value(
+        &mut self,
+        value: f32,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) {
+        if !self.set_min_value_value(value) {
+            return;
+        }
+        callbacks.min_value_changed();
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_VALUE_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_min_value_value(&mut self, value: f32) -> bool {
+        if self.min_value == value {
+            return false;
+        }
+        self.min_value = value;
+        true
+    }
+    pub fn max_value(&self) -> f32 {
+        self.max_value
+    }
+    pub fn set_max_value(
+        &mut self,
+        value: f32,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) {
+        if !self.set_max_value_value(value) {
+            return;
+        }
+        callbacks.max_value_changed();
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_VALUE_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_max_value_value(&mut self, value: f32) -> bool {
+        if self.max_value == value {
+            return false;
+        }
+        self.max_value = value;
+        true
+    }
+    pub fn offset(&self) -> bool {
+        self.offset
+    }
+    pub fn set_offset(
+        &mut self,
+        value: bool,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) {
+        if !self.set_offset_value(value) {
+            return;
+        }
+        callbacks.offset_changed();
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::OFFSET_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_offset_value(&mut self, value: bool) -> bool {
+        if self.offset == value {
+            return false;
+        }
+        self.offset = value;
+        true
+    }
+    pub fn does_copy(&self) -> bool {
+        self.does_copy
+    }
+    pub fn set_does_copy(
+        &mut self,
+        value: bool,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) {
+        if !self.set_does_copy_value(value) {
+            return;
+        }
+        callbacks.does_copy_changed();
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::DOES_COPY_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_does_copy_value(&mut self, value: bool) -> bool {
+        if self.does_copy == value {
+            return false;
+        }
+        self.does_copy = value;
+        true
+    }
+    pub fn min(&self) -> bool {
+        self.min
+    }
+    pub(crate) fn set_min_enabled_value(&mut self, value: bool) -> bool {
+        if self.min == value {
+            return false;
+        }
+        self.min = value;
+        true
+    }
+    pub fn set_min(
+        &mut self,
+        value: bool,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) {
+        if self.min == value {
+            return;
+        }
+        self.min = value;
+        callbacks.min_changed();
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MIN_PROPERTY_KEY,
+        );
+    }
+    pub fn max(&self) -> bool {
+        self.max
+    }
+    pub(crate) fn set_max_enabled_value(&mut self, value: bool) -> bool {
+        if self.max == value {
+            return false;
+        }
+        self.max = value;
+        true
+    }
+    pub fn set_max(
+        &mut self,
+        value: bool,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) {
+        if self.max == value {
+            return;
+        }
+        self.max = value;
+        callbacks.max_changed();
+        TransformComponentConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_PROPERTY_KEY,
+        );
+    }
+    pub fn copy(
+        &mut self,
+        object: &Self,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) {
+        self.min_max_space_value = object.min_max_space_value;
+        self.copy_factor = object.copy_factor;
+        self.min_value = object.min_value;
+        self.max_value = object.max_value;
+        self.offset = object.offset;
+        self.does_copy = object.does_copy;
+        self.min = object.min;
+        self.max = object.max;
+        self.base.copy(&object.base, callbacks);
+    }
+    pub fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut BinaryReader<'_>,
+        callbacks: &mut impl TransformComponentConstraintBaseCallbacks,
+    ) -> bool {
+        match property_key {
+            Self::MIN_MAX_SPACE_VALUE_PROPERTY_KEY => {
+                self.min_max_space_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                true
+            }
+            Self::COPY_FACTOR_PROPERTY_KEY => {
+                self.copy_factor = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                true
+            }
+            Self::MIN_VALUE_PROPERTY_KEY => {
+                self.min_value = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                true
+            }
+            Self::MAX_VALUE_PROPERTY_KEY => {
+                self.max_value = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                true
+            }
+            Self::OFFSET_PROPERTY_KEY => {
+                self.offset = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                true
+            }
+            Self::DOES_COPY_PROPERTY_KEY => {
+                self.does_copy = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                true
+            }
+            Self::MIN_PROPERTY_KEY => {
+                self.min = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                true
+            }
+            Self::MAX_PROPERTY_KEY => {
+                self.max = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                true
+            }
+            _ => self.base.deserialize(property_key, reader, callbacks),
+        }
+    }
+}
+
+impl std::ops::Deref for TransformComponentConstraintBase {
+    type Target = TransformSpaceConstraint;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for TransformComponentConstraintBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

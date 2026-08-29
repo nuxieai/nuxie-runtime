@@ -23,8 +23,6 @@ use nuxie_render_api::{
     test
 ))]
 use sha2::{Digest, Sha256};
-use std::array;
-use std::ops::Range;
 
 use crate::envelope::SignedContent;
 use crate::vm::{Error, Result};
@@ -53,23 +51,10 @@ const BINDING_MAP_ALLOCATOR_VERSION: u8 = 1;
 const BINDING_MAP_ENTRY_WIRE_SIZE: usize = 14;
 const BINDING_MAP_ABSENT: u16 = u16::MAX;
 
-#[derive(Debug, Clone, Copy)]
-struct VariantDescriptor {
-    target: u8,
-    offset: usize,
-    size: usize,
-}
-
-/// File-owned, backend-neutral `ShaderAsset` container.
-///
-/// Decoding validates SignedContent, RSTB structure, sections, and every final
-/// last-descriptor-wins range. The public importer retains an invalid state if
-/// this returns an error. Backend selection is deferred to exact lookup.
-#[derive(Debug)]
+/// Backend target selection over the actual translated ShaderAsset owner.
 pub(crate) struct ShaderAsset {
-    blob_data: Vec<u8>,
-    variants: [Option<Range<usize>>; 256],
-    texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
+    asset: nuxie_runtime::mechanical_port::source::core::CoreHandle,
+    _standalone_arena: Option<nuxie_runtime::mechanical_port::source::core::CoreArena>,
     #[cfg(any(feature = "apple-authored-msl", test))]
     supplemental_reflection: Option<Vec<u8>>,
     #[cfg(any(
@@ -85,88 +70,77 @@ pub(crate) struct ShaderAsset {
     ))]
     artifact_sha256: [u8; 32],
 }
-
+impl std::fmt::Debug for ShaderAsset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShaderAsset")
+            .field("native", &self.asset)
+            .finish_non_exhaustive()
+    }
+}
+type NativeShaderAsset = nuxie_runtime::mechanical_port::source::assets::shader_asset::ShaderAsset;
 impl ShaderAsset {
     pub(crate) fn decode(name: &str, payload: &[u8]) -> Result<Self> {
-        let envelope = SignedContent::parse(payload)
-            .map_err(|error| Error::runtime(format!("ShaderAsset '{name}': {error}")))?;
-        let rstb = envelope.content;
-        if rstb.len() > MAX_RSTB_BYTES {
+        use nuxie_runtime::mechanical_port::source::{
+            core::CoreArena, factory::RuntimeFactoryHandle,
+        };
+        let mut factory =
+            nuxie_render_api::PersistentFactory::new(nuxie_render_api::NullFactory::new());
+        let factory = RuntimeFactoryHandle::from_factory(&mut factory)
+            .expect("persistent shader decode factory");
+        let mut asset = NativeShaderAsset::default();
+        if !asset.decode(payload, &factory) {
             return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' RSTB exceeds {MAX_RSTB_BYTES} bytes"
+                "ShaderAsset '{name}' neutral decode failed"
             )));
         }
-
-        let mut cursor = Cursor::new(rstb);
-        if cursor.read_u32("magic")? != RSTB_MAGIC {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' has invalid RSTB magic"
-            )));
+        let arena = CoreArena::default();
+        let handle = arena.insert(asset);
+        let mut result = Self::from_native(handle)?;
+        result._standalone_arena = Some(arena);
+        Ok(result)
+    }
+    pub(crate) fn from_native(
+        asset: nuxie_runtime::mechanical_port::source::core::CoreHandle,
+    ) -> Result<Self> {
+        let payload = asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| asset.encoded_payload().to_vec())
+            .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?;
+        if asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| asset.content_bytes().len())
+            .unwrap_or(0)
+            > MAX_RSTB_BYTES
+        {
+            return Err(Error::runtime("ShaderAsset exceeds the host byte limit"));
         }
-        if cursor.read_u16("version")? != RSTB_VERSION {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' must use RSTB version {RSTB_VERSION}"
-            )));
-        }
-        let variant_count = usize::from(cursor.read_u8("variant count")?);
-        let section_count = usize::from(cursor.read_u8("section count")?);
-
-        let mut descriptors = Vec::with_capacity(variant_count);
-        for _ in 0..variant_count {
-            descriptors.push(VariantDescriptor {
-                target: cursor.read_u8("variant target")?,
-                offset: usize::try_from(cursor.read_u32("variant offset")?)
-                    .map_err(|_| Error::runtime("RSTB variant offset is not addressable"))?,
-                size: usize::try_from(cursor.read_u32("variant size")?)
-                    .map_err(|_| Error::runtime("RSTB variant size is not addressable"))?,
-            });
-        }
-        let mut texture_sampler_pairs = Vec::new();
         #[cfg(any(feature = "apple-authored-msl", test))]
-        let mut supplemental_reflection = None;
-        for _ in 0..section_count {
-            let tag = cursor.read_u8("section tag")?;
-            let length = usize::from(cursor.read_u16("section length")?);
-            let section = cursor.read_bytes(length, "section payload")?;
-            if tag == TEXTURE_SAMPLER_PAIR_SECTION {
-                texture_sampler_pairs.extend(decode_texture_sampler_pairs(section)?);
-            }
-            #[cfg(any(feature = "apple-authored-msl", test))]
-            if tag == SUPPLEMENTAL_REFLECTION_SECTION {
-                if supplemental_reflection.is_some() {
-                    return Err(Error::runtime(
-                        "RSTB contains duplicate supplemental reflection sections",
-                    ));
+        let supplemental_reflection = {
+            // Supplemental reflection is a host-only authenticated MSL extension.
+            // Do not rebuild the native owner's target index or pair table.
+            let content = SignedContent::parse(&payload)
+                .map_err(|e| Error::runtime(e.to_string()))?
+                .content;
+            let mut cursor = Cursor::new(content);
+            cursor.read_bytes(6, "header")?;
+            let variants = cursor.read_u8("variant count")? as usize;
+            let sections = cursor.read_u8("section count")?;
+            cursor.read_bytes(variants * 9, "variant descriptors")?;
+            let mut reflection = None;
+            for _ in 0..sections {
+                let tag = cursor.read_u8("section tag")?;
+                let length = cursor.read_u16("section length")? as usize;
+                let data = cursor.read_bytes(length, "section payload")?;
+                if tag == SUPPLEMENTAL_REFLECTION_SECTION {
+                    if reflection.is_some() {
+                        return Err(Error::runtime("duplicate supplemental reflection sections"));
+                    }
+                    reflection = Some(data.to_vec());
                 }
-                supplemental_reflection = Some(section.to_vec());
             }
-            #[cfg(not(any(feature = "apple-authored-msl", test)))]
-            let _ = section;
-        }
-
-        let blob_data = cursor.read_bytes(cursor.remaining(), "blob data")?;
-        // `ShaderAsset::decode` first indexes descriptors by target, so a
-        // later duplicate replaces an earlier descriptor before any range is
-        // checked.
-        let mut final_descriptors = [None; 256];
-        for descriptor in descriptors {
-            final_descriptors[usize::from(descriptor.target)] = Some(descriptor);
-        }
-        let mut variants: [Option<Range<usize>>; 256] = array::from_fn(|_| None);
-        for descriptor in final_descriptors.into_iter().flatten() {
-            let end = descriptor
-                .offset
-                .checked_add(descriptor.size)
-                .filter(|end| *end <= blob_data.len())
-                .ok_or_else(|| {
-                    Error::runtime(format!("ShaderAsset '{name}' RSTB variant is truncated"))
-                })?;
-            variants[usize::from(descriptor.target)] = Some(descriptor.offset..end);
-        }
+            reflection
+        };
         Ok(Self {
-            blob_data: blob_data.to_vec(),
-            variants,
-            texture_sampler_pairs,
+            asset,
+            _standalone_arena: None,
             #[cfg(any(feature = "apple-authored-msl", test))]
             supplemental_reflection,
             #[cfg(any(
@@ -184,7 +158,6 @@ impl ShaderAsset {
             artifact_sha256: Sha256::digest(payload).into(),
         })
     }
-
     pub(crate) fn decode_webgpu(&self, name: &str) -> Result<GpuCanvasShader> {
         let wgsl = self.variant(WGSL_SOURCE_TARGET).ok_or_else(|| {
             Error::runtime(format!(
@@ -196,7 +169,7 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no mandatory WebGPU RSTB target-16 binding map"
             ))
         })?;
-        decode_whole_module_wgsl(name, wgsl, binding_map)
+        decode_whole_module_wgsl(name, &wgsl, &binding_map)
     }
 
     pub(crate) fn decode_webgl2(&self, name: &str) -> Result<GpuCanvasWebGl2Shader> {
@@ -220,17 +193,17 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no mandatory WebGL2 target-15 fragment fixup"
             ))
         })?;
-        let (entries, sources) = decode_per_entry_glsl(name, source)?;
-        validate_gl_fixup(name, "vertex", vertex_fixup)?;
-        validate_gl_fixup(name, "fragment", fragment_fixup)?;
+        let (entries, sources) = decode_per_entry_glsl(name, &source)?;
+        validate_gl_fixup(name, "vertex", &vertex_fixup)?;
+        validate_gl_fixup(name, "fragment", &fragment_fixup)?;
         Ok(GpuCanvasWebGl2Shader {
             entries,
             sources,
-            bindings: decode_binding_map(name, binding_map)?,
+            bindings: decode_binding_map(name, &binding_map)?,
             binding_map_bytes: std::sync::Arc::from(binding_map),
             vertex_gl_fixup_bytes: std::sync::Arc::from(vertex_fixup),
             fragment_gl_fixup_bytes: std::sync::Arc::from(fragment_fixup),
-            texture_sampler_pairs: self.texture_sampler_pairs.clone(),
+            texture_sampler_pairs: self.texture_sampler_pairs(),
         })
     }
 
@@ -323,13 +296,13 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no supplemental reflection section tag 2"
             ))
         })?;
-        let (source, entries) = decode_whole_module_source(name, "MSL", source_container)?;
-        let bindings = decode_binding_map(name, binding_map)?;
+        let (source, entries) = decode_whole_module_source(name, "MSL", &source_container)?;
+        let bindings = decode_binding_map(name, &binding_map)?;
         let (entry_reflection, binding_reflection) = decode_supplemental_reflection(
             name,
             reflection,
-            source_container,
-            binding_map,
+            &source_container,
+            &binding_map,
             &entries,
             &bindings,
         )?;
@@ -358,10 +331,29 @@ impl ShaderAsset {
         })
     }
 
-    fn variant(&self, target: u8) -> Option<&[u8]> {
-        self.variants[usize::from(target)]
-            .as_ref()
-            .map(|range| &self.blob_data[range.clone()])
+    fn variant(&self, target: u8) -> Option<Vec<u8>> {
+        self.asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| {
+                let bytes = asset.find_shader(target);
+                (!bytes.is_empty()).then(|| bytes.to_vec())
+            })
+            .flatten()
+    }
+    fn texture_sampler_pairs(&self) -> Vec<GpuCanvasShaderTextureSamplerPair> {
+        self.asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| {
+                asset
+                    .texture_sampler_pairs()
+                    .iter()
+                    .map(|pair| GpuCanvasShaderTextureSamplerPair {
+                        texture_group: pair.tex_group,
+                        texture_binding: pair.tex_binding,
+                        sampler_group: pair.samp_group,
+                        sampler_binding: pair.samp_binding,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -459,7 +451,7 @@ fn decode_whole_module_wgsl(
     Ok(GpuCanvasShader {
         source,
         entries,
-        bindings: decode_binding_map(name, binding_map)?,
+        bindings: decode_binding_map(name, &binding_map)?,
         binding_map_bytes: std::sync::Arc::from(binding_map),
     })
 }
@@ -553,32 +545,6 @@ fn validate_gl_fixup(name: &str, stage: &str, bytes: &[u8]) -> Result<()> {
         )));
     }
     Ok(())
-}
-
-fn decode_texture_sampler_pairs(bytes: &[u8]) -> Result<Vec<GpuCanvasShaderTextureSamplerPair>> {
-    // Match C++ `ShaderAsset::decode`: a missing count or a pair count whose
-    // payload is truncated invalidates only this optional metadata section.
-    // The shader variants remain usable and the pair list stays empty.
-    let Some((&count, pair_bytes)) = bytes.split_first() else {
-        return Ok(Vec::new());
-    };
-    let required_pair_bytes = usize::from(count) * 4;
-    if pair_bytes.len() < required_pair_bytes {
-        return Ok(Vec::new());
-    }
-
-    let mut cursor = Cursor::new(bytes);
-    let count = usize::from(cursor.read_u8("texture/sampler pair count")?);
-    let mut pairs = Vec::with_capacity(count);
-    for _ in 0..count {
-        pairs.push(GpuCanvasShaderTextureSamplerPair {
-            texture_group: cursor.read_u8("texture pair group")?,
-            texture_binding: cursor.read_u8("texture pair binding")?,
-            sampler_group: cursor.read_u8("sampler pair group")?,
-            sampler_binding: cursor.read_u8("sampler pair binding")?,
-        });
-    }
-    Ok(pairs)
 }
 
 fn decode_whole_module_source(
@@ -1992,13 +1958,15 @@ mod tests {
 
     fn upstream_texture_sampler_pairs(asset: &ShaderAsset) -> Vec<UpstreamTextureSamplerPair> {
         asset
-            .texture_sampler_pairs
-            .iter()
+            .asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| asset.texture_sampler_pairs().to_vec())
+            .expect("decoded native ShaderAsset")
+            .into_iter()
             .map(|pair| UpstreamTextureSamplerPair {
-                tex_group: pair.texture_group,
-                tex_binding: pair.texture_binding,
-                samp_group: pair.sampler_group,
-                samp_binding: pair.sampler_binding,
+                tex_group: pair.tex_group,
+                tex_binding: pair.tex_binding,
+                samp_group: pair.samp_group,
+                samp_binding: pair.samp_binding,
             })
             .collect()
     }

@@ -1,9 +1,14 @@
-// Direct safe-Rust adaptations of pinned `refcnt_test.cpp` and
-// `lite_rtti_test.cpp`. `Rc` and `Any` are the campaign's approved Rust-native
-// owners; this file deliberately does not recreate intrusive C++ ownership.
+//! Direct safe-Rust adaptations of pinned `refcnt_test.cpp` and
+//! `lite_rtti_test.cpp`. The translated `source::refcnt` correspondence owner
+//! intentionally delegates ownership to `Rc`, and native `CoreObject` uses
+//! `Any` for exact concrete downcasts. These tests exercise those representations;
+//! the fixture structs are payloads, not substitute ownership or RTTI engines.
+//! Inherited Core type predicates are tested separately in `native_core_type.rs`.
 
 use std::any::{Any, TypeId};
 use std::rc::Rc;
+
+use nuxie_runtime::source::refcnt::{NativeRefCount, release, reset, safe_ref, safe_unref, swap};
 
 #[derive(Debug, Default)]
 struct MyRefCounted {
@@ -15,16 +20,16 @@ struct MyRefCounted {
 #[test]
 fn refcnt_direct_safe_rust_port() {
     let value = Rc::new(MyRefCounted::default());
-    assert_eq!(Rc::strong_count(&value), 1);
+    assert_eq!(value.debugging_refcnt(), 1);
 
-    let safe_ref = Rc::clone(&value);
-    assert_eq!(Rc::strong_count(&value), 2);
-    drop(safe_ref);
-    assert_eq!(Rc::strong_count(&value), 1);
+    let retained = safe_ref(Some(&value));
+    assert_eq!(value.debugging_refcnt(), 2);
+    safe_unref(retained);
+    assert_eq!(value.debugging_refcnt(), 1);
 
     let nullable: Option<Rc<MyRefCounted>> = None;
-    let safe_ref_of_null = nullable.clone();
-    drop(safe_ref_of_null);
+    let safe_ref_of_null = safe_ref(nullable.as_ref());
+    safe_unref(safe_ref_of_null);
     assert!(nullable.is_none());
 }
 
@@ -46,30 +51,36 @@ fn rcp_direct_safe_rust_port() {
 
     let mut r1 = Some(Rc::new(MyRefCounted::default()));
     assert!(r1.is_some());
-    assert_eq!(Rc::strong_count(r1.as_ref().unwrap()), 1);
+    assert_eq!(r1.as_ref().unwrap().debugging_refcnt(), 1);
 
     let mut r2 = r1.clone();
-    assert!(Rc::ptr_eq(r1.as_ref().unwrap(), r2.as_ref().unwrap()));
-    assert_eq!(Rc::strong_count(r2.as_ref().unwrap()), 2);
+    assert!(r1.as_ref().unwrap().ptr_eq(r2.as_ref().unwrap()));
+    assert_eq!(r2.as_ref().unwrap().debugging_refcnt(), 2);
 
     let r3 = Rc::new(MyRefCounted {
         integer: 1,
         float: 0.5,
         boolean: false,
     });
-    assert!(!Rc::ptr_eq(r1.as_ref().unwrap(), &r3));
-    assert_eq!(Rc::strong_count(&r3), 1);
+    assert!(!r1.as_ref().unwrap().ptr_eq(&r3));
+    assert_eq!(r3.debugging_refcnt(), 1);
     assert_eq!((r3.integer, r3.float, r3.boolean), (1, 0.5, false));
 
-    let released = r2.take().expect("release owned reference");
+    let released = release(&mut r2).expect("release owned reference");
     assert!(r2.is_none());
-    assert!(Rc::ptr_eq(r1.as_ref().unwrap(), &released));
-    assert_eq!(Rc::strong_count(&released), 2);
+    assert!(r1.as_ref().unwrap().ptr_eq(&released));
+    assert_eq!(released.debugging_refcnt(), 2);
     drop(released);
-    assert_eq!(Rc::strong_count(r1.as_ref().unwrap()), 1);
+    assert_eq!(r1.as_ref().unwrap().debugging_refcnt(), 1);
 
-    r1.take();
+    reset(&mut r1, None);
     assert!(r1.is_none());
+
+    let mut left = Some(Rc::new(MyRefCounted::default()));
+    let mut right = None;
+    swap(&mut left, &mut right);
+    assert!(left.is_none());
+    assert!(right.is_some());
 
     let derived = Rc::new(Derived {
         base: Base { x: 17 },
@@ -78,17 +89,17 @@ fn rcp_direct_safe_rust_port() {
     assert_eq!(derived.y, 21);
     let erased: Rc<dyn Any> = derived.clone();
     assert_eq!(erased.downcast_ref::<Derived>().unwrap().base.x, 17);
-    assert_eq!(Rc::strong_count(&derived), 2);
+    assert_eq!(derived.debugging_refcnt(), 2);
     assert!(erased.downcast_ref::<Base>().is_none());
 
     let restored = erased.downcast::<Derived>().expect("static Rc cast");
     assert_eq!(restored.y, 21);
-    assert_eq!(Rc::strong_count(&derived), 2);
+    assert_eq!(derived.debugging_refcnt(), 2);
     drop(restored);
-    assert_eq!(Rc::strong_count(&derived), 1);
+    assert_eq!(derived.debugging_refcnt(), 1);
 
     let erased: Rc<dyn Any> = derived.clone();
-    assert_eq!(Rc::strong_count(&derived), 2);
+    assert_eq!(derived.debugging_refcnt(), 2);
     assert!(std::ptr::eq(
         erased.downcast_ref::<Derived>().unwrap(),
         derived.as_ref()

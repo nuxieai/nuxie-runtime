@@ -35,7 +35,6 @@ nuxie-render-api = { path = "../nuxie-render-api" }
 [dev-dependencies]
 anyhow = "1"
 nuxie-binary = { path = "../nuxie-binary" }
-nuxie-graph = { path = "../nuxie-graph" }
 nuxie-image-codec = { path = "../nuxie-image-codec" }
 nuxie-runtime = { path = "../nuxie-runtime" }
 nuxie-render-stream = { path = "../nuxie-render-stream" }

@@ -1,12 +1,8 @@
 use crate::core::binary_reader::BinaryReader;
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 pub(super) fn deserialize(reader: &mut BinaryReader<'_>, label: &str) -> Result<u64> {
-    let value = reader.read_var_uint()?;
-    if value > u32::MAX as u64 {
-        bail!("{label} {value} does not fit in C++ unsigned int");
-    }
-    Ok(value)
+    reader.read_var_uint_u32(label).map(u64::from)
 }
 
 pub(super) fn deserialize_uint8(reader: &mut BinaryReader<'_>, label: &str) -> Result<u64> {

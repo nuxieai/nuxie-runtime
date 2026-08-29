@@ -1,0 +1,122 @@
+use crate::mechanical_port::source::{
+    component::Component, core::binary_reader::BinaryReader,
+    shapes::paint::gradient_stop::GradientStop,
+};
+
+pub trait GradientStopBaseCallbacks:
+    crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+{
+    fn notify_property_changed(&mut self, property_key: u16);
+    fn color_value_changed(&mut self) {}
+    fn position_changed(&mut self) {}
+}
+
+pub struct GradientStopBase {
+    pub base: Component,
+    color_value: i32,
+    position: f32,
+}
+
+impl Default for GradientStopBase {
+    fn default() -> Self {
+        Self {
+            base: Component::default(),
+            color_value: 0xFFFFFFFFu32 as i32,
+            position: 0.0,
+        }
+    }
+}
+
+impl GradientStopBase {
+    pub const TYPE_KEY: u16 = 19;
+    pub const COLOR_VALUE_PROPERTY_KEY: u16 = 38;
+    pub const POSITION_PROPERTY_KEY: u16 = 39;
+
+    pub fn is_type_of(type_key: u16) -> bool {
+        matches!(type_key, Self::TYPE_KEY | 10)
+    }
+    pub fn core_type(&self) -> u16 {
+        Self::TYPE_KEY
+    }
+    pub fn color_value(&self) -> i32 {
+        self.color_value
+    }
+    pub fn set_color_value(&mut self, value: i32, callbacks: &mut impl GradientStopBaseCallbacks) {
+        if !self.set_color_value_value(value) {
+            return;
+        }
+        callbacks.color_value_changed();
+        GradientStopBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::COLOR_VALUE_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_color_value_value(&mut self, value: i32) -> bool {
+        if self.color_value == value {
+            return false;
+        }
+        self.color_value = value;
+        true
+    }
+    pub fn position(&self) -> f32 {
+        self.position
+    }
+    pub fn set_position(&mut self, value: f32, callbacks: &mut impl GradientStopBaseCallbacks) {
+        if !self.set_position_value(value) {
+            return;
+        }
+        callbacks.position_changed();
+        GradientStopBaseCallbacks::notify_property_changed(callbacks, Self::POSITION_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_position_value(&mut self, value: f32) -> bool {
+        if self.position == value {
+            return false;
+        }
+        self.position = value;
+        true
+    }
+    pub fn clone_into(&self, callbacks: &mut impl GradientStopBaseCallbacks) -> GradientStop {
+        let mut cloned = GradientStop::default();
+        cloned.base.copy(self, callbacks);
+        cloned
+    }
+    pub fn copy(&mut self, object: &Self, callbacks: &mut impl GradientStopBaseCallbacks) {
+        self.color_value = object.color_value;
+        self.position = object.position;
+        self.base.copy(&object.base, callbacks);
+    }
+    pub fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut BinaryReader<'_>,
+        callbacks: &mut impl GradientStopBaseCallbacks,
+    ) -> bool {
+        match property_key {
+            Self::COLOR_VALUE_PROPERTY_KEY => {
+                self.color_value = crate::mechanical_port::source::core::field_types::core_color_type::CoreColorType::deserialize(reader);
+                true
+            }
+            Self::POSITION_PROPERTY_KEY => {
+                self.position = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                true
+            }
+            _ => self.base.deserialize(property_key, reader, callbacks),
+        }
+    }
+}
+
+impl std::ops::Deref for GradientStopBase {
+    type Target = Component;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl std::ops::DerefMut for GradientStopBase {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}

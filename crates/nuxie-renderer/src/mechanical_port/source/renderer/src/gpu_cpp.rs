@@ -2686,18 +2686,18 @@ fn multiply_mat2d(lhs: Mat2D, rhs: Mat2D) -> Mat2D {
     let a = lhs.0;
     let b = rhs.0;
     Mat2D([
-        a[0] * b[0] + a[2] * b[1],
-        a[1] * b[0] + a[3] * b[1],
-        a[0] * b[2] + a[2] * b[3],
-        a[1] * b[2] + a[3] * b[3],
-        a[0] * b[4] + a[2] * b[5] + a[4],
-        a[1] * b[4] + a[3] * b[5] + a[5],
+        a[0].mul_add(b[0], a[2] * b[1]),
+        a[1].mul_add(b[0], a[3] * b[1]),
+        a[0].mul_add(b[2], a[2] * b[3]),
+        a[1].mul_add(b[2], a[3] * b[3]),
+        a[0].mul_add(b[4], a[2] * b[5]) + a[4],
+        a[1].mul_add(b[4], a[3] * b[5]) + a[5],
     ])
 }
 
 fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
     let [a, b, c, d, tx, ty] = m.0;
-    let det = a * d - b * c;
+    let det = a.mul_add(d, -(c * b));
     if det == 0.0 {
         return None;
     }
@@ -2707,9 +2707,85 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
         -b * inv,
         -c * inv,
         a * inv,
-        (c * ty - d * tx) * inv,
-        (b * tx - a * ty) * inv,
+        c.mul_add(ty, -(d * tx)) * inv,
+        b.mul_add(tx, -(a * ty)) * inv,
     ]))
+}
+
+#[cfg(test)]
+mod mat2d_owner_tests {
+    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
+
+    fn from_bits(bits: [u32; 6]) -> Mat2D {
+        Mat2D(bits.map(f32::from_bits))
+    }
+
+    #[test]
+    fn gpu_mat2d_owners_preserve_pinned_finite_contractions() {
+        let lhs = from_bits([
+            0x9422_bf8a,
+            0x9788_280a,
+            0xd2ec_7e6e,
+            0x4d52_6674,
+            0xe887_c79b,
+            0x4bce_95e3,
+        ]);
+        let rhs = from_bits([
+            0xb12b_6d28,
+            0x2f8c_b036,
+            0xdeb1_8044,
+            0x4f30_2db7,
+            0x155f_c859,
+            0x4858_db48,
+        ]);
+        assert_eq!(
+            multiply_mat2d(lhs, rhs).0.map(f32::to_bits),
+            [
+                0xc301_f7ed,
+                0x3d67_41b5,
+                0xe2a2_c127,
+                0x5d10_cc02,
+                0xe887_c79b,
+                0x5632_3ab1,
+            ],
+        );
+
+        let cancellation = from_bits([
+            0x26cd_29b3,
+            0x2533_fdc2,
+            0xd01a_d4bb,
+            0xce87_d5a9,
+            0,
+            0,
+        ]);
+        let expected = [
+            0x6611_a2d3,
+            0x3cc0_fa97,
+            0xe7a6_00cd,
+            0xbe5b_f782,
+            0x8000_0000,
+            0x8000_0000,
+        ];
+        assert_eq!(
+            inverse_mat2d(cancellation)
+                .expect("pinned determinant is nonzero")
+                .0
+                .map(f32::to_bits),
+            expected,
+        );
+
+        // A centered 2x2 clip rect composes with identity, proving the live
+        // ClipRectInverseMatrix reset reaches the corrected inverse owner.
+        assert_eq!(
+            clip_rect_inverse_matrix_reset(
+                cancellation,
+                AABB::new(-1.0, -1.0, 1.0, 1.0),
+            )
+            .0
+            .map(f32::to_bits),
+            expected,
+        );
+    }
 }
 
 pub fn clip_rect_inverse_matrix_reset(clipMatrix: Mat2D, clipRect: AABB) -> Mat2D {
@@ -3023,7 +3099,7 @@ pub fn StorageTextureBufferSize(
 }
 
 pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
-    let pts = [
+    let source = [
         Vec2D {
             x: bounds.min_x,
             y: bounds.min_y,
@@ -3040,9 +3116,12 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
             x: bounds.min_x,
             y: bounds.max_y,
         },
-    ]
-    .map(|p| matrix.transform_point(p));
-    let cross = |a: Vec2D, b: Vec2D| a.x * b.y - a.y * b.x;
+    ];
+    let mut pts = [Vec2D::new(0.0, 0.0); 4];
+    matrix.map_points(&mut pts, &source);
+    // Pinned clang contracts the first cross product into the negated,
+    // separately rounded second product. Keep that authored SIMD lane order.
+    let cross = |a: Vec2D, b: Vec2D| a.x.mul_add(b.y, -(a.y * b.x));
     let v0 = Vec2D {
         x: pts[1].x - pts[0].x,
         y: pts[1].y - pts[0].y,
@@ -3056,6 +3135,85 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
         y: pts[3].y - pts[0].y,
     };
     (cross(v0, v1).abs() + cross(v1, v2).abs()) * 0.5
+}
+
+#[cfg(all(test, target_arch = "aarch64"))]
+mod map_points_caller_tests {
+    use super::{AABB, Mat2D, find_transformed_area};
+
+    #[test]
+    fn transformed_area_preserves_pinned_batch_exceptional_classification() {
+        let matrix = std::hint::black_box(Mat2D([
+            f32::from_bits(0x0080_0000),
+            f32::from_bits(0x0080_0000),
+            f32::from_bits(0xffff_ffff),
+            f32::from_bits(0x0000_0000),
+            f32::from_bits(0x7f7f_ffff),
+            f32::from_bits(0x3f80_0000),
+        ]));
+        let bounds = std::hint::black_box(AABB::new(
+            f32::from_bits(0xff80_0000),
+            f32::from_bits(0x7fc0_bbbb),
+            f32::from_bits(0xff7f_ffff),
+            f32::from_bits(0x0000_0000),
+        ));
+
+        let area = find_transformed_area(bounds, matrix);
+        assert!(area.is_nan());
+        // Without LTO, source-order lowering retains the same payload as pinned
+        // clang. Optimized payload selection is outside Rust's float contract.
+        #[cfg(debug_assertions)]
+        assert_eq!(area.to_bits(), 0x7fc0_bbbb);
+    }
+
+    #[test]
+    fn transformed_area_preserves_pinned_finite_cross_contraction_bits() {
+        let matrix = std::hint::black_box(Mat2D([
+            f32::from_bits(0xf905_d99f),
+            f32::from_bits(0x3410_0a4d),
+            f32::from_bits(0x4ad0_9610),
+            f32::from_bits(0x1711_99a5),
+            f32::from_bits(0x3c48_0a80),
+            f32::from_bits(0x85c5_1df6),
+        ]));
+        let bounds = std::hint::black_box(AABB::new(
+            f32::from_bits(0x9503_e6e0),
+            f32::from_bits(0x0b21_de72),
+            f32::from_bits(0x1df2_3437),
+            f32::from_bits(0xb784_8489),
+        ));
+
+        // Direct pinned clang/AArch64 oracle. The uncontracted Rust cross
+        // returned 0x27152232; the former scalar-map substitute 0x27152277.
+        assert_eq!(find_transformed_area(bounds, matrix).to_bits(), 0x2715_2238);
+    }
+
+    #[test]
+    fn transformed_area_preserves_pinned_threshold_control_result() {
+        let bounds = AABB::new(0.0, 0.0, 512.0, 512.0);
+        let without_translation = Mat2D([f32::from_bits(0x3f80_0001), 0.0, 0.0, 1.0, 0.0, 0.0]);
+        let with_large_translation = Mat2D([
+            f32::from_bits(0x3f80_0001),
+            0.0,
+            0.0,
+            1.0,
+            f32::from_bits(0x4e80_0000),
+            0.0,
+        ]);
+
+        let above = find_transformed_area(bounds, without_translation);
+        let at = find_transformed_area(bounds, with_large_translation);
+        assert_eq!(above.to_bits(), 0x4880_0001);
+        assert_eq!(at.to_bits(), 0x4880_0000);
+        assert!(above > 512.0 * 512.0);
+        assert!(!(at > 512.0 * 512.0));
+
+        // The removed determinant shortcut ignores mapped-point cancellation
+        // and incorrectly selects interior triangulation for the translated case.
+        let determinant_shortcut = f32::from_bits(0x3f80_0001) * 512.0 * 512.0;
+        assert_eq!(determinant_shortcut.to_bits(), 0x4880_0001);
+        assert!(determinant_shortcut > 512.0 * 512.0);
+    }
 }
 
 impl ClipRectInverseMatrix {

@@ -1,29 +1,18 @@
-//! One-for-one expected-red ports of all eleven cases in pinned
+//! One-for-one native ports of all eleven cases in pinned
 //! `tests/unit_tests/runtime/decode_ktx2_test.cpp`.
 //!
-//! Rust currently has no KTX2/BC7 decoder owner. The complete synthetic byte
-//! streams and every rejection/happy-path assertion remain explicit here.
+//! The complete synthetic byte streams and every rejection/happy-path assertion
+//! run against the translated decoder owner.
 
 const KTX2_IDENTIFIER: [u8; 12] = [
     0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a,
 ];
 const VK_FORMAT_BC7_SRGB_BLOCK: u32 = 146;
 
-#[derive(Debug, Default, PartialEq, Eq)]
-enum TextureFormat {
-    #[default]
-    Unknown,
-    Bc7,
-}
-
-#[derive(Debug, Default)]
-struct Ktx2DecodeResult {
-    format: TextureFormat,
-    pixel_width: u32,
-    pixel_height: u32,
-    level_count: u32,
-    blocks: Vec<u8>,
-}
+use nuxie_runtime::source::{
+    decoders::decode_ktx2::{Ktx2DecodeResult, Ktx2HwSupport, decode_ktx2},
+    gpu_texture_format::GpuTextureFormat,
+};
 
 fn append_u32(buffer: &mut Vec<u8>, value: u32) {
     buffer.extend_from_slice(&value.to_le_bytes());
@@ -61,94 +50,81 @@ fn build_skeleton_ktx2(
     buffer
 }
 
-fn decode_ktx2(_: &[u8], _: &mut Ktx2DecodeResult) -> bool {
-    panic!("Rust has no production KTX2/BC7 decoder owner")
-}
-
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_rejects_buffer_smaller_than_identifier_and_header() {
     let buffer = vec![0; 40];
     let mut output = Ktx2DecodeResult::default();
-    assert!(!decode_ktx2(&buffer, &mut output));
+    assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_rejects_bad_magic() {
     let mut buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 4, 4, 1, 0, 1, 0);
     buffer[0] = b'X';
     let mut output = Ktx2DecodeResult::default();
-    assert!(!decode_ktx2(&buffer, &mut output));
+    assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_rejects_unsupported_vk_format() {
     let buffer = build_skeleton_ktx2(37, 4, 4, 1, 0, 1, 0);
     let mut output = Ktx2DecodeResult::default();
-    assert!(!decode_ktx2(&buffer, &mut output));
+    assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_rejects_supercompressed_payload() {
     let buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 4, 4, 1, 2, 1, 0);
     let mut output = Ktx2DecodeResult::default();
-    assert!(!decode_ktx2(&buffer, &mut output));
+    assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_rejects_cubemaps_and_array_layers() {
     {
         let buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 4, 4, 1, 0, 6, 0);
         let mut output = Ktx2DecodeResult::default();
-        assert!(!decode_ktx2(&buffer, &mut output));
+        assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
     }
     {
         let buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 4, 4, 1, 0, 1, 4);
         let mut output = Ktx2DecodeResult::default();
-        assert!(!decode_ktx2(&buffer, &mut output));
+        assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
     }
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_rejects_out_of_range_dimensions() {
     {
         let buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 0, 4, 1, 0, 1, 0);
         let mut output = Ktx2DecodeResult::default();
-        assert!(!decode_ktx2(&buffer, &mut output));
+        assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
     }
     {
         let buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 4, 999_999, 1, 0, 1, 0);
         let mut output = Ktx2DecodeResult::default();
-        assert!(!decode_ktx2(&buffer, &mut output));
+        assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
     }
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_rejects_truncated_level_index() {
     let buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 4, 4, 1, 0, 1, 0);
     let mut output = Ktx2DecodeResult::default();
-    assert!(!decode_ktx2(&buffer, &mut output));
+    assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_rejects_level_pointer_outside_buffer() {
     let mut buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 4, 4, 1, 0, 1, 0);
     append_u64(&mut buffer, 1_u64 << 32);
     append_u64(&mut buffer, 16);
     append_u64(&mut buffer, 16);
     let mut output = Ktx2DecodeResult::default();
-    assert!(!decode_ktx2(&buffer, &mut output));
+    assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_rejects_byte_length_inconsistent_with_logical_block_grid() {
     let mut buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 4, 4, 1, 0, 1, 0);
     let level_offset = buffer.len() as u64 + 24;
@@ -157,11 +133,10 @@ fn ktx2_rejects_byte_length_inconsistent_with_logical_block_grid() {
     append_u64(&mut buffer, 32);
     buffer.resize(buffer.len() + 32, 0);
     let mut output = Ktx2DecodeResult::default();
-    assert!(!decode_ktx2(&buffer, &mut output));
+    assert!(!decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_happy_path_single_four_by_four_bc7_mip_zero() {
     let mut buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 4, 4, 1, 0, 1, 0);
     let level_offset = buffer.len() as u64 + 24;
@@ -175,8 +150,8 @@ fn ktx2_happy_path_single_four_by_four_bc7_mip_zero() {
     buffer.extend_from_slice(&expected);
 
     let mut output = Ktx2DecodeResult::default();
-    assert!(decode_ktx2(&buffer, &mut output));
-    assert_eq!(output.format, TextureFormat::Bc7);
+    assert!(decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
+    assert_eq!(output.format, GpuTextureFormat::Bc7);
     assert_eq!(output.pixel_width, 4);
     assert_eq!(output.pixel_height, 4);
     assert_eq!(output.level_count, 1);
@@ -185,7 +160,6 @@ fn ktx2_happy_path_single_four_by_four_bc7_mip_zero() {
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no KTX2/BC7 decoder owner"]
 fn ktx2_happy_path_eight_by_eight_with_two_mip_levels_concatenated() {
     let mut buffer = build_skeleton_ktx2(VK_FORMAT_BC7_SRGB_BLOCK, 8, 8, 2, 0, 1, 0);
     let header_end = buffer.len() as u64;
@@ -204,7 +178,7 @@ fn ktx2_happy_path_eight_by_eight_with_two_mip_levels_concatenated() {
     buffer.resize(buffer.len() + mip1_bytes as usize, 0xbb);
 
     let mut output = Ktx2DecodeResult::default();
-    assert!(decode_ktx2(&buffer, &mut output));
+    assert!(decode_ktx2(&buffer, &mut output, Ktx2HwSupport::default()));
     assert_eq!(output.pixel_width, 8);
     assert_eq!(output.pixel_height, 8);
     assert_eq!(output.level_count, 2);

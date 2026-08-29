@@ -3,9 +3,10 @@
 #![cfg(feature = "luau")]
 
 use luaur_rt::{Function, Table, Value};
+use nuxie_render_api::{NullFactory, PersistentFactory};
 use nuxie_runtime::{
-    NoopScriptHost, ScriptDataConverterMethod, ScriptInstance, ScriptListenerActionMethod,
-    ScriptListenerInvocation, ScriptPointerEventKind, ScriptValue,
+    File, NoopScriptHost, RuntimeFactoryHandle, ScriptDataConverterMethod, ScriptInstance,
+    ScriptListenerActionMethod, ScriptListenerInvocation, ScriptPointerEventKind, ScriptValue,
 };
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 
@@ -508,7 +509,15 @@ fn setting_file_models_refreshes_data_on_an_already_initialized_vm() {
         .join("tests/unit_tests/assets/script_create_viewmodel_instance.riv");
     let bytes = std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
-    let file = nuxie_binary::read_runtime_file(&bytes).expect("fixture parses");
+    let mut factory = PersistentFactory::new(NullFactory::new());
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained native factory"),
+        None,
+        None,
+        None,
+    )
+    .expect("native fixture import");
     let models = nuxie_runtime::script_view_models(&file);
     let model_name = models
         .keys()

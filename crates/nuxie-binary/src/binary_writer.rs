@@ -44,10 +44,6 @@ impl<'a> BinaryWriter<'a> {
         self.stream.write(&value.to_le_bytes());
     }
 
-    pub fn write_double(&mut self, value: f64) {
-        self.write_f64(value);
-    }
-
     pub fn write_var_uint64(&mut self, value: u64) {
         self.write_var_uint(value);
     }
@@ -60,6 +56,10 @@ impl<'a> BinaryWriter<'a> {
         if !bytes.is_empty() {
             self.stream.write(bytes);
         }
+    }
+
+    pub fn write_double(&mut self, value: f64) {
+        self.write_f64(value);
     }
 
     pub fn write_u8(&mut self, value: u8) {

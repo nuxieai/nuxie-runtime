@@ -1,6 +1,9 @@
 //! Direct owner for the 2D `ScriptedCanvas` portion of pinned
 //! `src/lua/renderer/lua_gpu.cpp`.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use luaur_rt::{AnyUserData, Lua, Result, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_render_api::{RenderCanvas, RenderCanvasFrame};
 
@@ -12,7 +15,7 @@ pub(super) struct ScriptedCanvas {
     bindings: RendererBindings,
     canvas: Option<Box<dyn RenderCanvas>>,
     image: Option<AnyUserData>,
-    frame: Option<Box<dyn RenderCanvasFrame>>,
+    frame: Option<Rc<RefCell<Box<dyn RenderCanvasFrame>>>>,
     renderer: Option<AnyUserData>,
 }
 
@@ -129,12 +132,13 @@ impl UserData for ScriptedCanvas {
                     }
                     _ => 0,
                 };
-                let mut frame = canvas
+                let frame = canvas
                     .begin_frame(clear_color)
                     .map_err(|error| luaur_rt::Error::runtime(error.to_string()))?;
-                let renderer = ScriptedRenderer::create_userdata(
+                let frame = Rc::new(RefCell::new(frame));
+                let renderer = ScriptedRenderer::create_canvas_userdata(
                     lua,
-                    frame.renderer(),
+                    Rc::clone(&frame),
                     this.bindings.clone(),
                 )?;
                 this.renderer = Some(renderer.clone());
@@ -149,9 +153,14 @@ impl UserData for ScriptedCanvas {
                 ));
             }
             this.end_renderer();
-            this.frame
-                .take()
-                .expect("checked active Canvas frame")
+            let frame = this.frame.take().expect("checked active Canvas frame");
+            Rc::try_unwrap(frame)
+                .map_err(|_| {
+                    luaur_rt::Error::runtime(
+                        "Canvas frame still has a live renderer owner after endFrame",
+                    )
+                })?
+                .into_inner()
                 .finish()
                 .map_err(|error| luaur_rt::Error::runtime(error.to_string()))
         });

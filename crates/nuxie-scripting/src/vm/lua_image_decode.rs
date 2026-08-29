@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use luaur_rt::{AnyUserData, Buffer, Lua, RegistryKey, Result, Value};
 use nuxie_image_codec::{DecodedImageRgba, decode_image_rgba_unbounded};
-use nuxie_runtime::{WorkTask, WorkTaskRef, WorkTaskState, with_global_work_pool};
+use nuxie_runtime::{
+    WorkCallbacks, WorkCancellationHandle, WorkPool, WorkTask, get_global_work_pool,
+};
 
 use super::lua_promise;
 
@@ -43,7 +45,6 @@ enum DecodeCompletion {
 }
 
 struct ImageDecodeTask {
-    state: WorkTaskState,
     request_id: u64,
     decoder: Arc<dyn ScriptImageDecoder>,
     encoded: Mutex<Vec<u8>>,
@@ -54,15 +55,11 @@ struct ImageDecodeTask {
 impl ImageDecodeTask {
     fn new(
         request_id: u64,
-        owner_id: u64,
         decoder: Arc<dyn ScriptImageDecoder>,
         encoded: Vec<u8>,
         completions: Arc<Mutex<VecDeque<DecodeCompletion>>>,
     ) -> Self {
-        let state = WorkTaskState::default();
-        state.set_owner_id(owner_id);
         Self {
-            state,
             request_id,
             decoder,
             encoded: Mutex::new(encoded),
@@ -79,22 +76,18 @@ impl ImageDecodeTask {
     }
 }
 
-impl WorkTask for ImageDecodeTask {
-    fn state(&self) -> &WorkTaskState {
-        &self.state
-    }
-
-    fn execute(&self) -> bool {
+impl WorkCallbacks for ImageDecodeTask {
+    fn execute(&mut self, error_message: &mut String) -> bool {
         let encoded = lock_unpoisoned(&self.encoded);
         let Some(decoded) = self.decoder.decode_rgba(&encoded) else {
-            self.state.set_error_message(DECODE_ERROR);
+            *error_message = DECODE_ERROR.to_owned();
             return false;
         };
         *lock_unpoisoned(&self.decoded) = Some(decoded);
         true
     }
 
-    fn on_complete(&self) {
+    fn on_complete(&mut self) {
         if let Some(image) = lock_unpoisoned(&self.decoded).take() {
             lock_unpoisoned(&self.completions).push_back(DecodeCompletion::Success {
                 request_id: self.request_id,
@@ -104,7 +97,7 @@ impl WorkTask for ImageDecodeTask {
         self.release_buffers();
     }
 
-    fn on_error(&self, error: &str) {
+    fn on_error(&mut self, error: &str) {
         lock_unpoisoned(&self.completions).push_back(DecodeCompletion::Failure {
             request_id: self.request_id,
             message: error.to_owned(),
@@ -112,14 +105,14 @@ impl WorkTask for ImageDecodeTask {
         self.release_buffers();
     }
 
-    fn on_cancel(&self) {
+    fn on_cancel(&mut self) {
         self.release_buffers();
     }
 }
 
 struct PendingDecode {
     promise: RegistryKey,
-    task: WorkTaskRef<ImageDecodeTask>,
+    cancellation: WorkCancellationHandle,
 }
 
 struct ImageDecodeRegistry {
@@ -134,7 +127,7 @@ impl ImageDecodeRegistry {
     fn new(decoder: Arc<dyn ScriptImageDecoder>) -> Self {
         Self {
             next_request_id: Cell::new(1),
-            owner_id: nuxie_runtime::next_work_owner_id(),
+            owner_id: WorkPool::next_owner_id(),
             decoder,
             pending: RefCell::new(HashMap::new()),
             completions: Arc::new(Mutex::new(VecDeque::new())),
@@ -153,7 +146,7 @@ impl ImageDecodeRegistry {
 
     fn cancel(&self, request_id: u64) {
         if let Some(pending) = self.pending.borrow_mut().remove(&request_id) {
-            pending.task.state().cancel();
+            pending.cancellation.cancel();
         }
     }
 
@@ -164,7 +157,7 @@ impl ImageDecodeRegistry {
             .drain()
             .map(|(_, pending)| pending)
         {
-            pending.task.state().cancel();
+            pending.cancellation.cancel();
         }
     }
 }
@@ -200,18 +193,18 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
     let promise = lua_promise::new_pending(lua)?;
     let promise_ref = lua.create_registry_value(promise.clone())?;
     let request_id = registry.next_request_id();
-    let task = Arc::new(ImageDecodeTask::new(
+    let mut task = WorkTask::new(ImageDecodeTask::new(
         request_id,
-        registry.owner_id,
         Arc::clone(&registry.decoder),
         encoded.to_vec(),
         Arc::clone(&registry.completions),
     ));
+    task.set_owner_id(registry.owner_id);
     registry.pending.borrow_mut().insert(
         request_id,
         PendingDecode {
             promise: promise_ref,
-            task: Arc::clone(&task),
+            cancellation: task.cancellation_handle(),
         },
     );
 
@@ -221,9 +214,7 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
         Ok(())
     })?;
     lua_promise::set_on_cancel(lua, promise.clone(), on_cancel)?;
-    with_global_work_pool(|pool| {
-        pool.submit(Some(task));
-    });
+    lock_unpoisoned(get_global_work_pool()).submit(Some(Box::new(task)));
     Ok(promise)
 }
 
@@ -274,12 +265,13 @@ pub(super) fn poll_completed(lua: &Lua) -> Result<bool> {
 mod tests {
     use super::*;
     use std::cell::Cell;
+    use std::time::{Duration, Instant};
 
     use luaur_rt::Table;
-    use nuxie_runtime::ScriptInstance;
+    use nuxie_runtime::{ScriptInstance, ScriptingVm as RuntimeScriptingVm};
 
-    use crate::vm::LuaScriptInstance;
     use crate::vm::view_model::ScriptedContext;
+    use crate::vm::{LuaScriptInstance, ScriptVm};
 
     fn lua_with_context() -> Lua {
         let lua = Lua::new();
@@ -297,18 +289,28 @@ mod tests {
         lua
     }
 
-    fn drain_work(lua: &Lua) {
-        for _ in 0..10_000 {
-            with_global_work_pool(|pool| {
-                pool.poll_completed_work(16);
-            });
-            poll_completed(lua).unwrap();
-            if registry(lua).unwrap().pending.borrow().is_empty() {
+    fn poll_work_until(mut complete: impl FnMut() -> bool) {
+        let start = Instant::now();
+        loop {
+            lock_unpoisoned(get_global_work_pool()).poll_completed_work(16);
+            if complete() {
                 return;
             }
-            std::thread::yield_now();
+            // With threading, polling only delivers completed callbacks; it
+            // does not execute the decode. A poll count is not a worker deadline.
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "image decode did not settle"
+            );
+            std::thread::sleep(Duration::from_millis(1));
         }
-        panic!("image decode did not settle");
+    }
+
+    fn drain_work(lua: &Lua) {
+        poll_work_until(|| {
+            poll_completed(lua).unwrap();
+            registry(lua).unwrap().pending.borrow().is_empty()
+        });
     }
 
     #[test]
@@ -427,15 +429,7 @@ mod tests {
         let table = lua.create_table();
         let mut instance = LuaScriptInstance::new(table);
 
-        for _ in 0..10_000 {
-            with_global_work_pool(|pool| {
-                pool.poll_completed_work(16);
-            });
-            if instance.poll_async_work().unwrap() {
-                break;
-            }
-            std::thread::yield_now();
-        }
+        poll_work_until(|| instance.poll_async_work().unwrap());
 
         assert!(lua.globals().get::<bool>("settled").unwrap());
     }
@@ -461,15 +455,7 @@ mod tests {
             .unwrap();
         let mut instance = LuaScriptInstance::new(table);
 
-        for _ in 0..10_000 {
-            with_global_work_pool(|pool| {
-                pool.poll_completed_work(16);
-            });
-            if !lock_unpoisoned(&registry(&lua).unwrap().completions).is_empty() {
-                break;
-            }
-            std::thread::yield_now();
-        }
+        poll_work_until(|| !lock_unpoisoned(&registry(&lua).unwrap().completions).is_empty());
         assert!(
             !lock_unpoisoned(&registry(&lua).unwrap().completions).is_empty(),
             "decode completion never reached the VM-owned queue"
@@ -487,6 +473,50 @@ mod tests {
         );
 
         assert!(instance.poll_async_work().unwrap());
+        assert_eq!(
+            lua.load("return decodePromise:getStatus()")
+                .eval::<String>()
+                .unwrap(),
+            "Fulfilled"
+        );
+    }
+
+    #[test]
+    fn vm_callbacks_leave_async_completion_for_the_artboard_poll_boundary() {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().unwrap();
+        let lua = vm.lua();
+        let context = lua
+            .create_userdata(ScriptedContext::new(
+                Rc::new(RefCell::new(None)),
+                Vec::new(),
+                Rc::new(Cell::new(false)),
+                None,
+            ))
+            .unwrap();
+        lua.globals().set("context", context).unwrap();
+        let mut encoded = Vec::new();
+        image_webp::WebPEncoder::new(&mut encoded)
+            .encode(&[4, 8, 12, 255], 1, 1, image_webp::ColorType::Rgba8)
+            .unwrap();
+        lua.globals()
+            .set("encoded", lua.create_buffer(encoded).unwrap())
+            .unwrap();
+        lua.load("decodePromise = context:decodeImage(encoded)")
+            .exec()
+            .unwrap();
+
+        poll_work_until(|| !lock_unpoisoned(&registry(lua).unwrap().completions).is_empty());
+        vm.eval::<()>("local callbackRan = true").unwrap();
+        assert_eq!(
+            lua.load("return decodePromise:getStatus()")
+                .eval::<String>()
+                .unwrap(),
+            "Pending",
+            "ordinary VM callbacks must not replace Artboard::advance as the async poll authority"
+        );
+
+        assert!(RuntimeScriptingVm::poll_async_work(&vm).unwrap());
         assert_eq!(
             lua.load("return decodePromise:getStatus()")
                 .eval::<String>()

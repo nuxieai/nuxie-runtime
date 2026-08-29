@@ -49,12 +49,15 @@ impl RuntimeFile {
         validate_cpp_artboard_local_slots(&mut local_slots, &self.objects);
 
         let mut animations = Vec::<RuntimeLinearAnimation<'_>>::new();
-        let mut current_animation = None;
-        let mut current_keyed_object = None;
-        let mut current_keyed_property = None;
+        // ImportStack retains each importer key independently across the
+        // complete file. The optional output coordinates identify owners that
+        // belong to this requested artboard; `None` remains a real sink for a
+        // retained owner elsewhere or one rejected during later validation.
+        let mut current_animation = None::<(u32, Option<usize>)>;
+        let mut current_keyed_object = None::<Option<(usize, usize)>>;
+        let mut current_keyed_property = None::<keyed_property_importer::KeyedPropertyImporter>;
 
-        for (offset, object) in self.objects[range.0..range.1].iter().enumerate() {
-            let file_index = range.0 + offset;
+        for (file_index, object) in self.objects.iter().enumerate() {
             let Some(object) = object.as_ref() else {
                 continue;
             };
@@ -66,79 +69,86 @@ impl RuntimeFile {
             };
 
             if definition.name == "LinearAnimation" {
-                animations.push(RuntimeLinearAnimation {
-                    object,
-                    keyed_objects: Vec::new(),
-                });
-                current_animation = Some(animations.len() - 1);
-                current_keyed_object = None;
-                current_keyed_property = None;
+                let animation_index = if range.0 <= file_index && file_index < range.1 {
+                    animations.push(RuntimeLinearAnimation {
+                        object,
+                        keyed_objects: Vec::new(),
+                    });
+                    Some(animations.len() - 1)
+                } else {
+                    None
+                };
+                current_animation = Some((
+                    object.uint_property("fps").unwrap_or(60) as u32,
+                    animation_index,
+                ));
                 continue;
             }
 
-            let Some(animation_index) = current_animation else {
-                continue;
-            };
-
             if definition.name == "KeyedObject" {
-                if cpp_keyed_object_target(object, &local_slots, &self.objects).is_none() {
-                    current_keyed_object = None;
-                    current_keyed_property = None;
+                let Some((_, animation_index)) = current_animation else {
                     continue;
-                }
-
-                animations[animation_index]
-                    .keyed_objects
-                    .push(RuntimeKeyedObject {
-                        object,
-                        keyed_properties: Vec::new(),
-                    });
-                current_keyed_object = Some(animations[animation_index].keyed_objects.len() - 1);
-                current_keyed_property = None;
+                };
+                let keyed_object = animation_index.and_then(|animation_index| {
+                    cpp_keyed_object_target(object, &local_slots, &self.objects)?;
+                    animations[animation_index]
+                        .keyed_objects
+                        .push(RuntimeKeyedObject {
+                            object,
+                            keyed_properties: Vec::new(),
+                        });
+                    Some((
+                        animation_index,
+                        animations[animation_index].keyed_objects.len() - 1,
+                    ))
+                });
+                current_keyed_object = Some(keyed_object);
                 continue;
             }
 
             if definition.name == "KeyedProperty" {
-                let Some(keyed_object_index) = current_keyed_object else {
+                let Some((animation_fps, _)) = current_animation else {
                     continue;
                 };
-                if !cpp_keyed_object_supports_property(
-                    animations[animation_index].keyed_objects[keyed_object_index].object,
-                    object,
-                    &local_slots,
-                    &self.objects,
-                ) {
-                    current_keyed_property = None;
+                let Some(keyed_object) = current_keyed_object else {
                     continue;
-                }
-
-                animations[animation_index].keyed_objects[keyed_object_index]
-                    .keyed_properties
-                    .push(RuntimeKeyedProperty {
-                        object,
-                        first_key_frame: None,
+                };
+                let keyed_property =
+                    keyed_object.and_then(|(animation_index, keyed_object_index)| {
+                        if !cpp_keyed_object_supports_property(
+                            animations[animation_index].keyed_objects[keyed_object_index].object,
+                            object,
+                            &local_slots,
+                            &self.objects,
+                        ) {
+                            return None;
+                        }
+                        animations[animation_index].keyed_objects[keyed_object_index]
+                            .keyed_properties
+                            .push(RuntimeKeyedProperty {
+                                object,
+                                first_key_frame: None,
+                                key_frames: Vec::new(),
+                            });
+                        Some((
+                            animation_index,
+                            keyed_object_index,
+                            animations[animation_index].keyed_objects[keyed_object_index]
+                                .keyed_properties
+                                .len()
+                                - 1,
+                        ))
                     });
-                current_keyed_property = Some((
-                    keyed_object_index,
-                    animations[animation_index].keyed_objects[keyed_object_index]
-                        .keyed_properties
-                        .len()
-                        - 1,
+                current_keyed_property = Some(keyed_property_importer::KeyedPropertyImporter::new(
+                    animation_fps,
+                    keyed_property,
                 ));
                 continue;
             }
 
             if definition.is_a("KeyFrame") {
-                let Some((keyed_object_index, keyed_property_index)) = current_keyed_property
-                else {
-                    continue;
-                };
-                let first_key_frame = &mut animations[animation_index].keyed_objects
-                    [keyed_object_index]
-                    .keyed_properties[keyed_property_index]
-                    .first_key_frame;
-                if first_key_frame.is_none() {
-                    *first_key_frame = Some(object);
+                if let Some(importer) = current_keyed_property.as_ref() {
+                    importer.add_key_frame(&mut animations, object);
                 }
             }
         }

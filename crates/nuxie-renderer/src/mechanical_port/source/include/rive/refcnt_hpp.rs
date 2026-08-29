@@ -628,3 +628,6 @@ impl<T: RefCntTarget> PartialEq for rcp<T> {
 }
 
 impl<T: RefCntTarget> Eq for rcp<T> {}
+
+#[cfg(test)]
+mod wave_c4_core_utility_tests;

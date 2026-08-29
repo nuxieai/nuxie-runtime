@@ -1,0 +1,216 @@
+use crate::mechanical_port::source::{
+    core::CoreHandle,
+    data_bind::data_values::{
+        data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
+        data_value_symbol_list_index::DataValueSymbolListIndex,
+    },
+    generated::data_bind::converters::data_converter_operation_base::{
+        DataConverterOperationBase, DataConverterOperationBaseCallbacks,
+    },
+};
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArithmeticOperation {
+    Add = 0,
+    Subtract = 1,
+    Multiply = 2,
+    Divide = 3,
+    Modulo = 4,
+    SquareRoot = 5,
+    Power = 6,
+    Exp = 7,
+    Log = 8,
+    Cosine = 9,
+    Sine = 10,
+    Tangent = 11,
+    Acosine = 12,
+    Asine = 13,
+    Atangent = 14,
+    Atangent2 = 15,
+    Round = 16,
+    Floor = 17,
+    Ceil = 18,
+}
+
+impl crate::mechanical_port::source::generated::core_registry::DataConverterCapability
+    for DataConverterOperation
+{
+    fn convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(input);
+    }
+
+    fn reverse_convert(
+        &mut self,
+        input: &dyn DataValue,
+        _data_bind: &CoreHandle,
+        output: &mut dyn FnMut(&dyn DataValue),
+    ) {
+        output(input);
+    }
+
+    fn output_type(&self) -> DataType {
+        Self::output_type(self)
+    }
+
+    crate::data_converter_capability_lifecycle!(base.base);
+}
+pub struct DataConverterOperation {
+    pub base: DataConverterOperationBase,
+    output: DataValueNumber,
+}
+
+impl std::ops::Deref for DataConverterOperation {
+    type Target = DataConverterOperationBase;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+impl std::ops::DerefMut for DataConverterOperation {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+
+impl Default for DataConverterOperation {
+    fn default() -> Self {
+        Self {
+            base: DataConverterOperationBase::default(),
+            output: DataValueNumber::default(),
+        }
+    }
+}
+
+impl DataConverterOperation {
+    pub fn new(operation: ArithmeticOperation) -> Self {
+        let mut converter = Self::default();
+        if converter.base.set_operation_type_value(operation as u32) {
+            DataConverterOperationBaseCallbacks::operation_type_changed(&mut converter);
+            crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
+                .notify_property_changed(DataConverterOperationBase::OPERATION_TYPE_PROPERTY_KEY);
+        }
+        converter
+    }
+    pub fn output_type(&self) -> DataType {
+        DataType::Number
+    }
+    fn input_number(input: &dyn DataValue) -> Option<f32> {
+        input
+            .as_any()
+            .downcast_ref::<DataValueNumber>()
+            .map(DataValueNumber::value)
+            .or_else(|| {
+                input
+                    .as_any()
+                    .downcast_ref::<DataValueSymbolListIndex>()
+                    .map(|value| value.value() as f32)
+            })
+    }
+    pub fn convert_value(&mut self, input: &dyn DataValue, value: f32) -> &DataValueNumber {
+        let result = Self::input_number(input).map_or(DataValueNumber::DEFAULT_VALUE, |input| {
+            match self.operation() {
+                ArithmeticOperation::Add => input + value,
+                ArithmeticOperation::Subtract => input - value,
+                ArithmeticOperation::Multiply => input * value,
+                ArithmeticOperation::Divide => input / value,
+                ArithmeticOperation::Modulo => {
+                    let range = value.abs();
+                    let mut result = input % range;
+                    if result < 0.0 {
+                        result += range;
+                    }
+                    result
+                }
+                ArithmeticOperation::SquareRoot => input.sqrt(),
+                ArithmeticOperation::Power => input.powf(value),
+                ArithmeticOperation::Exp => input.exp(),
+                ArithmeticOperation::Log => input.ln(),
+                ArithmeticOperation::Cosine => input.cos(),
+                ArithmeticOperation::Sine => input.sin(),
+                ArithmeticOperation::Tangent => input.tan(),
+                ArithmeticOperation::Acosine => input.acos(),
+                ArithmeticOperation::Asine => input.asin(),
+                ArithmeticOperation::Atangent => input.atan(),
+                ArithmeticOperation::Atangent2 => input.atan2(value),
+                ArithmeticOperation::Round => input.round(),
+                ArithmeticOperation::Floor => input.floor(),
+                ArithmeticOperation::Ceil => input.ceil(),
+            }
+        });
+        self.output.set_value(result);
+        &self.output
+    }
+    pub fn reverse_convert_value(&self, input: &dyn DataValue, value: f32) -> DataValueNumber {
+        let mut output = DataValueNumber::default();
+        if let Some(input) = input
+            .as_any()
+            .downcast_ref::<DataValueNumber>()
+            .map(DataValueNumber::value)
+        {
+            let result = match self.operation() {
+                ArithmeticOperation::Add => input - value,
+                ArithmeticOperation::Subtract => input + value,
+                ArithmeticOperation::Multiply => input / value,
+                ArithmeticOperation::Divide => input * value,
+                ArithmeticOperation::Modulo => input,
+                ArithmeticOperation::SquareRoot => input.powf(2.0),
+                ArithmeticOperation::Power => input.powf(1.0 / value),
+                ArithmeticOperation::Exp => input.ln(),
+                ArithmeticOperation::Log => input.exp(),
+                ArithmeticOperation::Cosine => input.acos(),
+                ArithmeticOperation::Sine => input.asin(),
+                ArithmeticOperation::Tangent => input.atan(),
+                ArithmeticOperation::Acosine => input.cos(),
+                ArithmeticOperation::Asine => input.sin(),
+                ArithmeticOperation::Atangent => input.tan(),
+                ArithmeticOperation::Atangent2
+                | ArithmeticOperation::Round
+                | ArithmeticOperation::Floor
+                | ArithmeticOperation::Ceil => input,
+            };
+            output.set_value(result);
+        }
+        output
+    }
+    pub fn mark_converter_dirty(&mut self) {
+        self.base.base.mark_converter_dirty()
+    }
+
+    pub fn operation(&self) -> ArithmeticOperation {
+        match self.base.operation_type() {
+            1 => ArithmeticOperation::Subtract,
+            2 => ArithmeticOperation::Multiply,
+            3 => ArithmeticOperation::Divide,
+            4 => ArithmeticOperation::Modulo,
+            5 => ArithmeticOperation::SquareRoot,
+            6 => ArithmeticOperation::Power,
+            7 => ArithmeticOperation::Exp,
+            8 => ArithmeticOperation::Log,
+            9 => ArithmeticOperation::Cosine,
+            10 => ArithmeticOperation::Sine,
+            11 => ArithmeticOperation::Tangent,
+            12 => ArithmeticOperation::Acosine,
+            13 => ArithmeticOperation::Asine,
+            14 => ArithmeticOperation::Atangent,
+            15 => ArithmeticOperation::Atangent2,
+            16 => ArithmeticOperation::Round,
+            17 => ArithmeticOperation::Floor,
+            18 => ArithmeticOperation::Ceil,
+            _ => ArithmeticOperation::Add,
+        }
+    }
+}
+
+impl DataConverterOperationBaseCallbacks for DataConverterOperation {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        self.base
+            .base
+            .base
+            .base
+            .notify_property_changed(property_key);
+    }
+}

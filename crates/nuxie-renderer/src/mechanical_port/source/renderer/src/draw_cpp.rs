@@ -20,6 +20,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp a
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     AABBu16, LogicalFlush, RenderContext, IAABB,
 };
+use crate::mechanical_port::source::renderer::src::gpu_cpp;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPath;
 use nuxie_render_api::{
     BlendMode, FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D,
@@ -460,14 +461,17 @@ fn source_line_cubic(start: Vec2D, end: Vec2D) -> [Vec2D; 4] {
 fn transformed_cubic_segment_count(points: [Vec2D; 4], matrix: Mat2D) -> u32 {
     let [xx, yx, xy, yy, _, _] = matrix.0;
     let second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
-        let x = -2.0 * b.x + a.x + c.x;
-        let y = -2.0 * b.y + a.y + c.y;
-        let mapped_x = xx * x + xy * y;
-        let mapped_y = yx * x + yy * y;
-        mapped_x * mapped_x + mapped_y * mapped_y
+        let x = (-2.0f32).mul_add(b.x, a.x) + c.x;
+        let y = (-2.0f32).mul_add(b.y, a.y) + c.y;
+        let mapped_x = xx.mul_add(x, xy * y);
+        let mapped_y = yy.mul_add(y, yx * x);
+        let squared_x = mapped_x * mapped_x;
+        let squared_y = mapped_y * mapped_y;
+        squared_x + squared_y
     };
-    let max_length_squared = second_difference(points[0], points[1], points[2])
-        .max(second_difference(points[1], points[2], points[3]));
+    let first = second_difference(points[0], points[1], points[2]);
+    let second = second_difference(points[1], points[2], points[3]);
+    let max_length_squared = if first < second { second } else { first };
     let length_term_squared = (9.0 / 16.0) * (crate::gpu::PARAMETRIC_PRECISION as f32).powi(2);
     (max_length_squared * length_term_squared)
         .sqrt()
@@ -924,22 +928,8 @@ unsafe fn allocate_path_resources(draw: *mut Draw, flush: *mut LogicalFlush) -> 
 
     const PADDING: i32 = 2;
     let frame = flush_ref.frameDescriptor();
-    let visible = IAABB {
-        left: owner.draw.base.pixel_bounds.left.max(0),
-        top: owner.draw.base.pixel_bounds.top.max(0),
-        right: owner
-            .draw
-            .base
-            .pixel_bounds
-            .right
-            .min(frame.renderTargetWidth as i32),
-        bottom: owner
-            .draw
-            .base
-            .pixel_bounds
-            .bottom
-            .min(frame.renderTargetHeight as i32),
-    };
+    let visible = IAABB::MakeWH(frame.renderTargetWidth, frame.renderTargetHeight)
+        .intersect(owner.draw.base.pixel_bounds);
     let width = (visible.right - visible.left).max(0) as u32;
     let height = (visible.bottom - visible.top).max(0) as u32;
     if owner.coverage_type == PathCoverageType::featherAtlas {
@@ -1483,8 +1473,7 @@ fn contour_directions_for_path(
     if is_stroke {
         return gpu::ContourDirections::forward;
     }
-    let [xx, yx, xy, yy, _, _] = matrix.0;
-    let determinant = xx * yy - yx * xy;
+    let determinant = crate::draw::mat2d_determinant(matrix);
     if initial_fill_rule == FillRule::Clockwise {
         if determinant < 0.0 {
             if matches!(
@@ -1581,7 +1570,7 @@ pub unsafe fn make_path_draw_from_source(
     let do_interior = !paint.getIsStroked()
         && paint.getFeather() == 0.0
         && context.frameInterlockMode() != gpu::InterlockMode::msaa
-        && crate::draw::should_use_interior_tessellation(path, matrix);
+        && should_use_interior_tessellation(path, matrix);
     let mut geometry = if do_interior {
         PreparedPathGeometry::Interior(crate::draw::build_interior_tessellation(
             path,
@@ -1728,11 +1717,107 @@ pub unsafe fn make_path_draw_from_source(
     } else {
         FillRule::NonZero
     };
-    let [xx, yx, xy, yy, _, _] = matrix.0;
-    owner.triangulator_reverse_triangles = xx * yy - yx * xy < 0.0;
+    owner.triangulator_reverse_triangles = crate::draw::mat2d_determinant(matrix) < 0.0;
     owner.triangulator_negate_winding = owner.triangulator_reverse_triangles
         != (directions == gpu::ContourDirections::forwardThenReverse);
     Some(owner)
+}
+
+fn should_use_interior_tessellation(path: &RawPath, matrix: Mat2D) -> bool {
+    path.verbs().len() < 1000
+        && path
+            .bounds()
+            .is_some_and(|bounds| gpu_cpp::find_transformed_area(bounds, matrix) > 512.0 * 512.0)
+}
+
+#[cfg(test)]
+mod transformed_area_consumer_tests {
+    use super::{
+        FillRule, Mat2D, PathCoverageType, RawPath, contour_directions_for_path, gpu,
+        should_use_interior_tessellation, transformed_cubic_segment_count,
+    };
+    use nuxie_render_api::Vec2D;
+
+    #[test]
+    fn source_path_draw_wang_vector_xform_preserves_pinned_segment_boundary() {
+        let points = [
+            Vec2D::new(f32::from_bits(0xbe60_4e00), f32::from_bits(0xbdaf_2ef0)),
+            Vec2D::new(f32::from_bits(0x401d_9080), f32::from_bits(0x40b1_82c0)),
+            Vec2D::new(f32::from_bits(0x4155_e0d0), f32::from_bits(0xba6d_d000)),
+            Vec2D::new(f32::from_bits(0x3e16_a200), f32::from_bits(0x4004_56c0)),
+        ];
+        let transform = Mat2D([
+            f32::from_bits(0xbe05_c750),
+            f32::from_bits(0x3d57_05f0),
+            f32::from_bits(0xbec1_8200),
+            f32::from_bits(0x401b_f700),
+            0.0,
+            0.0,
+        ]);
+        assert_eq!(transformed_cubic_segment_count(points, transform), 9);
+    }
+
+    #[test]
+    fn source_path_draw_wang_square_reduction_preserves_pinned_34_segment_boundary() {
+        let points = [
+            Vec2D::new(f32::from_bits(0x412b_7e28), f32::from_bits(0x4086_c8b4)),
+            Vec2D::new(f32::from_bits(0xc1e7_82aa), f32::from_bits(0x4138_be77)),
+            Vec2D::new(f32::from_bits(0x4215_f15b), f32::from_bits(0xc1c1_edc6)),
+            Vec2D::new(f32::from_bits(0xc1c1_a33a), f32::from_bits(0xc0e8_d4fe)),
+        ];
+        let transform = Mat2D([
+            f32::from_bits(0x3fce_0aa6),
+            f32::from_bits(0xbcef_34d7),
+            f32::from_bits(0xc03d_4af5),
+            f32::from_bits(0xbf03_18fc),
+            0.0,
+            0.0,
+        ]);
+
+        assert_eq!(transformed_cubic_segment_count(points, transform), 34);
+    }
+
+    #[test]
+    fn path_draw_contour_direction_uses_pinned_contracted_determinant() {
+        let matrix = Mat2D([
+            f32::from_bits(0x26cd_29b3),
+            f32::from_bits(0x2533_fdc2),
+            f32::from_bits(0xd01a_d4bb),
+            f32::from_bits(0xce87_d5a9),
+            0.0,
+            0.0,
+        ]);
+        assert_eq!(
+            contour_directions_for_path(
+                &RawPath::new(),
+                matrix,
+                FillRule::Clockwise,
+                false,
+                PathCoverageType::msaa,
+                false,
+            ),
+            gpu::ContourDirections::reverse,
+        );
+    }
+
+    fn threshold_path() -> RawPath {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(512.0, 0.0);
+        path.line_to(512.0, 512.0);
+        path.line_to(0.0, 512.0);
+        path
+    }
+
+    #[test]
+    fn path_draw_uses_mapped_area_for_the_pinned_threshold_decision() {
+        let path = threshold_path();
+        let mut matrix = Mat2D([f32::from_bits(0x3f80_0001), 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert!(should_use_interior_tessellation(&path, matrix));
+
+        matrix.0[4] = f32::from_bits(0x4e80_0000);
+        assert!(!should_use_interior_tessellation(&path, matrix));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

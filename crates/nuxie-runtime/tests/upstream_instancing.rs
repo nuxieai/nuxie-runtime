@@ -1,13 +1,13 @@
-//! Direct ports of all three cases in pinned
+//! Direct native-owner ports of all three cases in pinned
 //! `tests/unit_tests/runtime/instancing_test.cpp`.
 
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use nuxie_binary::{RuntimeFile, read_runtime_file};
-use nuxie_graph::{ArtboardGraph, GraphFile};
-use nuxie_render_api::RecordingFactory;
-use nuxie_runtime::ArtboardInstance;
+use nuxie_render_api::{PersistentFactory, RecordingFactory, RecordingRenderer};
+use nuxie_runtime::{
+    Artboard, CoreHandle, File, ImportResult, RuntimeFactoryHandle, RuntimeFileHandle,
+    source::shapes::{clipping_shape::ClippingShape, shape::Shape},
+};
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -19,137 +19,131 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
 }
 
-fn load_default(name: &str) -> (RuntimeFile, GraphFile) {
-    let file = read_runtime_file(&pinned_fixture(name))
-        .unwrap_or_else(|error| panic!("{name} imports: {error:#}"));
-    let graphs = GraphFile::from_runtime_file(&file)
-        .unwrap_or_else(|error| panic!("{name} graph builds: {error:#}"));
-    (file, graphs)
-}
-
-fn named_local(graph: &ArtboardGraph, name: &str) -> usize {
-    graph
-        .local_objects
-        .iter()
-        .find(|object| object.name.as_deref() == Some(name))
-        .unwrap_or_else(|| panic!("missing object named {name}"))
-        .local_id
-}
-
-fn property_key(type_name: &str, property_name: &str) -> u16 {
-    let definition = nuxie_schema::definition_by_name(type_name).expect("schema definition");
-    definition
-        .properties
-        .iter()
-        .chain(definition.ancestors.iter().flat_map(|ancestor| {
-            nuxie_schema::definition_by_name(ancestor)
-                .expect("ancestor definition")
-                .properties
-                .iter()
-        }))
-        .find(|property| property.name == property_name)
-        .unwrap_or_else(|| panic!("property {type_name}.{property_name}"))
-        .key
-        .int
-}
-
-fn missing_cloned_shape_position(_artboard: &ArtboardInstance, _local_id: usize) -> (f32, f32) {
-    panic!("Rust has no individual Component::clone owner")
+fn load_file(name: &str) -> (RuntimeFileHandle, RecordingRenderer) {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let renderer = factory.borrow().make_renderer();
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory)
+        .expect("explicit retained RecordingFactory");
+    let mut result = ImportResult::Malformed;
+    let file = File::import(
+        &pinned_fixture(name),
+        retained,
+        Some(&mut result),
+        None,
+        None,
+    )
+    .unwrap_or_else(|| panic!("{name} imports: {result:?}"));
+    assert_eq!(result, ImportResult::Success);
+    (file, renderer)
 }
 
 #[test]
-#[ignore = "expected-red: Rust has no individual Shape clone operation"]
 fn cloning_an_ellipse_works() {
-    let (file, graphs) = load_default("circle_clips.riv");
-    let graph = graphs.artboards.first().expect("default artboard graph");
-    let artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("default artboard instantiates");
-    let node = named_local(graph, "TopEllipse");
-    let x_key = property_key("Shape", "x");
-    let y_key = property_key("Shape", "y");
-    let position = (
-        artboard.double_property(node, x_key).expect("TopEllipse.x"),
-        artboard.double_property(node, y_key).expect("TopEllipse.y"),
-    );
-    let cloned_position = missing_cloned_shape_position(&artboard, node);
+    let (file, _renderer) = load_file("circle_clips.riv");
+    let source = file.with_file(File::artboard).expect("default artboard");
+    let node = source
+        .with_downcast::<Artboard, _>(|artboard| artboard.find_handle::<Shape>("TopEllipse"))
+        .flatten()
+        .expect("TopEllipse shape");
+    let cloned_node = node.clone_occurrence().expect("individual Shape clone");
+    let position = node
+        .with_downcast::<Shape, _>(|shape| (shape.base.x(), shape.base.y()))
+        .expect("source Shape");
+    let cloned_position = cloned_node
+        .with_downcast::<Shape, _>(|shape| (shape.base.x(), shape.base.y()))
+        .expect("cloned Shape");
     assert_eq!(position.0, cloned_position.0);
     assert_eq!(position.1, cloned_position.1);
+    assert!(cloned_node.remove_occurrence());
 }
 
 #[test]
 fn instancing_artboard_clones_clipped_properties() {
-    let (file, graphs) = load_default("circle_clips.riv");
-    let graph = graphs.artboards.first().expect("default artboard graph");
-
-    // The immutable ArtboardGraph is Rust's definition owner; construction of
-    // a distinct ArtboardInstance below is the borrow-safe `isInstance()`
-    // adaptation.
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("default artboard instantiates");
-    let node = named_local(graph, "TopEllipse");
+    let (file, mut renderer) = load_file("circle_clips.riv");
+    let source = file.with_file(File::artboard).expect("default artboard");
     assert_eq!(
-        graph.local_objects[node].type_name,
-        Some("Shape"),
-        "TopEllipse is a Shape"
+        source.with_downcast::<Artboard, _>(Artboard::is_instance),
+        Some(false),
     );
-
-    let clipping_sources = graph
-        .clipping_shapes
-        .iter()
-        .filter(|clipping| clipping.clipped_drawable_locals.contains(&node))
-        .map(|clipping| {
-            graph.local_objects[clipping.source_local.expect("clipping source local")]
-                .name
-                .as_deref()
-                .expect("clipping source name")
+    let instance = file
+        .with_file(File::artboard_default)
+        .expect("default instance");
+    assert!(instance.with_artboard(|artboard| artboard.is_instance()));
+    let node = instance
+        .with_artboard(|artboard| artboard.find_handle::<Shape>("TopEllipse"))
+        .expect("TopEllipse is a Shape");
+    let clipping_shapes = node
+        .with(|node| {
+            node.as_drawable()
+                .expect("Shape Drawable")
+                .clipping_shapes()
+                .to_vec()
         })
-        .collect::<Vec<_>>();
-    assert_eq!(clipping_sources.len(), 2);
-    assert_eq!(clipping_sources[0], "ClipRect2");
-    assert_eq!(clipping_sources[1], "BabyEllipse");
+        .expect("live TopEllipse");
+    assert_eq!(clipping_shapes.len(), 2);
+    let source_names: Vec<String> = clipping_shapes
+        .iter()
+        .map(|clipping| {
+            let source = clipping
+                .with_downcast::<ClippingShape, _>(ClippingShape::source)
+                .flatten()
+                .expect("clipping source");
+            source
+                .with(|source| {
+                    source
+                        .as_component()
+                        .expect("source Component")
+                        .base
+                        .name()
+                        .to_owned()
+                })
+                .expect("live clipping source")
+        })
+        .collect();
+    assert_eq!(source_names[0], "ClipRect2");
+    assert_eq!(source_names[1], "BabyEllipse");
 
-    artboard.update_pass();
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
-    artboard
-        .draw_artboard(
-            &file,
-            graph,
-            &graphs.artboards,
-            &mut factory,
-            &mut renderer,
-            &BTreeMap::new(),
-            None,
-            true,
-        )
-        .expect("clipped artboard draws");
+    Artboard::update_components_handle(&instance.core_handle());
+    instance.draw(&mut renderer);
 }
 
-fn missing_animation_delete_count() -> usize {
-    panic!("Rust animation definitions expose no C++ deleteCount equivalent")
-}
-
-fn missing_first_animation_identity(_graph: &ArtboardGraph, _artboard: &ArtboardInstance) -> bool {
-    panic!("Rust ArtboardInstance exposes no firstAnimation definition identity")
+// Integration tests cannot access LinearAnimation's cfg(test) global counter.
+// Native CoreHandle is weak: observe the retirement of these exact authored
+// animations without retaining them or inventing a second lifetime graph.
+fn deleted_animation_count(animations: &[CoreHandle]) -> usize {
+    animations
+        .iter()
+        .filter(|animation| !animation.is_alive())
+        .count()
 }
 
 #[test]
-#[ignore = "expected-red: Rust exposes neither firstAnimation identity nor deleteCount"]
 fn instancing_artboard_does_not_clone_animations() {
-    let (file, graphs) = load_default("juice.riv");
-    let graph = graphs.artboards.first().expect("default artboard graph");
-    let artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("default artboard instantiates");
-
-    let source_animation_count = graph.animations.len();
-    let instance_animation_count = graph.animations.len();
+    let (file, _renderer) = load_file("juice.riv");
+    let source = file.with_file(File::artboard).expect("default artboard");
+    let instance = file
+        .with_file(File::artboard_default)
+        .expect("default instance");
+    let source_animation_count = source
+        .with_downcast::<Artboard, _>(Artboard::animation_count)
+        .expect("source animation count");
+    let instance_animation_count = instance.with_artboard(|artboard| artboard.animation_count());
     assert_eq!(source_animation_count, instance_animation_count);
-    assert!(missing_first_animation_identity(graph, &artboard));
+    assert_eq!(
+        source
+            .with_downcast::<Artboard, _>(Artboard::first_animation)
+            .flatten(),
+        instance.with_artboard(|artboard| artboard.first_animation()),
+    );
 
-    assert_eq!(missing_animation_delete_count(), 0);
+    let animations = source
+        .with_downcast::<Artboard, _>(|artboard| artboard.animation_handles().to_vec())
+        .expect("authored animation handles");
+    assert_eq!(deleted_animation_count(&animations), 0);
     let number_of_animations = source_animation_count;
-    drop(artboard);
-    drop(graphs);
+    drop(instance);
+    assert_eq!(deleted_animation_count(&animations), 0);
+    drop(source);
     drop(file);
-    assert_eq!(missing_animation_delete_count(), number_of_animations);
+    assert_eq!(deleted_animation_count(&animations), number_of_animations);
 }

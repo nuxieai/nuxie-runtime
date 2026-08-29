@@ -706,3 +706,6 @@ impl FontShapeTextContract for Font {
 }
 
 // } // namespace rive
+
+#[cfg(test)]
+mod wave_c4_core_utility_tests;

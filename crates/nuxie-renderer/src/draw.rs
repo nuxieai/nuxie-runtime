@@ -11,7 +11,7 @@ use crate::gpu::{
 };
 use crate::gr_triangulator::{InnerFanTriangulator, SweepDirection, WindingFaces};
 use bytemuck::Zeroable;
-use nuxie_render_api::{FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
+use nuxie_render_api::{Aabb, FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
 use smallvec::SmallVec;
 
 #[cfg(test)]
@@ -111,13 +111,21 @@ pub(crate) enum FeatherFillDirection {
     ForwardThenReverse,
 }
 
+#[inline]
+pub(crate) fn mat2d_determinant(matrix: Mat2D) -> f32 {
+    let [xx, yx, xy, yy, _, _] = matrix.0;
+    xx.mul_add(yy, -(xy * yx))
+}
+
 pub(crate) fn feather_atlas_fill_direction(
     transform: Mat2D,
     fill_rule: FillRule,
     is_stroke: bool,
 ) -> FeatherFillDirection {
-    let [xx, yx, xy, yy, _, _] = transform.0;
-    if !is_stroke && fill_rule == FillRule::Clockwise && xx * yy - xy * yx < 0.0 {
+    if !is_stroke
+        && fill_rule == FillRule::Clockwise
+        && mat2d_determinant(transform) < 0.0
+    {
         FeatherFillDirection::Reverse
     } else {
         FeatherFillDirection::Forward
@@ -455,7 +463,9 @@ fn feather_pixel_bounds_impl(
         && feather_fill_requires_softening(paint_feather, matrix_scale))
     .then(|| softened_path_for_feathering(path, paint_feather * 1.5, matrix_scale));
     let path = softened_path.as_ref().unwrap_or(path);
-    let (min, max) = transformed_control_bounds(path, transform)?;
+    let mut mapped_bounds = transform.map_bounding_box(path.points());
+    debug_assert!(mapped_bounds.width() >= 0.0);
+    debug_assert!(mapped_bounds.height() >= 0.0);
     let mut radius = stroke.map_or(0.0, |(thickness, join, cap)| {
         let stroke_radius = thickness * 0.5;
         if join == StrokeJoin::Miter {
@@ -467,41 +477,21 @@ fn feather_pixel_bounds_impl(
         }
     });
     radius += paint_feather * 1.5;
-    let [xx, yx, xy, yy, _, _] = transform.0;
-    let outset_x = radius * (xx.abs() + xy.abs()) + 1.0;
-    let outset_y = radius * (yx.abs() + yy.abs()) + 1.0;
-    Some([
-        (min.x - outset_x).floor() as i32,
-        (min.y - outset_y).floor() as i32,
-        (max.x + outset_x).ceil() as i32,
-        (max.y + outset_y).ceil() as i32,
-    ])
+    let stroke_pixel_outset = transform.map_bounds(Aabb::new(0.0, 0.0, radius, radius));
+    mapped_bounds = mapped_bounds.outset(
+        stroke_pixel_outset.width() + 1.0,
+        stroke_pixel_outset.height() + 1.0,
+    );
+    let bounds = mapped_bounds.round_out();
+    Some([bounds.left, bounds.top, bounds.right, bounds.bottom])
 }
 
 pub(crate) fn path_pixel_bounds(path: &RawPath, transform: Mat2D) -> Option<[i32; 4]> {
-    let (min, max) = transformed_control_bounds(path, transform)?;
-    Some([
-        min.x.floor() as i32,
-        min.y.floor() as i32,
-        max.x.ceil() as i32,
-        max.y.ceil() as i32,
-    ])
-}
-
-fn transformed_control_bounds(path: &RawPath, transform: Mat2D) -> Option<(Vec2D, Vec2D)> {
-    let mut min = Vec2D::new(f32::INFINITY, f32::INFINITY);
-    let mut max = Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY);
-    for point in path.points() {
-        let point = transform.transform_point(*point);
-        min.x = min.x.min(point.x);
-        min.y = min.y.min(point.y);
-        max.x = max.x.max(point.x);
-        max.y = max.y.max(point.y);
-    }
-    if !min.x.is_finite() || !min.y.is_finite() || !max.x.is_finite() || !max.y.is_finite() {
-        return None;
-    }
-    Some((min, max))
+    let mapped_bounds = transform.map_bounding_box(path.points());
+    debug_assert!(mapped_bounds.width() >= 0.0);
+    debug_assert!(mapped_bounds.height() >= 0.0);
+    let bounds = mapped_bounds.round_out();
+    Some([bounds.left, bounds.top, bounds.right, bounds.bottom])
 }
 
 #[cfg(test)]
@@ -1122,7 +1112,7 @@ fn append_cubic_at_uniform_rotation(
 }
 
 fn angle_between(a: Vec2D, b: Vec2D) -> f32 {
-    let denominator = ((a.x * a.x + a.y * a.y) * (b.x * b.x + b.y * b.y)).sqrt();
+    let denominator = (dot(a, a) * dot(b, b)).sqrt();
     let cosine = (dot(a, b) / denominator).clamp(-1.0, 1.0);
     if cosine.is_nan() {
         0.0
@@ -1385,7 +1375,7 @@ fn chop_cubic_around_cusps(
         chopped[offset + 2][0] = cusp;
         let neighboring_midpoint = lerp(chopped[offset][2], chopped[offset + 2][1], 0.5);
         let direction = subtract(cusp, neighboring_midpoint);
-        let length = (direction.x * direction.x + direction.y * direction.y).sqrt();
+        let length = dot(direction, direction).sqrt();
         let pivot = if length > 0.0 && matrix_scale > 0.0 {
             let amount = 1.0 / (length * matrix_scale * POLAR_PRECISION as f32 * 2.0);
             Vec2D::new(cusp.x + direction.x * amount, cusp.y + direction.y * amount)
@@ -1412,15 +1402,23 @@ fn max_matrix_scale(transform: Mat2D) -> f32 {
     const MATH_EPSILON: f32 = 1.0 / 4096.0;
     let [xx, yx, xy, yy, _, _] = transform.0;
     if xy == 0.0 && yx == 0.0 {
-        return xx.abs().max(yy.abs());
+        let x = xx.abs();
+        let y = yy.abs();
+        return if x < y { y } else { x };
     }
-    let a = xx * xx + xy * xy;
-    let b = xx * yx + yy * xy;
-    let c = yx * yx + yy * yy;
-    let result = if b * b <= MATH_EPSILON * MATH_EPSILON {
+    let a = xx.mul_add(xx, xy * xy);
+    let b = xx.mul_add(yx, yy * xy);
+    let c = yx.mul_add(yx, yy * yy);
+    let b_squared = b * b;
+    let result = if b_squared <= MATH_EPSILON * MATH_EPSILON {
         a.max(c)
     } else {
-        (a + c) * 0.5 + ((a - c) * (a - c) + 4.0 * b * b).sqrt() * 0.5
+        let a_minus_c = a - c;
+        (a + c) * 0.5
+            + a_minus_c
+                .mul_add(a_minus_c, 4.0 * b_squared)
+                .sqrt()
+                * 0.5
     };
     if result.is_finite() {
         result.max(0.0).sqrt()
@@ -1448,11 +1446,8 @@ fn fast_acos(x: f32) -> f32 {
 }
 
 fn round_join_segment_count(incoming: Vec2D, outgoing: Vec2D, per_radian: f32) -> u32 {
-    let denominator = ((incoming.x * incoming.x + incoming.y * incoming.y)
-        * (outgoing.x * outgoing.x + outgoing.y * outgoing.y))
-        .sqrt();
-    let cosine =
-        ((incoming.x * outgoing.x + incoming.y * outgoing.y) / denominator).clamp(-1.0, 1.0);
+    let denominator = (dot(incoming, incoming) * dot(outgoing, outgoing)).sqrt();
+    let cosine = (dot(incoming, outgoing) / denominator).clamp(-1.0, 1.0);
     (fast_acos(cosine) * per_radian)
         .ceil()
         .clamp(1.0, crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32
@@ -1476,6 +1471,68 @@ mod fast_acos_tests {
                 round_join_segment_count(Vec2D::new(1.0, 0.0), outgoing, per_radian),
                 expected
             );
+        }
+    }
+
+    #[test]
+    fn wave_c4_simd_016_fast_acos() {
+        const MAX_ERROR: f32 = 0.016_755_2;
+        const MATH_EPSILON: f32 = 1.0 / 4096.0;
+
+        let boundaries = [fast_acos(-1.0), fast_acos(0.0), fast_acos(1.0), fast_acos(0.0)];
+        assert!(((-1.0_f32).acos() - boundaries[0]).abs() <= MAX_ERROR);
+        assert!((0.0_f32.acos() - boundaries[1]).abs() <= MAX_ERROR);
+        assert!((1.0_f32.acos() - boundaries[2]).abs() <= MAX_ERROR);
+
+        let mut x = [-0.99_f32, -0.8, -0.4, -0.2, 0.2, 0.4, 0.8, 0.99];
+        let mut derivative = [0.0_f32; 8];
+        for _ in 0..10 {
+            let fast_acos_x = x.map(fast_acos);
+            let mut second_derivative = [0.0_f32; 8];
+            for lane in 0..8 {
+                let xx = x[lane] * x[lane];
+                let a = -0.939115566365855_f32;
+                let b = 0.9217841528914573_f32;
+                let c = -1.2845906244690837_f32;
+                let d = 0.295624144969963174_f32;
+                let f = (b * xx + a) * x[lane];
+                let f_prime = 3.0 * b * xx + a;
+                let g = (d * xx + c) * xx + 1.0;
+                let g_prime = (4.0 * d * xx + 2.0 * c) * x[lane];
+                let gg = g * g;
+                let q = (1.0 - xx).sqrt();
+                derivative[lane] =
+                    (f_prime * g - f * g_prime) / gg + 1.0 / q;
+                let f_second = 6.0 * b * x[lane];
+                let g_second = 12.0 * d * xx + 2.0 * c;
+                second_derivative[lane] = ((f_second * g - f * g_second) * g
+                    - (f_prime * g - f * g_prime) * 2.0 * g_prime)
+                    / (gg * g)
+                    + x[lane] / ((1.0 - xx) * q);
+
+                assert!((x[lane].acos() - fast_acos_x[lane]).abs() <= MAX_ERROR);
+            }
+            for lane in 0..8 {
+                x[lane] =
+                    (x[lane] - derivative[lane] / second_derivative[lane]).clamp(-0.99, 0.99);
+            }
+        }
+
+        for lane in 0..8 {
+            assert!(derivative[lane].abs() <= MATH_EPSILON);
+        }
+
+        for known_root in [
+            -0.983_536_f32,
+            -0.867_381,
+            -0.410_923,
+            0.410_923,
+            0.867_381,
+            0.983_536,
+        ] {
+            assert!(x
+                .into_iter()
+                .any(|value| (value - known_root).abs() < MATH_EPSILON));
         }
     }
 }
@@ -1505,11 +1562,11 @@ fn scale(vector: Vec2D, amount: f32) -> Vec2D {
 }
 
 fn dot(a: Vec2D, b: Vec2D) -> f32 {
-    a.x * b.x + a.y * b.y
+    a.x.mul_add(b.x, a.y * b.y)
 }
 
 fn vector_cross(a: Vec2D, b: Vec2D) -> f32 {
-    a.x * b.y - a.y * b.x
+    a.x.mul_add(b.y, -(a.y * b.x))
 }
 
 pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D) -> bool {
@@ -1524,8 +1581,8 @@ pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D)
         max.x = max.x.max(point.x);
         max.y = max.y.max(point.y);
     }
-    let [xx, yx, xy, yy, _, _] = transform.0;
-    let transformed_area = (xx * yy - xy * yx).abs() * (max.x - min.x) * (max.y - min.y);
+    let transformed_area =
+        mat2d_determinant(transform).abs() * (max.x - min.x) * (max.y - min.y);
     transformed_area > 512.0 * 512.0
 }
 
@@ -1725,7 +1782,7 @@ pub(crate) fn build_interior_tessellation(
     } else {
         SweepDirection::Vertical
     };
-    let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
+    let determinant = mat2d_determinant(transform);
     let coarse_area = path_coarse_area(path);
     let negate_coverage = clockwise_atomic_negate_coverage_from_area(
         coarse_area,
@@ -1995,7 +2052,7 @@ pub(crate) fn clockwise_atomic_negate_coverage(
     fill_rule: FillRule,
     clockwise_override: bool,
 ) -> bool {
-    let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
+    let determinant = mat2d_determinant(transform);
     let coarse_area = path_coarse_area(path);
     clockwise_atomic_negate_coverage_from_area(
         coarse_area,
@@ -2020,7 +2077,7 @@ pub(crate) fn msaa_fill_requires_reverse_from_area(
     transform: Mat2D,
     fill_rule: FillRule,
 ) -> bool {
-    let determinant = transform.0[0] * transform.0[3] - transform.0[2] * transform.0[1];
+    let determinant = mat2d_determinant(transform);
     match fill_rule {
         FillRule::EvenOdd => false,
         FillRule::Clockwise => determinant < 0.0,
@@ -2703,15 +2760,17 @@ fn cubic_segment_count_with_precision_and_transform(
 fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D) -> f32 {
     let [xx, yx, xy, yy, _, _] = transform.0;
     let transformed_second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
-        let x = -2.0 * b.x + a.x + c.x;
-        let y = -2.0 * b.y + a.y + c.y;
-        let transformed_x = xx * x + xy * y;
-        let transformed_y = yx * x + yy * y;
-        transformed_x * transformed_x + transformed_y * transformed_y
+        let x = (-2.0f32).mul_add(b.x, a.x) + c.x;
+        let y = (-2.0f32).mul_add(b.y, a.y) + c.y;
+        let transformed_x = xx.mul_add(x, xy * y);
+        let transformed_y = yy.mul_add(y, yx * x);
+        let squared_x = transformed_x * transformed_x;
+        let squared_y = transformed_y * transformed_y;
+        squared_x + squared_y
     };
-    transformed_second_difference(points[0], points[1], points[2]).max(
-        transformed_second_difference(points[1], points[2], points[3]),
-    )
+    let first = transformed_second_difference(points[0], points[1], points[2]);
+    let second = transformed_second_difference(points[1], points[2], points[3]);
+    if first < second { second } else { first }
 }
 
 #[cfg(test)]
@@ -2808,6 +2867,64 @@ fn lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn determinant_cancellation_matrix() -> Mat2D {
+        Mat2D([
+            f32::from_bits(0x26cd_29b3),
+            f32::from_bits(0x2533_fdc2),
+            f32::from_bits(0xd01a_d4bb),
+            f32::from_bits(0xce87_d5a9),
+            0.0,
+            0.0,
+        ])
+    }
+
+    #[test]
+    fn winding_consumers_preserve_pinned_contracted_determinant_control() {
+        let transform = determinant_cancellation_matrix();
+        assert_eq!(mat2d_determinant(transform).to_bits(), 0xa7ee_c560);
+        assert_eq!(
+            feather_atlas_fill_direction(transform, FillRule::Clockwise, false),
+            FeatherFillDirection::Reverse,
+        );
+
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(1.0, 0.0);
+        path.line_to(1.0, 1.0);
+        path.close();
+        assert!(clockwise_atomic_negate_coverage(
+            &path,
+            transform,
+            FillRule::Clockwise,
+            false,
+        ));
+    }
+
+    #[test]
+    fn feather_consumers_use_pinned_find_max_scale_bits() {
+        let transform = Mat2D([
+            f32::from_bits(0xc32d_8148),
+            f32::from_bits(0xc2d1_a0c5),
+            f32::from_bits(0x42d9_3be7),
+            f32::from_bits(0x4345_c7ae),
+            0.0,
+            0.0,
+        ]);
+        assert_eq!(max_matrix_scale(transform).to_bits(), 0x4392_8724);
+        assert_eq!(
+            feather_atlas_scale(100.0, transform),
+            16.0 / (100.0 * 1.5 * f32::from_bits(0x4392_8724)),
+        );
+    }
+
+    #[test]
+    fn feather_consumers_preserve_pinned_find_max_scale_left_nan_control() {
+        let payload = f32::from_bits(0x7fc0_1234);
+        let transform = Mat2D([payload, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(max_matrix_scale(transform).to_bits(), payload.to_bits());
+        assert!(!feather_requires_atlas(100.0, transform, false));
+    }
 
     fn assert_stroke_tessellation_bytes_eq(
         actual: &StrokeTessellation,
@@ -3075,6 +3192,80 @@ mod tests {
                 4
             );
         }
+    }
+
+    #[test]
+    fn wang_vector_xform_preserves_pinned_finite_segment_boundary() {
+        let points = [
+            Vec2D::new(f32::from_bits(0xbe60_4e00), f32::from_bits(0xbdaf_2ef0)),
+            Vec2D::new(f32::from_bits(0x401d_9080), f32::from_bits(0x40b1_82c0)),
+            Vec2D::new(f32::from_bits(0x4155_e0d0), f32::from_bits(0xba6d_d000)),
+            Vec2D::new(f32::from_bits(0x3e16_a200), f32::from_bits(0x4004_56c0)),
+        ];
+        let transform = Mat2D([
+            f32::from_bits(0xbe05_c750),
+            f32::from_bits(0x3d57_05f0),
+            f32::from_bits(0xbec1_8200),
+            f32::from_bits(0x401b_f700),
+            0.0,
+            0.0,
+        ]);
+
+        let max_length_squared = max_transformed_cubic_second_difference(points, transform);
+        let length_term_squared =
+            (9.0 / 16.0) * (PARAMETRIC_PRECISION as f32).powi(2);
+        let wang = (max_length_squared * length_term_squared).sqrt().sqrt();
+        assert_eq!(wang.to_bits(), 0x4110_0000);
+        assert_eq!(
+            cubic_segment_count_with_precision_and_transform(
+                points,
+                PARAMETRIC_PRECISION as f32,
+                transform,
+            ),
+            9
+        );
+    }
+
+    #[test]
+    fn wang_square_reduction_preserves_pinned_34_segment_boundary() {
+        let points = [
+            Vec2D::new(f32::from_bits(0x412b_7e28), f32::from_bits(0x4086_c8b4)),
+            Vec2D::new(f32::from_bits(0xc1e7_82aa), f32::from_bits(0x4138_be77)),
+            Vec2D::new(f32::from_bits(0x4215_f15b), f32::from_bits(0xc1c1_edc6)),
+            Vec2D::new(f32::from_bits(0xc1c1_a33a), f32::from_bits(0xc0e8_d4fe)),
+        ];
+        let transform = Mat2D([
+            f32::from_bits(0x3fce_0aa6),
+            f32::from_bits(0xbcef_34d7),
+            f32::from_bits(0xc03d_4af5),
+            f32::from_bits(0xbf03_18fc),
+            0.0,
+            0.0,
+        ]);
+
+        let max_length_squared = max_transformed_cubic_second_difference(points, transform);
+        let length_term_squared = (9.0 / 16.0) * 4.0f32.powi(2);
+        let wang = (max_length_squared * length_term_squared).sqrt().sqrt();
+        assert_eq!(wang.to_bits(), 0x4204_0001);
+        assert_eq!(
+            cubic_segment_count_with_precision_and_transform(points, 4.0, transform),
+            34
+        );
+    }
+
+    #[test]
+    fn live_vec2d_dot_and_cross_preserve_pinned_cancellation_sign() {
+        let a = Vec2D::new(f32::from_bits(0x26cd_29b3), f32::from_bits(0xd01a_d4bb));
+        let b = Vec2D::new(f32::from_bits(0x2533_fdc2), f32::from_bits(0xce87_d5a9));
+        assert_eq!(vector_cross(a, b).to_bits(), 0xa7ee_c560);
+
+        let dot_a = Vec2D::new(a.x, -a.y);
+        let dot_b = Vec2D::new(b.y, b.x);
+        assert_eq!(dot(dot_a, dot_b).to_bits(), 0xa7ee_c560);
+
+        let cubic = [Vec2D::new(0.0, 0.0), Vec2D::new(0.0, 0.0), a, b];
+        let turn = vector_cross(subtract(cubic[2], cubic[0]), subtract(cubic[3], cubic[1]));
+        assert!(turn < 0.0, "the live cubic turn must not take the zero fallback");
     }
 
     #[test]
@@ -3905,6 +4096,33 @@ mod tests {
         assert_eq!(
             path_pixel_bounds(&path, Mat2D::IDENTITY),
             Some([1, 2, 7, 9])
+        );
+    }
+
+    #[test]
+    fn path_pixel_bounds_uses_pinned_map_bounding_box_nonfinite_normalization() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(1.0, 1.0);
+
+        // Pinned `PathDraw::Make` calls `Mat2D::mapBoundingBox` directly. Its
+        // extent subtraction normalizes this infinite mapped box to zero
+        // before `roundOut`; a pointwise scalar fold instead returns `None`.
+        let transform = Mat2D([f32::INFINITY, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(path_pixel_bounds(&path, transform), Some([0, 0, 0, 0]));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic]
+    fn path_pixel_bounds_retains_pinned_post_translation_width_assertion() {
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(1.0, 1.0);
+
+        path_pixel_bounds(
+            &path,
+            Mat2D([1.0, 0.0, 0.0, 1.0, f32::INFINITY, 0.0]),
         );
     }
 

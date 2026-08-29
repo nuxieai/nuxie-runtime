@@ -1,4 +1,21 @@
+use crate::importers::{ImportContext, ImportStackKey};
 use crate::*;
+
+pub(crate) fn is_file_asset_referencer(definition: &'static Definition) -> bool {
+    definition.is_a("TextStyle")
+        || matches!(definition.name, "Image" | "AudioEvent")
+        || definition_is_cpp_scripted_object(definition)
+}
+
+/// Pinned `FileAssetReferencer::registerReferencer`: the base relationship is
+/// registered before each concrete referencer continues through its Super
+/// import, so a missing BackboardImporter is immediately MissingObject.
+pub(crate) fn register_referencer_succeeds(
+    definition: &'static Definition,
+    context: &ImportContext,
+) -> bool {
+    !is_file_asset_referencer(definition) || context.latest(ImportStackKey::Backboard)
+}
 
 impl RuntimeFile {
     pub fn resolved_file_asset_for_object(&self, object_id: usize) -> Option<&RuntimeObject> {
@@ -16,7 +33,10 @@ impl RuntimeFile {
         }
 
         let asset_index = usize::try_from(cpp_file_asset_referencer_index(referencer)?).ok()?;
-        let asset = self.file_asset(asset_index)?;
+        let asset = self
+            .cpp_file_assets_for_backboard_owner(referencer)
+            .into_iter()
+            .nth(asset_index)?;
         if cpp_file_asset_matches_referencer(referencer, asset) {
             Some(asset)
         } else {
@@ -27,9 +47,11 @@ impl RuntimeFile {
 
 fn cpp_file_asset_referencer_index(object: &RuntimeObject) -> Option<u64> {
     let definition = definition_by_type_key(object.type_key)?;
+    if definition.is_a("TextStyle") {
+        return object.uint_property("fontAssetId");
+    }
     match definition.name {
         "Image" | "AudioEvent" => object.uint_property("assetId"),
-        "TextStyle" => object.uint_property("fontAssetId"),
         _ if definition_is_cpp_scripted_object(definition) => object.uint_property("scriptAssetId"),
         _ => None,
     }
@@ -39,12 +61,17 @@ fn cpp_file_asset_matches_referencer(referencer: &RuntimeObject, asset: &Runtime
     let Some(definition) = definition_by_type_key(referencer.type_key) else {
         return false;
     };
+    let Some(asset_definition) = definition_by_type_key(asset.type_key) else {
+        return false;
+    };
+    if definition.is_a("TextStyle") {
+        return asset_definition.is_a("FontAsset");
+    }
 
     match definition.name {
-        "Image" => asset.type_name == "ImageAsset",
-        "AudioEvent" => asset.type_name == "AudioAsset",
-        "TextStyle" => asset.type_name == "FontAsset",
-        _ if definition_is_cpp_scripted_object(definition) => asset.type_name == "ScriptAsset",
+        "Image" => asset_definition.is_a("ImageAsset"),
+        "AudioEvent" => asset_definition.is_a("AudioAsset"),
+        _ if definition_is_cpp_scripted_object(definition) => asset_definition.is_a("ScriptAsset"),
         _ => false,
     }
 }

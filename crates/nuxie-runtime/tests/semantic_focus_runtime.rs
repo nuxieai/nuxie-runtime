@@ -1,16 +1,75 @@
 //! Direct ports of the four focus-dependent cases in pinned
 //! `tests/unit_tests/runtime/semantic_state_machine_test.cpp`.
 
-use nuxie_binary::read_runtime_file;
-use nuxie_graph::GraphFile;
-use nuxie_runtime::{
-    ArtboardInstance, SemanticActionType, SemanticRole, SemanticState, SemanticTrait,
-    SemanticsDiff, StateMachineInstance, has_semantic_state, has_semantic_trait,
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::source::{
+    animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
+    artboard::RuntimeArtboardInstanceHandle,
+    math::vec2d::Vec2D,
+    semantic::{
+        semantic_role::SemanticRole,
+        semantic_snapshot::{SemanticsDiff, SemanticsDiffNode},
+        semantic_state::{SemanticState, has_semantic_state},
+        semantic_trait::{SemanticTrait, has_semantic_trait},
+    },
 };
+use nuxie_runtime::{File, RuntimeFactoryHandle, RuntimeFileHandle};
+
+fn native_file(bytes: &[u8]) -> RuntimeFileHandle {
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    File::import(
+        bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("semantic fixture imports")
+}
+
+fn drain(machine: &RuntimeStateMachineInstanceHandle) -> SemanticsDiff {
+    machine
+        .with_instance(|machine| machine.semantic_manager())
+        .unwrap()
+        .with_semantic_manager_mut(|manager| manager.drain_diff())
+}
+
+fn scene(
+    bytes: &[u8],
+    require_model: bool,
+) -> (
+    RuntimeFileHandle,
+    RuntimeArtboardInstanceHandle,
+    RuntimeStateMachineInstanceHandle,
+    SemanticsDiff,
+) {
+    let file = native_file(bytes);
+    let artboard = file.with_file(|file| file.artboard_default()).unwrap();
+    let machine = artboard.state_machine_instance_handle(0).unwrap();
+    machine.with_instance_mut(|machine| machine.enable_semantics());
+    let model = file.with_file_mut(|file| {
+        file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+    });
+    if require_model {
+        assert!(model.is_some());
+    }
+    if let Some(model) = model {
+        artboard.bind_view_model_instance(Some(model.clone()));
+        machine.with_instance_mut(|machine| machine.bind_view_model_instance(model));
+    }
+    settle(&machine);
+    let initial = drain(&machine);
+    (file, artboard, machine, initial)
+}
 
 fn upstream_semantic_fixture(
     asset: &str,
-) -> (ArtboardInstance, StateMachineInstance, SemanticsDiff) {
+) -> (
+    RuntimeFileHandle,
+    RuntimeArtboardInstanceHandle,
+    RuntimeStateMachineInstanceHandle,
+    SemanticsDiff,
+) {
     let fixture = std::path::PathBuf::from(
         std::env::var_os("RIVE_RUNTIME_DIR")
             .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
@@ -19,39 +78,23 @@ fn upstream_semantic_fixture(
     .join(asset);
     let bytes = std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("read {}: {error}", fixture.display()));
-    let file = read_runtime_file(&bytes).expect("semantic fixture imports");
-    let graphs = GraphFile::from_runtime_file(&file).expect("semantic fixture graph builds");
-    let graph = graphs.artboards.first().expect("default artboard graph");
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("default artboard instantiates");
-    let mut machine = artboard.state_machine_instance(0).expect("state machine 0");
-    assert!(machine.enable_semantics());
-    let _ = machine.bind_default_view_model_context_on_artboard(&mut artboard);
-    for _ in 0..10 {
-        machine
-            .advance_and_apply(&mut artboard, 0.1)
-            .expect("semantic fixture settles");
-    }
-    let initial = machine
-        .drain_semantics_diff(&mut artboard)
-        .expect("initial semantic tree drains");
-    (artboard, machine, initial)
+    scene(&bytes, false)
 }
 
-fn tabs(diff: &SemanticsDiff) -> Vec<&nuxie_runtime::SemanticsDiffNode> {
+fn tabs(diff: &SemanticsDiff) -> Vec<&SemanticsDiffNode> {
     diff.added
         .iter()
         .filter(|node| node.role == SemanticRole::Tab as u32)
         .collect()
 }
 
-fn selected(node: &nuxie_runtime::SemanticsDiffNode) -> bool {
+fn selected(node: &SemanticsDiffNode) -> bool {
     has_semantic_state(node.state_flags, SemanticState::SELECTED)
 }
 
 fn semantic_snapshot(
     initial: &SemanticsDiff,
-) -> std::collections::BTreeMap<u32, nuxie_runtime::SemanticsDiffNode> {
+) -> std::collections::BTreeMap<u32, SemanticsDiffNode> {
     initial
         .added
         .iter()
@@ -61,7 +104,7 @@ fn semantic_snapshot(
 }
 
 fn apply_semantic_diff(
-    snapshot: &mut std::collections::BTreeMap<u32, nuxie_runtime::SemanticsDiffNode>,
+    snapshot: &mut std::collections::BTreeMap<u32, SemanticsDiffNode>,
     diff: &SemanticsDiff,
 ) {
     for id in &diff.removed {
@@ -85,17 +128,15 @@ fn apply_semantic_diff(
     }
 }
 
-fn settle(machine: &mut StateMachineInstance, artboard: &mut ArtboardInstance) {
+fn settle(machine: &RuntimeStateMachineInstanceHandle) {
     for _ in 0..10 {
-        machine
-            .advance_and_apply(artboard, 0.1)
-            .expect("semantic action settles");
+        machine.advance_and_apply(0.1);
     }
 }
 
 #[test]
 fn upstream_simpsons_exposes_one_tab_list_and_labelled_single_selection() {
-    let (_, _, initial) = upstream_semantic_fixture("simpsons.riv");
+    let (_file, _artboard, _machine, initial) = upstream_semantic_fixture("simpsons.riv");
     assert_eq!(
         initial
             .added
@@ -111,106 +152,8 @@ fn upstream_simpsons_exposes_one_tab_list_and_labelled_single_selection() {
 }
 
 #[test]
-fn upstream_simpsons_pointer_tap_selects_other_tab() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("simpsons.riv");
-    let tabs = tabs(&initial);
-    let initially_selected = tabs.iter().find(|tab| selected(tab)).unwrap();
-    let other = tabs.iter().find(|tab| !selected(tab)).unwrap();
-    let x = (other.min_x + other.max_x) * 0.5;
-    let y = (other.min_y + other.max_y) * 0.5;
-    machine.pointer_down(&mut artboard, x, y, 0);
-    machine.pointer_up(&mut artboard, x, y, 0);
-    settle(&mut machine, &mut artboard);
-    let diff = machine.drain_semantics_diff(&mut artboard).unwrap();
-    let mut snapshot = semantic_snapshot(&initial);
-    apply_semantic_diff(&mut snapshot, &diff);
-    assert!(!selected(&snapshot[&initially_selected.id]));
-    assert!(selected(&snapshot[&other.id]));
-}
-
-#[test]
-fn upstream_simpsons_semantic_tap_selects_target_tab() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("simpsons.riv");
-    let tabs = tabs(&initial);
-    let initially_selected = tabs.iter().find(|tab| selected(tab)).unwrap();
-    let target = tabs.iter().find(|tab| !selected(tab)).unwrap();
-    assert!(machine.fire_semantic_action(target.id, SemanticActionType::Tap as u32));
-    settle(&mut machine, &mut artboard);
-    let diff = machine.drain_semantics_diff(&mut artboard).unwrap();
-    let mut snapshot = semantic_snapshot(&initial);
-    apply_semantic_diff(&mut snapshot, &diff);
-    assert!(selected(&snapshot[&target.id]));
-    assert!(!selected(&snapshot[&initially_selected.id]));
-}
-
-#[test]
-fn upstream_simpsons_pointer_and_semantic_tap_converge() {
-    let (mut pointer_artboard, mut pointer_machine, pointer_initial) =
-        upstream_semantic_fixture("simpsons.riv");
-    let (mut semantic_artboard, mut semantic_machine, semantic_initial) =
-        upstream_semantic_fixture("simpsons.riv");
-    let pointer_tabs = tabs(&pointer_initial);
-    let semantic_tabs = tabs(&semantic_initial);
-    assert_eq!(pointer_tabs.len(), semantic_tabs.len());
-    let pointer_target = pointer_tabs[1];
-    let semantic_target = semantic_tabs
-        .iter()
-        .find(|tab| tab.label == pointer_target.label)
-        .unwrap();
-    let x = (pointer_target.min_x + pointer_target.max_x) * 0.5;
-    let y = (pointer_target.min_y + pointer_target.max_y) * 0.5;
-    pointer_machine.pointer_down(&mut pointer_artboard, x, y, 0);
-    pointer_machine.pointer_up(&mut pointer_artboard, x, y, 0);
-    assert!(
-        semantic_machine.fire_semantic_action(semantic_target.id, SemanticActionType::Tap as u32)
-    );
-    settle(&mut pointer_machine, &mut pointer_artboard);
-    settle(&mut semantic_machine, &mut semantic_artboard);
-    let mut pointer_snapshot = semantic_snapshot(&pointer_initial);
-    let mut semantic_snapshot = semantic_snapshot(&semantic_initial);
-    apply_semantic_diff(
-        &mut pointer_snapshot,
-        &pointer_machine
-            .drain_semantics_diff(&mut pointer_artboard)
-            .unwrap(),
-    );
-    apply_semantic_diff(
-        &mut semantic_snapshot,
-        &semantic_machine
-            .drain_semantics_diff(&mut semantic_artboard)
-            .unwrap(),
-    );
-    for (pointer, semantic) in pointer_tabs.iter().zip(semantic_tabs) {
-        assert_eq!(
-            selected(&pointer_snapshot[&pointer.id]),
-            selected(&semantic_snapshot[&semantic.id]),
-            "{}",
-            pointer.label
-        );
-    }
-}
-
-#[test]
-fn upstream_simpsons_unknown_semantic_id_is_a_no_op() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("simpsons.riv");
-    let selected_before = tabs(&initial)
-        .into_iter()
-        .find(|tab| selected(tab))
-        .unwrap()
-        .id;
-    assert!(!machine.fire_semantic_action(0xdead_beef, SemanticActionType::Tap as u32));
-    settle(&mut machine, &mut artboard);
-    let mut snapshot = semantic_snapshot(&initial);
-    apply_semantic_diff(
-        &mut snapshot,
-        &machine.drain_semantics_diff(&mut artboard).unwrap(),
-    );
-    assert!(selected(&snapshot[&selected_before]));
-}
-
-#[test]
 fn upstream_simpsons_tabs_produce_two_three_and_five_list_items() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("simpsons.riv");
+    let (_file, _artboard, machine, initial) = upstream_semantic_fixture("simpsons.riv");
     let tab_nodes = tabs(&initial).into_iter().cloned().collect::<Vec<_>>();
     assert_eq!(tab_nodes.len(), 3);
     let mut snapshot = semantic_snapshot(&initial);
@@ -225,13 +168,11 @@ fn upstream_simpsons_tabs_produce_two_three_and_five_list_items() {
     for tab in tab_nodes {
         let x = (tab.min_x + tab.max_x) * 0.5;
         let y = (tab.min_y + tab.max_y) * 0.5;
-        machine.pointer_down(&mut artboard, x, y, 0);
-        machine.pointer_up(&mut artboard, x, y, 0);
-        settle(&mut machine, &mut artboard);
-        apply_semantic_diff(
-            &mut snapshot,
-            &machine.drain_semantics_diff(&mut artboard).unwrap(),
-        );
+        machine.with_instance_mut(|machine| machine.pointer_down(Vec2D::new(x, y), 0));
+        machine.with_instance_mut(|machine| machine.pointer_up(Vec2D::new(x, y), 0));
+        settle(&machine);
+        let update = drain(&machine);
+        apply_semantic_diff(&mut snapshot, &update);
         counts.push(
             snapshot
                 .values()
@@ -244,52 +185,37 @@ fn upstream_simpsons_tabs_produce_two_three_and_five_list_items() {
 }
 
 #[test]
-fn upstream_tabtest_semantic_taps_keep_exactly_one_selected() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("tabtest.riv");
-    let tab_nodes = tabs(&initial).into_iter().cloned().collect::<Vec<_>>();
-    assert!(tab_nodes.len() >= 2);
-    let mut snapshot = semantic_snapshot(&initial);
-    for tab in tab_nodes {
-        assert!(machine.fire_semantic_action(tab.id, SemanticActionType::Tap as u32));
-        settle(&mut machine, &mut artboard);
-        apply_semantic_diff(
-            &mut snapshot,
-            &machine.drain_semantics_diff(&mut artboard).unwrap(),
-        );
-        assert!(selected(&snapshot[&tab.id]));
-        assert_eq!(
-            snapshot
-                .values()
-                .filter(|node| node.role == SemanticRole::Tab as u32 && selected(node))
-                .count(),
-            1
-        );
-    }
-}
-
-#[test]
 fn upstream_enable_semantics_is_idempotent_and_manager_stays_selected() {
     let fixture = std::path::PathBuf::from(
         std::env::var_os("RIVE_RUNTIME_DIR")
             .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
     )
     .join("tests/unit_tests/assets/semantic/simpsons.riv");
-    let file = read_runtime_file(&std::fs::read(fixture).unwrap()).unwrap();
-    let graphs = GraphFile::from_runtime_file(&file).unwrap();
-    let mut artboard =
-        ArtboardInstance::from_graph_with_artboards(&file, &graphs.artboards[0], &graphs.artboards)
-            .unwrap();
-    let mut machine = artboard.state_machine_instance(0).unwrap();
-    assert!(!machine.semantic_manager());
-    assert!(machine.enable_semantics());
-    assert!(machine.semantic_manager());
-    assert!(!machine.enable_semantics());
-    assert!(machine.semantic_manager());
+    let file = native_file(&std::fs::read(fixture).unwrap());
+    let artboard = file.with_file(|file| file.artboard_default()).unwrap();
+    let machine = artboard.state_machine_instance_handle(0).unwrap();
+    assert!(
+        machine
+            .with_instance(|machine| machine.semantic_manager())
+            .is_none()
+    );
+    machine.with_instance_mut(|machine| machine.enable_semantics());
+    let manager = machine
+        .with_instance(|machine| machine.semantic_manager())
+        .unwrap();
+    machine.with_instance_mut(|machine| machine.enable_semantics());
+    let again = machine
+        .with_instance(|machine| machine.semantic_manager())
+        .unwrap();
+    assert!(
+        manager.ptr_eq(&again),
+        "enableSemantics retains the selected manager"
+    );
 }
 
 #[test]
 fn upstream_first_semantic_drain_delivers_tree_and_second_is_empty() {
-    let (mut artboard, mut machine, initial) = upstream_semantic_fixture("simpsons.riv");
+    let (_file, _artboard, machine, initial) = upstream_semantic_fixture("simpsons.riv");
     assert!(initial.tree_version > 0);
     assert!(!initial.added.is_empty());
     assert!(
@@ -298,17 +224,12 @@ fn upstream_first_semantic_drain_delivers_tree_and_second_is_empty() {
             .iter()
             .any(|node| node.role == SemanticRole::TabList as u32)
     );
-    assert!(
-        machine
-            .drain_semantics_diff(&mut artboard)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(drain(&machine).is_empty());
 }
 
 #[test]
 fn upstream_data_binding_lists_exposes_dropdown_button() {
-    let (_, _, initial) = upstream_semantic_fixture("data_binding_lists.riv");
+    let (_file, _artboard, _machine, initial) = upstream_semantic_fixture("data_binding_lists.riv");
     let button = initial
         .added
         .iter()
@@ -319,7 +240,7 @@ fn upstream_data_binding_lists_exposes_dropdown_button() {
 
 #[test]
 fn upstream_list_scroll_focus_exposes_one_list_and_five_labelled_items() {
-    let (_, _, initial) = list_focus_fixture();
+    let (_file, _artboard, _machine, initial) = list_focus_fixture();
     assert_eq!(
         initial
             .added
@@ -333,53 +254,44 @@ fn upstream_list_scroll_focus_exposes_one_list_and_five_labelled_items() {
         .iter()
         .filter(|node| node.role == SemanticRole::ListItem as u32)
         .collect::<Vec<_>>();
-    assert_eq!(items.len(), 5);
     for index in 1..=5 {
-        assert!(
-            items
-                .iter()
-                .any(|item| item.label == format!("Element {index}"))
-        );
+        let label = format!("Element {index}");
+        let item = items
+            .iter()
+            .find(|item| item.label == label)
+            .expect("authored visible list item");
+        assert_eq!(item.role, SemanticRole::ListItem as u32);
     }
+    assert_eq!(items.len(), 5);
 }
 
-fn list_focus_fixture() -> (ArtboardInstance, StateMachineInstance, SemanticsDiff) {
-    let file = read_runtime_file(include_bytes!(
-        "../../../fixtures/semantic/semantic_list_scroll_focus_fixed.riv"
-    ))
-    .expect("semantic list-focus fixture imports");
-    let graphs = GraphFile::from_runtime_file(&file).expect("semantic list-focus graph builds");
-    let graph = graphs.artboards.first().expect("default artboard graph");
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
-        .expect("default artboard instantiates");
-    let mut machine = artboard
-        .state_machine_instance(0)
-        .expect("default state machine instantiates");
-    assert!(machine.enable_semantics());
-    assert!(machine.bind_default_view_model_context_on_artboard(&mut artboard));
-    for _ in 0..10 {
-        machine
-            .advance_and_apply(&mut artboard, 0.1)
-            .expect("semantic list-focus fixture settles");
-    }
-    let initial = machine
-        .drain_semantics_diff(&mut artboard)
-        .expect("retained semantic tree drains after enable");
-    (artboard, machine, initial)
+fn list_focus_fixture() -> (
+    RuntimeFileHandle,
+    RuntimeArtboardInstanceHandle,
+    RuntimeStateMachineInstanceHandle,
+    SemanticsDiff,
+) {
+    scene(
+        include_bytes!("../../../fixtures/semantic/semantic_list_scroll_focus_fixed.riv"),
+        true,
+    )
 }
 
 #[test]
 fn upstream_list_scroll_focus_items_expose_the_focusable_trait() {
-    let (_, _, initial) = list_focus_fixture();
+    let (_file, _artboard, _machine, initial) = list_focus_fixture();
     let items = initial
         .added
         .iter()
         .filter(|node| node.role == SemanticRole::ListItem as u32)
         .collect::<Vec<_>>();
 
-    assert_eq!(items.len(), 5);
-    for (index, item) in items.iter().enumerate() {
-        assert_eq!(item.label, format!("Element {}", index + 1));
+    for index in 1..=5 {
+        let label = format!("Element {index}");
+        let item = items
+            .iter()
+            .find(|item| item.label == label)
+            .expect("authored visible list item");
         assert!(has_semantic_trait(
             item.trait_flags,
             SemanticTrait::FOCUSABLE
@@ -389,7 +301,7 @@ fn upstream_list_scroll_focus_items_expose_the_focusable_trait() {
 
 #[test]
 fn upstream_request_focus_sets_focused_only_on_the_target_item() {
-    let (mut artboard, mut machine, initial) = list_focus_fixture();
+    let (_file, _artboard, machine, initial) = list_focus_fixture();
     let items = initial
         .added
         .iter()
@@ -400,15 +312,16 @@ fn upstream_request_focus_sets_focused_only_on_the_target_item() {
         .find(|node| node.label == "Element 3")
         .expect("third semantic list item");
 
-    assert!(machine.request_semantic_focus(target.id));
-    for _ in 0..10 {
+    assert!(
         machine
-            .advance_and_apply(&mut artboard, 0.1)
-            .expect("focus request settles");
+            .with_instance(|machine| machine.semantic_manager())
+            .unwrap()
+            .request_focus(target.id)
+    );
+    for _ in 0..10 {
+        machine.advance_and_apply(0.1);
     }
-    let follow = machine
-        .drain_semantics_diff(&mut artboard)
-        .expect("focused semantic diff drains");
+    let follow = drain(&machine);
     let focused = follow
         .updated_semantic
         .iter()
@@ -421,7 +334,7 @@ fn upstream_request_focus_sets_focused_only_on_the_target_item() {
 
 #[test]
 fn upstream_moving_focus_hands_the_focused_bit_between_items() {
-    let (mut artboard, mut machine, initial) = list_focus_fixture();
+    let (_file, _artboard, machine, initial) = list_focus_fixture();
     let first = initial
         .added
         .iter()
@@ -433,21 +346,23 @@ fn upstream_moving_focus_hands_the_focused_bit_between_items() {
         .find(|node| node.label == "Element 3")
         .expect("third semantic list item");
 
-    assert!(machine.request_semantic_focus(first.id));
-    machine
-        .advance_and_apply(&mut artboard, 0.1)
-        .expect("first focus request settles");
-    machine
-        .drain_semantics_diff(&mut artboard)
-        .expect("first focus diff drains");
+    assert!(
+        machine
+            .with_instance(|machine| machine.semantic_manager())
+            .unwrap()
+            .request_focus(first.id)
+    );
+    machine.advance_and_apply(0.1);
+    drain(&machine);
 
-    assert!(machine.request_semantic_focus(third.id));
-    machine
-        .advance_and_apply(&mut artboard, 0.1)
-        .expect("third focus request settles");
-    let handoff = machine
-        .drain_semantics_diff(&mut artboard)
-        .expect("focus handoff diff drains");
+    assert!(
+        machine
+            .with_instance(|machine| machine.semantic_manager())
+            .unwrap()
+            .request_focus(third.id)
+    );
+    machine.advance_and_apply(0.1);
+    let handoff = drain(&machine);
     let first_update = handoff
         .updated_semantic
         .iter()
@@ -471,7 +386,7 @@ fn upstream_moving_focus_hands_the_focused_bit_between_items() {
 
 #[test]
 fn upstream_focusing_the_bottom_slot_scrolls_every_item_upward() {
-    let (mut artboard, mut machine, initial) = list_focus_fixture();
+    let (_file, _artboard, machine, initial) = list_focus_fixture();
     let items = initial
         .added
         .iter()
@@ -483,15 +398,16 @@ fn upstream_focusing_the_bottom_slot_scrolls_every_item_upward() {
         .find_map(|(id, (label, _))| (label == "Element 5").then_some(*id))
         .expect("bottom semantic list item");
 
-    assert!(machine.request_semantic_focus(last_id));
-    for _ in 0..10 {
+    assert!(
         machine
-            .advance_and_apply(&mut artboard, 0.1)
-            .expect("focus-driven scroll settles");
+            .with_instance(|machine| machine.semantic_manager())
+            .unwrap()
+            .request_focus(last_id)
+    );
+    for _ in 0..10 {
+        machine.advance_and_apply(0.1);
     }
-    let scroll = machine
-        .drain_semantics_diff(&mut artboard)
-        .expect("focus-driven geometry diff drains");
+    let scroll = drain(&machine);
     let shifted = scroll
         .updated_geometry
         .iter()

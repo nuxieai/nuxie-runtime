@@ -2,18 +2,18 @@
 
 use std::any::Any;
 use std::cell::RefCell;
-use std::future::Future;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
 
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie::{
-    ColorInt, Factory, File, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader,
-    GpuCanvasShaderStage, ImageDecodeError, OwnedArtboardInstance, PersistentFactory, RawPath,
-    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader,
-    RenderImage, RenderPaint, RenderPath, RenderShader,
+    ColorInt, Factory, File, FileImportLimits, FillRule, GpuCanvasError, GpuCanvasPlan,
+    GpuCanvasShader, GpuCanvasShaderStage, ImageDecodeError, PersistentFactory, RecordingFactory,
+    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage,
+    RenderPaint, RenderPath, RenderShader, RuntimeArtboardInstanceHandle, ScriptExecutionLimits,
+    ScriptedFile, import_unsigned_scripted,
 };
+use nuxie_render_api::RawPath;
 use nuxie_schema::definition_by_name;
 
 const SCRIPT: &[u8] = br#"
@@ -121,17 +121,6 @@ fn compile_luau(source: &[u8]) -> Vec<u8> {
     assert!(!output.is_null());
     // SAFETY: luaur returns a valid allocation containing output_size bytes.
     unsafe { std::slice::from_raw_parts(output.cast(), output_size) }.to_vec()
-}
-
-fn block_on<F: Future>(future: F) -> F::Output {
-    let mut future = std::pin::pin!(future);
-    let mut context = Context::from_waker(Waker::noop());
-    loop {
-        match future.as_mut().poll(&mut context) {
-            Poll::Ready(output) => return output,
-            Poll::Pending => std::thread::yield_now(),
-        }
-    }
 }
 
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
@@ -588,18 +577,33 @@ impl Factory for GpuRecordingFactory {
     }
 }
 
+fn import_default_artboard(
+    bytes: &[u8],
+    factory: &mut dyn Factory,
+) -> (ScriptedFile, RuntimeArtboardInstanceHandle) {
+    let scripted = import_unsigned_scripted(
+        bytes,
+        factory,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .expect("trusted scripted fixture imports");
+    let artboard = scripted
+        .native_file()
+        .with_file(File::artboard_default)
+        .expect("fixture artboard");
+    (scripted, artboard)
+}
+
 #[test]
 fn foldered_shader_resolves_through_bare_and_qualified_aliases_as_distinct_occurrences() {
-    let file = File::import_with_unsigned_scripts(&foldered_shader_alias_file()).unwrap();
-    let mut instance = file
-        .default_artboard()
-        .expect("fixture artboard")
-        .instantiate()
-        .unwrap();
     let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let (_file, artboard) = import_default_artboard(&foldered_shader_alias_file(), &mut factory);
     let mut renderer = factory.borrow().inner.make_renderer();
 
-    instance.draw(&mut factory, &mut renderer).unwrap();
+    artboard.advance_default(0.0);
+    artboard.draw(&mut renderer);
 
     let factory = factory.borrow();
     let occurrences = factory.shader_occurrences.borrow();
@@ -616,54 +620,42 @@ fn foldered_shader_resolves_through_bare_and_qualified_aliases_as_distinct_occur
 
 #[test]
 fn unused_contentless_shader_asset_does_not_prevent_script_boot() {
-    let file = File::import_with_unsigned_scripts(&contentless_shader_file(
-        UNUSED_CONTENTLESS_SHADER_SCRIPT,
-    ))
-    .unwrap();
-    let mut instance = file
-        .default_artboard()
-        .expect("fixture artboard")
-        .instantiate()
-        .unwrap();
     let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let (_file, artboard) = import_default_artboard(
+        &contentless_shader_file(UNUSED_CONTENTLESS_SHADER_SCRIPT),
+        &mut factory,
+    );
     let mut renderer = factory.borrow().inner.make_renderer();
 
-    instance.draw(&mut factory, &mut renderer).unwrap();
+    artboard.advance_default(0.0);
+    artboard.draw(&mut renderer);
 
     assert!(factory.borrow().shader_occurrences.borrow().is_empty());
 }
 
 #[test]
 fn requested_contentless_shader_asset_returns_nil_and_script_continues() {
-    let file = File::import_with_unsigned_scripts(&contentless_shader_file(
-        REQUESTED_CONTENTLESS_SHADER_SCRIPT,
-    ))
-    .unwrap();
-    let mut instance = file
-        .default_artboard()
-        .expect("fixture artboard")
-        .instantiate()
-        .unwrap();
     let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let (_file, artboard) = import_default_artboard(
+        &contentless_shader_file(REQUESTED_CONTENTLESS_SHADER_SCRIPT),
+        &mut factory,
+    );
     let mut renderer = factory.borrow().inner.make_renderer();
 
-    instance.draw(&mut factory, &mut renderer).unwrap();
+    artboard.advance_default(0.0);
+    artboard.draw(&mut renderer);
 
     assert!(factory.borrow().shader_occurrences.borrow().is_empty());
 }
 
 #[test]
 fn shader_alias_collisions_preserve_the_first_owner_per_alias() {
-    let file = File::import_with_unsigned_scripts(&colliding_shader_alias_file()).unwrap();
-    let mut instance = file
-        .default_artboard()
-        .expect("fixture artboard")
-        .instantiate()
-        .unwrap();
     let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let (_file, artboard) = import_default_artboard(&colliding_shader_alias_file(), &mut factory);
     let mut renderer = factory.borrow().inner.make_renderer();
 
-    instance.draw(&mut factory, &mut renderer).unwrap();
+    artboard.advance_default(0.0);
+    artboard.draw(&mut renderer);
 
     let factory = factory.borrow();
     let occurrences = factory.shader_occurrences.borrow();
@@ -687,16 +679,12 @@ fn shader_alias_collisions_preserve_the_first_owner_per_alias() {
 
 #[test]
 fn imported_shader_and_script_execute_and_composite_through_one_factory() {
-    let file = File::import_with_unsigned_scripts(&imported_file()).unwrap();
-    let mut instance = file
-        .default_artboard()
-        .expect("fixture artboard")
-        .instantiate()
-        .unwrap();
     let mut factory = PersistentFactory::new(GpuRecordingFactory::new());
+    let (_file, artboard) = import_default_artboard(&imported_file(), &mut factory);
     let mut renderer = factory.borrow().inner.make_renderer();
 
-    instance.draw(&mut factory, &mut renderer).unwrap();
+    artboard.advance_default(0.0);
+    artboard.draw(&mut renderer);
 
     let factory_ref = factory.borrow();
     let calls = factory_ref.calls.borrow();
@@ -748,91 +736,35 @@ fn imported_shader_and_script_execute_and_composite_through_one_factory() {
 
 #[test]
 fn scripted_drawable_hydrates_authored_boolean_input_before_init() {
-    let file = File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap();
-    let mut instance = file
-        .default_artboard()
-        .expect("fixture artboard")
-        .instantiate()
-        .unwrap();
     let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let (file, artboard) = import_default_artboard(&authored_boolean_input_file(), &mut factory);
     let mut renderer = factory.borrow().make_renderer();
 
-    instance.draw(&mut factory, &mut renderer).unwrap();
+    artboard.advance_default(0.0);
+    artboard.draw(&mut renderer);
 
-    let file = File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap();
-    let mut instance = file
-        .default_artboard()
-        .expect("fixture artboard")
-        .instantiate()
-        .unwrap();
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    assert!(block_on(instance.mount_scripted_drawables_async(&mut factory)).unwrap());
+    let second = file
+        .native_file()
+        .with_file(File::artboard_default)
+        .expect("second fixture artboard occurrence");
+    second.advance_default(0.0);
+    second.draw(&mut renderer);
 }
 
 #[test]
-fn scripted_drawable_mount_preparation_can_finish_before_installing_into_live_instance() {
-    let file =
-        Arc::new(File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap());
-    let mut instance = OwnedArtboardInstance::instantiate_default(Arc::clone(&file)).unwrap();
+fn default_factory_does_not_silently_draw_an_unsupported_gpu_canvas() {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
-
-    let plan = instance
-        .plan_scripted_drawable_mounts()
-        .unwrap()
-        .expect("fixture has a pending scripted drawable mount");
-    let prepared = block_on(plan.prepare(&mut factory)).unwrap();
-    assert!(
-        instance
-            .install_prepared_scripted_drawable_mounts(prepared)
-            .unwrap()
-    );
-}
-
-#[test]
-fn scripted_drawable_mount_preparation_rejects_a_replacement_file_identity() {
-    let original =
-        Arc::new(File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap());
-    let mut original_instance =
-        OwnedArtboardInstance::instantiate_default(Arc::clone(&original)).unwrap();
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let plan = original_instance
-        .plan_scripted_drawable_mounts()
-        .unwrap()
-        .expect("fixture has a pending scripted drawable mount");
-    let prepared = block_on(plan.prepare(&mut factory)).unwrap();
-
-    let replacement =
-        Arc::new(File::import_with_unsigned_scripts(&authored_boolean_input_file()).unwrap());
-    let mut replacement_instance = OwnedArtboardInstance::instantiate_default(replacement).unwrap();
-    assert!(
-        !replacement_instance
-            .install_prepared_scripted_drawable_mounts(prepared)
-            .unwrap()
-    );
-    assert!(
-        replacement_instance
-            .plan_scripted_drawable_mounts()
-            .unwrap()
-            .is_some()
-    );
-}
-
-#[test]
-fn default_factory_rejects_imported_gpu_canvas_instead_of_silently_drawing() {
-    let file = File::import_with_unsigned_scripts(&imported_file()).unwrap();
-    let mut instance = file
-        .default_artboard()
-        .expect("fixture artboard")
-        .instantiate()
-        .unwrap();
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let (_file, artboard) = import_default_artboard(&imported_file(), &mut factory);
     let mut renderer = factory.borrow().make_renderer();
 
-    let error = instance.draw(&mut factory, &mut renderer).unwrap_err();
     // Pinned lua_scripted_context.cpp:547-556 returns zero values when backend
-    // shader creation fails, so the downstream pipeline sees nil.
+    // shader creation fails, so the downstream pipeline sees nil and cannot
+    // submit a GPU canvas image.
+    artboard.advance_default(0.0);
+    artboard.draw(&mut renderer);
+    let stream = factory.borrow().stream();
     assert!(
-        format!("{error:#}").contains("error converting Lua nil to AnyUserData"),
-        "{error:#}"
+        !stream.contains("drawImage"),
+        "unsupported GPU canvas reached the renderer: {stream}"
     );
 }

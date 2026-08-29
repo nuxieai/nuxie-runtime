@@ -1,5 +1,28 @@
 use super::*;
 
+/// The converter index is the Rust equivalent of pinned
+/// `DataConverterGroup* m_dataConverterGroup`.
+///
+/// It is intentionally non-owning: dropping the importer must not drop the
+/// group retained by the runtime file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DataConverterGroupImporter {
+    group_index: usize,
+}
+
+impl DataConverterGroupImporter {
+    /// Mechanical translation of the constructor: retain exactly the group
+    /// supplied when the file creates this importer.
+    fn new(group_index: usize) -> Self {
+        Self { group_index }
+    }
+
+    /// Mechanical translation of the primary-header `group()` inline.
+    fn group(self) -> usize {
+        self.group_index
+    }
+}
+
 pub(super) fn dispatch_imports_successfully(
     object: &RuntimeObject,
     definition: &'static Definition,
@@ -51,7 +74,7 @@ impl RuntimeFile {
             return Vec::new();
         }
 
-        let mut current_group_index = None;
+        let mut current_group_importer = None;
         let mut current_converter_index = 0usize;
         let mut items = Vec::new();
 
@@ -69,14 +92,16 @@ impl RuntimeFile {
 
             if definition.is_a("DataConverter") {
                 if definition.name == "DataConverterGroup" {
-                    current_group_index = Some(current_converter_index);
+                    current_group_importer =
+                        Some(DataConverterGroupImporter::new(current_converter_index));
                 }
                 current_converter_index += 1;
                 continue;
             }
 
             if definition.name == "DataConverterGroupItem"
-                && current_group_index == Some(data_converter_index)
+                && current_group_importer
+                    .is_some_and(|importer| importer.group() == data_converter_index)
             {
                 items.push(RuntimeDataConverterGroupItem {
                     object,

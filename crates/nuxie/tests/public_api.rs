@@ -1,21 +1,23 @@
-// Test code is deliberately outside the panic-freedom lint gate (the crate
-// lints table denies these for src/; unwrap/indexing are fine in tests).
+// Test code is deliberately outside the panic-freedom lint gate.
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects
 )]
 
-use nuxie::{
-    BlendMode, ColorInt, Factory, File, FillRule, ImageDecodeError, OwnedArtboardInstance, RawPath,
-    RecordingFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, Renderer, StateMachineInputKind, StrokeCap,
-    StrokeJoin,
-};
 use std::cell::Cell;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Arc;
+
+use nuxie::{
+    BlendMode, ColorInt, Factory, File, FileAssetLoader, FileAssetLoaderRef, FillRule,
+    ImageDecodeError, PersistentFactory, RecordingFactory, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
+    RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle, StrokeCap, StrokeJoin,
+    ViewModelInstanceRuntime,
+    render_api::{Mat2D as RenderMat2D, RawPath as RenderRawPath},
+    runtime::assets::image_asset::ImageAsset,
+};
 
 struct DropTrackedRenderImage {
     inner: Box<dyn RenderImage>,
@@ -41,7 +43,7 @@ impl RenderImage for DropTrackedRenderImage {
         self.inner.height()
     }
 
-    fn uv_transform(&self) -> nuxie::Mat2D {
+    fn uv_transform(&self) -> RenderMat2D {
         self.inner.uv_transform()
     }
 }
@@ -110,10 +112,6 @@ struct FailFirstImageDecodeFactory {
 }
 
 impl FailFirstImageDecodeFactory {
-    fn new() -> Self {
-        Self::failing_on_attempt(1)
-    }
-
     fn failing_on_attempt(attempt: usize) -> Self {
         Self {
             inner: RecordingFactory::new(),
@@ -163,7 +161,11 @@ impl Factory for FailFirstImageDecodeFactory {
             .make_radial_gradient(cx, cy, radius, colors, stops)
     }
 
-    fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
+    fn make_render_path(
+        &mut self,
+        raw_path: RenderRawPath,
+        fill_rule: FillRule,
+    ) -> Box<dyn RenderPath> {
         self.inner.make_render_path(raw_path, fill_rule)
     }
 
@@ -215,217 +217,181 @@ fn external_fixture(name: &str) -> Vec<u8> {
     std::fs::read(&path).expect("read external fixture")
 }
 
-fn external_asset_fixture(relative: &str) -> Vec<u8> {
-    let path = PathBuf::from(
-        std::env::var_os("RIVE_RUNTIME_DIR")
-            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+fn import_with_factory<F: Factory + 'static>(
+    bytes: &[u8],
+    factory: &mut PersistentFactory<F>,
+    loader: Option<FileAssetLoaderRef>,
+) -> RuntimeFileHandle {
+    File::import(
+        bytes,
+        RuntimeFactoryHandle::from_factory(factory).expect("retained factory"),
+        None,
+        loader,
+        None,
     )
-    .join("tests/unit_tests/assets")
-    .join(relative);
-    std::fs::read(&path).expect("read external asset fixture")
+    .expect("import file")
 }
 
-/// Instantiate artboard 0, optionally set a view-model property before binding,
-/// then advance and draw, returning the recorded stream.
+fn recording_file(bytes: &[u8]) -> (PersistentFactory<RecordingFactory>, RuntimeFileHandle) {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = import_with_factory(bytes, &mut factory, None);
+    (factory, file)
+}
+
+fn default_view_model(
+    file: &RuntimeFileHandle,
+    artboard: &RuntimeArtboardInstanceHandle,
+) -> Option<nuxie::RuntimeViewModelInstanceHandle> {
+    file.with_file(|file| {
+        file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+            .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
+    })
+    .map(ViewModelInstanceRuntime::new)
+    .map(ViewModelInstanceRuntime::into_handle)
+}
+
 fn render_with_view_model(
     bytes: &[u8],
-    set: impl FnOnce(&mut nuxie::ViewModelInstance) -> bool,
+    set: impl FnOnce(&nuxie::RuntimeViewModelInstanceHandle),
 ) -> String {
-    let file = File::import(bytes).expect("import file");
-    let mut instance = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate artboard");
-    let mut view_model = instance
-        .instantiate_view_model()
-        .expect("artboard has a view model");
-    let _ = set(&mut view_model);
-    instance.bind_view_model(&view_model);
-    instance.advance(0.0);
-
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
-    instance
-        .draw(&mut factory, &mut renderer)
-        .expect("draw artboard");
-    factory.stream()
+    let (factory, file) = recording_file(bytes);
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let view_model = default_view_model(&file, &artboard).expect("artboard has a view model");
+    set(&view_model);
+    artboard.bind_view_model_instance(Some(view_model.instance()));
+    artboard.advance_default(0.0);
+    let mut renderer = factory.borrow().make_renderer();
+    artboard.draw(&mut renderer);
+    factory.borrow().stream()
 }
 
 #[test]
 fn public_api_imports_lists_instantiates_and_draws() {
-    let fixture = PathBuf::from(
-        std::env::var_os("RIVE_RUNTIME_DIR")
-            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
-    )
-    .join("tests/unit_tests/assets/shapetest.riv");
-    let bytes = std::fs::read(&fixture).expect("read fixture");
-    let file = File::import(&bytes).expect("import file");
+    let bytes = external_fixture("shapetest.riv");
+    let (factory, file) = recording_file(&bytes);
+    let (count, names) = file.with_file(|file| {
+        (
+            file.artboard_count(),
+            (0..file.artboard_count())
+                .map(|index| file.artboard_name_at(index))
+                .collect::<Vec<_>>(),
+        )
+    });
+    assert!(count >= 1);
+    assert_eq!(names.len(), count);
 
-    assert!(file.artboard_count() >= 1);
-    let names = file
-        .artboards()
-        .map(|artboard| artboard.name().unwrap_or("<unnamed>").to_owned())
-        .collect::<Vec<_>>();
-    assert_eq!(names.len(), file.artboard_count());
-
-    let artboard = file.default_artboard().expect("default artboard");
-    let mut instance = artboard.instantiate().expect("instantiate artboard");
-    instance.advance(0.0);
-
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
-    instance
-        .draw(&mut factory, &mut renderer)
-        .expect("draw artboard");
-
-    let stream = factory.stream();
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    artboard.advance_default(0.0);
+    let mut renderer = factory.borrow().make_renderer();
+    artboard.draw(&mut renderer);
+    let stream = factory.borrow().stream();
     assert!(stream.contains("rive-golden-stream-v1"));
     assert!(stream.contains("drawPath"));
 }
 
 #[test]
-fn artboard_owned_renderer_retries_a_failed_image_decode_without_poisoning() {
-    let file = File::import(&external_fixture("in_band_asset.riv")).expect("import image fixture");
-    let mut instance = file
-        .default_artboard()
-        .expect("default image artboard")
-        .instantiate()
-        .expect("instantiate image artboard");
-    let mut factory = FailFirstImageDecodeFactory::new();
-
-    assert_eq!(
-        factory.decode_attempts, 0,
-        "Artboard construction must be renderer-neutral"
-    );
-    let mut renderer = factory.inner.make_renderer();
-    let first = instance
-        .draw(&mut factory, &mut renderer)
-        .expect_err("first image decode fails at draw time");
-    assert!(first.downcast_ref::<ImageDecodeError>().is_some());
-    assert_eq!(factory.decode_attempts, 1);
-    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
+fn image_decode_failure_is_scoped_to_one_source_import() {
+    let bytes = external_fixture("in_band_asset.riv");
+    let mut factory = PersistentFactory::new(FailFirstImageDecodeFactory::failing_on_attempt(1));
+    let failed_file = import_with_factory(&bytes, &mut factory, None);
+    let failed_image = failed_file
+        .with_file(|file| file.asset(0))
+        .expect("ImageAsset");
     assert!(
-        factory.paints_created.get() > 0,
-        "the failed candidate should exercise owned render resources"
+        failed_image
+            .with_downcast::<ImageAsset, _>(|asset| asset.render_image().is_none())
+            .unwrap_or(false)
     );
-    assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
+    assert_eq!(factory.borrow().decode_attempts, 1);
 
-    instance
-        .draw(&mut factory, &mut renderer)
-        .expect("the same Artboard occurrence retries and draws");
-    assert!(factory.decode_attempts >= 2);
-    assert!(factory.images_created.get() > factory.images_dropped.get());
-    assert!(factory.paints_created.get() > factory.paints_dropped.get());
+    let decoded_file = import_with_factory(&bytes, &mut factory, None);
+    let decoded_image = decoded_file
+        .with_file(|file| file.asset(0))
+        .expect("ImageAsset");
+    assert!(
+        decoded_image
+            .with_downcast::<ImageAsset, _>(|asset| asset.render_image().is_some())
+            .unwrap_or(false)
+    );
+    assert_eq!(factory.borrow().decode_attempts, 2);
+    drop(failed_file);
+    drop(decoded_file);
+    assert_eq!(
+        factory.borrow().images_created.get(),
+        factory.borrow().images_dropped.get()
+    );
+}
 
-    // Pinned C++ retains both ImageAsset::m_RenderImage and the ShapePaint
-    // renderer member on the owning Artboard occurrence
-    // (`include/rive/assets/image_asset.hpp:19`,
-    // `src/assets/image_asset.cpp:28-39`).
-    assert_eq!(
-        factory.images_created.get(),
-        factory.images_dropped.get() + 1
-    );
-    assert_eq!(
-        factory.paints_created.get(),
-        factory.paints_dropped.get() + 1
-    );
-    drop(instance);
-    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
-    assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
+struct ExternalImageLoader {
+    walle: Vec<u8>,
+    eve: Vec<u8>,
+    attempts: Rc<Cell<usize>>,
+}
+
+impl FileAssetLoader for ExternalImageLoader {
+    fn load_contents(
+        &mut self,
+        asset: nuxie::CoreHandle,
+        in_band_bytes: &[u8],
+        factory: &RuntimeFactoryHandle,
+    ) -> bool {
+        let Some(name) = asset
+            .with_downcast::<ImageAsset, _>(|image| image.base.file_asset().base.name().to_owned())
+        else {
+            return false;
+        };
+        assert!(in_band_bytes.is_empty());
+        let bytes = match name.as_str() {
+            "walle.jpg" => &self.walle,
+            "eve.png" => &self.eve,
+            other => panic!("unexpected external image {other}"),
+        };
+        self.attempts.set(self.attempts.get() + 1);
+        asset
+            .with_downcast_mut::<ImageAsset, _>(|image| image.decode(bytes, factory))
+            .unwrap_or(false)
+    }
 }
 
 #[test]
-fn file_owned_external_images_decode_lazily_and_retry_without_poisoning() {
-    let mut file = File::import(&external_asset_fixture("out_of_band/walle.riv"))
-        .expect("import out-of-band image fixture");
-    let image_asset_ids = file
-        .runtime()
-        .file_assets()
-        .into_iter()
-        .filter(|asset| asset.type_name == "ImageAsset")
-        .map(|asset| {
-            u32::try_from(
-                asset
-                    .uint_property("assetId")
-                    .expect("image asset has a semantic id"),
-            )
-            .expect("semantic id fits u32")
-        })
-        .collect::<Vec<_>>();
-    assert!(!image_asset_ids.is_empty());
-    let image_bytes = external_asset_fixture("out_of_band/eve-317.png");
-    for asset_id in image_asset_ids {
-        file.attach_external_image_asset_bytes(asset_id, image_bytes.clone())
-            .expect("attach external image bytes");
-    }
-
-    let mut instance = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate image artboard");
-    let mut factory = FailFirstImageDecodeFactory::failing_on_attempt(2);
-    assert_eq!(factory.decode_attempts, 0, "attachment stays decode-free");
-
-    let mut renderer = factory.inner.make_renderer();
-    let first = instance
-        .draw(&mut factory, &mut renderer)
-        .expect_err("first external image decode fails at draw time");
-    assert!(first.downcast_ref::<ImageDecodeError>().is_some());
-    assert_eq!(factory.decode_attempts, 2);
-    assert!(factory.images_created.get() > 0);
-    // ImageAsset::decode installs each successful RenderImage immediately
-    // (`src/assets/image_asset.cpp:28-39`), so a later asset's decode failure
-    // does not roll back an earlier file-owned image.
-    assert_eq!(
-        factory.images_created.get(),
-        factory.images_dropped.get() + 1
+fn external_images_are_supplied_by_the_import_loader() {
+    let attempts = Rc::new(Cell::new(0));
+    let loader = FileAssetLoaderRef::new(Box::new(ExternalImageLoader {
+        walle: external_fixture("out_of_band/walle-370.png"),
+        eve: external_fixture("out_of_band/eve-317.png"),
+        attempts: attempts.clone(),
+    }));
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = import_with_factory(
+        &external_fixture("out_of_band/walle.riv"),
+        &mut factory,
+        Some(loader),
     );
-    assert!(factory.paints_created.get() > 0);
-    assert_eq!(factory.paints_created.get(), factory.paints_dropped.get());
-
-    instance
-        .draw(&mut factory, &mut renderer)
-        .expect("the same Artboard occurrence retries external image decoding");
-    assert!(factory.decode_attempts >= 4);
-    assert!(factory.images_created.get() > factory.images_dropped.get());
-    assert!(factory.images_created.get() > factory.images_dropped.get());
-    drop(instance);
-    assert_eq!(factory.images_created.get(), factory.images_dropped.get());
+    assert!(attempts.get() >= 2);
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    artboard.advance_default(0.0);
+    let mut renderer = factory.borrow().make_renderer();
+    artboard.draw(&mut renderer);
+    assert!(factory.borrow().stream().contains("drawImage"));
 }
 
 #[test]
-fn embedded_image_contents_remain_authoritative_over_external_bytes() {
-    let mut file = File::import(&external_fixture("in_band_asset.riv"))
-        .expect("import embedded image fixture");
-    let image_asset_ids = file
-        .runtime()
-        .file_assets()
-        .into_iter()
-        .filter(|asset| asset.type_name == "ImageAsset")
-        .filter_map(|asset| asset.uint_property("assetId"))
-        .map(|asset_id| u32::try_from(asset_id).expect("semantic id fits u32"))
-        .collect::<Vec<_>>();
-    assert!(!image_asset_ids.is_empty());
-    for asset_id in image_asset_ids {
-        file.attach_external_image_asset_bytes(asset_id, vec![0xde, 0xad, 0xbe, 0xef])
-            .expect("attach ignored external bytes");
-    }
-
-    let mut instance = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate artboard");
-    let mut factory = RecordingFactory::new();
-    let mut renderer = factory.make_renderer();
-    instance
-        .draw(&mut factory, &mut renderer)
-        .expect("embedded image draws");
-    let stream = factory.stream();
-    assert!(stream.contains("decodeImage"));
-    assert!(!stream.contains("data=deadbeef"));
+fn embedded_image_contents_are_decoded_during_import() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = import_with_factory(&external_fixture("in_band_asset.riv"), &mut factory, None);
+    let image = file.with_file(|file| file.asset(0)).expect("ImageAsset");
+    assert!(
+        image
+            .with_downcast::<ImageAsset, _>(|image| image.render_image().is_some())
+            .unwrap_or(false)
+    );
+    assert!(factory.borrow().stream().contains("decodeImage"));
 }
 
 #[cfg(all(feature = "renderer-metal", target_os = "macos"))]
@@ -444,277 +410,169 @@ fn public_api_exposes_the_explicit_metal_renderer() {
     let mut paint = factory.make_render_paint();
     paint.color(0xff_ff_00_00);
     frame.draw_path(path.as_ref(), paint.as_ref());
-
     let pixels = frame.finish().expect("render one native Metal frame");
     assert_eq!(pixels.len(), 16 * 16 * 4);
     assert!(
         pixels
             .chunks_exact(4)
-            .any(|pixel| pixel == [255, 0, 0, 255]),
-        "the explicit Metal backend must draw into the frame"
+            .any(|pixel| pixel == [255, 0, 0, 255])
     );
 }
 
 #[cfg(all(feature = "renderer-metal", target_os = "macos"))]
 #[test]
 fn imported_artboard_renders_pixels_with_the_explicit_metal_renderer() {
-    let file = File::import(&external_fixture("in_band_asset.riv"))
-        .expect("import embedded image fixture");
-    let mut instance = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate artboard");
-    let mut factory =
-        nuxie::NativeMetalFactory::new(4, 3).expect("construct the explicit native Metal renderer");
+    let mut factory = PersistentFactory::new(
+        nuxie::NativeMetalFactory::new(4, 3).expect("construct native Metal renderer"),
+    );
+    let file = import_with_factory(&external_fixture("in_band_asset.riv"), &mut factory, None);
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
     let mut frame = factory
+        .borrow_mut()
         .begin_frame(0xff_12_34_56)
         .expect("begin native Metal frame");
-    instance
-        .draw(&mut factory, &mut frame)
-        .expect("draw imported Rive artboard");
-
-    let output = frame
-        .finish_for_benchmark()
-        .expect("finish imported Rive artboard frame");
+    artboard.draw(&mut frame);
+    let output = frame.finish_for_benchmark().expect("finish frame");
     assert!(output.execution_inventory.draw_calls > 0);
-    assert_eq!(
-        &output.pixels[..4],
-        &[49, 49, 49, 255],
-        "the exact-source paint lifecycle must preserve the imported background color (draw_calls={}, logical_flushes={})",
-        output.execution_inventory.draw_calls,
-        output.execution_inventory.logical_flushes,
-    );
+    assert_eq!(&output.pixels[..4], &[49, 49, 49, 255]);
 }
 
 #[test]
 fn public_api_drives_default_state_machine_and_inputs() {
-    let bytes = repo_fixture("fixtures/animation/smi_test.riv");
-    let file = File::import(&bytes).expect("import file");
-
+    let (_factory, file) = recording_file(&repo_fixture("fixtures/animation/smi_test.riv"));
     let artboard = file
-        .artboard_named("artboard to nest")
+        .with_file(|file| file.artboard_named("artboard to nest"))
         .expect("artboard to nest");
-    assert!(artboard.state_machine_count() >= 1);
-    assert_eq!(artboard.state_machine_name(0), Some("State Machine 1"));
-    assert_eq!(artboard.state_machine_name(99), None);
-    assert_eq!(artboard.default_state_machine_index(), Some(0));
-
-    let mut instance = artboard.instantiate().expect("instantiate artboard");
-    let mut state_machine = instance
-        .default_state_machine_instance()
-        .expect("default state machine instance");
-
-    let bool_index = state_machine.input_index_named("bool").expect("bool input");
+    assert!(artboard.with_artboard(|artboard| artboard.base.state_machine_count()) >= 1);
     assert_eq!(
-        state_machine.input(bool_index).map(|input| input.kind()),
-        Some(StateMachineInputKind::Bool)
+        artboard.with_artboard(|artboard| artboard.base.state_machine_name_at(0)),
+        "State Machine 1"
     );
-    assert!(state_machine.set_bool(bool_index, true));
+    assert_eq!(
+        artboard.with_artboard(|artboard| artboard.base.default_state_machine_index()),
+        0
+    );
 
-    let number_index = state_machine.input_index_named("num").expect("num input");
-    assert!(state_machine.set_number(number_index, 42.0));
-
-    let trigger_index = state_machine.input_index_named("trig").expect("trig input");
-    assert!(state_machine.fire_trigger(trigger_index));
-
-    // Wrong-kind writes are rejected.
-    assert!(!state_machine.set_number(bool_index, 1.0));
-
-    instance.advance_with_state_machine(&mut state_machine, 0.016);
-    instance.advance_with_state_machine(&mut state_machine, 0.016);
+    let machine = artboard
+        .default_state_machine()
+        .expect("default state machine instance");
+    assert!(machine.with_instance(|machine| machine.get_bool("bool").is_some()));
+    assert!(machine.with_instance(|machine| machine.get_number("num").is_some()));
+    assert!(machine.with_instance(|machine| machine.get_trigger("trig").is_some()));
+    assert!(machine.with_instance(|machine| machine.get_number("bool").is_none()));
+    machine.set_bool("bool", true);
+    machine.set_number("num", 42.0);
+    machine.with_instance_mut(|machine| {
+        machine.get_trigger_mut("trig").expect("trigger").fire();
+    });
+    machine.advance_and_apply(0.016);
+    machine.advance_and_apply(0.016);
 }
 
 #[test]
-fn rich_state_machine_advance_keeps_mutation_distinct_from_cpp_continuation() {
-    let bytes = external_fixture("smi_test.riv");
-    let file = File::import(&bytes).expect("import file");
-    let mut instance = file
-        .artboard_named("artboard to nest")
-        .expect("artboard")
-        .instantiate()
-        .expect("instantiate artboard");
-    let mut state_machine = instance
-        .default_state_machine_instance()
+fn zero_time_state_machine_advance_keeps_cpp_continuation() {
+    let (_factory, file) = recording_file(&external_fixture("smi_test.riv"));
+    let artboard = file
+        .with_file(|file| file.artboard_named("artboard to nest"))
+        .expect("artboard");
+    let machine = artboard
+        .default_state_machine()
         .expect("default state machine");
-
-    let _initial = instance
-        .try_advance_with_state_machines_and_script_host_result(
-            std::slice::from_mut(&mut state_machine),
-            0.0,
-            &mut nuxie::NoopScriptHost,
-        )
-        .expect("initial settlement");
-    let settled = instance
-        .try_advance_with_state_machines_and_script_host_result(
-            std::slice::from_mut(&mut state_machine),
-            0.0,
-            &mut nuxie::NoopScriptHost,
-        )
-        .expect("settled zero-time advance");
-
-    assert!(!settled.changed);
-    assert!(
-        settled.keep_going,
-        "pinned C++ advanceAndApply returns true for zero elapsed time"
-    );
+    assert!(machine.advance_and_apply(0.0));
+    assert!(machine.advance_and_apply(0.0));
 }
 
 #[test]
 fn public_api_view_model_number_set_changes_stream() {
-    // `data_binding_test_2.riv` artboard 0 binds a shape to the view model's
-    // `num` number property, so setting it visibly changes the draw stream.
     let bytes = external_fixture("data_binding_test_2.riv");
-
-    let baseline = render_with_view_model(&bytes, |_| false);
+    let baseline = render_with_view_model(&bytes, |_| {});
     let mutated = render_with_view_model(&bytes, |view_model| {
-        assert!(
-            view_model.set_number("num", 137.0),
-            "num is a settable number property"
-        );
-        true
+        let number = view_model.property_number("num").expect("num property");
+        number.set_value(137.0);
+        assert_eq!(number.value(), 137.0);
     });
-
     assert!(baseline.contains("rive-golden-stream-v1"));
-    assert_ne!(
-        baseline, mutated,
-        "setting a bound number property must change the draw stream"
-    );
-    // Setting a property that does not exist reports no change.
-    let mut probe = File::import(&bytes)
-        .unwrap()
-        .default_artboard()
-        .unwrap()
-        .instantiate()
-        .unwrap()
-        .instantiate_view_model()
-        .unwrap();
-    assert!(!probe.set_number("does-not-exist", 1.0));
-    assert!(!probe.set_bool("num", true), "wrong-kind write is rejected");
+    assert_ne!(baseline, mutated);
+
+    let (_factory, file) = recording_file(&bytes);
+    let artboard = file.with_file(File::artboard_default).unwrap();
+    let probe = default_view_model(&file, &artboard).unwrap();
+    assert!(probe.property_number("does-not-exist").is_none());
+    assert!(probe.property_boolean("num").is_none());
 }
 
 #[test]
 fn public_api_view_model_string_set_changes_stream() {
-    // `relative_data_binding.riv` artboard 0 binds text to the view model's
-    // `str` string property.
     let bytes = external_fixture("relative_data_binding.riv");
-
-    let baseline = render_with_view_model(&bytes, |_| false);
+    let baseline = render_with_view_model(&bytes, |_| {});
     let mutated = render_with_view_model(&bytes, |view_model| {
-        assert!(
-            view_model.set_string("str", "nuxie view model string"),
-            "str is a settable string property"
-        );
-        true
+        let string = view_model.property_string("str").expect("str property");
+        string.set_value("nuxie view model string".to_owned());
+        assert_eq!(string.value(), "nuxie view model string");
     });
-
-    assert_ne!(
-        baseline, mutated,
-        "setting a bound string property must change the draw stream"
-    );
+    assert_ne!(baseline, mutated);
 }
 
 #[test]
 fn public_api_view_model_instance_selection_and_missing() {
-    // Artboards without a view model yield no context.
-    let bytes = repo_fixture("fixtures/animation/smi_test.riv");
-    let file = File::import(&bytes).expect("import file");
-    let instance = file
-        .default_artboard()
-        .unwrap()
-        .instantiate()
-        .expect("instantiate artboard");
-    assert!(instance.view_model_index().is_none());
-    assert!(instance.instantiate_view_model().is_none());
-    assert!(instance.instantiate_view_model_instance(0).is_none());
+    let (_factory, file) = recording_file(&repo_fixture("fixtures/animation/smi_test.riv"));
+    let artboard = file.with_file(File::artboard_default).unwrap();
+    assert!(default_view_model(&file, &artboard).is_none());
 
-    // A databind fixture exposes a view model and a source instance at index 0;
-    // an out-of-range instance index yields nothing.
-    let bytes = external_fixture("data_binding_test_2.riv");
-    let file = File::import(&bytes).expect("import file");
-    let instance = file
-        .default_artboard()
-        .unwrap()
-        .instantiate()
-        .expect("instantiate artboard");
-    assert!(instance.view_model_index().is_some());
-    assert!(instance.instantiate_view_model().is_some());
-    assert!(instance.instantiate_view_model_instance(0).is_some());
-    assert!(instance.instantiate_view_model_instance(9_999).is_none());
+    let (_factory, file) = recording_file(&external_fixture("data_binding_test_2.riv"));
+    let artboard = file.with_file(File::artboard_default).unwrap();
+    assert!(default_view_model(&file, &artboard).is_some());
+    let model = file
+        .with_file(|file| file.default_artboard_view_model(file.artboard()))
+        .expect("artboard view model");
+    assert!(model.create_instance_from_index(0).is_some());
+    assert!(model.create_instance_from_index(9_999).is_none());
 }
 
 #[test]
-fn public_api_artboard_view_model_binding_leaves_global_completion_to_state_machines() {
-    let bytes = external_fixture("global_viewmodels_test.riv");
-    let file = File::import(&bytes).expect("import file");
-    let mut instance = file
-        .default_artboard()
-        .unwrap()
-        .instantiate()
-        .expect("instantiate artboard");
-    let view_model = instance
-        .instantiate_view_model()
-        .expect("default artboard view model");
-
-    let _ = instance.bind_view_model(&view_model);
-
+fn artboard_view_model_binding_leaves_global_completion_to_state_machines() {
+    let (_factory, file) = recording_file(&external_fixture("global_viewmodels_test.riv"));
+    let artboard = file.with_file(File::artboard_default).unwrap();
+    let view_model = default_view_model(&file, &artboard).expect("default view model");
+    artboard.bind_view_model_instance(Some(view_model.instance()));
     assert_eq!(
-        instance
-            .owned_view_model_context()
+        artboard
+            .data_context()
             .expect("retained artboard context")
-            .instances()
-            .count(),
-        1,
-        "C++ Artboard::bindViewModelInstance installs only the supplied main; \
-         global completion belongs to StateMachineInstance binding"
+            .with_context(|context| context.view_model_instances().len()),
+        1
     );
 }
 
 #[test]
-fn borrowed_view_model_advance_facade_forces_zero_seconds_true() {
-    let bytes = external_fixture("global_viewmodels_test.riv");
-    let file = File::import(&bytes).expect("import file");
-    let mut instance = file
-        .default_artboard()
-        .expect("default artboard")
-        .instantiate()
-        .expect("instantiate artboard");
-    let mut view_model = instance
-        .instantiate_view_model()
-        .expect("default artboard view model");
-    let mut state_machine = instance
-        .default_state_machine_instance()
+fn bound_view_model_state_machine_zero_seconds_keeps_advancing() {
+    let (_factory, file) = recording_file(&external_fixture("global_viewmodels_test.riv"));
+    let artboard = file.with_file(File::artboard_default).unwrap();
+    let view_model = default_view_model(&file, &artboard).expect("default view model");
+    let machine = artboard
+        .default_state_machine()
         .expect("default state machine");
-
-    assert!(instance.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut state_machine),
-        0.0,
-        &mut view_model,
-    ));
-    assert!(instance.advance_with_state_machines_and_view_model(
-        std::slice::from_mut(&mut state_machine),
-        0.0,
-        &mut view_model,
-    ));
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(view_model.instance()));
+    artboard.bind_view_model_instance(Some(view_model.instance()));
+    assert!(machine.advance_and_apply(0.0));
+    assert!(machine.advance_and_apply(0.0));
 }
 
 #[test]
-fn owned_artboard_occurrence_fork_is_independent_and_shares_its_file() {
-    let file = Arc::new(
-        File::import(&external_fixture("hosted_font_file.riv")).expect("import font file"),
+fn artboard_occurrence_clone_is_independent() {
+    let (_factory, file) = recording_file(&external_fixture("hosted_font_file.riv"));
+    let source = file.with_file(File::artboard_default).unwrap();
+    let fork = source.instance().expect("clone artboard occurrence");
+    let fork_dimensions = fork.with_artboard(|artboard| (artboard.width(), artboard.height()));
+    source.set_size(fork_dimensions.0 + 17.0, fork_dimensions.1 + 23.0);
+    let source_dimensions = source.with_artboard(|artboard| (artboard.width(), artboard.height()));
+    assert_ne!(source_dimensions, fork_dimensions);
+    assert_eq!(
+        fork.with_artboard(|artboard| (artboard.width(), artboard.height())),
+        fork_dimensions
     );
-    let mut source = OwnedArtboardInstance::instantiate_default(Arc::clone(&file))
-        .expect("instantiate source occurrence");
-    let fork = source.fork_occurrence();
-    assert!(Arc::ptr_eq(source.file(), fork.file()));
-    assert_eq!(source.artboard().index(), fork.artboard().index());
-
-    let fork_dimensions = fork.artboard_dimensions();
-    assert!(
-        source
-            .raw_mut()
-            .set_artboard_dimensions(fork_dimensions.0 + 17.0, fork_dimensions.1 + 23.0)
-    );
-    assert_ne!(source.artboard_dimensions(), fork.artboard_dimensions());
-    assert_eq!(fork.artboard_dimensions(), fork_dimensions);
+    assert!(source.with_artboard(|artboard| artboard.file().upgrade().is_some()));
+    assert!(fork.with_artboard(|artboard| artboard.file().upgrade().is_some()));
 }

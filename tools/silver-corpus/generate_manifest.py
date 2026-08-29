@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import re
+import struct
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +52,7 @@ class Producer:
     provenance_test: str
     producer_line: int
     note: str
+    clone_artboard_instance: bool = False
 
 
 DYNAMIC_LAYOUT_SCROLL = (
@@ -137,6 +139,22 @@ DYNAMIC_GRID_STACK = (
     ),
 )
 
+GRID_STACK_FFP_CONTRACT_DIVERGENCES = {
+    "layout_grid_stack_grid_with_layouts",
+    "layout_grid_stack_stack_with_layouts",
+}
+
+SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES = {
+    "car_widgets_v01",
+    "hunter_x_demo",
+    "juice",
+    "rewards_demo",
+}
+
+SERIALIZED_RENDERING_APPROVED_ADAPTATION_DIVERGENCES = {
+    "collapse_data_binds-test_1",
+}
+
 PROVENANCE_UNKNOWN = {
     "interpolator": "No producer/reference exists in the pinned upstream runtime tests.",
     "multitouch_debug": (
@@ -151,17 +169,10 @@ PROVENANCE_UNKNOWN = {
 FORCED_BLOCKERS = {
     "db_health_tracker": "runtime-frame-loop-nontermination",
     "echo_show_demo": "renderer-paint-allocation",
-    "bidirectional_binding_source": "external-bindable-artboard-registration",
-    "data_bind_artboard_input": "external-bindable-artboard-registration",
     "data_viz_demo": "runtime-frame-loop-nontermination-after-nested-view-model-mutation",
-    "global_variables_test": "runtime-frame-loop-nontermination-with-global-view-models",
 }
 CLASSIFIED_RUNTIME_BLOCKERS = {
     "bindable_artboard_nesty": "external-bindable-artboard-with-bound-view-model-injection",
-    "data_binding_artboards_default_test": "external-bindable-artboard-registration",
-    "data_binding_artboards_test": "external-bindable-artboard-registration",
-    "databind_external_artboard_main": "external-bindable-artboard-and-view-model-graph-registration",
-    "databind_viewmodel": "runtime-owned-view-model-reference-replacement-by-instance-handle",
     "image_binding_with_listener": "live-decoded-image-view-model-payload-injection",
     "multi_listeners-rebind": "runtime-owned-nested-view-model-reference-replacement-by-handle",
     "replace_vm_instance": "runtime-owned-shared-view-model-graph-reparenting",
@@ -173,12 +184,65 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     "stateful_source_switch": "live-bindable-artboard-source-swap-with-stateful-child-borrowing",
     "transition_self_comparator_test": "runtime-owned-composite-list-and-view-model-comparator-mutation",
     "rebind_with_nested_viewmodel": "runtime-owned-nested-view-model-reference-replacement-by-handle",
-    "layout_hug_artboard": "top-level-computed-layout-width-height-exposure",
     "layout_grid_stack_grid_with_layout_participants": (
         "retained-text-render-style-registration-for-layout-participant-text"
     ),
 }
 EXACT = (
+    "ai_assitant",
+    "artboard_list_overrides_horizontal",
+    "artboard_list_overrides_vertical",
+    "bankcard",
+    "clear_viewmodel_list",
+    "collapsable_data_binding",
+    "collapse_data_binds-test_2",
+    "collapsing_elements",
+    "component_list_child_origin",
+    "component_list_grouped",
+    "component_list_hit_order",
+    "component_list_virtualized_scroll_manual",
+    "computed_values_test",
+    "databind_viewmodel",
+    "drag_event",
+    "draw_index_list",
+    "interactive_scrolling",
+    "interpolate_to_end",
+    "formula_random-always",
+    "formula_random-once",
+    "formula_random-source_change",
+    "layout_anim_bound",
+    "layout_anim_component_list",
+    "layout_anim_nested",
+    "layout_display",
+    "layout_fixed_fill",
+    "layout_paint",
+    "layout_scroll_drag_multiplier_layouts",
+    "layout_scroll_drag_multiplier_list",
+    "layout_scroll_drag_multiplier_virtualized",
+    "layout_scroll_snap_padding_layouts",
+    "layout_scroll_snap_padding_list",
+    "layout_scroll_snap_padding_virtualized",
+    "layout_scroll_snap_carousel",
+    "layout_scroll_visibility",
+    "nested_artboard_quantize_and_speed",
+    "number_to_list_nested_children",
+    "reset_phase_multi_main",
+    "scroll_intent",
+    "scroll_test",
+    "scroll_threshold-all-scroll",
+    "scroll_threshold-horizontal-scroll",
+    "scroll_threshold-vertical-scroll",
+    "spotify_kids_demo",
+    "stateful_multi_property",
+    "stateful_nested",
+    "superbowl",
+    "text_feather_falloff",
+    "text_input",
+    "text_vertical_trim_test",
+    "transition_artboard_condition_test",
+    "virtualized_artboard_databound_children",
+    "virtualize_blendmode",
+    "word_joiner_test",
     "hittest_ab_text_parent",
     "lock_icon_demo",
     "text_listener_simpler",
@@ -187,6 +251,7 @@ EXACT = (
     "listener_view_model",
     "viewmodel_image_reset",
     "zero_width_space_line_break",
+    "fit_font_size_test",
     "advance_blend_mode-inputs",
     "advance_blend_mode-vms",
     "animated_clipping-layout",
@@ -204,6 +269,10 @@ EXACT = (
     "component_stateful_vm_instance",
     "component_stateful_vm_instance_2",
     "data_bind_font_test",
+    "data_bind_artboard_input",
+    "data_binding_artboards_default_test",
+    "data_binding_artboards_test_recursive",
+    "databind_external_artboard_main",
     "component_stateful",
     "custom_property_trigger_bind",
     "computed_root_transform-nested_artboard",
@@ -222,6 +291,7 @@ EXACT = (
     "follow_path_constraint",
     "format_number_with_commas",
     "global_viewmodels_test-auto_instance",
+    "group_effect",
     "group_effect-main-missing-targets",
     "hittest_ab1",
     "hittest_ab1_grand_parent",
@@ -231,6 +301,7 @@ EXACT = (
     "hittest_nested",
     "image_fit_alignment_2",
     "layout_grid_stack_grid_with_layouts_size_changing",
+    "layout_hug_artboard",
     "image_fit_alignment_3",
     "image_fit_alignment_updated_test",
     "list_items",
@@ -268,6 +339,35 @@ EXACT = (
     "vertical_align_ellipsis",
     "viewmodel_list_trigger",
     "viewmodel_based_condition",
+    "computed_root_transform-list",
+    "data_bind_keyframes_test",
+    "data_bind_solo-solos-to-values",
+    "data_converter_interpolator_reset",
+    "deterministic_mode",
+    "focus_collapsing",
+    "gamepad_test",
+    "global_variables_test",
+    "global_viewmodels_test-set_instance",
+    "hittest_ab_2_non_virtualized",
+    "hittest_ab_2_virtualized",
+    "hittest_ab_shape_parent",
+    "image_fit_alignment",
+    "interpolation_zero_duration",
+    "keyboard_listener",
+    "keyboard_listener-KeyboardInput",
+    "layout_grid_stack_grid_with_layouts_size_span_changing",
+    "layout_grid_stack_grid_with_layouts_span",
+    "list_focus_order",
+    "multitouch_enter-MainList",
+    "multitouch_enter-MultiScroll",
+    "pointer_exit",
+    "paused_nested_artboard_opacity",
+    "path_effect_with_feathers",
+    "relative_data_bind_path-fire-trigger",
+    "relative_data_bind_path-listener",
+    "relative_data_bind_path-scripted-input",
+    "time_based_interpolation",
+    "unbound_stateful_component",
 )
 
 SCRIPTED_EXACT_NOTES = {
@@ -287,6 +387,48 @@ SCRIPTED_EXACT_NOTES = {
         "the pinned C++ silver baseline."
     ),
 }
+
+
+def data_binding_viewmodel_actions(
+    silver_id: str,
+) -> tuple[dict[str, object], ...] | None:
+    if silver_id != "databind_viewmodel":
+        return None
+    return (
+        {"kind": "create-default-view-model"},
+        {"kind": "bind-prepared-view-model"},
+        {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+        {"kind": "draw"},
+        {"kind": "frame"},
+        {"kind": "create-named-view-model", "view_model": "StatefulChild"},
+        {
+            "kind": "set-named-view-model-number",
+            "view_model": "StatefulChild",
+            "property": "num",
+            "value": 44.0,
+        },
+        {
+            "kind": "replace-view-model",
+            "property": "statefulChild",
+            "view_model": "StatefulChild",
+        },
+        {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+        {"kind": "draw"},
+        {"kind": "frame"},
+        {
+            "kind": "set-named-view-model-number",
+            "view_model": "StatefulChild",
+            "property": "num",
+            "value": 44.0,
+        },
+        {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+        {"kind": "draw"},
+        {"kind": "frame"},
+        {"kind": "pointer-down", "x": 25.0, "y": 25.0, "pointer_id": 0},
+        {"kind": "pointer-up", "x": 25.0, "y": 25.0, "pointer_id": 0},
+        {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+        {"kind": "draw"},
+    )
 
 
 def fl_e8_list_path_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
@@ -1528,7 +1670,7 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
     if silver_id == "list_focus_order":
         actions = [bind, advance(0.016), draw, frame, action("focus-next"), advance(0.016), draw, frame]
         actions += [action("focus-next") for _ in range(3)] + [advance(0.016), draw, frame]
-        for processed, count, focus in ((False, 1.0, True), (False, 2.0, False), (False, 3.0, False)):
+        for processed, count, focus in ((False, 1.0, True), (False, 2.0, True), (False, 3.0, False)):
             actions += [
                 action("set-view-model-boolean", property="stageProcessed", value=processed),
                 action("set-view-model-number", property="stageCount", value=count),
@@ -1536,7 +1678,7 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
             ]
             if focus:
                 actions += [action("focus-next"), advance(0.016), draw, frame]
-        actions += [action("focus-next"), advance(0.016), draw, frame, action("focus-next"), advance(0.016), draw]
+        actions += [action("focus-next"), advance(0.016), draw]
         return tuple(actions)
 
     if silver_id == "focus_collapsing":
@@ -1581,7 +1723,34 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
         return tuple(actions)
 
     if silver_id in {"formula_random-source_change", "formula_random-once", "formula_random-always"}:
-        return (bind, advance(0.1), draw, frame, action("set-view-model-number", property="n1", value=500.0), advance(0.1), draw, frame, advance(0.016), draw)
+        actions = [
+            action("clear-randoms"),
+            action("assert-random-calls", count=0),
+            action("add-random-value", value=0.0),
+            bind,
+            advance(0.1),
+            draw,
+            action("assert-random-calls", count=1),
+            frame,
+        ]
+        if silver_id != "formula_random-always":
+            actions.append(action("add-random-value", value=1.0))
+        actions += [
+            action("set-view-model-number", property="n1", value=500.0),
+            advance(0.1),
+            draw,
+            action("advance-draw-frames", frames=62, seconds=0.016),
+            action(
+                "assert-random-calls",
+                count={
+                    "formula_random-source_change": 2,
+                    "formula_random-once": 1,
+                    "formula_random-always": 64,
+                }[silver_id],
+            ),
+            action("clear-randoms"),
+        ]
+        return tuple(actions)
 
     if silver_id == "data_viz_demo":
         actions = [bind, advance(0.1), draw, action("set-view-model-number", property="item1/value", value=20.0)]
@@ -1591,7 +1760,11 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
     if silver_id == "data_bind_artboard_input":
         return (
             action("bind-fresh-view-model"), draw, advance(0.1), draw,
-            frame, advance(0.1), draw, frame, advance(0.1), draw,
+            action("set-view-model-bindable-artboard-by-name", property="artboardProperty", artboard="child2"),
+            frame, advance(0.1), draw,
+            action("set-view-model-bindable-artboard-by-name", property="artboardProperty", artboard="child1"),
+            frame, advance(0.1), draw,
+            action("set-view-model-artboard-from-file", property="artboardProperty", file="data_binding_artboards_source_test.riv", artboard="default"),
             frame, advance(0.1), draw,
             action("set-view-model-artboard", property="artboardProperty", value=1),
             frame, advance(0.1), draw,
@@ -1600,14 +1773,105 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
         )
 
     if silver_id == "bidirectional_binding_source":
-        actions = [action("create-default-view-model"), action("set-view-model-boolean", property="costume_db_bool", value=True), action("bind-prepared-view-model"), advance(0.0), draw]
-        actions += repeated_frames(9, 0.016)
+        actions = [
+            action("create-default-view-model"),
+            action("bind-prepared-view-model"),
+            advance(0.0),
+            action("set-view-model-boolean", property="costume_db_bool", value=True),
+            draw,
+            frame,
+            advance(0.016),
+            draw,
+        ]
+        for source in (
+            "bidirectional_binding_target_1.riv",
+            "bidirectional_binding_target_2.riv",
+            "bidirectional_binding_target_1.riv",
+            "bidirectional_binding_target_2.riv",
+        ):
+            actions += [
+                frame,
+                action(
+                    "set-view-model-artboard-from-file",
+                    property="costume_db_artboard",
+                    file=source,
+                    artboard="costume_artboard",
+                ),
+                advance(0.016),
+                draw,
+                frame,
+                advance(0.016),
+                draw,
+            ]
+        return tuple(actions)
+
+    if silver_id == "data_binding_artboards_default_test":
+        return (
+            action("bind-authored-view-model"), advance(0.1), draw,
+            frame, advance(0.1), draw,
+            action("set-view-model-bindable-artboard-by-name", property="ab", artboard="ch1"),
+            frame, advance(0.1), draw,
+            action("set-view-model-bindable-artboard-by-name", property="ab", artboard="ch2"),
+            frame, advance(0.1), draw,
+            action("set-view-model-artboard-from-file", property="ab", file="data_binding_artboards_source_test.riv", artboard="default"),
+            frame, advance(0.1), draw,
+        )
+
+    if silver_id == "databind_external_artboard_main":
+        return (
+            advance(0.0), draw, frame,
+            action("bind-fresh-view-model"),
+            action("set-view-model-artboard-from-file", property="ab", file="databind_external_artboard_child.riv", artboard="ExternalChild"),
+            action("replace-view-model-from-file", property="child", file="databind_external_artboard_child.riv", view_model="Child", instance="Instance"),
+            action("set-view-model-string", property="child/label", value="updated label"),
+            advance(0.016), draw,
+        )
+
+    if silver_id == "data_binding_artboards_test":
+        actions = [
+            action("bind-authored-view-model"), advance(0.1), draw,
+            frame, advance(0.1), draw,
+        ]
+        for source_file, artboard in (
+            (None, "ch1"),
+            (None, "ch2"),
+            ("data_binding_artboards_source_test.riv", "source_1"),
+        ):
+            actions += [
+                action("set-view-model-bindable-artboard-by-name", property="ab", artboard=artboard)
+                if source_file is None
+                else action("set-view-model-artboard-from-file", property="ab", file=source_file, artboard=artboard),
+                frame, advance(0.1), draw,
+            ]
+        for _ in range(2):
+            actions += [action("fire-view-model-trigger", property="ch/tr"), frame, advance(0.1), draw]
+        for source_file, artboard in (
+            ("data_binding_artboards_source_test.riv", "source_2"),
+            ("data_binding_artboards_source_test.riv", "source_1"),
+            (None, "ch2"),
+        ):
+            actions += [
+                action("set-view-model-bindable-artboard-by-name", property="ab", artboard=artboard)
+                if source_file is None
+                else action("set-view-model-artboard-from-file", property="ab", file=source_file, artboard=artboard),
+                frame, advance(0.1), draw,
+            ]
+        actions += [
+            action("clear-view-model-artboard", property="ab"), frame, advance(0.1), draw,
+            action("set-view-model-bindable-artboard-by-name", property="ab", artboard="ch2"), frame, advance(0.1), draw,
+        ]
         return tuple(actions)
 
     if silver_id == "global_variables_test":
-        actions = [bind, advance(0.1), draw]
-        actions += repeated_frames(int(1.0 / 0.016), 0.016)
-        return tuple(actions)
+        return (
+            action("create-default-main-view-model"),
+            action("set-state-machine-main-view-model"),
+            action("set-state-machine-default-global-view-models"),
+            action("bind-state-machine-view-models"),
+            advance(0.1),
+            draw,
+            action("advance-draw-frames", frames=int(1.0 / 0.016), seconds=0.016),
+        )
 
     if silver_id == "global_viewmodels_test-set_instance":
         return (
@@ -1677,7 +1941,7 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
         return tuple(actions)
 
     if silver_id == "data_binding_artboards_test_recursive":
-        actions = [bind, advance(0.1), draw, frame, advance(0.1), draw]
+        actions = [action("bind-authored-view-model"), advance(0.1), draw, frame, advance(0.1), draw]
         for artboard_name in (
             "recursive-grand-child-1",
             "recursive-parent",
@@ -1685,12 +1949,12 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
             "recursive-grand-child-2",
         ):
             actions += [
-                frame,
                 action(
-                    "set-view-model-artboard-by-name",
+                    "set-view-model-bindable-artboard-by-name",
                     property="ab",
                     artboard=artboard_name,
                 ),
+                frame,
                 advance(0.1),
                 draw,
             ]
@@ -1741,7 +2005,9 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
 
     if silver_id == "juice":
         actions = [action("advance", target="animation", seconds=0.0), draw]
-        for _ in range(int(3.0 / 0.016)):
+        # Pinned source derives this from the selected animation's one-second
+        # duration: int(durationSeconds() / 0.016f) == 62.
+        for _ in range(62):
             actions += [
                 frame,
                 action("advance", target="animation", seconds=0.016),
@@ -1761,32 +2027,27 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
         return tuple(actions)
 
     if silver_id == "image_fit_alignment":
-        return (
-            bind,
-            advance(0.1),
-            draw,
-            frame,
-            advance(0.016),
-            draw,
+        actions = [bind, advance(0.1), draw]
+        actions += repeated_frames(20, 0.016)
+        actions += [
             action(
                 "set-view-model-asset-by-name",
                 property="imageProperty",
                 asset="image2",
             ),
             advance(0.0),
-            frame,
-            advance(0.016),
-            draw,
+        ]
+        actions += repeated_frames(20, 0.016)
+        actions += [
             action(
                 "set-view-model-asset-by-name",
                 property="imageProperty",
                 asset="image3",
             ),
             advance(0.0),
-            frame,
-            advance(0.016),
-            draw,
-        )
+        ]
+        actions += repeated_frames(20, 0.016)
+        return tuple(actions)
 
     return None
 
@@ -1824,6 +2085,7 @@ def p2e_gamepad_actions(
     actions = [
         action("bind-default-view-model"),
         advance(0.0),
+        action("frame-size"),
         advance(0.1),
         draw,
         frame,
@@ -1886,105 +2148,23 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-gamepad_test|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
-component_list_hit_order|frame 1, op 106 (color): expected color, got save
-component_list_grouped|frame 6, op 413 (transform), field tx: expected -90, got 0
-component_list_virtualized_scroll_manual|frame 2, op 384 (color): expected color, got makeRenderPaint
-data_binding_artboards_test_recursive|frame 1, op 118 (makeRenderPaint): expected makeRenderPaint, got frame
-deterministic_mode|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
-draw_index_list|frame 0, op 35 (color): expected color, got makeRenderPaint
-focus_collapsing|frame 3, op 192 (color), field paint_id: expected 6, got 11
-formula_random-always|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
-formula_random-once|frame 1, op 44 (transform), field tx: expected 10, got 510.0007
-formula_random-source_change|frame 1, op 44 (transform), field tx: expected 10, got 521.8384
-global_viewmodels_test-set_instance|frame 1, op 163 (frame): expected frame, got color
-hittest_ab_2_non_virtualized|frame 0, op 198 (color): expected color, got save
-hittest_ab_2_virtualized|frame 0, op 132 (color): expected color, got save
-image_fit_alignment|frame 2, op 115 (transform), field tx: expected 462.03198, got -197.96802
-interactive_scrolling|frame 0, op 42 (transform), field xy: expected -0.0 (0x80000000), got 0
-interpolate_to_end|frame 1, op 63 (addRawPath): expected 954 fields, got 975
-keyboard_listener|frame 0, op 85 (color): expected color, got save
-keyboard_listener-KeyboardInput|frame 1, op 214 (color): expected color, got save
-juice|frame 0, op 40 (blendMode): expected blendMode, got makeRenderPaint
-layout_scroll_drag_multiplier_layouts|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
-layout_scroll_drag_multiplier_list|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
-layout_scroll_drag_multiplier_virtualized|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
-layout_scroll_snap_carousel|frame 1, op 145 (rewind): expected rewind, got drawPath
-layout_scroll_snap_padding_layouts|frame 0, op 38 (makeRenderPaint): expected makeRenderPaint, got frameSize
-layout_scroll_snap_padding_list|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
-layout_scroll_snap_padding_virtualized|frame 0, op 24 (makeRenderPaint): expected makeRenderPaint, got frameSize
-list_focus_order|frame 0, op 78 (addRawPath), field point: expected (-0.0 (0x80000000), 137.20052), got (-0.0 (0x80000000), 137.20053)
-layout_scroll_visibility|frame 0, op 130 (transform), field xy: expected -0.0 (0x80000000), got 0
+bidirectional_binding_source|frame 0, op 31 (makeRenderPaint): expected makeRenderPaint, got save
+data_binding_artboards_test|frame 7, op 582 (frame): expected frame, got makeRenderPaint
+juice|frame 1, op 360 (addRawPath): expected 40 fields, got 42
 layout_text_match|frame 0, op 61 (save): expected save, got frame
-layout_grid_stack_grid_with_layouts|frame 1, op 228 (rewind): expected rewind, got drawPath
-layout_grid_stack_grid_with_layouts_size_span_changing|frame 32, op 1592 (rewind): expected rewind, got drawPath
-layout_grid_stack_grid_with_layouts_span|frame 34, op 1116 (rewind): expected rewind, got drawPath
-layout_grid_stack_stack_with_layouts|frame 1, op 228 (rewind): expected rewind, got drawPath
-multitouch_enter-MainList|frame 1, op 179 (color): expected color, got save
-relative_data_bind_path-fire-trigger|frame 1, op 48 (color): expected color, got save
-relative_data_bind_path-listener|frame 1, op 72 (makeRenderPath): expected makeRenderPath, got drawPath
-relative_data_bind_path-scripted-input|frame 0, op 39 (transform), field tx: expected 115.56351, got 250
-scroll_intent|frame 0, op 69 (transform), field xy: expected -0.0 (0x80000000), got 0
-scroll_test|frame 0, op 53 (transform), field xy: expected -0.0 (0x80000000), got 0
-text_feather_falloff|frame 0, op 29 (feather), field paint_id: expected 12, got 8
-ai_assitant|frame 0, op 82 (makeLinearGradient): expected makeLinearGradient, got feather
-artboard_list_overrides_horizontal|frame 1, op 303 (rewind): expected rewind, got drawPath
-artboard_list_overrides_vertical|frame 1, op 303 (rewind): expected rewind, got drawPath
-bankcard|frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint
-car_widgets_v01|frame 0, op 222 (blendMode): expected blendMode, got makeRenderPaint
-clear_viewmodel_list|frame 0, op 10 (makeRenderPaint): expected makeRenderPaint, got save
-collapsable_data_binding|frame 0, op 14 (save): expected save, got color
-collapse_data_binds-test_1|frame 10, op 760 (rewind): expected rewind, got drawPath
-collapse_data_binds-test_2|frame 15, op 315 (addRawPath): expected 151 fields, got 256
-collapsing_elements|frame 2, op 943 (rewind): expected rewind, got drawPath
-component_list_child_origin|frame 1, op 448 (rewind): expected rewind, got drawPath
-computed_root_transform-list|frame 1, op 255 (rewind): expected rewind, got drawPath
-computed_values_test|frame 2, op 191 (addRawPath), field point: expected (301.00003, -0.0 (0x80000000)), got (301, -0.0 (0x80000000))
-data_bind_solo-solos-to-values|frame 0, op 81 (addRawPath): expected 752 fields, got 669
-data_bind_keyframes_test|frame 4, op 159 (save): expected save, got restore
-data_converter_interpolator_reset|frame 1, op 30 (save): expected save, got color
-drag_event|frame 23, op 602 (save): expected save, got color
+car_widgets_v01|frame 0, op 10306 (addRawPath): expected 60 fields, got 56
+collapse_data_binds-test_1|frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672
 focus_traversal|frame 0, op 95 (color): expected color, got save
-fit_font_size_test|frame 2, op 199 (makeRenderPath): expected makeRenderPath, got rewind
-group_effect|frame 0, op 46 (addRawPath): expected 163 fields, got 3
 hittest_ab1|frame 1, op 153 (color): expected color, got save
 hittest_ab1_grand_parent|frame 2, op 304 (color): expected color, got save
 hittest_ab1_parent|frame 1, op 192 (color): expected color, got save
-hittest_ab_shape_parent|frame 3, op 353 (save): expected save, got color
 hittest_nested|frame 1, op 155 (save): expected save, got color
-hunter_x_demo|frame 0, op 488 (blendMode): expected blendMode, got makeRenderPaint
-interpolation_zero_duration|frame 1, op 38 (transform), field tx: expected 0, got 200
-layout_anim_bound|frame 2, op 145 (rewind): expected rewind, got drawPath
-layout_anim_component_list|frame 1, op 88 (rewind): expected rewind, got drawPath
-layout_anim_nested|frame 1, op 85 (rewind): expected rewind, got drawPath
+hunter_x_demo|frame 0, op 5055 (addRawPath): expected 20 fields, got 22
 layout_aspect_ratio|frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)
-layout_display|frame 3, op 188 (makeRenderPath): expected makeRenderPath, got rewind
-layout_fixed_fill|frame 1, op 56 (rewind): expected rewind, got drawPath
-layout_paint|frame 0, op 77 (drawPath): expected drawPath, got makeRenderPath
-multitouch_enter-MultiScroll|frame 0, op 95 (transform), field xy: expected -0.0 (0x80000000), got 0
-nested_artboard_quantize_and_speed|frame 0, op 75 (transform), field xx: expected 0.95105654, got 1
+layout_grid_stack_grid_with_layouts|frame 76, op 4246 (rewind): expected rewind, got drawPath
+layout_grid_stack_stack_with_layouts|frame 76, op 4246 (rewind): expected rewind, got drawPath
 nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rewind
-number_to_list_nested_children|frame 0, op 141 (color): expected color, got save
-path_effect_with_feathers|frame 0, op 21 (feather), field paint_id: expected 8, got 5
-paused_nested_artboard_opacity|frame 1, op 103 (rewind): expected rewind, got drawPath
-pointer_exit|frame 31, op 1173 (save): expected save, got color
-reset_phase_multi_main|frame 0, op 25 (color): expected color, got makeRenderPaint
-rewards_demo|frame 0, op 22 (blendMode): expected blendMode, got makeRenderPaint
-scroll_threshold-all-scroll|frame 0, op 82 (transform), field xy: expected -0.0 (0x80000000), got 0
-scroll_threshold-horizontal-scroll|frame 0, op 79 (transform), field xy: expected -0.0 (0x80000000), got 0
-scroll_threshold-vertical-scroll|frame 0, op 69 (transform), field xy: expected -0.0 (0x80000000), got 0
-spotify_kids_demo|frame 0, op 200 (blendMode): expected blendMode, got makeRenderPaint
-stateful_multi_property|frame 1, op 134 (rewind): expected rewind, got drawPath
-stateful_nested|frame 0, op 39 (color), field paint_id: expected 15, got 10
-superbowl|frame 0, op 2825 (color), field paint_id: expected 220, got 208
-text_input|frame 0, op 25 (transform), field xy: expected -0.0 (0x80000000), got 0
-text_vertical_trim_test|frame 3, op 220 (rewind): expected rewind, got drawPath
-time_based_interpolation|frame 1, op 65 (transform), field tx: expected 250.07309, got 250.29443
-transition_artboard_condition_test|frame 0, op 16 (frameSize), field width: expected 983, got 984
-unbound_stateful_component|frame 0, op 10 (save): expected save, got color
-virtualize_blendmode|frame 0, op 33 (color): expected color, got save
-virtualized_artboard_databound_children|frame 5, op 365 (makeRenderPaint): expected makeRenderPaint, got save
-word_joiner_test|frame 2, op 262 (transform), field ty: expected -39.996094, got -15.796875
+rewards_demo|frame 0, op 1461 (addRawPath): expected 44 fields, got 46
 """.strip().splitlines()
 )
 
@@ -2028,6 +2208,17 @@ FRAME_COUNT = re.compile(
     r"(?:\(int\)\s*)?\(\s*(?P<numerator>[0-9]+(?:\.[0-9]+)?)(?:f)?\s*/\s*"
     r"(?P<denominator>[0-9]+(?:\.[0-9]+)?)(?:f)?\s*\))"
 )
+
+
+def cpp_f32(value: float | str) -> float:
+    """Round a value through the pinned C++ `float` representation."""
+    return struct.unpack("=f", struct.pack("=f", float(value)))[0]
+
+
+def cpp_float_division_to_int(numerator: str, denominator: str) -> int:
+    """Match `(int)(Nf / Df)`: f32 operands, f32 division, truncation."""
+    quotient = cpp_f32(cpp_f32(numerator) / cpp_f32(denominator))
+    return int(quotient)
 
 
 def action(kind: str, **values: object) -> dict[str, object]:
@@ -2246,8 +2437,8 @@ def executable_actions(
         match.group("name"): (
             int(match.group("literal"))
             if match.group("literal") is not None
-            else int(
-                float(match.group("numerator")) / float(match.group("denominator"))
+            else cpp_float_division_to_int(
+                match.group("numerator"), match.group("denominator")
             )
         )
         for match in FRAME_COUNT.finditer(clean)
@@ -2378,6 +2569,20 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         actions, blocker = ported_actions, None
                     if (ported_actions := p2e_gamepad_actions(silver_id)) is not None:
                         actions, blocker = ported_actions, None
+                    if (
+                        ported_actions := data_binding_viewmodel_actions(silver_id)
+                    ) is not None:
+                        actions, blocker = ported_actions, None
+                    if silver_id == "layout_hug_artboard":
+                        actions = (
+                            {"kind": "advance", "target": "artboard", "seconds": 0.0},
+                            {"kind": "layout-frame-size"},
+                            {"kind": "draw"},
+                            {"kind": "frame"},
+                            {"kind": "advance", "target": "state-machine", "seconds": 0.016},
+                            {"kind": "draw"},
+                        )
+                        blocker = None
                     if silver_id == "sorted_listeners":
                         # The C++ producer calls
                         # `file->createViewModelInstance(artboard.get())`
@@ -2430,10 +2635,30 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             f"{silver_id} has executable actions but no Rust result classification"
                         )
                     status = "diverges"
-                    note = (
-                        "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE "
-                        f"actions; first difference: {difference}."
-                    )
+                    if silver_id in SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES:
+                        note = (
+                            "Narrow producer-build-mode divergence: the pinned upstream unit-test "
+                            "silvers are built with --no_ffp_contract, while upstream production "
+                            "defaults to -ffp-contract=on; first difference: "
+                            f"{difference}."
+                        )
+                    elif silver_id in SERIALIZED_RENDERING_APPROVED_ADAPTATION_DIVERGENCES:
+                        note = (
+                            "Approved Yoga-to-Taffy layout-solver adaptation divergence; "
+                            "the translated layout owner matches pinned source at the solver "
+                            f"boundary; first difference: {difference}."
+                        )
+                    else:
+                        note = (
+                            "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE "
+                            f"actions; first difference: {difference}."
+                        )
+                if lane == "scripted" and status == "exact":
+                    # Exact scripted producers are owned by the literal inline
+                    # C++ test body. Any .riv opened by that body is an input
+                    # dependency, not the producer source.
+                    primary = "inline-script"
+                    dependencies = riv_sources
                 producers.append(
                     Producer(
                         id=silver_id,
@@ -2515,33 +2740,47 @@ def dynamic_producers() -> list[Producer]:
         ]
         return tuple(actions)
 
-    layout_scroll = [
-        Producer(
-            id=silver_id,
-            source=source,
-            dependencies=(),
-            artboard=artboard,
-            animation="none",
-            state_machine="default",
-            lane="runtime",
-            deterministic="enabled",
-            random="deterministic",
-            view_model="bind-default-if-present",
-            sample_times=(0.0, 0.016),
-            actions=actions_for(silver_id),
-            status="diverges",
-            producer_class="layout-scroll-dynamic",
-            provenance_file="tests/unit_tests/runtime/layout_scroll_test.cpp",
-            provenance_test=test_name,
-            producer_line=line,
-            note=(
+    layout_scroll = []
+    for silver_id, source, artboard, test_name, line in DYNAMIC_LAYOUT_SCROLL:
+        if silver_id in EXACT:
+            status = "exact"
+            note = (
+                "Rust renderer stream is operation-exact with the pinned C++ silver "
+                "baseline after replaying the TEST_CASE actions."
+            )
+        else:
+            difference = DIVERGENCES.get(silver_id)
+            if difference is None:
+                raise ValueError(f"{silver_id} has no Rust result classification")
+            status = "diverges"
+            note = (
                 "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE "
-                "actions; first difference: "
-                f"{DIVERGENCES[silver_id]}."
-            ),
+                f"actions; first difference: {difference}."
+            )
+        layout_scroll.append(
+            Producer(
+                id=silver_id,
+                source=source,
+                dependencies=(),
+                artboard=artboard,
+                animation="none",
+                state_machine="default",
+                lane="runtime",
+                deterministic="enabled",
+                random="deterministic",
+                view_model="bind-default-if-present",
+                sample_times=(0.0, 0.016),
+                actions=actions_for(silver_id),
+                status=status,
+                producer_class="layout-scroll-dynamic",
+                provenance_file="tests/unit_tests/runtime/layout_scroll_test.cpp",
+                provenance_test=test_name,
+                producer_line=line,
+                note=note,
+                # The pinned helpers call artboardNamed() and then instance().
+                clone_artboard_instance=True,
+            )
         )
-        for silver_id, source, artboard, test_name, line in DYNAMIC_LAYOUT_SCROLL
-    ]
 
     grid_actions = (
         action("advance", target="state-machine", seconds=0.0),
@@ -2579,10 +2818,18 @@ def dynamic_producers() -> list[Producer]:
                 raise ValueError(f"{silver_id} has no Rust result classification")
             status = "diverges"
             actions = grid_actions
-            note = (
-                "Genuine Rust-vs-C++ divergence after replaying the pinned "
-                f"gridStackSilver helper actions; first difference: {difference}."
-            )
+            if silver_id in GRID_STACK_FFP_CONTRACT_DIVERGENCES:
+                note = (
+                    "Narrow producer-build-mode divergence: the pinned upstream unit-test "
+                    "silvers are built with --no_ffp_contract, while upstream production "
+                    "defaults to -ffp-contract=on; first difference: "
+                    f"{difference}."
+                )
+            else:
+                note = (
+                    "Genuine Rust-vs-C++ divergence after replaying the pinned "
+                    f"gridStackSilver helper actions; first difference: {difference}."
+                )
         grid_stack.append(
             Producer(
                 id=silver_id,
@@ -2744,6 +2991,11 @@ def render(producers: list[Producer]) -> str:
                 + ", ".join(quoted(value) for value in producer.dependencies)
                 + "]",
                 f"artboard = {quoted(producer.artboard)}",
+                *(
+                    ["clone_artboard_instance = true"]
+                    if producer.clone_artboard_instance
+                    else []
+                ),
                 f"animation = {quoted(producer.animation)}",
                 f"state_machine = {quoted(producer.state_machine)}",
                 f"lane = {quoted(producer.lane)}",

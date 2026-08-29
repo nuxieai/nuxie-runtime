@@ -36,7 +36,8 @@ The following passed with only pre-existing generated/vendor warnings:
   `cargo test -p luaur-rt-test-harness --features send --test userdata_metatable_cache`.
 - The actual `nuxie-scripting` renderer integration test.
 - `cargo check -p nuxie-runtime -p nuxie-scripting`.
-- `make b6-audit-check` and the perf corpus/pinned-runtime checks.
+- the then-current `make b6-audit-check` (retired with the Bun-style runtime
+  source replacement) and the perf corpus/pinned-runtime checks.
 
 ## Stack evidence
 

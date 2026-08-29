@@ -14,7 +14,6 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 nuxie-binary = { path = "../crates/nuxie-binary" }
-nuxie-graph = { path = "../crates/nuxie-graph" }
 nuxie-render-api = { path = "../crates/nuxie-render-api" }
 nuxie-runtime = { path = "../crates/nuxie-runtime" }
 
@@ -47,3 +46,15 @@ bench = false
 debug = 1
 
 [workspace]
+
+# This fuzz package is intentionally detached from the root workspace, so it
+# must select the same source-parity forks explicitly. Workspace patches do not
+# propagate through path dependencies.
+[patch.crates-io]
+jpeg-decoder = { path = "../vendor/jpeg-decoder-0.3.2-rive-v9f" }
+taffy = { path = "../vendor/taffy-0.12.1-rive-yoga-order" }
+skrifa = { path = "../vendor/skrifa-0.45.1-rive-harfbuzz" }
+symphonia-bundle-flac = { path = "../vendor/symphonia-bundle-flac-0.5.5" }
+symphonia-bundle-mp3 = { path = "../vendor/symphonia-bundle-mp3-0.5.5" }
+symphonia-format-riff = { path = "../vendor/symphonia-format-riff-0.5.5" }
+symphonia-utils-xiph = { path = "../vendor/symphonia-utils-xiph-0.5.5" }

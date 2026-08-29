@@ -1,36 +1,27 @@
-//! Direct ports of `tests/unit_tests/runtime/work_task_test.cpp` at
-//! `d788e8ec`. The pinned probe ABI has no WorkTask surface, so these six
-//! API-contract cases run against the public Rust port directly.
+//! All six cases from pinned `tests/unit_tests/runtime/work_task_test.cpp`
+//! against the translated WorkTask owner and its virtual callback boundary.
 
-use nuxie_runtime::{WorkStatus, WorkTask, WorkTaskState};
-use std::sync::atomic::{AtomicBool, Ordering};
+use nuxie_runtime::{DynWorkTask, WorkCallbacks, WorkStatus, WorkTask};
 
 #[derive(Default)]
 struct TestWorkTask {
-    state: WorkTaskState,
-    execute_result: AtomicBool,
+    execute_result: bool,
 }
 
 impl TestWorkTask {
-    fn succeeding() -> Self {
-        Self {
-            state: WorkTaskState::default(),
-            execute_result: AtomicBool::new(true),
-        }
+    fn succeeding() -> WorkTask<Self> {
+        WorkTask::new(Self {
+            execute_result: true,
+        })
     }
 }
 
-impl WorkTask for TestWorkTask {
-    fn state(&self) -> &WorkTaskState {
-        &self.state
-    }
-
-    fn execute(&self) -> bool {
-        let result = self.execute_result.load(Ordering::Acquire);
-        if !result {
-            self.state.set_error_message("test failure");
+impl WorkCallbacks for TestWorkTask {
+    fn execute(&mut self, error_message: &mut String) -> bool {
+        if !self.execute_result {
+            *error_message = "test failure".into();
         }
-        result
+        self.execute_result
     }
 }
 
@@ -38,59 +29,63 @@ impl WorkTask for TestWorkTask {
 fn work_task_default_state() {
     let task = TestWorkTask::succeeding();
 
-    assert_eq!(task.state.status(), WorkStatus::Pending);
-    assert!(!task.state.is_cancelled());
-    assert_eq!(task.state.owner_id(), 0);
-    assert_eq!(task.state.submit_generation(), 0);
-    assert!(task.state.error_message().is_empty());
+    assert_eq!(task.status(), WorkStatus::Pending);
+    assert!(!task.is_cancelled());
+    assert_eq!(task.owner_id(), 0);
+    assert_eq!(task.submit_generation(), 0);
+    assert!(task.error_message().is_empty());
 }
 
 #[test]
 fn work_task_status_transitions() {
-    let task = TestWorkTask::succeeding();
+    let mut task = TestWorkTask::succeeding();
+    let retained_status = task.status_handle();
 
-    task.state.set_status(WorkStatus::Running);
-    assert_eq!(task.state.status(), WorkStatus::Running);
-    task.state.set_status(WorkStatus::Completed);
-    assert_eq!(task.state.status(), WorkStatus::Completed);
-    task.state.set_status(WorkStatus::Failed);
-    assert_eq!(task.state.status(), WorkStatus::Failed);
-    task.state.set_status(WorkStatus::Cancelled);
-    assert_eq!(task.state.status(), WorkStatus::Cancelled);
+    task.set_status(WorkStatus::Running);
+    assert_eq!(task.status(), WorkStatus::Running);
+    assert_eq!(retained_status.status(), WorkStatus::Running);
+    task.set_status(WorkStatus::Completed);
+    assert_eq!(task.status(), WorkStatus::Completed);
+    task.set_status(WorkStatus::Failed);
+    assert_eq!(task.status(), WorkStatus::Failed);
+    task.set_status(WorkStatus::Cancelled);
+    assert_eq!(task.status(), WorkStatus::Cancelled);
+    drop(task);
+    assert_eq!(retained_status.status(), WorkStatus::Cancelled);
 }
 
 #[test]
 fn work_task_cancel() {
     let task = TestWorkTask::succeeding();
 
-    assert!(!task.state.is_cancelled());
-    task.state.cancel();
-    assert!(task.state.is_cancelled());
+    assert!(!task.is_cancelled());
+    task.cancel();
+    assert!(task.is_cancelled());
 }
 
 #[test]
 fn work_task_owner_and_generation() {
-    let task = TestWorkTask::succeeding();
+    let mut task = TestWorkTask::succeeding();
 
-    task.state.set_owner_id(42);
-    assert_eq!(task.state.owner_id(), 42);
-    task.state.set_submit_generation(7);
-    assert_eq!(task.state.submit_generation(), 7);
+    task.set_owner_id(42);
+    assert_eq!(task.owner_id(), 42);
+    task.set_submit_generation(7);
+    assert_eq!(task.submit_generation(), 7);
 }
 
 #[test]
 fn work_task_execute_success() {
-    let task = TestWorkTask::succeeding();
+    let mut task = TestWorkTask::succeeding();
 
     assert!(task.execute());
-    assert!(task.state.error_message().is_empty());
+    assert!(task.error_message().is_empty());
 }
 
 #[test]
 fn work_task_execute_failure() {
-    let task = TestWorkTask::succeeding();
-    task.execute_result.store(false, Ordering::Release);
+    let mut task = TestWorkTask::succeeding();
+    task.callbacks.execute_result = false;
 
     assert!(!task.execute());
-    assert_eq!(task.state.error_message(), "test failure");
+    assert_eq!(task.error_message(), "test failure");
 }

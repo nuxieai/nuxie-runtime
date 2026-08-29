@@ -3,30 +3,16 @@
 
 use std::path::PathBuf;
 
-use nuxie_binary::read_runtime_file;
-use nuxie_graph::GraphFile;
-use nuxie_runtime::{
-    ArtboardInstance, RuntimeContourMeasure, RuntimePathCommand, RuntimePathSample,
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::source::math::{
+    aabb::Aabb,
+    contour_measure::{ContourMeasureIter, PosTan},
+    mat2d::Mat2D,
+    path_types::PathDirection,
+    raw_path::RawPath,
+    vec2d::Vec2D,
 };
-
-fn move_to(x: f32, y: f32) -> RuntimePathCommand {
-    RuntimePathCommand::Move { x, y }
-}
-
-fn line_to(x: f32, y: f32) -> RuntimePathCommand {
-    RuntimePathCommand::Line { x, y }
-}
-
-fn cubic_to(x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32) -> RuntimePathCommand {
-    RuntimePathCommand::Cubic {
-        x1,
-        y1,
-        x2,
-        y2,
-        x3,
-        y3,
-    }
-}
+use nuxie_runtime::{File, RuntimeFactoryHandle};
 
 fn nearly_eq(a: f32, b: f32, tolerance: f32) -> bool {
     assert!(tolerance >= 0.0);
@@ -40,39 +26,33 @@ fn nearly_eq(a: f32, b: f32, tolerance: f32) -> bool {
     true
 }
 
-fn nearly_eq_point(a: (f32, f32), b: (f32, f32), tolerance: f32) -> bool {
-    nearly_eq(a.0, b.0, tolerance) && nearly_eq(a.1, b.1, tolerance)
+fn nearly_eq_point(a: Vec2D, b: Vec2D, tolerance: f32) -> bool {
+    nearly_eq(a.x, b.x, tolerance) && nearly_eq(a.y, b.y, tolerance)
 }
 
 #[test]
 fn contour_basics() {
     let tolerance = 0.000001_f32;
+    let mut path = RawPath::default();
+    let mut contours = ContourMeasureIter::new(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    assert!(contours.next().is_none());
 
-    let mut path = Vec::new();
-    let mut contours = RuntimeContourMeasure::from_commands(&path);
-    assert!(contours.is_empty());
+    path.move_to(1.0, 2.0);
+    contours.rewind(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    assert!(contours.next().is_none());
 
-    path.push(move_to(1.0, 2.0));
-    contours = RuntimeContourMeasure::from_commands(&path);
-    assert!(contours.is_empty());
-
-    path.push(line_to(4.0, 6.0));
-    contours = RuntimeContourMeasure::from_commands(&path);
-    let contour = contours.first().expect("one measurable line contour");
+    path.line_to(4.0, 6.0);
+    contours.rewind(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    let contour = contours.next().expect("one measurable line contour");
     assert!(nearly_eq(contour.length(), 5.0, tolerance));
-    assert_eq!(contours.len(), 1);
+    assert!(contours.next().is_none());
 
     let width = 4.0;
     let height = 6.0;
-    path = vec![
-        move_to(0.0, 0.0),
-        line_to(width, 0.0),
-        line_to(width, height),
-        line_to(0.0, height),
-        RuntimePathCommand::Close,
-    ];
-    contours = RuntimeContourMeasure::from_commands(&path);
-    let contour = contours.first().expect("one measurable rectangle contour");
+    path = RawPath::default();
+    path.add_rect(Aabb::new(0.0, 0.0, width, height), PathDirection::Clockwise);
+    contours.rewind(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    let contour = contours.next().expect("one measurable rectangle contour");
     assert!(nearly_eq(
         contour.length(),
         2.0 * (width + height),
@@ -86,101 +66,76 @@ fn contour_basics() {
         width + height + width + height / 2.0,
     ];
     let mid_points = [
-        RuntimePathSample {
-            pos: (width / 2.0, 0.0),
-            tan: (1.0, 0.0),
+        PosTan {
+            pos: Vec2D::new(width / 2.0, 0.0),
+            tan: Vec2D::new(1.0, 0.0),
         },
-        RuntimePathSample {
-            pos: (width, height / 2.0),
-            tan: (0.0, 1.0),
+        PosTan {
+            pos: Vec2D::new(width, height / 2.0),
+            tan: Vec2D::new(0.0, 1.0),
         },
-        RuntimePathSample {
-            pos: (width / 2.0, height),
-            tan: (-1.0, 0.0),
+        PosTan {
+            pos: Vec2D::new(width / 2.0, height),
+            tan: Vec2D::new(-1.0, 0.0),
         },
-        RuntimePathSample {
-            pos: (0.0, height / 2.0),
-            tan: (0.0, -1.0),
+        PosTan {
+            pos: Vec2D::new(0.0, height / 2.0),
+            tan: Vec2D::new(0.0, -1.0),
         },
     ];
     for (distance, expected) in mid_distances.into_iter().zip(mid_points) {
-        let actual = contour.at_distance(distance);
+        let actual = contour.get_pos_tan(distance);
         assert!(nearly_eq_point(actual.pos, expected.pos, tolerance));
         assert!(nearly_eq_point(actual.tan, expected.tan, tolerance));
     }
-    assert_eq!(contours.len(), 1);
-}
-
-fn add_poly(path: &mut Vec<RuntimePathCommand>, points: &[(f32, f32)], closed: bool) {
-    let Some(&(x, y)) = points.first() else {
-        return;
-    };
-    path.push(move_to(x, y));
-    for &(x, y) in &points[1..] {
-        path.push(line_to(x, y));
-    }
-    if closed {
-        path.push(RuntimePathCommand::Close);
-    }
+    assert!(contours.next().is_none());
 }
 
 #[test]
 fn multi_contours() {
-    let points = [(0.0, 0.0), (3.0, 0.0), (3.0, 4.0)];
+    let points = [
+        Vec2D::new(0.0, 0.0),
+        Vec2D::new(3.0, 0.0),
+        Vec2D::new(3.0, 4.0),
+    ];
+    // Three measurable contours: 7, 12, 7. All intervening contours have zero length.
+    let mut path = RawPath::default();
+    path.add_poly(&points, false);
+    path.add_poly(&points, true);
+    path.move_to(0.0, 0.0);
+    path.move_to(0.0, 0.0);
+    path.close();
+    path.move_to(0.0, 0.0);
+    path.line_to(0.0, 0.0);
+    path.move_to(0.0, 0.0);
+    path.line_to(0.0, 0.0);
+    path.close();
+    path.add_poly(&points, false);
 
-    // We expect 3 measurable contours out of this: 7, 12, 7. The others
-    // should be skipped because their length is zero.
-    let mut path = Vec::new();
-    add_poly(&mut path, &points, false);
-    add_poly(&mut path, &points, true);
-
-    path.push(move_to(0.0, 0.0));
-
-    path.push(move_to(0.0, 0.0));
-    path.push(RuntimePathCommand::Close);
-
-    path.push(move_to(0.0, 0.0));
-    path.push(line_to(0.0, 0.0));
-
-    path.push(move_to(0.0, 0.0));
-    path.push(line_to(0.0, 0.0));
-    path.push(RuntimePathCommand::Close);
-
-    add_poly(&mut path, &points, false);
-
-    let contours = RuntimeContourMeasure::from_commands(&path);
-    assert_eq!(contours[0].length(), 7.0);
-    assert_eq!(contours[1].length(), 12.0);
-    assert_eq!(contours[2].length(), 7.0);
-    assert_eq!(contours.len(), 3);
+    let mut contours = ContourMeasureIter::new(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    assert_eq!(contours.next().expect("first contour").length(), 7.0);
+    assert_eq!(contours.next().expect("second contour").length(), 12.0);
+    assert_eq!(contours.next().expect("third contour").length(), 7.0);
+    assert!(contours.next().is_none());
 }
 
 #[test]
-#[ignore = "expected-red: Rust fixes a coarser contour subdivision tolerance internally"]
 fn contour_oval() {
     let tolerance = 0.0075_f32;
     let radius = 10.0_f32;
-
-    // Exact point stream emitted by pinned RawPath::addOval for a clockwise
-    // circle. RuntimeContourMeasure currently fixes its subdivision tolerance
-    // internally; the source-correspondence phase must compare that owner.
-    let c = 0.5519150244935106_f32;
-    let path = [
-        move_to(radius, 0.0),
-        cubic_to(radius, c * radius, c * radius, radius, 0.0, radius),
-        cubic_to(-c * radius, radius, -radius, c * radius, -radius, 0.0),
-        cubic_to(-radius, -c * radius, -c * radius, -radius, 0.0, -radius),
-        cubic_to(c * radius, -radius, radius, -c * radius, radius, 0.0),
-        RuntimePathCommand::Close,
-    ];
-    let contours = RuntimeContourMeasure::from_commands(&path);
-    let contour = contours.first().expect("one measurable oval contour");
+    let mut path = RawPath::default();
+    path.add_oval(
+        Aabb::new(-radius, -radius, radius, radius),
+        PathDirection::Clockwise,
+    );
+    let mut contours = ContourMeasureIter::new(&path, tolerance);
+    let contour = contours.next().expect("one measurable oval contour");
     assert!(nearly_eq(
         contour.length(),
         2.0 * radius * std::f32::consts::PI,
-        tolerance
+        tolerance,
     ));
-    assert_eq!(contours.len(), 1);
+    assert!(contours.next().is_none());
 }
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
@@ -195,81 +150,59 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 
 #[test]
 fn bad_contour() {
-    let file =
-        read_runtime_file(&pinned_fixture("zombie_skins.riv")).expect("zombie_skins.riv imports");
-    let graphs = GraphFile::from_runtime_file(&file).expect("zombie_skins.riv graph builds");
-    let graph = graphs.artboards.first().expect("default artboard graph");
-    let mut artboard = ArtboardInstance::from_graph_with_artboards(&file, graph, &graphs.artboards)
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let factory =
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("explicit retained factory");
+    let file = File::import(
+        &pinned_fixture("zombie_skins.riv"),
+        factory,
+        None,
+        None,
+        None,
+    )
+    .expect("zombie_skins.riv imports");
+    let artboard = file
+        .with_file(File::artboard_default)
         .expect("default artboard instantiates");
-    let default_index = artboard
-        .default_state_machine_index()
-        .expect("default state machine");
-    let mut machine = artboard
-        .state_machine_instance(default_index)
+    let machine = artboard
+        .default_state_machine_handle()
         .expect("default state machine instantiates");
-    machine
-        .advance_and_apply(&mut artboard, 0.0)
-        .expect("default state machine advances and applies");
+    machine.advance_and_apply(0.0);
 }
 
 #[test]
 fn nan_path() {
-    let path = [
-        move_to(0.0, 0.0),
-        line_to(1.0, 2.0),
-        cubic_to(3.0, 4.0, 5.0, 6.0, 7.0, 8.0),
-        cubic_to(9.0, 10.0, 11.0, 12.0, 13.0, 14.0),
-        cubic_to(15.0, 16.0, 17.0, 18.0, 19.0, 20.0),
-    ];
-
-    let contours = RuntimeContourMeasure::from_commands(&path);
-    let contour = contours.first().expect("one finite contour");
+    let mut path = RawPath::default();
+    path.move_to(0.0, 0.0);
+    path.line_to(1.0, 2.0);
+    path.cubic_to(3.0, 4.0, 5.0, 6.0, 7.0, 8.0);
+    path.cubic_to(9.0, 10.0, 11.0, 12.0, 13.0, 14.0);
+    path.cubic_to(15.0, 16.0, 17.0, 18.0, 19.0, 20.0);
+    let mut contours = ContourMeasureIter::new(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    let contour = contours.next().expect("one finite contour");
     assert!(contour.length().is_finite());
-    assert_eq!(contours.len(), 1);
+    assert!(contours.next().is_none());
 
     let nan = f32::NAN;
-    let transformed = path.map(|command| match command {
-        RuntimePathCommand::Move { .. } => move_to(nan, nan),
-        RuntimePathCommand::Line { .. } => line_to(nan, nan),
-        RuntimePathCommand::Cubic { .. } => cubic_to(nan, nan, nan, nan, nan, nan),
-        RuntimePathCommand::Close => RuntimePathCommand::Close,
-    });
-    assert!(RuntimeContourMeasure::from_commands(&transformed).is_empty());
+    let transformed = path.transform(Mat2D::new(nan, nan, nan, nan, nan, nan));
+    let mut contours = ContourMeasureIter::new(&transformed, ContourMeasureIter::DEFAULT_TOLERANCE);
+    assert!(contours.next().is_none());
 }
 
 #[test]
 fn fuzz_issue_7295() {
-    let inner_path = [
-        move_to(0.0, -20.5),
-        cubic_to(11.3218384, -20.5, 20.5, -11.3218384, 20.5, 0.0),
-        cubic_to(20.5, 11.3218384, 11.3218384, 20.5, 0.0, 20.5),
-        cubic_to(-11.3218384, 20.5, -20.5, 11.3218384, -20.5, 0.0),
-        cubic_to(-20.5, -11.3218384, -11.3218384, -20.5, 0.0, -20.5),
-    ];
+    let mut inner_path = RawPath::default();
+    inner_path.move_to(0.0, -20.5);
+    inner_path.cubic_to(11.3218384, -20.5, 20.5, -11.3218384, 20.5, 0.0);
+    inner_path.cubic_to(20.5, 11.3218384, 11.3218384, 20.5, 0.0, 20.5);
+    inner_path.cubic_to(-11.3218384, 20.5, -20.5, 11.3218384, -20.5, 0.0);
+    inner_path.cubic_to(-20.5, -11.3218384, -11.3218384, -20.5, 0.0, -20.5);
     let translate = -134_217_728.0_f32;
-    let outer_path = inner_path.map(|command| match command {
-        RuntimePathCommand::Move { x, y } => move_to(x + translate, y + translate),
-        RuntimePathCommand::Line { x, y } => line_to(x + translate, y + translate),
-        RuntimePathCommand::Cubic {
-            x1,
-            y1,
-            x2,
-            y2,
-            x3,
-            y3,
-        } => cubic_to(
-            x1 + translate,
-            y1 + translate,
-            x2 + translate,
-            y2 + translate,
-            x3 + translate,
-            y3 + translate,
-        ),
-        RuntimePathCommand::Close => RuntimePathCommand::Close,
-    });
-
-    let contours = RuntimeContourMeasure::from_commands(&outer_path);
-    let contour = contours.first().expect("one transformed contour");
-    let _result = contour.segment(0.0, 168.389008, true);
+    let outer_path = inner_path.transform(Mat2D::from_translate(translate, translate));
+    let contour = ContourMeasureIter::new(&outer_path, ContourMeasureIter::DEFAULT_TOLERANCE)
+        .next()
+        .expect("one transformed contour");
+    let mut result = RawPath::default();
+    contour.get_segment(0.0, 168.389008, &mut result, true);
     assert!((contour.length() - 168.389008).abs() <= 1.0 / 4096.0);
 }

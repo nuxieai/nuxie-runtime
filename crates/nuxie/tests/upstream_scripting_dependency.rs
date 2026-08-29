@@ -4,7 +4,10 @@
 
 use std::path::PathBuf;
 
-use nuxie::{File, PersistentFactory};
+use nuxie::{
+    FileImportLimits, PersistentFactory, ScriptExecutionLimits, ViewModelInstanceRuntime,
+    import_unsigned_scripted,
+};
 use nuxie_render_api::SerializingFactory;
 use silver_corpus::{compare_sriv, parse_sriv};
 
@@ -44,103 +47,95 @@ fn compare_silver(name: &str, actual: &[u8]) {
 }
 
 fn run_number_dependency(asset: &str, silver_name: &str) {
-    let file = File::import_with_unsigned_scripts(&pinned_fixture(asset))
-        .unwrap_or_else(|error| panic!("{asset} imports with trusted scripts: {error:#}"));
-    let artboard = file.artboard_named("Artboard").expect("Artboard artboard");
-    let mut instance = artboard.instantiate().expect("Artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
-    instance
-        .initialize_renderer(&mut silver)
-        .expect("Artboard renderer initializes at the import boundary");
-    let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = if instance.view_model_index().is_none() {
-        instance.instantiate_view_model()
-    } else {
-        instance.instantiate_view_model_instance(0)
-    }
-    .expect("Artboard view-model instance");
-    let (width, height) = instance.artboard_dimensions();
+    let scripted = import_unsigned_scripted(
+        &pinned_fixture(asset),
+        &mut silver,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .unwrap_or_else(|error| panic!("{asset} imports with trusted scripts: {error:#}"));
+    let file = scripted.native_file();
+    let artboard = file
+        .with_file(|file| file.artboard_named("Artboard"))
+        .expect("Artboard artboard");
+    let state_machine = artboard.state_machine_at(0).expect("state machine 0");
+    let view_model = file
+        .with_file(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+                .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
+        .expect("Artboard view-model instance");
+    state_machine
+        .with_instance_mut(|machine| machine.bind_view_model_instance(view_model.instance()));
+    artboard.bind_view_model_instance(Some(view_model.instance()));
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
     silver.borrow_mut().frame_size(width as u32, height as u32);
 
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("initial scripted advance");
+    state_machine.advance_and_apply(0.1);
     let mut renderer = silver.borrow().make_renderer();
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("initial dependency draw");
+    artboard.draw(&mut renderer);
 
     let mut counter = 0;
     for _ in 0..30 {
-        assert!(view_model.set_number("InputValue1", counter as f32));
+        let input = view_model
+            .property_number("InputValue1")
+            .expect("InputValue1 number");
+        input.set_value(counter as f32);
+        assert_eq!(input.value(), counter as f32);
         silver.borrow_mut().add_frame();
-        instance
-            .try_advance_with_state_machines_and_view_model_and_factory(
-                std::slice::from_mut(&mut state_machine),
-                0.016,
-                &mut view_model,
-                &mut silver,
-            )
-            .expect("dependency frame advances");
-        instance
-            .draw(&mut silver, &mut renderer)
-            .expect("dependency frame draws");
+        state_machine.advance_and_apply(0.016);
+        artboard.draw(&mut renderer);
         counter += 5;
     }
     compare_silver(silver_name, &silver.borrow().bytes());
 }
 
 fn run_string_dependency(asset: &str, silver_name: &str) {
-    let file = File::import_with_unsigned_scripts(&pinned_fixture(asset))
-        .unwrap_or_else(|error| panic!("{asset} imports with trusted scripts: {error:#}"));
-    let artboard = file.artboard_named("Artboard").expect("Artboard artboard");
-    let mut instance = artboard.instantiate().expect("Artboard instantiates");
     let mut silver = PersistentFactory::new(SerializingFactory::new());
-    instance
-        .initialize_renderer(&mut silver)
-        .expect("Artboard renderer initializes at the import boundary");
-    let mut state_machine = instance.state_machine_instance(0).expect("state machine 0");
-    let mut view_model = if instance.view_model_index().is_none() {
-        instance.instantiate_view_model()
-    } else {
-        instance.instantiate_view_model_instance(0)
-    }
-    .expect("Artboard view-model instance");
-    let (width, height) = instance.artboard_dimensions();
+    let scripted = import_unsigned_scripted(
+        &pinned_fixture(asset),
+        &mut silver,
+        None,
+        FileImportLimits::new(),
+        ScriptExecutionLimits::new(),
+    )
+    .unwrap_or_else(|error| panic!("{asset} imports with trusted scripts: {error:#}"));
+    let file = scripted.native_file();
+    let artboard = file
+        .with_file(|file| file.artboard_named("Artboard"))
+        .expect("Artboard artboard");
+    let state_machine = artboard.state_machine_at(0).expect("state machine 0");
+    let view_model = file
+        .with_file(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+                .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
+        })
+        .map(ViewModelInstanceRuntime::new)
+        .map(ViewModelInstanceRuntime::into_handle)
+        .expect("Artboard view-model instance");
+    state_machine
+        .with_instance_mut(|machine| machine.bind_view_model_instance(view_model.instance()));
+    artboard.bind_view_model_instance(Some(view_model.instance()));
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
     silver.borrow_mut().frame_size(width as u32, height as u32);
 
-    instance
-        .try_advance_with_state_machines_and_view_model_and_factory(
-            std::slice::from_mut(&mut state_machine),
-            0.1,
-            &mut view_model,
-            &mut silver,
-        )
-        .expect("initial scripted advance");
+    state_machine.advance_and_apply(0.1);
     let mut renderer = silver.borrow().make_renderer();
-    instance
-        .draw(&mut silver, &mut renderer)
-        .expect("initial dependency draw");
+    artboard.draw(&mut renderer);
 
     for value in STRING_VALUES {
-        assert!(view_model.set_string("InputString", value));
+        let input = view_model
+            .property_string("InputString")
+            .expect("InputString string");
+        input.set_value(value);
+        assert_eq!(input.value(), value);
         silver.borrow_mut().add_frame();
-        instance
-            .try_advance_with_state_machines_and_view_model_and_factory(
-                std::slice::from_mut(&mut state_machine),
-                0.016,
-                &mut view_model,
-                &mut silver,
-            )
-            .expect("dependency frame advances");
-        instance
-            .draw(&mut silver, &mut renderer)
-            .expect("dependency frame draws");
+        state_machine.advance_and_apply(0.016);
+        artboard.draw(&mut renderer);
     }
     compare_silver(silver_name, &silver.borrow().bytes());
 }

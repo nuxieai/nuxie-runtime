@@ -134,8 +134,51 @@ use crate::mechanical_port::source::{
     text::{font_hb::HbFont, raw_text::RawText as NativeRawText},
     text_engine::{self as native, Font, FontRef},
 };
+use harfrust::FontRef as HarfFontRef;
 use nuxie_render_api::{Aabb, Factory, RawPath, RenderPaint, Renderer};
+use skrifa::instance::{LocationRef, Size};
+use skrifa::outline::DrawSettings;
+use skrifa::outline::pen::NullPen;
+use skrifa::raw::TableProvider;
+use skrifa::{FontRef as SkrifaFontRef, GlyphId, MetadataProvider};
 use std::{cell::RefCell, marker::PhantomData, rc::Rc, sync::Arc};
+
+/// Whether embedded font bytes are safe for both translated text backends.
+///
+/// Authoring uses this before attaching bytes so malformed outlines cannot
+/// defer a parser panic until shaping or drawing.
+#[must_use]
+pub fn embedded_font_is_parseable(font_bytes: &[u8]) -> bool {
+    if HarfFontRef::new(font_bytes).is_err() {
+        return false;
+    }
+
+    std::panic::catch_unwind(|| {
+        let Ok(font) = SkrifaFontRef::new(font_bytes) else {
+            return false;
+        };
+        let Ok(maxp) = font.maxp() else {
+            return false;
+        };
+        let outlines = font.outline_glyphs();
+        for glyph_index in 0..u32::from(maxp.num_glyphs()) {
+            let Some(outline) = outlines.get(GlyphId::new(glyph_index)) else {
+                continue;
+            };
+            if outline
+                .draw(
+                    DrawSettings::unhinted(Size::unscaled(), LocationRef::default()),
+                    &mut NullPen,
+                )
+                .is_err()
+            {
+                return false;
+            }
+        }
+        true
+    })
+    .unwrap_or(false)
+}
 
 #[derive(Clone)]
 pub struct RawTextFont {

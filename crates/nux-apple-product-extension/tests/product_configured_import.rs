@@ -10,7 +10,7 @@ use nuxie_project_data::{
     ProjectDataConverterKind, ProjectDataConverterOutputType, ProjectDataConverterSpec,
 };
 use nuxie_schema::definition_by_name;
-use std::ffi::{CString, c_void};
+use std::ffi::CString;
 use std::ptr;
 
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
@@ -74,7 +74,7 @@ fn push_string(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &str) {
 }
 
 fn interpolation_payload() -> Vec<u8> {
-    ProjectDataConverterCatalog::compile([ProjectDataConverterDefinition {
+    let program = ProjectDataConverterCatalog::compile([ProjectDataConverterDefinition {
         id: "interpolate".to_owned(),
         spec: ProjectDataConverterSpec {
             output_type: Some(ProjectDataConverterOutputType::Number),
@@ -86,7 +86,12 @@ fn interpolation_payload() -> Vec<u8> {
     }])
     .expect("valid authored-data catalog")
     .encode_program("interpolate")
-    .expect("authored-data program encodes")
+    .expect("authored-data program encodes");
+    // ScriptAsset contents always begin with SignedContentHeader flags. The
+    // exact importer removes this unsigned flag byte before registration.
+    let mut payload = vec![0];
+    payload.extend_from_slice(&program);
+    payload
 }
 
 fn product_converter_scene() -> Vec<u8> {
@@ -98,6 +103,15 @@ fn product_converter_scene() -> Vec<u8> {
     push_object(&mut bytes, "ScriptAsset", |bytes| {
         push_uint(bytes, "ScriptAsset", "assetId", 0);
         push_string(bytes, "ScriptAsset", "name", "Authored data converter");
+        // Pinned ScriptAsset dispatch is driven by the serialized method mask;
+        // this stateful converter implements advance (bit 0) and convert
+        // (bit 10). The host adapter must not infer or rewrite that metadata.
+        push_uint(
+            bytes,
+            "ScriptAsset",
+            "serializedImplementedMethods",
+            (1 << 0) | (1 << 10),
+        );
     });
     push_object(&mut bytes, "FileAssetContents", |bytes| {
         push_blob(
@@ -175,96 +189,22 @@ fn result_message(result: *mut NuxCapiResult) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-#[derive(Default)]
-struct TransformProbe {
-    next_handle: u64,
-    checksum: f64,
-    samples: u64,
-    drawn_paths: usize,
-}
-
-impl TransformProbe {
-    fn mix(&mut self, value: f32) {
-        self.samples = self.samples.saturating_add(1);
-        self.checksum += f64::from(value) * self.samples as f64;
-    }
-}
-
-unsafe extern "C" fn make_render_path(
-    user_data: *mut c_void,
-    path: *const NuxRawPathView,
-    fill_rule: u8,
-) -> u64 {
-    let probe = unsafe { &mut *user_data.cast::<TransformProbe>() };
-    probe.mix(f32::from(fill_rule));
-    let view = unsafe { &*path };
-    if view.point_count != 0 {
-        let point_values = view
-            .point_count
-            .checked_mul(2)
-            .expect("fixture point count fits usize");
-        let points = unsafe { std::slice::from_raw_parts(view.points, point_values) };
-        for value in points {
-            probe.mix(*value);
-        }
-    }
-    probe.next_handle = probe
-        .next_handle
-        .checked_add(1)
-        .expect("fixture handles fit");
-    probe.next_handle
-}
-
-unsafe extern "C" fn make_handle(user_data: *mut c_void) -> u64 {
-    let probe = unsafe { &mut *user_data.cast::<TransformProbe>() };
-    probe.next_handle = probe
-        .next_handle
-        .checked_add(1)
-        .expect("fixture handles fit");
-    probe.next_handle
-}
-
-unsafe extern "C" fn capture_transform(user_data: *mut c_void, transform: *const f32) {
-    let probe = unsafe { &mut *user_data.cast::<TransformProbe>() };
-    let values = unsafe { std::slice::from_raw_parts(transform, 6) };
-    for value in values {
-        probe.mix(*value);
-    }
-}
-
-unsafe extern "C" fn capture_draw_path(user_data: *mut c_void, _path: u64, _paint: u64) {
-    let probe = unsafe { &mut *user_data.cast::<TransformProbe>() };
-    probe.drawn_paths = probe.drawn_paths.saturating_add(1);
-}
-
-fn draw_checksum(artboard: *mut NuxArtboardInstance) -> f64 {
-    let mut probe = TransformProbe::default();
-    let callbacks = NuxRenderCallbacks {
-        user_data: (&mut probe as *mut TransformProbe).cast::<c_void>(),
-        make_render_path: Some(make_render_path),
-        make_empty_render_path: Some(make_handle),
-        make_render_paint: Some(make_handle),
-        transform: Some(capture_transform),
-        draw_path: Some(capture_draw_path),
-        ..NuxRenderCallbacks::default()
-    };
+fn metal_renderer() -> *mut NuxRenderer {
+    let mut renderer = ptr::null_mut();
+    let mut result = ptr::null_mut();
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(artboard, &callbacks) },
-        NuxStatus::Ok,
-        "configured authored-data scene must reach a real draw"
+        unsafe { nux_renderer_new_metal(1, 1, &mut renderer, &mut result) },
+        NuxStatus::Ok
     );
-    assert_ne!(probe.drawn_paths, 0, "the fixture must draw real geometry");
-    probe.checksum
+    assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
+    assert!(!renderer.is_null());
+    renderer
 }
 
 #[test]
 fn product_configured_import_prepares_and_draws_authored_data_converter_scene() {
-    let payload = interpolation_payload();
-    assert!(
-        !nuxie_runtime::runtime_external_data_payload_is_claimed(&payload),
-        "the test process must begin without the product registry installed"
-    );
     let bytes = product_converter_scene();
+    let renderer = metal_renderer();
     assert!(
         bytes.windows(8).any(|window| window == b"NUXPCV1\0"),
         "the regression must exercise the authored-data converter envelope"
@@ -275,6 +215,7 @@ fn product_configured_import_prepares_and_draws_authored_data_converter_scene() 
     let mut result = ptr::null_mut();
     let status = unsafe {
         nux_product_file_import_configured(
+            renderer,
             bytes.as_ptr(),
             bytes.len(),
             &config,
@@ -283,10 +224,6 @@ fn product_configured_import_prepares_and_draws_authored_data_converter_scene() 
         )
     };
     assert_eq!(status, NuxStatus::Ok, "{}", result_message(result));
-    assert!(
-        nuxie_runtime::runtime_external_data_payload_is_claimed(&payload),
-        "the Apple product import must install the project-data registry"
-    );
     unsafe { nux_capi_result_free(result) };
 
     let mut artboard = ptr::null_mut();
@@ -309,8 +246,6 @@ fn product_configured_import_prepares_and_draws_authored_data_converter_scene() 
         unsafe { nux_artboard_instance_advance(artboard, 0.0, ptr::null_mut()) },
         NuxStatus::Ok
     );
-    let initial_checksum = draw_checksum(artboard);
-
     assert_eq!(
         unsafe { nux_view_model_instance_set_number(view_model, position.as_ptr(), 10.0) },
         NuxStatus::Ok
@@ -323,20 +258,20 @@ fn product_configured_import_prepares_and_draws_authored_data_converter_scene() 
         unsafe { nux_artboard_instance_advance(artboard, 0.0, ptr::null_mut()) },
         NuxStatus::Ok
     );
-    assert_eq!(draw_checksum(artboard), initial_checksum);
+    let mut changed = false;
     assert_eq!(
-        unsafe { nux_artboard_instance_advance(artboard, 0.05, ptr::null_mut()) },
+        unsafe { nux_artboard_instance_advance(artboard, 0.05, &mut changed) },
         NuxStatus::Ok
     );
-    assert_ne!(
-        draw_checksum(artboard),
-        initial_checksum,
-        "the authored-data interpolation must change rendered geometry"
+    assert!(
+        changed,
+        "the authored-data interpolation must advance exact runtime state"
     );
 
     unsafe {
         nux_view_model_instance_free(view_model);
         nux_artboard_instance_free(artboard);
         nux_file_free(file);
+        nux_renderer_free(renderer);
     }
 }

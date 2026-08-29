@@ -1,7 +1,6 @@
 //! Portable, read-only metadata for the exact file-asset catalog.
 
 use super::*;
-use nuxie::{FileAsset, FileAssetKind};
 
 pub const NUX_FILE_ASSET_PROVIDER_EXTERNAL_BYTES: u32 = 1 << 0;
 pub const NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE: u32 = 1 << 1;
@@ -111,58 +110,24 @@ pub(crate) struct ExpectedFileAssetDescriptor {
     required_provider_flags: u32,
 }
 
-fn kind(kind: FileAssetKind) -> u32 {
-    match kind {
-        FileAssetKind::Image => NUX_FILE_ASSET_KIND_IMAGE,
-        FileAssetKind::Font => NUX_FILE_ASSET_KIND_FONT,
-        FileAssetKind::Audio => NUX_FILE_ASSET_KIND_AUDIO,
-        FileAssetKind::Blob => NUX_FILE_ASSET_KIND_BLOB,
-        FileAssetKind::Script => NUX_FILE_ASSET_KIND_SCRIPT,
-        FileAssetKind::Shader => NUX_FILE_ASSET_KIND_SHADER,
-    }
-}
-
-fn required_provider_flags(asset: FileAsset<'_>) -> u32 {
-    let external = asset.contents().is_none();
-    match asset.kind() {
-        FileAssetKind::Image => {
-            NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE
-                | if external {
-                    NUX_FILE_ASSET_PROVIDER_EXTERNAL_BYTES
-                } else {
-                    0
-                }
-        }
-        FileAssetKind::Font | FileAssetKind::Audio if external => {
-            NUX_FILE_ASSET_PROVIDER_EXTERNAL_BYTES
-        }
-        FileAssetKind::Font
-        | FileAssetKind::Audio
-        | FileAssetKind::Blob
-        | FileAssetKind::Script
-        | FileAssetKind::Shader => 0,
-    }
-}
-
-fn borrowed_string(value: &str) -> NuxStringView {
+fn borrowed_bytes(value: &[u8]) -> NuxStringView {
     NuxStringView {
         data: value.as_ptr().cast(),
         len: value.len(),
     }
 }
 
-fn descriptor_view(asset: FileAsset<'_>) -> NuxFileAssetDescriptorView {
-    let authored_id = asset.asset_id();
+fn descriptor_view(asset: &FileAssetMetadata) -> NuxFileAssetDescriptorView {
     NuxFileAssetDescriptorView {
-        ordinal: asset.index(),
-        kind: kind(asset.kind()),
-        has_authored_id: u32::from(authored_id.is_some()),
-        authored_id: authored_id.unwrap_or(0),
-        name: borrowed_string(asset.name().unwrap_or_default()),
-        file_extension: borrowed_string(asset.file_extension()),
-        is_embedded: u32::from(asset.contents().is_some()),
-        has_contents_record: u32::from(asset.has_contents_record()),
-        required_provider_flags: required_provider_flags(asset),
+        ordinal: asset.ordinal,
+        kind: asset.kind,
+        has_authored_id: u32::from(asset.authored_id.is_some()),
+        authored_id: asset.authored_id.unwrap_or(0),
+        name: borrowed_bytes(&asset.name),
+        file_extension: borrowed_bytes(&asset.file_extension),
+        is_embedded: u32::from(asset.is_embedded),
+        has_contents_record: u32::from(asset.has_contents_record),
+        required_provider_flags: asset.required_provider_flags,
         ..NuxFileAssetDescriptorView::default()
     }
 }
@@ -316,22 +281,22 @@ mod tests {
 }
 
 pub(crate) fn validate_expected_descriptors(
-    file: &File,
+    file: &FileMetadataCatalog,
     expected: &[ExpectedFileAssetDescriptor],
 ) -> Result<(), &'static str> {
-    if file.asset_count() != expected.len() {
+    if file.assets.len() != expected.len() {
         return Err("file asset count does not match the expected catalog");
     }
-    for (asset, expected) in file.assets().zip(expected) {
+    for (asset, expected) in file.assets.iter().zip(expected) {
         let actual = ExpectedFileAssetDescriptor {
-            ordinal: asset.index(),
-            kind: kind(asset.kind()),
-            authored_id: asset.asset_id(),
-            name: asset.name().unwrap_or_default().as_bytes().to_vec(),
-            file_extension: asset.file_extension().as_bytes().to_vec(),
-            is_embedded: asset.contents().is_some(),
-            has_contents_record: asset.has_contents_record(),
-            required_provider_flags: required_provider_flags(asset),
+            ordinal: asset.ordinal,
+            kind: asset.kind,
+            authored_id: asset.authored_id,
+            name: asset.name.to_vec(),
+            file_extension: asset.file_extension.to_vec(),
+            is_embedded: asset.is_embedded,
+            has_contents_record: asset.has_contents_record,
+            required_provider_flags: asset.required_provider_flags,
         };
         if actual != *expected {
             return Err("file asset descriptor does not match the expected catalog");
@@ -357,7 +322,7 @@ pub unsafe extern "C" fn nux_file_asset_count(
         let Some(file) = (unsafe { file.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        unsafe { *out_count = file.file.asset_count() };
+        unsafe { *out_count = file.metadata.assets.len() };
         NuxStatus::Ok
     })
 }
@@ -378,7 +343,7 @@ pub unsafe extern "C" fn nux_file_asset_descriptor(
         let Some(file) = (unsafe { file.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        let Some(asset) = file.file.asset(index) else {
+        let Some(asset) = file.metadata.assets.get(index) else {
             return NuxStatus::NotFound;
         };
         let view = descriptor_view(asset);

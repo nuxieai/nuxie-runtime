@@ -24,10 +24,14 @@ fn fixture_bytes(name: &str) -> Vec<u8> {
 }
 
 fn import(name: &str) -> *mut NuxFile {
+    import_with_callbacks(name, &NuxRenderCallbacks::default())
+}
+
+fn import_with_callbacks(name: &str, callbacks: &NuxRenderCallbacks) -> *mut NuxFile {
     let bytes = fixture_bytes(name);
     let mut file = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), callbacks, &mut file) },
         NuxStatus::Ok
     );
     file
@@ -161,9 +165,8 @@ fn default_selection_matches_authored_then_valid_fallback_order() {
     for (fixture, index, expected_kind) in [
         // Authored valid default state machine.
         (SMI_FIXTURE, SMI_ARTBOARD, NuxPlayerKind::StateMachine),
-        // Its sole state-machine definition cannot instantiate and there is no
-        // animation, so selection reaches the static fallback.
-        ("shapetest.riv", 0, NuxPlayerKind::StaticArtboard),
+        // Exact runtime import can instantiate its index-zero state machine.
+        ("shapetest.riv", 0, NuxPlayerKind::StateMachine),
         // No state machines; linear-animation zero is selected.
         ("circle_clips.riv", 0, NuxPlayerKind::LinearAnimation),
     ] {
@@ -215,8 +218,6 @@ unsafe extern "C" fn release_object(user_data: *mut c_void, handle: u64) {
 
 #[test]
 fn player_retains_artboard_file_and_renderer_binding_until_last_owner() {
-    let file = import(SMI_FIXTURE);
-    let instance = artboard(file, SMI_ARTBOARD);
     let mut state = RenderLifetime::default();
     let callbacks = NuxRenderCallbacks {
         user_data: (&mut state as *mut RenderLifetime).cast(),
@@ -228,8 +229,10 @@ fn player_retains_artboard_file_and_renderer_binding_until_last_owner() {
         release_render_shader: Some(release_object),
         ..NuxRenderCallbacks::default()
     };
+    let file = import_with_callbacks(SMI_FIXTURE, &callbacks);
+    let instance = artboard(file, SMI_ARTBOARD);
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
+        unsafe { nux_artboard_instance_draw(instance) },
         NuxStatus::Ok
     );
     assert!(state.made > 0);
@@ -401,23 +404,42 @@ fn versioned_structs_reject_short_prefixes_and_preserve_larger_tails() {
     );
     assert_eq!(large_player.canary, 0xBADC_0FFE_E0DD_F00D);
 
+    let bytes = fixture_bytes(SMI_FIXTURE);
     let mut short_callbacks = NuxRenderCallbacks::default();
     short_callbacks.struct_size = 0;
+    let mut short_file = std::ptr::dangling_mut();
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &short_callbacks) },
+        unsafe {
+            nux_file_import(
+                bytes.as_ptr(),
+                bytes.len(),
+                &short_callbacks,
+                &mut short_file,
+            )
+        },
         NuxStatus::InvalidStructSize
     );
+    assert!(short_file.is_null());
     let mut large_callbacks = Large {
         value: NuxRenderCallbacks::default(),
         canary: 0x1234_5678_9ABC_DEF0,
     };
     large_callbacks.value.struct_size = std::mem::size_of_val(&large_callbacks) as u32;
+    let mut large_file = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &large_callbacks.value) },
+        unsafe {
+            nux_file_import(
+                bytes.as_ptr(),
+                bytes.len(),
+                &large_callbacks.value,
+                &mut large_file,
+            )
+        },
         NuxStatus::Ok
     );
     assert_eq!(large_callbacks.canary, 0x1234_5678_9ABC_DEF0);
     unsafe {
+        nux_file_free(large_file);
         nux_player_free(player);
         nux_artboard_instance_free(instance);
         nux_file_free(file);
@@ -429,9 +451,16 @@ fn owned_results_cover_import_and_selection_errors() {
     let mut file = std::ptr::dangling_mut();
     let mut result = std::ptr::null_mut();
     let invalid = b"not a rive file";
+    let callbacks = NuxRenderCallbacks::default();
     assert_eq!(
         unsafe {
-            nux_file_import_with_result(invalid.as_ptr(), invalid.len(), &mut file, &mut result)
+            nux_file_import_with_result(
+                invalid.as_ptr(),
+                invalid.len(),
+                &callbacks,
+                &mut file,
+                &mut result,
+            )
         },
         NuxStatus::ImportError
     );
@@ -483,6 +512,7 @@ fn owned_results_cover_import_and_selection_errors() {
 #[test]
 fn result_bearing_apis_reject_aliased_output_slots_before_publication() {
     let bytes = fixture_bytes(SMI_FIXTURE);
+    let callbacks = NuxRenderCallbacks::default();
     let mut shared_slot: *mut c_void = std::ptr::dangling_mut();
     let shared_slot_pointer = &mut shared_slot as *mut *mut c_void;
     assert_eq!(
@@ -490,6 +520,7 @@ fn result_bearing_apis_reject_aliased_output_slots_before_publication() {
             nux_file_import_with_result(
                 bytes.as_ptr(),
                 bytes.len(),
+                &callbacks,
                 shared_slot_pointer.cast(),
                 shared_slot_pointer.cast(),
             )
@@ -549,9 +580,6 @@ unsafe extern "C" fn count_save(user_data: *mut c_void) {
 
 #[test]
 fn sibling_visual_occurrences_bind_distinct_callback_contexts_independently() {
-    let file = import(SMI_FIXTURE);
-    let first = artboard(file, SMI_ARTBOARD);
-    let second = artboard(file, SMI_ARTBOARD);
     let mut first_saves = 0usize;
     let mut second_saves = 0usize;
     let first_callbacks = NuxRenderCallbacks {
@@ -564,35 +592,37 @@ fn sibling_visual_occurrences_bind_distinct_callback_contexts_independently() {
         save: Some(count_save),
         ..NuxRenderCallbacks::default()
     };
+    let first_file = import_with_callbacks(SMI_FIXTURE, &first_callbacks);
+    let second_file = import_with_callbacks(SMI_FIXTURE, &second_callbacks);
+    let first = artboard(first_file, SMI_ARTBOARD);
+    let second = artboard(second_file, SMI_ARTBOARD);
 
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(first, &first_callbacks) },
+        unsafe { nux_artboard_instance_advance(first, 0.0, std::ptr::null_mut()) },
         NuxStatus::Ok
     );
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(second, &second_callbacks) },
+        unsafe { nux_artboard_instance_advance(second, 0.0, std::ptr::null_mut()) },
         NuxStatus::Ok
     );
+    assert_eq!(unsafe { nux_artboard_instance_draw(first) }, NuxStatus::Ok);
+    assert_eq!(unsafe { nux_artboard_instance_draw(second) }, NuxStatus::Ok);
     assert!(first_saves > 0);
     assert!(second_saves > 0);
 
     assert_eq!(unsafe { nux_artboard_instance_free(first) }, NuxStatus::Ok);
     let before = second_saves;
-    assert_eq!(
-        unsafe { nux_artboard_instance_draw(second, &second_callbacks) },
-        NuxStatus::Ok
-    );
+    assert_eq!(unsafe { nux_artboard_instance_draw(second) }, NuxStatus::Ok);
     assert!(second_saves > before);
     assert_eq!(unsafe { nux_artboard_instance_free(second) }, NuxStatus::Ok);
-    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+    assert_eq!(unsafe { nux_file_free(first_file) }, NuxStatus::Ok);
+    assert_eq!(unsafe { nux_file_free(second_file) }, NuxStatus::Ok);
 }
 
 #[test]
-fn callback_time_free_is_rejected_and_second_callback_binding_must_match() {
-    let file = import(SMI_FIXTURE);
-    let instance = artboard(file, SMI_ARTBOARD);
+fn callback_time_free_is_rejected_under_the_immutable_import_binding() {
     let mut state = ReentrantFree {
-        instance,
+        instance: std::ptr::null_mut(),
         status: NuxStatus::Ok,
         zero_handle_releases: 0,
     };
@@ -603,15 +633,21 @@ fn callback_time_free_is_rejected_and_second_callback_binding_must_match() {
         save: Some(reentrant_save),
         ..NuxRenderCallbacks::default()
     };
+    let file = import_with_callbacks(SMI_FIXTURE, &callbacks);
+    let instance = artboard(file, SMI_ARTBOARD);
+    state.instance = instance;
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
+        unsafe { nux_artboard_instance_advance(instance, 0.0, std::ptr::null_mut()) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(instance) },
         NuxStatus::Ok
     );
     assert_eq!(state.status, NuxStatus::ReentrantCall);
-    let different_descriptor = callbacks;
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &different_descriptor) },
-        NuxStatus::HandleMismatch
+        unsafe { nux_artboard_instance_draw(instance) },
+        NuxStatus::Ok
     );
     assert_eq!(
         unsafe { nux_artboard_instance_free(instance) },

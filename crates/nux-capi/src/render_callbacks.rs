@@ -8,10 +8,11 @@
 //! callback is optional (may be NULL); missing callbacks degrade to no-ops so
 //! a zeroed vtable behaves like a null renderer.
 
+use nuxie::render_api::{Mat2D, RawPath};
 use nuxie::{
-    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, RawPath,
-    RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle,
-    RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
+    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
+    RenderShader, Renderer, StrokeCap, StrokeJoin,
 };
 use std::any::Any;
 use std::ffi::c_void;

@@ -55,14 +55,13 @@ Experience lifecycle, Flow/session policy, `.nux` acquisition and
 authentication, product-specific host commands, and Apple application
 orchestration are no longer runtime crates. The Swift SDK owns those concepts
 on Apple platforms and consumes the raw C ABI. `nuxie-project-data` remains an
-authored-data conversion owner above the baseline. The distributed
-`nux-apple-product-extension` installs that converter through one explicit,
-product-named import entrypoint. Android has no matching upper-leaf archive:
-its SDK consumes the portable configured-import symbols from `nux-capi`
-directly. Consequently, the optional Android distribution edge to
-`nuxie-project-data` is activated only by `android-vulkan`, and installation
-occurs only when `scripting` is also enabled. No baseline, Apple baseline,
-renderer-only Android, or portable scripting import installs the adapter.
+authored-data conversion owner above the baseline. The shared upper-leaf
+`nuxie-project-data-scripting` adapter bridges that model to the translated
+scripting boundary. Product imports pass the adapter as an explicit
+File-scoped capability; there is no global installation. The Apple product
+extension and Android authored-WGSL import select it deliberately. No baseline,
+ordinary Metal, renderer-only Android, or portable scripting import installs
+the adapter.
 
 ### Editor authoring
 
@@ -91,8 +90,9 @@ seams required by the SDK. The caller owns layer configuration, drawable
 acquisition, actor and frame scheduling, and every product concept.
 
 The shipping Apple archive is rooted at `nux-apple-product-extension`. That
-upper leaf combines `nux-capi` with `nuxie-project-data` while exporting only
-`nux_product_file_import_configured` in addition to the product-neutral CAPI.
+upper leaf combines `nux-capi` with `nuxie-project-data-scripting` while
+exporting only the renderer-first `nux_product_file_import_configured` in
+addition to the product-neutral CAPI.
 It does not own platform rendering or lifecycle policy, and it does not revive
 the retired `NuxieRuntimeFFI` package.
 
@@ -101,11 +101,10 @@ the retired `NuxieRuntimeFFI` package.
 `nux-capi` adapts baseline operations into C calling conventions, handles,
 errors, callbacks, and buffer negotiation. Its Apple feature is a
 product-neutral platform extension. Product lifecycle operations remain
-absent; the separately owned authored-data leaf adds only converter
-installation plus configured import. Android's structurally narrower release
-uses the feature-intersection seam described above because the SDK calls
-`nux_file_import_configured` / `nux_file_import_with_assets` rather than a
-product-named extension symbol. Replay and oracle tools import the baseline
+absent; the separately owned authored-data leaf adds only an explicit program
+adapter to the renderer-first product import. Android uses
+`nux_file_import_android_vulkan_with_trusted_wgsl` for the same authenticated
+adapter/native-shader boundary. Replay and oracle tools import the baseline
 directly so parity evidence cannot depend on product glue.
 
 The direct `nux-capi -> nuxie` dependency is a permanent, narrowly approved ABI

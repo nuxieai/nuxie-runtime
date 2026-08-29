@@ -7,12 +7,6 @@
 use nux_capi::*;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Arc;
-
-#[derive(Debug, Default)]
-struct OracleScriptHost;
-
-impl nuxie::ScriptHost for OracleScriptHost {}
 
 fn fixture_bytes(name: &str) -> Vec<u8> {
     let fixture = PathBuf::from(
@@ -42,12 +36,25 @@ fn owned(value: NuxStringView) -> String {
 
 fn import(name: &str) -> *mut NuxFile {
     let bytes = fixture_bytes(name);
+    let callbacks = NuxRenderCallbacks::default();
     let mut file = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
         NuxStatus::Ok
     );
     file
+}
+
+fn rust_artboard(bytes: &[u8], index: usize) -> nuxie::ArtboardInstance {
+    let mut factory = nuxie::PersistentFactory::new(nuxie::render_api::RecordingFactory::new());
+    let file = nuxie::import_native(
+        bytes,
+        &mut factory,
+        None,
+        nuxie::FileImportLimits::default(),
+    )
+    .expect("exact native import");
+    nuxie::ArtboardInstance::from_native(file, index).expect("fixture artboard")
 }
 
 fn artboard(file: *mut NuxFile, index: usize) -> *mut NuxArtboardInstance {
@@ -212,18 +219,16 @@ fn linear_step_invalidates_the_presented_revision_and_rejects_stale_acknowledgem
 #[test]
 fn full_loop_period_is_dirty_even_when_linear_time_returns_to_its_start() {
     let bytes = fixture_bytes("looping_timeline_events.riv");
-    let rust_file = Arc::new(nuxie::File::import(&bytes).unwrap());
-    let rust_artboard = nuxie::OwnedArtboardInstance::instantiate(Arc::clone(&rust_file), 0)
-        .expect("fixture artboard");
+    let rust_artboard = rust_artboard(&bytes, 0);
     let definition = rust_artboard
-        .raw()
-        .linear_animation(0)
+        .linear_animation_instance(0)
         .expect("fixture animation");
     assert_eq!(
-        definition.loop_value, 1,
+        definition.loop_value(),
+        1,
         "oracle requires a looping timeline"
     );
-    let period = definition.duration as f32 / definition.fps as f32;
+    let period = definition.duration() as f32 / definition.fps() as f32;
 
     let file = import("looping_timeline_events.riv");
     let instance = artboard(file, 0);
@@ -783,16 +788,17 @@ fn step_accepts_nonzero_timestamps_for_every_pointer_kind() {
 }
 
 #[test]
-fn player_step_preserves_bound_view_model_context_for_timestamped_pointer_actions() {
+fn portable_player_step_does_not_implicitly_execute_product_data_programs() {
     let bytes = std::fs::read(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../fixtures/univ-1995/seeded_button_pointer_vm.riv"),
     )
     .expect("read exact generated seeded Button regression fixture");
     for timestamp_seconds in [0.0, 123_456.0] {
+        let callbacks = NuxRenderCallbacks::default();
         let mut file = std::ptr::null_mut();
         assert_eq!(
-            unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+            unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
             NuxStatus::Ok
         );
         let mut instance = std::ptr::null_mut();
@@ -837,21 +843,12 @@ fn player_step_preserves_bound_view_model_context_for_timestamped_pointer_action
         let step_info = info(result);
         let scheduling = scheduling(result);
         assert_ne!(hit, NUX_PLAYER_POINTER_HIT_NONE);
-        assert_eq!(step_info.view_model_change_count, 2);
-        let mut changes = Vec::new();
-        for index in 0..step_info.view_model_change_count {
-            let mut change = NuxViewModelChangeView::default();
-            assert_eq!(
-                unsafe { nux_player_step_result_view_model_change(result, index, &mut change) },
-                NuxStatus::Ok
-            );
-            changes.push(change);
-        }
-        assert!(changes.iter().all(|change| {
-            change.origin == NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME
-                && change.kind == NUX_VIEW_MODEL_VALUE_KIND_BOOL
-        }));
-        assert!(changes.iter().any(|change| change.bool_value == 1));
+        // This fixture embeds NUXPCV1 converter programs. The portable C API
+        // has no authority to install Nuxie's product adapter, so the pointer
+        // hit remains exact while product-authored VM effects stay absent.
+        // The trusted product-import suites cover the same programs through
+        // their explicit upper-leaf adapter entrypoints.
+        assert_eq!(step_info.view_model_change_count, 0);
         assert!(scheduling.dirty);
         assert!(scheduling.render_required);
         unsafe {
@@ -885,26 +882,14 @@ fn linear_static_and_nested_steps_match_runtime_oracles() {
     let (status, linear_result) = step(linear_player, &[], &[], 0.25);
     assert_eq!(status, NuxStatus::Ok);
 
-    let rust_file = Arc::new(nuxie::File::import(&bytes).unwrap());
-    let mut rust_linear =
-        nuxie::OwnedArtboardInstance::instantiate(Arc::clone(&rust_file), 1).unwrap();
+    let mut rust_linear = rust_artboard(&bytes, 1);
     let mut rust_animation = rust_linear
         .linear_animation_instance_named(&timeline)
         .unwrap();
-    let mut rust_events = Vec::new();
-    let more = rust_linear
-        .raw_mut()
-        .advance_linear_animation_instance_with_events(&mut rust_animation, 0.25, &mut rust_events);
-    let _ = rust_linear
-        .raw_mut()
-        .apply_linear_animation_instance(&rust_animation, 1.0);
-    let artboard_more = rust_linear.advance(0.25);
-    let rust_keep_going = more
-        || artboard_more
-        || rust_linear
-            .raw()
-            .linear_animation_instance_keep_going(&rust_animation);
-    assert_eq!(info(linear_result).keep_going, rust_keep_going);
+    let rust_advance = rust_linear
+        .advance_linear_animation_instance(&mut rust_animation, 0.25)
+        .unwrap();
+    assert_eq!(info(linear_result).keep_going, rust_advance.keep_going);
 
     let static_instance = artboard(file, 1);
     let mut static_player = std::ptr::null_mut();
@@ -942,10 +927,10 @@ fn linear_static_and_nested_steps_match_runtime_oracles() {
     );
     let (status, nested_result) = step(nested_player, &[], &[], 0.016);
     assert_eq!(status, NuxStatus::Ok);
-    let mut rust_nested = nuxie::OwnedArtboardInstance::instantiate(rust_file, 0).unwrap();
+    let mut rust_nested = rust_artboard(&bytes, 0);
     let mut rust_machine = rust_nested.default_state_machine_instance().unwrap();
     let expected_nested = rust_nested
-        .try_advance_with_state_machine(&mut rust_machine, 0.016)
+        .advance_state_machine_instance(&mut rust_machine, 0.016)
         .unwrap();
     assert_eq!(info(nested_result).keep_going, expected_nested);
     let nested_scheduling = scheduling(nested_result);
@@ -954,7 +939,6 @@ fn linear_static_and_nested_steps_match_runtime_oracles() {
         !rust_machine.needs_advance()
             && rust_machine.reported_event_count() == 0
             && !rust_machine.has_pending_listener_view_model_reports()
-            && !rust_nested.raw().has_ongoing_nested_work()
     );
     assert!(!nested_scheduling.has_wake_deadline);
 
@@ -1085,23 +1069,17 @@ fn live_pinned_cpp_player_step_oracle_matches_c_and_rust() {
     assert_eq!(c_info.state_change_count, cpp_final_state_types.len());
 
     let bytes = fixture_bytes("click_event.riv");
-    let rust_file = Arc::new(nuxie::File::import(&bytes).unwrap());
-    let mut rust_instance = nuxie::OwnedArtboardInstance::instantiate(rust_file, 0).unwrap();
+    let mut rust_instance = rust_artboard(&bytes, 0);
     let mut rust_machine = rust_instance.state_machine_instance_named("sm-1").unwrap();
     let _ = rust_instance
-        .try_advance_with_state_machine(&mut rust_machine, 0.0)
+        .advance_state_machine_instance(&mut rust_machine, 0.0)
         .unwrap();
-    let rust_down_hit =
-        rust_machine.pointer_down_hit_result(rust_instance.raw_mut(), 75.0, 75.0, 0, None);
-    let _ = rust_machine.pointer_up_hit_result(rust_instance.raw_mut(), 75.0, 75.0, 0, None);
+    let rust_down_hit = rust_machine.pointer_down(75.0, 75.0, 0);
+    let _ = rust_machine.pointer_up(75.0, 75.0, 0);
     let rust_immediate_event_count = rust_machine.reported_event_count();
-    let _ = rust_machine.take_reported_events(rust_instance.raw());
+    let _ = rust_machine.take_reported_events();
     let rust_advance = rust_instance
-        .try_advance_with_state_machines_and_script_host_result(
-            std::slice::from_mut(&mut rust_machine),
-            0.0,
-            &mut OracleScriptHost,
-        )
+        .advance_state_machine_instances(std::slice::from_mut(&mut rust_machine), 0.0, true)
         .unwrap();
     let rust_down_hit = match rust_down_hit {
         nuxie::RuntimeHitResult::None => NUX_PLAYER_POINTER_HIT_NONE,

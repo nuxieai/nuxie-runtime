@@ -29,9 +29,9 @@ DEFAULT_TARGETS = (
 PACKAGING_INPUTS = (
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
-    "crates/nux-capi/abi-layout-v3.json",
-    "crates/nux-capi/exports-v3-apple-metal-extension.txt",
-    "crates/nux-capi/exports-v3-portable.txt",
+    "crates/nux-capi/abi-layout-v4.json",
+    "crates/nux-capi/exports-v4-apple-metal-extension.txt",
+    "crates/nux-capi/exports-v4-portable.txt",
     "crates/nux-capi/include/nux_capi.generated.h",
     "crates/nux-capi/include/nux_capi.h",
     "crates/nux-capi/include/nux_capi_apple.h",

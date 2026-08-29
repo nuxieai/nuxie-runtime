@@ -1,19 +1,25 @@
 //! Public host adapter. All live scene state belongs to the translated owners.
 
+use std::collections::HashSet;
+
 use anyhow::{Context, Result, ensure};
 use nuxie_render_api::{Aabb, Mat2D, Renderer};
 
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     artboard::{Artboard, RuntimeArtboardInstanceHandle},
+    component::ComponentOccurrenceHandle,
     component_dirt::ComponentDirt,
     core::CoreHandle,
     file::RuntimeFileHandle,
     generated::{component_base::ComponentBase, core_registry::CoreRegistry},
+    scripted::scripted_data_converter::ScriptedDataConverter,
+    text::text_value_run::TextValueRun,
 };
 use crate::{
     host_animation::{LinearAnimationInstance, RuntimeLinearAnimationAdvanceResult},
     host_state_machine::StateMachineInstance,
+    scripting::{ScriptError, ScriptValue},
 };
 
 pub struct ArtboardInstance {
@@ -78,6 +84,14 @@ impl ArtboardInstance {
     pub fn artboard_index(&self) -> usize {
         self.index
     }
+    /// Index of the source ViewModel declared by this Artboard, or `None` for
+    /// the upstream `UINT32_MAX` sentinel.
+    pub fn view_model_index(&self) -> Option<usize> {
+        let index = self
+            .native
+            .with_artboard(|artboard| artboard.base.view_model_id());
+        (index != u32::MAX).then(|| index as usize)
+    }
     pub fn name(&self) -> String {
         CoreRegistry::get_string_handle(
             &self.native.core_handle(),
@@ -107,10 +121,22 @@ impl ArtboardInstance {
             .with_artboard_mut(|a| a.base.set_frame_origin(value));
     }
     pub fn set_width(&mut self, value: f32) {
-        self.native.with_artboard_mut(|a| a.base.set_width(value));
+        let height = self.native.with_artboard(|artboard| artboard.height());
+        self.set_artboard_dimensions(value, height);
     }
     pub fn set_height(&mut self, value: f32) {
-        self.native.with_artboard_mut(|a| a.base.set_height(value));
+        let width = self.native.with_artboard(|artboard| artboard.width());
+        self.set_artboard_dimensions(width, value);
+    }
+    pub fn set_artboard_dimensions(&mut self, width: f32, height: f32) -> bool {
+        let unchanged = self
+            .native
+            .with_artboard(|artboard| artboard.width() == width && artboard.height() == height);
+        if unchanged {
+            return false;
+        }
+        self.native.set_size(width, height);
+        true
     }
     pub fn object_handle(&self, local_id: usize) -> Option<CoreHandle> {
         let id = u32::try_from(local_id).ok()?;
@@ -186,6 +212,48 @@ impl ArtboardInstance {
         self.object_handle(id).is_some_and(|object| {
             CoreRegistry::set_string_handle(&object, i32::from(key), value.into())
         })
+    }
+    /// Return the authored root text run's current text. Nested paths remain
+    /// the responsibility of the translated Artboard APIs; this projection is
+    /// intentionally the exact root-name lookup used by the C host surface.
+    pub fn root_text_value_run_text(&self, name: &str) -> Option<String> {
+        let run = self
+            .native
+            .with_artboard(|artboard| artboard.base.find_handle::<TextValueRun>(name))?;
+        run.with_downcast::<TextValueRun, _>(|run| run.base.text().to_owned())
+    }
+    /// Set one authored root text run through the translated TextValueRun
+    /// mutation path. `None` means no root run has the exact authored name.
+    pub fn set_root_text_value_run(&mut self, name: &str, value: String) -> Option<bool> {
+        let run = self
+            .native
+            .with_artboard(|artboard| artboard.base.find_handle::<TextValueRun>(name))?;
+        run.with_downcast_mut::<TextValueRun, _>(|run| {
+            let changed = run.base.text() != value;
+            if changed {
+                run.set_bound_text(value);
+            }
+            changed
+        })
+    }
+
+    /// Set one primitive input on every live occurrence of an authored
+    /// scripted object in this exact root, including nested artboards and
+    /// component-list rows.
+    ///
+    /// `None` means no initialized occurrence of `global_id` is currently
+    /// retained. `Some(false)` means all retained occurrences already expose
+    /// the requested backend value. The authored global id is resolved from
+    /// each occurrence's source Artboard; no host-side object registry or
+    /// compatibility mount plan is introduced.
+    pub fn set_script_input_for_global_occurrences_if_changed(
+        &mut self,
+        global_id: u32,
+        name: &str,
+        value: ScriptValue,
+    ) -> std::result::Result<Option<bool>, ScriptError> {
+        let mut visited = HashSet::new();
+        set_script_input_in_occurrence_tree(&self.native, global_id, name, &value, &mut visited)
     }
     pub fn object_world_transform(&mut self, id: usize) -> Option<Mat2D> {
         self.native.update_pass(true);
@@ -325,5 +393,114 @@ impl ArtboardInstance {
     }
     pub fn set_volume(&mut self, value: f32) {
         self.native.with_artboard_mut(|a| a.base.set_volume(value));
+    }
+}
+
+fn set_script_input_in_occurrence_tree(
+    artboard: &RuntimeArtboardInstanceHandle,
+    global_id: u32,
+    name: &str,
+    value: &ScriptValue,
+    visited: &mut HashSet<(usize, usize, u64)>,
+) -> std::result::Result<Option<bool>, ScriptError> {
+    if !visited.insert(artboard.core_handle().identity_key()) {
+        return Ok(None);
+    }
+    let (objects, nested_hosts, component_lists, source) = artboard.with_artboard(|artboard| {
+        (
+            artboard.base.objects().to_vec(),
+            artboard.base.nested_artboards(),
+            artboard.base.artboard_component_lists(),
+            artboard.base.artboard_source_handle(),
+        )
+    });
+    let source_objects = source
+        .and_then(|source| source.with_downcast::<Artboard, _>(|source| source.objects().to_vec()))
+        .unwrap_or_default();
+
+    let mut found = false;
+    let mut changed = false;
+    for (local_id, object) in objects.into_iter().enumerate() {
+        let Some(object) = object else { continue };
+        let matches_global = source_objects
+            .get(local_id)
+            .and_then(Option::as_ref)
+            .and_then(|source| u32::try_from(source.identity_key().1).ok())
+            == Some(global_id);
+        if !matches_global {
+            continue;
+        }
+        let instance = object
+            .with(|object| {
+                object
+                    .as_scripted_object()
+                    .and_then(|scripted| scripted.runtime_instance())
+            })
+            .flatten();
+        let Some(instance) = instance else { continue };
+        found = true;
+        let current = instance.borrow_mut().get_input(name)?;
+        if script_input_values_equivalent(&current, value) {
+            continue;
+        }
+        instance.borrow_mut().set_input(name, value.clone())?;
+        mark_script_input_dirt(&object);
+        changed = true;
+    }
+
+    let nested_instances = nested_hosts
+        .into_iter()
+        .filter_map(|host| {
+            host.with(|host| host.nested_artboard_instance_handle())
+                .flatten()
+        })
+        .chain(component_lists.into_iter().flat_map(|list| {
+            list.with(|list| {
+                let host = list.as_artboard_host()?;
+                Some(
+                    (0..host.artboard_count())
+                        .filter_map(|index| host.artboard_instance(index as i32))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .flatten()
+            .unwrap_or_default()
+        }));
+    for nested in nested_instances {
+        if let Some(nested_changed) =
+            set_script_input_in_occurrence_tree(&nested, global_id, name, value, visited)?
+        {
+            found = true;
+            changed |= nested_changed;
+        }
+    }
+    Ok(found.then_some(changed))
+}
+
+fn script_input_values_equivalent(current: &ScriptValue, requested: &ScriptValue) -> bool {
+    current == requested
+        || matches!(
+            (current, requested),
+            (ScriptValue::Number(current), ScriptValue::Color(requested))
+                if *current == f64::from(*requested)
+        )
+        || matches!(
+            (current, requested),
+            (ScriptValue::CoreString(current), ScriptValue::String(requested))
+                if current.as_bytes() == requested.as_bytes()
+        )
+}
+
+fn mark_script_input_dirt(owner: &CoreHandle) {
+    let is_component = owner
+        .with(|owner| owner.as_component().is_some())
+        .unwrap_or(false);
+    if is_component {
+        ComponentOccurrenceHandle::Authored(owner.clone())
+            .add_dirt(ComponentDirt::SCRIPT_UPDATE, false);
+    } else {
+        owner.with_downcast_mut::<ScriptedDataConverter, _>(|converter| {
+            converter.add_scripted_dirt(u32::from(ComponentDirt::SCRIPT_UPDATE.0), false);
+        });
     }
 }

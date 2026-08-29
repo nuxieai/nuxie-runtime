@@ -38,13 +38,13 @@ class DistributionToolTests(unittest.TestCase):
             (REPO_ROOT / "crates/nux-capi/size-budgets-v3.json").read_text()
         )
         self.portable_exports = (
-            REPO_ROOT / "crates/nux-capi/exports-v3-portable.txt"
+            REPO_ROOT / "crates/nux-capi/exports-v4-portable.txt"
         ).read_text().splitlines()
         self.apple_exports = (
-            REPO_ROOT / "crates/nux-capi/exports-v3-apple-metal-extension.txt"
+            REPO_ROOT / "crates/nux-capi/exports-v4-apple-metal-extension.txt"
         ).read_text().splitlines()
         self.abi_layout = json.loads(
-            (REPO_ROOT / "crates/nux-capi/abi-layout-v3.json").read_text()
+            (REPO_ROOT / "crates/nux-capi/abi-layout-v4.json").read_text()
         )
         self.size_baseline = json.loads(
             (
@@ -71,22 +71,22 @@ class DistributionToolTests(unittest.TestCase):
         self.assertIn('--remove-section=__LLVM,__bitcode', self.builder)
         self.assertIn('--remove-section=__LLVM,__cmdline', self.builder)
         for manifest in (
-            'exports-v3-portable.txt',
-            'exports-v3-apple-metal-extension.txt',
+            'exports-v4-portable.txt',
+            'exports-v4-apple-metal-extension.txt',
             'exports-v1-product-extension.txt',
         ):
             self.assertIn(manifest, self.builder)
-        self.assertNotIn('exports-v3-legacy-migration.txt', self.builder)
+        self.assertNotIn('exports-v4-legacy-migration.txt', self.builder)
 
     def test_contract_fingerprint_covers_android_header_partitions(self) -> None:
         for manifest in (
-            'exports-v3-android-vulkan-extension.txt',
-            'exports-v3-android-authored-wgsl-extension.txt',
+            'exports-v4-android-vulkan-extension.txt',
+            'exports-v4-android-authored-wgsl-extension.txt',
         ):
             self.assertIn(manifest, self.builder)
         self.assertIn(
             'androidAuthoredWgslExtension=${repo_root}/crates/nux-capi/'
-            'exports-v3-android-authored-wgsl-extension.txt',
+            'exports-v4-android-authored-wgsl-extension.txt',
             self.verifier,
         )
 

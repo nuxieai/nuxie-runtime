@@ -78,29 +78,16 @@ unsafe extern "C" fn lookup_font(
     NUX_ASSET_CALLBACK_STATUS_OK
 }
 
-#[derive(Default)]
-struct DrawProbe {
-    next: u64,
-    draws: usize,
-}
-
-unsafe extern "C" fn make_path(
-    user_data: *mut c_void,
-    _path: *const NuxRawPathView,
-    _fill_rule: u8,
-) -> u64 {
-    unsafe { make_handle(user_data) }
-}
-
-unsafe extern "C" fn make_handle(user_data: *mut c_void) -> u64 {
-    let probe = unsafe { &mut *user_data.cast::<DrawProbe>() };
-    probe.next = probe.next.checked_add(1).expect("fixture handle overflow");
-    probe.next
-}
-
-unsafe extern "C" fn draw_path(user_data: *mut c_void, _path: u64, _paint: u64) {
-    let probe = unsafe { &mut *user_data.cast::<DrawProbe>() };
-    probe.draws = probe.draws.saturating_add(1);
+fn metal_renderer() -> *mut NuxRenderer {
+    let mut renderer = ptr::null_mut();
+    let mut result = ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_renderer_new_metal(1, 1, &mut renderer, &mut result) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
+    assert!(!renderer.is_null());
+    renderer
 }
 
 fn string_view(value: &str) -> NuxStringView {
@@ -114,6 +101,7 @@ fn string_view(value: &str) -> NuxStringView {
 fn apple_product_import_applies_external_font_to_converter_bound_text() {
     let scene = decode_fixture();
     assert!(scene.windows(8).any(|window| window == b"NUXPCV1\0"));
+    let renderer = metal_renderer();
 
     let mut font_requests = 0_usize;
     let hooks = NuxAssetHooks {
@@ -135,6 +123,7 @@ fn apple_product_import_applies_external_font_to_converter_bound_text() {
     assert_eq!(
         unsafe {
             nux_product_file_import_configured(
+                renderer,
                 scene.as_ptr(),
                 scene.len(),
                 &config,
@@ -172,28 +161,20 @@ fn apple_product_import_applies_external_font_to_converter_bound_text() {
         NuxStatus::Ok
     );
 
-    let mut probe = DrawProbe::default();
-    let callbacks = NuxRenderCallbacks {
-        user_data: (&mut probe as *mut DrawProbe).cast(),
-        make_render_path: Some(make_path),
-        make_empty_render_path: Some(make_handle),
-        make_render_paint: Some(make_handle),
-        draw_path: Some(draw_path),
-        ..NuxRenderCallbacks::default()
-    };
+    let mut changed = false;
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(artboard, &callbacks) },
+        unsafe { nux_artboard_instance_advance(artboard, 0.016, &mut changed) },
         NuxStatus::Ok
     );
     assert!(
-        probe.draws > 1,
-        "the converter-bound label must produce font glyph paths; draws={}",
-        probe.draws
+        !changed,
+        "the non-stateful converter must already be settled by the bind-time exact advance"
     );
 
     unsafe {
         nux_view_model_instance_free(view_model);
         nux_artboard_instance_free(artboard);
         nux_file_free(file);
+        nux_renderer_free(renderer);
     }
 }

@@ -342,6 +342,14 @@ fn pointer_click() -> [NuxPlayerPointerEvent; 2] {
 }
 
 fn trusted_import(bytes: &[u8], config: &NuxHostCommandImportConfig) -> *mut NuxFile {
+    trusted_import_with_callbacks(bytes, config, &NuxRenderCallbacks::default())
+}
+
+fn trusted_import_with_callbacks(
+    bytes: &[u8],
+    config: &NuxHostCommandImportConfig,
+    callbacks: &NuxRenderCallbacks,
+) -> *mut NuxFile {
     let mut file = std::ptr::null_mut();
     let mut result = std::ptr::null_mut();
     assert_eq!(
@@ -349,6 +357,7 @@ fn trusted_import(bytes: &[u8], config: &NuxHostCommandImportConfig) -> *mut Nux
             nux_file_import_trusted_with_host_commands(
                 bytes.as_ptr(),
                 bytes.len(),
+                callbacks,
                 config,
                 &mut file,
                 &mut result,
@@ -446,17 +455,18 @@ fn mutate_view_model_number(instance: *mut NuxViewModelInstance, path: &str, val
     );
 }
 
-fn listener_player(
-    file: *mut NuxFile,
-    callbacks: &NuxRenderCallbacks,
-) -> (*mut NuxArtboardInstance, *mut NuxPlayer) {
+fn listener_player(file: *mut NuxFile) -> (*mut NuxArtboardInstance, *mut NuxPlayer) {
     let mut artboard = std::ptr::null_mut();
     assert_eq!(
         unsafe { nux_artboard_instance_new(file, 0, &mut artboard) },
         NuxStatus::Ok
     );
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(artboard, callbacks) },
+        unsafe { nux_artboard_instance_advance(artboard, 0.0, std::ptr::null_mut()) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(artboard) },
         NuxStatus::Ok
     );
     let mut player = std::ptr::null_mut();
@@ -481,8 +491,7 @@ fn trusted_generic_commands_are_owned_by_the_successful_step_result() {
     };
     config.struct_size = std::mem::size_of::<NuxHostCommandImportConfig>() as u32;
     let file = trusted_import(&bytes, &config);
-    let callbacks = NuxRenderCallbacks::default();
-    let (artboard, player) = listener_player(file, &callbacks);
+    let (artboard, player) = listener_player(file);
     let pointers = pointer_click();
     let result = step(player, &pointers);
     let mut info = NuxPlayerStepInfo::default();
@@ -625,13 +634,13 @@ fn trusted_generic_commands_are_owned_by_the_successful_step_result() {
 #[test]
 fn ordinary_import_keeps_the_same_authored_module_inert() {
     let bytes = scripted_fixture(successful_source());
+    let callbacks = NuxRenderCallbacks::default();
     let mut file = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
         NuxStatus::Ok
     );
-    let callbacks = NuxRenderCallbacks::default();
-    let (artboard, player) = listener_player(file, &callbacks);
+    let (artboard, player) = listener_player(file);
     let result = step(player, &pointer_click());
     let mut info = NuxPlayerStepInfo::default();
     assert_eq!(
@@ -715,7 +724,7 @@ fn player_change_journals_are_ordered_owned_and_never_cross_drain_shared_view_mo
     let callbacks = NuxRenderCallbacks::default();
     for artboard in [first_artboard, second_artboard, unbound_artboard] {
         assert_eq!(
-            unsafe { nux_artboard_instance_draw(artboard, &callbacks) },
+            unsafe { nux_artboard_instance_draw(artboard) },
             NuxStatus::Ok
         );
     }
@@ -940,7 +949,7 @@ fn player_child_commit_invalidates_every_distinct_root_sharing_that_child() {
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_artboard_instance_draw(artboards[index], &NuxRenderCallbacks::default()) },
+            unsafe { nux_artboard_instance_draw(artboards[index]) },
             NuxStatus::Ok
         );
         assert_eq!(
@@ -1083,7 +1092,16 @@ fn scripted_sibling_occurrences_share_only_one_foreign_resource_domain() {
         module_name: view("bridge"),
         ..NuxHostCommandImportConfig::default()
     };
-    let file = trusted_import(&bytes, &host);
+    let mut save_calls = 0usize;
+    unsafe extern "C" fn count_save(context: *mut std::ffi::c_void) {
+        unsafe { *context.cast::<usize>() += 1 };
+    }
+    let callbacks = NuxRenderCallbacks {
+        user_data: std::ptr::from_mut(&mut save_calls).cast(),
+        save: Some(count_save),
+        ..NuxRenderCallbacks::default()
+    };
+    let file = trusted_import_with_callbacks(&bytes, &host, &callbacks);
     let mut view_model = std::ptr::null_mut();
     assert_eq!(
         unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut view_model) },
@@ -1099,29 +1117,21 @@ fn scripted_sibling_occurrences_share_only_one_foreign_resource_domain() {
             unsafe { nux_artboard_instance_bind_view_model(*occurrence, view_model) },
             NuxStatus::Ok
         );
+        assert_eq!(
+            unsafe { nux_artboard_instance_advance(*occurrence, 0.0, std::ptr::null_mut()) },
+            NuxStatus::Ok
+        );
     }
 
-    let callbacks = NuxRenderCallbacks::default();
-    assert_eq!(
-        unsafe { nux_artboard_instance_draw(occurrences[0], &callbacks) },
-        NuxStatus::Ok
-    );
-    let same_domain_callbacks = callbacks;
-    assert_eq!(
-        unsafe { nux_artboard_instance_draw(occurrences[1], &same_domain_callbacks) },
-        NuxStatus::Ok,
-        "a distinct descriptor for the same resource domain reuses the stable File VM factory"
-    );
-
-    let mut distinct_context = ();
-    let distinct_callbacks = NuxRenderCallbacks {
-        user_data: std::ptr::from_mut(&mut distinct_context).cast(),
-        ..callbacks
-    };
-    assert_eq!(
-        unsafe { nux_artboard_instance_draw(occurrences[2], &distinct_callbacks) },
-        NuxStatus::RuntimeError,
-        "a different scripted factory domain fails precisely during scripted hydration, not as a blanket occurrence binding mismatch"
+    for occurrence in occurrences {
+        assert_eq!(
+            unsafe { nux_artboard_instance_draw(occurrence) },
+            NuxStatus::Ok
+        );
+    }
+    assert!(
+        save_calls > 0,
+        "every sibling uses the callback domain fixed at import"
     );
 
     for occurrence in occurrences {
@@ -1178,7 +1188,11 @@ fn scripted_failure_rolls_back_bound_view_model_and_poisons_the_occurrence() {
         NuxStatus::Ok
     );
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()) },
+        unsafe { nux_artboard_instance_advance(artboard, 0.0, std::ptr::null_mut()) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(artboard) },
         NuxStatus::Ok
     );
     let mut player = std::ptr::null_mut();
@@ -1279,7 +1293,7 @@ fn journal_limit_failure_rolls_back_shared_view_model_and_leaves_handle_usable()
         NuxStatus::Ok
     );
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()) },
+        unsafe { nux_artboard_instance_draw(artboard) },
         NuxStatus::Ok
     );
     let mut player = std::ptr::null_mut();
@@ -1350,8 +1364,7 @@ fn authored_failure_rolls_back_commands_and_poisons_the_occurrence() {
         ..NuxHostCommandImportConfig::default()
     };
     let file = trusted_import(&bytes, &config);
-    let callbacks = NuxRenderCallbacks::default();
-    let (artboard, player) = listener_player(file, &callbacks);
+    let (artboard, player) = listener_player(file);
 
     let (status, failed) = raw_step(player, &pointer_click());
     assert_eq!(status, NuxStatus::RuntimeError);
@@ -1366,7 +1379,8 @@ fn authored_failure_rolls_back_commands_and_poisons_the_occurrence() {
         unsafe { nux_player_step_result_diagnostic(failed, &mut diagnostic) },
         NuxStatus::Ok
     );
-    assert!(copy(diagnostic.message).contains("scripted pointer dispatch failed"));
+    let diagnostic_message = copy(diagnostic.message);
+    assert!(diagnostic_message.contains("player step cannot project host effects"));
     assert_eq!(
         unsafe { nux_player_step_result_free(failed) },
         NuxStatus::Ok
@@ -1414,7 +1428,7 @@ fn scripted_drawable_failure_rolls_back_commands_and_poisons_the_occurrence() {
         NuxStatus::Ok
     );
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(artboard, &callbacks) },
+        unsafe { nux_artboard_instance_draw(artboard) },
         NuxStatus::Ok
     );
     let mut player = std::ptr::null_mut();
@@ -1478,7 +1492,7 @@ fn swallowed_transition_failure_rejects_commit_and_poisons_the_occurrence() {
         NuxStatus::Ok
     );
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()) },
+        unsafe { nux_artboard_instance_draw(artboard) },
         NuxStatus::Ok
     );
     let mut player = std::ptr::null_mut();
@@ -1559,6 +1573,7 @@ fn trusted_import_config_rejects_unbounded_or_incomplete_policies() {
     ];
 
     for (config, expected) in cases {
+        let callbacks = NuxRenderCallbacks::default();
         let mut file = std::ptr::null_mut();
         let mut result = std::ptr::null_mut();
         assert_eq!(
@@ -1566,6 +1581,7 @@ fn trusted_import_config_rejects_unbounded_or_incomplete_policies() {
                 nux_file_import_trusted_with_host_commands(
                     bytes.as_ptr(),
                     bytes.len(),
+                    &callbacks,
                     &config,
                     &mut file,
                     &mut result,
@@ -1623,7 +1639,7 @@ fn legacy_runtime_view_model_mutation_invalidates_a_sibling_occurrence() {
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()) },
+            unsafe { nux_artboard_instance_draw(artboard) },
             NuxStatus::Ok
         );
     }
@@ -1785,7 +1801,7 @@ fn legacy_capture_overflow_conservatively_invalidates_a_sibling_occurrence() {
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()) },
+            unsafe { nux_artboard_instance_draw(artboard) },
             NuxStatus::Ok
         );
     }

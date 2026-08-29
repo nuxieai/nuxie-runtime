@@ -37,6 +37,15 @@ impl ScriptedFile {
     pub fn host(&self) -> &dyn ScriptHostExtensionInstance {
         self.installed.host.as_ref()
     }
+    /// Start one host-owned unit of script work. Every callback in the unit
+    /// shares the VM's aggregate limits and first-failure side channel.
+    pub fn begin_script_cycle(&self) {
+        self.installed.vm.begin_script_cycle();
+    }
+    /// End the host-owned unit started by [`Self::begin_script_cycle`].
+    pub fn end_script_cycle(&self) {
+        self.installed.vm.end_script_cycle();
+    }
 }
 
 /// Import original bytes with an explicit factory, authenticated script
@@ -84,6 +93,7 @@ pub fn import_scripted(
         host,
         shader_authorities: RefCell::new(Vec::new()),
         vm,
+        program_adapter: capability.program_adapter.clone(),
     });
     let loader = FileAssetLoaderRef::new(Box::new(AdmittedCodeAssetLoader {
         next: loader,
@@ -126,7 +136,7 @@ pub fn import_unsigned_scripted(
     let capability = unsafe {
         ScriptExecutionCapability::for_verified_artifact_unchecked(
             bytes,
-            Arc::new(TestNoopScriptHostExtension),
+            Arc::new(NoopScriptHostExtension),
         )?
     };
     import_scripted(
@@ -145,6 +155,7 @@ struct InstalledScripts {
     host: Box<dyn ScriptHostExtensionInstance>,
     shader_authorities: RefCell<Vec<(Arc<[u8]>, GpuCanvasShaderProvenance)>>,
     vm: Rc<ScriptVm>,
+    program_adapter: Option<Arc<dyn nuxie_runtime::ScriptProgramAdapter>>,
 }
 
 /// Authenticated code is taken only from the original file's in-band bytes.
@@ -228,7 +239,34 @@ impl ScriptingVm for InstalledScripts {
         &self,
         scripts: &[ScriptAssetRegistration<'_>],
     ) -> Vec<ScriptAssetRegistrationResult> {
-        ScriptingVm::register_script_assets(&*self.vm, scripts)
+        let Some(adapter) = self.program_adapter.as_ref() else {
+            return ScriptingVm::register_script_assets(&*self.vm, scripts);
+        };
+        let mut results = (0..scripts.len())
+            .map(|_| ScriptAssetRegistrationResult::default())
+            .collect::<Vec<_>>();
+        let mut delegated_indices = Vec::new();
+        let mut delegated = Vec::new();
+        for (index, registration) in scripts.iter().enumerate() {
+            if let Some(result) = adapter.register_script_asset(registration) {
+                results[index] = result;
+            } else {
+                delegated_indices.push(index);
+                delegated.push(ScriptAssetRegistration {
+                    name: registration.name,
+                    bytecode: registration.bytecode,
+                    is_protocol: registration.is_protocol,
+                    missing_dependencies: registration.missing_dependencies.clone(),
+                });
+            }
+        }
+        for (index, result) in delegated_indices
+            .into_iter()
+            .zip(ScriptingVm::register_script_assets(&*self.vm, &delegated))
+        {
+            results[index] = result;
+        }
+        results
     }
     fn instantiate_program(
         &self,
@@ -238,6 +276,11 @@ impl ScriptingVm for InstalledScripts {
         parents: Vec<Option<ScriptViewModel>>,
         host: &mut dyn ScriptHost,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
+        if let Some(result) = self.program_adapter.as_ref().and_then(|adapter| {
+            adapter.instantiate_program(program, present, model.clone(), parents.clone(), host)
+        }) {
+            return result;
+        }
         ScriptingVm::instantiate_program(&*self.vm, program, present, model, parents, host)
     }
     fn instantiate_script(
@@ -456,26 +499,31 @@ pub trait ScriptHostExtensionInstance: std::fmt::Debug {
     }
 }
 
-#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
-#[derive(Debug)]
-struct TestNoopScriptHostExtension;
+/// Script host with no injected modules and an empty effect stream.
+///
+/// Product program adapters use this when an authenticated artifact needs the
+/// translated scripting lifecycle but the embedding did not request the
+/// optional portable host-command module.
+#[cfg(feature = "scripting")]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoopScriptHostExtension;
 
-#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
+#[cfg(feature = "scripting")]
 #[derive(Debug)]
-struct TestNoopScriptHostExtensionInstance;
+struct NoopScriptHostExtensionInstance;
 
-#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
-impl ScriptHostExtension for TestNoopScriptHostExtension {
+#[cfg(feature = "scripting")]
+impl ScriptHostExtension for NoopScriptHostExtension {
     fn install(
         &self,
         _vm: &ScriptVm,
     ) -> std::result::Result<Box<dyn ScriptHostExtensionInstance>, nuxie_runtime::ScriptError> {
-        Ok(Box::new(TestNoopScriptHostExtensionInstance))
+        Ok(Box::new(NoopScriptHostExtensionInstance))
     }
 }
 
-#[cfg(all(feature = "scripting", any(test, feature = "test-support")))]
-impl ScriptHostExtensionInstance for TestNoopScriptHostExtensionInstance {
+#[cfg(feature = "scripting")]
+impl ScriptHostExtensionInstance for NoopScriptHostExtensionInstance {
     fn effects_type_id(&self) -> std::any::TypeId {
         std::any::TypeId::of::<()>()
     }
@@ -526,6 +574,7 @@ pub struct ScriptExecutionCapability {
     binding: ScriptExecutionBinding,
     extension: Arc<dyn ScriptHostExtension>,
     native_shader_code: bool,
+    program_adapter: Option<Arc<dyn nuxie_runtime::ScriptProgramAdapter>>,
 }
 
 #[cfg(feature = "scripting")]
@@ -562,6 +611,7 @@ impl ScriptExecutionCapability {
             },
             extension,
             native_shader_code: false,
+            program_adapter: None,
         })
     }
 
@@ -588,7 +638,20 @@ impl ScriptExecutionCapability {
             },
             extension,
             native_shader_code: true,
+            program_adapter: None,
         })
+    }
+
+    /// Attach a product-owned program family after the enclosing artifact has
+    /// already been authenticated. Unclaimed assets still use the ordinary
+    /// Luau backend.
+    #[doc(hidden)]
+    pub fn with_program_adapter(
+        mut self,
+        adapter: Arc<dyn nuxie_runtime::ScriptProgramAdapter>,
+    ) -> Self {
+        self.program_adapter = Some(adapter);
+        self
     }
 
     fn authorizes(&self, artifact_bytes: &[u8]) -> bool {
@@ -609,7 +672,10 @@ impl ScriptExecutionCapability {
     }
 }
 
-#[cfg(all(feature = "scripting", feature = "ore-metal-authored-msl"))]
+#[cfg(all(
+    feature = "scripting",
+    any(feature = "ore-metal-authored-msl", feature = "android-authored-wgsl")
+))]
 fn mint_shader_provenance(
     native_shaders_are_authorized: bool,
     type_name: &str,
@@ -635,7 +701,10 @@ fn mint_shader_provenance(
     })
 }
 
-#[cfg(all(feature = "scripting", not(feature = "ore-metal-authored-msl")))]
+#[cfg(all(
+    feature = "scripting",
+    not(any(feature = "ore-metal-authored-msl", feature = "android-authored-wgsl"))
+))]
 fn mint_shader_provenance(
     _native_shaders_are_authorized: bool,
     _type_name: &str,

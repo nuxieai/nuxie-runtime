@@ -38,9 +38,13 @@ fn fixture_bytes(name: &str) -> Vec<u8> {
 }
 
 fn import_fixture(name: &str) -> *mut NuxFile {
+    import_fixture_with_callbacks(name, &NuxRenderCallbacks::default())
+}
+
+fn import_fixture_with_callbacks(name: &str, callbacks: &NuxRenderCallbacks) -> *mut NuxFile {
     let bytes = fixture_bytes(name);
     let mut file: *mut NuxFile = std::ptr::null_mut();
-    let status = unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) };
+    let status = unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), callbacks, &mut file) };
     assert_eq!(status, NuxStatus::Ok);
     assert!(!file.is_null());
     file
@@ -82,8 +86,9 @@ fn c_api_negotiates_an_exact_abi_and_reports_build_identity() {
 #[test]
 fn c_api_imports_file_and_exposes_artboard_metadata() {
     let bytes = fixture_bytes("shapetest.riv");
+    let callbacks = NuxRenderCallbacks::default();
     let mut file: *mut NuxFile = std::ptr::null_mut();
-    let status = unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) };
+    let status = unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) };
     assert_eq!(status, NuxStatus::Ok);
     assert!(!file.is_null());
 
@@ -160,11 +165,19 @@ fn c_api_exposes_the_exact_dense_file_asset_catalog() {
 #[test]
 fn c_api_rejects_null_arguments_without_writing_handles() {
     let bytes = fixture_bytes("shapetest.riv");
-    let status = unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), std::ptr::null_mut()) };
+    let callbacks = NuxRenderCallbacks::default();
+    let status = unsafe {
+        nux_file_import(
+            bytes.as_ptr(),
+            bytes.len(),
+            &callbacks,
+            std::ptr::null_mut(),
+        )
+    };
     assert_eq!(status, NuxStatus::NullArgument);
 
     let mut file: *mut NuxFile = std::ptr::dangling_mut();
-    let status = unsafe { nux_file_import(std::ptr::null(), bytes.len(), &mut file) };
+    let status = unsafe { nux_file_import(std::ptr::null(), bytes.len(), &callbacks, &mut file) };
     assert_eq!(status, NuxStatus::NullArgument);
     assert!(file.is_null());
 }
@@ -391,13 +404,6 @@ unsafe extern "C" fn counting_draw_image_mesh(
 
 #[test]
 fn c_api_draw_forwards_render_calls_to_vtable() {
-    let file = import_fixture(SMI_FIXTURE);
-    let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
-    let status = unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
-    assert_eq!(status, NuxStatus::Ok);
-    let status = unsafe { nux_artboard_instance_advance(instance, 0.0, std::ptr::null_mut()) };
-    assert_eq!(status, NuxStatus::Ok);
-
     let mut counters_data = RenderCounters::default();
     let callbacks = NuxRenderCallbacks {
         user_data: (&mut counters_data as *mut RenderCounters).cast::<c_void>(),
@@ -414,8 +420,14 @@ fn c_api_draw_forwards_render_calls_to_vtable() {
         transform: Some(counting_transform),
         ..NuxRenderCallbacks::default()
     };
+    let file = import_fixture_with_callbacks(SMI_FIXTURE, &callbacks);
+    let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
+    let status = unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
+    assert_eq!(status, NuxStatus::Ok);
+    let status = unsafe { nux_artboard_instance_advance(instance, 0.0, std::ptr::null_mut()) };
+    assert_eq!(status, NuxStatus::Ok);
 
-    let status = unsafe { nux_artboard_instance_draw(instance, &callbacks) };
+    let status = unsafe { nux_artboard_instance_draw(instance) };
     assert_eq!(status, NuxStatus::Ok);
 
     assert!(counters_data.draw_paths > 0, "expected draw_path calls");
@@ -431,11 +443,15 @@ fn c_api_draw_forwards_render_calls_to_vtable() {
 
     unsafe {
         nux_artboard_instance_free(instance);
+        assert!(
+            counters_data.made > counters_data.released,
+            "the exact imported File retains its source renderer members"
+        );
+        nux_file_free(file);
         assert_eq!(
             counters_data.made, counters_data.released,
             "every created render object must be released exactly once"
         );
-        nux_file_free(file);
     }
 }
 
@@ -446,8 +462,7 @@ fn c_api_draw_with_empty_vtable_behaves_like_null_renderer() {
     let status = unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) };
     assert_eq!(status, NuxStatus::Ok);
 
-    let callbacks = NuxRenderCallbacks::default();
-    let status = unsafe { nux_artboard_instance_draw(instance, &callbacks) };
+    let status = unsafe { nux_artboard_instance_draw(instance) };
     assert_eq!(status, NuxStatus::Ok);
 
     unsafe {
@@ -458,13 +473,6 @@ fn c_api_draw_with_empty_vtable_behaves_like_null_renderer() {
 
 #[test]
 fn c_api_retained_draw_reuses_and_releases_render_handles() {
-    let file = import_fixture(SMI_FIXTURE);
-    let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
-    assert_eq!(
-        unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) },
-        NuxStatus::Ok
-    );
-
     let mut counters_data = RenderCounters::default();
     let callbacks = NuxRenderCallbacks {
         user_data: (&mut counters_data as *mut RenderCounters).cast::<c_void>(),
@@ -477,15 +485,21 @@ fn c_api_retained_draw_reuses_and_releases_render_handles() {
         draw_path: Some(counting_draw_path),
         ..NuxRenderCallbacks::default()
     };
+    let file = import_fixture_with_callbacks(SMI_FIXTURE, &callbacks);
+    let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
+        unsafe { nux_artboard_instance_new(file, SMI_INPUT_ARTBOARD, &mut instance) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(instance) },
         NuxStatus::Ok
     );
     let made_after_first_draw = counters_data.made;
     let released_after_first_draw = counters_data.released;
     assert!(made_after_first_draw > 0);
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
+        unsafe { nux_artboard_instance_draw(instance) },
         NuxStatus::Ok
     );
     assert_eq!(counters_data.made, made_after_first_draw);
@@ -493,25 +507,14 @@ fn c_api_retained_draw_reuses_and_releases_render_handles() {
 
     unsafe {
         nux_artboard_instance_free(instance);
-        assert_eq!(counters_data.released, counters_data.made);
         nux_file_free(file);
+        assert_eq!(counters_data.released, counters_data.made);
     }
 }
 
 #[test]
 fn c_api_artboard_retries_a_failed_image_decode_without_poisoning() {
     let bytes = fixture_bytes("in_band_asset.riv");
-    let mut file: *mut NuxFile = std::ptr::null_mut();
-    assert_eq!(
-        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
-        NuxStatus::Ok
-    );
-    let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
-    assert_eq!(
-        unsafe { nux_artboard_instance_new(file, 0, &mut instance) },
-        NuxStatus::Ok
-    );
-
     let mut counters_data = RenderCounters::default();
     let callbacks = NuxRenderCallbacks {
         user_data: (&mut counters_data as *mut RenderCounters).cast::<c_void>(),
@@ -529,36 +532,44 @@ fn c_api_artboard_retries_a_failed_image_decode_without_poisoning() {
         draw_image_mesh: Some(counting_draw_image_mesh),
         ..NuxRenderCallbacks::default()
     };
+    let mut file: *mut NuxFile = std::ptr::null_mut();
     assert_eq!(
-        counters_data.image_decode_attempts, 0,
-        "artboard construction must remain renderer-neutral"
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
+        NuxStatus::Ok
     );
-
-    assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
-        NuxStatus::RuntimeError
-    );
+    assert!(!file.is_null());
     assert_eq!(counters_data.image_decode_attempts, 1);
-    assert!(
-        counters_data.made > 0,
-        "the failed candidate should exercise owned render handles"
-    );
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
     assert_eq!(counters_data.made, counters_data.released);
+    file = std::ptr::null_mut();
 
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
         NuxStatus::Ok
     );
     assert!(counters_data.image_decode_attempts >= 2);
+    let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut instance) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_advance(instance, 0.0, std::ptr::null_mut()) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(instance) },
+        NuxStatus::Ok
+    );
     assert!(counters_data.draw_images > 0);
     assert!(counters_data.made > counters_data.released);
 
     unsafe { nux_artboard_instance_free(instance) };
+    unsafe { nux_file_free(file) };
     assert_eq!(
         counters_data.made, counters_data.released,
-        "the file-owned image releases exactly once with its owning occurrence"
+        "the file-owned image releases exactly once with its owning file"
     );
-    unsafe { nux_file_free(file) };
 }
 
 #[test]
@@ -582,7 +593,7 @@ fn c_api_instance_functions_reject_null_arguments() {
         unsafe { nux_artboard_instance_advance(std::ptr::null_mut(), 0.0, std::ptr::null_mut()) };
     assert_eq!(status, NuxStatus::NullArgument);
 
-    let status = unsafe { nux_artboard_instance_draw(std::ptr::null_mut(), std::ptr::null()) };
+    let status = unsafe { nux_artboard_instance_draw(std::ptr::null_mut()) };
     assert_eq!(status, NuxStatus::NullArgument);
 
     let mut state_machine: *mut NuxStateMachineInstance = std::ptr::dangling_mut();
@@ -867,9 +878,11 @@ fn probe_callbacks(probe: &mut GeometryProbe) -> NuxRenderCallbacks {
 /// and draw, returning the geometry checksum captured through the render vtable.
 fn draw_geometry_checksum(number: Option<f32>) -> f64 {
     let bytes = fixture_bytes(VM_FIXTURE);
+    let mut probe = GeometryProbe::default();
+    let callbacks = probe_callbacks(&mut probe);
     let mut file: *mut NuxFile = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
         NuxStatus::Ok
     );
 
@@ -903,10 +916,8 @@ fn draw_geometry_checksum(number: Option<f32>) -> f64 {
         NuxStatus::Ok
     );
 
-    let mut probe = GeometryProbe::default();
-    let callbacks = probe_callbacks(&mut probe);
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(instance, &callbacks) },
+        unsafe { nux_artboard_instance_draw(instance) },
         NuxStatus::Ok
     );
     assert!(probe.draw_paths > 0, "expected the artboard to draw paths");
@@ -932,9 +943,10 @@ fn c_api_view_model_number_set_changes_drawn_geometry() {
 #[test]
 fn c_api_view_model_setters_report_status_codes() {
     let bytes = fixture_bytes(VM_FIXTURE);
+    let callbacks = NuxRenderCallbacks::default();
     let mut file: *mut NuxFile = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
         NuxStatus::Ok
     );
     let mut instance: *mut NuxArtboardInstance = std::ptr::null_mut();

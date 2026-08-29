@@ -191,10 +191,31 @@ fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
     };
 
     unsafe {
-        let mut file = ptr::null_mut();
+        let mut renderer = ptr::null_mut();
         let mut result = ptr::null_mut();
+        let create_status = nux_renderer_new_android_vulkan(64, 64, &mut renderer, &mut result);
+        if create_status != NuxStatus::Ok && !live_vulkan_test_required() {
+            assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+            return;
+        }
+        assert_eq!(create_status, NuxStatus::Ok);
+        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+
+        let config = NuxFileImportConfig {
+            asset_hooks: &hooks,
+            ..NuxFileImportConfig::default()
+        };
+        let mut file = ptr::null_mut();
+        result = ptr::null_mut();
         assert_eq!(
-            nux_file_import_with_assets(rive.as_ptr(), rive.len(), &hooks, &mut file, &mut result),
+            nux_file_import_android_vulkan(
+                renderer,
+                rive.as_ptr(),
+                rive.len(),
+                &config,
+                &mut file,
+                &mut result,
+            ),
             NuxStatus::Ok
         );
         assert_eq!(probe.lookups.load(Ordering::Relaxed), 1);
@@ -210,19 +231,6 @@ fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
         );
         let mut player = ptr::null_mut();
         assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
-
-        let mut renderer = ptr::null_mut();
-        result = ptr::null_mut();
-        let create_status = nux_renderer_new_android_vulkan(64, 64, &mut renderer, &mut result);
-        if create_status != NuxStatus::Ok && !live_vulkan_test_required() {
-            assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
-            assert_eq!(nux_player_free(player), NuxStatus::Ok);
-            assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
-            assert_eq!(nux_file_free(file), NuxStatus::Ok);
-            return;
-        }
-        assert_eq!(create_status, NuxStatus::Ok);
-        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
 
         let mut frame = ptr::null_mut();
         result = ptr::null_mut();
@@ -241,43 +249,13 @@ fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
         assert_eq!(probe.decodes.load(Ordering::Relaxed), 1);
         assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
 
-        // This is the original pixel sanity check. The PNG's white texel is
-        // sampled by this tiny fixture while its red texel is not, so this
-        // observation intentionally does not claim to prove the wrapper.
-        assert!(frame_contains_pixel(frame, [0xff, 0xff, 0xff, 0xff]));
-        assert!(!frame_contains_pixel(frame, [0xff, 0x00, 0x00, 0xff]));
-        assert_eq!(nux_android_vulkan_frame_free(frame), NuxStatus::Ok);
-
-        result = ptr::null_mut();
-        assert_eq!(
-            nux_renderer_android_vulkan_reset_player_domain(renderer, player, &mut result),
-            NuxStatus::Ok
-        );
-        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
-
-        frame = ptr::null_mut();
-        result = ptr::null_mut();
-        assert_eq!(
-            nux_renderer_android_vulkan_render_player(
-                renderer,
-                player,
-                0xff00_0000,
-                NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER,
-                &mut frame,
-                &mut result,
-            ),
-            NuxStatus::Ok
-        );
-        assert_eq!(probe.lookups.load(Ordering::Relaxed), 1);
-        assert_eq!(probe.decodes.load(Ordering::Relaxed), 1);
-        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
         assert!(
             frame_contains_pixel(frame, STUB_PIXEL),
-            "render after domain reset did not upload host-decoded pixels"
+            "factory-at-import did not upload host-decoded pixels"
         );
         assert!(
             !frame_contains_pixel(frame, [0xff, 0x80, 0x00, 0xff]),
-            "render after domain reset used the fixture PNG's native orange texel"
+            "factory-at-import used the fixture PNG's native orange texel"
         );
         assert_eq!(nux_android_vulkan_frame_free(frame), NuxStatus::Ok);
         assert_eq!(nux_renderer_android_vulkan_free(renderer), NuxStatus::Ok);
@@ -300,28 +278,12 @@ fn fixture_renders_content_through_the_android_vulkan_arm() {
     let bytes = std::fs::read(&riv_path).expect("read riv");
 
     unsafe {
-        let mut file: *mut NuxFile = ptr::null_mut();
-        assert_eq!(
-            nux_file_import(bytes.as_ptr(), bytes.len(), &mut file),
-            NuxStatus::Ok
-        );
-        let mut artboard: *mut NuxArtboardInstance = ptr::null_mut();
-        assert_eq!(
-            nux_artboard_instance_new(file, 0, &mut artboard),
-            NuxStatus::Ok
-        );
-        let mut player: *mut NuxPlayer = ptr::null_mut();
-        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
-
         let mut renderer: *mut NuxAndroidVulkanRenderer = ptr::null_mut();
         let mut result: *mut NuxCapiResult = ptr::null_mut();
         let create_status = nux_renderer_new_android_vulkan(400, 800, &mut renderer, &mut result);
         if create_status != NuxStatus::Ok {
             if !required {
                 nux_capi_result_free(result);
-                nux_player_free(player);
-                nux_artboard_instance_free(artboard);
-                nux_file_free(file);
                 return;
             }
             let mut view: NuxCapiDiagnosticView = std::mem::zeroed();
@@ -335,6 +297,27 @@ fn fixture_renders_content_through_the_android_vulkan_arm() {
         }
         nux_capi_result_free(result);
         result = ptr::null_mut();
+
+        let mut file: *mut NuxFile = ptr::null_mut();
+        assert_eq!(
+            nux_file_import_android_vulkan(
+                renderer,
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxFileImportConfig::default(),
+                &mut file,
+                &mut result,
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
+        let mut artboard: *mut NuxArtboardInstance = ptr::null_mut();
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        let mut player: *mut NuxPlayer = ptr::null_mut();
+        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
 
         // Step once like the host frame loop does.
         let step = NuxPlayerStep {

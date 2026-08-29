@@ -1,6 +1,8 @@
 use super::*;
 use crate::mechanical_port::source::data_bind::data_values::data_value_integer::DataValueInteger;
 use crate::mechanical_port::source::viewmodel::{
+    viewmodel_instance_artboard::ViewModelInstanceArtboard,
+    viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob,
     viewmodel_instance_boolean::ViewModelInstanceBoolean,
     viewmodel_instance_color::ViewModelInstanceColor,
     viewmodel_instance_enum::ViewModelInstanceEnum, viewmodel_instance_list::ViewModelInstanceList,
@@ -38,6 +40,30 @@ impl RuntimeOwnedViewModelInstance {
                     .map(|asset| asset.base.property_value() as u64)
             })
             .flatten()
+    }
+    pub fn artboard_value_by_property_name_path(&self, name: &str) -> Option<u64> {
+        let path = self.path_named(name)?;
+        self.property_by_path(&path)?
+            .with_downcast::<ViewModelInstanceArtboard, _>(|value| {
+                value.base.property_value() as u64
+            })
+    }
+    pub fn blob_asset_value_by_property_name_path(
+        &self,
+        name: &str,
+    ) -> Option<RuntimeBlobAssetValue> {
+        let path = self.path_named(name)?;
+        self.property_by_path(&path)?
+            .with_downcast::<ViewModelInstanceAssetBlob, _>(|value| {
+                value.asset().map_or_else(
+                    || {
+                        RuntimeBlobAssetValue::from_file_asset_index(
+                            value.base.property_value() as u64
+                        )
+                    },
+                    RuntimeBlobAssetValue::from_live_asset,
+                )
+            })
     }
     pub fn set_asset_by_property_name_path(&mut self, name: &str, value: u64) -> bool {
         let Some(handle) = self.asset_source_handle_by_property_name_path(name) else {
@@ -182,6 +208,12 @@ impl RuntimeOwnedViewModelHandle {
             })
             .map(|instance| Self::from_native(self.native_file(), instance))
             .collect()
+    }
+    pub fn list_items_by_property_name_path(&self, path: &str) -> Option<Vec<Self>> {
+        self.testing_list_items_by_property_name(path)
+    }
+    pub fn list_item_count_by_property_name_path(&self, path: &str) -> Option<usize> {
+        self.borrow().list_item_count_by_property_name_path(path)
     }
     pub fn insert_list_item_by_property_name_path(
         &self,
@@ -1018,6 +1050,30 @@ impl RuntimeOwnedViewModelInstance {
         };
         self.fire_trigger_by_source_handle(&handle)
     }
+    pub fn set_trigger_by_property_name_path(&mut self, name: &str, value: u64) -> bool {
+        let Ok(value) = u32::try_from(value) else {
+            return false;
+        };
+        let Some(handle) = self.trigger_source_handle_by_property_name_path(name) else {
+            return false;
+        };
+        let Some(property) = self.property_by_path(handle.path()) else {
+            return false;
+        };
+        let previous = property.with_downcast::<ViewModelInstanceTrigger, _>(|property| {
+            property.base.property_value()
+        });
+        if previous.is_none() || previous == Some(value) {
+            return false;
+        }
+        mutate(|| {
+            crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_uint_handle(
+                &property,
+                crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY as i32,
+                value,
+            )
+        })
+    }
     pub fn fire_trigger_by_source_handle(
         &mut self,
         handle: &RuntimeOwnedViewModelTriggerSourceHandle,
@@ -1161,8 +1217,18 @@ impl RuntimeOwnedViewModelHandle {
     pub fn borrow(&self) -> Ref<'_, RuntimeOwnedViewModelInstance> {
         self.instance.borrow()
     }
+    pub fn try_borrow(
+        &self,
+    ) -> Result<Ref<'_, RuntimeOwnedViewModelInstance>, std::cell::BorrowError> {
+        self.instance.try_borrow()
+    }
     pub fn borrow_mut(&self) -> RefMut<'_, RuntimeOwnedViewModelInstance> {
         self.instance.borrow_mut()
+    }
+    pub fn try_borrow_mut(
+        &self,
+    ) -> Result<RefMut<'_, RuntimeOwnedViewModelInstance>, std::cell::BorrowMutError> {
+        self.instance.try_borrow_mut()
     }
     pub fn native_handle(&self) -> CoreHandle {
         self.instance.borrow().native_handle()

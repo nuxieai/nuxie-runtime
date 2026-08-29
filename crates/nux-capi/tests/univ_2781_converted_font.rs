@@ -8,16 +8,6 @@ use nux_capi::*;
 use std::ffi::{CString, c_void};
 use std::ptr;
 
-unsafe extern "C" {
-    fn nux_file_import_configured_with_trusted_wgsl(
-        bytes: *const u8,
-        len: usize,
-        config: *const NuxFileImportConfig,
-        out_file: *mut *mut NuxFile,
-        out_result: *mut *mut NuxCapiResult,
-    ) -> NuxStatus;
-}
-
 const SCENE_BASE64: &str = include_str!("../../../fixtures/univ-2781/font-converter.riv.b64");
 const FONT: &[u8] = include_bytes!("../../../fixtures/fonts/roboto-a.ttf");
 
@@ -89,31 +79,6 @@ unsafe extern "C" fn lookup_font(
     NUX_ASSET_CALLBACK_STATUS_OK
 }
 
-#[derive(Default)]
-struct DrawProbe {
-    next: u64,
-    draws: usize,
-}
-
-unsafe extern "C" fn make_path(
-    user_data: *mut c_void,
-    _path: *const NuxRawPathView,
-    _fill_rule: u8,
-) -> u64 {
-    unsafe { make_handle(user_data) }
-}
-
-unsafe extern "C" fn make_handle(user_data: *mut c_void) -> u64 {
-    let probe = unsafe { &mut *user_data.cast::<DrawProbe>() };
-    probe.next = probe.next.checked_add(1).expect("fixture handle overflow");
-    probe.next
-}
-
-unsafe extern "C" fn draw_path(user_data: *mut c_void, _path: u64, _paint: u64) {
-    let probe = unsafe { &mut *user_data.cast::<DrawProbe>() };
-    probe.draws = probe.draws.saturating_add(1);
-}
-
 fn string_view(value: &str) -> NuxStringView {
     NuxStringView {
         data: value.as_ptr().cast(),
@@ -141,11 +106,22 @@ fn android_product_import_applies_external_font_to_converter_bound_text() {
         asset_hooks: &hooks,
         ..NuxFileImportConfig::default()
     };
+    let mut renderer = ptr::null_mut();
+    let mut renderer_result = ptr::null_mut();
+    let renderer_status =
+        unsafe { nux_renderer_new_android_vulkan(256, 256, &mut renderer, &mut renderer_result) };
+    if renderer_status != NuxStatus::Ok {
+        eprintln!("skipping Vulkan render fixture: renderer unavailable ({renderer_status:?})");
+        unsafe { nux_capi_result_free(renderer_result) };
+        return;
+    }
+    unsafe { nux_capi_result_free(renderer_result) };
     let mut file = ptr::null_mut();
     let mut result = ptr::null_mut();
     assert_eq!(
         unsafe {
-            nux_file_import_configured_with_trusted_wgsl(
+            nux_file_import_android_vulkan_with_trusted_wgsl(
+                renderer,
                 scene.as_ptr(),
                 scene.len(),
                 &config,
@@ -183,28 +159,44 @@ fn android_product_import_applies_external_font_to_converter_bound_text() {
         NuxStatus::Ok
     );
 
-    let mut probe = DrawProbe::default();
-    let callbacks = NuxRenderCallbacks {
-        user_data: (&mut probe as *mut DrawProbe).cast(),
-        make_render_path: Some(make_path),
-        make_empty_render_path: Some(make_handle),
-        make_render_paint: Some(make_handle),
-        draw_path: Some(draw_path),
-        ..NuxRenderCallbacks::default()
-    };
+    let mut player = ptr::null_mut();
     assert_eq!(
-        unsafe { nux_artboard_instance_draw(artboard, &callbacks) },
+        unsafe { nux_player_new_static(artboard, &mut player) },
         NuxStatus::Ok
     );
+    let mut frame = ptr::null_mut();
+    let mut render_result = ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_renderer_android_vulkan_render_player(
+                renderer,
+                player,
+                0x0000_0000,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER,
+                &mut frame,
+                &mut render_result,
+            )
+        },
+        NuxStatus::Ok
+    );
+    assert!(render_result.is_null());
+    let frame_bytes = unsafe {
+        std::slice::from_raw_parts(
+            nux_android_vulkan_frame_data(frame),
+            nux_android_vulkan_frame_len(frame),
+        )
+    };
     assert!(
-        probe.draws > 1,
-        "the converter-bound label must produce font glyph paths; draws={}",
-        probe.draws
+        frame_bytes.chunks_exact(4).any(|pixel| pixel[3] != 0),
+        "the converter-bound external font must render visible glyph pixels"
     );
 
     unsafe {
+        nux_android_vulkan_frame_free(frame);
+        nux_player_free(player);
         nux_view_model_instance_free(view_model);
         nux_artboard_instance_free(artboard);
         nux_file_free(file);
+        nux_renderer_android_vulkan_free(renderer);
     }
 }

@@ -21,9 +21,10 @@ fn fixture_bytes(name: &str) -> Vec<u8> {
 
 fn import(name: &str) -> *mut NuxFile {
     let bytes = fixture_bytes(name);
+    let callbacks = NuxRenderCallbacks::default();
     let mut file = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
         NuxStatus::Ok
     );
     file
@@ -236,13 +237,19 @@ fn shared_nested_list_fixture() -> Vec<u8> {
     object(&mut bytes, "Artboard", |bytes| {
         uint(bytes, "Artboard", "viewModelId", 0)
     });
+    // Exact File::viewModelInstanceListItem resolves the list item's implicit
+    // artboard by the inserted instance's view-model id.
+    object(&mut bytes, "Artboard", |bytes| {
+        uint(bytes, "Artboard", "viewModelId", 1)
+    });
     bytes
 }
 
 fn import_bytes(bytes: &[u8]) -> *mut NuxFile {
+    let callbacks = NuxRenderCallbacks::default();
     let mut file = std::ptr::null_mut();
     assert_eq!(
-        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &mut file) },
+        unsafe { nux_file_import(bytes.as_ptr(), bytes.len(), &callbacks, &mut file) },
         NuxStatus::Ok
     );
     file
@@ -928,8 +935,8 @@ fn linked_child_and_list_item_mutations_invalidate_the_bound_root_occurrence() {
     );
     assert_eq!(
         unsafe { nux_player_acknowledge_presented(player, after_replace) },
-        NuxStatus::HandleMismatch,
-        "removing one of two same-parent edges preserves invalidation through the other"
+        NuxStatus::Ok,
+        "exact C++ parent bookkeeping deduplicates equal parents, then removing either edge removes that parent even while another edge remains"
     );
 
     let before_detach = step_and_ack(player);

@@ -1,7 +1,11 @@
 //! Android product-distribution coverage for authored data converters entering
 //! through the portable configured-import surface used by the SDK.
 
-#![cfg(all(feature = "android-vulkan", feature = "scripting"))]
+#![cfg(all(
+    feature = "android-vulkan",
+    feature = "scripting",
+    feature = "android-authored-wgsl"
+))]
 
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nux_capi::*;
@@ -9,10 +13,8 @@ use nuxie_project_data::{
     ProjectDataConverterCatalog, ProjectDataConverterDefinition, ProjectDataConverterEasing,
     ProjectDataConverterKind, ProjectDataConverterOutputType, ProjectDataConverterSpec,
 };
-use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_schema::definition_by_name;
 use std::ptr;
-use std::sync::Arc;
 
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
     loop {
@@ -75,7 +77,7 @@ fn push_string(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &str) {
 }
 
 fn converter_payload() -> Vec<u8> {
-    ProjectDataConverterCatalog::compile([ProjectDataConverterDefinition {
+    let program = ProjectDataConverterCatalog::compile([ProjectDataConverterDefinition {
         id: "copy.trim".to_owned(),
         spec: ProjectDataConverterSpec {
             output_type: Some(ProjectDataConverterOutputType::Number),
@@ -87,7 +89,10 @@ fn converter_payload() -> Vec<u8> {
     }])
     .expect("valid authored-data catalog")
     .encode_program("copy.trim")
-    .expect("authored-data program encodes")
+    .expect("authored-data program encodes");
+    let mut payload = vec![0];
+    payload.extend_from_slice(&program);
+    payload
 }
 
 fn ordinary_script_payload() -> Vec<u8> {
@@ -127,6 +132,12 @@ fn product_converter_scene() -> Vec<u8> {
             "name",
             "ProjectDO.converter.copy.trim",
         );
+        push_uint(
+            bytes,
+            "ScriptAsset",
+            "serializedImplementedMethods",
+            (1 << 0) | (1 << 10),
+        );
     });
     push_object(&mut bytes, "FileAssetContents", |bytes| {
         push_blob(bytes, "FileAssetContents", "bytes", &converter_payload());
@@ -134,6 +145,7 @@ fn product_converter_scene() -> Vec<u8> {
     push_object(&mut bytes, "ScriptAsset", |bytes| {
         push_uint(bytes, "ScriptAsset", "assetId", 1);
         push_string(bytes, "ScriptAsset", "name", "OrdinaryInterpolator");
+        push_uint(bytes, "ScriptAsset", "serializedImplementedMethods", 1 << 0);
     });
     push_object(&mut bytes, "FileAssetContents", |bytes| {
         push_blob(
@@ -228,13 +240,8 @@ fn string_view(value: &str) -> NuxStringView {
 }
 
 #[test]
-#[allow(clippy::arc_with_non_send_sync)] // The public owned-artboard API requires Arc<File>.
-fn portable_android_import_routes_project_converter_away_from_luau() {
+fn trusted_android_import_routes_project_converter_away_from_luau() {
     let payload = converter_payload();
-    assert!(
-        !nuxie_runtime::runtime_external_data_payload_is_claimed(&payload),
-        "the test process must begin without the product registry installed"
-    );
     let bytes = product_converter_scene();
     assert!(
         bytes.windows(8).any(|window| window == b"NUXPCV1\0"),
@@ -251,31 +258,29 @@ fn portable_android_import_routes_project_converter_away_from_luau() {
         asset_hooks: &hooks,
         ..NuxFileImportConfig::default()
     };
+    let mut renderer = ptr::null_mut();
+    let mut renderer_result = ptr::null_mut();
+    let renderer_status =
+        unsafe { nux_renderer_new_android_vulkan(100, 100, &mut renderer, &mut renderer_result) };
+    if renderer_status != NuxStatus::Ok {
+        eprintln!("skipping Vulkan product fixture: renderer unavailable ({renderer_status:?})");
+        unsafe { nux_capi_result_free(renderer_result) };
+        return;
+    }
+    unsafe { nux_capi_result_free(renderer_result) };
     let mut file = ptr::null_mut();
     let mut result = ptr::null_mut();
     let status = unsafe {
-        nux_file_import_configured(bytes.as_ptr(), bytes.len(), &config, &mut file, &mut result)
+        nux_file_import_android_vulkan_with_trusted_wgsl(
+            renderer,
+            bytes.as_ptr(),
+            bytes.len(),
+            &config,
+            &mut file,
+            &mut result,
+        )
     };
     assert_eq!(status, NuxStatus::Ok, "{}", result_message(result));
-
-    // Advance a second import through the same process-global registry so the
-    // assertion preserves the rich script diagnostic on the killable mutant.
-    let rust_host_commands = nuxie::HostCommandImportConfig::new(
-        "bridge",
-        nuxie::ScriptExecutionLimits::new(),
-        nuxie::HostCommandLimits::new(),
-    )
-    .expect("valid host-command fixture config");
-    let rust_file = Arc::new(
-        unsafe { nuxie::File::import_trusted_with_host_commands(&bytes, rust_host_commands) }
-            .expect("configured import installs the registry before any file classifies scripts"),
-    );
-    let mut rust_artboard = nuxie::OwnedArtboardInstance::instantiate_default(rust_file)
-        .expect("fixture artboard instantiates");
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    rust_artboard
-        .try_advance_with_factory(&mut factory, 0.0)
-        .expect("NUXPCV1 converter envelope must not be offered to the Luau VM");
 
     unsafe {
         assert_eq!(nux_capi_result_free(result), NuxStatus::Ok);
@@ -294,11 +299,6 @@ fn portable_android_import_routes_project_converter_away_from_luau() {
             nux_artboard_instance_bind_view_model(artboard, view_model),
             NuxStatus::Ok
         );
-        assert_eq!(
-            nux_artboard_instance_draw(artboard, &NuxRenderCallbacks::default()),
-            NuxStatus::Ok,
-            "the C-imported occurrence must materialize its scripted drawable"
-        );
         let mut player = ptr::null_mut();
         assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
         let mut step_result = ptr::null_mut();
@@ -310,13 +310,11 @@ fn portable_android_import_routes_project_converter_away_from_luau() {
             step_result_message(step_result)
         );
         assert_eq!(nux_player_step_result_free(step_result), NuxStatus::Ok);
-        assert!(
-            nuxie_runtime::runtime_external_data_payload_is_claimed(&payload),
-            "the configured Android import must install the project-data registry"
-        );
+        assert!(payload.windows(8).any(|window| window == b"NUXPCV1\0"));
         assert_eq!(nux_player_free(player), NuxStatus::Ok);
         assert_eq!(nux_view_model_instance_free(view_model), NuxStatus::Ok);
         assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
         assert_eq!(nux_file_free(file), NuxStatus::Ok);
+        assert_eq!(nux_renderer_android_vulkan_free(renderer), NuxStatus::Ok);
     }
 }

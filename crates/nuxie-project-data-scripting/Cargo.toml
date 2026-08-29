@@ -1,0 +1,14 @@
+[package]
+name = "nuxie-project-data-scripting"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+nuxie = { path = "../nuxie", default-features = false }
+nuxie-project-data = { path = "../nuxie-project-data" }
+
+[lints]
+workspace = true

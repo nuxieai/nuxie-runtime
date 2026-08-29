@@ -171,7 +171,7 @@ def main() -> int:
     parser.add_argument(
         "--oracle",
         type=pathlib.Path,
-        default=REPO_ROOT / "crates/nux-capi/abi-layout-v3.json",
+        default=REPO_ROOT / "crates/nux-capi/abi-layout-v4.json",
     )
     arguments = parser.parse_args()
     structs = public_structs(arguments.header.read_text(encoding="utf-8"))

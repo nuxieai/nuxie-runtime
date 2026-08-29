@@ -2299,6 +2299,27 @@ pub struct ScriptAssetRegistrationResult {
     pub error: Option<ScriptError>,
 }
 
+/// Product-owned script program family layered over the translated runtime's
+/// opaque `ScriptingVm` registration and instantiation seam.
+///
+/// Adapters may claim only payloads they recognize. Returning `None` delegates
+/// the exact asset to the ordinary scripting backend unchanged.
+pub trait ScriptProgramAdapter: std::fmt::Debug {
+    fn register_script_asset(
+        &self,
+        registration: &ScriptAssetRegistration<'_>,
+    ) -> Option<ScriptAssetRegistrationResult>;
+
+    fn instantiate_program(
+        &self,
+        program: &RuntimeScriptProgram,
+        context_present: bool,
+        view_model: Option<ScriptViewModel>,
+        parent_view_models: Vec<Option<ScriptViewModel>>,
+        host: &mut dyn ScriptHost,
+    ) -> Option<Result<Box<dyn ScriptInstance>, ScriptError>>;
+}
+
 /// Runtime-owned VM seam implemented by concrete scripting backends.
 
 impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {

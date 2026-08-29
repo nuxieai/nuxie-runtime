@@ -10,17 +10,16 @@ use super::{
     ffi_guard_with_handle_result, ffi_guard_with_result, publish_result, register_handle,
     remove_handle, struct_size_supports, write_caller_struct,
 };
-#[cfg(feature = "apple-authored-msl")]
 use super::{NuxFile, NuxFileImportConfig};
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
 #[cfg(feature = "apple-authored-msl")]
 use nuxie::ore_metal_gpu_canvas::{OreMetalGpuCanvas, OreMetalGpuCanvasImage};
+use nuxie::render_api::{Mat2D, RawPath};
 use nuxie::{
     ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan,
     GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderLoad, GpuCanvasShaderProfile,
-    ImageDecodeError, Mat2D, PersistentFactory, RawPath, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader,
-    Renderer,
+    ImageDecodeError, PersistentFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
+    RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader, Renderer,
 };
 use nuxie_renderer::{
     NativeMetalExecutionInventory, NativeMetalFactory, RenderMode, RendererError,
@@ -47,9 +46,79 @@ use std::thread;
 /// In addition to the configured-import pointer contract, the caller must
 /// establish that every native shader payload in the exact artifact was
 /// emitted by the trusted native-shader exporter.
-#[cfg(feature = "apple-authored-msl")]
-#[doc(hidden)]
-pub unsafe fn nux_file_import_configured_with_trusted_native_shaders(
+unsafe fn import_metal_file_with_authority(
+    renderer: *mut NuxRenderer,
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+    authority: super::NativeShaderImportAuthority,
+    program_adapter: Option<Arc<dyn nuxie::ScriptProgramAdapter>>,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _renderer_call = match enter_handle(renderer, HandleKind::Renderer) {
+            Ok(guard) => guard,
+            Err(status) => {
+                if !out_result.is_null() {
+                    publish_result(out_result, status, "renderer handle is unavailable");
+                }
+                return status;
+            }
+        };
+        let Some(renderer) = (unsafe { renderer.as_ref() }) else {
+            if !out_result.is_null() {
+                publish_result(out_result, NuxStatus::NullArgument, "renderer is null");
+            }
+            return NuxStatus::NullArgument;
+        };
+        let state = match renderer.state.try_borrow() {
+            Ok(state) => state,
+            Err(_) => {
+                if !out_result.is_null() {
+                    publish_result(out_result, NuxStatus::ReentrantCall, "renderer is active");
+                }
+                return NuxStatus::ReentrantCall;
+            }
+        };
+        if !state.attached {
+            if !out_result.is_null() {
+                publish_result(
+                    out_result,
+                    NuxStatus::InvalidArgument,
+                    "renderer is detached",
+                );
+            }
+            return NuxStatus::InvalidArgument;
+        }
+        let factory = state.factory.clone();
+        let generation = renderer.domain.generation.load(Ordering::Relaxed);
+        drop(state);
+        unsafe {
+            super::asset_hooks::nux_file_import_configured_with_factory(
+                bytes,
+                len,
+                config,
+                out_file,
+                out_result,
+                factory,
+                RendererDomainBinding::Metal {
+                    domain: Arc::clone(&renderer.domain),
+                    generation,
+                },
+                authority,
+                program_adapter,
+            )
+        }
+    })
+}
+
+/// Imports a file into this renderer's retained factory domain. The returned
+/// file and every occurrence created from it remain bound to this exact Metal
+/// renderer generation.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_file_import_metal(
+    renderer: *mut NuxRenderer,
     bytes: *const u8,
     len: usize,
     config: *const NuxFileImportConfig,
@@ -57,13 +126,66 @@ pub unsafe fn nux_file_import_configured_with_trusted_native_shaders(
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
     unsafe {
-        super::asset_hooks::nux_file_import_configured_with_authority(
+        import_metal_file_with_authority(
+            renderer,
+            bytes,
+            len,
+            config,
+            out_file,
+            out_result,
+            super::NativeShaderImportAuthority::Denied,
+            None,
+        )
+    }
+}
+
+#[cfg(feature = "apple-authored-msl")]
+#[doc(hidden)]
+pub unsafe fn nux_file_import_metal_with_trusted_native_shaders(
+    renderer: *mut NuxRenderer,
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    unsafe {
+        import_metal_file_with_authority(
+            renderer,
             bytes,
             len,
             config,
             out_file,
             out_result,
             super::NativeShaderImportAuthority::TrustedExporter,
+            None,
+        )
+    }
+}
+
+/// Rust-only product seam combining trusted native shaders with one explicit
+/// program adapter. It is intentionally absent from the product-neutral C ABI.
+#[cfg(feature = "apple-authored-msl")]
+#[doc(hidden)]
+pub unsafe fn nux_file_import_metal_with_trusted_native_shaders_and_program_adapter(
+    renderer: *mut NuxRenderer,
+    bytes: *const u8,
+    len: usize,
+    config: *const NuxFileImportConfig,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+    program_adapter: Arc<dyn nuxie::ScriptProgramAdapter>,
+) -> NuxStatus {
+    unsafe {
+        import_metal_file_with_authority(
+            renderer,
+            bytes,
+            len,
+            config,
+            out_file,
+            out_result,
+            super::NativeShaderImportAuthority::TrustedExporter,
+            Some(program_adapter),
         )
     }
 }
@@ -201,7 +323,7 @@ impl Default for NuxRendererInfo {
 }
 
 pub(crate) struct RendererState {
-    factory: PersistentFactory<AppleMetalFactory>,
+    factory: PersistentFactory<crate::asset_hooks::AssetFactory<AppleMetalFactory>>,
     pixel_width: u32,
     pixel_height: u32,
     attached: bool,
@@ -841,7 +963,7 @@ pub unsafe extern "C" fn nux_renderer_new_metal(
         };
         let renderer = Box::into_raw(Box::new(NuxRenderer {
             state: RefCell::new(RendererState {
-                factory: PersistentFactory::new(factory),
+                factory: PersistentFactory::new(crate::asset_hooks::AssetFactory::new(factory)),
                 pixel_width,
                 pixel_height,
                 attached: true,
@@ -1039,7 +1161,7 @@ pub unsafe extern "C" fn nux_renderer_reattach(
             })?
             .saturating_add(1);
         debug_assert_ne!(next_generation, 0);
-        *state.factory.borrow_mut() = factory;
+        state.factory.borrow_mut().replace_inner(factory);
         state.pixel_width = pixel_width;
         state.pixel_height = pixel_height;
         state.attached = true;
@@ -1049,60 +1171,6 @@ pub unsafe extern "C" fn nux_renderer_reattach(
             NUX_RENDERER_DISPOSITION_RECREATED
         };
         write_outcome(out_outcome, &outcome(&state, disposition, None))
-    })
-}
-
-/// Drops renderer-owned resources from the player's retained artboard and
-/// binds it to this renderer's current generation.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_renderer_reset_player_domain(
-    renderer: *const NuxRenderer,
-    player: *mut NuxPlayer,
-    out_result: *mut *mut NuxCapiResult,
-) -> NuxStatus {
-    with_result(out_result, || {
-        let _renderer_call = enter_handle(renderer, HandleKind::Renderer)
-            .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
-        let _player_call = enter_handle(player, HandleKind::Player)
-            .map_err(|status| ApiFailure::new(status, "player handle is unavailable"))?;
-        let renderer = unsafe { renderer.as_ref() }
-            .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "renderer is null"))?;
-        let player = unsafe { player.as_ref() }
-            .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "player is null"))?;
-        {
-            let state = renderer
-                .state
-                .try_borrow()
-                .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-            if !state.attached {
-                return Err(ApiFailure::new(
-                    NuxStatus::InvalidArgument,
-                    "cannot bind a player to a detached renderer",
-                ));
-            }
-        }
-        let _occurrence_call = enter_occurrence(&player.artboard)
-            .map_err(|status| ApiFailure::new(status, "player occurrence is unavailable"))?;
-        let artboard = player.artboard.instance.try_borrow().map_err(|_| {
-            ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
-        })?;
-        artboard.reset_renderer();
-        *player.artboard.renderer_domain.borrow_mut() = Some(RendererDomainBinding::Metal {
-            domain: Arc::clone(&renderer.domain),
-            generation: renderer.domain.generation.load(Ordering::Relaxed),
-        });
-        player
-            .artboard
-            .observed_renderer_generation
-            .set(renderer.domain.generation.load(Ordering::Relaxed));
-        player.artboard.invalidate_render().map_err(|status| {
-            player.artboard.poisoned.set(true);
-            ApiFailure::new(
-                status,
-                "player render revision overflowed during domain reset",
-            )
-        })?;
-        Ok(())
     })
 }
 
@@ -1173,30 +1241,18 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                 return write_outcome(out_outcome, &outcome(&state, disposition, None));
             }
 
-            // Domain ownership starts only when an available drawable causes
-            // this call to touch renderer-owned resources. Timeout, occlusion,
-            // and zero-size preflight never lock a player to a backend.
             let generation = renderer_ref.domain.generation.load(Ordering::Relaxed);
-            let existing_domain = { player.artboard.renderer_domain.borrow().clone() };
-            match existing_domain {
-                Some(RendererDomainBinding::Metal {
+            match &player.artboard.renderer_domain {
+                RendererDomainBinding::Metal {
                     domain: bound_domain,
                     generation: bound_generation,
-                }) if bound_domain.id == renderer_ref.domain.id
+                } if bound_domain.id == renderer_ref.domain.id
                     && Arc::ptr_eq(&bound_domain, &renderer_ref.domain)
-                    && bound_generation == generation => {}
-                None => {
-                    *player.artboard.renderer_domain.borrow_mut() =
-                        Some(RendererDomainBinding::Metal {
-                            domain: Arc::clone(&renderer_ref.domain),
-                            generation,
-                        });
-                    player.artboard.observed_renderer_generation.set(generation);
-                }
-                Some(_) => {
+                    && *bound_generation == generation => {}
+                _ => {
                     return Err(ApiFailure::new(
                         NuxStatus::HandleMismatch,
-                        "player is bound to another renderer domain; reset it explicitly",
+                        "player was not imported through this Metal renderer generation",
                     ));
                 }
             }
@@ -1230,18 +1286,7 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     (state.pixel_width, state.pixel_height),
                 )?);
             }
-            if let Some(assets) = player.artboard.asset_hooks.as_ref() {
-                let mut factory = assets.wrap_factory(&mut state.factory);
-                artboard.draw(&mut factory, &mut *frame).map_err(|error| {
-                    ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
-                })?;
-            } else {
-                artboard
-                    .draw(&mut state.factory, &mut *frame)
-                    .map_err(|error| {
-                        ApiFailure::new(NuxStatus::RuntimeError, format!("{error:#}"))
-                    })?;
-            }
+            artboard.draw(&mut *frame);
             drop(artboard);
             let inventory = frame.finish().map_err(renderer_failure)?;
             player
@@ -1337,14 +1382,13 @@ mod tests {
         let factory =
             AppleMetalFactory::new(NativeMetalFactory::new(8, 8).expect("native Metal factory"))
                 .expect("authored-MSL renderer factory");
-        let mut state = RendererState {
-            factory: PersistentFactory::new(factory),
+        let state = RendererState {
+            factory: PersistentFactory::new(crate::asset_hooks::AssetFactory::new(factory)),
             pixel_width: 8,
             pixel_height: 8,
             attached: true,
         };
-        let assets = crate::asset_hooks::AssetCatalog::default();
-        let wrapped = assets.wrap_factory(&mut state.factory);
+        let wrapped = state.factory.clone();
 
         assert_eq!(
             wrapped.gpu_canvas_shader_profile(),

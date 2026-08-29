@@ -985,29 +985,37 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
     def test_allows_exact_android_product_data_import_boundary(self) -> None:
         self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        self.create_package(
+            "crates/nuxie-project-data-scripting",
+            "nuxie-project-data-scripting",
+            "",
+        )
         capi = self.create_package(
             "crates/nux-capi",
             "nux-capi",
             """
             [features]
-            android-vulkan = ["dep:nuxie-project-data"]
+            android-authored-wgsl = ["dep:nuxie-project-data-scripting"]
 
             [dependencies]
-            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            nuxie-project-data-scripting = { path = "../nuxie-project-data-scripting", optional = true }
+
+            [dev-dependencies]
+            nuxie-project-data = { path = "../nuxie-project-data" }
             """,
         )
         (capi / "src/lib.rs").write_text(
-            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            '#[cfg(all(\n'
+            '    feature = "android-vulkan",\n'
+            '    feature = "scripting",\n'
+            '    feature = "android-authored-wgsl"\n'
+            '))]\n'
             "mod android_product_import;\n"
         )
         (capi / "src/android_product_import.rs").write_text(
-            "pub(crate) fn prepare_configured_import_runtime() {\n"
-            "    nuxie_project_data::install_runtime_adapter();\n"
+            "fn adapter() {\n"
+            "    Some(nuxie_project_data_scripting::ProjectDataScriptProgramAdapter::shared()),\n"
             "}\n"
-        )
-        (capi / "src/asset_hooks.rs").write_text(
-            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
-            "    super::android_product_import::prepare_configured_import_runtime();\n"
         )
         (capi / "tests").mkdir()
         (capi / "tests/android_project_data_import.rs").write_text(
@@ -1024,133 +1032,152 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_rejects_android_product_import_without_scripting_gate(self) -> None:
-        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        self.create_package(
+            "crates/nuxie-project-data-scripting",
+            "nuxie-project-data-scripting",
+            "",
+        )
         capi = self.create_package(
             "crates/nux-capi",
             "nux-capi",
             """
             [features]
-            android-vulkan = ["dep:nuxie-project-data"]
+            android-authored-wgsl = ["dep:nuxie-project-data-scripting"]
 
             [dependencies]
-            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            nuxie-project-data-scripting = { path = "../nuxie-project-data-scripting", optional = true }
             """,
         )
         (capi / "src/lib.rs").write_text(
             '#[cfg(feature = "android-vulkan")]\nmod android_product_import;\n'
         )
         (capi / "src/android_product_import.rs").write_text(
-            "pub(crate) fn prepare_configured_import_runtime() {\n"
-            "    nuxie_project_data::install_runtime_adapter();\n"
+            "fn adapter() {\n"
+            "    Some(nuxie_project_data_scripting::ProjectDataScriptProgramAdapter::shared()),\n"
             "}\n"
-        )
-        (capi / "src/asset_hooks.rs").write_text(
-            '#[cfg(feature = "android-vulkan")]\n'
-            "    super::android_product_import::prepare_configured_import_runtime();\n"
         )
 
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "must retain its exact android-vulkan + scripting configured-import boundary",
+            "must retain its exact android-vulkan + scripting + authored-WGSL adapter boundary",
             result.stderr,
         )
 
     def test_rejects_extra_android_product_data_symbol(self) -> None:
-        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        self.create_package(
+            "crates/nuxie-project-data-scripting",
+            "nuxie-project-data-scripting",
+            "",
+        )
         capi = self.create_package(
             "crates/nux-capi",
             "nux-capi",
             """
             [features]
-            android-vulkan = ["dep:nuxie-project-data"]
+            android-authored-wgsl = ["dep:nuxie-project-data-scripting"]
 
             [dependencies]
-            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            nuxie-project-data-scripting = { path = "../nuxie-project-data-scripting", optional = true }
             """,
         )
         (capi / "src/lib.rs").write_text(
-            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            '#[cfg(all(\n'
+            '    feature = "android-vulkan",\n'
+            '    feature = "scripting",\n'
+            '    feature = "android-authored-wgsl"\n'
+            '))]\n'
             "mod android_product_import;\n"
         )
         (capi / "src/android_product_import.rs").write_text(
-            "pub(crate) fn prepare_configured_import_runtime() {\n"
-            "    nuxie_project_data::install_runtime_adapter();\n"
+            "fn adapter() {\n"
+            "    Some(nuxie_project_data_scripting::ProjectDataScriptProgramAdapter::shared()),\n"
+            "    nuxie_project_data_scripting::unexpected_product_call();\n"
             "}\n"
-        )
-        (capi / "src/asset_hooks.rs").write_text(
-            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
-            "    super::android_product_import::prepare_configured_import_runtime();\n"
-            "nuxie_project_data::unexpected_product_call();\n"
-        )
-
-        result = self.run_check()
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("protected source imports a product/authoring module", result.stderr)
-
-    def test_rejects_extra_ungated_android_product_prepare_call(self) -> None:
-        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
-        capi = self.create_package(
-            "crates/nux-capi",
-            "nux-capi",
-            """
-            [features]
-            android-vulkan = ["dep:nuxie-project-data"]
-
-            [dependencies]
-            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
-            """,
-        )
-        (capi / "src/lib.rs").write_text(
-            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
-            "mod android_product_import;\n"
-        )
-        (capi / "src/android_product_import.rs").write_text(
-            "pub(crate) fn prepare_configured_import_runtime() {\n"
-            "    nuxie_project_data::install_runtime_adapter();\n"
-            "}\n"
-        )
-        (capi / "src/asset_hooks.rs").write_text(
-            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
-            "    super::android_product_import::prepare_configured_import_runtime();\n"
-            "super::android_product_import::prepare_configured_import_runtime();\n"
         )
 
         result = self.run_check()
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "must retain its exact android-vulkan + scripting configured-import boundary",
+            "must retain its exact android-vulkan + scripting + authored-WGSL adapter boundary",
+            result.stderr,
+        )
+
+    def test_rejects_extra_ungated_android_product_prepare_call(self) -> None:
+        self.create_package(
+            "crates/nuxie-project-data-scripting",
+            "nuxie-project-data-scripting",
+            "",
+        )
+        capi = self.create_package(
+            "crates/nux-capi",
+            "nux-capi",
+            """
+            [features]
+            android-authored-wgsl = ["dep:nuxie-project-data-scripting"]
+
+            [dependencies]
+            nuxie-project-data-scripting = { path = "../nuxie-project-data-scripting", optional = true }
+            """,
+        )
+        (capi / "src/lib.rs").write_text(
+            '#[cfg(all(\n'
+            '    feature = "android-vulkan",\n'
+            '    feature = "scripting",\n'
+            '    feature = "android-authored-wgsl"\n'
+            '))]\n'
+            "mod android_product_import;\n"
+        )
+        (capi / "src/android_product_import.rs").write_text(
+            "fn adapter() {\n"
+            "    Some(nuxie_project_data_scripting::ProjectDataScriptProgramAdapter::shared()),\n"
+            "    Some(nuxie_project_data_scripting::ProjectDataScriptProgramAdapter::shared()),\n"
+            "}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "must retain its exact android-vulkan + scripting + authored-WGSL adapter boundary",
             result.stderr,
         )
 
     def test_rejects_extra_android_product_data_import_member(self) -> None:
         self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        self.create_package(
+            "crates/nuxie-project-data-scripting",
+            "nuxie-project-data-scripting",
+            "",
+        )
         capi = self.create_package(
             "crates/nux-capi",
             "nux-capi",
             """
             [features]
-            android-vulkan = ["dep:nuxie-project-data"]
+            android-authored-wgsl = ["dep:nuxie-project-data-scripting"]
 
             [dependencies]
-            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            nuxie-project-data-scripting = { path = "../nuxie-project-data-scripting", optional = true }
+
+            [dev-dependencies]
+            nuxie-project-data = { path = "../nuxie-project-data" }
             """,
         )
         (capi / "src/lib.rs").write_text(
-            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
+            '#[cfg(all(\n'
+            '    feature = "android-vulkan",\n'
+            '    feature = "scripting",\n'
+            '    feature = "android-authored-wgsl"\n'
+            '))]\n'
             "mod android_product_import;\n"
         )
         (capi / "src/android_product_import.rs").write_text(
-            "pub(crate) fn prepare_configured_import_runtime() {\n"
-            "    nuxie_project_data::install_runtime_adapter();\n"
+            "fn adapter() {\n"
+            "    Some(nuxie_project_data_scripting::ProjectDataScriptProgramAdapter::shared()),\n"
             "}\n"
-        )
-        (capi / "src/asset_hooks.rs").write_text(
-            '#[cfg(all(feature = "android-vulkan", feature = "scripting"))]\n'
-            "    super::android_product_import::prepare_configured_import_runtime();\n"
         )
         (capi / "tests").mkdir()
         (capi / "tests/android_project_data_import.rs").write_text(
@@ -1166,21 +1193,25 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "must retain its exact android-vulkan + scripting configured-import boundary",
+            "must retain its exact android-vulkan + scripting + authored-WGSL adapter boundary",
             result.stderr,
         )
 
     def test_rejects_android_product_data_activated_outside_vulkan_feature(self) -> None:
-        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        self.create_package(
+            "crates/nuxie-project-data-scripting",
+            "nuxie-project-data-scripting",
+            "",
+        )
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
             """
             [features]
-            scripting = ["dep:nuxie-project-data"]
+            scripting = ["dep:nuxie-project-data-scripting"]
 
             [dependencies]
-            nuxie-project-data = { path = "../nuxie-project-data", optional = true }
+            nuxie-project-data-scripting = { path = "../nuxie-project-data-scripting", optional = true }
             """,
         )
 
@@ -1188,22 +1219,26 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(
-            "optional nuxie-project-data must be activated only by feature "
-            "'android-vulkan'",
+            "optional nuxie-project-data-scripting must be activated only by feature "
+            "'android-authored-wgsl'",
             result.stderr,
         )
 
     def test_rejects_nonoptional_android_product_data_edge(self) -> None:
-        self.create_package("crates/nuxie-project-data", "nuxie-project-data", "")
+        self.create_package(
+            "crates/nuxie-project-data-scripting",
+            "nuxie-project-data-scripting",
+            "",
+        )
         self.create_package(
             "crates/nux-capi",
             "nux-capi",
             """
             [features]
-            android-vulkan = ["dep:nuxie-project-data"]
+            android-authored-wgsl = ["dep:nuxie-project-data-scripting"]
 
             [dependencies]
-            nuxie-project-data = { path = "../nuxie-project-data" }
+            nuxie-project-data-scripting = { path = "../nuxie-project-data-scripting" }
             """,
         )
 
@@ -1704,7 +1739,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("nuxie self edge", result.stderr)
-        self.assertIn("only the test-support feature", result.stderr)
+        self.assertIn("only scripting and test-support", result.stderr)
 
     def test_rejects_product_dependency_through_excluded_in_repo_helper(
         self,
@@ -2428,12 +2463,6 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("portable ABI facade symbol 'host_interfaces'", result.stderr)
-        for symbol in (
-            "RuntimeOwnedViewModelHandle",
-            "RuntimeOwnedViewModelTransaction",
-            "RuntimeViewModelLinkError",
-        ):
-            self.assertIn(f"portable ABI facade symbol '{symbol}'", result.stderr)
 
     def test_rejects_unapproved_direct_nested_portable_abi_paths(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")

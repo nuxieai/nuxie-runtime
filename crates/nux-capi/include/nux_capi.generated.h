@@ -16,7 +16,7 @@
 /**
  * Increment only for a breaking change to the exported C contract.
  */
-#define NUX_CAPI_ABI_VERSION 3
+#define NUX_CAPI_ABI_VERSION 4
 
 #define NUX_FILE_ASSET_CATALOG_HARD_MAX 4096
 
@@ -403,9 +403,8 @@ typedef struct NuxAndroidVulkanRenderer NuxAndroidVulkanRenderer;
 #endif
 
 /**
- * Owned artboard occurrence. It retains the imported [`File`] through native
- * shared ownership and therefore remains valid after its [`NuxFile`] handle
- * is released.
+ * Owned artboard occurrence. It retains the exact imported file and its
+ * factory, and therefore remains valid after its [`NuxFile`] handle is released.
  */
 typedef struct NuxArtboardInstance NuxArtboardInstance;
 
@@ -464,6 +463,77 @@ typedef struct NuxViewModelSnapshot NuxViewModelSnapshot;
 #if defined(NUX_CAPI_ANDROID_VULKAN)
 typedef uint32_t NuxAndroidVulkanPixelFormat;
 #endif
+
+typedef struct NuxStringView {
+  const char *data;
+  size_t len;
+} NuxStringView;
+
+/**
+ * Borrowed arbitrary bytes. Unlike `NuxStringView`, this view makes no UTF-8
+ * promise. Its owner and lifetime are documented by the containing API.
+ */
+typedef struct NuxByteView {
+  const uint8_t *data;
+  size_t len;
+} NuxByteView;
+
+typedef struct NuxTextRunMutation {
+  /**
+   * Exact, case-sensitive authored root `TextValueRun` name.
+   */
+  struct NuxStringView name;
+  /**
+   * Replacement text bytes, borrowed only for the synchronous call.
+   */
+  struct NuxByteView text;
+} NuxTextRunMutation;
+
+typedef struct NuxTextRunMutationBatch {
+  uint32_t struct_size;
+  const struct NuxTextRunMutation *mutations;
+  size_t mutation_count;
+} NuxTextRunMutationBatch;
+
+/**
+ * Caller-sized view into one owned C-ABI result. `code` and `message` remain
+ * valid until the owning `NuxCapiResult` is released.
+ */
+typedef struct NuxCapiDiagnosticView {
+  uint32_t struct_size;
+  NuxStatus status;
+  struct NuxStringView code;
+  struct NuxStringView message;
+} NuxCapiDiagnosticView;
+
+/**
+ * Immutable identity embedded into the shipped runtime binary.
+ *
+ * Both strings have process-static lifetime and are not NUL-terminated; C
+ * callers must respect their explicit lengths.
+ */
+typedef struct NuxRuntimeInfo {
+  /**
+   * Must be initialized to `sizeof(NuxRuntimeInfo)` by the caller.
+   */
+  uint32_t struct_size;
+  uint32_t abi_version;
+  struct NuxStringView runtime_version;
+  struct NuxStringView source_revision;
+} NuxRuntimeInfo;
+
+typedef struct NuxFileAssetDescriptorView {
+  uint32_t struct_size;
+  size_t ordinal;
+  uint32_t kind;
+  uint32_t has_authored_id;
+  uint32_t authored_id;
+  struct NuxStringView name;
+  struct NuxStringView file_extension;
+  uint32_t is_embedded;
+  uint32_t has_contents_record;
+  uint32_t required_provider_flags;
+} NuxFileAssetDescriptorView;
 
 /**
  * Borrowed view of a [`RawPath`]: `verbs` holds `NuxPathVerb` values and
@@ -557,77 +627,6 @@ typedef struct NuxRenderCallbacks {
                           float);
   void (*modulate_opacity)(void*, float);
 } NuxRenderCallbacks;
-
-typedef struct NuxStringView {
-  const char *data;
-  size_t len;
-} NuxStringView;
-
-/**
- * Borrowed arbitrary bytes. Unlike `NuxStringView`, this view makes no UTF-8
- * promise. Its owner and lifetime are documented by the containing API.
- */
-typedef struct NuxByteView {
-  const uint8_t *data;
-  size_t len;
-} NuxByteView;
-
-typedef struct NuxTextRunMutation {
-  /**
-   * Exact, case-sensitive authored root `TextValueRun` name.
-   */
-  struct NuxStringView name;
-  /**
-   * Replacement text bytes, borrowed only for the synchronous call.
-   */
-  struct NuxByteView text;
-} NuxTextRunMutation;
-
-typedef struct NuxTextRunMutationBatch {
-  uint32_t struct_size;
-  const struct NuxTextRunMutation *mutations;
-  size_t mutation_count;
-} NuxTextRunMutationBatch;
-
-/**
- * Caller-sized view into one owned C-ABI result. `code` and `message` remain
- * valid until the owning `NuxCapiResult` is released.
- */
-typedef struct NuxCapiDiagnosticView {
-  uint32_t struct_size;
-  NuxStatus status;
-  struct NuxStringView code;
-  struct NuxStringView message;
-} NuxCapiDiagnosticView;
-
-/**
- * Immutable identity embedded into the shipped runtime binary.
- *
- * Both strings have process-static lifetime and are not NUL-terminated; C
- * callers must respect their explicit lengths.
- */
-typedef struct NuxRuntimeInfo {
-  /**
-   * Must be initialized to `sizeof(NuxRuntimeInfo)` by the caller.
-   */
-  uint32_t struct_size;
-  uint32_t abi_version;
-  struct NuxStringView runtime_version;
-  struct NuxStringView source_revision;
-} NuxRuntimeInfo;
-
-typedef struct NuxFileAssetDescriptorView {
-  uint32_t struct_size;
-  size_t ordinal;
-  uint32_t kind;
-  uint32_t has_authored_id;
-  uint32_t authored_id;
-  struct NuxStringView name;
-  struct NuxStringView file_extension;
-  uint32_t is_embedded;
-  uint32_t has_contents_record;
-  uint32_t required_provider_flags;
-} NuxFileAssetDescriptorView;
 
 /**
  * Explicit trust and resource policy for a generic script-host command
@@ -1393,16 +1392,11 @@ NuxStatus nux_artboard_instance_bind_view_model(struct NuxArtboardInstance *inst
                                                 const struct NuxViewModelInstance *view_model);
 
 /**
- * Draw the artboard through the caller-provided render vtable. See
- * `NuxRenderCallbacks` for the ownership and handle contract. The first
- * draw's renderer domain is retained by the Artboard occurrence, even if that
- * draw returns an error. A different descriptor/domain returns
- * `NUX_STATUS_HANDLE_MISMATCH`; a future explicit reset can make switching
- * domains safe. Callback functions and `user_data` must remain valid until
- * the last artboard/player retaining the occurrence is freed.
+ * Draw the artboard through the render domain supplied at file import.
+ * Callback functions and `user_data` must remain valid until the last
+ * artboard/player retaining the imported file is freed.
  */
-NuxStatus nux_artboard_instance_draw(struct NuxArtboardInstance *instance,
-                                     const struct NuxRenderCallbacks *callbacks);
+NuxStatus nux_artboard_instance_draw(struct NuxArtboardInstance *instance);
 
 NuxStatus nux_artboard_instance_free(struct NuxArtboardInstance *instance);
 
@@ -1502,17 +1496,26 @@ NuxStatus nux_file_asset_descriptor(const struct NuxFile *file,
 
 NuxStatus nux_file_free(struct NuxFile *file);
 
-NuxStatus nux_file_import(const uint8_t *bytes, size_t len, struct NuxFile **out_file);
+NuxStatus nux_file_import(const uint8_t *bytes,
+                          size_t len,
+                          const struct NuxRenderCallbacks *callbacks,
+                          struct NuxFile **out_file);
 
-#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
-NuxStatus nux_file_import_configured(const uint8_t *bytes,
-                                     size_t len,
-                                     const struct NuxFileImportConfig *config,
-                                     struct NuxFile **out_file,
-                                     struct NuxCapiResult **out_result);
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Imports a file into this renderer's retained factory domain. The returned
+ * file and every occurrence created from it remain bound to this exact Vulkan
+ * renderer generation.
+ */
+NuxStatus nux_file_import_android_vulkan(struct NuxAndroidVulkanRenderer *renderer,
+                                         const uint8_t *bytes,
+                                         size_t len,
+                                         const struct NuxFileImportConfig *config,
+                                         struct NuxFile **out_file,
+                                         struct NuxCapiResult **out_result);
 #endif
 
-#if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(NUX_CAPI_ANDROID_AUTHORED_WGSL))
+#if ((defined(NUX_CAPI_ANDROID_VULKAN) && defined(NUX_CAPI_ANDROID_AUTHORED_WGSL)) && defined(NUX_CAPI_ANDROID_AUTHORED_WGSL))
 /**
  * Import caller-authenticated product bytes after enabling the authored-data
  * converter format and trusted WGSL-exporter authority.
@@ -1525,13 +1528,28 @@ NuxStatus nux_file_import_configured(const uint8_t *bytes,
  * # Safety
  *
  * The pointers and lengths must satisfy the same contract as
- * [`super::nux_file_import_configured`].
+ * [`super::nux_file_import_android_vulkan`].
  */
-NuxStatus nux_file_import_configured_with_trusted_wgsl(const uint8_t *bytes,
-                                                       size_t len,
-                                                       const struct NuxFileImportConfig *config,
-                                                       struct NuxFile **out_file,
-                                                       struct NuxCapiResult **out_result);
+NuxStatus nux_file_import_android_vulkan_with_trusted_wgsl(struct NuxAndroidVulkanRenderer *renderer,
+                                                           const uint8_t *bytes,
+                                                           size_t len,
+                                                           const struct NuxFileImportConfig *config,
+                                                           struct NuxFile **out_file,
+                                                           struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Imports a file into this renderer's retained factory domain. The returned
+ * file and every occurrence created from it remain bound to this exact Metal
+ * renderer generation.
+ */
+NuxStatus nux_file_import_metal(struct NuxRenderer *renderer,
+                                const uint8_t *bytes,
+                                size_t len,
+                                const struct NuxFileImportConfig *config,
+                                struct NuxFile **out_file,
+                                struct NuxCapiResult **out_result);
 #endif
 
 /**
@@ -1546,20 +1564,10 @@ NuxStatus nux_file_import_configured_with_trusted_wgsl(const uint8_t *bytes,
  */
 NuxStatus nux_file_import_trusted_with_host_commands(const uint8_t *bytes,
                                                      size_t len,
+                                                     const struct NuxRenderCallbacks *callbacks,
                                                      const struct NuxHostCommandImportConfig *config,
                                                      struct NuxFile **out_file,
                                                      struct NuxCapiResult **out_result);
-
-#if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
-/**
- * Convenience wrapper for importing a file with portable asset hooks.
- */
-NuxStatus nux_file_import_with_assets(const uint8_t *bytes,
-                                      size_t len,
-                                      const struct NuxAssetHooks *hooks,
-                                      struct NuxFile **out_file,
-                                      struct NuxCapiResult **out_result);
-#endif
 
 /**
  * Diagnostic import path for production consumers. `out_file` is published
@@ -1568,6 +1576,7 @@ NuxStatus nux_file_import_with_assets(const uint8_t *bytes,
  */
 NuxStatus nux_file_import_with_result(const uint8_t *bytes,
                                       size_t len,
+                                      const struct NuxRenderCallbacks *callbacks,
                                       struct NuxFile **out_file,
                                       struct NuxCapiResult **out_result);
 
@@ -1736,16 +1745,6 @@ NuxStatus nux_renderer_android_vulkan_render_player(struct NuxAndroidVulkanRende
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)
 /**
- * Drops renderer-owned resources from the player's retained artboard and
- * binds it to this renderer's current durable domain.
- */
-NuxStatus nux_renderer_android_vulkan_reset_player_domain(const struct NuxAndroidVulkanRenderer *renderer,
-                                                          struct NuxPlayer *player,
-                                                          struct NuxCapiResult **out_result);
-#endif
-
-#if defined(NUX_CAPI_ANDROID_VULKAN)
-/**
  * Recreates the headless target at a new non-zero extent. The durable domain
  * and generation are retained, so players already bound to this renderer
  * continue to render without an explicit reset.
@@ -1824,16 +1823,6 @@ NuxStatus nux_renderer_render_player(struct NuxRenderer *renderer,
                                      const struct NuxMetalRenderOperation *operation,
                                      struct NuxRendererOutcome *out_outcome,
                                      struct NuxCapiResult **out_result);
-#endif
-
-#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
-/**
- * Drops renderer-owned resources from the player's retained artboard and
- * binds it to this renderer's current generation.
- */
-NuxStatus nux_renderer_reset_player_domain(const struct NuxRenderer *renderer,
-                                           struct NuxPlayer *player,
-                                           struct NuxCapiResult **out_result);
 #endif
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
@@ -1975,9 +1964,11 @@ NuxStatus nux_view_model_instance_new_authored(const struct NuxFile *file,
                                                struct NuxViewModelInstance **out_instance);
 
 /**
- * Instantiate the artboard's view model with generated defaults (mirrors
- * `createDefaultViewModelInstance`). Returns `NUX_STATUS_NOT_FOUND` when the
- * artboard declares no view model. Free with `nux_view_model_instance_free`.
+ * Instantiate the artboard's authored default view-model occurrence (mirrors
+ * `File::createDefaultViewModelInstance`). When the source view model has no
+ * authored default, the translated runtime generates property defaults.
+ * Returns `NUX_STATUS_NOT_FOUND` when the artboard declares no view model.
+ * Free with `nux_view_model_instance_free`.
  */
 NuxStatus nux_view_model_instance_new_default(const struct NuxArtboardInstance *instance,
                                               struct NuxViewModelInstance **out_view_model);

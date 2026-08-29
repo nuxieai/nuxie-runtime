@@ -131,7 +131,9 @@ if [[ ! -x "${cargo_ndk}" ]]; then
     echo "missing cargo-ndk ${cargo_ndk_version}: ${cargo_ndk}" >&2
     exit 3
 fi
-if [[ "$("${cargo_ndk}" --version)" != "cargo-ndk ${cargo_ndk_version}" ]]; then
+PATH="$(dirname "${cargo_ndk}"):$(dirname "${rust_cargo}"):${PATH}"
+export PATH
+if [[ "$("${rust_cargo}" ndk --version)" != "cargo-ndk ${cargo_ndk_version}" ]]; then
     echo "cargo-ndk must be exactly ${cargo_ndk_version}" >&2
     exit 3
 fi
@@ -205,7 +207,6 @@ build_inputs_hash="$(
         --ndk-host-tag "${ndk_host_tag}"
 )"
 
-PATH="$(dirname "${rust_cargo}"):${PATH}" \
 RUSTUP_TOOLCHAIN="${rust_toolchain}" \
 RUSTC="${rust_compiler}" \
 CARGO="${rust_cargo}" \
@@ -219,7 +220,7 @@ NUX_RUNTIME_CONTRACT_FINGERPRINT="${contract_fingerprint}" \
 NUX_RUNTIME_BUILD_PROFILE="release" \
 NUX_RUNTIME_RUSTC_VERSION="${rustc_version}" \
 NUX_RUNTIME_DISTRIBUTION_ROOT_PACKAGE="nux-capi" \
-    "${cargo_ndk}" \
+    "${rust_cargo}" ndk \
         --target arm64-v8a \
         --target x86_64 \
         --platform "${android_api}" \

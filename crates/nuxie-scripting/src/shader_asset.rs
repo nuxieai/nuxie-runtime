@@ -1961,6 +1961,7 @@ mod tests {
             .asset
             .with_downcast::<NativeShaderAsset, _>(|asset| asset.texture_sampler_pairs().to_vec())
             .expect("decoded native ShaderAsset")
+            .into_iter()
             .map(|pair| UpstreamTextureSamplerPair {
                 tex_group: pair.tex_group,
                 tex_binding: pair.tex_binding,

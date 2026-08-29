@@ -9,6 +9,7 @@ pub use listener_invocation::{
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     animation::{
+        animation_state::AnimationState,
         state_machine::StateMachine,
         state_machine_instance::{EventReport, RuntimeStateMachineInstanceHandle},
     },
@@ -20,6 +21,8 @@ use crate::mechanical_port::source::{
     math::vec2d::Vec2D,
     open_url_event::OpenUrlEvent,
 };
+use crate::{RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment};
+use std::cell::RefCell;
 
 pub use crate::mechanical_port::source::{
     animation::state_machine_instance::FocusState, hit_result::HitResult as RuntimeHitResult,
@@ -115,6 +118,61 @@ pub struct RuntimeLayerState {
     pub core_type: u16,
 }
 
+/// An owned observation of the ordinary animation currently selected by one
+/// state-machine layer.
+///
+/// The translated layer retains the live animation instance. Hosts receive a
+/// snapshot because borrowing that instance across the translated owner's
+/// `RefCell` boundary would let a reference outlive its owner borrow.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StateMachineCurrentAnimation {
+    animation_index: usize,
+    name: String,
+    time: f32,
+}
+
+impl StateMachineCurrentAnimation {
+    pub fn animation_index(&self) -> usize {
+        self.animation_index
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn time(&self) -> f32 {
+        self.time
+    }
+}
+
+/// Exact rendered occurrence associated with a host-routed pointer event.
+///
+/// The path and repetition records must come from translated live-occurrence
+/// observations. This DTO only carries that information through the event
+/// queue; it does not own or reconstruct an authored graph.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StateMachineEventContext {
+    path: Vec<RuntimeGeometryHitPathSegment>,
+    occurrence: Vec<RuntimeGeometryHitOccurrence>,
+}
+
+impl StateMachineEventContext {
+    pub fn new(
+        path: Vec<RuntimeGeometryHitPathSegment>,
+        occurrence: Vec<RuntimeGeometryHitOccurrence>,
+    ) -> Self {
+        Self { path, occurrence }
+    }
+
+    pub fn path(&self) -> &[RuntimeGeometryHitPathSegment] {
+        &self.path
+    }
+
+    pub fn occurrence(&self) -> &[RuntimeGeometryHitOccurrence] {
+        &self.occurrence
+    }
+}
+
 impl RuntimeLayerState {
     pub fn native_handle(&self) -> CoreHandle {
         self.handle.clone()
@@ -132,10 +190,15 @@ pub struct StateMachineReportedEvent {
     seconds_delay: f32,
     properties: Vec<RuntimeEventProperty>,
     string_properties: Vec<StateMachineEventStringProperty>,
+    context: Option<StateMachineEventContext>,
 }
 
 impl StateMachineReportedEvent {
-    fn from_native(report: EventReport, artboard: &RuntimeArtboardInstanceHandle) -> Option<Self> {
+    fn from_native(
+        report: EventReport,
+        artboard: &RuntimeArtboardInstanceHandle,
+        context: Option<StateMachineEventContext>,
+    ) -> Option<Self> {
         let event = report.event?;
         let core_type = event.core_type()?;
         let local_index =
@@ -177,6 +240,7 @@ impl StateMachineReportedEvent {
             seconds_delay: report.seconds_delay,
             properties,
             string_properties,
+            context,
         })
     }
     pub fn native_handle(&self) -> CoreHandle {
@@ -206,6 +270,32 @@ impl StateMachineReportedEvent {
     pub fn string_properties(&self) -> &[StateMachineEventStringProperty] {
         &self.string_properties
     }
+
+    pub fn context(&self) -> Option<&StateMachineEventContext> {
+        self.context.as_ref()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ReportObservationKey {
+    event_identity: Option<(usize, usize, u64)>,
+    seconds_delay_bits: u32,
+}
+
+impl From<&EventReport> for ReportObservationKey {
+    fn from(report: &EventReport) -> Self {
+        Self {
+            event_identity: report.event.as_ref().map(CoreHandle::identity_key),
+            seconds_delay_bits: report.seconds_delay.to_bits(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct HostReportedEventObservations {
+    reports: Vec<ReportObservationKey>,
+    contexts: Vec<Option<StateMachineEventContext>>,
+    drained: usize,
 }
 
 fn event_properties(event: &CoreHandle) -> Vec<RuntimeEventProperty> {
@@ -347,6 +437,7 @@ pub struct StateMachineInstance {
     artboard: RuntimeArtboardInstanceHandle,
     file: RuntimeFileHandle,
     index: usize,
+    host_reported_events: RefCell<HostReportedEventObservations>,
 }
 
 impl std::fmt::Debug for StateMachineInstance {
@@ -370,6 +461,58 @@ impl StateMachineInstance {
             artboard,
             file,
             index,
+            host_reported_events: RefCell::new(HostReportedEventObservations::default()),
+        }
+    }
+
+    fn native_reported_events(&self) -> Vec<EventReport> {
+        self.native.with_instance(|machine| {
+            (0..machine.reported_event_count())
+                .map(|index| machine.reported_event_at(index))
+                .collect()
+        })
+    }
+
+    fn synchronize_host_reported_events(&self) -> Vec<EventReport> {
+        let reports = self.native_reported_events();
+        let keys: Vec<_> = reports.iter().map(ReportObservationKey::from).collect();
+        let mut observations = self.host_reported_events.borrow_mut();
+        let common_prefix = observations
+            .reports
+            .iter()
+            .zip(&keys)
+            .take_while(|(previous, current)| previous == current)
+            .count();
+        if common_prefix < observations.reports.len().min(keys.len())
+            || keys.len() < observations.reports.len()
+        {
+            observations.contexts.truncate(common_prefix);
+            observations.drained = observations.drained.min(common_prefix);
+        }
+        observations.contexts.resize(keys.len(), None);
+        observations.reports = keys;
+        observations.drained = observations.drained.min(reports.len());
+        reports
+    }
+
+    fn begin_native_frame(&self) {
+        *self.host_reported_events.borrow_mut() = HostReportedEventObservations::default();
+    }
+
+    fn attach_context_to_new_reports(
+        &self,
+        previous_count: usize,
+        context: &StateMachineEventContext,
+    ) {
+        let reports = self.synchronize_host_reported_events();
+        let mut observations = self.host_reported_events.borrow_mut();
+        for slot in observations
+            .contexts
+            .iter_mut()
+            .take(reports.len())
+            .skip(previous_count)
+        {
+            *slot = Some(context.clone());
         }
     }
 
@@ -477,8 +620,14 @@ impl StateMachineInstance {
         })
     }
     pub fn advance(&mut self, seconds: f32, new_frame: bool) -> bool {
-        self.native
-            .with_instance_mut(|machine| machine.advance(seconds, new_frame))
+        if new_frame {
+            self.begin_native_frame();
+        }
+        let changed = self
+            .native
+            .with_instance_mut(|machine| machine.advance(seconds, new_frame));
+        self.synchronize_host_reported_events();
+        changed
     }
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
         self.advance_and_apply_view_models(seconds, true)
@@ -488,8 +637,12 @@ impl StateMachineInstance {
         seconds: f32,
         advance_view_models: bool,
     ) -> bool {
-        self.native
-            .advance_and_apply_view_models(seconds, advance_view_models)
+        self.begin_native_frame();
+        let changed = self
+            .native
+            .advance_and_apply_view_models(seconds, advance_view_models);
+        self.synchronize_host_reported_events();
+        changed
     }
 
     pub fn advance_and_apply_batch(
@@ -505,7 +658,7 @@ impl StateMachineInstance {
         let root = artboard.native_handle();
         let root_identity = root.core_handle();
         let mut native = Vec::with_capacity(machines.len());
-        for machine in machines {
+        for machine in machines.iter() {
             anyhow::ensure!(
                 machine.artboard.core_handle() == root_identity,
                 "state machine belongs to another Artboard"
@@ -520,12 +673,14 @@ impl StateMachineInstance {
             );
             native.push(machine.native.clone());
         }
-        Ok(advance_native_state_machines(
-            &root,
-            &native,
-            seconds,
-            advance_view_models,
-        ))
+        for machine in machines.iter() {
+            machine.begin_native_frame();
+        }
+        let result = advance_native_state_machines(&root, &native, seconds, advance_view_models);
+        for machine in machines.iter() {
+            machine.synchronize_host_reported_events();
+        }
+        Ok(result)
     }
     pub fn needs_advance(&self) -> bool {
         self.native.with_instance(|machine| machine.needs_advance())
@@ -546,6 +701,31 @@ impl StateMachineInstance {
             handle,
         })
     }
+    pub fn current_animation_count(&self) -> usize {
+        self.native
+            .with_instance_mut(|machine| machine.current_animation_count())
+    }
+    pub fn current_animation(&self, index: usize) -> Option<StateMachineCurrentAnimation> {
+        let state = self
+            .native
+            .with_instance_mut(|machine| machine.current_animation_by_index(index))?;
+        let animation = state
+            .definition()
+            .with_downcast::<AnimationState, _>(AnimationState::animation)
+            .flatten()?;
+        let animation_index = self.artboard.with_artboard(|artboard| {
+            (0..artboard.base.animation_count()).find(|&index| {
+                artboard.base.animation_handle_at(index).as_ref() == Some(&animation)
+            })
+        })?;
+        let (name, time) =
+            state.first_animation(|animation| (animation.name(), animation.time()))?;
+        Some(StateMachineCurrentAnimation {
+            animation_index,
+            name,
+            time,
+        })
+    }
     pub fn layer_count(&self) -> usize {
         let machine = self.native.with_instance(|machine| machine.state_machine());
         machine
@@ -563,67 +743,102 @@ impl StateMachineInstance {
         })
     }
     pub fn reported_event_count(&self) -> usize {
-        self.native
-            .with_instance(|machine| machine.reported_event_count())
+        self.synchronize_host_reported_events().len()
     }
     pub fn reported_event(&self, index: usize) -> Option<StateMachineReportedEvent> {
-        let report = self.native.with_instance(|machine| {
-            (index < machine.reported_event_count()).then(|| machine.reported_event_at(index))
-        })?;
-        StateMachineReportedEvent::from_native(report, &self.artboard)
+        let report = self.synchronize_host_reported_events().get(index)?.clone();
+        let context = self
+            .host_reported_events
+            .borrow()
+            .contexts
+            .get(index)
+            .cloned()
+            .flatten();
+        StateMachineReportedEvent::from_native(report, &self.artboard, context)
     }
     pub fn reported_events(&self) -> Vec<StateMachineReportedEvent> {
         (0..self.reported_event_count())
             .filter_map(|index| self.reported_event(index))
             .collect()
     }
+    /// Drain host-visible reports without consuming the translated queue.
+    ///
+    /// Pinned C++ keeps listener-fired reports available until the next
+    /// `advance(..., true)` applies them. The host cursor is therefore kept on
+    /// this adapter: repeated drains are empty, while native event delivery
+    /// still observes the original queue on the following frame.
+    pub fn take_reported_events(&mut self) -> Vec<StateMachineReportedEvent> {
+        let reports = self.synchronize_host_reported_events();
+        let (start, contexts) = {
+            let mut observations = self.host_reported_events.borrow_mut();
+            let start = observations.drained.min(reports.len());
+            observations.drained = reports.len();
+            (start, observations.contexts.clone())
+        };
+        reports
+            .into_iter()
+            .enumerate()
+            .skip(start)
+            .filter_map(|(index, report)| {
+                StateMachineReportedEvent::from_native(
+                    report,
+                    &self.artboard,
+                    contexts.get(index).cloned().flatten(),
+                )
+            })
+            .collect()
+    }
+    pub fn has_pending_listener_view_model_reports(&self) -> bool {
+        self.native
+            .with_instance(|machine| machine.has_pending_listener_view_model_reports())
+    }
+    pub fn submit_gamepads_from_buffer(&mut self, data: &[u8]) -> bool {
+        self.native.submit_gamepads_from_buffer(data)
+    }
     pub fn pointer_move(
         &mut self,
-        _artboard: &mut crate::host_artboard::ArtboardInstance,
         x: f32,
         y: f32,
-        pointer_id: i32,
-    ) -> RuntimeHitResult {
-        self.pointer_move_at(x, y, 0.0, pointer_id)
-    }
-    pub fn pointer_move_at(
-        &mut self,
-        x: f32,
-        y: f32,
-        timestamp: f32,
+        timestamp_seconds: f32,
         pointer_id: i32,
     ) -> RuntimeHitResult {
         self.native.with_instance_mut(|machine| {
-            machine.pointer_move(Vec2D::new(x, y), timestamp, pointer_id)
+            machine.pointer_move(Vec2D::new(x, y), timestamp_seconds, pointer_id)
         })
     }
-    pub fn pointer_down(
-        &mut self,
-        _artboard: &mut crate::host_artboard::ArtboardInstance,
-        x: f32,
-        y: f32,
-        pointer_id: i32,
-    ) -> RuntimeHitResult {
+    pub fn pointer_down(&mut self, x: f32, y: f32, pointer_id: i32) -> RuntimeHitResult {
         self.native
             .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(x, y), pointer_id))
     }
-    pub fn pointer_up(
+    pub fn pointer_down_with_event_context(
         &mut self,
-        _artboard: &mut crate::host_artboard::ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
+        context: &StateMachineEventContext,
     ) -> RuntimeHitResult {
+        let previous_count = self.synchronize_host_reported_events().len();
+        let result = self.pointer_down(x, y, pointer_id);
+        self.attach_context_to_new_reports(previous_count, context);
+        result
+    }
+    pub fn pointer_up(&mut self, x: f32, y: f32, pointer_id: i32) -> RuntimeHitResult {
         self.native
             .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(x, y), pointer_id))
     }
-    pub fn pointer_exit(
+    pub fn pointer_up_with_event_context(
         &mut self,
-        _artboard: &mut crate::host_artboard::ArtboardInstance,
         x: f32,
         y: f32,
         pointer_id: i32,
+        context: &StateMachineEventContext,
     ) -> RuntimeHitResult {
+        let previous_count = self.synchronize_host_reported_events().len();
+        let result = self.pointer_up(x, y, pointer_id);
+        self.attach_context_to_new_reports(previous_count, context);
+        result
+    }
+    pub fn pointer_exit(&mut self, x: f32, y: f32, pointer_id: i32) -> RuntimeHitResult {
         self.native
             .with_instance_mut(|machine| machine.pointer_exit(Vec2D::new(x, y), pointer_id))
     }

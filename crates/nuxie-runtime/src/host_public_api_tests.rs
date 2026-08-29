@@ -6,7 +6,9 @@
 
 use crate::{
     File, FileAssetLoaderRef, ImportResult, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle,
-    RuntimeFileHandle, RuntimeScriptingVmHandle, RuntimeStateMachineInstanceHandle,
+    RuntimeFileHandle, RuntimeHitResult, RuntimeScriptingVmHandle,
+    RuntimeStateMachineInstanceHandle, StateMachineEventContext,
+    StateMachineInstance as HostStateMachineInstance,
     source::{
         animation::state_machine_instance::StateMachineInstance, renderer::Renderer,
         viewmodel::runtime::viewmodel_instance_runtime::ViewModelInstanceRuntime,
@@ -53,4 +55,32 @@ fn native_owners_are_public() {
         property_image, property_font, property_blob, property_artboard,
         property_view_model, property, replace_view_model, properties,
     );
+}
+
+#[test]
+fn host_state_machine_pointer_surface_matches_the_translated_owner() {
+    let _: fn(&mut HostStateMachineInstance, f32, f32, i32) -> RuntimeHitResult =
+        HostStateMachineInstance::pointer_down;
+    let _: fn(&mut HostStateMachineInstance, f32, f32, f32, i32) -> RuntimeHitResult =
+        HostStateMachineInstance::pointer_move;
+    let _: fn(&mut HostStateMachineInstance, f32, f32, i32) -> RuntimeHitResult =
+        HostStateMachineInstance::pointer_up;
+    let _: fn(
+        &mut HostStateMachineInstance,
+        f32,
+        f32,
+        i32,
+        &StateMachineEventContext,
+    ) -> RuntimeHitResult = HostStateMachineInstance::pointer_down_with_event_context;
+    let _: fn(
+        &mut HostStateMachineInstance,
+        f32,
+        f32,
+        i32,
+        &StateMachineEventContext,
+    ) -> RuntimeHitResult = HostStateMachineInstance::pointer_up_with_event_context;
+
+    assert!(!RuntimeHitResult::None.is_hit());
+    assert!(RuntimeHitResult::Hit.is_hit());
+    assert!(RuntimeHitResult::HitOpaque.is_hit());
 }

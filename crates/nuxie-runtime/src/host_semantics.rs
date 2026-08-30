@@ -347,7 +347,7 @@ fn semantic_bounds(bounds: NativeAabb, transform: NativeMat2D) -> Option<Aabb> {
 
 fn source_artboard_global_id(artboard: &RuntimeArtboardInstanceHandle) -> Option<u32> {
     let source = artboard.with_artboard(|artboard| artboard.base.artboard_source_handle())?;
-    u32::try_from(source.identity_key().1).ok()
+    source.source_global_id()
 }
 
 fn source_object_global_id(
@@ -359,7 +359,7 @@ fn source_object_global_id(
         .with_downcast::<Artboard, _>(|source| source.objects().get(local_id).cloned())
         .flatten()
         .flatten()?;
-    u32::try_from(source_object.identity_key().1).ok()
+    source_object.source_global_id()
 }
 
 fn local_id_for_handle(
@@ -1406,7 +1406,7 @@ impl ArtboardInstance {
             file.assets()
                 .iter()
                 .find(|asset| {
-                    u32::try_from(asset.identity_key().1) == Ok(asset_global_id)
+                    asset.source_global_id() == Some(asset_global_id)
                         && asset
                             .with(|asset| asset.as_any().is::<ImageAsset>())
                             .unwrap_or(false)

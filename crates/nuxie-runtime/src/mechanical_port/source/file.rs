@@ -423,13 +423,25 @@ impl File {
         // Core has no type key, so the most recent non-bind object remains the
         // target for an immediately following DataBind.
         let mut last_bindable_object: Option<CoreHandle> = None;
+        // Host source identity is the dense order of concrete Core records
+        // accepted from the file. Importers may allocate synthetic owners in
+        // the same arena, so an arena slot is not an authored global id.
+        let mut source_global_id = 0_u32;
 
         while !reader.reached_end() {
             let Some(object) = read_runtime_object(reader, header) else {
                 import_stack.read_null_object();
                 continue;
             };
+            let object_source_global_id = source_global_id;
+            let Some(next_source_global_id) = source_global_id.checked_add(1) else {
+                return (ImportResult::Malformed, false);
+            };
+            source_global_id = next_source_global_id;
             let object = self.core_arena.insert_boxed(object);
+            if !object.set_source_global_id(object_source_global_id) {
+                return (ImportResult::Malformed, false);
+            }
             let object_type = object.core_type().unwrap_or_default();
             if !object.is_type_of(
                 crate::mechanical_port::source::generated::data_bind::data_bind_base::DataBindBase::TYPE_KEY,

@@ -1325,6 +1325,22 @@ impl ArtboardComponentList {
         transform * Mat2D::from_translate(position.x, position.y)
     }
 
+    pub(crate) fn draw_transform_for_index(&self, index: i32) -> Option<Mat2D> {
+        let item = self.list_item(index)?;
+        let artboard_transform = self.artboard_transforms.get(&item).copied()?;
+        // ArtboardComponentList::draw composes this host transform with the
+        // retained per-occurrence transform. worldTransformForArtboard is a
+        // different upstream contract: it deliberately omits scroll and is
+        // reserved for scroll-into-view calculations.
+        let host_transform = if self.virtualization_enabled_ref() {
+            self.layout_parent_ref(|parent| *parent.world_transform())
+                .unwrap_or_else(Mat2D::identity)
+        } else {
+            *self.transform().world_transform()
+        };
+        Some(host_transform * artboard_transform)
+    }
+
     pub(crate) fn update_after_transform_occurrence(owner: &CoreHandle, value: ComponentDirt) {
         if owner
             .with_downcast::<Self, _>(Self::artboard_count)

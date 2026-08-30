@@ -745,7 +745,7 @@ fn collect_geometry(
                     .with_downcast::<ArtboardComponentList, _>(|list| {
                         let child = list.artboard_instance(item_index)?;
                         let item = list.list_item(item_index)?;
-                        let transform = list.world_transform_for_artboard(&child);
+                        let transform = list.draw_transform_for_index(item_index)?;
                         Some((child, item, transform))
                     })
                     .flatten()

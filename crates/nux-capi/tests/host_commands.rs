@@ -189,6 +189,139 @@ fn scripted_drawable_fixture(source: &[u8]) -> Vec<u8> {
     bytes
 }
 
+fn nested_local_view_model_fixture(emit_commands: bool) -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 18_260, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    for (model, property, kind) in [
+        ("Root", "amount", "ViewModelPropertyNumber"),
+        ("Button", "pressed", "ViewModelPropertyBoolean"),
+    ] {
+        push_object(&mut bytes, "ViewModel", |bytes| {
+            push_string(bytes, "ViewModel", "name", model);
+        });
+        push_object(&mut bytes, kind, |bytes| {
+            push_string(bytes, kind, "name", property);
+        });
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ViewModelInstance", |bytes| {
+        push_uint(bytes, "ViewModelInstance", "viewModelId", 0);
+    });
+    push_object(&mut bytes, "ViewModelInstanceNumber", |bytes| {
+        push_uint(bytes, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+    });
+    for (asset_id, pressed) in [(0, true), (1, false)] {
+        let before = if emit_commands {
+            "bridge.command(\"before\", button.pressed.value)"
+        } else {
+            ""
+        };
+        let after = if emit_commands {
+            "bridge.command(\"after\", button.pressed.value)"
+        } else {
+            ""
+        };
+        let source = format!(
+            r#"local bridge = require("bridge")
+            return function(context)
+                return {{
+                    init = function(_self) return true end,
+                    performAction = function(_self, _invocation)
+                        local button = context:viewModel()
+                        {before}
+                        button.pressed.value = {pressed}
+                        if {pressed} then
+                            local root = context:rootViewModel()
+                            root.amount.value = root.amount.value + 1
+                        end
+                        {after}
+                    end,
+                }}
+            end"#
+        );
+        let mut payload = vec![0];
+        payload.extend(compile_luau(source.as_bytes()));
+        push_object(&mut bytes, "ScriptAsset", |bytes| {
+            push_uint(bytes, "ScriptAsset", "assetId", asset_id);
+            push_string(bytes, "ScriptAsset", "name", &format!("Press{asset_id}"));
+        });
+        push_object(&mut bytes, "FileAssetContents", |bytes| {
+            push_blob(bytes, "FileAssetContents", "bytes", &payload);
+        });
+    }
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_string(bytes, "Artboard", "name", "Parent");
+        push_f32(bytes, "Artboard", "width", 200.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+        push_uint(bytes, "Artboard", "viewModelId", 0);
+    });
+    for (host, x) in [(1, 0.0), (5, 100.0)] {
+        push_object(&mut bytes, "NestedArtboard", |bytes| {
+            push_uint(bytes, "NestedArtboard", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", 1);
+            push_f32(bytes, "Node", "x", x);
+        });
+        push_object(&mut bytes, "ViewModelInstance", |bytes| {
+            push_uint(bytes, "ViewModelInstance", "parentId", host);
+            push_uint(bytes, "ViewModelInstance", "viewModelId", 1);
+        });
+        push_object(&mut bytes, "ViewModelInstanceBoolean", |bytes| {
+            push_uint(bytes, "ViewModelInstanceBoolean", "parentId", host + 1);
+            push_uint(bytes, "ViewModelInstanceBoolean", "viewModelPropertyId", 0);
+        });
+        push_object(&mut bytes, "NestedStateMachine", |bytes| {
+            push_uint(bytes, "NestedStateMachine", "parentId", host);
+            push_uint(bytes, "NestedStateMachine", "animationId", 0);
+        });
+    }
+    push_object(&mut bytes, "StateMachine", |bytes| {
+        push_string(bytes, "StateMachine", "name", "ParentMachine");
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_string(bytes, "Artboard", "name", "Button");
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+        push_uint(bytes, "Artboard", "viewModelId", 1);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+        push_f32(bytes, "Node", "x", 50.0);
+        push_f32(bytes, "Node", "y", 50.0);
+    });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Component", "parentId", 2);
+        push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 100.0);
+        push_f32(bytes, "ParametricPath", "height", 100.0);
+    });
+    push_object(&mut bytes, "StateMachine", |bytes| {
+        push_string(bytes, "StateMachine", "name", "Press");
+    });
+    for (listener_type, asset_id) in [(2, 0), (3, 1)] {
+        push_object(&mut bytes, "StateMachineListenerSingle", |bytes| {
+            push_uint(bytes, "StateMachineListener", "targetId", 1);
+            push_uint(
+                bytes,
+                "StateMachineListenerSingle",
+                "listenerTypeValue",
+                listener_type,
+            );
+        });
+        push_object(&mut bytes, "ScriptedListenerAction", |bytes| {
+            push_uint(bytes, "ScriptedListenerAction", "scriptAssetId", asset_id);
+        });
+    }
+    bytes
+}
+
 fn scripted_transition_fixture(source: &[u8]) -> Vec<u8> {
     let mut payload = vec![0];
     payload.extend(compile_luau(source));
@@ -873,6 +1006,186 @@ fn player_change_journals_are_ordered_owned_and_never_cross_drain_shared_view_mo
         unsafe { nux_player_step_result_free(first_result) },
         NuxStatus::Ok
     );
+}
+
+#[test]
+fn player_accepts_nested_local_press_writes_without_publishing_them_as_root_changes() {
+    let bytes = nested_local_view_model_fixture(true);
+    let config = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..NuxHostCommandImportConfig::default()
+    };
+    let file = trusted_import(&bytes, &config);
+    let mut artboard = std::ptr::null_mut();
+    let mut root = std::ptr::null_mut();
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(file, 0, &mut artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut root) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_bind_view_model(artboard, root) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_new_state_machine_named(artboard, view("ParentMachine"), &mut player) },
+        NuxStatus::Ok
+    );
+    let initial = correlated_step_with_delta(player, &[], 0, 0.0);
+    assert_eq!(
+        unsafe { nux_player_step_result_free(initial) },
+        NuxStatus::Ok
+    );
+    let mut root_identity = 0;
+    assert_eq!(
+        unsafe { nux_view_model_instance_identity(root, &mut root_identity) },
+        NuxStatus::Ok
+    );
+
+    // Hold two independently authored local VMIs at once. Releasing the first
+    // must not reset the second, and neither local Boolean is a root journal row.
+    for (index, (x, down, before, count)) in [
+        (50.0, true, false, 1.0),
+        (150.0, true, false, 2.0),
+        (50.0, false, true, 2.0),
+        (150.0, false, true, 2.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let pointer = NuxPlayerPointerEvent {
+            kind: if down {
+                NUX_PLAYER_POINTER_KIND_DOWN
+            } else {
+                NUX_PLAYER_POINTER_KIND_UP
+            },
+            x,
+            y: 50.0,
+            pointer_id: if x < 100.0 { 1 } else { 2 },
+            timestamp_seconds: 0.0,
+        };
+        let result = correlated_step_with_delta(player, &[pointer], index as u64 + 1, 0.0);
+        let mut info = NuxPlayerStepInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_info(result, &mut info) },
+            NuxStatus::Ok
+        );
+        assert_eq!(info.host_command_count, 2);
+        assert_eq!(info.view_model_change_count, usize::from(down));
+        for (command_index, expected) in [before, down].into_iter().enumerate() {
+            let mut command = NuxHostCommandView::default();
+            let mut value = NuxHostValueView::default();
+            assert_eq!(
+                unsafe { nux_player_step_result_host_command(result, command_index, &mut command) },
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                copy(command.name),
+                if command_index == 0 {
+                    "before"
+                } else {
+                    "after"
+                }
+            );
+            assert_eq!(
+                unsafe {
+                    nux_player_step_result_host_value(result, command.root_value_index, &mut value)
+                },
+                NuxStatus::Ok
+            );
+            assert_eq!(value.kind, NUX_HOST_VALUE_KIND_BOOL);
+            assert_eq!(value.bool_value, expected);
+        }
+        if down {
+            let mut change = NuxViewModelChangeView::default();
+            assert_eq!(
+                unsafe { nux_player_step_result_view_model_change(result, 0, &mut change) },
+                NuxStatus::Ok
+            );
+            assert_eq!(change.owner_instance_id, root_identity);
+            assert_eq!(change.property_index, 0);
+            assert_eq!(change.kind, NUX_VIEW_MODEL_VALUE_KIND_NUMBER);
+            assert_eq!(change.number_value, count);
+        }
+        let mut scheduling = NuxPlayerSchedulingInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_scheduling(result, &mut scheduling) },
+            NuxStatus::Ok
+        );
+        assert!(
+            scheduling.dirty,
+            "local-only release still invalidates rendering"
+        );
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+        assert_eq!(view_model_number(root, "amount"), count);
+    }
+
+    // The legacy pointer/advance APIs share the same occurrence ownership
+    // boundary, but do not support host-command effects. Use the same authored
+    // local writes without commands for this independent legacy occurrence.
+    let legacy_file = trusted_import(&nested_local_view_model_fixture(false), &config);
+    let mut legacy_root = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(legacy_file, 0, 0, &mut legacy_root) },
+        NuxStatus::Ok
+    );
+    let mut legacy_artboard = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_artboard_instance_new(legacy_file, 0, &mut legacy_artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_bind_view_model(legacy_artboard, legacy_root) },
+        NuxStatus::Ok
+    );
+    let mut legacy = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_state_machine_instance_new(legacy_artboard, 0, &mut legacy) },
+        NuxStatus::Ok
+    );
+    let mut changed = false;
+    assert_eq!(
+        unsafe { nux_state_machine_instance_advance(legacy_artboard, legacy, 0.0, &mut changed) },
+        NuxStatus::Ok
+    );
+    let mut hit = false;
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_pointer_down(legacy_artboard, legacy, 50.0, 50.0, &mut hit)
+        },
+        NuxStatus::Ok
+    );
+    assert!(hit);
+    assert_eq!(view_model_number(legacy_root, "amount"), 1.0);
+    assert_eq!(
+        unsafe {
+            nux_state_machine_instance_pointer_up(legacy_artboard, legacy, 50.0, 50.0, &mut hit)
+        },
+        NuxStatus::Ok
+    );
+    assert!(hit);
+    assert_eq!(
+        unsafe { nux_state_machine_instance_advance(legacy_artboard, legacy, 0.0, &mut changed) },
+        NuxStatus::Ok
+    );
+    assert_eq!(view_model_number(legacy_root, "amount"), 1.0);
+    unsafe {
+        nux_state_machine_instance_free(legacy);
+        nux_artboard_instance_free(legacy_artboard);
+        nux_view_model_instance_free(legacy_root);
+        nux_file_free(legacy_file);
+        nux_player_free(player);
+        nux_artboard_instance_free(artboard);
+        nux_view_model_instance_free(root);
+        nux_file_free(file);
+    }
 }
 
 #[test]

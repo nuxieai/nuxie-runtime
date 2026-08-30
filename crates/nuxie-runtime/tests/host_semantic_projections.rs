@@ -2,12 +2,13 @@ use std::path::{Path, PathBuf};
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory, Vec2D};
 use nuxie_runtime::{
-    ArtboardInstance, File, RuntimeArtboardOccurrenceSegment, RuntimeFactoryHandle,
-    RuntimeLayoutBounds, RuntimeScrollConstraintSnapshot, StateMachineEventContext,
-    StateMachineInputKind,
+    ArtboardInstance, File, FileAssetLoader, FileAssetLoaderRef, RuntimeArtboardOccurrenceSegment,
+    RuntimeFactoryHandle, RuntimeLayoutBounds, RuntimeOwnedViewModelHandle,
+    RuntimeScrollConstraintSnapshot, StateMachineEventContext, StateMachineInputKind,
     source::animation::nested_state_machine::NestedStateMachine,
     source::artboard::Artboard,
     source::artboard_component_list::ArtboardComponentList,
+    source::assets::font_asset::FontAsset,
     source::assets::image_asset::ImageAsset,
     source::generated::{
         core_registry::CoreRegistry, layout_component_base::LayoutComponentBase,
@@ -17,6 +18,11 @@ use nuxie_runtime::{
     source::viewmodel::viewmodel_instance::ViewModelInstance,
     source::viewmodel::viewmodel_instance_boolean::ViewModelInstanceBoolean,
 };
+
+const COMPONENT_LIST_HOST_TRANSFORM_FIXTURE: &str =
+    include_str!("../../../fixtures/parity/component-list-host-transform.riv.b64");
+const COMPONENT_LIST_HOST_TRANSFORM_FONT: &[u8] =
+    include_bytes!("../../../fixtures/fonts/roboto-a.ttf");
 
 fn fixture_path(name: &str) -> PathBuf {
     let runtime_dir = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -43,6 +49,66 @@ fn occurrence_identity(handle: &nuxie_runtime::CoreHandle) -> u64 {
         value = value.wrapping_mul(0x100_0000_01b3);
     }
     value
+}
+
+fn decode_base64_fixture(encoded: &str) -> Vec<u8> {
+    let mut output = Vec::new();
+    let mut word = 0_u32;
+    let mut sextets = 0_u8;
+    for byte in encoded.bytes().filter(|byte| !byte.is_ascii_whitespace()) {
+        if byte == b'=' {
+            break;
+        }
+        let value = match byte {
+            b'A'..=b'Z' => byte.checked_sub(b'A').expect("matched ASCII range"),
+            b'a'..=b'z' => byte
+                .checked_sub(b'a')
+                .and_then(|value| value.checked_add(26))
+                .expect("matched ASCII range"),
+            b'0'..=b'9' => byte
+                .checked_sub(b'0')
+                .and_then(|value| value.checked_add(52))
+                .expect("matched ASCII range"),
+            b'+' => 62,
+            b'/' => 63,
+            _ => panic!("invalid base64 fixture byte"),
+        };
+        word = (word << 6) | u32::from(value);
+        sextets = sextets.checked_add(1).expect("base64 quantum overflow");
+        if sextets == 4 {
+            output.extend_from_slice(&word.to_be_bytes()[1..]);
+            word = 0;
+            sextets = 0;
+        }
+    }
+    if sextets == 2 {
+        output.push((word >> 4) as u8);
+    } else if sextets == 3 {
+        output.extend_from_slice(&(word >> 2).to_be_bytes()[2..]);
+    }
+    output
+}
+
+struct ComponentListHostTransformAssetLoader;
+
+impl FileAssetLoader for ComponentListHostTransformAssetLoader {
+    fn load_contents(
+        &mut self,
+        asset: nuxie_runtime::CoreHandle,
+        in_band_bytes: &[u8],
+        factory: &RuntimeFactoryHandle,
+    ) -> bool {
+        asset
+            .with_downcast_mut::<FontAsset, _>(|font| {
+                let bytes = if in_band_bytes.is_empty() {
+                    COMPONENT_LIST_HOST_TRANSFORM_FONT
+                } else {
+                    in_band_bytes
+                };
+                font.decode(bytes, factory)
+            })
+            .unwrap_or(false)
+    }
 }
 
 #[test]
@@ -103,6 +169,58 @@ fn layout_and_geometry_reads_share_the_settled_native_occurrence() {
             .hit_test_segments_with_bounds(Vec2D::new(1.0e20, 1.0e20))
             .is_empty()
     );
+}
+
+#[test]
+fn component_list_geometry_uses_the_same_transform_as_exact_draw() {
+    let bytes = decode_base64_fixture(COMPONENT_LIST_HOST_TRANSFORM_FIXTURE);
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(
+        &bytes,
+        retained,
+        None,
+        Some(FileAssetLoaderRef::new(Box::new(
+            ComponentListHostTransformAssetLoader,
+        ))),
+        None,
+    )
+    .expect("fixture imports");
+    let artboard_index = file
+        .with_file(|file| {
+            (0..file.artboard_count())
+                .find(|&index| file.artboard_name_at(index) == "Projection corpus")
+        })
+        .expect("publisher-named artboard exists");
+    let mut artboard =
+        ArtboardInstance::from_native(file, artboard_index).expect("artboard instance");
+    let native_file = artboard.native_file();
+    let source = native_file
+        .with_file(|file| file.artboard_at_source(artboard_index))
+        .expect("publisher-named source artboard");
+    let view_model = native_file
+        .with_file_mut(|file| file.create_default_view_model_instance_for_artboard(source))
+        .and_then(|native| RuntimeOwnedViewModelHandle::from_native(native_file.clone(), native))
+        .expect("default view model");
+    artboard.bind_owned_view_model_handle(view_model.clone());
+    let mut machine = artboard
+        .state_machine_instance_named("Generated Nuxie Interaction")
+        .expect("generated interaction state machine");
+    machine.bind_owned_view_model_handle(view_model);
+
+    artboard.advance(0.0).expect("list defaults materialize");
+    artboard.advance(0.0).expect("list occurrences settle");
+    artboard
+        .advance_state_machine_instance(&mut machine, 0.0)
+        .expect("generated interaction state machine settles");
+
+    let pointer_hit = artboard
+        .hit_test_segments_with_bounds(Vec2D::new(370.0, 114.0))
+        .into_iter()
+        .find(|hit| !hit.occurrence.is_empty())
+        .expect("third list occurrence exposes concrete geometry");
+    assert_eq!(pointer_hit.occurrence.len(), 1);
+    assert_eq!(pointer_hit.occurrence[0].item_index, 2);
 }
 
 #[test]

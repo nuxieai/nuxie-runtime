@@ -666,12 +666,19 @@ impl Text {
     pub fn runs(&self) -> &[TextValueRunHandle] {
         &self.all_runs
     }
-    pub(crate) fn inferred_semantic_data(&self) -> Option<ResolvedSemanticData> {
-        let label = self
-            .all_runs
+    /// Return the exact settled value represented by this Text's resolved runs.
+    ///
+    /// Unlike inferred accessibility semantics, an empty value is still a
+    /// valid Text value. Host catalogues use this projection to preserve the
+    /// same empty-string observation as the upstream runtime.
+    pub(crate) fn settled_text_value(&self) -> String {
+        self.all_runs
             .iter()
             .filter_map(|run| run.with(|run| run.base.text().to_owned()))
-            .collect::<String>();
+            .collect()
+    }
+    pub(crate) fn inferred_semantic_data(&self) -> Option<ResolvedSemanticData> {
+        let label = self.settled_text_value();
         (!label.is_empty()).then_some(ResolvedSemanticData {
             has_semantics: true,
             role: SemanticRole::Text as u32,
@@ -1861,5 +1868,34 @@ impl Text {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod settled_text_value_tests {
+    use super::*;
+
+    fn runtime_run(value: &str) -> TextValueRunHandle {
+        let mut run = TextValueRun::default();
+        run.base.set_text_value(value.to_owned());
+        TextValueRunHandle::Runtime(Rc::new(RefCell::new(run)))
+    }
+
+    #[test]
+    fn settled_text_value_preserves_empty_resolved_runs_without_creating_accessibility_semantics() {
+        let mut text = Text::default();
+        text.all_runs.push(runtime_run(""));
+
+        assert_eq!(text.settled_text_value(), "");
+        assert!(text.inferred_semantic_data().is_none());
+    }
+
+    #[test]
+    fn settled_text_value_concatenates_every_resolved_run_in_order() {
+        let mut text = Text::default();
+        text.all_runs
+            .extend([runtime_run("first"), runtime_run(""), runtime_run("second")]);
+
+        assert_eq!(text.settled_text_value(), "firstsecond");
     }
 }

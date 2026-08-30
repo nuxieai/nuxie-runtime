@@ -908,12 +908,7 @@ impl ArtboardInstance {
 }
 
 fn text_value(handle: &CoreHandle) -> Option<String> {
-    handle.with(|object| {
-        object
-            .as_text()?
-            .inferred_semantic_data()
-            .map(|data| data.label)
-    })?
+    handle.with(|object| object.as_text().map(Text::settled_text_value))?
 }
 
 fn semantic_text_from_geometry(

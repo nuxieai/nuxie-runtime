@@ -142,6 +142,26 @@ impl TransformComponent {
         }
     }
 
+    pub(crate) fn mark_transform_dirty_from_layout(
+        owner: &CoreHandle,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        assert!(owner.is_type_of(TransformComponentBase::TYPE_KEY));
+        let occurrence =
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            );
+        if occurrence.add_dirt_from_layout(active, active_handle, ComponentDirt::TRANSFORM, false) {
+            occurrence.add_dirt_from_layout(
+                active,
+                active_handle,
+                ComponentDirt::WORLD_TRANSFORM,
+                true,
+            );
+        }
+    }
+
     pub fn update_transform_state(&mut self, x: f32, y: f32) {
         self.transform = Mat2D::from_rotation(self.base.rotation());
         self.transform[4] = x;

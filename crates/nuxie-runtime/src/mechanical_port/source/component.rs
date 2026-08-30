@@ -40,6 +40,27 @@ pub enum ComponentOccurrenceHandle {
     ),
 }
 
+/// The most-derived owner of an active C++ `LayoutComponent` occurrence.
+///
+/// C++ dirt callbacks are reentrant through raw object pointers. Rust keeps
+/// authored objects in `RefCell` arena slots, so a dirt cascade that returns
+/// to the property setter's Layout occurrence must use the mutable owner that
+/// is already on the stack. Retaining the concrete owner here also preserves
+/// virtual `Artboard::onDirty` dispatch for the Artboard subclass.
+pub(crate) enum ActiveLayoutOwner<'a> {
+    Layout(&'a mut crate::mechanical_port::source::layout_component::LayoutComponent),
+    Artboard(&'a mut Artboard),
+}
+
+impl ActiveLayoutOwner<'_> {
+    fn component_add_dirt(&mut self, value: ComponentDirt, recurse: bool) -> bool {
+        match self {
+            Self::Layout(layout) => layout.component_add_dirt(value, recurse),
+            Self::Artboard(artboard) => artboard.component_add_dirt(value, recurse),
+        }
+    }
+}
+
 impl From<CoreHandle> for ComponentOccurrenceHandle {
     fn from(value: CoreHandle) -> Self {
         Self::Authored(value)
@@ -267,6 +288,55 @@ impl ComponentOccurrenceHandle {
                 .unwrap_or_default()
             {
                 dependent.add_dirt_from_shape(shape, value, true);
+            }
+        }
+        true
+    }
+
+    /// Carry the active most-derived Layout owner through a reentrant dirt
+    /// cascade. This is the Rust ownership translation of C++'s raw-pointer
+    /// call chain; it changes no callback or dependent ordering.
+    pub(crate) fn add_dirt_from_layout(
+        &self,
+        active: &mut ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+        value: ComponentDirt,
+        recurse: bool,
+    ) -> bool {
+        if self.authored() == Some(active_handle) {
+            return active.component_add_dirt(value, recurse);
+        }
+        let Some(dirt) = self
+            .with_component_mut(|component| component.add_dirt_state(value))
+            .flatten()
+        else {
+            return false;
+        };
+        match self {
+            Self::Authored(handle)
+                if handle.is_type_of(
+                    crate::mechanical_port::source::generated::constraints::constraint_base::ConstraintBase::TYPE_KEY,
+                ) =>
+            {
+                crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_from_layout(
+                    handle,
+                    dirt,
+                    active,
+                    active_handle,
+                );
+            }
+            Self::Authored(handle) => {
+                handle.with_mut(|object| object.component_on_dirty(dirt));
+            }
+            Self::PathComposer(_) | Self::TextVariationHelper(_) => self.on_dirty(dirt),
+        }
+        self.notify_artboard();
+        if recurse {
+            for dependent in self
+                .with_component(Component::dependents_snapshot)
+                .unwrap_or_default()
+            {
+                dependent.add_dirt_from_layout(active, active_handle, value, true);
             }
         }
         true

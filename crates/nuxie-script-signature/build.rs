@@ -38,7 +38,9 @@ fn main() {
         // cc-rs's explicit compiler choices; otherwise use the LLVM toolchain
         // advertised on PATH (or by LLVM_CONFIG_PATH), without a host sysroot.
         println!("cargo:rerun-if-env-changed=LLVM_CONFIG_PATH");
-        println!("cargo:rerun-if-env-changed=PATH");
+        // pnpm and fnm add per-invocation PATH entries unrelated to LLVM.
+        // Track explicit toolchain selections and the selected tool files,
+        // not the ambient search path, so they do not invalidate every build.
         for kind in ["CC", "AR"] {
             for key in [
                 format!("{kind}_wasm32-unknown-unknown"),
@@ -65,10 +67,14 @@ fn main() {
                     .any(|key| env::var_os(key).is_some())
                 };
                 if !explicit("CC") {
-                    build.compiler(directory.join("clang"));
+                    let compiler = directory.join("clang");
+                    println!("cargo:rerun-if-changed={}", compiler.display());
+                    build.compiler(compiler);
                 }
                 if !explicit("AR") {
-                    build.archiver(directory.join("llvm-ar"));
+                    let archiver = directory.join("llvm-ar");
+                    println!("cargo:rerun-if-changed={}", archiver.display());
+                    build.archiver(archiver);
                 }
             }
         }

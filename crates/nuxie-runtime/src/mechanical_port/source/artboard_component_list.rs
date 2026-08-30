@@ -437,7 +437,12 @@ impl ArtboardComponentList {
         owner: &CoreHandle,
         artboard: &RuntimeArtboardInstanceHandle,
     ) -> Option<RuntimeStateMachineInstanceHandle> {
-        let instance = artboard.default_state_machine_handle()?;
+        // Upstream ArtboardComponentList::createStateMachineInstance uses the
+        // authored default when present and otherwise falls back to machine 0.
+        let default_index =
+            artboard.with_artboard(|artboard| artboard.base.default_state_machine_index());
+        let state_machine_index = component_list_state_machine_index(default_index);
+        let instance = artboard.state_machine_instance_handle(state_machine_index)?;
         Self::link_state_machine_to_artboard_occurrence(owner, &instance, artboard);
         Some(instance)
     }
@@ -508,6 +513,21 @@ impl ArtboardComponentList {
                 }
             }
         });
+    }
+}
+
+fn component_list_state_machine_index(default_index: i32) -> usize {
+    usize::try_from(default_index).unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::component_list_state_machine_index;
+
+    #[test]
+    fn state_machine_selection_matches_upstream_default_or_zero_rule() {
+        assert_eq!(component_list_state_machine_index(3), 3);
+        assert_eq!(component_list_state_machine_index(-1), 0);
     }
 }
 

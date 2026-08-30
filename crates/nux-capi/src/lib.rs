@@ -8,6 +8,7 @@
 )]
 
 mod asset_catalog;
+mod player_view_models;
 mod render_callbacks;
 
 pub use asset_catalog::*;
@@ -469,9 +470,20 @@ fn begin_bound_view_model_change_capture(
     let Some(root) = root else {
         return Ok(None);
     };
-    let owners = root
-        .reachable_change_owner_snapshot()
-        .ok_or(NuxStatus::ReentrantCall)?;
+    let artboard = occurrence
+        .instance
+        .try_borrow()
+        .map_err(|_| NuxStatus::ReentrantCall)?;
+    let mut owners = Vec::new();
+    for scene_root in
+        player_view_models::scene_roots(&artboard, &root, MAX_PLAYER_STEP_STATE_CHANGES)?
+    {
+        owners.extend(
+            scene_root
+                .reachable_change_owner_snapshot()
+                .ok_or(NuxStatus::ReentrantCall)?,
+        );
+    }
     let capture = RuntimeViewModelChangeCapture::begin().ok_or(NuxStatus::ReentrantCall)?;
     Ok(Some(BoundViewModelChangeCapture {
         root,
@@ -492,10 +504,19 @@ fn commit_legacy_runtime_change_or_poison(
     let mut view_model_changed = false;
     if let Some(BoundViewModelChangeCapture {
         root,
-        owners,
+        mut owners,
         capture,
     }) = view_model_capture
     {
+        let current_roots = occurrence.instance.try_borrow().ok().and_then(|artboard| {
+            player_view_models::scene_roots(&artboard, &root, MAX_PLAYER_STEP_STATE_CHANGES).ok()
+        });
+        let Some(current_roots) = current_roots else {
+            invalidate_unresolved_legacy_view_model_changes(&owners);
+            occurrence.poisoned.set(true);
+            return NuxStatus::RuntimeError;
+        };
+        owners.extend(current_roots);
         let Some(owner_changes) =
             RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
                 &owners, capture,
@@ -505,11 +526,7 @@ fn commit_legacy_runtime_change_or_poison(
             // journal overflows or cannot be resolved, conservatively mark
             // every pre-mutation owner. Exact owner relays then invalidate any
             // other root that still retains a mutated-and-detached child.
-            if let Ok(generation) = reserve_view_model_mutation_generation() {
-                for owner in owners {
-                    owner.mark_observable_mutation(generation);
-                }
-            }
+            invalidate_unresolved_legacy_view_model_changes(&owners);
             occurrence.poisoned.set(true);
             return NuxStatus::RuntimeError;
         };
@@ -537,6 +554,14 @@ fn commit_legacy_runtime_change_or_poison(
         }
     }
     occurrence.commit_runtime_change_or_poison(runtime_changed || view_model_changed)
+}
+
+fn invalidate_unresolved_legacy_view_model_changes(owners: &[RuntimeOwnedViewModelHandle]) {
+    if let Ok(generation) = reserve_view_model_mutation_generation() {
+        for owner in owners {
+            owner.mark_observable_mutation(generation);
+        }
+    }
 }
 
 fn file_has_script_assets(file: &RuntimeFileHandle) -> bool {
@@ -3910,9 +3935,26 @@ fn player_step_body(
         elapsed_seconds: step.elapsed_seconds,
     };
 
+    let scene_view_model_roots = match bound_view_model.as_ref() {
+        Some(view_model) => match player_view_models::scene_roots(
+            &artboard,
+            view_model,
+            MAX_PLAYER_STEP_STATE_CHANGES,
+        ) {
+            Ok(roots) => roots,
+            Err(status) => {
+                return publish_player_step_failure(
+                    out_result,
+                    status,
+                    "player occurrence view-model scope exceeds its bound or is invalid",
+                );
+            }
+        },
+        None => Vec::new(),
+    };
     let mut view_model_transaction = match bound_view_model.as_ref() {
-        Some(view_model) => match RuntimeOwnedViewModelGraphTransaction::begin(
-            std::slice::from_ref(view_model),
+        Some(_) => match RuntimeOwnedViewModelGraphTransaction::begin(
+            &scene_view_model_roots,
             MAX_PLAYER_STEP_STATE_CHANGES,
         ) {
             Ok(transaction) => Some(transaction),
@@ -4105,14 +4147,31 @@ fn player_step_body(
     let (host_commands, host_values) = (Vec::new(), Vec::new());
     let resolved_view_model_changes = match (bound_view_model.as_ref(), change_capture) {
         (Some(view_model), Some(capture)) => {
-            match view_model.resolve_change_capture_with_owners(capture) {
+            let roots = match player_view_models::scene_roots(
+                &artboard,
+                view_model,
+                MAX_PLAYER_STEP_STATE_CHANGES,
+            ) {
+                Ok(roots) => roots,
+                Err(status) => {
+                    player.artboard.poisoned.set(true);
+                    return publish_player_step_failure(
+                        out_result,
+                        status,
+                        "player occurrence view-model scope exceeds its bound or is invalid",
+                    );
+                }
+            };
+            match RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
+                &roots, capture,
+            ) {
                 Some(changes) => changes,
                 None => {
                     player.artboard.poisoned.set(true);
                     return publish_player_step_failure(
                         out_result,
                         NuxStatus::LimitExceeded,
-                        "runtime view-model change journal exceeded its bound or left the bound graph",
+                        "runtime view-model change journal exceeded its bound or left the player occurrence graph",
                     );
                 }
             }
@@ -4124,16 +4183,31 @@ fn player_step_body(
         .iter()
         .map(|(owner, _)| owner.clone())
         .collect::<Vec<_>>();
+    let subscribed_owners = match bound_view_model.as_ref() {
+        Some(root) => match root.reachable_change_owner_snapshot() {
+            Some(owners) => owners,
+            None => {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    NuxStatus::RuntimeError,
+                    "bound view-model subscription graph is invalid",
+                );
+            }
+        },
+        None => Vec::new(),
+    };
     let view_model_changes = data_binding::own_view_model_changes(
         data_binding::NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME,
         step.correlation_id,
         resolved_view_model_changes
             .into_iter()
+            .filter(|(owner, _)| subscribed_owners.iter().any(|root| root.ptr_eq(owner)))
             .map(|(_, change)| change)
             .collect(),
     );
-    runtime_dirty |= !view_model_changes.is_empty();
-    let bound_view_model_generation_commit = if view_model_changes.is_empty() {
+    runtime_dirty |= !changed_view_model_owners.is_empty();
+    let bound_view_model_generation_commit = if changed_view_model_owners.is_empty() {
         None
     } else {
         match reserve_view_model_mutation_generation() {
@@ -4232,7 +4306,10 @@ fn player_step_body(
         player
             .artboard
             .observed_bound_view_model_generation
-            .set(next);
+            .set(bound_view_model.as_ref().map_or(
+                0,
+                RuntimeOwnedViewModelHandle::observable_mutation_generation,
+            ));
     }
     unsafe { (*pending.handle).scheduling.settled = runtime_settled };
     if runtime_dirty {

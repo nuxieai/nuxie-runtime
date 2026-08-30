@@ -241,19 +241,34 @@ impl ArtboardInstance {
     /// scripted object in this exact root, including nested artboards and
     /// component-list rows.
     ///
-    /// `None` means no initialized occurrence of `global_id` is currently
-    /// retained. `Some(false)` means all retained occurrences already expose
-    /// the requested backend value. The authored global id is resolved from
-    /// each occurrence's source Artboard; no host-side object registry or
-    /// compatibility mount plan is introduced.
-    pub fn set_script_input_for_global_occurrences_if_changed(
+    /// `None` means no initialized occurrence of the exact source Artboard and
+    /// local object is currently retained. `Some(false)` means all retained
+    /// occurrences already expose the requested backend value. The source
+    /// Artboard index and its local object id are the same two coordinates the
+    /// upstream runtime uses; binary-global ids are never compared with Rust
+    /// arena slots.
+    pub fn set_script_input_for_source_occurrences_if_changed(
         &mut self,
-        global_id: u32,
+        source_artboard_index: usize,
+        source_local_id: usize,
         name: &str,
         value: ScriptValue,
     ) -> std::result::Result<Option<bool>, ScriptError> {
+        let Some(source_artboard) = self
+            .file
+            .with_file(|file| file.artboard_at_source(source_artboard_index))
+        else {
+            return Ok(None);
+        };
         let mut visited = HashSet::new();
-        set_script_input_in_occurrence_tree(&self.native, global_id, name, &value, &mut visited)
+        set_script_input_in_occurrence_tree(
+            &self.native,
+            &source_artboard,
+            source_local_id,
+            name,
+            &value,
+            &mut visited,
+        )
     }
     pub fn object_world_transform(&mut self, id: usize) -> Option<Mat2D> {
         self.native.update_pass(true);
@@ -398,7 +413,8 @@ impl ArtboardInstance {
 
 fn set_script_input_in_occurrence_tree(
     artboard: &RuntimeArtboardInstanceHandle,
-    global_id: u32,
+    source_artboard: &CoreHandle,
+    source_local_id: usize,
     name: &str,
     value: &ScriptValue,
     visited: &mut HashSet<(usize, usize, u64)>,
@@ -414,22 +430,12 @@ fn set_script_input_in_occurrence_tree(
             artboard.base.artboard_source_handle(),
         )
     });
-    let source_objects = source
-        .and_then(|source| source.with_downcast::<Artboard, _>(|source| source.objects().to_vec()))
-        .unwrap_or_default();
-
     let mut found = false;
     let mut changed = false;
-    for (local_id, object) in objects.into_iter().enumerate() {
-        let Some(object) = object else { continue };
-        let matches_global = source_objects
-            .get(local_id)
-            .and_then(Option::as_ref)
-            .and_then(|source| u32::try_from(source.identity_key().1).ok())
-            == Some(global_id);
-        if !matches_global {
-            continue;
-        }
+    let matches_source_artboard = source.as_ref() == Some(source_artboard);
+    if matches_source_artboard
+        && let Some(object) = objects.get(source_local_id).and_then(Option::as_ref)
+    {
         let instance = object
             .with(|object| {
                 object
@@ -437,15 +443,15 @@ fn set_script_input_in_occurrence_tree(
                     .and_then(|scripted| scripted.runtime_instance())
             })
             .flatten();
-        let Some(instance) = instance else { continue };
-        found = true;
-        let current = instance.borrow_mut().get_input(name)?;
-        if script_input_values_equivalent(&current, value) {
-            continue;
+        if let Some(instance) = instance {
+            found = true;
+            let current = instance.borrow_mut().get_input(name)?;
+            if !script_input_values_equivalent(&current, value) {
+                instance.borrow_mut().set_input(name, value.clone())?;
+                mark_script_input_dirt(object);
+                changed = true;
+            }
         }
-        instance.borrow_mut().set_input(name, value.clone())?;
-        mark_script_input_dirt(&object);
-        changed = true;
     }
 
     let nested_instances = nested_hosts
@@ -467,9 +473,14 @@ fn set_script_input_in_occurrence_tree(
             .unwrap_or_default()
         }));
     for nested in nested_instances {
-        if let Some(nested_changed) =
-            set_script_input_in_occurrence_tree(&nested, global_id, name, value, visited)?
-        {
+        if let Some(nested_changed) = set_script_input_in_occurrence_tree(
+            &nested,
+            source_artboard,
+            source_local_id,
+            name,
+            value,
+            visited,
+        )? {
             found = true;
             changed |= nested_changed;
         }

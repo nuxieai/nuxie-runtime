@@ -4068,6 +4068,24 @@ pub trait CoreCapabilities: Any {
                 for dependent in dependents {
                     dependent.add_dirt_from_shape(shape, value, true);
                 }
+            } else if let (Some(active_handle), Some(artboard)) =
+                (self_handle.as_ref(), self.as_artboard_mut())
+            {
+                let mut active =
+                    crate::mechanical_port::source::component::ActiveLayoutOwner::Artboard(
+                        artboard,
+                    );
+                for dependent in dependents {
+                    dependent.add_dirt_from_layout(&mut active, active_handle, value, true);
+                }
+            } else if let (Some(active_handle), Some(layout)) =
+                (self_handle.as_ref(), self.as_layout_component_mut())
+            {
+                let mut active =
+                    crate::mechanical_port::source::component::ActiveLayoutOwner::Layout(layout);
+                for dependent in dependents {
+                    dependent.add_dirt_from_layout(&mut active, active_handle, value, true);
+                }
             } else {
                 for dependent in dependents {
                     dependent.add_dirt(value, true);

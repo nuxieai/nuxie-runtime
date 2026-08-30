@@ -155,6 +155,27 @@ impl Constraint {
         TransformComponent::mark_transform_dirty_from_shape(&parent, active_shape);
     }
 
+    pub(crate) fn on_dirty_from_layout(
+        owner: &CoreHandle,
+        _dirt: ComponentDirt,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        // Release this Constraint's arena slot before dirtying its parent. In
+        // C++ the parent can be the Layout object whose setter is already on
+        // the stack; the active-owner path preserves that reentrant call.
+        let parent = owner
+            .with(|owner| {
+                owner
+                    .as_component()
+                    .expect("Constraint inherits Component")
+                    .parent_handle()
+            })
+            .flatten()
+            .expect("Constraint parent was validated");
+        TransformComponent::mark_transform_dirty_from_layout(&parent, active, active_handle);
+    }
+
     pub fn handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.handle()
     }

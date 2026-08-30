@@ -23,6 +23,9 @@ cc-rs target `CC`/`AR` settings are respected; otherwise `llvm-config --bindir`
 (or `LLVM_CONFIG_PATH`) selects Clang and llvm-ar, avoiding Apple's native-only
 Clang. This changes build tooling only, never the target away from
 `wasm32-unknown-unknown`.
+Use `LLVM_CONFIG_PATH` or target `CC`/`AR` settings to intentionally switch
+toolchains. Build caching tracks those settings and the selected LLVM tool
+files, not unrelated per-invocation `PATH` entries added by package managers.
 
 ## Source provenance
 
@@ -52,7 +55,8 @@ boundaries). Each valid case is followed by all 64 individual signature-byte
 mutations, changed message/context/key, and a zero signature. The Node test
 instantiates a real release WASM artifact, requires zero imports, invokes the
 Rust-selected backend through a test-only example ABI, and checks 1,518 cases.
-The same import check must also be applied to the final publisher/ProductHost
-artifacts so their linker settings cannot retain an unintended dependency.
+Audit final publisher/ProductHost artifacts for unintended libhydrogen, RNG,
+WASI, or other ambient-host imports too. ProductHost's ordinary wasm-bindgen
+and browser imports remain allowed; the isolated verifier has zero imports.
 
 Tracked with [UNIV-2813](https://universe.basis.dev/issue/UNIV-2813).

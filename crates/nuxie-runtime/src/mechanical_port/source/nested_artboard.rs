@@ -1015,7 +1015,11 @@ impl NestedArtboard {
         self.instance.as_ref()?.with_artboard(|instance| {
             instance.nested_artboards().into_iter().find(|nested| {
                 nested
-                    .with_downcast::<NestedArtboard, _>(|nested| nested.base.base.name() == name)
+                    .with(|object| {
+                        object
+                            .as_nested_artboard()
+                            .is_some_and(|nested| nested.base.base.name() == name)
+                    })
                     .unwrap_or(false)
             })
         })

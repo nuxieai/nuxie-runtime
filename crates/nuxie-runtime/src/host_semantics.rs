@@ -29,7 +29,6 @@ use crate::{
         math::{
             aabb::Aabb as NativeAabb, mat2d::Mat2D as NativeMat2D, vec2d::Vec2D as NativeVec2D,
         },
-        nested_artboard::NestedArtboard,
         text::{
             cursor::{Cursor, CursorPosition},
             fully_shaped_text::FullyShapedText,
@@ -127,7 +126,7 @@ impl RuntimeNestedArtboardMount {
                 .flatten()
         } else {
             self.host
-                .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+                .with(|object| object.as_nested_artboard()?.artboard_instance_default())
                 .flatten()
         };
         current.is_some_and(|current| current.downgrade().ptr_eq(&self.child))
@@ -335,6 +334,17 @@ fn transform_bounds(bounds: NativeAabb, transform: NativeMat2D) -> Aabb {
     native_to_render_bounds(transform.map_bounding_box(bounds))
 }
 
+fn semantic_bounds(bounds: NativeAabb, transform: NativeMat2D) -> Option<Aabb> {
+    if bounds.is_empty_or_nan() {
+        return None;
+    }
+    let world_bounds = transform.map_bounding_box(bounds);
+    if world_bounds.is_empty_or_nan() {
+        return None;
+    }
+    Some(native_to_render_bounds(world_bounds))
+}
+
 fn source_artboard_global_id(artboard: &RuntimeArtboardInstanceHandle) -> Option<u32> {
     let source = artboard.with_artboard(|artboard| artboard.base.artboard_source_handle())?;
     u32::try_from(source.identity_key().1).ok()
@@ -385,7 +395,7 @@ fn retained_child_artboards(
     let mut children = Vec::new();
     for host in hosts.into_iter().flatten() {
         if let Some(nested) = host
-            .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+            .with(|object| object.as_nested_artboard()?.artboard_instance_default())
             .flatten()
         {
             children.push(RuntimeNestedArtboardMount {
@@ -589,7 +599,7 @@ impl ArtboardInstance {
                 *object.as_world_transform_component()?.world_transform(),
             ))
         })??;
-        Some(transform_bounds(bounds, world))
+        semantic_bounds(bounds, world)
     }
 
     pub fn scrolled_layout_bounds(&mut self, local_id: usize) -> Option<RuntimeLayoutBounds> {
@@ -681,6 +691,37 @@ fn drawable_chain(
     result
 }
 
+fn authored_geometry_is_catalogued(handle: &CoreHandle, visibility: GeometryVisibility) -> bool {
+    handle
+        .with(|object| {
+            if let Some(text) = object.as_text() {
+                if visibility == GeometryVisibility::Retained {
+                    return true;
+                }
+                let render_opacity = text.base.render_opacity();
+                return render_opacity.is_finite() && render_opacity > 0.0;
+            }
+            if object.as_shape().is_none() {
+                return false;
+            }
+            if visibility == GeometryVisibility::Retained {
+                return true;
+            }
+            object.as_shape_paint_container().is_some_and(|container| {
+                container.shape_paints().iter().any(|paint| {
+                    paint
+                        .with(|paint| {
+                            paint
+                                .as_shape_paint_behavior()
+                                .is_some_and(|paint| paint.should_draw())
+                        })
+                        .unwrap_or(false)
+                })
+            })
+        })
+        .unwrap_or(false)
+}
+
 fn collect_geometry(
     artboard: &RuntimeArtboardInstanceHandle,
     artboard_to_root: NativeMat2D,
@@ -707,10 +748,12 @@ fn collect_geometry(
         });
 
         if let Some((child, host_transform)) = handle
-            .with_downcast::<NestedArtboard, _>(|nested| {
+            .with(|object| {
+                let nested = object.as_nested_artboard()?;
+                let host = object.as_artboard_host()?;
                 Some((
                     nested.artboard_instance_default()?,
-                    nested.world_transform_for_artboard(artboard.downgrade()),
+                    host.world_transform_for_artboard(artboard.downgrade()),
                 ))
             })
             .flatten()
@@ -775,6 +818,10 @@ fn collect_geometry(
             continue;
         }
 
+        if !authored_geometry_is_catalogued(&handle, visibility) {
+            continue;
+        }
+
         let Some((local_bounds, world)) = handle
             .with(|object| {
                 Some((
@@ -787,7 +834,9 @@ fn collect_geometry(
             continue;
         };
         let root_transform = artboard_to_root * world;
-        let bounds = transform_bounds(local_bounds, root_transform);
+        let Some(bounds) = semantic_bounds(local_bounds, root_transform) else {
+            continue;
+        };
         if ![bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
             .into_iter()
             .all(f32::is_finite)
@@ -911,7 +960,7 @@ fn resolve_geometry_artboard(
                 .resolve_handle(u32::try_from(pair[0].local_id).ok()?)
         })?;
         if let Some(child) = host
-            .with_downcast::<NestedArtboard, _>(NestedArtboard::artboard_instance_default)
+            .with(|object| object.as_nested_artboard()?.artboard_instance_default())
             .flatten()
         {
             artboard = child;
@@ -1136,9 +1185,7 @@ fn resolve_occurrence_artboard(
                     artboard
                         .base
                         .resolve_handle(u32::try_from(host_local_id).ok()?)?
-                        .with_downcast::<NestedArtboard, _>(
-                            NestedArtboard::artboard_instance_default,
-                        )
+                        .with(|object| object.as_nested_artboard()?.artboard_instance_default())
                         .flatten()
                 })?,
             RuntimeArtboardOccurrenceSegment::ComponentListItem {
@@ -1182,7 +1229,8 @@ fn occurrence_machine(
                 let nested = artboard
                     .base
                     .resolve_handle(u32::try_from(host_local_id).ok()?)?;
-                nested.with_downcast::<NestedArtboard, _>(|nested| {
+                nested.with(|object| {
+                    let nested = object.as_nested_artboard()?;
                     nested.nested_animations().iter().find_map(|animation| {
                         animation
                             .with_downcast::<NestedStateMachine, _>(|machine| {

@@ -213,6 +213,39 @@ fn shape_and_layout_catalog_fixture() -> Vec<u8> {
     bytes
 }
 
+fn shape_catalog_with_null_record_fixture() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 9_656);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    // An unknown type with no properties is a consumed null Core record. It
+    // occupies raw file-global id 1 without allocating a CoreArena slot.
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Node", "parentId", 2);
+        push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 10.0);
+        push_f32(bytes, "ParametricPath", "height", 10.0);
+    });
+    bytes
+}
+
 fn nested_artboard_layout_fixture() -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     push_var_uint(&mut bytes, 7);
@@ -391,6 +424,34 @@ fn transparent_shape_remains_retained_but_not_visibly_catalogued() {
         has_shape(&artboard.retained_geometry_with_bounds()),
         "effective paint visibility must not remove the authored Shape from retained geometry",
     );
+}
+
+#[test]
+fn null_wire_records_still_advance_following_host_source_ids() {
+    let bytes = shape_catalog_with_null_record_fixture();
+    let descriptor = nuxie_binary::read_runtime_file(&bytes).expect("fixture descriptor imports");
+    assert_eq!(descriptor.object_count(), 7);
+    assert!(descriptor.object(1).is_none());
+    assert_eq!(descriptor.artboard(0).map(|artboard| artboard.id), Some(2));
+
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let mut artboard = ArtboardInstance::from_native(file, 0).expect("artboard instance");
+    artboard.advance(0.0).expect("initial advance");
+
+    for (catalogue, geometry) in [
+        ("visible", artboard.visible_geometry_with_bounds()),
+        ("retained", artboard.retained_geometry_with_bounds()),
+    ] {
+        let shape = geometry
+            .iter()
+            .find(|hit| hit.path.last().is_some_and(|segment| segment.local_id == 1))
+            .unwrap_or_else(|| panic!("{catalogue} geometry contains the authored Shape"));
+        assert_eq!(shape.path.len(), 1);
+        assert_eq!(shape.path[0].artboard_global_id, 2);
+        assert_eq!(shape.path[0].local_id, 1);
+    }
 }
 
 #[test]

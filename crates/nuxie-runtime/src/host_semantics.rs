@@ -593,12 +593,16 @@ impl ArtboardInstance {
     pub fn world_bounds(&mut self, local_id: usize) -> Option<Aabb> {
         self.update_components();
         let handle = self.object_handle(local_id)?;
-        let (bounds, world) = handle.with(|object| {
+        let (bounds, world, render_opacity) = handle.with(|object| {
             Some((
                 object.semantic_provider_local_bounds()?,
                 *object.as_world_transform_component()?.world_transform(),
+                object.as_transform_component()?.render_opacity(),
             ))
         })??;
+        if !(render_opacity > 0.0) {
+            return None;
+        }
         semantic_bounds(bounds, world)
     }
 

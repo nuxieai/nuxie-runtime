@@ -23,6 +23,8 @@ use nuxie_runtime::{
 
 const COMPONENT_LIST_HOST_TRANSFORM_FIXTURE: &str =
     include_str!("../../../fixtures/parity/component-list-host-transform.riv.b64");
+const ANIMATED_PILL_ANCESTOR_OPACITY_FIXTURE: &str =
+    include_str!("../../../fixtures/parity/animated-pill-ancestor-opacity.riv.b64");
 const COMPONENT_LIST_HOST_TRANSFORM_FONT: &[u8] =
     include_bytes!("../../../fixtures/fonts/roboto-a.ttf");
 
@@ -451,6 +453,50 @@ fn paintless_layout_is_not_a_shape_or_text_catalog_entry() {
             "authored LayoutComponent must not be emitted by the Shape/Text catalog: {geometry:#?}",
         );
     }
+}
+
+#[test]
+fn ancestor_zero_opacity_suppresses_text_host_observations() {
+    let bytes = decode_base64_fixture(ANIMATED_PILL_ANCESTOR_OPACITY_FIXTURE);
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let mut artboard = ArtboardInstance::from_native(file, 0).expect("Screen artboard instance");
+    let mut animation = artboard
+        .linear_animation_instance_named("Arrive Badge")
+        .expect("authored arrival animation");
+    assert!(
+        artboard
+            .apply_linear_animation_instance_at(&mut animation, 0.0, 1.0)
+            .expect("animation applies at t=0")
+    );
+
+    let label = artboard
+        .components()
+        .into_iter()
+        .find(|component| component.name == "badge-label")
+        .expect("fixture has badge label Text");
+    assert_eq!(
+        label
+            .handle
+            .with(|object| object.as_text().map(|text| text.base.render_opacity()))
+            .flatten(),
+        Some(0.0),
+        "the translated occurrence retains the exact effective ancestor opacity",
+    );
+    assert_eq!(
+        artboard.world_bounds(label.local_id),
+        None,
+        "a Text occurrence suppressed by an ancestor must not expose visible world bounds",
+    );
+    assert!(
+        artboard.semantic_text_with_bounds().iter().all(|text| {
+            text.path
+                .last()
+                .is_none_or(|segment| segment.local_id != label.local_id)
+        }),
+        "a Text occurrence suppressed by an ancestor must not enter the semantic catalogue",
+    );
 }
 
 #[test]

@@ -13,6 +13,7 @@ use nuxie_runtime::{
     source::generated::{
         core_registry::CoreRegistry, layout_component_base::LayoutComponentBase,
         shapes::paint::solid_color_base::SolidColorBase,
+        text::text_value_run_base::TextValueRunBase,
         world_transform_component_base::WorldTransformComponentBase,
     },
     source::nested_artboard::NestedArtboard,
@@ -604,6 +605,56 @@ fn static_text_queries_use_the_settled_text_occurrence() {
             .text_selection_rects(local_id, 0..first_boundary)
             .is_empty()
     );
+}
+
+#[test]
+fn empty_text_remains_in_the_occurrence_catalogue_but_not_geometry() {
+    let (_factory, mut artboard) = import_host_artboard("hello_world.riv");
+    artboard.advance(0.0).expect("initial advance");
+
+    let original = artboard
+        .semantic_text_with_bounds()
+        .into_iter()
+        .find(|text| !text.value.is_empty() && text.path.len() == 1)
+        .expect("fixture has root semantic Text");
+    let run = artboard
+        .components()
+        .into_iter()
+        .find(|component| component.handle.is_type_of(TextValueRunBase::TYPE_KEY))
+        .expect("fixture has TextValueRun")
+        .handle;
+    assert!(CoreRegistry::set_string_handle(
+        &run,
+        i32::from(TextValueRunBase::TEXT_PROPERTY_KEY),
+        String::new(),
+    ));
+    artboard.advance(0.0).expect("empty Text settles");
+
+    assert!(
+        artboard
+            .retained_geometry_with_bounds()
+            .iter()
+            .all(|hit| hit.path != original.path),
+        "upstream empty-or-NaN geometry rejection remains authoritative",
+    );
+    let empty = artboard
+        .semantic_text_with_bounds()
+        .into_iter()
+        .find(|text| text.path == original.path)
+        .expect("the exact retained Text occurrence remains catalogued");
+    assert_eq!(empty.value, "");
+    assert!(
+        [
+            empty.bounds.min_x,
+            empty.bounds.min_y,
+            empty.bounds.max_x,
+            empty.bounds.max_y,
+        ]
+        .into_iter()
+        .all(f32::is_finite),
+    );
+    assert_eq!(empty.bounds.min_x, empty.bounds.max_x);
+    assert_eq!(empty.bounds.min_y, empty.bounds.max_y);
 }
 
 #[test]

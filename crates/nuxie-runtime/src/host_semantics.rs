@@ -907,87 +907,136 @@ impl ArtboardInstance {
     }
 }
 
-fn text_value(handle: &CoreHandle) -> Option<String> {
-    handle.with(|object| object.as_text().map(Text::settled_text_value))?
-}
-
-fn semantic_text_from_geometry(
+fn collect_semantic_text(
     artboard: &RuntimeArtboardInstanceHandle,
-    hits: Vec<RuntimeGeometryHit>,
-) -> Vec<RuntimeSemanticTextHit> {
-    hits.into_iter()
-        .filter_map(|hit| {
-            let final_segment = *hit.path.last()?;
-            let target_artboard = if final_segment.artboard_global_id
-                == source_artboard_global_id(artboard)?
-                && hit.occurrence.is_empty()
-            {
-                artboard.clone()
-            } else {
-                resolve_geometry_artboard(artboard, &hit.path, &hit.occurrence)?
-            };
-            let value = text_value(&target_artboard.with_artboard(|artboard| {
-                artboard
-                    .base
-                    .resolve_handle(u32::try_from(final_segment.local_id).ok()?)
-            })?)?;
-            Some(RuntimeSemanticTextHit {
-                path: hit.path,
-                occurrence: hit.occurrence,
-                bounds: hit.bounds,
-                value,
-            })
-        })
-        .collect()
-}
-
-fn resolve_geometry_artboard(
-    root: &RuntimeArtboardInstanceHandle,
-    path: &[RuntimeGeometryHitPathSegment],
+    artboard_to_root: NativeMat2D,
+    path_prefix: &[RuntimeGeometryHitPathSegment],
     occurrence: &[RuntimeGeometryHitOccurrence],
-) -> Option<RuntimeArtboardInstanceHandle> {
-    let mut artboard = root.clone();
-    let mut occurrence_index = 0;
-    for pair in path.windows(2) {
-        let host = artboard.with_artboard(|artboard| {
-            artboard
-                .base
-                .resolve_handle(u32::try_from(pair[0].local_id).ok()?)
-        })?;
-        if let Some(child) = host
-            .with(|object| object.as_nested_artboard()?.artboard_instance_default())
-            .flatten()
-        {
-            artboard = child;
+    output: &mut Vec<RuntimeSemanticTextHit>,
+) {
+    let Some(artboard_global_id) = source_artboard_global_id(artboard) else {
+        return;
+    };
+    for drawable in drawable_chain(artboard, GeometryVisibility::Visible) {
+        let Some(handle) = drawable.authored_handle() else {
             continue;
-        }
-        let repeated = occurrence.get(occurrence_index)?;
-        occurrence_index += 1;
-        if repeated.host_local_id != pair[0].local_id {
-            return None;
-        }
-        let (child, item) = host
-            .with_downcast::<ArtboardComponentList, _>(|list| {
+        };
+        let Some(local_id) = local_id_for_handle(artboard, &handle) else {
+            continue;
+        };
+        let mut path = path_prefix.to_vec();
+        path.push(RuntimeGeometryHitPathSegment {
+            artboard_global_id,
+            local_id,
+        });
+
+        if let Some((child, host_transform)) = handle
+            .with(|object| {
+                let nested = object.as_nested_artboard()?;
+                let host = object.as_artboard_host()?;
                 Some((
-                    list.artboard_instance(i32::try_from(repeated.item_index).ok()?)?,
-                    list.list_item(i32::try_from(repeated.item_index).ok()?)?,
+                    nested.artboard_instance_default()?,
+                    host.world_transform_for_artboard(artboard.downgrade()),
                 ))
             })
-            .flatten()?;
-        if retained_occurrence_identity(&item) != repeated.occurrence_identity {
-            return None;
+            .flatten()
+        {
+            collect_semantic_text(
+                &child,
+                artboard_to_root * host_transform,
+                &path,
+                occurrence,
+                output,
+            );
+            continue;
         }
-        artboard = child;
+
+        if handle.is_type_of(ArtboardComponentList::TYPE_KEY) {
+            let indices = handle
+                .with_downcast_mut::<ArtboardComponentList, _>(|list| {
+                    list.ensure_ordered_list_indices();
+                    list.ordered_list_indices().to_vec()
+                })
+                .unwrap_or_default();
+            for item_index in indices {
+                let Some((child, item, child_transform)) = handle
+                    .with_downcast::<ArtboardComponentList, _>(|list| {
+                        Some((
+                            list.artboard_instance(item_index)?,
+                            list.list_item(item_index)?,
+                            list.draw_transform_for_index(item_index)?,
+                        ))
+                    })
+                    .flatten()
+                else {
+                    continue;
+                };
+                let Ok(item_index) = usize::try_from(item_index) else {
+                    continue;
+                };
+                let mut child_occurrence = occurrence.to_vec();
+                child_occurrence.push(RuntimeGeometryHitOccurrence {
+                    artboard_global_id,
+                    host_local_id: local_id,
+                    item_index,
+                    occurrence_identity: retained_occurrence_identity(&item),
+                });
+                collect_semantic_text(
+                    &child,
+                    artboard_to_root * child_transform,
+                    &path,
+                    &child_occurrence,
+                    output,
+                );
+            }
+            continue;
+        }
+
+        let Some((local_bounds, world, value)) = handle
+            .with(|object| {
+                let text = object.as_text()?;
+                let render_opacity = text.base.render_opacity();
+                if !render_opacity.is_finite() || render_opacity <= 0.0 {
+                    return None;
+                }
+                Some((
+                    text.local_bounds(),
+                    *object.as_world_transform_component()?.world_transform(),
+                    text.settled_text_value(),
+                ))
+            })
+            .flatten()
+        else {
+            continue;
+        };
+        let bounds = transform_bounds(local_bounds, artboard_to_root * world);
+        if ![bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
+            .into_iter()
+            .all(f32::is_finite)
+        {
+            continue;
+        }
+        output.push(RuntimeSemanticTextHit {
+            path,
+            occurrence: occurrence.to_vec(),
+            bounds,
+            value,
+        });
     }
-    Some(artboard)
 }
 
 impl ArtboardInstance {
     pub fn semantic_text_with_bounds(&mut self) -> Vec<RuntimeSemanticTextHit> {
         self.update_components();
-        let native = self.native_handle();
-        let geometry = self.visible_geometry_with_bounds();
-        semantic_text_from_geometry(&native, geometry)
+        let mut output = Vec::new();
+        collect_semantic_text(
+            &self.native_handle(),
+            NativeMat2D::identity(),
+            &[],
+            &[],
+            &mut output,
+        );
+        output
     }
 }
 

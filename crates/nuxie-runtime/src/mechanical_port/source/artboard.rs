@@ -2600,7 +2600,11 @@ impl Artboard {
             .iter()
             .find(|nested| {
                 nested
-                    .with_downcast::<NestedArtboard, _>(|nested| nested.name() == name)
+                    .with(|object| {
+                        object
+                            .as_nested_artboard()
+                            .is_some_and(|nested| nested.name() == name)
+                    })
                     .unwrap_or(false)
             })
             .cloned()
@@ -2616,7 +2620,7 @@ impl Artboard {
             Some(nested)
         } else {
             let instance = nested
-                .with_downcast::<NestedArtboard, _>(|nested| nested.artboard_instance_handle(0))
+                .with(|object| object.as_nested_artboard()?.artboard_instance_handle(0))
                 .flatten()?;
             instance.with_artboard(|instance| instance.nested_artboard_at_path(rest))
         }
@@ -4554,7 +4558,7 @@ impl ArtboardInstance {
         }
         let nested = self.base.nested_artboard_at_path(path)?;
         nested
-            .with_downcast::<NestedArtboard, _>(|nested| nested.input(name))
+            .with(|object| object.as_nested_artboard()?.input(name))
             .flatten()
     }
 

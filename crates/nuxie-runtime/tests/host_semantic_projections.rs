@@ -13,6 +13,7 @@ use nuxie_runtime::{
     source::generated::{
         core_registry::CoreRegistry, layout_component_base::LayoutComponentBase,
         shapes::paint::solid_color_base::SolidColorBase,
+        world_transform_component_base::WorldTransformComponentBase,
     },
     source::nested_artboard::NestedArtboard,
     source::viewmodel::viewmodel_instance::ViewModelInstance,
@@ -89,6 +90,168 @@ fn decode_base64_fixture(encoded: &str) -> Vec<u8> {
     output
 }
 
+fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        bytes.push(byte);
+        if value == 0 {
+            break;
+        }
+    }
+}
+
+fn schema_property_key(type_name: &str, property_name: &str) -> u16 {
+    let definition = nuxie_schema::definition_by_name(type_name)
+        .unwrap_or_else(|| panic!("missing schema definition {type_name}"));
+    std::iter::once(definition.name)
+        .chain(definition.ancestors.iter().copied())
+        .filter_map(nuxie_schema::definition_by_name)
+        .flat_map(|owner| owner.properties)
+        .find(|property| property.name == property_name)
+        .unwrap_or_else(|| panic!("missing property {type_name}.{property_name}"))
+        .key
+        .int
+}
+
+fn push_object(bytes: &mut Vec<u8>, type_name: &str, properties: impl FnOnce(&mut Vec<u8>)) {
+    push_var_uint(
+        bytes,
+        u64::from(
+            nuxie_schema::definition_by_name(type_name)
+                .unwrap_or_else(|| panic!("missing schema definition {type_name}"))
+                .type_key
+                .int,
+        ),
+    );
+    properties(bytes);
+    push_var_uint(bytes, 0);
+}
+
+fn push_uint(bytes: &mut Vec<u8>, owner: &str, name: &str, value: u64) {
+    push_var_uint(bytes, u64::from(schema_property_key(owner, name)));
+    push_var_uint(bytes, value);
+}
+
+fn push_f32(bytes: &mut Vec<u8>, owner: &str, name: &str, value: f32) {
+    push_var_uint(bytes, u64::from(schema_property_key(owner, name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_color(bytes: &mut Vec<u8>, owner: &str, name: &str, value: u32) {
+    push_var_uint(bytes, u64::from(schema_property_key(owner, name)));
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_string(bytes: &mut Vec<u8>, owner: &str, name: &str, value: &str) {
+    push_var_uint(bytes, u64::from(schema_property_key(owner, name)));
+    push_var_uint(bytes, value.len() as u64);
+    bytes.extend_from_slice(value.as_bytes());
+}
+
+fn empty_shape_path_fixture() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 9_653);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "PointsPath", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+    });
+    bytes
+}
+
+fn shape_and_layout_catalog_fixture() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 9_655);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Node", "parentId", 2);
+        push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 10.0);
+        push_f32(bytes, "ParametricPath", "height", 10.0);
+    });
+    push_object(&mut bytes, "LayoutComponent", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+        push_f32(bytes, "LayoutComponent", "width", 20.0);
+        push_f32(bytes, "LayoutComponent", "height", 10.0);
+        push_uint(bytes, "LayoutComponent", "styleId", 6);
+    });
+    push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+    bytes
+}
+
+fn nested_artboard_layout_fixture() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, 9_654);
+    push_var_uint(&mut bytes, 0);
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_string(bytes, "Artboard", "name", "Child");
+        push_f32(bytes, "Artboard", "width", 20.0);
+        push_f32(bytes, "Artboard", "height", 10.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 20.0);
+        push_f32(bytes, "ParametricPath", "height", 10.0);
+    });
+    push_object(&mut bytes, "Fill", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+    });
+    push_object(&mut bytes, "SolidColor", |bytes| {
+        push_uint(bytes, "Node", "parentId", 3);
+        push_color(bytes, "SolidColor", "colorValue", 0xff33_66aa);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_string(bytes, "Artboard", "name", "Root");
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "NestedArtboardLayout", |bytes| {
+        push_string(bytes, "NestedArtboardLayout", "name", "NestedLayout");
+        push_uint(bytes, "Node", "parentId", 0);
+        push_uint(bytes, "NestedArtboard", "artboardId", 0);
+        push_f32(bytes, "Node", "x", 40.0);
+        push_f32(bytes, "Node", "y", 8.0);
+        push_f32(bytes, "NestedArtboardLayout", "instanceWidth", 20.0);
+        push_f32(bytes, "NestedArtboardLayout", "instanceHeight", 10.0);
+    });
+    bytes
+}
+
 struct ComponentListHostTransformAssetLoader;
 
 impl FileAssetLoader for ComponentListHostTransformAssetLoader {
@@ -138,7 +301,11 @@ fn scroll_snapshots_are_exact_occurrence_observations() {
 
 #[test]
 fn layout_and_geometry_reads_share_the_settled_native_occurrence() {
-    let (_factory, mut artboard) = import_host_artboard("layout/fixed_participant.riv");
+    let bytes = shape_and_layout_catalog_fixture();
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let mut artboard = ArtboardInstance::from_native(file, 0).expect("artboard instance");
     artboard.advance(0.0).expect("initial advance");
 
     let local_id = (0..artboard.object_count())
@@ -169,6 +336,173 @@ fn layout_and_geometry_reads_share_the_settled_native_occurrence() {
             .hit_test_segments_with_bounds(Vec2D::new(1.0e20, 1.0e20))
             .is_empty()
     );
+}
+
+#[test]
+fn empty_shape_and_path_bounds_follow_upstream_empty_or_nan_rejection() {
+    let bytes = empty_shape_path_fixture();
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None)
+        .expect("empty Shape/PointsPath fixture imports");
+    let mut artboard = ArtboardInstance::from_native(file, 0).expect("default artboard instance");
+    artboard.advance(0.0).expect("initial advance");
+
+    assert_eq!(artboard.object_count(), 3);
+    assert_eq!(artboard.world_bounds(1), None, "empty Shape bounds");
+    assert_eq!(artboard.world_bounds(2), None, "empty Path bounds");
+    let retained = artboard.retained_geometry_with_bounds();
+    assert!(
+        retained.iter().all(|hit| {
+            hit.path
+                .last()
+                .is_none_or(|segment| !matches!(segment.local_id, 1 | 2))
+        }),
+        "empty drawable bounds must not leak the finite [-f32::MAX, +f32::MAX] expansion sentinel: {retained:#?}"
+    );
+}
+
+#[test]
+fn transparent_shape_remains_retained_but_not_visibly_catalogued() {
+    let bytes = shape_and_layout_catalog_fixture();
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let mut artboard = ArtboardInstance::from_native(file, 0).expect("artboard instance");
+    artboard.advance(0.0).expect("initial advance");
+
+    let has_shape = |geometry: &[nuxie_runtime::RuntimeGeometryHit]| {
+        geometry
+            .iter()
+            .any(|hit| hit.path.last().is_some_and(|segment| segment.local_id == 1))
+    };
+    assert!(has_shape(&artboard.visible_geometry_with_bounds()));
+    assert!(artboard.set_color_property(3, SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0x0033_66aa,));
+    assert!(
+        !has_shape(&artboard.visible_geometry_with_bounds()),
+        "an effectively transparent SolidColor must remove its Shape from visible geometry",
+    );
+    assert!(
+        has_shape(&artboard.retained_geometry_with_bounds()),
+        "effective paint visibility must not remove the authored Shape from retained geometry",
+    );
+}
+
+#[test]
+fn zero_opacity_text_remains_retained_but_not_visibly_catalogued() {
+    let (_factory, mut artboard) = import_host_artboard("hello_world.riv");
+    artboard.advance(0.0).expect("initial advance");
+    let text_type = nuxie_schema::definition_by_name("Text")
+        .expect("Text schema definition")
+        .type_key
+        .int;
+    let text_local = artboard
+        .components()
+        .into_iter()
+        .find(|component| component.handle.core_type() == Some(text_type))
+        .map(|component| component.local_id)
+        .expect("fixture has Text");
+    let has_text = |geometry: &[nuxie_runtime::RuntimeGeometryHit]| {
+        geometry.iter().any(|hit| {
+            hit.path
+                .last()
+                .is_some_and(|segment| segment.local_id == text_local)
+        })
+    };
+    assert!(has_text(&artboard.visible_geometry_with_bounds()));
+
+    assert!(artboard.set_double_property(
+        text_local,
+        WorldTransformComponentBase::OPACITY_PROPERTY_KEY,
+        0.0,
+    ));
+    assert!(
+        !has_text(&artboard.visible_geometry_with_bounds()),
+        "settled zero render opacity must remove Text from visible geometry",
+    );
+    assert!(
+        has_text(&artboard.retained_geometry_with_bounds()),
+        "settled zero render opacity must not remove Text from retained geometry",
+    );
+}
+
+#[test]
+fn paintless_layout_is_not_a_shape_or_text_catalog_entry() {
+    let bytes = shape_and_layout_catalog_fixture();
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let mut artboard = ArtboardInstance::from_native(file, 0).expect("artboard instance");
+    artboard.advance(0.0).expect("initial advance");
+    assert!(
+        artboard.world_bounds(5).is_some(),
+        "fixture LayoutComponent has observable settled bounds",
+    );
+
+    for geometry in [
+        artboard.visible_geometry_with_bounds(),
+        artboard.retained_geometry_with_bounds(),
+    ] {
+        assert!(
+            geometry
+                .iter()
+                .all(|hit| { hit.path.last().is_none_or(|segment| segment.local_id != 5) }),
+            "authored LayoutComponent must not be emitted by the Shape/Text catalog: {geometry:#?}",
+        );
+    }
+}
+
+#[test]
+fn nested_layout_geometry_preserves_the_child_occurrence_path() {
+    let bytes = nested_artboard_layout_fixture();
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let mut artboard = ArtboardInstance::from_native(file, 1).expect("root artboard instance");
+    artboard.advance(0.0).expect("initial layout settles");
+    assert_eq!(artboard.object_count(), 2);
+    assert_eq!(
+        artboard.native_handle().with_artboard(|artboard| {
+            artboard
+                .base
+                .resolve_handle(1)
+                .and_then(|handle| handle.core_type())
+        }),
+        Some(452)
+    );
+    assert_eq!(
+        artboard.native_handle().with_artboard(|artboard| {
+            artboard
+                .nested_artboard_at_path("NestedLayout")
+                .and_then(|handle| handle.core_type())
+        }),
+        Some(452),
+        "C++ NestedArtboard* path lookup is polymorphic"
+    );
+    let occurrences = artboard.nested_artboard_occurrences_named("Child");
+    assert_eq!(occurrences.len(), 1);
+    assert!(occurrences[0].is_current());
+
+    for geometry in [
+        artboard.visible_geometry_with_bounds(),
+        artboard.retained_geometry_with_bounds(),
+    ] {
+        let child = geometry
+            .iter()
+            .find(|hit| {
+                hit.path.len() == 2
+                    && hit.occurrence.is_empty()
+                    && (hit.bounds.min_x - 30.0).abs() < 0.01
+                    && (hit.bounds.min_y - 3.0).abs() < 0.01
+                    && (hit.bounds.max_x - 50.0).abs() < 0.01
+                    && (hit.bounds.max_y - 13.0).abs() < 0.01
+            })
+            .unwrap_or_else(|| panic!("nested layout child geometry is absent: {geometry:#?}"));
+        assert_ne!(
+            child.path[0].artboard_global_id,
+            child.path[1].artboard_global_id
+        );
+    }
 }
 
 #[test]

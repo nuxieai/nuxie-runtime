@@ -1,7 +1,7 @@
 use super::*;
 use crate::assets::file_asset_contents::ImportedFileAssetRecord;
 
-const SCRIPT_VERIFICATION_PUBLIC_KEY: [u8; libhydrogen::sign::PUBLICKEYBYTES] = [
+const SCRIPT_VERIFICATION_PUBLIC_KEY: [u8; nuxie_script_signature::PUBLIC_KEY_BYTES] = [
     159, 202, 90, 135, 12, 153, 157, 21, 112, 103, 62, 130, 59, 196, 187, 236, 103, 210, 239, 227,
     175, 97, 222, 254, 70, 53, 212, 18, 191, 143, 101, 108,
 ];
@@ -84,15 +84,17 @@ impl<'a> TextAssetImporter<'a> {
             combined_bytecode.extend_from_slice(in_band.bytes);
         }
 
-        let Ok(signature): Result<[u8; libhydrogen::sign::BYTES], _> = signature.try_into() else {
+        let Ok(signature): Result<[u8; nuxie_script_signature::SIGNATURE_BYTES], _> =
+            signature.try_into()
+        else {
             return;
         };
-        let signature = libhydrogen::sign::Signature::from(signature);
-        let public_key = libhydrogen::sign::PublicKey::from(SCRIPT_VERIFICATION_PUBLIC_KEY);
-        let context = libhydrogen::sign::Context::from("RiveCode");
-        let is_verified =
-            libhydrogen::sign::verify(&signature, &combined_bytecode, &context, &public_key)
-                .is_ok();
+        let is_verified = nuxie_script_signature::verify(
+            &signature,
+            &combined_bytecode,
+            b"RiveCode",
+            &SCRIPT_VERIFICATION_PUBLIC_KEY,
+        );
 
         for in_band in verification_set.iter() {
             if is_verified {
@@ -152,7 +154,7 @@ fn signed_content(bytes: &[u8]) -> Option<&[u8]> {
     let content_offset = if flags & 0x80 == 0 {
         1
     } else {
-        1 + libhydrogen::sign::BYTES
+        1 + nuxie_script_signature::SIGNATURE_BYTES
     };
     bytes.get(content_offset..)
 }

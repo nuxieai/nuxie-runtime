@@ -483,16 +483,18 @@ impl ScriptAsset {
                 self.bytecode = bytecode.to_vec();
                 return true;
             }
-            let Ok(signature): Result<[u8; libhydrogen::sign::BYTES], _> =
+            let Ok(signature): Result<[u8; nuxie_script_signature::SIGNATURE_BYTES], _> =
                 header.signature().try_into()
             else {
                 self.base.base.set_verified(false);
                 return false;
             };
-            let signature = libhydrogen::sign::Signature::from(signature);
-            let public_key = libhydrogen::sign::PublicKey::from(SCRIPT_VERIFICATION_PUBLIC_KEY);
-            let context = libhydrogen::sign::Context::from("RiveCode");
-            if libhydrogen::sign::verify(&signature, bytecode, &context, &public_key).is_err() {
+            if !nuxie_script_signature::verify(
+                &signature,
+                bytecode,
+                b"RiveCode",
+                &SCRIPT_VERIFICATION_PUBLIC_KEY,
+            ) {
                 self.base.base.set_verified(false);
                 return false;
             }

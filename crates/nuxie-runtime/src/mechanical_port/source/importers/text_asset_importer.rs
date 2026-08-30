@@ -112,15 +112,17 @@ impl ImportStackObject for TextAssetImporter {
             combined_bytecode.extend_from_slice(&in_band.bytes);
         }
 
-        let Ok(signature): Result<[u8; libhydrogen::sign::BYTES], _> = signature.try_into() else {
+        let Ok(signature): Result<[u8; nuxie_script_signature::SIGNATURE_BYTES], _> =
+            signature.try_into()
+        else {
             return StatusCode::Ok;
         };
-        let signature = libhydrogen::sign::Signature::from(signature);
-        let public_key = libhydrogen::sign::PublicKey::from(SCRIPT_VERIFICATION_PUBLIC_KEY);
-        let context = libhydrogen::sign::Context::from("RiveCode");
-        let verified =
-            libhydrogen::sign::verify(&signature, &combined_bytecode, &context, &public_key)
-                .is_ok();
+        let verified = nuxie_script_signature::verify(
+            &signature,
+            &combined_bytecode,
+            b"RiveCode",
+            &SCRIPT_VERIFICATION_PUBLIC_KEY,
+        );
         for in_band in verification_set.iter() {
             in_band
                 .text_asset

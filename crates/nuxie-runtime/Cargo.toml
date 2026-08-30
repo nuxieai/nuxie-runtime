@@ -20,7 +20,7 @@ default = ["js-host-seed"]
 [dependencies]
 anyhow = "1"
 harfrust = "0.12"
-libhydrogen = "=0.4.6"
+nuxie-script-signature = { path = "../nuxie-script-signature" }
 nuxie-audio = { path = "../nuxie-audio" }
 nuxie-binary = { path = "../nuxie-binary" }
 nuxie-image-codec = { path = "../nuxie-image-codec" }

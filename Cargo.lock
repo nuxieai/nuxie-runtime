@@ -1073,8 +1073,8 @@ name = "nuxie-binary"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "libhydrogen",
  "nuxie-schema",
+ "nuxie-script-signature",
  "serde",
  "serde_json",
  "sha2",
@@ -1196,12 +1196,12 @@ dependencies = [
  "harfrust",
  "js-sys",
  "libc",
- "libhydrogen",
  "nuxie-audio",
  "nuxie-binary",
  "nuxie-image-codec",
  "nuxie-render-api",
  "nuxie-schema",
+ "nuxie-script-signature",
  "nuxie-scripting",
  "nuxie-sriv",
  "png",
@@ -1222,6 +1222,17 @@ name = "nuxie-schema"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+]
+
+[[package]]
+name = "nuxie-script-signature"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "libhydrogen",
+ "libhydrogen-sys",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

@@ -17,6 +17,7 @@ members = [
     "crates/nuxie-schema",
     "crates/nuxie-sriv",
     "crates/nuxie-scripting",
+    "crates/nuxie-script-signature",
     "tools/golden-compare",
     "tools/luaur-rt-test-harness",
     "tools/perf-compare",

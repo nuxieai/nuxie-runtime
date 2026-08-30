@@ -14,7 +14,7 @@ test-support = []
 
 [dependencies]
 anyhow = "1"
-libhydrogen = "=0.4.6"
+nuxie-script-signature = { path = "../nuxie-script-signature" }
 nuxie-schema = { path = "../nuxie-schema" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", optional = true }

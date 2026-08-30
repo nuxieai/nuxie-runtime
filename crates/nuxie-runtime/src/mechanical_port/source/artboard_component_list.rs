@@ -1325,7 +1325,10 @@ impl ArtboardComponentList {
         transform * Mat2D::from_translate(position.x, position.y)
     }
 
-    pub(crate) fn draw_transform_for_index(&self, index: i32) -> Option<Mat2D> {
+    /// Read the exact retained draw transform for one mounted list occurrence,
+    /// including scroll. Unlike `world_transform_for_artboard`, this matches
+    /// the transform used by rendering and read-only editor geometry queries.
+    pub fn draw_transform_for_index(&self, index: i32) -> Option<Mat2D> {
         let item = self.list_item(index)?;
         let artboard_transform = self.artboard_transforms.get(&item).copied()?;
         // ArtboardComponentList::draw composes this host transform with the

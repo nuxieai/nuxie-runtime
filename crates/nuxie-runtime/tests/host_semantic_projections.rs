@@ -25,6 +25,8 @@ const COMPONENT_LIST_HOST_TRANSFORM_FIXTURE: &str =
     include_str!("../../../fixtures/parity/component-list-host-transform.riv.b64");
 const ANIMATED_PILL_ANCESTOR_OPACITY_FIXTURE: &str =
     include_str!("../../../fixtures/parity/animated-pill-ancestor-opacity.riv.b64");
+const PROJECTION_CORPUS_AUTHORED_RUNTIME_FIXTURE: &str =
+    include_str!("../../../fixtures/parity/projection-corpus-authored-runtime.riv.b64");
 const COMPONENT_LIST_HOST_TRANSFORM_FONT: &[u8] =
     include_bytes!("../../../fixtures/fonts/roboto-a.ttf");
 
@@ -605,6 +607,83 @@ fn component_list_geometry_uses_the_same_transform_as_exact_draw() {
 }
 
 #[test]
+fn authored_source_global_ids_survive_runtime_synthetic_core_owners() {
+    let bytes = decode_base64_fixture(PROJECTION_CORPUS_AUTHORED_RUNTIME_FIXTURE);
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let artboard_index = file
+        .with_file(|file| {
+            (0..file.artboard_count())
+                .find(|&index| file.artboard_name_at(index) == "Projection corpus")
+        })
+        .expect("publisher-named artboard exists");
+    let mut artboard =
+        ArtboardInstance::from_native(file, artboard_index).expect("artboard instance");
+    let native_file = artboard.native_file();
+    let source = native_file
+        .with_file(|file| file.artboard_at_source(artboard_index))
+        .expect("source artboard");
+    let view_model = native_file
+        .with_file_mut(|file| file.create_default_view_model_instance_for_artboard(source))
+        .and_then(|native| RuntimeOwnedViewModelHandle::from_native(native_file.clone(), native))
+        .expect("default view model");
+    artboard.bind_owned_view_model_handle(view_model);
+    artboard.advance(0.0).expect("first advance");
+    let visible = artboard.visible_geometry_with_bounds();
+    let retained = artboard.retained_geometry_with_bounds();
+    let semantic = artboard.semantic_text_with_bounds();
+
+    let has_geometry_path = |hits: &[nuxie_runtime::RuntimeGeometryHit],
+                             expected: &[(u32, usize)]| {
+        hits.iter().any(|hit| {
+            hit.path
+                .iter()
+                .map(|segment| (segment.artboard_global_id, segment.local_id))
+                .eq(expected.iter().copied())
+        })
+    };
+    let card_shape = &[(103, 16), (277, 2)];
+    let list_shape = &[(103, 15), (208, 48)];
+    let list_text = &[(103, 15), (208, 9)];
+    for (catalogue, hits) in [("visible", &visible), ("retained", &retained)] {
+        assert!(
+            has_geometry_path(hits, card_shape),
+            "{catalogue} geometry must retain the authored nested-card source id"
+        );
+        assert!(
+            has_geometry_path(hits, list_shape),
+            "{catalogue} geometry must retain the authored list-item Shape source id"
+        );
+        assert!(
+            has_geometry_path(hits, list_text),
+            "{catalogue} geometry must retain the authored list-item Text source id"
+        );
+        assert!(
+            hits.iter().all(|hit| hit
+                .path
+                .iter()
+                .all(|segment| segment.artboard_global_id != 278)),
+            "{catalogue} geometry must not expose the shifted arena slot as source identity"
+        );
+    }
+
+    assert!(semantic.iter().any(|hit| {
+        hit.value == "Pro"
+            && hit
+                .path
+                .iter()
+                .map(|segment| (segment.artboard_global_id, segment.local_id))
+                .eq(list_text.iter().copied())
+    }));
+    assert!(semantic.iter().all(|hit| {
+        hit.path
+            .iter()
+            .all(|segment| segment.artboard_global_id != 278)
+    }));
+}
+
+#[test]
 fn root_dimension_setters_release_the_occurrence_borrow_before_layout_callbacks() {
     let (_factory, mut artboard) = import_host_artboard("layout/fixed_participant.riv");
     let (original_width, original_height) = artboard.artboard_dimensions();
@@ -705,18 +784,29 @@ fn empty_text_remains_in_the_occurrence_catalogue_but_not_geometry() {
 
 #[test]
 fn image_dimensions_mutate_the_file_owned_image_asset() {
-    let (_factory, mut artboard) = import_host_artboard("hosted_image_file.riv");
+    let bytes = std::fs::read(fixture_path("hosted_image_file.riv")).expect("pinned fixture bytes");
+    let asset_global_id = nuxie_binary::read_runtime_file(&bytes)
+        .expect("fixture descriptor imports")
+        .file_assets()
+        .into_iter()
+        .find(|asset| asset.type_name == "ImageAsset")
+        .map(|asset| asset.id)
+        .expect("fixture has authored ImageAsset");
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained_factory =
+        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let native_file =
+        File::import(&bytes, retained_factory, None, None, None).expect("fixture imports");
+    let mut artboard =
+        ArtboardInstance::from_native(native_file, 0).expect("default artboard instance");
     let file = artboard.native_file();
-    let (asset_global_id, previous) = file.with_file(|file| {
+    let previous = file.with_file(|file| {
         file.assets()
             .iter()
             .find_map(|asset| {
                 asset.with_downcast::<ImageAsset, _>(|image| {
-                    Some((
-                        u32::try_from(asset.identity_key().1).ok()?,
-                        (image.base.width(), image.base.height()),
-                    ))
-                })?
+                    (image.base.width(), image.base.height())
+                })
             })
             .expect("fixture has ImageAsset")
     });
@@ -730,14 +820,9 @@ fn image_dimensions_mutate_the_file_owned_image_asset() {
         .register_image_dimensions(asset_global_id, dimensions.0, dimensions.1)
         .expect("first canonical registration succeeds");
     let retained = file.with_file(|file| {
-        file.assets()
-            .iter()
-            .find(|asset| u32::try_from(asset.identity_key().1) == Ok(asset_global_id))
-            .and_then(|asset| {
-                asset.with_downcast::<ImageAsset, _>(|image| {
-                    (image.base.width(), image.base.height())
-                })
-            })
+        file.assets().iter().find_map(|asset| {
+            asset.with_downcast::<ImageAsset, _>(|image| (image.base.width(), image.base.height()))
+        })
     });
     assert_eq!(retained, Some((dimensions.0 as f32, dimensions.1 as f32)));
     assert!(

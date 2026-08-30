@@ -121,6 +121,7 @@ pub trait CoreObject: CoreRegistryObject + Any {
 struct CoreArenaSlot {
     generation: Cell<u64>,
     occupied: Cell<bool>,
+    source_global_id: Cell<Option<u32>>,
     core_type: Cell<CoreTypeKey>,
     type_predicate: Cell<Option<fn(CoreTypeKey) -> bool>>,
     component_graph_order: Cell<Option<u32>>,
@@ -139,6 +140,7 @@ impl CoreArenaSlot {
         Self {
             generation: Cell::new(0),
             occupied: Cell::new(false),
+            source_global_id: Cell::new(None),
             core_type: Cell::new(0),
             type_predicate: Cell::new(None),
             component_graph_order: Cell::new(None),
@@ -249,6 +251,7 @@ impl CoreArena {
             index,
             generation,
         };
+        slot.source_global_id.set(None);
         slot.core_type.set(value.core_type());
         slot.type_predicate.set(Some(value.type_predicate()));
         slot.component_graph_order.set(
@@ -285,6 +288,7 @@ impl CoreArena {
         slot.data_bind_container.borrow_mut().take();
         slot.artboard_dirty.borrow_mut().take();
         slot.component_graph_order.set(None);
+        slot.source_global_id.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
         arena.borrow_mut().free.push(handle.index);
@@ -307,6 +311,7 @@ impl CoreArena {
         slot.data_bind_container.borrow_mut().take();
         slot.artboard_dirty.borrow_mut().take();
         slot.component_graph_order.set(None);
+        slot.source_global_id.set(None);
         slot.occupied.set(false);
         slot.generation.set(slot.generation.get().wrapping_add(1));
         arena.borrow_mut().free.push(handle.index);
@@ -345,6 +350,16 @@ pub struct CoreHandle {
 impl CoreHandle {
     pub fn identity_key(&self) -> (usize, usize, u64) {
         (self.arena.as_ptr() as usize, self.index, self.generation)
+    }
+    pub(crate) fn source_global_id(&self) -> Option<u32> {
+        self.slot()?.source_global_id.get()
+    }
+    pub(crate) fn set_source_global_id(&self, value: u32) -> bool {
+        let Some(slot) = self.slot() else {
+            return false;
+        };
+        slot.source_global_id.set(Some(value));
+        true
     }
     pub fn component_graph_order(&self) -> Option<u32> {
         self.slot()?.component_graph_order.get()
@@ -661,5 +676,55 @@ impl Drop for Core {
                 }
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CoreArena;
+    use crate::mechanical_port::source::{node::Node, shapes::shape::Shape};
+
+    #[test]
+    fn reused_arena_slots_do_not_inherit_source_global_ids() {
+        let arena = CoreArena::default();
+        let authored = arena.insert(Shape::default());
+        assert!(authored.set_source_global_id(42));
+        assert_eq!(authored.source_global_id(), Some(42));
+        let authored_identity = authored.identity_key();
+
+        let removed = arena.remove(&authored).expect("authored owner is live");
+        assert_eq!(authored.source_global_id(), None);
+        drop(removed);
+
+        let synthetic = arena.insert(Node::default());
+        let synthetic_identity = synthetic.identity_key();
+        assert_eq!(synthetic_identity.0, authored_identity.0, "same arena");
+        assert_eq!(synthetic_identity.1, authored_identity.1, "slot is reused");
+        assert_ne!(
+            synthetic_identity.2, authored_identity.2,
+            "generation changes on reuse"
+        );
+        assert_eq!(
+            synthetic.source_global_id(),
+            None,
+            "a runtime owner must not inherit authored source identity"
+        );
+    }
+
+    #[test]
+    fn cloned_runtime_occurrences_do_not_copy_source_global_ids() {
+        let arena = CoreArena::default();
+        let authored = arena.insert(Shape::default());
+        assert!(authored.set_source_global_id(42));
+
+        let occurrence = authored
+            .clone_occurrence()
+            .expect("Shape has a concrete runtime clone");
+        assert_eq!(authored.source_global_id(), Some(42));
+        assert_eq!(
+            occurrence.source_global_id(),
+            None,
+            "runtime identity is distinct from authored source identity"
+        );
     }
 }

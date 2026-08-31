@@ -7,17 +7,16 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `77804e86f121f293fe31f5c51773390e45ba0218`
+- LAST_SYNCED_SHA: `d25e6a4b6c1b8382b588f08371231373780fbcd5`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest applied change: TextInput refreshes its style font before font-size
-  assignment and raw-text update, and skips this branch when its style is missing,
-  `77804e86f121f293fe31f5c51773390e45ba0218`.
-  Its Artboard metadata changes are all `runtime:false`; existing codegen
-  correctly excludes them and reproduces the checked-in schema unchanged.
-  Work: [UNIV-1676](https://universe.basis.dev/issue/UNIV-1676).
-  Previous path-effect-aware clipping landed in PR557;
-  work: [UNIV-1673](https://universe.basis.dev/issue/UNIV-1673).
+  Latest applied change: IK rebuilds each FK bone's local transform from its
+  current authored values, recomputes its world transform, then decomposes the
+  local transform before solving, avoiding reuse of a stale constrained pose.
+  Upstream: `d25e6a4b6c1b8382b588f08371231373780fbcd5`.
+  Its six-draw, non-full-strength regression and exact fixtures are translated
+  and enrolled in the existing Silver corpus with authored view-model instance0.
+  Work: [UNIV-1672](https://universe.basis.dev/issue/UNIV-1672).
 - Generated shader provenance remains
   `2b2203f45a67f813cb662272962192ecfdfd923e`: renderer shader inputs are unchanged.
 - Intervening `8efe18ec7b52a02139844ffe71438c00de13037e` needs no Rust

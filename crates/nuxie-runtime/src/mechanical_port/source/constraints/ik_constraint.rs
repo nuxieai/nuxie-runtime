@@ -261,14 +261,21 @@ impl IKConstraint {
             return;
         }
         for link in &mut self.fk_chain {
-            let (parent_world_inverse, transform_components) =
-                Self::with_bone_mut(&link.bone, |bone| {
-                    let parent_world_inverse = get_parent_world(bone).invert_or_identity();
-                    let world_transform = *bone.world_transform();
-                    let bone_transform = bone.mutable_transform();
-                    *bone_transform = parent_world_inverse * world_transform;
-                    (parent_world_inverse, bone_transform.decompose())
-                });
+            let (parent_world_inverse, transform_components) = link
+                .bone
+                .with_mut(|owner| {
+                    let parent_world =
+                        get_parent_world(owner.as_bone().expect("IK chain remains Bone-derived"));
+                    let parent_world_inverse = parent_world.invert_or_identity();
+                    // Preserve virtual x/y dispatch, including RootBone's
+                    // authored translation, when rebuilding the FK transform.
+                    let translation = owner.transform_component_translation();
+                    let bone = owner.as_bone_mut().expect("IK chain remains Bone-derived");
+                    bone.update_transform_state(translation.x, translation.y);
+                    *bone.mutable_world_transform() = parent_world * *bone.transform();
+                    (parent_world_inverse, bone.transform().decompose())
+                })
+                .expect("IKConstraint chain retains live Bones");
             link.parent_world_inverse = parent_world_inverse;
             link.transform_components = transform_components;
         }

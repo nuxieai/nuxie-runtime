@@ -332,9 +332,7 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
             pass.m_vkColorLayerCount[index],
         );
         if let Some(target) = pass.m_vkColorRenderTargets[index].as_mut() {
-            target
-                .targetMut()
-                .updateLastAccess(colorAttachmentWriteAccess);
+            target.updateLastAccess(colorAttachmentWriteAccess);
         }
         if let Some(texture) = pass.m_vkColorTextures[index]
             .as_ref()
@@ -362,9 +360,7 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
         transitionColorImage(pass, image, baseMip, baseLayer, layerCount);
         let resolve = &mut pass.m_vkResolveTargets[index];
         if let Some(target) = resolve.renderTarget.as_mut() {
-            target
-                .targetMut()
-                .updateLastAccess(colorAttachmentWriteAccess);
+            target.updateLastAccess(colorAttachmentWriteAccess);
         }
         if let Some(texture) = resolve
             .texture

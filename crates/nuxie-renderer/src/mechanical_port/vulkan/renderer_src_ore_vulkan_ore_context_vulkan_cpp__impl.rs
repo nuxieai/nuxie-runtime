@@ -16,9 +16,7 @@ use super::ore_shader_module_vulkan_decl::ShaderModuleVulkan;
 use super::ore_texture_vulkan_decl::TextureViewVulkan;
 use super::ore_texture_vulkan_decl::TextureVulkan;
 use super::ore_vulkan_dsl::{createDSLFromLayoutDesc, kVkMaxBindingsPerGroup};
-use super::render_target_vulkan_decl::{
-    RenderTargetVulkanApi, RenderTargetVulkanImpl, RetainedRenderTargetVulkan,
-};
+use super::render_target_vulkan_decl::RetainedRenderTargetVulkan;
 use super::vkutil_decl::Texture2D;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 use ash::vk;
@@ -647,7 +645,7 @@ pub(crate) fn makeBuffer(
     if let Some(data) = desc.data_prefix().ok()? {
         unsafe { std::ptr::copy_nonoverlapping(data.as_ptr(), mapped, desc.size as usize) };
     }
-    Some(ResourceHandle::new_buffer_in_domain(Some(manager), domain, buffer).erase())
+    Some(ResourceHandle::new_buffer_with_installed_manager_in_domain(domain, buffer).erase())
 }
 
 fn isDepthStencilFormatLocal(format: TextureFormat) -> bool {
@@ -726,7 +724,7 @@ pub(crate) fn makeTexture(
         texture.m_vmaAllocation = Some(Box::new(allocation));
     }
     texture.m_vkLayout.set(vk::ImageLayout::UNDEFINED);
-    Some(ResourceHandle::new_texture_in_domain(Some(manager), domain, texture).erase())
+    Some(ResourceHandle::new_texture_with_installed_manager_in_domain(domain, texture).erase())
 }
 
 pub(crate) fn makeTextureView(
@@ -779,7 +777,7 @@ pub(crate) fn makeTextureView(
     view.m_vkImageView = unsafe { context.m_vk.m_ashDevice.create_image_view(&view_info, None) }
         .unwrap_or(vk::ImageView::null());
     view.m_vkDestroyImageView = Some(context.m_vk.m_ashDevice.fp_v1_0().destroy_image_view);
-    Some(ResourceHandle::new_in_domain(Some(manager), domain, view).erase())
+    Some(ResourceHandle::new_with_installed_manager_in_domain(domain, view).erase())
 }
 
 fn samplerCompareToVk(compare: CompareFunction) -> vk::CompareOp {
@@ -1106,7 +1104,7 @@ pub(crate) fn makeBindGroup(
     if bg.resolveDescriptorSet() == vk::DescriptorSet::null() {
         return None;
     }
-    Some(ResourceHandle::new_in_domain(Some(manager), domain, bg).erase())
+    Some(ResourceHandle::new_with_installed_manager_in_domain(domain, bg).erase())
 }
 
 pub(crate) fn beginRenderPass(
@@ -1356,26 +1354,27 @@ pub(crate) unsafe fn wrapCanvasTexture(
     canvas: *mut core::ffi::c_void,
 ) -> Option<AnyResourceHandle> {
     let canvas = unsafe { canvas.cast::<RenderCanvas>().as_mut() }?;
-    let target = unsafe {
-        canvas
-            .renderTarget()
-            .cast::<RenderTargetVulkanImpl>()
-            .as_mut()
-    }?;
-    let image = target.targetImage();
-    let imageView = target.targetImageView();
+    // Pinned C++ casts to the `RenderTargetVulkan` base and relies on virtual
+    // dispatch. Recover the actual Rust complete object so a texture-backed
+    // RenderCanvas retains those same derived image/view overrides.
+    let target = NonNull::new(canvas.renderTarget())?;
+    let binding = unsafe {
+        super::render_context_vulkan_impl::liveRenderTargetVulkanTextureBinding(target)
+    };
+    let image = binding.image;
+    let imageView = binding.imageView;
     if image == vk::Image::null() || imageView == vk::ImageView::null() {
         return None;
     }
-    let format = match target.base.framebufferFormat() {
+    let format = match binding.framebufferFormat {
         vk::Format::B8G8R8A8_UNORM => TextureFormat::bgra8unorm,
         vk::Format::R16G16B16A16_SFLOAT => TextureFormat::rgba16float,
         vk::Format::A2B10G10R10_UNORM_PACK32 => TextureFormat::rgb10a2unorm,
         _ => TextureFormat::rgba8unorm,
     };
     let desc = TextureDesc {
-        width: canvas.width(),
-        height: canvas.height(),
+        width: binding.width,
+        height: binding.height,
         format,
         r#type: TextureType::texture2D,
         renderTarget: true,
@@ -1387,9 +1386,11 @@ pub(crate) unsafe fn wrapCanvasTexture(
     let mut texture = TextureVulkan::new(manager.clone(), &desc, context);
     texture.m_vkImage = image;
     texture.m_vkLayout.set(vk::ImageLayout::UNDEFINED);
-    let texture =
-        ResourceHandle::new_texture_in_domain(Some(manager.clone()), domain.clone(), texture)
-            .erase();
+    let texture = ResourceHandle::new_texture_with_installed_manager_in_domain(
+        domain.clone(),
+        texture,
+    )
+    .erase();
     let viewDesc = TextureViewDesc {
         texture: Some(&texture),
         dimension: TextureViewDimension::texture2D,
@@ -1401,9 +1402,8 @@ pub(crate) unsafe fn wrapCanvasTexture(
     };
     let mut view = TextureViewVulkan::new(manager.clone(), texture.clone(), &viewDesc);
     view.m_vkImageView = imageView;
-    let targetApi: &mut dyn RenderTargetVulkanApi = target;
-    view.m_vkRenderTarget = Some(unsafe { RetainedRenderTargetVulkan::fromLiveTarget(targetApi) });
-    Some(ResourceHandle::new_in_domain(Some(manager), domain, view).erase())
+    view.m_vkRenderTarget = Some(unsafe { RetainedRenderTargetVulkan::fromLiveTarget(target) });
+    Some(ResourceHandle::new_with_installed_manager_in_domain(domain, view).erase())
 }
 
 pub(crate) unsafe fn wrapRiveTexture(
@@ -1440,9 +1440,11 @@ pub(crate) unsafe fn wrapRiveTexture(
     wrapped
         .m_vkLayout
         .set(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-    let wrapped =
-        ResourceHandle::new_texture_in_domain(Some(manager.clone()), domain.clone(), wrapped)
-            .erase();
+    let wrapped = ResourceHandle::new_texture_with_installed_manager_in_domain(
+        domain.clone(),
+        wrapped,
+    )
+    .erase();
     let viewDesc = TextureViewDesc {
         texture: Some(&wrapped),
         dimension: TextureViewDimension::texture2D,
@@ -1454,7 +1456,7 @@ pub(crate) unsafe fn wrapRiveTexture(
     };
     let mut view = TextureViewVulkan::new(manager.clone(), wrapped.clone(), &viewDesc);
     view.m_vkImageView = imageView;
-    Some(ResourceHandle::new_in_domain(Some(manager), domain, view).erase())
+    Some(ResourceHandle::new_with_installed_manager_in_domain(domain, view).erase())
 }
 
 impl ContextApi for ContextVulkan {

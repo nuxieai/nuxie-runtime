@@ -136,6 +136,10 @@ unsafe impl GpuResourcePayload for ShaderModule {
     fn gpu_resource_mut(&mut self) -> &mut GPUResource {
         &mut self.base
     }
+
+    fn shader_module_base_mut(&mut self) -> Option<&mut ShaderModule> {
+        Some(self)
+    }
 }
 
 // The following records are declared inside ShaderModule in the C++ source.

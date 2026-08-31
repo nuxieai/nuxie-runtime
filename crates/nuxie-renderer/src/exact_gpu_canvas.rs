@@ -12,6 +12,7 @@ use std::sync::{Arc, Weak};
 
 use nuxie_ore_metal::context::{ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
+use nuxie_ore_metal::shader_module::TextureSamplerPair;
 use nuxie_ore_metal::types::{
     kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
     BlendFactor, BlendOp, BlendState, BufferDesc, BufferUsage, ClearColor, ColorAttachment,
@@ -29,8 +30,9 @@ use nuxie_render_api::{
     GpuCanvasError, GpuCanvasPipelinePlan, GpuCanvasPipelineShaders, GpuCanvasPlan,
     GpuCanvasRenderPass, GpuCanvasShaderArtifact, GpuCanvasShaderBinding, GpuCanvasShaderEntry,
     GpuCanvasShaderEntrySelection, GpuCanvasShaderProfile, GpuCanvasShaderResourceKind,
-    GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureViewDimension,
-    GpuCanvasStencilFace, GpuCanvasTextureBinding, GpuCanvasTextureUpload, RenderGpuCanvasShader,
+    GpuCanvasShaderStage, GpuCanvasShaderTextureSampleType, GpuCanvasShaderTextureSamplerPair,
+    GpuCanvasShaderTextureViewDimension, GpuCanvasStencilFace, GpuCanvasTextureBinding,
+    GpuCanvasTextureUpload, RenderGpuCanvasShader,
 };
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
@@ -51,8 +53,29 @@ fn rejected(message: impl Into<String>) -> GpuCanvasError {
 }
 
 /// One exact ORE context and the authored texture resources that belong to it.
+enum ExactGpuCanvasContext<C> {
+    Owned(Box<C>),
+    Borrowed(std::ptr::NonNull<C>),
+}
+
+impl<C> ExactGpuCanvasContext<C> {
+    fn as_ref(&self) -> &C {
+        match self {
+            Self::Owned(context) => context,
+            Self::Borrowed(context) => unsafe { context.as_ref() },
+        }
+    }
+
+    fn as_mut(&mut self) -> &mut C {
+        match self {
+            Self::Owned(context) => context,
+            Self::Borrowed(context) => unsafe { context.as_mut() },
+        }
+    }
+}
+
 pub(crate) struct ExactGpuCanvas<C: ContextApi> {
-    context: Box<C>,
+    context: ExactGpuCanvasContext<C>,
     profile: GpuCanvasShaderProfile,
     retained_textures: Vec<RetainedTexture>,
     frame_number: u64,
@@ -63,17 +86,40 @@ impl<C: ContextApi> ExactGpuCanvas<C> {
         context: Box<C>,
         profile: GpuCanvasShaderProfile,
     ) -> Result<Self, GpuCanvasError> {
+        Self::from_context(ExactGpuCanvasContext::Owned(context), profile)
+    }
+
+    /// Borrow the single ORE context owned by the source `RenderContext`.
+    ///
+    /// # Safety
+    ///
+    /// `context` must remain at a stable address and outlive this executor.
+    /// Calls through the executor must not overlap any other mutable use of
+    /// that context. The Vulkan product root enforces both conditions by
+    /// dropping this executor before its pinned `RenderContext` owner.
+    pub(crate) unsafe fn new_borrowed(
+        context: std::ptr::NonNull<C>,
+        profile: GpuCanvasShaderProfile,
+    ) -> Result<Self, GpuCanvasError> {
+        Self::from_context(ExactGpuCanvasContext::Borrowed(context), profile)
+    }
+
+    fn from_context(
+        context: ExactGpuCanvasContext<C>,
+        profile: GpuCanvasShaderProfile,
+    ) -> Result<Self, GpuCanvasError> {
         let expected = match profile {
             GpuCanvasShaderProfile::WebGpu => ShaderTarget::wgsl,
             GpuCanvasShaderProfile::WebGl2 => ShaderTarget::glsl,
+            GpuCanvasShaderProfile::TrustedVulkanSpirV => ShaderTarget::spirv,
             GpuCanvasShaderProfile::TrustedAppleMetal => {
-                return Err(rejected("trusted Metal is not a browser profile"));
+                return Err(rejected("trusted Metal uses its concrete ORE adapter"));
             }
         };
-        if context.shaderTarget() != expected {
+        if context.as_ref().shaderTarget() != expected {
             return Err(rejected(format!(
                 "ORE target {:?} does not match profile {profile:?}",
-                context.shaderTarget()
+                context.as_ref().shaderTarget()
             )));
         }
         Ok(Self {
@@ -85,7 +131,7 @@ impl<C: ContextApi> ExactGpuCanvas<C> {
     }
 
     pub(crate) fn context_mut(&mut self) -> &mut C {
-        &mut self.context
+        self.context.as_mut()
     }
 
     pub(crate) fn next_frame_number(&mut self) -> u64 {
@@ -94,15 +140,37 @@ impl<C: ContextApi> ExactGpuCanvas<C> {
     }
 
     pub(crate) fn begin_frame(&mut self, frame_number: u64) {
-        self.context.beginFrame(&FrameDescriptor::new(
+        self.context.as_mut().beginFrame(&FrameDescriptor::new(
             frame_number.saturating_sub(1),
             frame_number,
         ));
     }
 
+    /// Begin an ORE frame on the exact externally owned command buffer that
+    /// the concrete backend supplies, as required by Vulkan upstream.
+    ///
+    /// # Safety
+    ///
+    /// `external_command_buffer` must belong to this context's device and
+    /// remain recording-valid until [`Self::end_frame`] returns.
+    pub(crate) unsafe fn begin_frame_external(
+        &mut self,
+        safe_frame_number: u64,
+        current_frame_number: u64,
+        external_command_buffer: std::ptr::NonNull<std::ffi::c_void>,
+    ) {
+        self.context.as_mut().beginFrame(&unsafe {
+            FrameDescriptor::withExternalCommandBuffer(
+                external_command_buffer,
+                safe_frame_number,
+                current_frame_number,
+            )
+        });
+    }
+
     pub(crate) fn end_frame(&mut self) {
-        self.context.finishActiveRenderPass();
-        self.context.endFrame();
+        self.context.as_mut().finishActiveRenderPass();
+        self.context.as_mut().endFrame();
     }
 
     pub(crate) fn make_shader_artifact(
@@ -161,10 +229,10 @@ impl<C: ContextApi> ExactGpuCanvas<C> {
         }
 
         let canvas_ptr = canvas.get().cast::<std::ffi::c_void>();
-        let canvas_view = unsafe { self.context.wrapCanvasTexture(canvas_ptr) }
+        let canvas_view = unsafe { self.context.as_mut().wrapCanvasTexture(canvas_ptr) }
             .ok_or_else(|| rejected(context_error(self.context.as_ref(), "wrap canvas texture")))?;
         let texture_specs = collect_texture_specs(&pipeline_plans, &render_passes)?;
-        let retained_textures = self.retain_textures(&texture_specs)?;
+        let retained_textures = self.retain_textures(&texture_specs, execution_anchor)?;
 
         let mut built = Vec::with_capacity(pipeline_plans.len());
         for (shaders, pipeline_plan) in pipelines.iter().zip(&pipeline_plans) {
@@ -225,7 +293,8 @@ impl<C: ContextApi> ExactGpuCanvas<C> {
     fn retain_textures(
         &mut self,
         specs: &BTreeMap<u64, GpuCanvasTextureBinding>,
-    ) -> Result<BTreeMap<u64, AnyResourceHandle>, GpuCanvasError> {
+        execution_anchor: &Rc<dyn Any>,
+    ) -> Result<BTreeMap<u64, RetainedTextureResource>, GpuCanvasError> {
         self.retained_textures
             .retain(|retained| retained.lifetime.upgrade().is_some());
         for spec in specs.values() {
@@ -242,8 +311,11 @@ impl<C: ContextApi> ExactGpuCanvas<C> {
                     "more than {MAX_RETAINED_TEXTURES} live authored textures"
                 )));
             }
-            self.retained_textures
-                .push(RetainedTexture::create(self.context.as_mut(), spec)?);
+            self.retained_textures.push(RetainedTexture::create(
+                self.context.as_mut(),
+                spec,
+                execution_anchor,
+            )?);
         }
         specs
             .keys()
@@ -253,7 +325,7 @@ impl<C: ContextApi> ExactGpuCanvas<C> {
                     .iter()
                     .find(|retained| retained.resource_id == *resource_id)
                     .ok_or_else(|| rejected("authored texture disappeared during submission"))?;
-                Ok((*resource_id, texture.texture.clone()))
+                Ok((*resource_id, texture.resource.clone()))
             })
             .collect()
     }
@@ -283,6 +355,8 @@ impl ExactGpuCanvasShaderOccurrence {
                     ShaderStage::autoDetect,
                     &shader.binding_map_bytes,
                     None,
+                    shader.shader_asset_id,
+                    &shader.texture_sampler_pairs,
                     "trusted WGSL GPU-canvas module",
                 )?]
             }
@@ -310,18 +384,37 @@ impl ExactGpuCanvasShaderOccurrence {
                         stage,
                         &shader.binding_map_bytes,
                         Some(fixup),
+                        shader.shader_asset_id,
+                        &shader.texture_sampler_pairs,
                         "trusted GLSL GPU-canvas entry",
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?,
+            (
+                GpuCanvasShaderProfile::TrustedVulkanSpirV,
+                GpuCanvasShaderArtifact::TrustedVulkanSpirV(shader),
+            ) => vec![make_shader_module(
+                context,
+                shader.code(),
+                ShaderLanguage::glsl,
+                ShaderStage::autoDetect,
+                shader.binding_map_bytes(),
+                None,
+                shader.shader_asset_id(),
+                shader.texture_sampler_pairs(),
+                "trusted SPIR-V GPU-canvas module",
+            )?],
             (GpuCanvasShaderProfile::WebGpu, _) => {
                 return Err(rejected("WebGPU factory requires the WebGPU RSTB target"));
             }
             (GpuCanvasShaderProfile::WebGl2, _) => {
                 return Err(rejected("WebGL2 factory requires the WebGL2 RSTB target"));
             }
+            (GpuCanvasShaderProfile::TrustedVulkanSpirV, _) => {
+                return Err(rejected("Vulkan factory requires the SPIR-V RSTB target"));
+            }
             (GpuCanvasShaderProfile::TrustedAppleMetal, _) => {
-                return Err(rejected("trusted Metal is not a browser profile"));
+                return Err(rejected("trusted Metal uses its concrete ORE adapter"));
             }
         };
         Ok(Self {
@@ -356,7 +449,10 @@ impl ExactGpuCanvasShaderOccurrence {
                     })
             })
             .ok_or_else(|| rejected(format!("selected {stage:?} entry is stale or absent")))?;
-        let module_index = if self.profile == GpuCanvasShaderProfile::WebGpu {
+        let module_index = if matches!(
+            self.profile,
+            GpuCanvasShaderProfile::WebGpu | GpuCanvasShaderProfile::TrustedVulkanSpirV
+        ) {
             0
         } else {
             index
@@ -382,6 +478,8 @@ fn make_shader_module(
     stage: ShaderStage,
     binding_map: &[u8],
     gl_fixup: Option<&[u8]>,
+    shader_asset_id: u32,
+    texture_sampler_pairs: &[GpuCanvasShaderTextureSamplerPair],
     label: &'static str,
 ) -> Result<AnyResourceHandle, GpuCanvasError> {
     let code_size = u32::try_from(source.len()).map_err(|_| rejected("shader exceeds u32"))?;
@@ -389,7 +487,7 @@ fn make_shader_module(
         u32::try_from(binding_map.len()).map_err(|_| rejected("binding map exceeds u32"))?;
     let gl_fixup_size = u32::try_from(gl_fixup.map_or(0, <[u8]>::len))
         .map_err(|_| rejected("GL fixup exceeds u32"))?;
-    context
+    let mut module = context
         .makeShaderModule(&ShaderModuleDesc {
             code: Some(source),
             codeSize: code_size,
@@ -399,10 +497,32 @@ fn make_shader_module(
             bindingMapSize: binding_map_size,
             glFixupBytes: gl_fixup,
             glFixupSize: gl_fixup_size,
+            shaderAssetId: shader_asset_id,
             label: Some(label),
             ..ShaderModuleDesc::default()
         })
-        .ok_or_else(|| rejected(context_error(context, "compile trusted shader module")))
+        .ok_or_else(|| rejected(context_error(context, "compile trusted shader module")))?;
+    if !texture_sampler_pairs.is_empty() {
+        let pairs = texture_sampler_pairs
+            .iter()
+            .map(|pair| TextureSamplerPair {
+                textureGroup: pair.texture_group,
+                textureBinding: pair.texture_binding,
+                samplerGroup: pair.sampler_group,
+                samplerBinding: pair.sampler_binding,
+            })
+            .collect();
+        // SAFETY: this is the freshly returned, unaliased local module. It has
+        // not been cloned or published and no payload reference has escaped;
+        // pair assignment occurs before the handle enters any shader entry,
+        // exactly matching pinned lua_gpu.cpp.
+        if !unsafe { module.replaceShaderTextureSamplerPairs(pairs) } {
+            return Err(rejected(
+                "shader module rejected its exact texture/sampler pairs",
+            ));
+        }
+    }
+    Ok(module)
 }
 
 struct RetainedTexture {
@@ -411,7 +531,14 @@ struct RetainedTexture {
     descriptor: TextureIdentity,
     uploads: Vec<GpuCanvasTextureUpload>,
     applied_uploads: usize,
-    texture: AnyResourceHandle,
+    resource: RetainedTextureResource,
+    external_image: Option<Rc<dyn nuxie_render_api::RenderImage>>,
+}
+
+#[derive(Clone)]
+enum RetainedTextureResource {
+    AuthoredTexture(AnyResourceHandle),
+    ExternalImageView(AnyResourceHandle),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -445,28 +572,63 @@ impl RetainedTexture {
     fn create(
         context: &mut dyn ContextApi,
         binding: &GpuCanvasTextureBinding,
+        execution_anchor: &Rc<dyn Any>,
     ) -> Result<Self, GpuCanvasError> {
         let descriptor = TextureIdentity::from_binding(binding);
-        let texture = context
-            .makeTexture(&TextureDesc {
-                width: binding.width,
-                height: binding.height,
-                depthOrArrayLayers: binding.depth_or_array_layers,
-                format: texture_format(&binding.format)?,
-                r#type: texture_type(&binding.texture_type)?,
-                renderTarget: binding.render_target,
-                numMipmaps: binding.mip_level_count,
-                sampleCount: binding.sample_count,
-                label: Some("authored GPU-canvas texture"),
-            })
-            .ok_or_else(|| rejected(context_error(context, "allocate authored texture")))?;
+        let (resource, external_image) = if let Some(image) = &binding.external_image {
+            validate_external_image_binding(binding, image.as_ref())?;
+            let source = image
+                .as_any()
+                .downcast_ref::<RiveRenderImageHandle>()
+                .ok_or_else(|| {
+                    rejected("Image:view() image is not a GPU-backed RiveRenderImage")
+                })?;
+            let source_texture = source
+                .source_texture_for_execution_anchor(execution_anchor)
+                .ok_or_else(|| {
+                    rejected("Image:view() image belongs to another renderer/device domain")
+                })?;
+            // Pinned lua_gpu.cpp:3632-3693 passes the retained
+            // RiveRenderImage's exact gpu::Texture to Context::wrapRiveTexture.
+            // In Vulkan this also records the required shader-read transition
+            // in the active host command buffer (ore_context_vulkan.cpp:
+            // 1697-1705). No authored replacement texture is allocated.
+            let view = unsafe {
+                context.wrapRiveTexture(
+                    source_texture.as_ptr().cast(),
+                    binding.width,
+                    binding.height,
+                )
+            }
+            .ok_or_else(|| rejected(context_error(context, "wrap Image:view() texture")))?;
+            (
+                RetainedTextureResource::ExternalImageView(view),
+                Some(Rc::clone(image)),
+            )
+        } else {
+            let texture = context
+                .makeTexture(&TextureDesc {
+                    width: binding.width,
+                    height: binding.height,
+                    depthOrArrayLayers: binding.depth_or_array_layers,
+                    format: texture_format(&binding.format)?,
+                    r#type: texture_type(&binding.texture_type)?,
+                    renderTarget: binding.render_target,
+                    numMipmaps: binding.mip_level_count,
+                    sampleCount: binding.sample_count,
+                    label: Some("authored GPU-canvas texture"),
+                })
+                .ok_or_else(|| rejected(context_error(context, "allocate authored texture")))?;
+            (RetainedTextureResource::AuthoredTexture(texture), None)
+        };
         let mut retained = Self {
             resource_id: binding.resource_id,
             lifetime: binding.lifetime.downgrade(),
             descriptor,
             uploads: Vec::new(),
             applied_uploads: 0,
-            texture,
+            resource,
+            external_image,
         };
         retained.apply_uploads(binding)?;
         Ok(retained)
@@ -474,6 +636,10 @@ impl RetainedTexture {
 
     fn update(&mut self, binding: &GpuCanvasTextureBinding) -> Result<(), GpuCanvasError> {
         if self.descriptor != TextureIdentity::from_binding(binding)
+            || !same_external_image(
+                self.external_image.as_ref(),
+                binding.external_image.as_ref(),
+            )
             || !binding.uploads.starts_with(&self.uploads)
         {
             return Err(rejected(format!(
@@ -485,8 +651,19 @@ impl RetainedTexture {
     }
 
     fn apply_uploads(&mut self, binding: &GpuCanvasTextureBinding) -> Result<(), GpuCanvasError> {
+        if matches!(self.resource, RetainedTextureResource::ExternalImageView(_)) {
+            if !binding.uploads.is_empty() {
+                return Err(rejected(
+                    "Image:view() cannot receive authored texture uploads",
+                ));
+            }
+            return Ok(());
+        }
+        let RetainedTextureResource::AuthoredTexture(texture) = &self.resource else {
+            unreachable!("external image view returned above")
+        };
         for upload in binding.uploads.iter().skip(self.applied_uploads) {
-            self.texture
+            texture
                 .upload(&TextureDataDesc {
                     data: Some(&upload.bytes),
                     bytesPerRow: upload.bytes_per_row,
@@ -508,6 +685,43 @@ impl RetainedTexture {
     }
 }
 
+fn same_external_image(
+    left: Option<&Rc<dyn nuxie_render_api::RenderImage>>,
+    right: Option<&Rc<dyn nuxie_render_api::RenderImage>>,
+) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+        _ => false,
+    }
+}
+
+fn validate_external_image_binding(
+    binding: &GpuCanvasTextureBinding,
+    image: &dyn nuxie_render_api::RenderImage,
+) -> Result<(), GpuCanvasError> {
+    if binding.width != image.width()
+        || binding.height != image.height()
+        || binding.depth_or_array_layers != 1
+        || binding.format != "rgba8unorm"
+        || binding.texture_type != "2d"
+        || binding.render_target
+        || binding.sample_count != 1
+        || binding.mip_level_count != 1
+        || binding.view_dimension != "2d"
+        || binding.base_mip_level != 0
+        || binding.mip_level_count_in_view != 1
+        || binding.base_array_layer != 0
+        || binding.array_layer_count != 1
+        || !binding.uploads.is_empty()
+    {
+        return Err(rejected(
+            "Image:view() binding does not describe its exact retained 2D image view",
+        ));
+    }
+    Ok(())
+}
+
 struct BuiltPipeline {
     pipeline: AnyResourceHandle,
     groups: Vec<Option<AnyResourceHandle>>,
@@ -525,20 +739,25 @@ fn build_pipeline(
     profile: GpuCanvasShaderProfile,
     shaders: &GpuCanvasPipelineShaders,
     plan: &GpuCanvasPipelinePlan,
-    retained_textures: &BTreeMap<u64, AnyResourceHandle>,
+    retained_textures: &BTreeMap<u64, RetainedTextureResource>,
     execution_anchor: &Rc<dyn Any>,
 ) -> Result<BuiltPipeline, GpuCanvasError> {
     let vertex = shader_occurrence(&shaders.vertex, profile, execution_anchor, "vertex")?;
-    let fragment_handle = shaders.fragment.as_ref().unwrap_or(&shaders.vertex);
-    let fragment = shader_occurrence(fragment_handle, profile, execution_anchor, "fragment")?;
     let (vertex_module, vertex_entry) =
         vertex.module_for(GpuCanvasShaderStage::Vertex, plan.vertex_entry.as_ref())?;
-    let (fragment_module, fragment_entry) =
-        fragment.module_for(GpuCanvasShaderStage::Fragment, plan.fragment_entry.as_ref())?;
-
-    let bindings = relevant_bindings(vertex, fragment)?;
-    let layouts = make_layouts(context, &bindings)?;
-    let layout_refs = layouts.iter().map(Option::as_ref).collect::<Vec<_>>();
+    // Upstream resolves an explicit fragment before parsing color targets.
+    // The combined-file fallback remains deferred until the parsed target
+    // count is known.
+    let explicit_fragment = shaders
+        .fragment
+        .as_ref()
+        .map(|fragment| shader_occurrence(fragment, profile, execution_anchor, "fragment"))
+        .transpose()?;
+    let explicit_fragment_module_and_entry = explicit_fragment
+        .map(|fragment| {
+            fragment.module_for(GpuCanvasShaderStage::Fragment, plan.fragment_entry.as_ref())
+        })
+        .transpose()?;
 
     let vertex_attributes = plan
         .vertex_layouts
@@ -575,6 +794,20 @@ fn build_pipeline(
         .collect::<Result<Vec<_>, GpuCanvasError>>()?;
 
     let (color_targets, color_count) = color_targets(&plan.pipeline_state.color_targets)?;
+    let fragment_module_and_entry =
+        match fragment_selection(explicit_fragment.is_some(), color_count as usize) {
+            FragmentSelection::Explicit => explicit_fragment_module_and_entry,
+            FragmentSelection::CombinedVertex => Some(
+                vertex.module_for(GpuCanvasShaderStage::Fragment, plan.fragment_entry.as_ref())?,
+            ),
+            FragmentSelection::None => None,
+        };
+    // Mirrors pinned lua_gpu.cpp:2181-2217 exactly. Automatic layouts always
+    // come from the vertex module's complete binding map. They are not stage
+    // filtered and an explicitly separate fragment module is not merged in.
+    let bindings = vertex.bindings();
+    let layouts = make_layouts(context, bindings)?;
+    let layout_refs = layouts.iter().map(Option::as_ref).collect::<Vec<_>>();
     let (depth_stencil, stencil_front, stencil_back, stencil_read_mask, stencil_write_mask) =
         depth_stencil(plan.pipeline_state.depth_stencil.as_ref())?;
     let index_format = plan
@@ -589,8 +822,9 @@ fn build_pipeline(
             &PipelineDesc {
                 vertexModule: Some(vertex_module),
                 vertexEntryPoint: Some(&vertex_entry.physical_entry_point),
-                fragmentModule: Some(fragment_module),
-                fragmentEntryPoint: Some(&fragment_entry.physical_entry_point),
+                fragmentModule: fragment_module_and_entry.map(|(module, _)| module),
+                fragmentEntryPoint: fragment_module_and_entry
+                    .map(|(_, entry)| entry.physical_entry_point.as_str()),
                 vertexBuffers: (!vertex_layouts.is_empty()).then_some(vertex_layouts.as_slice()),
                 vertexBufferCount: u32::try_from(vertex_layouts.len())
                     .map_err(|_| rejected("vertex layout count exceeds u32"))?,
@@ -621,7 +855,7 @@ fn build_pipeline(
             })
         })?;
 
-    let resources = make_pipeline_resources(context, &bindings, plan, &layouts, retained_textures)?;
+    let resources = make_pipeline_resources(context, bindings, plan, &layouts, retained_textures)?;
     Ok(BuiltPipeline {
         pipeline,
         groups: resources.groups,
@@ -633,6 +867,26 @@ fn build_pipeline(
         _views: resources.views,
         _samplers: resources.samplers,
     })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FragmentSelection {
+    Explicit,
+    CombinedVertex,
+    None,
+}
+
+/// Mirrors pinned lua_gpu.cpp:1943-1947 and 2096-2111 exactly: an authored
+/// fragment always wins, combined-file fallback exists only for color output,
+/// and a vertex-only pipeline with no color targets has no fragment stage.
+fn fragment_selection(has_explicit_fragment: bool, color_target_count: usize) -> FragmentSelection {
+    if has_explicit_fragment {
+        FragmentSelection::Explicit
+    } else if color_target_count > 0 {
+        FragmentSelection::CombinedVertex
+    } else {
+        FragmentSelection::None
+    }
 }
 
 fn shader_occurrence<'a>(
@@ -651,34 +905,6 @@ fn shader_occurrence<'a>(
         )));
     }
     Ok(shader)
-}
-
-fn relevant_bindings(
-    vertex: &ExactGpuCanvasShaderOccurrence,
-    fragment: &ExactGpuCanvasShaderOccurrence,
-) -> Result<Vec<GpuCanvasShaderBinding>, GpuCanvasError> {
-    let mut by_identity = BTreeMap::<(u8, u8), GpuCanvasShaderBinding>::new();
-    for (occurrence, stage_bit) in [(vertex, 1_u8), (fragment, 2_u8)] {
-        for binding in occurrence
-            .bindings()
-            .iter()
-            .filter(|binding| binding.stage_mask & stage_bit != 0)
-        {
-            match by_identity.get(&(binding.group, binding.binding)) {
-                Some(existing) if existing != binding => {
-                    return Err(rejected(format!(
-                        "binding group {} slot {} differs between shader stages",
-                        binding.group, binding.binding
-                    )));
-                }
-                Some(_) => {}
-                None => {
-                    by_identity.insert((binding.group, binding.binding), binding.clone());
-                }
-            }
-        }
-    }
-    Ok(by_identity.into_values().collect())
 }
 
 fn make_layouts(
@@ -765,7 +991,7 @@ fn make_pipeline_resources(
     bindings: &[GpuCanvasShaderBinding],
     plan: &GpuCanvasPipelinePlan,
     layouts: &[Option<AnyResourceHandle>],
-    retained_textures: &BTreeMap<u64, AnyResourceHandle>,
+    retained_textures: &BTreeMap<u64, RetainedTextureResource>,
 ) -> Result<PipelineResources, GpuCanvasError> {
     let mut uniform_buffers = BTreeMap::new();
     let mut buffers = Vec::new();
@@ -789,17 +1015,22 @@ fn make_pipeline_resources(
     let mut textures = Vec::new();
     let mut views = Vec::new();
     for binding in &plan.texture_bindings {
-        let texture = retained_textures
+        let resource = retained_textures
             .get(&binding.resource_id)
             .ok_or_else(|| rejected("sampled texture is absent from retained resources"))?;
-        let view = make_texture_view(context, texture, binding)?;
+        let view = match resource {
+            RetainedTextureResource::AuthoredTexture(texture) => {
+                textures.push(texture.clone());
+                make_texture_view(context, texture, binding)?
+            }
+            RetainedTextureResource::ExternalImageView(view) => view.clone(),
+        };
         if texture_views
             .insert((binding.group, binding.binding), view.clone())
             .is_some()
         {
             return Err(rejected("duplicate sampled-texture binding"));
         }
-        textures.push(texture.clone());
         views.push(view);
     }
 
@@ -1022,7 +1253,12 @@ fn execute_pass(
         let pipeline = pipelines
             .get(draw.pipeline_index as usize)
             .ok_or_else(|| rejected("draw references an absent pipeline snapshot"))?;
+        context.clearLastError();
         pass.setPipeline(Some(&pipeline.pipeline));
+        let pipeline_error = context.lastError();
+        if !pipeline_error.is_empty() {
+            return Err(rejected(format!("setPipeline: {pipeline_error}")));
+        }
         for (slot, buffer) in &pipeline.vertex_buffers {
             pass.setVertexBuffer(*slot, Some(buffer), 0);
         }
@@ -1115,7 +1351,7 @@ impl AttachmentViewKey {
 
 fn retain_attachment_view(
     context: &mut dyn ContextApi,
-    retained_textures: &BTreeMap<u64, AnyResourceHandle>,
+    retained_textures: &BTreeMap<u64, RetainedTextureResource>,
     view: &GpuCanvasAttachmentView,
     attachment_views: &mut BTreeMap<AttachmentViewKey, AnyResourceHandle>,
 ) -> Result<(), GpuCanvasError> {
@@ -1126,9 +1362,14 @@ fn retain_attachment_view(
     if attachment_views.contains_key(&key) {
         return Ok(());
     }
-    let texture = retained_textures
+    let resource = retained_textures
         .get(&binding.resource_id)
         .ok_or_else(|| rejected("attachment texture is not retained"))?;
+    let RetainedTextureResource::AuthoredTexture(texture) = resource else {
+        return Err(rejected(
+            "Image:view() cannot be used as a render attachment",
+        ));
+    };
     let view = make_texture_view(context, texture, binding)?;
     attachment_views.insert(key, view);
     Ok(())
@@ -1222,6 +1463,10 @@ fn collect_texture_specs(
                 if existing.lifetime != binding.lifetime
                     || TextureIdentity::from_binding(existing)
                         != TextureIdentity::from_binding(binding)
+                    || !same_external_image(
+                        existing.external_image.as_ref(),
+                        binding.external_image.as_ref(),
+                    )
                 {
                     return Err(rejected(format!(
                         "texture {} has inconsistent descriptors",
@@ -1797,5 +2042,16 @@ mod tests {
         assert_eq!(entry.kind, BindingKind::uniformBuffer);
         assert_eq!(entry.textureViewDim, TextureViewDimension::texture2D);
         assert_eq!(entry.textureSampleType, SampleType::floatFilterable);
+    }
+
+    #[test]
+    fn fragment_selection_matches_all_three_upstream_cases() {
+        assert_eq!(fragment_selection(true, 0), FragmentSelection::Explicit);
+        assert_eq!(fragment_selection(true, 1), FragmentSelection::Explicit);
+        assert_eq!(
+            fragment_selection(false, 1),
+            FragmentSelection::CombinedVertex
+        );
+        assert_eq!(fragment_selection(false, 0), FragmentSelection::None);
     }
 }

@@ -1445,13 +1445,14 @@ pub struct GpuCanvasShaderBinding {
 /// The authored shader representation requested by a renderer factory.
 ///
 /// WebGPU remains the default. WebGL2 is selected by the exact browser fallback
-/// factory. Apple Metal is an explicit trusted-native opt-in.
+/// factory. Apple Metal and Vulkan SPIR-V are explicit trusted-native opt-ins.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum GpuCanvasShaderProfile {
     #[default]
     WebGpu,
     WebGl2,
     TrustedAppleMetal,
+    TrustedVulkanSpirV,
 }
 
 /// Opaque authority for one cryptographically authenticated ShaderAsset.
@@ -1656,6 +1657,82 @@ impl GpuCanvasAppleMetalShader {
     }
 }
 
+/// Trusted whole-module SPIR-V plus its exact target-13 binding metadata.
+///
+/// The pinned Vulkan ORE backend selects RSTB target 5 and passes these bytes
+/// directly to `vkCreateShaderModule`. Construction therefore requires the
+/// same exact-artifact authority as the native Metal representation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuCanvasVulkanSpirVShader {
+    code: Arc<[u8]>,
+    entries: Vec<GpuCanvasShaderEntry>,
+    bindings: Vec<GpuCanvasShaderBinding>,
+    binding_map_bytes: Arc<[u8]>,
+    shader_asset_id: u32,
+    texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
+    provenance: GpuCanvasShaderProvenance,
+}
+
+impl GpuCanvasVulkanSpirVShader {
+    /// Assemble a Vulkan artifact after decoding every part from the exact
+    /// authenticated byte sequence described by `provenance`.
+    ///
+    /// # Safety
+    ///
+    /// `code`, `entries`, `bindings`, and `binding_map_bytes` must be the exact
+    /// target-5 and target-13 data decoded from `artifact_sha256` at
+    /// `artifact_size`. The SPIR-V must retain the trusted exporter's validity
+    /// guarantee for unsafe Vulkan driver passthrough.
+    #[doc(hidden)]
+    pub unsafe fn from_verified_parts(
+        provenance: GpuCanvasShaderProvenance,
+        artifact_size: u64,
+        artifact_sha256: [u8; 32],
+        code: Arc<[u8]>,
+        entries: Vec<GpuCanvasShaderEntry>,
+        bindings: Vec<GpuCanvasShaderBinding>,
+        binding_map_bytes: Arc<[u8]>,
+        shader_asset_id: u32,
+        texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
+    ) -> Option<Self> {
+        provenance
+            .authorizes_digest(artifact_size, &artifact_sha256)
+            .then_some(Self {
+                code,
+                entries,
+                bindings,
+                binding_map_bytes,
+                shader_asset_id,
+                texture_sampler_pairs,
+                provenance,
+            })
+    }
+
+    pub fn code(&self) -> &[u8] {
+        &self.code
+    }
+
+    pub fn entries(&self) -> &[GpuCanvasShaderEntry] {
+        &self.entries
+    }
+
+    pub fn bindings(&self) -> &[GpuCanvasShaderBinding] {
+        &self.bindings
+    }
+
+    pub fn binding_map_bytes(&self) -> &[u8] {
+        &self.binding_map_bytes
+    }
+
+    pub fn shader_asset_id(&self) -> u32 {
+        self.shader_asset_id
+    }
+
+    pub fn texture_sampler_pairs(&self) -> &[GpuCanvasShaderTextureSamplerPair] {
+        &self.texture_sampler_pairs
+    }
+}
+
 /// The authored WGSL module selected by WebGPU from a Rive `ShaderAsset`.
 ///
 /// Rive target 0 stores one source module shared by every entry. Target 16
@@ -1667,6 +1744,8 @@ pub struct GpuCanvasShader {
     pub bindings: Vec<GpuCanvasShaderBinding>,
     /// Exact target-16 bytes consumed by the ORE WebGPU module constructor.
     pub binding_map_bytes: Arc<[u8]>,
+    pub shader_asset_id: u32,
+    pub texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
 }
 
 impl GpuCanvasShader {
@@ -1681,7 +1760,7 @@ impl GpuCanvasShader {
     }
 }
 
-/// One texture/sampler pair lowered into a combined GLSL sampler uniform.
+/// One authored texture/sampler pair attached to a backend shader module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GpuCanvasShaderTextureSamplerPair {
     pub texture_group: u8,
@@ -1702,6 +1781,7 @@ pub struct GpuCanvasWebGl2Shader {
     pub binding_map_bytes: Arc<[u8]>,
     pub vertex_gl_fixup_bytes: Arc<[u8]>,
     pub fragment_gl_fixup_bytes: Arc<[u8]>,
+    pub shader_asset_id: u32,
     pub texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
 }
 
@@ -1716,6 +1796,7 @@ pub enum GpuCanvasShaderArtifact {
     WebGpu(GpuCanvasShader),
     WebGl2(GpuCanvasWebGl2Shader),
     TrustedAppleMetal(GpuCanvasAppleMetalShader),
+    TrustedVulkanSpirV(GpuCanvasVulkanSpirVShader),
 }
 
 impl GpuCanvasShaderArtifact {
@@ -1724,6 +1805,7 @@ impl GpuCanvasShaderArtifact {
             Self::WebGpu(shader) => &shader.entries,
             Self::WebGl2(shader) => &shader.entries,
             Self::TrustedAppleMetal(shader) => shader.entries(),
+            Self::TrustedVulkanSpirV(shader) => shader.entries(),
         }
     }
 
@@ -1732,6 +1814,7 @@ impl GpuCanvasShaderArtifact {
             Self::WebGpu(shader) => &shader.bindings,
             Self::WebGl2(shader) => &shader.bindings,
             Self::TrustedAppleMetal(shader) => shader.bindings(),
+            Self::TrustedVulkanSpirV(shader) => shader.bindings(),
         }
     }
 }
@@ -2559,6 +2642,7 @@ pub trait Factory {
             GpuCanvasShaderArtifact::WebGpu(shader) => self.make_gpu_canvas_shader(shader),
             GpuCanvasShaderArtifact::WebGl2(_) => Err(GpuCanvasError::unsupported()),
             GpuCanvasShaderArtifact::TrustedAppleMetal(_) => Err(GpuCanvasError::unsupported()),
+            GpuCanvasShaderArtifact::TrustedVulkanSpirV(_) => Err(GpuCanvasError::unsupported()),
         }
     }
 
@@ -2571,7 +2655,9 @@ pub trait Factory {
     ) -> GpuCanvasShaderLoad {
         match shader {
             GpuCanvasShaderArtifact::WebGpu(shader) => self.load_gpu_canvas_shader(shader),
-            GpuCanvasShaderArtifact::WebGl2(_) | GpuCanvasShaderArtifact::TrustedAppleMetal(_) => {
+            GpuCanvasShaderArtifact::WebGl2(_)
+            | GpuCanvasShaderArtifact::TrustedAppleMetal(_)
+            | GpuCanvasShaderArtifact::TrustedVulkanSpirV(_) => {
                 GpuCanvasShaderLoad::Ready(self.make_gpu_canvas_shader_artifact(shader))
             }
         }

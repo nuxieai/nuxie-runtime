@@ -70,6 +70,7 @@ use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
 use core::mem::ManuallyDrop;
+use core::ptr::NonNull;
 use nuxie_render_api::Mat2D;
 use std::any::Any;
 use std::rc::Rc;
@@ -354,6 +355,22 @@ impl RiveRenderImageHandle {
     pub(crate) fn has_source_texture(&self) -> bool {
         !self.source().refTexture().get().is_null()
     }
+
+    /// Borrow the exact `gpu::Texture*` held by the retained source image,
+    /// but only inside the execution domain that created it. The pointer
+    /// remains valid while this handle is retained. This is the Rust
+    /// projection of pinned `RiveRenderImage::getTexture()` used by
+    /// `Image:view()` before `ore::Context::wrapRiveTexture()`.
+    pub(crate) fn source_texture_for_execution_anchor(
+        &self,
+        execution_anchor: &Rc<dyn Any>,
+    ) -> Option<NonNull<Texture>> {
+        let attached = self.execution_domain.as_ref()?;
+        if !Rc::ptr_eq(&attached._domain_guard, execution_anchor) {
+            return None;
+        }
+        NonNull::new(self.source().refTexture().get())
+    }
 }
 
 impl Clone for RiveRenderImageHandle {
@@ -377,5 +394,56 @@ impl nuxie_render_api::RenderImage for RiveRenderImageHandle {
     }
     fn uv_transform(&self) -> Mat2D {
         *self.source().uvTransform()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp;
+
+    #[test]
+    fn image_view_projection_returns_the_retained_source_texture_for_matching_anchor() {
+        let texture = make_rcp(|| Texture::new(9, 7));
+        let expected = texture.get();
+        let image = make_rcp(|| unsafe { RiveRenderImage::new(texture) });
+        let anchor: Rc<dyn Any> = Rc::new(());
+        let handle = RiveRenderImageHandle::from_exact(image)
+            .expect("source image")
+            .with_execution_domain(RenderResourceDomain::new(), Rc::clone(&anchor));
+
+        assert_eq!(
+            handle
+                .source_texture_for_execution_anchor(&anchor)
+                .expect("source texture")
+                .as_ptr(),
+            expected
+        );
+    }
+
+    #[test]
+    fn image_view_projection_rejects_foreign_or_unattached_anchor() {
+        let texture = make_rcp(|| Texture::new(9, 7));
+        let image = make_rcp(|| unsafe { RiveRenderImage::new(texture) });
+        let matching_anchor: Rc<dyn Any> = Rc::new(());
+        let foreign_anchor: Rc<dyn Any> = Rc::new(());
+        let unattached = RiveRenderImageHandle::from_exact(image.clone()).expect("source image");
+        assert!(
+            unattached
+                .source_texture_for_execution_anchor(&matching_anchor)
+                .is_none()
+        );
+
+        let attached = RiveRenderImageHandle::from_exact(image)
+            .expect("source image")
+            .with_execution_domain(
+                RenderResourceDomain::new(),
+                Rc::clone(&matching_anchor),
+            );
+        assert!(
+            attached
+                .source_texture_for_execution_anchor(&foreign_anchor)
+                .is_none()
+        );
     }
 }

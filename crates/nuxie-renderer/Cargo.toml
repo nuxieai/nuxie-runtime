@@ -10,7 +10,7 @@ default = []
 # Stable product roots for the three exact-source renderer ports. Their
 # internal campaign feature names remain aliases for source-shaped cfg owners;
 # none of these roots selects another renderer or an automatic fallback.
-renderer-vulkan = ["native-vulkan-experimental", "rive-decoders"]
+renderer-vulkan = ["native-ore-vulkan-experimental", "rive-decoders"]
 renderer-webgpu = ["native-webgpu-experimental", "rive-decoders"]
 renderer-webgl2 = ["native-webgl2-experimental", "rive-decoders"]
 renderer-metal = ["native-metal-experimental", "rive-decoders"]

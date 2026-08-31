@@ -13,6 +13,12 @@ pub struct TextSelectionPath {
     rectangles: RectanglesToContour,
 }
 impl TextSelectionPath {
+    pub fn new(is_local: bool, fill_rule: nuxie_render_api::FillRule) -> Self {
+        Self {
+            path: ShapePaintPath::with_fill_rule(is_local, fill_rule),
+            rectangles: RectanglesToContour::default(),
+        }
+    }
     pub fn update(&mut self, rects: &[Aabb], radius: f32) {
         self.path.rewind();
         self.rectangles.reset();

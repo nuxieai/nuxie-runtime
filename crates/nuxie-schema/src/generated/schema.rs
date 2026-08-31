@@ -354,6 +354,7 @@ pub enum ObjectKind {
     LayoutParticipant,
     KeyFrameInt,
     GridItemPlacement,
+    TextStyleBackground,
 }
 
 impl ObjectKind {
@@ -708,6 +709,7 @@ impl ObjectKind {
             Self::LayoutParticipant => &DEFINITIONS[346],
             Self::KeyFrameInt => &DEFINITIONS[347],
             Self::GridItemPlacement => &DEFINITIONS[348],
+            Self::TextStyleBackground => &DEFINITIONS[349],
         }
     }
 
@@ -1071,6 +1073,7 @@ pub fn object_kind_by_type_key(key: u16) -> Option<ObjectKind> {
         1066 => Some(ObjectKind::LayoutParticipant),
         1067 => Some(ObjectKind::KeyFrameInt),
         1068 => Some(ObjectKind::GridItemPlacement),
+        1069 => Some(ObjectKind::TextStyleBackground),
         _ => None,
     }
 }
@@ -1430,6 +1433,7 @@ pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
         "LayoutParticipant" => Some(&DEFINITIONS[346]),
         "KeyFrameInt" => Some(&DEFINITIONS[347]),
         "GridItemPlacement" => Some(&DEFINITIONS[348]),
+        "TextStyleBackground" => Some(&DEFINITIONS[349]),
         _ => None,
     }
 }
@@ -2016,6 +2020,7 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         1068 => Some(CoreRegistryFieldKind::Int),
         1069 => Some(CoreRegistryFieldKind::Double),
         1070 => Some(CoreRegistryFieldKind::Double),
+        1071 => Some(CoreRegistryFieldKind::Double),
         _ => None,
     }
 }
@@ -2616,6 +2621,7 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         1068 => Some(FieldKind::Int),
         1069 => Some(FieldKind::Double),
         1070 => Some(FieldKind::Double),
+        1071 => Some(FieldKind::Double),
         _ => None,
     }
 }
@@ -3188,6 +3194,7 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         1068 => Some(FieldKind::Int),
         1069 => Some(FieldKind::Double),
         1070 => Some(FieldKind::Double),
+        1071 => Some(FieldKind::Double),
         _ => None,
     }
 }
@@ -26367,6 +26374,44 @@ static DEF_348_PROPERTIES: &[Property] = &[
     },
 ];
 
+static DEF_349_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+
+static DEF_349_PROPERTIES: &[Property] = &[Property {
+    name: "cornerRadius",
+    key: Key {
+        int: 1071,
+        name: "cornerradius",
+    },
+    alternates: &[],
+    declared_type: "double",
+    runtime_type: FieldKind::Double,
+    description: Some("Corner radius applied to the background geometry"),
+    initial_value: Some("0"),
+    initial_value_runtime: None,
+    group: None,
+    nullable: false,
+    override_set: false,
+    override_get: false,
+    virtual_: false,
+    editor_only: false,
+    coop: true,
+    with_rive_tools_only: false,
+    stores_data: true,
+    deserializes: true,
+    stores_field: true,
+    encoded: false,
+    bindable: true,
+    animates: true,
+    computed: false,
+    journal: None,
+    parentable: None,
+    records: None,
+    exports_to_runtime_conditionally: false,
+    pure_virtual: false,
+    passthrough: false,
+    bitmask_passthrough: None,
+}];
+
 pub fn property_by_key_in_hierarchy(
     type_key: u16,
     property_key: u16,
@@ -28365,6 +28410,9 @@ pub fn property_by_key_in_hierarchy(
         (1068, 1048) => Some(("GridItemPlacement", &DEF_348_PROPERTIES[1])),
         (1068, 1049) => Some(("GridItemPlacement", &DEF_348_PROPERTIES[2])),
         (1068, 1050) => Some(("GridItemPlacement", &DEF_348_PROPERTIES[3])),
+        (1069, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
+        (1069, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
+        (1069, 1071) => Some(("TextStyleBackground", &DEF_349_PROPERTIES[0])),
         _ => None,
     }
 }
@@ -35139,5 +35187,24 @@ pub static DEFINITIONS: &[Definition] = &[
         cloneable: true,
         properties: DEF_348_PROPERTIES,
         ancestors: DEF_348_ANCESTORS,
+    },
+    Definition {
+        name: "TextStyleBackground",
+        rust_variant: "TextStyleBackground",
+        file: "text/text_style_background.json",
+        type_key: Key {
+            int: 1069,
+            name: "textstylebackground",
+        },
+        runtime_parent: Some("ContainerComponent"),
+        raw_parent_file: Some("container_component.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_349_PROPERTIES,
+        ancestors: DEF_349_ANCESTORS,
     },
 ];

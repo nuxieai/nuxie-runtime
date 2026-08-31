@@ -66,4 +66,8 @@ unsafe impl GpuResourcePayload for ShaderModuleVulkan {
     fn gpu_resource_mut(&mut self) -> &mut GPUResource {
         self.base.gpu_resource_mut()
     }
+
+    fn shader_module_base_mut(&mut self) -> Option<&mut ShaderModule> {
+        Some(&mut self.base)
+    }
 }

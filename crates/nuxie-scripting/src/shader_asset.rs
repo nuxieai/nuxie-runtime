@@ -3,8 +3,11 @@
 //! Mirrors pinned C++ `src/assets/shader_asset.cpp::ShaderAsset::decode` at
 //! registration, then `src/lua/renderer/lua_gpu.cpp::buildShaderEntries` when
 //! WebGPU selects authored whole-module WGSL target 0 and its mandatory
-//! `BindingMap` target 16 sidecar.
+//! `BindingMap` target 16 sidecar. Vulkan selects authored whole-module SPIR-V
+//! target 5 and its target 13 binding-map sidecar.
 
+#[cfg(any(feature = "android-authored-wgsl", test))]
+use nuxie_render_api::GpuCanvasVulkanSpirVShader;
 #[cfg(any(feature = "apple-authored-msl", test))]
 use nuxie_render_api::{
     GpuCanvasAppleMetalShader, GpuCanvasShaderBindingReflection, GpuCanvasShaderBuiltin,
@@ -35,6 +38,10 @@ const WEBGL2_SOURCE_TARGET: u8 = 1;
 const WEBGL2_BINDING_MAP_TARGET: u8 = 11;
 const WEBGL2_VERTEX_FIXUP_TARGET: u8 = 14;
 const WEBGL2_FRAGMENT_FIXUP_TARGET: u8 = 15;
+#[cfg(any(feature = "android-authored-wgsl", test))]
+const VULKAN_SPIRV_SOURCE_TARGET: u8 = 5;
+#[cfg(any(feature = "android-authored-wgsl", test))]
+const VULKAN_SPIRV_BINDING_MAP_TARGET: u8 = 13;
 const TEXTURE_SAMPLER_PAIR_SECTION: u8 = 1;
 #[cfg(any(feature = "apple-authored-msl", test))]
 const APPLE_METAL_SOURCE_TARGET: u8 = 2;
@@ -169,7 +176,15 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no mandatory WebGPU RSTB target-16 binding map"
             ))
         })?;
-        decode_whole_module_wgsl(name, &wgsl, &binding_map)
+        decode_whole_module_wgsl(
+            name,
+            &wgsl,
+            &binding_map,
+            self.asset
+                .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
+                .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?,
+            self.texture_sampler_pairs(),
+        )
     }
 
     pub(crate) fn decode_webgl2(&self, name: &str) -> Result<GpuCanvasWebGl2Shader> {
@@ -203,6 +218,10 @@ impl ShaderAsset {
             binding_map_bytes: std::sync::Arc::from(binding_map),
             vertex_gl_fixup_bytes: std::sync::Arc::from(vertex_fixup),
             fragment_gl_fixup_bytes: std::sync::Arc::from(fragment_fixup),
+            shader_asset_id: self
+                .asset
+                .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
+                .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?,
             texture_sampler_pairs: self.texture_sampler_pairs(),
         })
     }
@@ -241,6 +260,17 @@ impl ShaderAsset {
                     "ShaderAsset '{name}' Apple Metal support is not compiled"
                 )))
             }
+            #[cfg(any(feature = "android-authored-wgsl", test))]
+            GpuCanvasShaderProfile::TrustedVulkanSpirV => self
+                .decode_vulkan_spirv(name, provenance)
+                .map(GpuCanvasShaderArtifact::TrustedVulkanSpirV),
+            #[cfg(not(any(feature = "android-authored-wgsl", test)))]
+            GpuCanvasShaderProfile::TrustedVulkanSpirV => {
+                let _ = provenance;
+                Err(Error::runtime(format!(
+                    "ShaderAsset '{name}' Vulkan SPIR-V support is not compiled"
+                )))
+            }
         }
     }
 
@@ -261,6 +291,63 @@ impl ShaderAsset {
             )));
         }
         self.decode_webgpu(name)
+    }
+
+    #[cfg(any(feature = "android-authored-wgsl", test))]
+    fn decode_vulkan_spirv(
+        &self,
+        name: &str,
+        provenance: Option<GpuCanvasShaderProvenance>,
+    ) -> Result<GpuCanvasVulkanSpirVShader> {
+        let provenance = provenance.ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no verified provenance for Vulkan SPIR-V"
+            ))
+        })?;
+        if !provenance.authorizes_digest(self.artifact_size, &self.artifact_sha256) {
+            return Err(Error::runtime(format!(
+                "ShaderAsset '{name}' Vulkan SPIR-V provenance does not authorize this artifact"
+            )));
+        }
+        let source_container = self.variant(VULKAN_SPIRV_SOURCE_TARGET).ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' has no Vulkan RSTB target-5 SPIR-V source"
+            ))
+        })?;
+        let binding_map = self
+            .variant(VULKAN_SPIRV_BINDING_MAP_TARGET)
+            .ok_or_else(|| {
+                Error::runtime(format!(
+                    "ShaderAsset '{name}' has no mandatory Vulkan RSTB target-13 binding map"
+                ))
+            })?;
+        let (code, entries) = decode_whole_module_bytes(name, "SPIR-V", &source_container)?;
+        let bindings = decode_binding_map(name, &binding_map)?;
+        let shader_asset_id = self
+            .asset
+            .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
+            .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?;
+        // SAFETY: the selected target-5 module, ordered entry records, target-13
+        // sidecar, asset id, and texture/sampler pairs all come directly from
+        // this exact authenticated ShaderAsset. No source translation occurs.
+        unsafe {
+            GpuCanvasVulkanSpirVShader::from_verified_parts(
+                provenance,
+                self.artifact_size,
+                self.artifact_sha256,
+                std::sync::Arc::from(code),
+                entries,
+                bindings,
+                std::sync::Arc::from(binding_map),
+                shader_asset_id,
+                self.texture_sampler_pairs(),
+            )
+        }
+        .ok_or_else(|| {
+            Error::runtime(format!(
+                "ShaderAsset '{name}' Vulkan SPIR-V provenance was rejected"
+            ))
+        })
     }
 
     #[cfg(any(feature = "apple-authored-msl", test))]
@@ -366,9 +453,12 @@ pub fn decode_browser_shader_asset(
     payload: &[u8],
     profile: GpuCanvasShaderProfile,
 ) -> Result<GpuCanvasShaderArtifact> {
-    if profile == GpuCanvasShaderProfile::TrustedAppleMetal {
+    if matches!(
+        profile,
+        GpuCanvasShaderProfile::TrustedAppleMetal | GpuCanvasShaderProfile::TrustedVulkanSpirV
+    ) {
         return Err(Error::runtime(
-            "browser ShaderAsset decoding does not authorize native Metal code",
+            "browser ShaderAsset decoding does not authorize native shader code",
         ));
     }
     ShaderAsset::decode(name, payload)?.decode_for_profile(name, profile, None)
@@ -446,6 +536,8 @@ fn decode_whole_module_wgsl(
     name: &str,
     source_container: &[u8],
     binding_map: &[u8],
+    shader_asset_id: u32,
+    texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
 ) -> Result<GpuCanvasShader> {
     let (source, entries) = decode_whole_module_source(name, "WGSL", source_container)?;
     Ok(GpuCanvasShader {
@@ -453,6 +545,8 @@ fn decode_whole_module_wgsl(
         entries,
         bindings: decode_binding_map(name, &binding_map)?,
         binding_map_bytes: std::sync::Arc::from(binding_map),
+        shader_asset_id,
+        texture_sampler_pairs,
     })
 }
 
@@ -592,6 +686,44 @@ fn decode_whole_module_source(
             ))
         })?
         .to_owned();
+    Ok((source, entries))
+}
+
+#[cfg(any(feature = "android-authored-wgsl", test))]
+fn decode_whole_module_bytes(
+    name: &str,
+    language: &str,
+    source_container: &[u8],
+) -> Result<(Vec<u8>, Vec<GpuCanvasShaderEntry>)> {
+    let mut cursor = Cursor::new(source_container);
+    let entry_count = usize::from(cursor.read_u8("shader entry count")?);
+    if entry_count == 0 {
+        return Err(Error::runtime(format!(
+            "ShaderAsset '{name}' {language} entry table is empty"
+        )));
+    }
+    let mut entries = Vec::with_capacity(entry_count);
+    for _ in 0..entry_count {
+        let stage = match cursor.read_u8("shader stage")? {
+            0 => GpuCanvasShaderStage::Vertex,
+            1 => GpuCanvasShaderStage::Fragment,
+            2 => GpuCanvasShaderStage::Compute,
+            other => {
+                return Err(Error::runtime(format!(
+                    "ShaderAsset '{name}' {language} stage {other} is unsupported"
+                )));
+            }
+        };
+        entries.push(GpuCanvasShaderEntry {
+            stage,
+            logical_entry_point: cursor.read_string("shader logical entry point")?,
+            physical_entry_point: cursor.read_string("shader physical entry point")?,
+        });
+    }
+
+    let source_length = usize::try_from(cursor.read_u32("shader source length")?)
+        .map_err(|_| Error::runtime("shader source length is not addressable"))?;
+    let source = cursor.read_bytes(source_length, "shader source")?.to_vec();
     Ok((source, entries))
 }
 
@@ -974,14 +1106,18 @@ mod tests {
     }
 
     fn source_container(entries: &[(u8, &str, &str)], wgsl: &str) -> Vec<u8> {
+        byte_source_container(entries, wgsl.as_bytes())
+    }
+
+    fn byte_source_container(entries: &[(u8, &str, &str)], source_bytes: &[u8]) -> Vec<u8> {
         let mut source = vec![entries.len() as u8];
         for (stage, logical, physical) in entries {
             source.push(*stage);
             put_string(&mut source, logical);
             put_string(&mut source, physical);
         }
-        put_u32(&mut source, wgsl.len() as u32);
-        source.extend_from_slice(wgsl.as_bytes());
+        put_u32(&mut source, source_bytes.len() as u32);
+        source.extend_from_slice(source_bytes);
         source
     }
 
@@ -1174,6 +1310,185 @@ mod tests {
         ])
     }
 
+    #[test]
+    fn vulkan_spirv_preserves_exact_target_5_13_asset_and_pair_data() {
+        let code = vec![0x03, 0x02, 0x23, 0x07, 0xff, 0x00, 0x80, 0x11];
+        let source = byte_source_container(
+            &[
+                (2, "compute_second", "compute_second"),
+                (0, "vertex_first", "vertex_first"),
+                (1, "fragment_last", "fragment_last"),
+            ],
+            &code,
+        );
+        let mut binding_map = native_binding_map();
+        binding_map.extend_from_slice(&[0xa5, 0x5a]);
+        let payload = rstb_payload_with_sections(
+            &[
+                (WGSL_SOURCE_TARGET, imported_gpu_canvas_source_container()),
+                (
+                    WGSL_BINDING_MAP_TARGET,
+                    IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+                ),
+                (VULKAN_SPIRV_SOURCE_TARGET, source),
+                (VULKAN_SPIRV_BINDING_MAP_TARGET, binding_map.clone()),
+            ],
+            &[(
+                TEXTURE_SAMPLER_PAIR_SECTION,
+                vec![2, 1, 4, 1, 7, 2, 3, 5, 6],
+            )],
+        );
+        let asset = ShaderAsset::decode("vulkan", &payload).unwrap();
+        asset
+            .asset
+            .with_downcast_mut::<NativeShaderAsset, _>(|asset| asset.base.set_asset_id(73))
+            .expect("native ShaderAsset");
+        let artifact = asset
+            .decode_for_profile(
+                "vulkan",
+                GpuCanvasShaderProfile::TrustedVulkanSpirV,
+                Some(provenance(&payload)),
+            )
+            .expect("Vulkan selects the authenticated target-5/13 pair");
+        let GpuCanvasShaderArtifact::TrustedVulkanSpirV(shader) = artifact else {
+            panic!("Vulkan profile must return SPIR-V");
+        };
+        assert_eq!(shader.code(), code);
+        assert_eq!(
+            shader
+                .entries()
+                .iter()
+                .map(|entry| (
+                    entry.stage,
+                    entry.logical_entry_point.as_str(),
+                    entry.physical_entry_point.as_str(),
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    GpuCanvasShaderStage::Compute,
+                    "compute_second",
+                    "compute_second",
+                ),
+                (GpuCanvasShaderStage::Vertex, "vertex_first", "vertex_first",),
+                (
+                    GpuCanvasShaderStage::Fragment,
+                    "fragment_last",
+                    "fragment_last",
+                ),
+            ],
+        );
+        assert_eq!(shader.bindings().len(), 3);
+        assert_eq!(shader.binding_map_bytes(), binding_map);
+        assert_eq!(shader.shader_asset_id(), 73);
+        assert_eq!(
+            shader.texture_sampler_pairs(),
+            [
+                GpuCanvasShaderTextureSamplerPair {
+                    texture_group: 1,
+                    texture_binding: 4,
+                    sampler_group: 1,
+                    sampler_binding: 7,
+                },
+                GpuCanvasShaderTextureSamplerPair {
+                    texture_group: 2,
+                    texture_binding: 3,
+                    sampler_group: 5,
+                    sampler_binding: 6,
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn vulkan_spirv_rejects_a_zero_entry_target_5_container() {
+        let payload = rstb_payload(&[
+            (
+                VULKAN_SPIRV_SOURCE_TARGET,
+                byte_source_container(&[], &[0x03, 0x02, 0x23, 0x07]),
+            ),
+            (
+                VULKAN_SPIRV_BINDING_MAP_TARGET,
+                IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+            ),
+        ]);
+        let asset = ShaderAsset::decode("zero-entry-vulkan", &payload).unwrap();
+
+        let error = asset
+            .decode_for_profile(
+                "zero-entry-vulkan",
+                GpuCanvasShaderProfile::TrustedVulkanSpirV,
+                Some(provenance(&payload)),
+            )
+            .expect_err("upstream buildShaderEntries fails without an entry record");
+
+        assert!(error.to_string().contains("entry table is empty"));
+    }
+
+    #[test]
+    fn vulkan_spirv_requires_exact_provenance_and_never_falls_back_to_wgsl() {
+        let webgpu_only = imported_gpu_canvas_webgpu_payload();
+        let asset = ShaderAsset::decode("webgpu-only", &webgpu_only).unwrap();
+        let error = asset
+            .decode_for_profile(
+                "webgpu-only",
+                GpuCanvasShaderProfile::TrustedVulkanSpirV,
+                Some(provenance(&webgpu_only)),
+            )
+            .expect_err("Vulkan never falls back to target 0");
+        assert!(error.to_string().contains("target-5"));
+
+        let missing_vulkan_map = rstb_payload(&[
+            (
+                VULKAN_SPIRV_SOURCE_TARGET,
+                byte_source_container(&[(0, "vertex", "vertex")], &[0x03, 0x02, 0x23, 0x07]),
+            ),
+            (
+                WGSL_BINDING_MAP_TARGET,
+                IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+            ),
+        ]);
+        let asset = ShaderAsset::decode("missing-vulkan-map", &missing_vulkan_map).unwrap();
+        let error = asset
+            .decode_for_profile(
+                "missing-vulkan-map",
+                GpuCanvasShaderProfile::TrustedVulkanSpirV,
+                Some(provenance(&missing_vulkan_map)),
+            )
+            .expect_err("Vulkan never falls back to the target-16 WGSL map");
+        assert!(error.to_string().contains("target-13"));
+
+        let payload = rstb_payload(&[
+            (
+                VULKAN_SPIRV_SOURCE_TARGET,
+                byte_source_container(&[(0, "vertex", "vertex")], &[0x03, 0x02, 0x23, 0x07]),
+            ),
+            (
+                VULKAN_SPIRV_BINDING_MAP_TARGET,
+                IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+            ),
+        ]);
+        let asset = ShaderAsset::decode("vulkan", &payload).unwrap();
+        assert!(
+            asset
+                .decode_for_profile("vulkan", GpuCanvasShaderProfile::TrustedVulkanSpirV, None,)
+                .expect_err("native Vulkan bytes require outer provenance")
+                .to_string()
+                .contains("no verified provenance")
+        );
+        assert!(
+            asset
+                .decode_for_profile(
+                    "vulkan",
+                    GpuCanvasShaderProfile::TrustedVulkanSpirV,
+                    Some(provenance(b"different artifact")),
+                )
+                .expect_err("provenance is bound to the exact artifact")
+                .to_string()
+                .contains("does not authorize")
+        );
+    }
+
     #[cfg(feature = "android-authored-wgsl")]
     #[test]
     fn android_wgsl_requires_exact_unforgeable_provenance() {
@@ -1242,6 +1557,58 @@ mod tests {
     }
 
     #[test]
+    fn webgpu_preserves_shader_asset_id_and_all_texture_sampler_pairs() {
+        let payload = rstb_payload_with_sections(
+            &[
+                (WGSL_SOURCE_TARGET, imported_gpu_canvas_source_container()),
+                (
+                    WGSL_BINDING_MAP_TARGET,
+                    IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec(),
+                ),
+            ],
+            &[
+                (TEXTURE_SAMPLER_PAIR_SECTION, vec![1, 0, 1, 0, 2]),
+                (
+                    TEXTURE_SAMPLER_PAIR_SECTION,
+                    vec![2, 1, 3, 1, 4, 2, 5, 2, 6],
+                ),
+            ],
+        );
+        let asset = ShaderAsset::decode("webgpu-metadata", &payload).unwrap();
+        asset
+            .asset
+            .with_downcast_mut::<NativeShaderAsset, _>(|asset| asset.base.set_asset_id(41))
+            .expect("native ShaderAsset");
+
+        let shader = asset.decode_webgpu("webgpu-metadata").unwrap();
+
+        assert_eq!(shader.shader_asset_id, 41);
+        assert_eq!(
+            shader.texture_sampler_pairs,
+            [
+                GpuCanvasShaderTextureSamplerPair {
+                    texture_group: 0,
+                    texture_binding: 1,
+                    sampler_group: 0,
+                    sampler_binding: 2,
+                },
+                GpuCanvasShaderTextureSamplerPair {
+                    texture_group: 1,
+                    texture_binding: 3,
+                    sampler_group: 1,
+                    sampler_binding: 4,
+                },
+                GpuCanvasShaderTextureSamplerPair {
+                    texture_group: 2,
+                    texture_binding: 5,
+                    sampler_group: 2,
+                    sampler_binding: 6,
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn selects_webgl2_per_entry_sources_sidecars_and_texture_pairs() {
         let glsl = per_entry_source_container(&[
             (
@@ -1267,14 +1634,23 @@ mod tests {
                 (WEBGL2_VERTEX_FIXUP_TARGET, empty_gl_fixup()),
                 (WEBGL2_FRAGMENT_FIXUP_TARGET, empty_gl_fixup()),
             ],
-            &[(TEXTURE_SAMPLER_PAIR_SECTION, vec![1, 2, 4, 2, 7])],
+            &[
+                (TEXTURE_SAMPLER_PAIR_SECTION, vec![1, 2, 4, 2, 7]),
+                (TEXTURE_SAMPLER_PAIR_SECTION, vec![1, 3, 5, 3, 8]),
+            ],
         );
-        let artifact =
-            decode_browser_shader_asset("portable", &payload, GpuCanvasShaderProfile::WebGl2)
-                .expect("WebGL2 profile selects its exact variants");
+        let asset = ShaderAsset::decode("portable", &payload).unwrap();
+        asset
+            .asset
+            .with_downcast_mut::<NativeShaderAsset, _>(|asset| asset.base.set_asset_id(42))
+            .expect("native ShaderAsset");
+        let artifact = asset
+            .decode_for_profile("portable", GpuCanvasShaderProfile::WebGl2, None)
+            .expect("WebGL2 profile selects its exact variants");
         let GpuCanvasShaderArtifact::WebGl2(shader) = artifact else {
             panic!("expected WebGL2 artifact");
         };
+        assert_eq!(shader.shader_asset_id, 42);
         assert_eq!(shader.entries.len(), 2);
         assert_eq!(shader.entries[0].logical_entry_point, "authored_vertex");
         assert_eq!(shader.entries[0].physical_entry_point, "main");
@@ -1291,12 +1667,20 @@ mod tests {
         assert_eq!(shader.vertex_gl_fixup_bytes.as_ref(), [1, 0, 0]);
         assert_eq!(
             shader.texture_sampler_pairs,
-            vec![GpuCanvasShaderTextureSamplerPair {
-                texture_group: 2,
-                texture_binding: 4,
-                sampler_group: 2,
-                sampler_binding: 7,
-            }]
+            vec![
+                GpuCanvasShaderTextureSamplerPair {
+                    texture_group: 2,
+                    texture_binding: 4,
+                    sampler_group: 2,
+                    sampler_binding: 7,
+                },
+                GpuCanvasShaderTextureSamplerPair {
+                    texture_group: 3,
+                    texture_binding: 5,
+                    sampler_group: 3,
+                    sampler_binding: 8,
+                },
+            ]
         );
     }
 

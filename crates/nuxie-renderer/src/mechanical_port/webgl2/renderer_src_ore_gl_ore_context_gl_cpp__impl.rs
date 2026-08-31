@@ -1969,6 +1969,7 @@ mod tests {
     use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
     use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
     use crate::mechanical_port::webgl2::render_context_gl_decl::TextureGLImpl;
+    use nuxie_ore_metal::shader_module::TextureSamplerPair;
     use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
     use std::rc::Rc;
@@ -2118,6 +2119,33 @@ mod tests {
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 16);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 14);
+    }
+
+    #[test]
+    fn erased_shader_pair_replacement_projects_through_shader_module_gl_base() {
+        let (domain, _) = execution([]);
+        let pair = TextureSamplerPair {
+            textureGroup: 1,
+            textureBinding: 2,
+            samplerGroup: 3,
+            samplerBinding: 4,
+        };
+        let module = ShaderModuleGL::new(domain.stamp());
+        let mut module = ResourceHandle::new(None, module).erase();
+
+        // SAFETY: this is the sole fresh local module handle, and no payload
+        // reference is obtained before the construction-only replacement.
+        assert!(unsafe { module.replaceShaderTextureSamplerPairs(vec![pair]) });
+        assert_eq!(
+            module
+                .downcast_ref::<ShaderModuleGL>()
+                .expect("GL shader-module payload")
+                .m_textureSamplerPairs,
+            [pair]
+        );
+
+        drop(module);
+        domain.shutdown();
     }
 
     #[test]

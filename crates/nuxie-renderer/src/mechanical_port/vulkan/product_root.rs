@@ -1,10 +1,16 @@
 //! Headless native product root for the exact Vulkan translation.
 
+#[cfg(feature = "native-ore-vulkan-experimental")]
+use std::any::Any;
 use std::ffi::{CStr, CString, c_void};
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::ptr::NonNull;
+#[cfg(feature = "native-ore-vulkan-experimental")]
+use std::rc::Rc;
+#[cfg(feature = "native-ore-vulkan-experimental")]
+use std::sync::Arc;
 
 use ash::vk;
 use ash::vk::Handle;
@@ -13,12 +19,21 @@ use super::render_context_vulkan_decl::{ContextOptions, RenderContextVulkanImpl}
 use super::render_target_vulkan_decl::{RenderTargetVulkanApi, RenderTargetVulkanImpl};
 use super::vkutil_decl::{ImageAccess, ImageAccessAction};
 use super::vulkan_context_decl::VulkanFeatures;
+#[cfg(feature = "native-ore-vulkan-experimental")]
+use crate::exact_gpu_canvas::ExactGpuCanvas;
 use crate::exact_source_adapter::ExactSourceBackend;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
-    FlushResources, FrameDescriptor, RenderContext, RenderContextContract,
+    FlushResources, FrameDescriptor, OreContext, RenderContext, RenderContextContract,
 };
+#[cfg(feature = "native-ore-vulkan-experimental")]
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 use crate::{RenderMode, RendererError};
+#[cfg(feature = "native-ore-vulkan-experimental")]
+use nuxie_render_api::{
+    GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShaderArtifact,
+    GpuCanvasShaderProfile, RenderGpuCanvasShader,
+};
 
 const TARGET_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 const TARGET_USAGE: vk::ImageUsageFlags = vk::ImageUsageFlags::from_raw(
@@ -92,6 +107,8 @@ pub(crate) struct VulkanProductBackend {
     queue: vk::Queue,
     queue_family_index: u32,
     context: Option<Pin<Box<RenderContext>>>,
+    #[cfg(feature = "native-ore-vulkan-experimental")]
+    gpu_canvas: Option<ExactGpuCanvas<super::ContextVulkan>>,
     target: rcp<RenderTargetVulkanImpl>,
     resources: TargetResources,
     width: u32,
@@ -170,6 +187,8 @@ impl VulkanProductBackend {
             queue,
             queue_family_index,
             context: Some(context),
+            #[cfg(feature = "native-ore-vulkan-experimental")]
+            gpu_canvas: None,
             target,
             resources,
             width,
@@ -185,6 +204,36 @@ impl VulkanProductBackend {
 
     pub(crate) fn adapter_name(&self) -> &str {
         &self.adapter_name
+    }
+
+    #[cfg(feature = "native-ore-vulkan-experimental")]
+    fn gpu_canvas_mut(
+        &mut self,
+    ) -> Result<&mut ExactGpuCanvas<super::ContextVulkan>, GpuCanvasError> {
+        if self.gpu_canvas.is_none() {
+            let ore_context = unsafe { Pin::get_unchecked_mut(self.context_pin()) }.oreExecutable();
+            let mut ore_context = NonNull::new(ore_context)
+                .ok_or_else(|| GpuCanvasError::new("exact Vulkan ORE context is unavailable"))?;
+            let context = match unsafe { ore_context.as_mut() } {
+                OreContext::Vulkan(context) => NonNull::from(context.as_mut()),
+                #[allow(unreachable_patterns)]
+                _ => {
+                    return Err(GpuCanvasError::new(
+                        "exact Vulkan RenderContext returned a foreign ORE context",
+                    ));
+                }
+            };
+            self.gpu_canvas = Some(unsafe {
+                ExactGpuCanvas::new_borrowed(
+                    context,
+                    GpuCanvasShaderProfile::TrustedVulkanSpirV,
+                )?
+            });
+        }
+        Ok(self
+            .gpu_canvas
+            .as_mut()
+            .expect("initialized source-owned Vulkan ORE context"))
     }
 
     #[cfg(test)]
@@ -533,6 +582,114 @@ impl ExactSourceBackend for VulkanProductBackend {
             self.active_frame = false;
         }
     }
+
+    #[cfg(feature = "native-ore-vulkan-experimental")]
+    fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
+        GpuCanvasShaderProfile::TrustedVulkanSpirV
+    }
+
+    #[cfg(feature = "native-ore-vulkan-experimental")]
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        artifact: &GpuCanvasShaderArtifact,
+        execution_anchor: Rc<dyn Any>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.gpu_canvas_mut()?
+            .make_shader_artifact(artifact, execution_anchor)
+    }
+
+    #[cfg(feature = "native-ore-vulkan-experimental")]
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &Arc<dyn RenderGpuCanvasShader>,
+        execution_anchor: Rc<dyn Any>,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        self.gpu_canvas_mut()?
+            .make_shader_occurrence(prepared, execution_anchor)
+    }
+
+    #[cfg(feature = "native-ore-vulkan-experimental")]
+    fn make_gpu_canvas_image_with_pipelines(
+        &mut self,
+        pipelines: &[GpuCanvasPipelineShaders],
+        plan: &GpuCanvasPlan,
+        execution_anchor: Rc<dyn Any>,
+    ) -> Result<RiveRenderImageHandle, GpuCanvasError> {
+        let canvas = unsafe { Pin::get_unchecked_mut(self.context_pin()) }
+            .makeRenderCanvasExecutable(plan.width, plan.height);
+        if !canvas.operator_bool() {
+            return Err(GpuCanvasError::new(
+                "exact Vulkan failed to create a GPU-canvas render target",
+            ));
+        }
+
+        let command = {
+            let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
+            let implementation = unsafe {
+                &mut *context.static_impl_cast::<RenderContextVulkanImpl>()
+            };
+            super::render_context_vulkan_impl::makeCommandBuffer(implementation)
+        };
+        let command = NonNull::new(command).ok_or_else(|| {
+            GpuCanvasError::new("exact Vulkan failed to create a GPU-canvas command buffer")
+        })?;
+
+        // ORE and the main renderer share the exact same VulkanContext and
+        // GPUResourceManager upstream. Feed both from this product root's one
+        // host frame-number stream. Work issued during an active main frame
+        // belongs to that frame; standalone synchronous canvas work advances
+        // the stream before recording.
+        let (safe_frame_number, current_frame_number) =
+            gpu_canvas_frame_numbers(&mut self.frame_number, self.active_frame);
+
+        let execution = (|| {
+            let gpu_canvas = self.gpu_canvas_mut()?;
+            unsafe {
+                gpu_canvas.begin_frame_external(
+                    safe_frame_number,
+                    current_frame_number,
+                    command,
+                )
+            };
+            let result = gpu_canvas.execute_current_frame(
+                &canvas,
+                pipelines,
+                plan,
+                &execution_anchor,
+            );
+            gpu_canvas.end_frame();
+            result
+        })();
+
+        // Pinned Vulkan owns this submission/free path. It runs even when the
+        // authored pass is rejected after beginFrame, exactly as the source
+        // canvas pre-pass must release its command-buffer allocation.
+        {
+            let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
+            let implementation = unsafe {
+                &mut *context.static_impl_cast::<RenderContextVulkanImpl>()
+            };
+            unsafe {
+                super::render_context_vulkan_impl::commitCommandBuffer(
+                    implementation,
+                    command.as_ptr(),
+                )
+            };
+        }
+        execution
+    }
+}
+
+#[cfg(feature = "native-ore-vulkan-experimental")]
+fn gpu_canvas_frame_numbers(frame_number: &mut u64, active_frame: bool) -> (u64, u64) {
+    if !active_frame {
+        *frame_number = frame_number.wrapping_add(1);
+    }
+    let current_frame_number = *frame_number;
+    (
+        current_frame_number.saturating_sub(1),
+        current_frame_number,
+    )
 }
 
 impl Drop for VulkanProductBackend {
@@ -541,6 +698,8 @@ impl Drop for VulkanProductBackend {
         unsafe {
             let _ = self.device.device_wait_idle();
         }
+        #[cfg(feature = "native-ore-vulkan-experimental")]
+        self.gpu_canvas.take();
         self.target.operator_assign_null();
         self.context.take();
         unsafe {
@@ -877,4 +1036,23 @@ fn find_memory_type(
                     .contains(required)
         })
         .ok_or_else(|| RendererError::Device(format!("no Vulkan memory type for {required:?}")))
+}
+
+#[cfg(all(test, feature = "native-ore-vulkan-experimental"))]
+mod gpu_canvas_frame_number_tests {
+    use super::gpu_canvas_frame_numbers;
+
+    #[test]
+    fn gpu_canvas_uses_the_single_monotonic_host_frame_stream() {
+        let mut frame_number = 2;
+
+        assert_eq!(gpu_canvas_frame_numbers(&mut frame_number, false), (2, 3));
+        assert_eq!(frame_number, 3);
+
+        assert_eq!(gpu_canvas_frame_numbers(&mut frame_number, true), (2, 3));
+        assert_eq!(frame_number, 3);
+
+        assert_eq!(gpu_canvas_frame_numbers(&mut frame_number, false), (3, 4));
+        assert_eq!(frame_number, 4);
+    }
 }

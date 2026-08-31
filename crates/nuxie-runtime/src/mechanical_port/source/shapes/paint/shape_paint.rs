@@ -402,10 +402,14 @@ impl ShapePaint {
     }
 
     pub(crate) fn finish_invalidate_effects(&mut self) {
+        self.invalidate_effect_feather();
+        self.invalidate_rendering();
+    }
+
+    pub(crate) fn invalidate_effect_feather(&mut self) {
         if let Some(feather) = self.feather.as_ref() {
             feather.with_downcast_mut::<Feather, _>(Feather::mark_effect_path_dirty);
         }
-        self.invalidate_rendering();
     }
 
     pub fn invalidate_effects(&mut self) {
@@ -413,7 +417,7 @@ impl ShapePaint {
     }
 
     pub fn invalidate_rendering(&mut self) {
-        self.base.add_dirt(ComponentDirt::PATH, false);
+        self.base.add_dirt(ComponentDirt::PATH, true);
     }
 
     pub fn add_stroke_effect(

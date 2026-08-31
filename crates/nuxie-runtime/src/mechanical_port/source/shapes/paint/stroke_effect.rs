@@ -74,7 +74,9 @@ impl StrokeEffectState {
         }
     }
 }
-pub trait StrokeEffect {
+pub trait StrokeEffect:
+    crate::mechanical_port::source::generated::core_registry::CoreCapabilities
+{
     fn stroke_effect_state(&mut self) -> &mut StrokeEffectState;
     fn stroke_effect_handle(&self) -> Option<CoreHandle>;
     fn update_effect(

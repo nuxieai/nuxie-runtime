@@ -7,12 +7,16 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1f04919af881fe51c929924dc773c835ca9071f0`
+- LAST_SYNCED_SHA: `ddd1a2aacf62ee6e550b65b445d0ccdafe284e6a`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest applied change: text style backgrounds with corner rounding,
-  `1f04919af881fe51c929924dc773c835ca9071f0`.
-  Work: [UNIV-1675](https://universe.basis.dev/issue/UNIV-1675).
+  Latest applied change: path-effect-aware clipping,
+  `ddd1a2aacf62ee6e550b65b445d0ccdafe284e6a`.
+  Work: [UNIV-1673](https://universe.basis.dev/issue/UNIV-1673).
+- Intervening `8efe18ec7b52a02139844ffe71438c00de13037e` needs no Rust
+  translation: Apple products and verification links already explicitly set
+  macOS 12. The current upstream oracle source retains its Premake macOS 11
+  linker-floor fix. No runtime behavior or future dependency was excluded.
 - This source checkpoint is not Adreno/PowerVR hardware qualification. The
   existing MoltenVK C-API content checks fail identically on the previous main
   and this update; follow-up: [UNIV-2875](https://universe.basis.dev/issue/UNIV-2875).
@@ -94,6 +98,9 @@ Current pin locations to inspect together:
 - `tools/fetch-test-assets.sh`: default revision, not fixed asset provenance.
 - `tools/{check-renderer-decoder-provenance,generate-renderer-shaders,renderer-dawn-live-reference-bootstrap}.sh`.
 - `tools/golden-runner/runtime-provenance.sh`.
+- `tools/silver-corpus/{generate_manifest.py,src/lib.rs}` and `silver-corpus.toml`:
+  current inventory reference and new upstream cases; preserve existing result
+  classifications unless the translated upstream delta changes their evidence.
 - `tools/backend-port/build-{webgpu,webgl2}-source-oracle.sh` and shader
   importers: source revisions and regenerated artifact hashes.
 

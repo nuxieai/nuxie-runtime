@@ -72,3 +72,48 @@ fn reusing_a_path_in_multiple_passes_works_correctly() {
     )
     .expect("pinned reuse_path_in_effect silver");
 }
+
+#[test]
+fn a_clip_follows_the_path_effect_on_its_sources_fill() {
+    let mut silver = PersistentFactory::new(SerializingFactory::new());
+    let vm = RuntimeScriptingVmHandle::new(Box::new(
+        ScriptVm::new_with_execution_limits(ScriptExecutionLimits::default()).unwrap(),
+    ));
+    let file = File::import(
+        &pinned_fixture("scripted_path_effect_clip.riv"),
+        RuntimeFactoryHandle::from_factory(&mut silver).unwrap(),
+        None,
+        None,
+        Some(vm),
+    )
+    .expect("scripted_path_effect_clip.riv imports");
+    let artboard = file.with_file(File::artboard_default).unwrap();
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
+    silver.borrow_mut().frame_size(width as u32, height as u32);
+    let machine = artboard.state_machine_instance_handle(0).unwrap();
+    let model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+        })
+        .unwrap();
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(model));
+    let mut renderer = silver.borrow().make_renderer();
+    machine.advance_and_apply(0.0);
+    artboard.draw(&mut renderer);
+
+    // A single frame would not catch a clip that resolves its effect once and freezes.
+    for _ in 0..60 {
+        silver.borrow_mut().add_frame();
+        machine.advance_and_apply(1.0f32 / 60.0f32);
+        artboard.draw(&mut renderer);
+    }
+
+    let expected = pinned_fixture("../silvers/scripted_path_effect_clip.sriv");
+    let actual = silver.borrow().bytes().to_vec();
+    assert_eq!(actual.len(), expected.len(), "pinned SRIV byte length");
+    sriv::compare_sriv(
+        &sriv::parse_sriv(&expected).unwrap(),
+        &sriv::parse_sriv(&actual).unwrap(),
+    )
+    .expect("pinned scripted_path_effect_clip silver");
+}

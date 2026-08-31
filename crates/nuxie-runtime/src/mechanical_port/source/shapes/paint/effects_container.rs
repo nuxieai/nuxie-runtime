@@ -1,4 +1,6 @@
 use crate::mechanical_port::source::{
+    component::{Component, ComponentOccurrenceHandle},
+    component_dirt::ComponentDirt,
     core::CoreHandle,
     shapes::paint::{
         group_effect::GroupEffect,
@@ -12,6 +14,10 @@ pub struct EffectsContainerState {
     pub effects: Vec<CoreHandle>,
 }
 impl EffectsContainerState {
+    pub fn has_effects(&self) -> bool {
+        !self.effects.is_empty()
+    }
+
     pub fn add_stroke_effect(&mut self, effect: CoreHandle) {
         self.effects.push(effect);
     }
@@ -40,6 +46,39 @@ pub(crate) struct ActiveStrokeEffect<'a> {
 impl<'a> ActiveStrokeEffect<'a> {
     pub(crate) fn new(identity: CoreHandle, effect: &'a mut dyn StrokeEffect) -> Self {
         Self { identity, effect }
+    }
+}
+
+// C++ may recursively dirty the effect whose callback is already on the stack.
+// Use that actual Rust owner while preserving onDirty, artboard notification,
+// and depth-first dependent order; never reacquire its borrowed Core slot.
+fn add_dirt_with_active(
+    occurrence: &ComponentOccurrenceHandle,
+    value: ComponentDirt,
+    active: &mut Option<ActiveStrokeEffect<'_>>,
+) {
+    let dependents = if let Some(owner) = active
+        .as_mut()
+        .filter(|owner| occurrence.authored() == Some(&owner.identity))
+    {
+        if !owner.effect.component_add_dirt(value, false) {
+            return;
+        }
+        owner
+            .effect
+            .as_component()
+            .expect("active stroke effect Component")
+            .dependents_snapshot()
+    } else {
+        if !occurrence.add_dirt(value, false) {
+            return;
+        }
+        occurrence
+            .with_component(Component::dependents_snapshot)
+            .unwrap_or_default()
+    };
+    for dependent in dependents {
+        add_dirt_with_active(&dependent, value, active);
     }
 }
 
@@ -110,15 +149,30 @@ pub(crate) fn invalidate_effects_handle_with_active(
         }
     }
 
-    container.with_mut(|container| {
-        if let Some(paint) = container.as_shape_paint_mut() {
-            paint.finish_invalidate_effects();
+    let dependents = container
+        .with_mut(|container| {
+            let paint = container.as_shape_paint_mut()?;
+            paint.invalidate_effect_feather();
+            // Finish this paint's synchronous dirty callbacks before releasing
+            // it to traverse dependents, including the active source effect.
+            if !paint.base.add_dirt(ComponentDirt::PATH, false) {
+                return None;
+            }
+            Some(paint.base.dependents_snapshot())
+        })
+        .flatten();
+    if let Some(dependents) = dependents {
+        for dependent in dependents {
+            add_dirt_with_active(&dependent, ComponentDirt::PATH, active);
         }
-    });
+    }
 }
 
 pub trait EffectsContainer {
     fn effects_state(&mut self) -> &mut EffectsContainerState;
+    fn has_effects(&mut self) -> bool {
+        self.effects_state().has_effects()
+    }
     // The live effect is already borrowed by its lifecycle callback. Retain
     // its occurrence identity without resolving and reborrowing that owner.
     fn add_stroke_effect(&mut self, identity: CoreHandle, _effect: &mut dyn StrokeEffect) {

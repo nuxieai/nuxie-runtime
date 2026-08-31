@@ -866,21 +866,28 @@
 //     // reading the buffer and subtracting.
 //     borrowedCoveragePass = 1 << 4,
 //
+//     // The backend can't turn color writes off via dynamic state
+//     // (e.g., VK_EXT_color_write_enable), so the shader emulates it by
+//     // outputting color == 0.
+//     // NOTE: "color == 0" doesn't work with blending disabled (opaquePaint), so
+//     // this flag also forces blend on for opaque content.
+//     emulateDynamicColorWriteDisable = 1 << 5,
+//
 //     // DrawType::renderPassInitialize only. Also store the color clear value to
 //     // PLS when drawing a clear, in addition to clearing the other PLS planes.
-//     storeColorClear = 1 << 5,
+//     storeColorClear = 1 << 6,
 //
 //     // DrawType::renderPassInitialize only. Seed the color PLS plane by
 //     // sampling the framebuffer contents (previously copied into a dst color
 //     // texture bound at IMAGE_TEXTURE_IDX). Used for
 //     // LoadAction::preserveRenderTarget on backends that can't directly copy
 //     // a texture into a storage buffer (e.g. WebGPU).
-//     loadColorFromDstTexture = 1 << 6,
+//     loadColorFromDstTexture = 1 << 7,
 //
 //     // DrawType::renderPassInitialize only. Swizzle the existing framebuffer
 //     // contents from BGRA to RGBA. (For when this data had to get copied from a
 //     // BGRA target.)
-//     swizzleColorBGRAToRGBA = 1 << 7,
+//     swizzleColorBGRAToRGBA = 1 << 8,
 //
 //     // DrawType::renderPassResolve only. Optimization for when rendering to an
 //     // offscreen texture.
@@ -888,7 +895,7 @@
 //     // It renders the final "resolve" operation directly to the renderTarget in
 //     // a single pass, instead of (1) resolving the offscreen texture, and then
 //     // (2) copying the offscreen texture to back the renderTarget.
-//     coalescedResolveAndTransfer = 1 << 8,
+//     coalescedResolveAndTransfer = 1 << 9,
 // };
 //
 // constexpr static ShaderFeatures ShaderFeaturesMaskFor(
@@ -2018,7 +2025,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/gpu.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: 2b2203f45a67f813cb662272962192ecfdfd923e
 // Ownership unit: generic-gpu-contract.
 // Include/dependency authority: the pinned header and source-shaped modules.
 
@@ -2706,10 +2713,11 @@ define_flag_type!(
     clipUpdateOnly = 1 << 2,
     nestedClipUpdateOnly = 1 << 3,
     borrowedCoveragePass = 1 << 4,
-    storeColorClear = 1 << 5,
-    loadColorFromDstTexture = 1 << 6,
-    swizzleColorBGRAToRGBA = 1 << 7,
-    coalescedResolveAndTransfer = 1 << 8,
+    emulateDynamicColorWriteDisable = 1 << 5,
+    storeColorClear = 1 << 6,
+    loadColorFromDstTexture = 1 << 7,
+    swizzleColorBGRAToRGBA = 1 << 8,
+    coalescedResolveAndTransfer = 1 << 9,
 );
 
 impl ShaderMiscFlags {

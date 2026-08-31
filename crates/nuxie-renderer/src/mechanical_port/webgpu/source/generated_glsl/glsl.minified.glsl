@@ -15,7 +15,7 @@
 #define h5 mediump mat4x4
 #define X ivec2
 #define a6 ivec4
-#define a1 uvec2
+#define c1 uvec2
 #define G uvec4
 #define N mediump uint
 #define D4 bvec2
@@ -23,7 +23,7 @@
 #define v7 bvec4
 #define g0 mat2
 #define e
-#define Z0(j2) out j2
+#define a1(j2) out j2
 #define T4(j2) inout j2
 #ifdef GL_ANGLE_base_vertex_base_instance_shader_builtin
 #extension GL_ANGLE_base_vertex_base_instance_shader_builtin:require
@@ -144,9 +144,9 @@
 #define x7(k0,p,l,Q1) r5(k0,p,l,Q1)
 #define f6(T,f,a) k5(T,f,a)
 #define U6(a,p,q,p6,O8,R0) n2(a,p,d(q,O8),R0)
-#define Hg(T,f,a) C4(T,f,a)
+#define Ig(T,f,a) C4(T,f,a)
 #define G3
-#define d1
+#define e1
 #define q1(a,l) texelFetch(a,l,0)
 #ifdef TARGET_SPIRV
 #elif GLSL_VERSION>=310
@@ -158,7 +158,7 @@
 #define P3
 #ifdef DISABLE_SHADER_STORAGE_BUFFERS
 #define K5(f,w1,a) C4(a3,f,a)
-#define G4(f,w1,a) Hg(a3,f,a)
+#define G4(f,w1,a) Ig(a3,f,a)
 #define L5(f,w1,a) e5(a3,f,a)
 #define N0(a,A0) q1(a,X((A0)&Dc,(A0)>>Cc))
 #define M5(a,A0) q1(a,X((A0)&Dc,(A0)>>Cc)).xy
@@ -166,7 +166,7 @@
 #ifdef GL_ARB_shader_storage_buffer_object
 #extension GL_ARB_shader_storage_buffer_object:require
 #endif
-#define K5(f,w1,a) layout(std430,binding=f)readonly buffer w1{a1 c2[];}a
+#define K5(f,w1,a) layout(std430,binding=f)readonly buffer w1{c1 c2[];}a
 #define G4(f,w1,a) layout(std430,binding=f)readonly buffer w1{G c2[];}a
 #define L5(f,w1,a) layout(std430,binding=f)readonly buffer w1{g c2[];}a
 #define Ma(f,w1,a) layout(std430,binding=f)buffer w1{uint c2[];}a
@@ -175,7 +175,7 @@
 #define Ad(a,A0) a.c2[A0]
 #define z7(a,A0,q) atomicMax(a.c2[A0],q)
 #define Na(a,A0,q) atomicAdd(a.c2[A0],q)
-#define Ig(a,A0,q) atomicOr(a.c2[A0],q)
+#define Jg(a,A0,q) atomicOr(a.c2[A0],q)
 #endif
 #ifdef PLS_IMPL_STORAGE_BUFFER
 #define L1(a) void main(){X J=ivec2(floor(Y));int D0=int(I8(uvec2(J),(n.m6+(ta-1u))&~(ta-1u)));
@@ -232,9 +232,9 @@
 #define j1(f,a) layout(binding=f,r32ui)uniform highp upixelLocalANGLE a
 #define J1
 #define H0(h) pixelLocalLoadANGLE(h)
-#define Y0(h) pixelLocalLoadANGLE(h).x
+#define Z0(h) pixelLocalLoadANGLE(h).x
 #define x0(h,D) pixelLocalStoreANGLE(h,D)
-#define c1(h,D) pixelLocalStoreANGLE(h,uvec4(D))
+#define d1(h,D) pixelLocalStoreANGLE(h,uvec4(D))
 #define v2(h)
 #define d2(h)
 #define w2
@@ -252,9 +252,9 @@
 #define j1(f,a) layout(r32ui)highp uint a
 #define J1 };
 #define H0(h) h
-#define Y0(h) h
+#define Z0(h) h
 #define x0(h,D) h=(D)
-#define c1(h,D) h=(D)
+#define d1(h,D) h=(D)
 #define v2(h) h=h
 #define d2(h) h=h
 #define w2
@@ -271,8 +271,8 @@
 #define Sa Ra
 #define H0 Pa
 #define x0 Qa
-#define Y0 T2
-#define c1 U2
+#define Z0 T2
+#define d1 U2
 #define v2(h)
 #define d2(h)
 #if defined(GL_ARB_fragment_shader_interlock)
@@ -296,11 +296,11 @@
 #define j1(f,a) layout(input_attachment_index=f,binding=f,set=F3)uniform highp usubpassInput A7##a;layout(location=f)out highp uvec4 a
 #define J1
 #define H0(h) subpassLoad(A7##h)
-#define Y0(h) subpassLoad(A7##h).x
+#define Z0(h) subpassLoad(A7##h).x
 #define x0(h,D) h=(D)
-#define c1(h,D) h.x=(D)
+#define d1(h,D) h.x=(D)
 #define v2(h) x0(h,subpassLoad(A7##h))
-#define d2(h) c1(h,subpassLoad(A7##h).x)
+#define d2(h) d1(h,subpassLoad(A7##h).x)
 #define w2
 #define x2
 #endif
@@ -310,9 +310,9 @@
 #define j1(f,a) layout(location=f)out highp uvec4 a
 #define J1
 #define H0(h) vec4(0)
-#define Y0(h) 0u
+#define Z0(h) 0u
 #define x0(h,D) h=(D)
-#define c1(h,D) h.x=(D)
+#define d1(h,D) h.x=(D)
 #define v2(h) h=vec4(0)
 #define d2(h) h.x=0u
 #define w2
@@ -349,19 +349,19 @@ uniform highp int BASE_INSTANCE_UNIFORM_NAME;
 #define a0(a)
 #define A(a,d0)
 #define z1(O0) gl_Position=O0;}
-#define Y2(S1,a) layout(location=0)out S1 Jg;void main()
+#define Y2(S1,a) layout(location=0)out S1 Kg;void main()
 #define q6 Y2
 #define r6 gl_FrontFacing
-#define G2(D) Jg=D
+#define G2(D) Kg=D
 #define Y gl_FragCoord.xy
 #define H6
 #define S2
 #if defined(PLS_IMPL_STORAGE_TEXTURE)||defined(PLS_IMPL_STORAGE_BUFFER)
 #define Dd(B7,h,D) if(!(B7)){x0(h,D);}
-#define Ed(B7,h,D) if(!(B7)){c1(h,D);}
+#define Ed(B7,h,D) if(!(B7)){d1(h,D);}
 #else
 #define Dd(B7,h,D) x0(h,D);
-#define Ed(B7,h,D) c1(h,D);
+#define Ed(B7,h,D) d1(h,D);
 #endif
 #ifndef o2
 #define o2(a) layout(location=0)out i C1;L1(a)
@@ -377,6 +377,6 @@ uniform highp int BASE_INSTANCE_UNIFORM_NAME;
 #define U0(C,H) ((C)*(H))
 precision highp float;precision highp int;
 #if GLSL_VERSION<310
-e i Kg(uint u){G T1=G(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return g(T1)*(1./255.);}
-#define unpackUnorm4x8 Kg
+e i Lg(uint u){G T1=G(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return g(T1)*(1./255.);}
+#define unpackUnorm4x8 Lg
 #endif

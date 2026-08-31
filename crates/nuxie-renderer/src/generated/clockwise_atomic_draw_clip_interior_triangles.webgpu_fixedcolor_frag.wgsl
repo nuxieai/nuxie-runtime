@@ -8,14 +8,14 @@ struct CC {
     ff: f32,
     gf: f32,
     m6_: u32,
-    Fg: u32,
+    Gg: u32,
     Re: u32,
     Se: u32,
     R7_: vec4<i32>,
-    Bg: vec2<f32>,
+    Cg: vec2<f32>,
     pd: vec2<f32>,
     a2_: u32,
-    Gg: f32,
+    Hg: f32,
     Z5_: u32,
     P2_: f32,
     qd: f32,
@@ -23,7 +23,7 @@ struct CC {
     z3_: f32,
     A3_: f32,
     rd: f32,
-    yg: u32,
+    zg: u32,
 }
 
 struct ge_1 {
@@ -49,7 +49,7 @@ var<private> C1_: vec4<f32>;
 @group(3) @binding(9)
 var aa: sampler;
 @group(0) @binding(8)
-var KD: texture_2d<f32>;
+var LD: texture_2d<f32>;
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(1) @binding(11)
@@ -58,7 +58,7 @@ var IC: texture_2d<f32>;
 var Mb: sampler;
 @group(1) @binding(13)
 var S5_: sampler;
-var<private> f1_1: vec4<f32>;
+var<private> X0_1: vec4<f32>;
 var<private> B0_1: f32;
 var<private> U1_1: vec2<f32>;
 var<private> L0_1: vec4<f32>;
@@ -67,11 +67,11 @@ var<private> e2_1: f32;
 fn main_1() {
     var phi_181_: bool;
     var phi_182_: bool;
+    var phi_461_: f32;
     var phi_460_: f32;
     var phi_459_: f32;
-    var phi_458_: f32;
-    var phi_461_: f32;
-    var phi_465_: f32;
+    var phi_462_: f32;
+    var phi_466_: f32;
 
     let _e37 = i1_1;
     if ih {
@@ -94,36 +94,36 @@ fn main_1() {
         }
         let _e85 = phi_182_;
         if _e85 {
-            phi_465_ = 0f;
+            phi_466_ = 0f;
         } else {
             let _e87 = n.a2_;
-            phi_458_ = _e37;
+            phi_459_ = _e37;
             if (_e74 < _e87) {
                 let _e94 = (_e87 | (262144u + u32(((abs(_e37) * 1024f) + 0.5f))));
                 let _e95 = atomicMax((&P0_.c2_[(_e41 + (((((_e44.y >> bitcast<u32>(5u)) * (_e39 << bitcast<u32>(5u))) + ((_e44.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e44.x & 28u) << bitcast<u32>(5u)) + ((_e44.y & 28u) << bitcast<u32>(2i)))) + (((_e44.y & 3u) << bitcast<u32>(2i)) + (_e44.x & 3u))))]), _e94);
                 if (_e95 <= _e87) {
-                    phi_459_ = 0f;
+                    phi_460_ = 0f;
                 } else {
-                    phi_460_ = _e37;
+                    phi_461_ = _e37;
                     if (_e95 < _e94) {
-                        phi_460_ = (f32(bitcast<i32>(((_e95 & 524287u) - 262144u))) * 0.0009765625f);
+                        phi_461_ = (f32(bitcast<i32>(((_e95 & 524287u) - 262144u))) * 0.0009765625f);
                     }
-                    let _e104 = phi_460_;
-                    phi_459_ = _e104;
+                    let _e104 = phi_461_;
+                    phi_460_ = _e104;
                 }
-                let _e106 = phi_459_;
-                phi_458_ = _e106;
+                let _e106 = phi_460_;
+                phi_459_ = _e106;
             }
-            let _e108 = phi_458_;
-            phi_461_ = _e37;
+            let _e108 = phi_459_;
+            phi_462_ = _e37;
             if (_e108 > 0f) {
                 let _e114 = atomicAdd((&P0_.c2_[(_e41 + (((((_e44.y >> bitcast<u32>(5u)) * (_e39 << bitcast<u32>(5u))) + ((_e44.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e44.x & 28u) << bitcast<u32>(5u)) + ((_e44.y & 28u) << bitcast<u32>(2i)))) + (((_e44.y & 3u) << bitcast<u32>(2i)) + (_e44.x & 3u))))]), u32(((abs(_e108) * 1024f) + 0.5f)));
-                phi_461_ = ((f32(bitcast<i32>(((_e114 & 524287u) - 262144u))) * 0.0009765625f) + _e37);
+                phi_462_ = ((f32(bitcast<i32>(((_e114 & 524287u) - 262144u))) * 0.0009765625f) + _e37);
             }
-            let _e122 = phi_461_;
-            phi_465_ = (1f - _e122);
+            let _e122 = phi_462_;
+            phi_466_ = (1f - _e122);
         }
-        let _e125 = phi_465_;
+        let _e125 = phi_466_;
         h0_ = vec4(_e125);
         C1_ = vec4<f32>(1f, 1f, 1f, 1f);
     } else {
@@ -134,11 +134,11 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(1) @interpolate(flat, either) i1_: f32, @location(7) @interpolate(flat, either) d3_: vec2<u32>, @location(8) l4_: vec2<f32>, @location(0) f1_: vec4<f32>, @location(3) @interpolate(flat, either) B0_: f32, @location(4) @interpolate(flat, either) U1_: vec2<f32>, @location(5) L0_: vec4<f32>, @location(6) @interpolate(flat, either) e2_: f32) -> FragmentOutput {
+fn main(@location(1) @interpolate(flat, either) i1_: f32, @location(7) @interpolate(flat, either) d3_: vec2<u32>, @location(8) l4_: vec2<f32>, @location(0) X0_: vec4<f32>, @location(3) @interpolate(flat, either) B0_: f32, @location(4) @interpolate(flat, either) U1_: vec2<f32>, @location(5) L0_: vec4<f32>, @location(6) @interpolate(flat, either) e2_: f32) -> FragmentOutput {
     i1_1 = i1_;
     d3_1 = d3_;
     l4_1 = l4_;
-    f1_1 = f1_;
+    X0_1 = X0_;
     B0_1 = B0_;
     U1_1 = U1_;
     L0_1 = L0_;

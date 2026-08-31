@@ -24,12 +24,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--upstream-root", required=True, type=Path)
+    parser.add_argument("--generated-root", type=Path)
     args = parser.parse_args()
 
     repo = args.repo_root.resolve()
     upstream = args.upstream_root.resolve()
     source_cpp = upstream / "renderer/src/vulkan/vulkan_shaders.cpp"
-    generated_root = upstream / "renderer/src/shaders/out/generated/spirv"
+    generated_root = args.generated_root or upstream / "renderer/src/shaders/out/generated/spirv"
     destination = (
         repo
         / "crates/nuxie-renderer/src/mechanical_port/vulkan/generated/spirv"
@@ -40,7 +41,7 @@ def main() -> None:
     checksums = {name: digest for digest, name in (
         line.split() for line in Path(__file__).with_name("vulkan-spirv.sha256").read_text().splitlines()
     )}
-    pinned_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+    pinned_ref = "2b2203f45a67f813cb662272962192ecfdfd923e"
 
     includes = [
         match.decode("utf-8")

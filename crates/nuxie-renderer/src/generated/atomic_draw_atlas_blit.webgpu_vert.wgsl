@@ -1,4 +1,4 @@
-struct bg {
+struct cg {
     c2_: array<vec4<u32>>,
 }
 
@@ -8,14 +8,14 @@ struct CC {
     ff: f32,
     gf: f32,
     m6_: u32,
-    Fg: u32,
+    Gg: u32,
     Re: u32,
     Se: u32,
     R7_: vec4<i32>,
-    Bg: vec2<f32>,
+    Cg: vec2<f32>,
     pd: vec2<f32>,
     a2_: u32,
-    Gg: f32,
+    Hg: f32,
     Z5_: u32,
     P2_: f32,
     qd: f32,
@@ -23,7 +23,7 @@ struct CC {
     z3_: f32,
     A3_: f32,
     rd: f32,
-    yg: u32,
+    zg: u32,
 }
 
 struct gl_PerVertex {
@@ -41,7 +41,7 @@ struct Ke {
     c2_: array<vec4<f32>>,
 }
 
-struct cg {
+struct dg {
     c2_: array<vec4<u32>>,
 }
 
@@ -52,7 +52,7 @@ struct VertexOutput {
 }
 
 @group(0) @binding(2)
-var<storage> PB: bg;
+var<storage> PB: cg;
 @group(0) @binding(0)
 var<uniform> n: CC;
 var<private> gl_VertexIndex_1: i32;
@@ -70,7 +70,7 @@ var<storage> AD: Je;
 @group(0) @binding(4)
 var<storage> RB: Ke;
 @group(0) @binding(5)
-var<storage> ED: cg;
+var<storage> ED: dg;
 @group(3) @binding(9)
 var aa: sampler;
 
@@ -79,7 +79,7 @@ fn main_1() {
     let _e27 = (bitcast<u32>(_e24.z) & 65535u);
     let _e32 = PB.c2_[((_e27 * 4u) + 2u)];
     let _e35 = bitcast<vec3<f32>>(_e32.yzw);
-    let _e41 = n.Bg;
+    let _e41 = n.Cg;
     C2_ = (((_e24.xy * _e35.x) + _e35.yz) * _e41);
     B0_ = _e27;
     let _e44 = n.ff;

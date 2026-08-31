@@ -1,5 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/src/vulkan/pipeline_manager_vulkan.hpp`.
+//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
 
 #![allow(non_snake_case)]
 
@@ -122,7 +123,7 @@ unsafe impl Sync for PipelineManagerVulkan {}
 
 impl PipelineManagerVulkan {
     pub(crate) fn vendorID(&self) -> u32 {
-        self.m_vk.physicalDeviceProperties().vendor_id
+        self.m_vk.physicalDeviceProperties.vendor_id
     }
     pub(crate) fn featherAtlasFormat(&self) -> vk::Format {
         self.m_featherAtlasFormat

@@ -441,6 +441,41 @@ mod tests {
         host_is_arm64: true,
     };
 
+    // Independent current-source oracle: upstream background_shader_compiler.mm
+    // appends these generated C++ string payloads in this order (lines 131–142,
+    // 230–233, 260–265 at 2b2203f4). The older assembled .metal captures remain
+    // historical fixtures; they must not substitute for the current batch.
+    fn current_source_oracle(atomic_path: bool) -> String {
+        macro_rules! fragment {
+            ($name:literal) => {
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/tests/fixtures/native_metal/background_shader_sources/",
+                    $name
+                ))
+            };
+        }
+        let mut source = fragment!("metal.glsl").to_owned();
+        for fragment in [
+            fragment!("constants.glsl"),
+            fragment!("flush_uniforms.glsl"),
+            fragment!("common.glsl"),
+        ] {
+            source.push_str(fragment);
+            source.push('\n');
+        }
+        let tail = if atomic_path {
+            [fragment!("draw_path_common.glsl"), fragment!("atomic_draw.glsl")]
+        } else {
+            [fragment!("draw_image_mesh.vert"), fragment!("draw_mesh.frag")]
+        };
+        for fragment in tail {
+            source.push_str(fragment);
+            source.push('\n');
+        }
+        source
+    }
+
     fn job(draw_type: DrawType) -> BackgroundCompileJob {
         BackgroundCompileJob::new(
             draw_type,
@@ -460,10 +495,7 @@ mod tests {
         .expect("image mesh request");
         assert_eq!(
             request.source,
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/image_mesh_raster.metal"
-            ))
+            current_source_oracle(false)
         );
         assert_eq!(
             request.preprocessor_macros,
@@ -520,10 +552,7 @@ mod tests {
         .expect("atomic path request");
         assert_eq!(
             atomic_request.source,
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/path_atomics.metal"
-            ))
+            current_source_oracle(true)
         );
     }
 
@@ -732,10 +761,7 @@ mod tests {
         );
         assert_eq!(
             source,
-            include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/image_mesh_raster.metal"
-            ))
+            current_source_oracle(false)
         );
 
         compiler.push_job(

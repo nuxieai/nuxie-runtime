@@ -7,7 +7,7 @@
  * source-shaped data. It does not compile, evaluate, simplify, or generate
  * shader artifacts.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 2b2203f45a67f813cb662272962192ecfdfd923e
  */
 
 #![allow(dead_code)]
@@ -15,12 +15,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2b2203f45a67f813cb662272962192ecfdfd923e";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "eefc0b9115beb4fe87b85431b0c683fdec73244c044278e97fdba0c96014bb56";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 322;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 13401;
+    "ca428e5e270f1e538a03105fe9eed8944f83d3d5eefd48ac27c6914320de21e2";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 323;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 13482;
 
 /// Exact pinned GLSL source, retained for provenance and line-for-line audit.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -318,12 +318,13 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define HSL_BLEND_MODES_SPECIALIZATION_IDX 6
 #define DITHER_SPECIALIZATION_IDX 7
 #define CLOCKWISE_FILL_SPECIALIZATION_IDX 8
-#define NESTED_CLIP_UPDATE_ONLY_IDX 9
+#define NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX 9
 #define BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX 10
-#define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 11
-#define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 12
-#define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 13
-#define SPECIALIZATION_COUNT 14
+#define EMULATE_DYNAMIC_COLOR_WRITE_DISABLE_SPECIALIZATION_IDX 11
+#define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 12
+#define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 13
+#define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 14
+#define SPECIALIZATION_COUNT 15
 
 // When rendering to an r32i feather atlas, use 16:16 fixed point.
 #define ATLAS_R32I_FIXED_POINT_FACTOR 65536.
@@ -395,22 +396,22 @@ pub struct ConditionalBlock {
 pub const CONDITIONAL_BLOCKS: &[ConditionalBlock] = &[
     ConditionalBlock {
         block_id: "pp-0255",
-        block_start: 318,
-        block_end: 322,
+        block_start: 319,
+        block_end: 323,
         block_depth: 0,
         branch_count: 1,
     },
     ConditionalBlock {
         block_id: "pp-0256",
-        block_start: 319,
-        block_end: 321,
+        block_start: 320,
+        block_end: 322,
         block_depth: 1,
         branch_count: 1,
     },
 ];
 
 /// Every branch entry remains literal, in authority/source order. The active
-/// paths are ledger spellings; they are not evaluated as Rust cfg expressions.
+/// paths describe source branches; they are not evaluated as Rust cfg expressions.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConditionalBranch {
     pub block_id: &'static str,
@@ -424,14 +425,14 @@ pub const CONDITIONAL_BRANCHES: &[ConditionalBranch] = &[
     ConditionalBranch {
         block_id: "pp-0255",
         branch_ordinal: 1,
-        branch_line: 318,
+        branch_line: 319,
         directive: "#ifdef __cplusplus",
         active_branch_path: "(defined(__cplusplus))",
     },
     ConditionalBranch {
         block_id: "pp-0256",
         branch_ordinal: 1,
-        branch_line: 319,
+        branch_line: 320,
         directive: "#if __cplusplus >= 201703",
         active_branch_path: "(defined(__cplusplus)) && (__cplusplus >= 201703)",
     },

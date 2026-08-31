@@ -3,7 +3,7 @@
 //!
 //! The source citations are `renderer/src/metal/background_shader_compiler.h:17-30`
 //! and `renderer/src/metal/background_shader_compiler.mm:94-275` at pinned
-//! upstream SHA `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
+//! upstream SHA `2b2203f45a67f813cb662272962192ecfdfd923e`.
 //!
 //! This module owns the `BackgroundCompileJob` inputs, deterministic
 //! macro/source-fragment assembly, and the exact generated source payloads.
@@ -37,10 +37,11 @@ pub(crate) type ShaderMiscFlags = u32;
 pub(crate) const CLIP_UPDATE_ONLY: ShaderMiscFlags = 1 << 2;
 pub(crate) const NESTED_CLIP_UPDATE_ONLY: ShaderMiscFlags = 1 << 3;
 pub(crate) const BORROWED_COVERAGE_PASS: ShaderMiscFlags = 1 << 4;
-pub(crate) const STORE_COLOR_CLEAR: ShaderMiscFlags = 1 << 5;
-pub(crate) const LOAD_COLOR_FROM_DST_TEXTURE: ShaderMiscFlags = 1 << 6;
-pub(crate) const SWIZZLE_COLOR_BGRA_TO_RGBA: ShaderMiscFlags = 1 << 7;
-pub(crate) const COALESCED_RESOLVE_AND_TRANSFER: ShaderMiscFlags = 1 << 8;
+pub(crate) const EMULATE_DYNAMIC_COLOR_WRITE_DISABLE: ShaderMiscFlags = 1 << 5;
+pub(crate) const STORE_COLOR_CLEAR: ShaderMiscFlags = 1 << 6;
+pub(crate) const LOAD_COLOR_FROM_DST_TEXTURE: ShaderMiscFlags = 1 << 7;
+pub(crate) const SWIZZLE_COLOR_BGRA_TO_RGBA: ShaderMiscFlags = 1 << 8;
+pub(crate) const COALESCED_RESOLVE_AND_TRANSFER: ShaderMiscFlags = 1 << 9;
 
 /// The `MetalFeatures` input used by the upstream compiler. The only member
 /// read by `background_shader_compiler.mm:115-119` is the atomic barrier type.
@@ -759,6 +760,7 @@ mod tests {
                 CLIP_UPDATE_ONLY,
                 NESTED_CLIP_UPDATE_ONLY,
                 BORROWED_COVERAGE_PASS,
+                EMULATE_DYNAMIC_COLOR_WRITE_DISABLE,
                 STORE_COLOR_CLEAR,
                 LOAD_COLOR_FROM_DST_TEXTURE,
                 SWIZZLE_COLOR_BGRA_TO_RGBA,
@@ -774,6 +776,7 @@ mod tests {
                 1 << 6,
                 1 << 7,
                 1 << 8,
+                1 << 9,
             ]
         );
     }
@@ -781,11 +784,11 @@ mod tests {
     #[test]
     fn generated_macro_fixture_is_pinned_complete_and_one_to_one() {
         for provenance in [
-            "upstream_sha=4ac7b32798da0482e441ef09304dc3b480ed3ee5",
-            "generator_sha256=bf4b9f529a19765c5e6f28b68ef8a73f5bd65433cd87ce723df5df923e6bc22b",
+            "upstream_sha=2b2203f45a67f813cb662272962192ecfdfd923e",
+            "generator_sha256=bc6f3cb877ff8af9c73177d06704ac067a5f6d9a1321fc5edd5ac429d33791b1",
             "makefile_sha256=ec5d0d98d78051e98cda80f92cd67858cb1fb70be64cddd8ad13bcd4ad5f50fc",
-            "input_set_sha256=bb1df1e11890783d83263a0e8de0509af77fbeab9ee50634da9ef028fe9270b1",
-            "generated_header_sha256=b415a51a8f22f1485be7c8ec4c033609288652a4396add1129a3df4f54ebd8b7",
+            "input_set_sha256=c152c2c00c07aefd35902aef8ccccd00f76b311f6259bacdd3586d2021ae2302",
+            "generated_header_sha256=4db7b238b92d7c54f3d28166b609c30023e04d655c50d3af639736275fc64a41",
         ] {
             assert!(
                 METAL_MACRO_TOKEN_FIXTURE.contains(provenance),

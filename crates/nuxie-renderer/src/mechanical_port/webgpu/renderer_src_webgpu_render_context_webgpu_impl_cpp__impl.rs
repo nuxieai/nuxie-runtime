@@ -148,18 +148,18 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 const GLSL_VERTEX: &str = "DB";
 const GLSL_FRAGMENT: &str = "GB";
 const GLSL_POST_INVERT_Y: &str = "RC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "JF";
-const GLSL_DRAW_PATH: &str = "ID";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "KF";
+const GLSL_DRAW_PATH: &str = "JD";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "NE";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "YD";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "OE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "AE";
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_CLEAR_COLOR: &str = "QE";
-const GLSL_LOAD_COLOR: &str = "SE";
-const GLSL_STORE_COLOR: &str = "ZD";
-const GLSL_CLEAR_COVERAGE: &str = "AE";
-const GLSL_CLEAR_CLIP: &str = "QF";
+const GLSL_CLEAR_COLOR: &str = "RE";
+const GLSL_LOAD_COLOR: &str = "TE";
+const GLSL_STORE_COLOR: &str = "BE";
+const GLSL_CLEAR_COVERAGE: &str = "CE";
+const GLSL_CLEAR_CLIP: &str = "RF";
 const GLSL_ENABLE_CLIPPING: &str = "I";
 const GLSL_ENABLE_CLIP_RECT: &str = "BB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "AB";
@@ -168,16 +168,16 @@ const GLSL_ENABLE_NESTED_CLIPPING: &str = "YC";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "FC";
 const GLSL_ENABLE_DITHER: &str = "LB";
 const GLSL_TARGET_SPIRV: &str = "DC";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "LF";
-const GLSL_PLS_IMPL_NONE: &str = "NF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "MF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "MF";
+const GLSL_PLS_IMPL_NONE: &str = "OF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "NF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_DRAW_IMAGE: &str = "HE";
-const GLSL_DRAW_IMAGE_RECT: &str = "JD";
+const GLSL_DRAW_IMAGE: &str = "JE";
+const GLSL_DRAW_IMAGE_RECT: &str = "KD";
 const GLSL_DRAW_IMAGE_MESH: &str = "OB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
-const GLSL_CLOCKWISE_FILL: &str = "BE";
+const GLSL_CLOCKWISE_FILL: &str = "DE";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
@@ -230,9 +230,9 @@ const IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX: u32 = 3;
 const IMAGE_TRANSLATES_ATTRIB_IDX: u32 = 4;
 const IMAGE_PACKED_ATTRIBS_IDX: u32 = 5;
 const IMAGE_ATTRIB_COUNT: usize = 4;
-const SPECIALIZATION_COUNT: usize = 14;
+const SPECIALIZATION_COUNT: usize = 15;
 const SPECIALIZATION_IDS: [&str; SPECIALIZATION_COUNT] = [
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
 ];
 
 fn appendImageDrawInstanceAttribs(attributes: &mut Vec<WGPUVertexAttribute>) {
@@ -1619,6 +1619,7 @@ pub(crate) fn makeDrawPipeline(
         hasMisc(ShaderMiscFlags::clockwiseFill) as u8 as f64,
         hasMisc(ShaderMiscFlags::nestedClipUpdateOnly) as u8 as f64,
         hasMisc(ShaderMiscFlags::borrowedCoveragePass) as u8 as f64,
+        0.0, // EMULATE_DYNAMIC_COLOR_WRITE_DISABLE — ignored for now.
         hasMisc(ShaderMiscFlags::storeColorClear) as u8 as f64,
         hasMisc(ShaderMiscFlags::loadColorFromDstTexture) as u8 as f64,
         0.0,
@@ -4548,13 +4549,39 @@ pub(crate) fn MakeContext(
     <RenderContext as RenderContextContract>::new(implementation)
 }
 
-pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 4837;
+pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 4840;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 192817] = [(); PINNED_SOURCE.len()];
+const _: [(); 193004] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn specialization_entries_keep_the_shifted_upstream_indices() {
+        // WebGPU leaves emulation disabled, but still shares the 15-slot
+        // specialization contract with Vulkan. Only declared slots are sent.
+        let mut values = [0.0; SPECIALIZATION_COUNT];
+        values[12] = 1.0;
+        values[13] = 2.0;
+        values[14] = 3.0;
+        let entries = buildConstantEntries(
+            Some(
+                "@id(11) override emulate = false;\n\
+                 @id(12) override clear = false;\n\
+                 @id(13) override load = false;\n\
+                 @id(14) override arm = false;",
+            ),
+            &values,
+        );
+        assert_eq!(SPECIALIZATION_COUNT, 15);
+        assert_eq!(&SPECIALIZATION_IDS[11..], &["11", "12", "13", "14"]);
+        assert_eq!(
+            entries.iter().map(|entry| entry.value).collect::<Vec<_>>(),
+            [0.0, 1.0, 2.0, 3.0],
+        );
+        assert!(buildConstantEntries(None, &values).is_empty());
+    }
 
     const GENERATED_GLSL_PRODUCTS: [&str; 17] = [
         include_str!("source/generated_glsl/advanced_blend.minified.glsl"),
@@ -4584,7 +4611,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            50_515
+            50_728
         );
     }
 

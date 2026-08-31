@@ -1,5 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/src/vulkan/draw_pipeline_layout_vulkan.hpp`.
+//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
 
 #![allow(non_snake_case)]
 
@@ -24,6 +25,12 @@ impl DrawPipelineLayoutVulkan {
 
     pub(crate) fn renderPassOptions(&self) -> RenderPassOptionsVulkan {
         self.m_renderPassOptions
+    }
+
+    // Specialization cannot remove a push-constant declaration, so every
+    // MSAA layout includes it even on devices with native color-write state.
+    pub(crate) fn hasColorWriteDisablePushConstant(&self) -> bool {
+        self.m_interlockMode == InterlockMode::msaa
     }
 
     pub(crate) fn plsLayout(&self) -> vk::DescriptorSetLayout {

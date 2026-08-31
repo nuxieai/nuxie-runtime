@@ -7,7 +7,7 @@
  * and function declarations as inert Rust data. It does not compile,
  * evaluate, simplify, or generate shader artifacts.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 2b2203f45a67f813cb662272962192ecfdfd923e
  */
 
 #![allow(dead_code)]
@@ -15,12 +15,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2b2203f45a67f813cb662272962192ecfdfd923e";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/specialization.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "e510983192e84c1cc69d990a14f606cfa92af234290636593d5be3e3f4e07f72";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 43;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 2044;
+    "186ab355b6e3cd6321fa017fd6dd55102c52538526bd3c84595304583781c77c";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 57;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 2745;
 pub const TRANSLATION_UNIT: &str = "metal-shader-source-batch";
 pub const TRANSLATION_TARGET: &str =
     "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/specialization_glsl.rs";
@@ -70,16 +70,18 @@ layout(constant_id = HSL_BLEND_MODES_SPECIALIZATION_IDX) const
 layout(constant_id = DITHER_SPECIALIZATION_IDX) const bool EnableDither = true;
 layout(constant_id = CLOCKWISE_FILL_SPECIALIZATION_IDX) const
     bool ClockwiseFill = true;
+layout(constant_id = NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX) const
+    bool NestedClipUpdateOnly = false;
 layout(constant_id = BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX) const
     bool BorrowedCoveragePrepass = false;
-layout(constant_id = NESTED_CLIP_UPDATE_ONLY_IDX) const
-    bool NestedClipUpdateOnly = false;
-layout(constant_id = VULKAN_VENDOR_ARM_SPECIALIZATION_IDX) const
-    bool VulkanVendorARM = false;
+layout(constant_id = EMULATE_DYNAMIC_COLOR_WRITE_DISABLE_SPECIALIZATION_IDX)
+    const bool EmulateDynamicColorWriteDisable = false;
 layout(constant_id = STORE_COLOR_CLEAR_SPECIALIZATION_IDX) const
     bool StoreColorClear = false;
 layout(constant_id = LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX) const
     bool LoadColorFromDstTexture = false;
+layout(constant_id = VULKAN_VENDOR_ARM_SPECIALIZATION_IDX) const
+    bool VulkanVendorARM = false;
 
 #define @ENABLE_CLIPPING EnableClipping
 #define @ENABLE_CLIP_RECT EnableClipRect
@@ -91,11 +93,23 @@ layout(constant_id = LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX) const
 #define @ENABLE_HSL_BLEND_MODES EnableHSLBlendModes
 #define @ENABLE_DITHER EnableDither
 #define @CLOCKWISE_FILL ClockwiseFill
-#define @BORROWED_COVERAGE_PASS BorrowedCoveragePrepass
 #define @NESTED_CLIP_UPDATE_ONLY NestedClipUpdateOnly
-#define @VULKAN_VENDOR_ARM VulkanVendorARM
+#define @BORROWED_COVERAGE_PASS BorrowedCoveragePrepass
 #define @STORE_COLOR_CLEAR StoreColorClear
 #define @LOAD_COLOR_FROM_DST_TEXTURE LoadColorFromDstTexture
+#define @VULKAN_VENDOR_ARM VulkanVendorARM
+
+// WebGPU has no concept of dynamic state, so we don't use the dynamic rendering
+// drawTypes there, and there is no missing dynamic state to emulate.
+// Furthermore, this feature gets emulated via push constant, for which
+// naga/WGSL have no equivalent.
+#ifndef @TARGET_WGSL
+// Since SPIR-V can't omit declarations via specialization constants, only
+// define @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE where it is used (i.e., MSAA).
+#if defined(@RENDER_MODE_MSAA)
+#define @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE EmulateDynamicColorWriteDisable
+#endif
+#endif
 "###;
 
 /// Stable aliases used by later source-audit queues.
@@ -120,10 +134,25 @@ pub struct ConditionalBlock {
     pub branch_count: u8,
 }
 
-pub const CONDITIONAL_BLOCKS: &[ConditionalBlock] = &[];
+pub const CONDITIONAL_BLOCKS: &[ConditionalBlock] = &[
+    ConditionalBlock {
+        block_id: "pp-sync-51",
+        block_start: 51,
+        block_end: 57,
+        block_depth: 0,
+        branch_count: 1,
+    },
+    ConditionalBlock {
+        block_id: "pp-sync-54",
+        block_start: 54,
+        block_end: 56,
+        block_depth: 1,
+        branch_count: 1,
+    },
+];
 
 /// Every branch entry remains literal, in authority/source order. This source
-/// contains no conditional preprocessor directives.
+/// retains its conditional preprocessor directives.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConditionalBranch {
     pub block_id: &'static str,
@@ -133,7 +162,22 @@ pub struct ConditionalBranch {
     pub active_branch_path: &'static str,
 }
 
-pub const CONDITIONAL_BRANCHES: &[ConditionalBranch] = &[];
+pub const CONDITIONAL_BRANCHES: &[ConditionalBranch] = &[
+    ConditionalBranch {
+        block_id: "pp-sync-51",
+        branch_ordinal: 1,
+        branch_line: 51,
+        directive: "#ifndef @TARGET_WGSL",
+        active_branch_path: "(!defined(@TARGET_WGSL))",
+    },
+    ConditionalBranch {
+        block_id: "pp-sync-54",
+        branch_ordinal: 1,
+        branch_line: 54,
+        directive: "#if defined(@RENDER_MODE_MSAA)",
+        active_branch_path: "(!defined(@TARGET_WGSL)) && (defined(@RENDER_MODE_MSAA))",
+    },
+];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ExportedSymbol {
@@ -143,97 +187,103 @@ pub struct ExportedSymbol {
     pub generated_header_name: &'static str,
 }
 
-/// The fifteen @-prefixed identifiers exported by the pinned batch minifier.
+/// The @-prefixed identifiers exported by the pinned batch minifier.
 pub const EXPORTED_SYMBOLS: &[ExportedSymbol] = &[
     ExportedSymbol {
-        source_line: 29,
+        source_line: 31,
         source_name: "@ENABLE_CLIPPING",
-        generated_name: "O",
+        generated_name: "I",
         generated_header_name: "GLSL_ENABLE_CLIPPING",
     },
     ExportedSymbol {
-        source_line: 30,
+        source_line: 32,
         source_name: "@ENABLE_CLIP_RECT",
-        generated_name: "AB",
+        generated_name: "BB",
         generated_header_name: "GLSL_ENABLE_CLIP_RECT",
     },
     ExportedSymbol {
-        source_line: 31,
+        source_line: 33,
         source_name: "@ENABLE_ADVANCED_BLEND",
-        generated_name: "GB",
+        generated_name: "AB",
         generated_header_name: "GLSL_ENABLE_ADVANCED_BLEND",
     },
     ExportedSymbol {
-        source_line: 32,
+        source_line: 34,
         source_name: "@DISABLE_ADVANCED_BLEND",
-        generated_name: "NF",
+        generated_name: "VF",
         generated_header_name: "GLSL_DISABLE_ADVANCED_BLEND",
     },
     ExportedSymbol {
-        source_line: 33,
+        source_line: 35,
         source_name: "@ENABLE_FEATHER",
         generated_name: "HB",
         generated_header_name: "GLSL_ENABLE_FEATHER",
     },
     ExportedSymbol {
-        source_line: 34,
+        source_line: 36,
         source_name: "@ENABLE_EVEN_ODD",
-        generated_name: "PC",
+        generated_name: "WC",
         generated_header_name: "GLSL_ENABLE_EVEN_ODD",
     },
     ExportedSymbol {
-        source_line: 35,
+        source_line: 37,
         source_name: "@ENABLE_NESTED_CLIPPING",
-        generated_name: "RC",
+        generated_name: "YC",
         generated_header_name: "GLSL_ENABLE_NESTED_CLIPPING",
     },
     ExportedSymbol {
-        source_line: 36,
+        source_line: 38,
         source_name: "@ENABLE_HSL_BLEND_MODES",
-        generated_name: "XB",
+        generated_name: "FC",
         generated_header_name: "GLSL_ENABLE_HSL_BLEND_MODES",
     },
     ExportedSymbol {
-        source_line: 37,
+        source_line: 39,
         source_name: "@ENABLE_DITHER",
-        generated_name: "JB",
+        generated_name: "LB",
         generated_header_name: "GLSL_ENABLE_DITHER",
     },
     ExportedSymbol {
-        source_line: 38,
+        source_line: 40,
         source_name: "@CLOCKWISE_FILL",
-        generated_name: "UD",
+        generated_name: "DE",
         generated_header_name: "GLSL_CLOCKWISE_FILL",
     },
     ExportedSymbol {
-        source_line: 39,
+        source_line: 42,
         source_name: "@BORROWED_COVERAGE_PASS",
-        generated_name: "WB",
+        generated_name: "EC",
         generated_header_name: "GLSL_BORROWED_COVERAGE_PASS",
     },
     ExportedSymbol {
-        source_line: 40,
+        source_line: 41,
         source_name: "@NESTED_CLIP_UPDATE_ONLY",
-        generated_name: "YC",
+        generated_name: "FD",
         generated_header_name: "GLSL_NESTED_CLIP_UPDATE_ONLY",
     },
     ExportedSymbol {
-        source_line: 41,
+        source_line: 45,
         source_name: "@VULKAN_VENDOR_ARM",
-        generated_name: "WC",
+        generated_name: "DD",
         generated_header_name: "GLSL_VULKAN_VENDOR_ARM",
     },
     ExportedSymbol {
-        source_line: 42,
+        source_line: 43,
         source_name: "@STORE_COLOR_CLEAR",
-        generated_name: "ED",
+        generated_name: "MD",
         generated_header_name: "GLSL_STORE_COLOR_CLEAR",
     },
     ExportedSymbol {
-        source_line: 43,
+        source_line: 44,
         source_name: "@LOAD_COLOR_FROM_DST_TEXTURE",
-        generated_name: "FD",
+        generated_name: "ND",
         generated_header_name: "GLSL_LOAD_COLOR_FROM_DST_TEXTURE",
+    },
+    ExportedSymbol {
+        source_line: 53,
+        source_name: "@EMULATE_DYNAMIC_COLOR_WRITE_DISABLE",
+        generated_name: "GD",
+        generated_header_name: "GLSL_EMULATE_DYNAMIC_COLOR_WRITE_DISABLE",
     },
 ];
 
@@ -248,35 +298,35 @@ pub struct ExportedIdentifier {
 pub const EXPORT_INVENTORY: &[ExportedIdentifier] = &[
     ExportedIdentifier {
         source_name: "BORROWED_COVERAGE_PASS",
-        generated_name: "WB",
+        generated_name: "EC",
     },
     ExportedIdentifier {
         source_name: "CLOCKWISE_FILL",
-        generated_name: "UD",
+        generated_name: "DE",
     },
     ExportedIdentifier {
         source_name: "DISABLE_ADVANCED_BLEND",
-        generated_name: "NF",
+        generated_name: "VF",
     },
     ExportedIdentifier {
         source_name: "ENABLE_ADVANCED_BLEND",
-        generated_name: "GB",
-    },
-    ExportedIdentifier {
-        source_name: "ENABLE_CLIPPING",
-        generated_name: "O",
-    },
-    ExportedIdentifier {
-        source_name: "ENABLE_CLIP_RECT",
         generated_name: "AB",
     },
     ExportedIdentifier {
+        source_name: "ENABLE_CLIPPING",
+        generated_name: "I",
+    },
+    ExportedIdentifier {
+        source_name: "ENABLE_CLIP_RECT",
+        generated_name: "BB",
+    },
+    ExportedIdentifier {
         source_name: "ENABLE_DITHER",
-        generated_name: "JB",
+        generated_name: "LB",
     },
     ExportedIdentifier {
         source_name: "ENABLE_EVEN_ODD",
-        generated_name: "PC",
+        generated_name: "WC",
     },
     ExportedIdentifier {
         source_name: "ENABLE_FEATHER",
@@ -284,27 +334,31 @@ pub const EXPORT_INVENTORY: &[ExportedIdentifier] = &[
     },
     ExportedIdentifier {
         source_name: "ENABLE_HSL_BLEND_MODES",
-        generated_name: "XB",
+        generated_name: "FC",
     },
     ExportedIdentifier {
         source_name: "ENABLE_NESTED_CLIPPING",
-        generated_name: "RC",
-    },
-    ExportedIdentifier {
-        source_name: "LOAD_COLOR_FROM_DST_TEXTURE",
-        generated_name: "FD",
-    },
-    ExportedIdentifier {
-        source_name: "NESTED_CLIP_UPDATE_ONLY",
         generated_name: "YC",
     },
     ExportedIdentifier {
+        source_name: "LOAD_COLOR_FROM_DST_TEXTURE",
+        generated_name: "ND",
+    },
+    ExportedIdentifier {
+        source_name: "NESTED_CLIP_UPDATE_ONLY",
+        generated_name: "FD",
+    },
+    ExportedIdentifier {
         source_name: "STORE_COLOR_CLEAR",
-        generated_name: "ED",
+        generated_name: "MD",
     },
     ExportedIdentifier {
         source_name: "VULKAN_VENDOR_ARM",
-        generated_name: "WC",
+        generated_name: "DD",
+    },
+    ExportedIdentifier {
+        source_name: "EMULATE_DYNAMIC_COLOR_WRITE_DISABLE",
+        generated_name: "GD",
     },
 ];
 

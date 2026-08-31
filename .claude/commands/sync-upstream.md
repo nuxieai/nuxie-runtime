@@ -1,59 +1,30 @@
 ---
-description: Run one upstream-sync cycle against rive-app/rive-runtime — triage new commits with ratings, stop for user approval, then port approved changes and advance the reference pin with a green ratchet.
+description: Maintain the Rust port one upstream commit at a time, with separate translation and two review passes.
 ---
 
-# Upstream Sync cycle
+# Incremental upstream sync
 
-You are running one cycle of the upstream-sync workflow defined in
-`docs/upstream-sync-map.md` — read it first; it is authoritative. This
-command may be invoked manually or by a scheduled job.
+Read `docs/upstream-sync-map.md` and `docs/PARITY_WORKFLOW.md` first. They define
+the checkpoint, frozen destination, supported scope, and source-first method.
 
-## Steps
+1. Confirm the current request authorizes writes. Scheduled inspection alone is
+   read-only; this command does not grant merge permission.
+2. Enumerate upstream commits oldest first from the completed checkpoint to the
+   frozen target. Use a clean candidate worktree; leave normal checkouts alone.
+3. Inspect the next complete diff, surrounding owners, tests, and dependencies.
+   Port applicable changes, skip proven irrelevant/equivalent changes, and split
+   mixed commits by actual source rather than title. Ask about major new scope.
+4. Translate that delta and its relevant tests/assets. Do not load implement or
+   TDD skills, restart a whole-runtime port, or restore superseded implementations.
+5. After translation, perform source-equivalence review, then a separate
+   Rust-integration review. Review subsequent semantic corrections too.
+6. Run targeted checks against the matching upstream checkpoint. Commit with
+   `Upstream-Commit: <full SHA>`; keep one upstream change's identity intact.
+7. Continue in order within the authorized scope. Small PRs may contain several
+   commits; validate the applicable broader harnesses before landing. Record
+   skips and unverified coverage briefly in the PR, not a new ledger.
+8. Advance the completed checkpoint and coherent active pins only through the
+   fully accounted prefix. Preserve historical provenance and fail-closed checks.
 
-1. **Prepare the pass.** The orchestrator fetches upstream, creates or refreshes
-   a clean candidate worktree under `~/dev/worktrees/`, verifies its HEAD, and
-   clones any candidate dependency forks needed by the runners. Keep the pinned
-   checkout untouched.
-2. **Scout and probe.** Sandboxed scouts inventory the span, run
-   `make runtime-source-correspondence-check`, bucket every commit, and run every locally available
-   ordinary/scripted probe. The orchestrator completes network-blocked fetches,
-   dependency setup, and probes. Every final-cut diff must be attributed to an
-   upstream row or the pass stops for re-triage.
-3. **Extend one triage report.** Write or update
-   `docs/sync/triage-<date>-<shortsha>.md` per the map. A later candidate is a
-   top-up pass on that same report: preserve existing `S<cycle>-<n>` IDs, append
-   rows, and refresh final-cut evidence in place. Include version-skew checks
-   (.riv header/format first, then Luau, then shaping/layout/bidi/image and build
-   interface changes) plus deferred rows and staleness counters.
-4. **STOP FOR APPROVAL.** Present the report summary and top
-   recommendations to the user. Port NOTHING and move NO pins without
-   explicit row-level approval, a standing category approval, or a
-   cycle-scoped authorization recorded in the map's State section. Cite the
-   applicable authorization before acting.
-5. **Port approved rows by owner set.** Safety fixes go first; foundational
-   chains are serial; then disjoint subsystem-owner sets may run in parallel,
-   each in its own worktree. Preserve upstream order within each set and keep
-   one commit per upstream change. Stage unverifiable new fixtures in the
-   cycle-local `.s<cycle>-deferred-corpus.toml`, not the pinned corpus.
-6. **Verify landings.** A sandbox-blocked worker supplies a commit map for
-   orchestrator reconstruction. Treat every reported SHA as a claim: verify
-   that the commit object exists and inspect its diff before scheduling it.
-   Route overlap sets through named semantic merge resolvers and rerun their
-   focused oracles.
-7. **Close atomically.** In one landing, advance every active pin and
-   `LAST_SYNCED_SHA`, update candidate-dependent runner build configs, rebuild
-   the required oracles, enroll deferred corpus entries, run the full ratchet,
-   remove staging, and append the cycle summary/deferred counters. Current pins
-   move together; historical evidence, audit pins, source citations, and prior
-   fixture provenance stay frozen.
-
-## Rules
-
-- Scheduled triage ends at step 4 with a report and a notification unless a
-  standing category approval is recorded. It never infers approval from prior
-  cycles.
-- All `docs/PORTING.md` ground rules apply to port slices (port code not behaviors,
-  ratchet per commit, fences, single writer, threads policy for scouts).
-- Keep the pinned reference checkout untouched. Run candidate probes from the
-  verified candidate worktree and remove cycle-only worktrees when the cycle
-  ends.
+Parallelize disjoint work, not integration order. Green samples are not proof of
+complete translation. Preserve all approved Rust and browser-target adaptations.

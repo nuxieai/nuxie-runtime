@@ -1,5 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/draw_pipeline_layout_vulkan.cpp`.
+//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
 
 #![allow(non_snake_case)]
 
@@ -130,8 +131,12 @@ impl DrawPipelineLayoutVulkan {
         } else {
             VULKAN_BINDINGS_SET_COUNT
         };
-        let info =
+        let pushConstantRanges = [super::vkutil_decl::ColorWriteEnablePushConstant];
+        let mut info =
             vk::PipelineLayoutCreateInfo::default().set_layouts(&descriptorSetLayouts[..setCount]);
+        if interlockMode == InterlockMode::msaa {
+            info = info.push_constant_ranges(&pushConstantRanges);
+        }
         let pipelineLayout =
             vk_check(unsafe { vk.m_ashDevice.create_pipeline_layout(&info, None) });
 

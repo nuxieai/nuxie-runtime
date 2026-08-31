@@ -1,7 +1,7 @@
 #ifdef DB
 g1(e0)
 #ifdef M3
-L(0,uint,OD);L(1,uint,PD);L(2,uint,QD);L(3,uint,RD);
+L(0,uint,PD);L(1,uint,QD);L(2,uint,RD);L(3,uint,SD);
 #else
 L(0,G,KC);
 #endif
@@ -9,9 +9,9 @@ h1
 #endif
 k2 J0 W(0,i,R6);f2
 #ifdef DB
-S3 T3 z4 A4 i df(uint j){return dc((G(j,j,j,j)>>G(16,8,0,24))&0xffu)/255.;}y1(EF,e0,F,B,r){
+S3 T3 z4 A4 i df(uint j){return dc((G(j,j,j,j)>>G(16,8,0,24))&0xffu)/255.;}y1(FF,e0,F,B,r){
 #ifdef M3
-M(r,F,OD,uint);M(r,F,PD,uint);M(r,F,QD,uint);M(r,F,RD,uint);G KC=G(OD,PD,QD,RD);
+M(r,F,PD,uint);M(r,F,QD,uint);M(r,F,RD,uint);M(r,F,SD,uint);G KC=G(PD,QD,RD,SD);
 #else
 M(r,F,KC,G);
 #endif
@@ -22,5 +22,5 @@ U.y=-U.y;
 a0(R6);z1(U);}
 #endif
 #ifdef GB
-C3 D3 Y2(i,FF){A(R6,i);G2(R6);}
+C3 D3 Y2(i,GF){A(R6,i);G2(R6);}
 #endif

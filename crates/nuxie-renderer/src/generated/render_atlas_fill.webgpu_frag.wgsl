@@ -4,14 +4,14 @@ struct CC {
     ff: f32,
     gf: f32,
     m6_: u32,
-    Fg: u32,
+    Gg: u32,
     Re: u32,
     Se: u32,
     R7_: vec4<i32>,
-    Bg: vec2<f32>,
+    Cg: vec2<f32>,
     pd: vec2<f32>,
     a2_: u32,
-    Gg: f32,
+    Hg: f32,
     Z5_: u32,
     P2_: f32,
     qd: f32,
@@ -19,20 +19,20 @@ struct CC {
     z3_: f32,
     A3_: f32,
     rd: f32,
-    yg: u32,
+    zg: u32,
 }
 
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(3) @binding(9)
 var aa: sampler;
-var<private> Jg: f32;
+var<private> Kg: f32;
 var<private> O_1: vec4<f32>;
 var<private> gl_FrontFacing_1: bool;
 @group(0) @binding(0)
 var<uniform> n: CC;
 @group(0) @binding(8)
-var KD: texture_2d<f32>;
+var LD: texture_2d<f32>;
 @group(1) @binding(11)
 var IC: texture_2d<f32>;
 @group(3) @binding(8)
@@ -75,7 +75,7 @@ fn main_1() {
         phi_424_ = -(_e83);
     }
     let _e87 = phi_424_;
-    Jg = _e87;
+    Kg = _e87;
     return;
 }
 
@@ -84,6 +84,6 @@ fn main(@location(0) O: vec4<f32>, @builtin(front_facing) gl_FrontFacing: bool) 
     O_1 = O;
     gl_FrontFacing_1 = gl_FrontFacing;
     main_1();
-    let _e5 = Jg;
+    let _e5 = Kg;
     return _e5;
 }

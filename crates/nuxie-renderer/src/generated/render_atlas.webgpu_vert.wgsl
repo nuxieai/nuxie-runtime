@@ -1,8 +1,8 @@
-struct cg {
+struct dg {
     c2_: array<vec4<u32>>,
 }
 
-struct bg {
+struct cg {
     c2_: array<vec4<u32>>,
 }
 
@@ -12,14 +12,14 @@ struct CC {
     ff: f32,
     gf: f32,
     m6_: u32,
-    Fg: u32,
+    Gg: u32,
     Re: u32,
     Se: u32,
     R7_: vec4<i32>,
-    Bg: vec2<f32>,
+    Cg: vec2<f32>,
     pd: vec2<f32>,
     a2_: u32,
-    Gg: f32,
+    Hg: f32,
     Z5_: u32,
     P2_: f32,
     qd: f32,
@@ -27,7 +27,7 @@ struct CC {
     z3_: f32,
     A3_: f32,
     rd: f32,
-    yg: u32,
+    zg: u32,
 }
 
 struct gl_PerVertex {
@@ -53,9 +53,9 @@ struct VertexOutput {
 @group(0) @binding(7)
 var LC: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> ED: cg;
+var<storage> ED: dg;
 @group(0) @binding(2)
-var<storage> PB: bg;
+var<storage> PB: cg;
 @group(0) @binding(0)
 var<uniform> n: CC;
 var<private> gl_VertexIndex_1: i32;
@@ -471,7 +471,7 @@ fn main_1() {
             let _e584 = phi_2525_;
             let _e586 = phi_2521_;
             let _e588 = phi_2497_;
-            let _e594 = n.yg;
+            let _e594 = n.zg;
             let _e597 = select(_e584.xy, vec2<f32>(1f, -1f), vec2((_e594 != 0u)));
             let _e603 = vec4<f32>(_e597.x, _e584.y, _e584.z, _e584.w);
             phi_2568_ = vec4<f32>(_e603.x, _e597.y, _e603.z, _e603.w);

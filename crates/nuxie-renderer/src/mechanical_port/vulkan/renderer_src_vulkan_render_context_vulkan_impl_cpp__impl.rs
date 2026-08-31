@@ -1,5 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/render_context_vulkan_impl.cpp`.
+//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -1035,7 +1036,7 @@ impl Drop for FeatherAtlasPipeline {
 
 impl RenderContextVulkanImpl {
     fn new(vk_context: Arc<VulkanContext>, options: ContextOptions) -> Self {
-        let properties = vk_context.physicalDeviceProperties();
+        let properties = &vk_context.physicalDeviceProperties;
         let vendor = properties.vendor_id;
         let workarounds = DriverWorkarounds {
             maxInstancesPerRenderPass: if properties.api_version < vk::API_VERSION_1_3
@@ -1072,9 +1073,7 @@ impl RenderContextVulkanImpl {
             vk_context.features.shaderClipDistance && properties.limits.max_clip_distances >= 4;
         base.m_platformFeatures.supportsPipelineDynamicState = vk_context.features.apiVersion
             >= vk::API_VERSION_1_3
-            && vk_context.features.colorWriteEnable
-            && !workarounds.needsInterruptibleRenderPasses()
-            && vendor != vkutil::Imagination;
+            && !workarounds.needsInterruptibleRenderPasses();
         base.m_platformFeatures.clipSpaceBottomUp = false;
         base.m_platformFeatures.framebufferBottomUp = false;
         base.m_platformFeatures.msaaColorPreserveNeedsDraw = true;
@@ -1225,7 +1224,7 @@ impl RenderContextVulkanImpl {
         );
         unsafe { rcp_ref(&self.m_nullImageTexture) }.scheduleUploadBytes(&black);
         let device_name =
-            unsafe { CStr::from_ptr(self.m_vk.physicalDeviceProperties().device_name.as_ptr()) };
+            unsafe { CStr::from_ptr(self.m_vk.physicalDeviceProperties.device_name.as_ptr()) };
         if device_name
             .to_bytes()
             .windows(b"Adreno (TM) 8".len())
@@ -3669,7 +3668,8 @@ impl<'a> PipelineBinder<'a> {
             have_scissor: false,
         }
     }
-    fn bind(&mut self, command: vk::CommandBuffer, pipeline: vk::Pipeline, scissor: IAABB) {
+    fn bind(&mut self, command: vk::CommandBuffer, pipeline: vk::Pipeline, scissor: IAABB,
+        layout: &DrawPipelineLayoutVulkan) {
         unsafe {
             if pipeline != self.pipeline {
                 self.vk.ashDevice().cmd_bind_pipeline(
@@ -3678,6 +3678,9 @@ impl<'a> PipelineBinder<'a> {
                     pipeline,
                 );
                 self.pipeline = pipeline;
+                if layout.hasColorWriteDisablePushConstant() {
+                    self.setEmulatedColorWriteEnable(command, layout, true);
+                }
             }
             if !self.have_scissor || scissor != self.scissor {
                 self.vk
@@ -3688,7 +3691,20 @@ impl<'a> PipelineBinder<'a> {
             }
         }
     }
-    fn setDynamicState(&self, command: vk::CommandBuffer, state: &PipelineState) {
+    fn setEmulatedColorWriteEnable(&self, command: vk::CommandBuffer,
+        layout: &DrawPipelineLayoutVulkan, enabled: bool) {
+        assert!(layout.hasColorWriteDisablePushConstant());
+        let value: f32 = if enabled { 1.0 } else { 0.0 };
+        let range = vkutil::ColorWriteEnablePushConstant;
+        unsafe {
+            (self.vk.CmdPushConstants.expect("Vulkan push constants command"))(
+                command, layout.vkPipelineLayout(), range.stage_flags, range.offset,
+                range.size, std::ptr::from_ref(&value).cast());
+        }
+    }
+
+    fn setDynamicState(&self, command: vk::CommandBuffer, state: &PipelineState,
+        layout: &DrawPipelineLayoutVulkan) {
         unsafe {
             (self
                 .vk
@@ -3731,11 +3747,13 @@ impl<'a> PipelineBinder<'a> {
                 command,
                 vkutil::vkCullMode(state.cullFace),
             );
-            let color_write: vk::Bool32 = state.colorWriteEnabled.into();
-            (self
-                .vk
-                .CmdSetColorWriteEnableEXT
-                .expect("color write enable command"))(command, 1, &color_write);
+            if self.vk.features.colorWriteEnable {
+                let color_write: vk::Bool32 = state.colorWriteEnabled.into();
+                (self.vk.CmdSetColorWriteEnableEXT.expect("color write enable command"))(
+                    command, 1, &color_write);
+            } else {
+                self.setEmulatedColorWriteEnable(command, layout, state.colorWriteEnabled);
+            }
         }
     }
 }
@@ -3798,6 +3816,11 @@ fn submitDrawList(
             batch.shaderFeatures
         };
         let mut misc = batch.shaderMiscFlags;
+        if vkutil::hasPipelineDynamicState(batch.drawType)
+            && !implementation.m_vk.features.colorWriteEnable
+        {
+            misc |= ShaderMiscFlags::emulateDynamicColorWriteDisable;
+        }
         if draw_pass
             .m_renderPassOptions
             .has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer)
@@ -3870,7 +3893,7 @@ fn submitDrawList(
             } else {
                 render_pass_scissor
             };
-            binder.bind(command, pipeline.m_vkPipeline, desired);
+            binder.bind(command, pipeline.m_vkPipeline, desired, draw_pass.pipelineLayout());
         }
         match batch.drawType {
             DrawType::midpointFanPatches
@@ -3965,13 +3988,14 @@ fn submitDrawList(
                         crate::mechanical_port::source::renderer::src::gpu_cpp::get_pipeline_state(
                             pass,
                             desc.interlockMode,
-                            batch.shaderMiscFlags,
+                            misc,
                             batch.drawContents,
                             desc.fixedFunctionColorOutput,
                             batch.firstBlendMode,
                             &implementation.base.m_platformFeatures,
                         );
-                    binder.setDynamicState(command, &state);
+                    assert!(vkutil::hasPipelineDynamicState(batch.drawType));
+                    binder.setDynamicState(command, &state, draw_pass.pipelineLayout());
                     unsafe {
                         implementation.m_vk.ashDevice().cmd_draw_indexed(
                             command,
@@ -4479,7 +4503,7 @@ pub(crate) unsafe fn MakeContext(
             get_instance_proc_addr,
         )
     };
-    let properties = vk_context.physicalDeviceProperties();
+    let properties = &vk_context.physicalDeviceProperties;
     if properties.api_version < vk::API_VERSION_1_1 {
         eprintln!(
             "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.1."

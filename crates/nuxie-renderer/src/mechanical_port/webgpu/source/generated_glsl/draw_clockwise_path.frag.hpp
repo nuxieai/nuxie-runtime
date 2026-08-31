@@ -20,7 +20,7 @@ o2(JB)
 #else
 L1(JB)
 #endif
-{A(f1,g);
+{A(X0,g);
 #ifdef EB
 A(i1,c);
 #else
@@ -46,25 +46,25 @@ i v0;c F1;
 #if defined(EB)&&defined(EC)
 if(!EC)
 #endif
-{v0=J7(f1,1. S2);F1=1.;
+{v0=J7(X0,1. S2);F1=1.;
 #ifdef BB
 if(BB){c sb=f3(Y4(L0));F1=min(sb,F1);}
 #endif
 }w2;
 #if defined(EB)&&defined(EC)
-if(EC){c1(P0,packHalf2x16(A2(r0,B0)));
+if(EC){d1(P0,packHalf2x16(A2(r0,B0)));
 #ifndef Q
 v2(j0);
 #endif
 }else
 #endif
-{E N4=unpackHalf2x16(Y0(P0));c i9=N4.y;c O4=i9==B0?N4.x:G0(.0);c me=
+{E N4=unpackHalf2x16(Z0(P0));c i9=N4.y;c O4=i9==B0?N4.x:G0(.0);c me=
 #ifndef EB
 R5(O)?max(O4,r0):
 #endif
 O4+r0;
 #ifdef I
-if(I&&U1.x!=.0){E M0=unpackHalf2x16(Y0(h0));c I5=M0.y;c tb=I5==U1.x?M0.x:G0(.0);F1=min(tb,F1);}
+if(I&&U1.x!=.0){E M0=unpackHalf2x16(Z0(h0));c I5=M0.y;c tb=I5==U1.x?M0.x:G0(.0);F1=min(tb,F1);}
 #endif
 F1=max(F1,.0);c Z1=da(O4,.0,F1);c E1=da(me,.0,F1);
 #ifdef LB

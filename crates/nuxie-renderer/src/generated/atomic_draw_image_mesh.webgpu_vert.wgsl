@@ -4,14 +4,14 @@ struct CC {
     ff: f32,
     gf: f32,
     m6_: u32,
-    Fg: u32,
+    Gg: u32,
     Re: u32,
     Se: u32,
     R7_: vec4<i32>,
-    Bg: vec2<f32>,
+    Cg: vec2<f32>,
     pd: vec2<f32>,
     a2_: u32,
-    Gg: f32,
+    Hg: f32,
     Z5_: u32,
     P2_: f32,
     qd: f32,
@@ -19,7 +19,7 @@ struct CC {
     z3_: f32,
     A3_: f32,
     rd: f32,
-    yg: u32,
+    zg: u32,
 }
 
 struct gl_PerVertex {
@@ -29,7 +29,7 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct bg {
+struct cg {
     c2_: array<vec4<u32>>,
 }
 
@@ -41,7 +41,7 @@ struct Ke {
     c2_: array<vec4<f32>>,
 }
 
-struct cg {
+struct dg {
     c2_: array<vec4<u32>>,
 }
 
@@ -54,7 +54,7 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(1) override Zg: bool = true;
+@id(1) override ah: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
@@ -77,19 +77,19 @@ var LC: texture_2d<u32>;
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> PB: bg;
+var<storage> PB: cg;
 @group(0) @binding(3)
 var<storage> AD: Je;
 @group(0) @binding(4)
 var<storage> RB: Ke;
 @group(0) @binding(5)
-var<storage> ED: cg;
+var<storage> ED: dg;
 @group(3) @binding(9)
 var aa: sampler;
 
 fn main_1() {
-    var phi_313_: bool;
-    var phi_376_: vec4<f32>;
+    var phi_314_: bool;
+    var phi_377_: vec4<f32>;
 
     let _e35 = WB_1;
     let _e43 = OC_1;
@@ -97,7 +97,7 @@ fn main_1() {
     let _e47 = ((mat2x2<f32>(vec2<f32>(_e35.x, _e35.y), vec2<f32>(_e35.z, _e35.w)) * _e43) + _e45.xy);
     let _e48 = PC_1;
     X1_ = _e48;
-    if Zg {
+    if ah {
         let _e49 = QB_1;
         let _e54 = vec2<f32>(_e49.x, _e49.y);
         let _e55 = vec2<f32>(_e49.z, _e49.w);
@@ -105,24 +105,24 @@ fn main_1() {
             default: {
                 let _e61 = (abs(_e54) + abs(_e55));
                 let _e63 = (_e61.x != 0f);
-                phi_313_ = _e63;
+                phi_314_ = _e63;
                 if _e63 {
-                    phi_313_ = (_e61.y != 0f);
+                    phi_314_ = (_e61.y != 0f);
                 }
-                let _e67 = phi_313_;
+                let _e67 = phi_314_;
                 if _e67 {
                     let _e71 = ((mat2x2<f32>(_e54, _e55) * _e47) + _e45.zw);
                     let _e72 = -(_e71);
                     let _e78 = (vec2<f32>(1f, 1f) / _e61).xyxy;
-                    phi_376_ = (((vec4<f32>(_e71.x, _e71.y, _e72.x, _e72.y) * _e78) + _e78) + vec4<f32>(0.5f, 0.5f, 0.5f, 0.5f));
+                    phi_377_ = (((vec4<f32>(_e71.x, _e71.y, _e72.x, _e72.y) * _e78) + _e78) + vec4<f32>(0.5f, 0.5f, 0.5f, 0.5f));
                     break;
                 } else {
-                    phi_376_ = _e45.zwzw;
+                    phi_377_ = _e45.zwzw;
                     break;
                 }
             }
         }
-        let _e83 = phi_376_;
+        let _e83 = phi_377_;
         L0_ = _e83;
     }
     let _e85 = IB_1[0u];

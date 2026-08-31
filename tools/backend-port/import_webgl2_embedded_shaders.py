@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 
-PINNED_UPSTREAM = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+PINNED_UPSTREAM = "2b2203f45a67f813cb662272962192ecfdfd923e"
 GENERATED_INPUTS = (
     "advanced_blend.minified.glsl",
     "atomic_draw.minified.glsl",
@@ -66,7 +66,7 @@ def main() -> None:
     if revision != PINNED_UPSTREAM:
         raise RuntimeError(f"expected pinned upstream {PINNED_UPSTREAM}, found {revision}")
 
-    generated = upstream / "renderer/out/cpp-webgl2-oracle/include/generated/shaders"
+    generated = Path(os.environ.get("RENDERER_SHADER_UPSTREAM_OUT", upstream / "renderer/out/cpp-webgl2-oracle/include/generated/shaders"))
     destination = (
         repo
         / "crates/nuxie-renderer/src/mechanical_port/webgl2/source/generated_glsl_embedded"

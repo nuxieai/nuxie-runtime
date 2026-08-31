@@ -1,5 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/draw_pipeline_vulkan.cpp`.
+//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
 
 #![allow(non_snake_case)]
 
@@ -27,7 +28,7 @@ use std::sync::Arc;
 const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const PLS_PLANE_COUNT: usize = 4;
-const SPECIALIZATION_COUNT: usize = 14;
+const SPECIALIZATION_COUNT: usize = 15;
 
 #[cold]
 #[track_caller]
@@ -238,6 +239,7 @@ impl DrawPipelineVulkan {
                     .shaderMiscFlags
                     .has(ShaderMiscFlags::borrowedCoveragePass),
             ),
+            u32::from(props.shaderMiscFlags.has(ShaderMiscFlags::emulateDynamicColorWriteDisable)),
             u32::from(props.shaderMiscFlags.has(ShaderMiscFlags::storeColorClear)),
             u32::from(
                 props
@@ -429,11 +431,25 @@ impl DrawPipelineVulkan {
                 &*layout::INPUT_ASSEMBLY_TRIANGLE_STRIP,
             ),
         };
-        let dynamicState = if vkutil_decl::hasPipelineDynamicState(props.drawType) {
-            &*layout::DYNAMIC_PIPELINE_STATE
-        } else {
-            &*layout::DYNAMIC_VIEWPORT_SCISSOR
-        };
+        let mut dynamicStates = [vk::DynamicState::VIEWPORT; 8];
+        dynamicStates[1] = vk::DynamicState::SCISSOR;
+        let mut dynamicStateCount = 2;
+        if vkutil_decl::hasPipelineDynamicState(props.drawType) {
+            dynamicStates[2..7].copy_from_slice(&[
+                vk::DynamicState::DEPTH_WRITE_ENABLE,
+                vk::DynamicState::STENCIL_COMPARE_MASK,
+                vk::DynamicState::STENCIL_WRITE_MASK,
+                vk::DynamicState::STENCIL_OP,
+                vk::DynamicState::CULL_MODE,
+            ]);
+            dynamicStateCount = 7;
+            if vk.features.colorWriteEnable {
+                dynamicStates[7] = vk::DynamicState::COLOR_WRITE_ENABLE_EXT;
+                dynamicStateCount = 8;
+            }
+        }
+        let dynamicState = vk::PipelineDynamicStateCreateInfo::default()
+            .dynamic_states(&dynamicStates[..dynamicStateCount]);
         let mut pipelineCreateInfo = vk::GraphicsPipelineCreateInfo::default()
             .stages(&stages)
             .vertex_input_state(vertexInputState)
@@ -442,7 +458,7 @@ impl DrawPipelineVulkan {
             .rasterization_state(&pipelineRasterizationStateCreateInfo)
             .multisample_state(&msaaState)
             .color_blend_state(&pipelineColorBlendStateCreateInfo)
-            .dynamic_state(dynamicState)
+            .dynamic_state(&dynamicState)
             .layout(pipelineLayout.vkPipelineLayout())
             .render_pass(vkRenderPass)
             .subpass(subpassIndex);

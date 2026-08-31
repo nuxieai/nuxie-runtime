@@ -7015,7 +7015,7 @@ mod source_owner_regressions {
 
     const OWNER_EXPECTATIONS: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../docs/metal-port-reports/metal-native-owner-expectations.tsv"
+        "/tests/fixtures/native_metal/metal-native-owner-expectations.tsv"
     ));
     const OWNER_EXPECTATIONS_SHA256: &str =
         "08824cc2e288d9f29711c1e5d85666b25c0eb9d0bc46d33e14b6de51623e6765";

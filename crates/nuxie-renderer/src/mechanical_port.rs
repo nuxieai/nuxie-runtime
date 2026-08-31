@@ -2,8 +2,8 @@
 
 // This tree deliberately preserves source declarations, conditional branches,
 // C++ naming, and translation-unit imports even when one Rust product
-// configuration does not reference them. The campaign ledgers/checker, not
-// Rust's reachability lints, are the completeness authority for these files.
+// configuration does not reference them. Pinned upstream source and the
+// source-shaped module tree, not Rust's reachability lints, define the port.
 #![allow(
     dead_code,
     irrefutable_let_patterns,

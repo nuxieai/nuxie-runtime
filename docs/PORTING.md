@@ -1,5 +1,13 @@
 # PORTING.md — The C++→Rust Idiom Codex
 
+> Maintenance note: `PARITY_WORKFLOW.md` and its referenced literal translation
+> plan are the sole current process authority. The owner-family closure
+> workflow, ledger/checklist gates, old Rust paths, and representation examples
+> below describe earlier implementations and must not be restored mechanically.
+> Preserve the bounded adaptation contracts and semantic cautions, but derive
+> each translation from the pinned upstream pair and its current Rust owner.
+> Passing goldens alone does not prove source equivalence.
+
 This is the translation manual for porting the Rive C++ runtime (the pinned
 checkout at `RIVE_RUNTIME_DIR`, conventionally `~/dev/oss/rive-runtime`) into
 this Rust workspace. It is the authoritative distillation of the patterns
@@ -37,74 +45,11 @@ what is idiomatic Rust.
 
 ---
 
-## 0. Owner-Family Closure Workflow
+## Execution method
 
-> **Process reset (coordinator directive, 2026-07-30, binding for FL-D
-> onward).** Tests are the acceptance. A family is DONE when: (1) the port
-> lands file-to-file per the manifest; (2) the family's upstream unit tests
-> are ported per the W65 triage (fixture differentials or literal Rust
-> ports; C++-container-mechanics cases documented as skipped); (3) the
-> existing differential suites and goldens are green; (4) the orchestrator
-> spot-checks the family's trickiest behaviors against the pinned C++; (5)
-> one PR to main flips the family's manifest rows. Nothing else is
-> required: no candidate/evidence commit pairs, no trace-fingerprint
-> rounds, no promotion commits, no review-until-zero-findings, and no
-> adversarial charters against enforcement tooling (the ownership detector
-> is a frozen drift lint validated by its fixed negative corpus). At most
-> one time-boxed behavioral review may be used where differentials
-> structurally cannot observe the surface. The numbered workflow below
-> remains sound guidance for HOW to port a family (read whole family
-> first, checklist the members, port coherently, keep differentials
-> honest); its publication/acceptance machinery is superseded by this
-> paragraph. Rationale: rounds 10-12 of the FL-B/FL-C5 campaign produced
-> zero behavioral findings while consuming days on tooling review; the
-> upstream test estate (1,320 TEST_CASEs, 238 silvers) is a stricter and
-> cheaper oracle than review rounds. In PR #89, the retired staleness gates
-> also forced five fingerprint-rebind commits in a single day as the source
-> changed.
-
-1. **Read the whole family first.** Read every mapped implementation and header,
-   plus the importer and concrete subclasses that establish its lifecycle.
-   Record import validation, retained ownership, authored ordering, cloning,
-   construction/destruction, float edge behavior, and virtual dispatch.
-2. **Write a closure checklist.** Before production edits, map every relevant
-   C++ file/member to its direct Rust file, its live C++ differential or
-   source-cited structural proof, and its permanent checker rule. Missing
-   evidence is an open implementation row, not a review follow-up.
-3. **Port the family coherently.** Preserve one writer and a frozen base.
-   File-to-file moves stay behavior-preserving where practical; semantic edits
-   then port the complete family without Editor-specific or benchmark-driven
-   compensation.
-4. **Adversarially review the checklist.** At minimum probe wrong types, bad
-   indices, duplicate authored occurrences, failed candidates, zero values,
-   nested paths, same-frame timing, clone isolation, and malformed import
-   behavior wherever the family admits them.
-5. **Close the checklist before flipping manifest rows.** Every row must have a
-   live pinned-C++ differential or a source-cited structural proof. Turn each
-   behavioral gap into a permanent differential or checker negative control
-   before completing the family.
-
-Focused tests run continuously while the family is being translated. Run the
-expensive full battery once after the checklist is closed, then land the family
-in one PR that flips its manifest rows. Large waves such as DataBind/Artboard
-and Text/Layout must be partitioned into dependency-complete owner-family
-checklists before their first production edit; a wave-sized file count is not
-itself a family.
-
-Keep one production writer. Parallel work is limited to read-only source
-mapping, oracle-probe design, and independent review. Rebase only at declared
-family boundaries. Reuse Cargo and C++ artifacts when their provenance keys
-(source SHA, compiler, configuration, feature defines, and archive hash) still
-match; clean-tree validation proves source identity and must not force an
-otherwise identical rebuild.
-
-Performance validates the completed FL-A-through-FL-E structural port. Do not
-run family- or wave-level timing gates while mapped FL production rows remain
-pending, and never use individual benchmark entries as implementation slices.
-After all FL code is ported and the correctness/structure floors are green,
-run the canonical performance acceptance once against the complete port.
-
----
+Use [PARITY_WORKFLOW.md](PARITY_WORKFLOW.md): complete mechanical translation,
+source-equivalence review, Rust-integration review, then existing validation.
+There is no owner-family ledger, test-first gate, or promotion process.
 
 ## 1. Ownership & Type Mappings
 

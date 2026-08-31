@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -37,8 +37,10 @@ def main() -> None:
     snapshot_root = (
         repo / "crates/nuxie-renderer/src/mechanical_port/vulkan/source"
     )
-    ledger_path = repo / "docs/backend-port-generated-artifacts.tsv"
-    inventory_path = repo / "docs/backend-port-source-inventory.tsv"
+    checksums = {name: digest for digest, name in (
+        line.split() for line in Path(__file__).with_name("vulkan-spirv.sha256").read_text().splitlines()
+    )}
+    pinned_ref = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
 
     includes = [
         match.decode("utf-8")
@@ -50,17 +52,8 @@ def main() -> None:
             f"{len(includes)} includes/{len(set(includes))} unique"
         )
 
-    with ledger_path.open(newline="", encoding="utf-8") as ledger_file:
-        ledger = {
-            row["artifact_path"]: row
-            for row in csv.DictReader(ledger_file, delimiter="\t")
-        }
-
-    with inventory_path.open(newline="", encoding="utf-8") as inventory_file:
-        inventory = {
-            row["source_path"]: row
-            for row in csv.DictReader(inventory_file, delimiter="\t")
-        }
+    if set(includes) != set(checksums):
+        raise SystemExit("Vulkan shader includes differ from retained checksums")
 
     snapshot_root.mkdir(parents=True, exist_ok=True)
     for source_path in (
@@ -69,9 +62,9 @@ def main() -> None:
     ):
         source = upstream / source_path
         data = source.read_bytes()
-        row = inventory.get(source_path)
-        if row is None or sha256(data) != row["source_sha256"]:
-            raise SystemExit(f"source inventory mismatch for {source_path}")
+        pinned = subprocess.check_output(["git", "-C", str(upstream), "show", f"{pinned_ref}:{source_path}"])
+        if data != pinned:
+            raise SystemExit(f"pinned source mismatch for {source_path}")
         target = snapshot_root / source_path.replace("/", "_")
         shutil.copyfile(source, target)
         if target.read_bytes() != data:
@@ -79,17 +72,10 @@ def main() -> None:
 
     destination.mkdir(parents=True, exist_ok=True)
     for name in includes:
-        artifact_path = f"out/generated/spirv/{name}"
-        row = ledger.get(artifact_path)
-        if row is None:
-            raise SystemExit(f"missing frozen generated-artifact row: {artifact_path}")
-        if row["retention"] != "retained" or row["direct_include_count"] != "1":
-            raise SystemExit(f"unexpected frozen retention row: {row}")
-
         source = generated_root / name
         data = source.read_bytes()
         actual = sha256(data)
-        expected = row["artifact_sha256"]
+        expected = checksums.get(name)
         if actual != expected:
             raise SystemExit(
                 f"generated header hash mismatch for {name}: "

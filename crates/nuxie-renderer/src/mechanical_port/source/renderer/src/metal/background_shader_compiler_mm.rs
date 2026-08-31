@@ -2258,7 +2258,7 @@ mod tests {
 
     const EXPECTATIONS: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../docs/metal-port-reports/metal-native-owner-expectations.tsv"
+        "/tests/fixtures/native_metal/metal-native-owner-expectations.tsv"
     ));
 
     const BG_ROWS: [&str; 10] = [

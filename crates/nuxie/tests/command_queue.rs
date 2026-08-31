@@ -1,9 +1,8 @@
 //! Focused parity tests for Rive's pinned `command_queue_test.cpp`.
 //!
 //! These tests port the non-rendering command-loop invariants from
-//! `tests/unit_tests/runtime/command_queue_test.cpp` at `4ac7b327`. The
-//! complete case-by-case correspondence is recorded in
-//! `docs/command-queue-test-ledger.md`.
+//! `tests/unit_tests/runtime/command_queue_test.cpp` at `4ac7b327`.
+//! The test cases below are the executable correspondence to that source.
 
 use std::{
     any::Any,

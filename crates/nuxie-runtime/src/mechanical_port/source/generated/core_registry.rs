@@ -39873,10 +39873,7 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        {
-            let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
-        }
+        Some(Box::new(self.clone_core()))
     }
     fn deserialize(
         &mut self,
@@ -63852,24 +63849,7 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
         &mut self,
         stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(
-            crate::mechanical_port::source::component::Component::import(
-                &mut self
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base
-                    .base,
-                stack,
-            ),
-        )
+        Some(crate::mechanical_port::source::layout_component::LayoutComponent::import(self, stack))
     }
 
     fn overrides_keyed_interpolation(&mut self, property_key: i32) -> Option<bool> {

@@ -7,16 +7,20 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `74c0d601c516f86db4847521198dba42080db06a`
+- LAST_SYNCED_SHA: `f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest applied change: SolidColor and GradientStop expose upstream's shared,
-  non-Core red, green, blue, and alpha views over their packed color. Registry
-  dispatch, data binding, polling, generated schema metadata, and skipped uint
-  decoding follow the matching upstream contracts. All eight upstream tests are
-  translated, and the new 13-frame Silver case is byte-exact.
-  Upstream: `74c0d601c516f86db4847521198dba42080db06a`.
-  Work: [UNIV-1674](https://universe.basis.dev/issue/UNIV-1674).
+  Latest applied change: files exported before runtime format 7.3 retain the
+  legacy translation-only layout transform, while 7.3 and later compose stored
+  rotation and scale over the solved slot. The version gate is imported and
+  cloned through the same lifecycle as upstream. The exact updated layout
+  fixtures and a focused pre-7.3/7.3 regression are included.
+  Upstream: `f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c`.
+  Work: [UNIV-1874](https://universe.basis.dev/issue/UNIV-1874).
+- Intervening `1de56230e9ea062a2da2e25eee00942eafe3bdb4` and
+  `0a8499b87a7d722b982d9c444172cab94d8320f2` need no Rust translation: they
+  change upstream coverage and GMS test-host infrastructure, not runtime,
+  renderer, format, fixture, or supported product behavior.
 - Generated shader provenance remains
   `2b2203f45a67f813cb662272962192ecfdfd923e`: renderer shader inputs are unchanged.
 - Intervening `8efe18ec7b52a02139844ffe71438c00de13037e` needs no Rust

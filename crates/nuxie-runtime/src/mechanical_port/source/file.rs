@@ -269,7 +269,7 @@ impl Drop for File {
 
 impl File {
     pub const MAJOR_VERSION: i32 = 7;
-    pub const MINOR_VERSION: i32 = 2;
+    pub const MINOR_VERSION: i32 = 3;
 
     pub fn set_deterministic_mode(value: bool) {
         DETERMINISTIC_MODE.store(value, std::sync::atomic::Ordering::Relaxed);

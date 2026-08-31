@@ -2,6 +2,7 @@ use super::{
     glyph_lookup::GlyphLookup,
     text_interface::TextInterface,
     text_modifier_group::{TextModifierGroup, TransformGlyphArg},
+    text_style_background::TextStyleBackground,
     text_style_paint::TextStylePaint,
     text_value_run::TextValueRun,
     utf::Utf,
@@ -906,6 +907,16 @@ impl Text {
                     style.paints.propagate_opacity(self.base.render_opacity());
                 });
             }
+            for style in &self.text_style_paints {
+                if let Some(background) = style
+                    .with_downcast::<TextStylePaint, _>(TextStylePaint::background)
+                    .flatten()
+                {
+                    background.with_downcast_mut::<TextStyleBackground, _>(|background| {
+                        background.propagate_opacity(self.base.render_opacity());
+                    });
+                }
+            }
         }
 
         if value
@@ -966,6 +977,19 @@ impl Text {
         }
         self.render_styles.clear();
         self.draw_commands.clear();
+
+        // Reset off the child list: emoji-only styles never enter render_styles.
+        self.build_text_style_paints();
+        for style in &self.text_style_paints {
+            if let Some(background) = style
+                .with_downcast::<TextStylePaint, _>(TextStylePaint::background)
+                .flatten()
+            {
+                background
+                    .with_downcast_mut::<TextStyleBackground, _>(TextStyleBackground::reset_path);
+            }
+        }
+
         for run in &mut self.all_runs {
             run.with_mut(TextValueRun::reset_hit_test);
         }
@@ -1348,19 +1372,31 @@ impl Text {
                             style.with_downcast_mut::<TextStylePaint, _>(|style| {
                                 style.paints.propagate_opacity(self.base.render_opacity());
                             });
-                            self.draw_commands.push(TextDrawCommand::Style(style));
+                            self.draw_commands
+                                .push(TextDrawCommand::Style(style.clone()));
                         }
                     }
-                    value_run.with_mut(|value_run| {
-                        if value_run.is_hit_target() {
-                            value_run.add_hit_rect(Aabb::new(
-                                current_x,
-                                current_y + line.top,
-                                current_x + advance,
-                                current_y + line.bottom,
-                            ));
+                    let background = style
+                        .with_downcast::<TextStylePaint, _>(TextStylePaint::background)
+                        .flatten();
+                    let is_hit_target =
+                        value_run.with(TextValueRun::is_hit_target).unwrap_or(false);
+                    if is_hit_target || background.is_some() {
+                        let glyph_bounds = Aabb::new(
+                            current_x,
+                            current_y + line.top,
+                            current_x + advance,
+                            current_y + line.bottom,
+                        );
+                        if is_hit_target {
+                            value_run.with_mut(|value_run| value_run.add_hit_rect(glyph_bounds));
                         }
-                    });
+                        if let Some(background) = background {
+                            background.with_downcast_mut::<TextStyleBackground, _>(|background| {
+                                background.add_rect(glyph_bounds);
+                            });
+                        }
+                    }
                     current_x += advance;
                 }
                 if line_index == info.ellipsis_line {
@@ -1431,6 +1467,17 @@ impl Text {
                 }
             });
         }
+        for style in &self.text_style_paints {
+            if let Some(background) = style
+                .with_downcast::<TextStylePaint, _>(TextStylePaint::background)
+                .flatten()
+            {
+                background.with_downcast_mut::<TextStyleBackground, _>(|background| {
+                    background.update_path();
+                    background.propagate_opacity(self.base.render_opacity());
+                });
+            }
+        }
     }
     pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.base.needs_save_operation() {
@@ -1448,6 +1495,17 @@ impl Text {
         }
         let world_transform = self.shape_world_transform;
         let blend_mode = self.base.blend_mode().into();
+        // Backgrounds precede every glyph, in style child order.
+        for style in &self.text_style_paints {
+            if let Some(background) = style
+                .with_downcast::<TextStylePaint, _>(TextStylePaint::background)
+                .flatten()
+            {
+                background.with_downcast_mut::<TextStyleBackground, _>(|background| {
+                    background.draw(renderer, &world_transform, blend_mode);
+                });
+            }
+        }
         for index in 0..self.draw_commands.len() {
             match &self.draw_commands[index] {
                 TextDrawCommand::Style(style) => {

@@ -32,6 +32,7 @@ pub struct TextStylePaint {
     paint_pool: Vec<Box<dyn RenderPaint>>,
     path: ShapePaintPath,
     has_contents: bool,
+    background: Option<CoreHandle>,
 }
 impl TextStylePaint {
     pub fn new() -> Self {
@@ -42,12 +43,19 @@ impl TextStylePaint {
             paint_pool: Vec::new(),
             path: ShapePaintPath::default(),
             has_contents: false,
+            background: None,
         }
     }
     pub fn rewind_path(&mut self) {
         self.path.rewind();
         self.has_contents = false;
         self.opacity_paths.clear();
+    }
+    pub fn background(&self) -> Option<CoreHandle> {
+        self.background.clone()
+    }
+    pub fn set_background(&mut self, background: CoreHandle) {
+        self.background = Some(background);
     }
     pub fn add_path(&mut self, raw: &RawPath, opacity: f32) -> bool {
         let had = self.has_contents;

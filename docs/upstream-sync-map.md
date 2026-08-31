@@ -7,16 +7,18 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `2b2203f45a67f813cb662272962192ecfdfd923e`
+- LAST_SYNCED_SHA: `1f04919af881fe51c929924dc773c835ca9071f0`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  First applied change: `2b2203f45a67f813cb662272962192ecfdfd923e`.
-  Work: [UNIV-2873](https://universe.basis.dev/issue/UNIV-2873).
+  Latest applied change: text style backgrounds with corner rounding,
+  `1f04919af881fe51c929924dc773c835ca9071f0`.
+  Work: [UNIV-1675](https://universe.basis.dev/issue/UNIV-1675).
 - This source checkpoint is not Adreno/PowerVR hardware qualification. The
   existing MoltenVK C-API content checks fail identically on the previous main
   and this update; follow-up: [UNIV-2875](https://universe.basis.dev/issue/UNIV-2875).
 - No new catch-up exclusions have been approved. The established Rust
-  adaptations below remain in force. This is not standing automation or merge
+  adaptations below remain in force. The user authorized merging each reviewed
+  manual update as it is completed on 2026-08-31. This is not standing automation
   authorization.
 
 ## One upstream commit at a time

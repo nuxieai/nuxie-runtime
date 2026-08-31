@@ -11,6 +11,7 @@ pub mod text_modifier_group_base;
 pub mod text_modifier_range_base;
 pub mod text_shape_modifier_base;
 pub mod text_style_axis_base;
+pub mod text_style_background_base;
 pub mod text_style_base;
 pub mod text_style_feature_base;
 pub mod text_style_paint_base;

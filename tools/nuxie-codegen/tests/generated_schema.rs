@@ -176,8 +176,8 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         }
     }
 
-    assert_eq!(runtime_definition_count, 349);
-    assert_eq!(runtime_property_count, 604);
+    assert_eq!(runtime_definition_count, 350);
+    assert_eq!(runtime_property_count, 605);
     assert_eq!(
         declared_types,
         [
@@ -207,7 +207,7 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         (("Bytes", None), 4),
         (("callback", None), 4),
         (("Color", None), 7),
-        (("double", None), 229),
+        (("double", None), 230),
         (("Id", Some("uint")), 83),
         (("int", Some("int")), 1),
         (("int16", None), 2),
@@ -309,7 +309,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
     );
 
     let properties = runtime_json_properties(&runtime_dir.join("dev/defs"));
-    assert_eq!(properties.len(), 604);
+    assert_eq!(properties.len(), 605);
 
     let encoded = properties
         .iter()
@@ -709,7 +709,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| json_bool_or_default(&entry.property, "bindable", false))
             .count(),
-        271,
+        272,
         "dev/defs bindable property count changed; audit generated bindable metadata"
     );
 
@@ -718,7 +718,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| json_bool_or_default(&entry.property, "animates", false))
             .count(),
-        224,
+        225,
         "dev/defs animates property count changed; audit generated animates metadata and animation-keyed property support"
     );
     let animates_runtime_types = properties
@@ -745,7 +745,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
         ("bool", 28usize),
         ("callback", 4),
         ("Color", 4),
-        ("double", 152),
+        ("double", 153),
         ("int16", 2),
         ("String", 6),
         ("uint", 14),
@@ -805,7 +805,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("description").is_some())
             .count(),
-        453,
+        454,
         "dev/defs description coverage changed; audit generated description metadata"
     );
     assert_eq!(
@@ -847,7 +847,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("initialValue").is_some())
             .count(),
-        560,
+        561,
         "dev/defs initialValue coverage changed; audit generated stored-field initializers"
     );
 

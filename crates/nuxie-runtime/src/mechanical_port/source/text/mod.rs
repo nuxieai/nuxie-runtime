@@ -23,6 +23,7 @@ pub mod text_selection_path;
 pub mod text_shape_modifier;
 pub mod text_style;
 pub mod text_style_axis;
+pub mod text_style_background;
 pub mod text_style_feature;
 pub mod text_style_paint;
 pub mod text_target_modifier;

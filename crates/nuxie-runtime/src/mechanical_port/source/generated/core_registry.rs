@@ -2614,6 +2614,7 @@ pub enum CoreConcreteType {
     TextInputCursor,
     TextInputText,
     TextStyleFeature,
+    TextStyleBackground,
     TextVariationModifier,
     TextModifierGroup,
     TextStyle,
@@ -3157,6 +3158,7 @@ pub enum CoreField {
     TextStyleAxisTag,
     TextStyleFeatureFeatureValue,
     TextStyleFeatureTag,
+    TextStyleBackgroundCornerRadius,
     TextStyleFontAssetId,
     TextStyleFontSize,
     TextStyleLetterSpacing,
@@ -6726,6 +6728,7 @@ impl CoreRegistry {
             571 => CoreConcreteType::TextInputCursor,
             572 => CoreConcreteType::TextInputText,
             164 => CoreConcreteType::TextStyleFeature,
+            1069 => CoreConcreteType::TextStyleBackground,
             162 => CoreConcreteType::TextVariationModifier,
             159 => CoreConcreteType::TextModifierGroup,
             573 => CoreConcreteType::TextStyle,
@@ -7306,6 +7309,7 @@ impl CoreRegistry {
             82 => CoreField::CubicMirroredVertexRotation,
             83 => CoreField::CubicMirroredVertexDistance,
             126 => CoreField::PolygonCornerRadius,
+            1071 => CoreField::TextStyleBackgroundCornerRadius,
             127 => CoreField::StarInnerRadius,
             380 => CoreField::ImageOriginX,
             381 => CoreField::ImageOriginY,
@@ -7922,6 +7926,7 @@ impl CoreRegistry {
             82 => CoreField::CubicMirroredVertexRotation,
             83 => CoreField::CubicMirroredVertexDistance,
             126 => CoreField::PolygonCornerRadius,
+            1071 => CoreField::TextStyleBackgroundCornerRadius,
             127 => CoreField::StarInnerRadius,
             380 => CoreField::ImageOriginX,
             381 => CoreField::ImageOriginY,
@@ -8627,6 +8632,7 @@ impl CoreRegistry {
             82 => 2,
             83 => 2,
             126 => 2,
+            1071 => 2,
             127 => 2,
             380 => 2,
             381 => 2,
@@ -9235,6 +9241,7 @@ impl CoreRegistry {
             82 => 35,
             83 => 35,
             126 => 51,
+            1071 => 1069,
             127 => 52,
             380 => 100,
             381 => 100,
@@ -75914,6 +75921,7 @@ impl CoreRegistry {
             571 => Some(Box::new(<crate::mechanical_port::source::text::text_input_cursor::TextInputCursor>::default())),
             572 => Some(Box::new(<crate::mechanical_port::source::text::text_input_text::TextInputText>::default())),
             164 => Some(Box::new(<crate::mechanical_port::source::text::text_style_feature::TextStyleFeature>::default())),
+            1069 => Some(Box::new(<crate::mechanical_port::source::text::text_style_background::TextStyleBackground>::default())),
             162 => Some(Box::new(<crate::mechanical_port::source::text::text_variation_modifier::TextVariationModifier>::default())),
             159 => Some(Box::new(<crate::mechanical_port::source::text::text_modifier_group::TextModifierGroup>::default())),
             573 => Some(Box::new(<crate::mechanical_port::source::text::text_style::TextStyle>::default())),
@@ -75943,4 +75951,235 @@ impl CoreRegistry {
             _ => None,
         }
     }
+}
+
+impl CoreRegistryObject
+    for crate::mechanical_port::source::text::text_style_background::TextStyleBackground
+{
+    fn as_registry_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::text::text_style_background_base::TextStyleBackgroundBase::is_type_of(type_key)
+    }
+    fn set_uint(&mut self, field: CoreField, value: u32) {
+        match field {
+            CoreField::ComponentParentId => {
+                if self.base.base.base.base.base.set_parent_id_value(value) {
+                    <crate::mechanical_port::source::text::text_style_background::TextStyleBackground as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
+                    <crate::mechanical_port::source::text::text_style_background::TextStyleBackground as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::component_base::ComponentBase::PARENT_ID_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_string(&mut self, field: CoreField, value: String) {
+        match field {
+            CoreField::ComponentName => {
+                if self.base.base.base.base.base.set_name_value(value) {
+                    <crate::mechanical_port::source::text::text_style_background::TextStyleBackground as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
+                    <crate::mechanical_port::source::text::text_style_background::TextStyleBackground as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::component_base::ComponentBase::NAME_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_color(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn set_bool(&mut self, field: CoreField, value: bool) {
+        let _ = (field, value);
+    }
+    fn set_double(&mut self, field: CoreField, value: f32) {
+        if field == CoreField::TextStyleBackgroundCornerRadius
+            && self.base.set_corner_radius_value(value)
+        {
+            self.corner_radius_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(self, 1071);
+        }
+    }
+    fn set_callback(&mut self, field: CoreField, mut value: CallbackData<'_>) {
+        let _ = (field, value);
+    }
+    fn set_int(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        match field {
+            CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
+            _ => 0,
+        }
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        match field {
+            CoreField::ComponentName => self.base.base.base.base.base.name().to_owned(),
+            _ => String::new(),
+        }
+    }
+    fn get_color(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        let _ = field;
+        false
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        match field {
+            CoreField::TextStyleBackgroundCornerRadius => self.base.corner_radius(),
+            _ => 0.0,
+        }
+    }
+    fn get_int(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+}
+impl crate::mechanical_port::source::core::CoreObject
+    for crate::mechanical_port::source::text::text_style_background::TextStyleBackground
+{
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        crate::mechanical_port::source::generated::text::text_style_background_base::TextStyleBackgroundBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core {
+        &self.base.base.base.base.base.base
+    }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self.base.base.base.base.base.base
+    }
+    fn core_type(&self) -> u16 {
+        crate::mechanical_port::source::generated::text::text_style_background_base::TextStyleBackgroundBase::TYPE_KEY
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::text::text_style_background_base::TextStyleBackgroundBase::is_type_of(type_key)
+    }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        {
+            let mut callbacks = Self::default();
+            Some(Box::new(self.base.clone_into(&mut callbacks)))
+        }
+    }
+    fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+    ) -> bool {
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.deserialize(property_key, reader, self);
+        self.base = base;
+        result
+    }
+}
+impl CoreCapabilities
+    for crate::mechanical_port::source::text::text_style_background::TextStyleBackground
+{
+    fn lifecycle_validate(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<bool> {
+        Some(
+            crate::mechanical_port::source::component::Component::validate(
+                &mut self.base.base.base.base,
+                context,
+            ),
+        )
+    }
+    fn lifecycle_on_added_dirty(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(crate::mechanical_port::source::text::text_style_background::TextStyleBackground::on_added_dirty(self, context))
+    }
+    fn lifecycle_import(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::component::Component::import(
+                &mut self.base.base.base.base,
+                stack,
+            ),
+        )
+    }
+
+    fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
+        Some(&self.base.base.base.base)
+    }
+    fn as_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::component::Component> {
+        Some(&mut self.base.base.base.base)
+    }
+    fn as_container_component(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::container_component::ContainerComponent> {
+        Some(&self.base.base)
+    }
+    fn as_container_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::container_component::ContainerComponent> {
+        Some(&mut self.base.base)
+    }
+    fn as_shape_paint_container(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
+    {
+        Some(&self.paints)
+    }
+    fn as_shape_paint_container_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+    > {
+        Some(&mut self.paints)
+    }
+    fn shape_paint_world_transform(
+        &self,
+    ) -> Option<crate::mechanical_port::source::math::mat2d::Mat2D> {
+        Some(self.shape_world_transform())
+    }
+    fn shape_paint_path_builder(
+        &self,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        Some(self.path_builder().into())
+    }
+    fn with_shape_paint_path_mut(
+        &mut self,
+        kind: crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind,
+        f: &mut dyn FnMut(
+            &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
+        ),
+    ) -> bool {
+        use crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind;
+        match kind {
+            ShapePaintPathKind::World => false,
+            ShapePaintPathKind::LocalClockwise => {
+                f(self.local_clockwise_path());
+                true
+            }
+            ShapePaintPathKind::Local => {
+                f(self.local_path());
+                true
+            }
+        }
+    }
+}
+impl crate::mechanical_port::source::generated::text::text_style_background_base::TextStyleBackgroundBaseCallbacks for crate::mechanical_port::source::text::text_style_background::TextStyleBackground {
+    fn corner_radius_changed(&mut self) { self.corner_radius_changed(); }
+    fn notify_property_changed(&mut self, property_key: u16) { crate::mechanical_port::source::core::Core::notify_property_changed(self, property_key); }
+}
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+    for crate::mechanical_port::source::text::text_style_background::TextStyleBackground
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(self, property_key);
+    }
+}
+impl crate::mechanical_port::source::core::CoreType
+    for crate::mechanical_port::source::text::text_style_background::TextStyleBackground
+{
+    const TYPE_KEY: u16 = crate::mechanical_port::source::generated::text::text_style_background_base::TextStyleBackgroundBase::TYPE_KEY;
 }

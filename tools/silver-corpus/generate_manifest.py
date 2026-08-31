@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+UPSTREAM_REF = "ddd1a2aacf62ee6e550b65b445d0ccdafe284e6a"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -371,6 +371,12 @@ EXACT = (
 )
 
 SCRIPTED_EXACT_NOTES = {
+    "scripted_path_effect_clip": (
+        "The literal upstream initial draw plus 60 frame advances is ported in "
+        "crates/nuxie-runtime/tests/upstream_scripting_path_effect.rs "
+        "(a_clip_follows_the_path_effect_on_its_sources_fill) and passes the "
+        "pinned SRIV comparison, including cached fill-effect clip updates."
+    ),
     "script_create_text_runs": (
         "The pinned C++ action sequence is active and operation-exact across authored "
         "initialization plus push, swap, remove, insert, pop, and shift list mutations. "
@@ -2956,7 +2962,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (252, 208, 41, 3):
+    if (len(producers), runtime, scripted, unknown) != (253, 208, 42, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -2969,9 +2975,9 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 252",
+        "expected_entries = 253",
         "expected_runtime = 208",
-        "expected_scripted = 41",
+        "expected_scripted = 42",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",
         "cpp_rust_exact_ids = ["

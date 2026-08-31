@@ -499,7 +499,21 @@ TEST_CASE("renders selected board", "[silver]")
         manifest = Path(__file__).resolve().parents[2] / "silver-corpus.toml"
         if not runtime_dir.is_dir() or not manifest.is_file():
             self.skipTest("pinned upstream or checked-in manifest is unavailable")
-        expected = generate_manifest.render(generate_manifest.discover(runtime_dir))
+        producers = generate_manifest.discover(runtime_dir)
+        clip = next(item for item in producers if item.id == "scripted_path_effect_clip")
+        # Exact scripted cases retain the owned C++ body as source; this body
+        # imports a fixture, which must remain an explicit input dependency.
+        self.assertEqual(clip.source, "inline-script")
+        self.assertEqual(clip.dependencies, ("scripted_path_effect_clip.riv",))
+        self.assertEqual(clip.lane, "scripted")
+        self.assertEqual(clip.status, "exact")
+        self.assertEqual(clip.actions, "cpp-test-body")
+        self.assertEqual(clip.producer_class, "scripted-literal")
+        self.assertEqual(
+            clip.provenance_file,
+            "tests/unit_tests/runtime/scripting/scripting_path_effect_test.cpp",
+        )
+        expected = generate_manifest.render(producers)
         self.assertEqual(manifest.read_text(encoding="utf-8"), expected)
 
 

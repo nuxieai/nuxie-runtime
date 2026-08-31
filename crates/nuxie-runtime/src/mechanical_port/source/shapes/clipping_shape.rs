@@ -8,7 +8,13 @@ use crate::mechanical_port::source::{
     drawable::{DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
     generated::shapes::clipping_shape_base::ClippingShapeBase,
     math::mat2d::Mat2D,
-    shapes::{paint::shape_paint_path::ShapePaintPath, path_flags::PathFlags},
+    shapes::{
+        paint::{
+            effects_container::EffectsContainer, fill::Fill, shape_paint::ShapePaintPathKind,
+            shape_paint_path::ShapePaintPath,
+        },
+        path_flags::PathFlags,
+    },
     status_code::StatusCode,
 };
 use nuxie_render_api::Renderer;
@@ -285,14 +291,87 @@ impl ClippingShape {
             return;
         };
         for shape in &self.shapes {
-            shape.with_mut(|shape| {
-                if let Some(shape) = shape.as_shape_mut() {
+            let paints = shape
+                .with_mut(|shape| {
+                    let shape = shape.as_shape_mut()?;
                     shape.path_composer_mut().add_dependent(this.clone());
-                }
-            });
+                    Some(shape.paint_container.shape_paints().to_vec())
+                })
+                .flatten()
+                .unwrap_or_default();
+            // Cached fill effects must finish updating before the clip reads them.
+            for paint in paints {
+                paint.with_downcast_mut::<Fill, _>(|fill| {
+                    if fill.base.base.has_effects() {
+                        fill.base.add_dependent(this.clone());
+                    }
+                });
+            }
         }
         self.clip_start.set_clipping_shape(this.clone());
         self.clip_end.set_clipping_shape(this);
+    }
+
+    fn add_fill_paths(&mut self, shape: &CoreHandle) -> bool {
+        let Some((paints, world)) = shape
+            .with(|shape| {
+                let shape = shape.as_shape()?;
+                Some((
+                    shape.paint_container.shape_paints().to_vec(),
+                    *shape.base.world_transform(),
+                ))
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        let mut added_effected = false;
+        let mut needs_raw_path = false;
+        for paint in paints {
+            // Stroke effect outputs are centerlines, not filled clip geometry.
+            let Some(effected) = paint.with_downcast_mut::<Fill, _>(|fill| {
+                let paint = &mut fill.base.base;
+                if !paint.has_effects() {
+                    None
+                } else {
+                    let provider = *paint.path_provider();
+                    paint.last_effect_path(&provider)
+                }
+            }) else {
+                continue;
+            };
+            let Some(effected) = effected else {
+                needs_raw_path = true;
+                continue;
+            };
+            let effected = effected.borrow();
+            if !effected.empty() {
+                let transform = if effected.is_local() {
+                    world
+                } else {
+                    Mat2D::identity()
+                };
+                self.path.add_shape_paint_path(&effected, Some(&transform));
+            }
+            // An existing empty effect still contributes an empty clip; never
+            // replace it with the unaffected shape unless another fill needs it.
+            added_effected = true;
+        }
+        if added_effected && !needs_raw_path {
+            return true;
+        }
+        shape
+            .with(|shape| {
+                let Some(shape) = shape.as_shape() else {
+                    return added_effected;
+                };
+                shape.with_path_mut(ShapePaintPathKind::World, |path| {
+                    self.path
+                        .add_shape_paint_path(path, Some(&Mat2D::identity()));
+                });
+                true
+            })
+            .unwrap_or(added_effected)
     }
 
     pub fn update(&mut self, value: ComponentDirt) {
@@ -308,17 +387,14 @@ impl ClippingShape {
             };
             self.path.rewind_as(false, fill_rule);
             self.clip_path = false;
-            for shape in &self.shapes {
-                shape.with_mut(|shape| {
-                    if let Some(shape) = shape.as_shape_mut()
-                        && !shape.is_empty()
-                    {
-                        shape.with_path_mut(crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World, |path| {
-                            self.path.add_shape_paint_path(path, Some(&Mat2D::identity()));
-                        });
-                        self.clip_path = true;
-                    }
-                });
+            for index in 0..self.shapes.len() {
+                let shape = self.shapes[index].clone();
+                let nonempty = shape
+                    .with(|shape| shape.as_shape().is_some_and(|shape| !shape.is_empty()))
+                    .unwrap_or(false);
+                if nonempty && self.add_fill_paths(&shape) {
+                    self.clip_path = true;
+                }
             }
         }
     }

@@ -86,7 +86,11 @@ impl DataBindContextTargetValue {
                         SourceKind::AssetBlob => Box::new(DataValueAssetBlob::default()),
                         SourceKind::ViewModel => Box::new(DataValueViewModel::default()),
                         SourceKind::Artboard | SourceKind::Other => {
-                            Box::new(DataValueInteger::default())
+                            if binding.source_output_type() == DataType::Number {
+                                Box::new(DataValueNumber::default())
+                            } else {
+                                Box::new(DataValueInteger::default())
+                            }
                         }
                     })
                 }
@@ -254,7 +258,18 @@ impl DataBindContextTargetValue {
                         false
                     }
                 } else {
-                    self.update_integer(binding.uint_value())
+                    let value = binding.uint_value();
+                    // Read back using the actual kind retained by initialize(),
+                    // independently of subsequent source-resolution timing.
+                    if self
+                        .target_value
+                        .as_ref()
+                        .is_some_and(|target| target.as_any().is::<DataValueNumber>())
+                    {
+                        self.update_number(value as f32)
+                    } else {
+                        self.update_integer(value)
+                    }
                 }
             }
             FieldType::Color => self.update_color(binding.color_value()),

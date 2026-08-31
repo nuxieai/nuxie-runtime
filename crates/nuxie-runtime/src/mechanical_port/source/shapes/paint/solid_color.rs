@@ -1,6 +1,8 @@
 use crate::mechanical_port::source::{
     core_context::{CoreContext, StatusCode},
-    generated::shapes::paint::solid_color_base::SolidColorBase,
+    generated::shapes::paint::{
+        color_channels_base::ColorChannels, solid_color_base::SolidColorBase,
+    },
     renderer::RenderPaint,
     shapes::paint::{
         color::{color_modulate_opacity, color_opacity},
@@ -13,6 +15,31 @@ pub struct SolidColor {
     mutator: ShapePaintMutatorState,
 }
 impl SolidColor {
+    pub fn color_red(&self) -> u32 {
+        ColorChannels::color_red(self)
+    }
+    pub fn set_color_red(&mut self, value: u32) {
+        ColorChannels::set_color_red(self, value);
+    }
+    pub fn color_green(&self) -> u32 {
+        ColorChannels::color_green(self)
+    }
+    pub fn set_color_green(&mut self, value: u32) {
+        ColorChannels::set_color_green(self, value);
+    }
+    pub fn color_blue(&self) -> u32 {
+        ColorChannels::color_blue(self)
+    }
+    pub fn set_color_blue(&mut self, value: u32) {
+        ColorChannels::set_color_blue(self, value);
+    }
+    pub fn color_alpha(&self) -> u32 {
+        ColorChannels::color_alpha(self)
+    }
+    pub fn set_color_alpha(&mut self, value: u32) {
+        ColorChannels::set_color_alpha(self, value);
+    }
+
     pub fn set_color_value(&mut self, value: i32) {
         if !self.base.set_color_value_value(value) {
             return;
@@ -69,6 +96,15 @@ impl SolidColor {
     }
     pub fn color_value_changed(&mut self) {
         self.render_opacity_changed();
+    }
+}
+
+impl ColorChannels for SolidColor {
+    fn color_value(&self) -> i32 {
+        self.base.color_value()
+    }
+    fn set_color_value(&mut self, value: i32) {
+        SolidColor::set_color_value(self, value);
     }
 }
 

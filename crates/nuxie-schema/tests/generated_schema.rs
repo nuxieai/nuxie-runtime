@@ -2,8 +2,8 @@ use nuxie_schema::{
     CoreRegistryFieldKind, FieldKind, StoredFieldInitializer, UintStorage,
     core_registry_field_kind_by_property_key, core_registry_getter_field_kind_by_property_key,
     core_registry_setter_field_kind_by_property_key, definition_by_name, definition_by_type_key,
-    generated::{DEFINITIONS, ObjectKind},
-    is_callback_property_key, object_supports_property,
+    generated::{DEFINITIONS, ObjectKind, RUNTIME_MIXINS},
+    is_callback_property_key, object_supports_property, runtime_mixin_by_name,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -81,8 +81,10 @@ fn generated_schema_metadata_matches_cpp_defs_json() {
     let expected_files = defs
         .iter()
         .filter_map(|(file, json)| {
-            (json_bool_or_default(json, "runtime", true) && json_key_fits_u16(json))
-                .then_some(file.clone())
+            (json_bool_or_default(json, "runtime", true)
+                && json_key_fits_u16(json)
+                && !json_bool_or_default(json, "isMixin", false))
+            .then_some(file.clone())
         })
         .collect::<BTreeSet<_>>();
     let actual_files = DEFINITIONS
@@ -341,6 +343,117 @@ fn object_kind_and_type_key_lookup_agree() {
     assert_eq!(component.type_key.int, 10);
     assert!(component.abstract_);
     assert!(!component.cloneable);
+}
+
+#[test]
+fn runtime_color_mixin_is_shared_metadata_not_a_core_type() {
+    let defs = read_defs_json(&reference_runtime_dir().join("dev/defs"));
+    let expected_files = defs
+        .iter()
+        .filter(|(_, json)| {
+            json_bool_or_default(json, "runtime", true)
+                && json_bool_or_default(json, "isMixin", false)
+                && json_key_fits_u16(json)
+        })
+        .map(|(file, _)| file.as_str())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        RUNTIME_MIXINS
+            .iter()
+            .map(|mixin| mixin.file)
+            .collect::<BTreeSet<_>>(),
+        expected_files
+    );
+    let mixin = runtime_mixin_by_name("ColorChannels").expect("runtime interface metadata");
+    assert_eq!(RUNTIME_MIXINS, &[*mixin]);
+    assert!(definition_by_name("ColorChannels").is_none());
+    assert!(definition_by_type_key(101).is_none());
+    let raw = defs.get(mixin.file).expect("runtime mixin JSON definition");
+    assert_eq!(
+        mixin.name,
+        json_str(raw, "name").expect("runtime mixin JSON name")
+    );
+    let raw_properties = json_runtime_properties(raw);
+    assert_eq!(mixin.properties.len(), raw_properties.len());
+    for property in mixin.properties {
+        let property_json = raw_properties
+            .get(property.name)
+            .expect("runtime mixin JSON property");
+        assert_eq!(
+            (property.key.int, property.key.name),
+            json_key_tuple(property_json)
+        );
+        assert_eq!(property.description, json_str(property_json, "description"));
+        assert_eq!(
+            property.initial_value,
+            json_str(property_json, "initialValue")
+        );
+        assert_eq!(property.runtime_type, FieldKind::Uint);
+        assert_eq!(property.declared_type, "uint");
+        assert!(property.animates && property.bindable && property.stores_data);
+        assert!(!property.deserializes && !property.stores_field);
+        let bitmask = property.bitmask_passthrough.expect("host mask view");
+        assert!(bitmask.host_provided);
+        assert_eq!(
+            Some((bitmask.target, bitmask.bit, bitmask.width)),
+            json_bitmask_passthrough(property_json)
+        );
+        assert_eq!(
+            core_registry_field_kind_by_property_key(property.key.int),
+            Some(CoreRegistryFieldKind::Uint)
+        );
+        assert_eq!(
+            core_registry_setter_field_kind_by_property_key(property.key.int),
+            Some(FieldKind::Uint)
+        );
+        assert_eq!(
+            core_registry_getter_field_kind_by_property_key(property.key.int),
+            Some(FieldKind::Uint)
+        );
+        for definition in DEFINITIONS {
+            let consumer = matches!(definition.name, "SolidColor" | "GradientStop");
+            assert!(!definition.is_a("ColorChannels"));
+            assert_eq!(definition.runtime_mixins().contains(&mixin), consumer);
+            assert_eq!(
+                object_supports_property(definition.type_key.int, property.key.int),
+                consumer
+            );
+            if consumer {
+                let (owner, shared) = nuxie_schema::property_by_key_in_hierarchy(
+                    definition.type_key.int,
+                    property.key.int,
+                )
+                .expect("consumer resolves shared mixin property");
+                assert_eq!(owner, "ColorChannels");
+                assert!(std::ptr::eq(shared, property));
+                assert!(definition.property_by_key(property.key.int).is_none());
+                assert_eq!(
+                    nuxie_schema::bitmask_passthrough_by_key_in_hierarchy(
+                        definition.type_key.int,
+                        property.key.int
+                    ),
+                    Some(bitmask)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn bitmask_views_have_registry_field_ids_without_serialized_fields() {
+    for property in DEFINITIONS
+        .iter()
+        .flat_map(|definition| definition.properties)
+    {
+        if let Some(bitmask) = property.bitmask_passthrough {
+            assert!(!bitmask.host_provided);
+            assert!(!property.deserializes && !property.stores_field);
+            assert_eq!(
+                core_registry_field_kind_by_property_key(property.key.int),
+                CoreRegistryFieldKind::from_property(property)
+            );
+        }
+    }
 }
 
 #[test]
@@ -742,7 +855,10 @@ fn core_registry_field_kind_matches_cpp_fallback_families() {
         core_registry_field_kind_by_property_key(245),
         Some(CoreRegistryFieldKind::Bool)
     );
-    assert_eq!(core_registry_field_kind_by_property_key(1027), None);
+    assert_eq!(
+        core_registry_field_kind_by_property_key(1027),
+        Some(CoreRegistryFieldKind::Uint)
+    );
     assert_eq!(core_registry_field_kind_by_property_key(401), None);
 }
 

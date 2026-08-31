@@ -11724,7 +11724,9 @@ fn read_core_registry_fallback_value(
 ) -> Result<KnownPropertySkip> {
     let value = match field {
         CoreRegistryFieldKind::Uint => {
-            FieldValue::Uint(read_known_uint_field(reader, property, "uint field")?)
+            // File::readRuntimeObject skips a full varuint64 after deserialize
+            // declines a property, even when its declared storage is uint32.
+            FieldValue::Uint(reader.read_var_uint()?)
         }
         CoreRegistryFieldKind::Int => {
             FieldValue::Int(read_known_int_field(reader, property, "int field")?)

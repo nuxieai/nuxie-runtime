@@ -14,7 +14,7 @@ abis=(arm64-v8a x86_64)
 if [[ "${1:-}" == "--plan" ]]; then
     printf '%s\n' \
         'artifact: NuxieRuntimeAndroid.zip' \
-        'release-tag: android-runtime-v0.3.5' \
+        'release-tag: android-runtime-v0.3.6' \
         'root-package: nux-capi' \
         'rust-toolchain: 1.94.1' \
         'cargo-ndk: 4.1.2' \

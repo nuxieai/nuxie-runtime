@@ -62,15 +62,15 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.3.6 release
+## Immutable v0.3.7 release
 
 After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.3.6 <full-source-sha>
-git push origin android-runtime-v0.3.6
-tools/publish-nux-capi-android-release.sh android-runtime-v0.3.6
+git tag android-runtime-v0.3.7 <full-source-sha>
+git push origin android-runtime-v0.3.7
+tools/publish-nux-capi-android-release.sh android-runtime-v0.3.7
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

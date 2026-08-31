@@ -1,7 +1,8 @@
 use nuxie_schema::{
-    CoreRegistryFieldKind, FieldKind, StoredFieldInitializer,
+    CoreRegistryFieldKind, FieldKind, Property, RuntimeMixin, StoredFieldInitializer,
     core_registry_field_kind_by_property_key, core_registry_getter_field_kind_by_property_key,
-    core_registry_setter_field_kind_by_property_key, generated::DEFINITIONS,
+    core_registry_setter_field_kind_by_property_key,
+    generated::{DEFINITIONS, RUNTIME_MIXINS},
     is_callback_property_key, object_supports_property,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,6 +12,17 @@ fn reference_runtime_dir() -> PathBuf {
     std::env::var_os("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+}
+
+fn property_owners() -> impl Iterator<Item = (&'static str, &'static str, &'static [Property])> {
+    DEFINITIONS
+        .iter()
+        .map(|definition| (definition.name, definition.file, definition.properties))
+        .chain(
+            RUNTIME_MIXINS
+                .iter()
+                .map(|mixin| (mixin.name, mixin.file, mixin.properties)),
+        )
 }
 
 #[test]
@@ -37,6 +49,82 @@ fn generated_rust_schema_matches_cpp_type_keys() {
 }
 
 #[test]
+fn generated_rust_runtime_mixins_match_cpp_interfaces_and_consumers() {
+    let runtime_dir = reference_runtime_dir();
+    let constants = parse_generated_class_constants(&runtime_dir);
+
+    for mixin in RUNTIME_MIXINS {
+        let header = cpp_header_for(&runtime_dir, mixin.file);
+        let source = std::fs::read_to_string(&header)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
+        assert!(
+            source
+                .lines()
+                .any(|line| line.trim() == format!("class {}Base", mixin.name)),
+            "{} is a standalone runtime interface in {}",
+            mixin.name,
+            header.display(),
+        );
+        assert!(
+            !parse_u16_constants(&header).contains_key("typeKey"),
+            "{} must not acquire a serialized Core type key",
+            mixin.name,
+        );
+        assert!(nuxie_schema::definition_by_name(mixin.name).is_none());
+        assert!(parse_cpp_member_initializers(&header).is_empty());
+        assert!(!cpp_header_declares_clone(&header));
+        assert!(!source.contains("bool deserialize("));
+        assert!(!source.contains("bool isTypeOf("));
+        for property in mixin.properties {
+            assert!(
+                !property.stores_field,
+                "{}.{} stores no field",
+                mixin.name, property.name
+            );
+            assert!(
+                !property.deserializes,
+                "{}.{} does not deserialize",
+                mixin.name, property.name
+            );
+        }
+
+        let cpp_consumers = parse_cpp_runtime_mixin_consumers(&runtime_dir, mixin, &constants);
+        let rust_consumers = DEFINITIONS
+            .iter()
+            .filter(|definition| {
+                definition
+                    .runtime_mixins()
+                    .iter()
+                    .any(|value| value.name == mixin.name)
+            })
+            .map(|definition| definition.type_key.int)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            rust_consumers, cpp_consumers,
+            "{} exact from() consumers",
+            mixin.name
+        );
+        for definition in DEFINITIONS {
+            let consumer_header = cpp_header_for(&runtime_dir, definition.file);
+            let consumer_source = std::fs::read_to_string(&consumer_header).unwrap_or_else(|err| {
+                panic!("failed to read {}: {err}", consumer_header.display())
+            });
+            assert_eq!(
+                consumer_source.contains(&format!("public {}Base", mixin.name)),
+                cpp_consumers.contains(&definition.type_key.int),
+                "{} C++ mixin inheritance for {}",
+                definition.name,
+                mixin.name,
+            );
+            assert!(
+                !definition.is_a(mixin.name),
+                "runtime mixin is not Core ancestry"
+            );
+        }
+    }
+}
+
+#[test]
 fn generated_rust_schema_matches_cpp_property_keys() {
     let runtime_dir = reference_runtime_dir();
     assert!(
@@ -45,17 +133,17 @@ fn generated_rust_schema_matches_cpp_property_keys() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
-        let header = cpp_header_for(&runtime_dir, definition.file);
+    for (owner, file, properties) in property_owners() {
+        let header = cpp_header_for(&runtime_dir, file);
         let constants = parse_u16_constants(&header);
 
-        for property in definition.properties {
+        for property in properties {
             let cpp_name = format!("{}PropertyKey", property.name);
             assert_eq!(
                 constants.get(&cpp_name).copied(),
                 Some(property.key.int),
                 "{}.{} property key in {}",
-                definition.name,
+                owner,
                 property.name,
                 header.display()
             );
@@ -66,7 +154,7 @@ fn generated_rust_schema_matches_cpp_property_keys() {
                     constants.get(&cpp_name).copied(),
                     Some(alternate.int),
                     "{}.{} alternate property key in {}",
-                    definition.name,
+                    owner,
                     alternate.name,
                     header.display()
                 );
@@ -292,7 +380,14 @@ fn generated_rust_schema_matches_cpp_value_getters() {
                     property.name,
                     &cpp_member_name(property.name),
                     property.virtual_ || property.pure_virtual,
-                    property.override_get,
+                    property.override_get
+                        || definition.runtime_mixins().iter().any(|mixin| {
+                            mixin.properties.iter().any(|mixin_property| {
+                                mixin_property.bitmask_passthrough.is_some_and(|mask| {
+                                    mask.host_provided && mask.target == property.name
+                                })
+                            })
+                        }),
                     definition.name,
                     &header,
                 );
@@ -388,17 +483,17 @@ fn generated_rust_schema_matches_cpp_bitmask_passthrough_constants() {
         runtime_dir.display()
     );
 
-    for definition in DEFINITIONS {
-        let header = cpp_header_for(&runtime_dir, definition.file);
+    for (owner, file, properties) in property_owners() {
+        let header = cpp_header_for(&runtime_dir, file);
         let constants = parse_u32_constants(&header);
 
-        for property in definition.properties {
+        for property in properties {
             let bitmask_name = format!("{}Bitmask", property.name);
             assert_eq!(
                 constants.get(&bitmask_name).copied(),
                 property.cpp_bitmask_passthrough_bitmask_constant(),
                 "{}.{} generated bitmask passthrough bitmask constant in {}",
-                definition.name,
+                owner,
                 property.name,
                 header.display()
             );
@@ -408,7 +503,7 @@ fn generated_rust_schema_matches_cpp_bitmask_passthrough_constants() {
                 constants.get(&bit_offset_name).copied(),
                 property.cpp_bitmask_passthrough_bit_offset_constant(),
                 "{}.{} generated bitmask passthrough bit offset constant in {}",
-                definition.name,
+                owner,
                 property.name,
                 header.display()
             );
@@ -418,7 +513,7 @@ fn generated_rust_schema_matches_cpp_bitmask_passthrough_constants() {
                 constants.get(&field_mask_name).copied(),
                 property.cpp_bitmask_passthrough_field_mask_constant(),
                 "{}.{} generated bitmask passthrough field mask constant in {}",
-                definition.name,
+                owner,
                 property.name,
                 header.display()
             );
@@ -446,14 +541,14 @@ fn generated_rust_schema_matches_cpp_core_registry_property_field_ids() {
         );
     }
 
-    for definition in DEFINITIONS {
-        for property in definition.properties {
+    for (owner, _, properties) in property_owners() {
+        for property in properties {
             let expected = CoreRegistryFieldKind::from_property(property);
             assert_eq!(
                 cpp_field_ids.get(&property.key.int).copied(),
                 expected,
                 "{}.{} propertyFieldId entry",
-                definition.name,
+                owner,
                 property.name
             );
 
@@ -462,7 +557,7 @@ fn generated_rust_schema_matches_cpp_core_registry_property_field_ids() {
                     cpp_field_ids.get(&alternate.int).copied(),
                     expected,
                     "{}.{} alternate propertyFieldId entry",
-                    definition.name,
+                    owner,
                     alternate.name
                 );
             }
@@ -490,14 +585,14 @@ fn generated_rust_schema_matches_cpp_core_registry_setter_families() {
         );
     }
 
-    for definition in DEFINITIONS {
-        for property in definition.properties {
+    for (owner, _, properties) in property_owners() {
+        for property in properties {
             let expected = core_registry_setter_field_kind_by_property_key(property.key.int);
             assert_eq!(
                 cpp_setters.get(&property.key.int).copied(),
                 expected,
                 "{}.{} setter entry",
-                definition.name,
+                owner,
                 property.name
             );
 
@@ -506,7 +601,7 @@ fn generated_rust_schema_matches_cpp_core_registry_setter_families() {
                     cpp_setters.get(&alternate.int).copied(),
                     expected,
                     "{}.{} alternate setter entry",
-                    definition.name,
+                    owner,
                     alternate.name
                 );
             }
@@ -534,14 +629,14 @@ fn generated_rust_schema_matches_cpp_core_registry_getter_families() {
         );
     }
 
-    for definition in DEFINITIONS {
-        for property in definition.properties {
+    for (owner, _, properties) in property_owners() {
+        for property in properties {
             let expected = core_registry_getter_field_kind_by_property_key(property.key.int);
             assert_eq!(
                 cpp_getters.get(&property.key.int).copied(),
                 expected,
                 "{}.{} getter entry",
-                definition.name,
+                owner,
                 property.name
             );
 
@@ -550,7 +645,7 @@ fn generated_rust_schema_matches_cpp_core_registry_getter_families() {
                     cpp_getters.get(&alternate.int).copied(),
                     expected,
                     "{}.{} alternate getter entry",
-                    definition.name,
+                    owner,
                     alternate.name
                 );
             }
@@ -578,14 +673,14 @@ fn generated_rust_schema_matches_cpp_core_registry_callbacks() {
         );
     }
 
-    for definition in DEFINITIONS {
-        for property in definition.properties {
+    for (owner, _, properties) in property_owners() {
+        for property in properties {
             let expected = property.runtime_type == FieldKind::Callback;
             assert_eq!(
                 cpp_callback_keys.contains(&property.key.int),
                 expected,
                 "{}.{} isCallback entry",
-                definition.name,
+                owner,
                 property.name
             );
 
@@ -593,7 +688,7 @@ fn generated_rust_schema_matches_cpp_core_registry_callbacks() {
                 assert!(
                     !cpp_callback_keys.contains(&alternate.int),
                     "{}.{} alternate key unexpectedly appears in CoreRegistry::isCallback",
-                    definition.name,
+                    owner,
                     alternate.name
                 );
             }
@@ -612,29 +707,45 @@ fn generated_rust_schema_matches_cpp_core_registry_object_supports_property() {
 
     let constants = parse_generated_class_constants(&runtime_dir);
     let cpp_supports = parse_cpp_core_registry_object_supports_property(&runtime_dir, &constants);
+    let cpp_mixin_consumers = RUNTIME_MIXINS
+        .iter()
+        .map(|mixin| {
+            (
+                format!("{}Base", mixin.name),
+                parse_cpp_runtime_mixin_consumers(&runtime_dir, mixin, &constants),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
 
-    for (property_key, owner_class) in &cpp_supports {
-        let owner = owner_class.strip_suffix("Base").unwrap_or(owner_class);
-
+    for (property_key, owner) in &cpp_supports {
         for definition in DEFINITIONS {
-            let expected =
-                definition.name == owner || definition.ancestors.iter().any(|name| *name == owner);
+            let expected = match owner {
+                CppPropertyOwner::Core(owner_class) => {
+                    let owner = owner_class.strip_suffix("Base").unwrap_or(owner_class);
+                    definition.name == owner
+                        || definition.ancestors.iter().any(|name| *name == owner)
+                }
+                CppPropertyOwner::Mixin(owner_class) => cpp_mixin_consumers
+                    .get(owner_class)
+                    .unwrap_or_else(|| panic!("missing runtime mixin {owner_class}"))
+                    .contains(&definition.type_key.int),
+            };
             assert_eq!(
                 object_supports_property(definition.type_key.int, *property_key),
                 expected,
-                "{} support for property key {property_key} owned by {owner_class}",
+                "{} support for property key {property_key} owned by {owner:?}",
                 definition.name
             );
         }
     }
 
-    for definition in DEFINITIONS {
-        for property in definition.properties {
+    for (owner, _, properties) in property_owners() {
+        for property in properties {
             assert_eq!(
                 cpp_supports.contains_key(&property.key.int),
                 !property.encoded,
                 "{}.{} objectSupportsProperty entry",
-                definition.name,
+                owner,
                 property.name
             );
 
@@ -643,7 +754,7 @@ fn generated_rust_schema_matches_cpp_core_registry_object_supports_property() {
                     cpp_supports.contains_key(&alternate.int),
                     !property.encoded,
                     "{}.{} alternate objectSupportsProperty entry",
-                    definition.name,
+                    owner,
                     alternate.name
                 );
             }
@@ -1714,7 +1825,10 @@ fn collect_generated_class_constants(dir: &Path, constants: &mut BTreeMap<String
             .find_map(|line| {
                 let line = line.trim();
                 let rest = line.strip_prefix("class ")?;
-                rest.split_whitespace().next()
+                let name = rest.split_whitespace().next()?;
+                // Runtime mixin headers forward-declare Core before their
+                // own non-Core class definition.
+                (!name.ends_with(';')).then_some(name)
             })
             .unwrap_or_else(|| panic!("missing class declaration in {}", path.display()));
 
@@ -1722,6 +1836,80 @@ fn collect_generated_class_constants(dir: &Path, constants: &mut BTreeMap<String
             constants.insert(format!("{class_name}::{name}"), value);
         }
     }
+}
+
+fn parse_cpp_runtime_mixin_consumers(
+    runtime_dir: &Path,
+    mixin: &RuntimeMixin,
+    constants: &BTreeMap<String, u16>,
+) -> BTreeSet<u16> {
+    let path = cpp_generated_source_for(runtime_dir, mixin.file);
+    let source = std::fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
+    let signature = format!("{0}Base* {0}Base::from(Core* object)", mixin.name);
+    let (_, body) = source.split_once(&signature).unwrap_or_else(|| {
+        panic!(
+            "missing runtime mixin projection {signature} in {}",
+            path.display()
+        )
+    });
+    let mut consumers = BTreeSet::new();
+    let mut pending_owner = None::<String>;
+    let mut has_switch = false;
+    let mut has_null_fallback = false;
+    for line in body.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        match line {
+            "{" | "}" => {}
+            "switch (object->coreType())" => {
+                assert!(
+                    !has_switch,
+                    "duplicate mixin consumer switch in {}",
+                    path.display()
+                );
+                has_switch = true;
+            }
+            "return nullptr;" => {
+                assert!(
+                    pending_owner.is_none(),
+                    "mixin case missing cast in {}",
+                    path.display()
+                );
+                has_null_fallback = true;
+            }
+            _ => {
+                if let Some(case) = line.strip_prefix("case ") {
+                    assert!(has_switch && !has_null_fallback);
+                    assert!(
+                        pending_owner.is_none(),
+                        "mixin case missing cast in {}",
+                        path.display()
+                    );
+                    let case = case.strip_suffix(':').expect("mixin case terminator");
+                    let owner = case.strip_suffix("::typeKey").expect("mixin Core type key");
+                    let key = *constants.get(case).unwrap_or_else(|| {
+                        panic!("missing generated constant {case} in {}", path.display())
+                    });
+                    assert!(consumers.insert(key), "duplicate mixin consumer {case}");
+                    pending_owner = Some(owner.to_owned());
+                } else if let Some(cast) = line.strip_prefix("return object->as<") {
+                    let owner = cast.strip_suffix(">();").expect("mixin cast terminator");
+                    assert_eq!(
+                        pending_owner.take().as_deref(),
+                        Some(owner),
+                        "mixin cast owner in {}",
+                        path.display()
+                    );
+                } else {
+                    panic!(
+                        "unrecognized mixin projection line in {}: {line}",
+                        path.display()
+                    );
+                }
+            }
+        }
+    }
+    assert!(has_switch && has_null_fallback && pending_owner.is_none());
+    consumers
 }
 
 fn parse_cpp_core_registry_property_field_ids(
@@ -2004,10 +2192,16 @@ fn parse_cpp_core_registry_callback_property_keys(
     callback_keys
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum CppPropertyOwner {
+    Core(String),
+    Mixin(String),
+}
+
 fn parse_cpp_core_registry_object_supports_property(
     runtime_dir: &Path,
     constants: &BTreeMap<String, u16>,
-) -> BTreeMap<u16, String> {
+) -> BTreeMap<u16, CppPropertyOwner> {
     let path = runtime_dir.join("include/rive/generated/core_registry.hpp");
     let source = std::fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
@@ -2049,13 +2243,24 @@ fn parse_cpp_core_registry_object_supports_property(
             }
         }
 
-        let Some(rest) = line.strip_prefix("return object->is<") else {
+        let owner = if let Some(rest) = line.strip_prefix("return object->is<") {
+            CppPropertyOwner::Core(
+                rest.strip_suffix(">();")
+                    .unwrap_or_else(|| panic!("bad objectSupportsProperty return line: {line}"))
+                    .to_owned(),
+            )
+        } else if let Some(owner) = line
+            .strip_prefix("return ")
+            .and_then(|rest| rest.strip_suffix("::from(object) != nullptr;"))
+        {
+            CppPropertyOwner::Mixin(owner.to_owned())
+        } else {
+            assert!(
+                !line.starts_with("return "),
+                "unrecognized objectSupportsProperty return line: {line}",
+            );
             continue;
         };
-        let owner = rest
-            .strip_suffix(">();")
-            .unwrap_or_else(|| panic!("bad objectSupportsProperty return line: {line}"))
-            .to_string();
 
         for case in pending_cases.drain(..) {
             let key = constants
@@ -2070,6 +2275,14 @@ fn parse_cpp_core_registry_object_supports_property(
         }
     }
 
+    assert!(
+        pending_cases.is_empty(),
+        "unresolved objectSupportsProperty cases: {pending_cases:?}"
+    );
+    assert!(
+        pending_class.is_none(),
+        "unresolved objectSupportsProperty class"
+    );
     supports
 }
 

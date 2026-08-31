@@ -71,9 +71,6 @@ impl CoreRegistryFieldKind {
     }
 
     pub fn from_property(property: &Property) -> Option<Self> {
-        if property.bitmask_passthrough.is_some() {
-            return None;
-        }
         Self::from_field_kind(property.runtime_type)
     }
 }
@@ -89,6 +86,16 @@ pub struct BitmaskPassthrough {
     pub target: &'static str,
     pub bit: u8,
     pub width: u8,
+    /// The mask accessor belongs to a consuming Core type, not this mixin.
+    pub host_provided: bool,
+}
+
+/// A runtime interface with shared properties, never a serialized Core type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeMixin {
+    pub name: &'static str,
+    pub file: &'static str,
+    pub properties: &'static [Property],
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -283,6 +290,11 @@ impl Definition {
         self.name == type_name || self.ancestors.iter().any(|name| *name == type_name)
     }
 
+    /// Runtime interfaces are separate from the single Core inheritance chain.
+    pub fn runtime_mixins(self) -> &'static [&'static RuntimeMixin] {
+        generated::runtime_mixins_for_type_key(self.type_key.int)
+    }
+
     pub fn property_by_key(self, key: u16) -> Option<&'static Property> {
         self.properties.iter().find(|property| {
             property.key.int == key || property.alternates.iter().any(|alt| alt.int == key)
@@ -309,6 +321,10 @@ pub fn object_supports_property(type_key: u16, property_key: u16) -> bool {
 
 pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
     generated::definition_by_name(name)
+}
+
+pub fn runtime_mixin_by_name(name: &str) -> Option<&'static RuntimeMixin> {
+    generated::runtime_mixin_by_name(name)
 }
 
 pub fn property_by_key_in_hierarchy(

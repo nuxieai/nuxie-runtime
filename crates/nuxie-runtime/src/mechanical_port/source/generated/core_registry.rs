@@ -3,6 +3,7 @@ use std::any::Any;
 use crate::mechanical_port::source::core::{
     CoreHandle, field_types::core_callback_type::CallbackData,
 };
+use crate::mechanical_port::source::generated::shapes::paint::color_channels_base::ColorChannelsBase;
 
 // Source type metadata is available for abstract owners as well as arena objects.
 // Each key comes from the matching generated owner; no instance is needed.
@@ -6762,6 +6763,30 @@ impl CoreRegistry {
     }
     pub fn set_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
         let field = match property_key {
+            118 => {
+                if let Some(color) = ColorChannelsBase::from_mut(object) {
+                    color.set_color_red(value);
+                }
+                return;
+            }
+            136 => {
+                if let Some(color) = ColorChannelsBase::from_mut(object) {
+                    color.set_color_green(value);
+                }
+                return;
+            }
+            210 => {
+                if let Some(color) = ColorChannelsBase::from_mut(object) {
+                    color.set_color_blue(value);
+                }
+                return;
+            }
+            218 => {
+                if let Some(color) = ColorChannelsBase::from_mut(object) {
+                    color.set_color_alpha(value);
+                }
+                return;
+            }
             549 => CoreField::ViewModelInstanceListItemViewModelId,
             550 => CoreField::ViewModelInstanceListItemViewModelInstanceId,
             875 => CoreField::ViewModelPropertySymbolTypeValue,
@@ -7419,6 +7444,10 @@ impl CoreRegistry {
     }
     pub fn get_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
         let field = match property_key {
+            118 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_red()),
+            136 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_green()),
+            210 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_blue()),
+            218 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_alpha()),
             549 => CoreField::ViewModelInstanceListItemViewModelId,
             550 => CoreField::ViewModelInstanceListItemViewModelInstanceId,
             875 => CoreField::ViewModelPropertySymbolTypeValue,
@@ -8151,6 +8180,10 @@ impl CoreRegistry {
 
     pub fn property_field_id(property_key: i32) -> i32 {
         match property_key {
+            118 => 0,
+            136 => 0,
+            210 => 0,
+            218 => 0,
             549 => 0,
             550 => 0,
             875 => 0,
@@ -8383,6 +8416,8 @@ impl CoreRegistry {
             685 => 0,
             932 => 0,
             1026 => 0,
+            1027 => 0,
+            1028 => 0,
             272 => 0,
             934 => 0,
             935 => 0,
@@ -8471,8 +8506,32 @@ impl CoreRegistry {
             32 => 4,
             164 => 4,
             94 => 4,
+            953 => 4,
+            954 => 4,
+            955 => 4,
             245 => 4,
             196 => 4,
+            989 => 4,
+            990 => 4,
+            991 => 4,
+            992 => 4,
+            993 => 4,
+            994 => 4,
+            995 => 4,
+            996 => 4,
+            997 => 4,
+            998 => 4,
+            999 => 4,
+            1000 => 4,
+            1001 => 4,
+            1002 => 4,
+            1003 => 4,
+            1004 => 4,
+            1005 => 4,
+            1006 => 4,
+            1007 => 4,
+            1008 => 4,
+            1009 => 4,
             921 => 4,
             634 => 4,
             333 => 4,
@@ -8736,6 +8795,7 @@ impl CoreRegistry {
     }
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
         let owner_type = match property_key {
+            118 | 136 | 210 | 218 => return ColorChannelsBase::from(object).is_some(),
             549 => 427,
             550 => 427,
             875 => 430,

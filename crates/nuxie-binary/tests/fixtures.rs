@@ -8344,17 +8344,16 @@ fn callback_fallback_matches_cpp_runtime() {
 
 #[test]
 fn bitmask_passthrough_fallback_matches_cpp_core_registry_table() {
-    let file = read_runtime_file(&synthetic_runtime_file(4255, |bytes| {
-        push_var_uint(bytes, 70_000);
-        // Text.verticalTrimTopValue is object-local bitmask passthrough
-        // metadata, but C++ does not include it in CoreRegistry::propertyFieldId.
-        push_var_uint(bytes, 1027);
-    }))
-    .expect("C++ treats bitmask passthrough fallback at EOF as a null object slot");
-
-    assert_eq!(file.object_count(), 1);
-    assert_eq!(file.known_object_count(), 0);
-    assert!(file.objects[0].is_none());
+    // 74c0d601 registers Text.verticalTrimTopValue as uint. file.cpp's
+    // unknown-property fallback consumes readVarUint64 even without a ToC.
+    assert!(
+        read_runtime_file(&synthetic_runtime_file(4255, |bytes| {
+            push_var_uint(bytes, 70_000);
+            push_var_uint(bytes, 1027);
+        }))
+        .is_err(),
+        "the registered uint fallback requires a payload, not a null-slot early return"
+    );
 
     assert!(
         read_runtime_file(&synthetic_runtime_file(4256, |bytes| {
@@ -8363,23 +8362,61 @@ fn bitmask_passthrough_fallback_matches_cpp_core_registry_table() {
             push_var_uint(bytes, 0);
         }))
         .is_err(),
-        "C++ leaves the explicit terminator in the stream and later reports malformed"
+        "the zero is consumed as the uint payload, so the object still needs a terminator"
     );
+
+    let file = read_runtime_file(&synthetic_runtime_file(4255, |bytes| {
+        push_var_uint(bytes, 70_000);
+        push_var_uint(bytes, 1027);
+        push_var_uint(bytes, u64::MAX);
+        push_var_uint(bytes, 0);
+        push_var_uint(bytes, 2);
+        push_var_uint(bytes, 0);
+    }))
+    .expect("C++ skips the full uint payload and resumes after the unknown object");
+    assert_eq!(file.object_count(), 2);
+    assert_eq!(file.known_object_count(), 1);
+    assert!(file.objects[0].is_none());
+    assert_eq!(file.object(1).expect("following Node").type_name, "Node");
 }
 
 #[test]
-fn known_object_bitmask_passthrough_without_toc_collapses_to_null_like_cpp() {
+fn known_object_bitmask_passthrough_without_toc_uses_uint_fallback_like_cpp() {
+    assert!(
+        read_runtime_file(&synthetic_runtime_file(4264, |bytes| {
+            push_var_uint(bytes, 134);
+            // Not a TextBase::deserialize field, but now a registered uint key.
+            push_var_uint(bytes, 1027);
+        }))
+        .is_err(),
+        "the known-object fallback also requires the registered uint payload"
+    );
+
     let file = read_runtime_file(&synthetic_runtime_file(4264, |bytes| {
         push_var_uint(bytes, 134);
-        // Text.verticalTrimTopValue is a known schema property, but it is not
-        // in TextBase::deserialize or CoreRegistry::propertyFieldId.
+        push_uint_property(bytes, "Text", "verticalTrimValue", 0x1234);
         push_var_uint(bytes, 1027);
+        push_var_uint(bytes, u64::MAX);
+        push_string_property(bytes, "Text", "name", "after skipped view");
+        push_var_uint(bytes, 0);
+        push_var_uint(bytes, 2);
+        push_var_uint(bytes, 0);
     }))
-    .expect("C++ treats a known-object bitmask passthrough fallback at EOF as a null slot");
+    .expect("C++ skips the full uint payload without deserializing the bitmask view");
 
-    assert_eq!(file.object_count(), 1);
-    assert_eq!(file.known_object_count(), 0);
-    assert!(file.objects[0].is_none());
+    assert_eq!(file.object_count(), 2);
+    assert_eq!(file.known_object_count(), 2);
+    let text = file.object(0).expect("Text stays a known object");
+    assert!(text.property("verticalTrimTopValue").is_none());
+    assert_eq!(text.uint_property("verticalTrimValue"), Some(0x1234));
+    assert_eq!(text.string_property("name"), Some("after skipped view"));
+    let skipped = text
+        .skipped_property("verticalTrimTopValue")
+        .expect("nonserialized bitmask metadata");
+    assert_eq!(skipped.reason, SkipReason::BitmaskPassthroughProperty);
+    assert_eq!(skipped.field, Some("uint"));
+    assert_eq!(skipped.value, Some(FieldValue::Uint(u64::MAX)));
+    assert_eq!(file.object(1).expect("following Node").type_name, "Node");
 }
 
 #[test]

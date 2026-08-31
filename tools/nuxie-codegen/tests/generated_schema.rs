@@ -176,8 +176,8 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         }
     }
 
-    assert_eq!(runtime_definition_count, 350);
-    assert_eq!(runtime_property_count, 605);
+    assert_eq!(runtime_definition_count, 351);
+    assert_eq!(runtime_property_count, 609);
     assert_eq!(
         declared_types,
         [
@@ -214,7 +214,7 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         (("List<Id>", Some("Bytes")), 8),
         (("String", None), 23),
         (("String", Some("String")), 1),
-        (("uint", None), 121),
+        (("uint", None), 125),
         (("uint", Some("uint")), 4),
         (("uint16", None), 2),
         (("uint8", None), 42),
@@ -230,6 +230,14 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
 
     let expected_mixins = [
         ("artboard.json", vec!["publishable.json"]),
+        (
+            "shapes/paint/solid_color.json",
+            vec!["shapes/paint/color_channels.json"],
+        ),
+        (
+            "shapes/paint/gradient_stop.json",
+            vec!["shapes/paint/color_channels.json"],
+        ),
         (
             "script_input_viewmodel_property.json",
             vec!["script_input_common.json"],
@@ -309,7 +317,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
     );
 
     let properties = runtime_json_properties(&runtime_dir.join("dev/defs"));
-    assert_eq!(properties.len(), 605);
+    assert_eq!(properties.len(), 609);
 
     let encoded = properties
         .iter()
@@ -499,6 +507,38 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
         })
         .collect::<BTreeSet<_>>();
     let expected_bitmasks = [
+        (
+            "shapes/paint/color_channels.json",
+            "colorRed",
+            118,
+            "colorValue",
+            16,
+            8,
+        ),
+        (
+            "shapes/paint/color_channels.json",
+            "colorGreen",
+            136,
+            "colorValue",
+            8,
+            8,
+        ),
+        (
+            "shapes/paint/color_channels.json",
+            "colorBlue",
+            210,
+            "colorValue",
+            0,
+            8,
+        ),
+        (
+            "shapes/paint/color_channels.json",
+            "colorAlpha",
+            218,
+            "colorValue",
+            24,
+            8,
+        ),
         ("focus_data.json", "canFocus", 953, "focusFlags", 0, 1),
         ("focus_data.json", "canTouch", 954, "focusFlags", 1, 1),
         ("focus_data.json", "canTraverse", 955, "focusFlags", 2, 1),
@@ -709,7 +749,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| json_bool_or_default(&entry.property, "bindable", false))
             .count(),
-        272,
+        276,
         "dev/defs bindable property count changed; audit generated bindable metadata"
     );
 
@@ -718,7 +758,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| json_bool_or_default(&entry.property, "animates", false))
             .count(),
-        225,
+        229,
         "dev/defs animates property count changed; audit generated animates metadata and animation-keyed property support"
     );
     let animates_runtime_types = properties
@@ -748,7 +788,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
         ("double", 153),
         ("int16", 2),
         ("String", 6),
-        ("uint", 14),
+        ("uint", 18),
         ("uint16", 2),
         ("uint8", 12),
     ]
@@ -805,7 +845,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("description").is_some())
             .count(),
-        454,
+        458,
         "dev/defs description coverage changed; audit generated description metadata"
     );
     assert_eq!(
@@ -847,7 +887,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("initialValue").is_some())
             .count(),
-        561,
+        565,
         "dev/defs initialValue coverage changed; audit generated stored-field initializers"
     );
 
@@ -876,6 +916,19 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
 #[test]
 fn invalid_bitmask_passthrough_metadata_is_rejected_like_cpp_generator() {
     let cases = [
+        (
+            "host_mask_out_of_range",
+            r#"{
+              "name": "HostChannels", "isMixin": true,
+              "key": { "int": 5000, "string": "hostchannels" },
+              "properties": { "channel": {
+                "type": "uint", "key": { "int": 5001, "string": "channel" },
+                "passthroughForBitmask": "colorValue",
+                "passthroughBit": 25, "passthroughBitWidth": 8
+              } }
+            }"#,
+            "passthroughBit/passthroughBitWidth must fit in 0..32",
+        ),
         (
             "missing_target",
             r#"
@@ -1006,6 +1059,142 @@ fn invalid_bitmask_passthrough_metadata_is_rejected_like_cpp_generator() {
             stderr.contains(expected_stderr),
             "expected stderr for {name} to contain {expected_stderr:?}\nstderr:\n{stderr}"
         );
+    }
+}
+
+#[test]
+fn runtime_mixins_are_separate_interfaces_with_exact_consumer_lookup() {
+    let defs_dir = write_codegen_defs_fixture_files(
+        "runtime_mixins",
+        &[
+            (
+                "channels.json",
+                r#"{
+              "name": "HostChannels", "isMixin": true, "abstract": true,
+              "key": { "int": 5000, "string": "hostchannels" },
+              "properties": { "channel": {
+                "type": "uint", "key": { "int": 5001, "string": "channel" },
+                "passthroughForBitmask": "colorValue", "passthroughBit": 16,
+                "passthroughBitWidth": 8
+              } }
+            }"#,
+            ),
+            (
+                "first.json",
+                r#"{
+              "name": "First", "key": { "int": 5002, "string": "first" },
+              "mixin": "channels.json", "mixins": ["absent_editor_mixin.json"],
+              "properties": { "colorValue": {
+                "type": "Color", "key": { "int": 5002, "string": "color" }
+              } }
+            }"#,
+            ),
+            (
+                "second.json",
+                r#"{
+              "name": "Second", "key": { "int": 5003, "string": "second" },
+              "mixins": ["channels.json"]
+            }"#,
+            ),
+            (
+                "child.json",
+                r#"{
+              "name": "Child", "key": { "int": 5004, "string": "child" },
+              "extends": "first.json"
+            }"#,
+            ),
+        ],
+    );
+    let out_path = defs_dir.join("schema.rs");
+    let output = run_codegen(&defs_dir, &out_path);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let generated = std::fs::read_to_string(&out_path).unwrap();
+    let _ = std::fs::remove_dir_all(&defs_dir);
+    let object_kinds = generated
+        .split("pub enum ObjectKind {")
+        .nth(1)
+        .unwrap()
+        .split('}')
+        .next()
+        .unwrap();
+    assert!(!object_kinds.contains("HostChannels"));
+    assert!(generated.contains("RuntimeMixin { name: \"HostChannels\""));
+    assert!(
+        generated.contains("static DEF_0_RUNTIME_MIXINS: &[&RuntimeMixin] = &[&RUNTIME_MIXINS[0]]")
+    );
+    assert!(
+        generated.contains("static DEF_1_RUNTIME_MIXINS: &[&RuntimeMixin] = &[&RUNTIME_MIXINS[0]]")
+    );
+    assert!(generated.contains("5002 => DEF_0_RUNTIME_MIXINS"));
+    assert!(generated.contains("5003 => DEF_1_RUNTIME_MIXINS"));
+    assert!(!generated.contains("DEF_2_RUNTIME_MIXINS"));
+    assert!(generated.contains("(5002, 5001) => Some((\"HostChannels\", &MIXIN_0_PROPERTIES[0]))"));
+    assert!(generated.contains("(5003, 5001) => Some((\"HostChannels\", &MIXIN_0_PROPERTIES[0]))"));
+    assert!(!generated.contains("(5004, 5001)"));
+    assert!(generated.contains("5001 => Some(CoreRegistryFieldKind::Uint)"));
+    assert!(generated.contains("deserializes: false,\n        stores_field: false"));
+    assert!(generated.contains("host_provided: true"));
+}
+
+#[test]
+fn bitmask_passthrough_accepts_color_targets_and_unresolved_mixin_hosts() {
+    for (name, def, host_provided) in [
+        (
+            "color_target",
+            r#"{
+          "name": "ColorObject", "key": { "int": 5000, "string": "colorobject" },
+          "properties": {
+            "colorValue": { "type": "Color", "key": { "int": 5001, "string": "colorvalue" } },
+            "channel": { "type": "uint", "key": { "int": 5002, "string": "channel" },
+              "passthroughForBitmask": "colorValue", "passthroughBit": 24, "passthroughBitWidth": 8 }
+          }
+        }"#,
+            false,
+        ),
+        // Property.make removes runtime:false properties before host resolution.
+        (
+            "editor_only_mask_still_uses_host",
+            r#"{
+          "name": "HostChannels", "isMixin": true, "key": { "int": 5000, "string": "hostchannels" },
+          "properties": {
+            "colorValue": { "type": "Color", "runtime": false,
+              "key": { "int": 5001, "string": "colorvalue" } },
+            "channel": { "type": "uint", "key": { "int": 5002, "string": "channel" },
+              "passthroughForBitmask": "colorValue", "passthroughBit": 24, "passthroughBitWidth": 8 }
+          }
+        }"#,
+            true,
+        ),
+        // Source overlap validation only visits resolved same-definition masks.
+        (
+            "overlapping_host_views",
+            r#"{
+          "name": "HostChannels", "isMixin": true, "key": { "int": 5000, "string": "hostchannels" },
+          "properties": {
+            "first": { "type": "uint", "key": { "int": 5001, "string": "first" },
+              "passthroughForBitmask": "colorValue", "passthroughBit": 24, "passthroughBitWidth": 8 },
+            "second": { "type": "uint", "key": { "int": 5002, "string": "second" },
+              "passthroughForBitmask": "colorValue", "passthroughBit": 24, "passthroughBitWidth": 8 }
+          }
+        }"#,
+            true,
+        ),
+    ] {
+        let defs_dir = write_codegen_defs_fixture(name, def);
+        let out_path = defs_dir.join("schema.rs");
+        let output = run_codegen(&defs_dir, &out_path);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let generated = std::fs::read_to_string(&out_path).unwrap();
+        let _ = std::fs::remove_dir_all(&defs_dir);
+        assert!(generated.contains(&format!("host_provided: {host_provided}")));
     }
 }
 

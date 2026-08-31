@@ -1,3 +1,4 @@
+pub mod color_channels_base;
 pub mod dash_base;
 pub mod dash_path_base;
 pub mod feather_base;

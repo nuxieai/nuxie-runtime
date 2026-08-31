@@ -7,17 +7,16 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `e949498e05483a852c10fbbdad2cd1941c15aebc`
+- LAST_SYNCED_SHA: `74c0d601c516f86db4847521198dba42080db06a`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest applied change: explicit deferred sessions record 2D/ORE commands and
-  resources, then replay them through the real backend in upstream canvas/screen
-  order. Runtime factories, scripted GPUCanvas, serialization, supported
-  backends, and the upstream regression tests follow the new contract.
-  Apple C API imports and presentation use the same deferred session, retaining
-  native shader authorization, device generations, and the acquired drawable.
-  Upstream: `e949498e05483a852c10fbbdad2cd1941c15aebc`.
-  Work: [UNIV-1678](https://universe.basis.dev/issue/UNIV-1678).
+  Latest applied change: SolidColor and GradientStop expose upstream's shared,
+  non-Core red, green, blue, and alpha views over their packed color. Registry
+  dispatch, data binding, polling, generated schema metadata, and skipped uint
+  decoding follow the matching upstream contracts. All eight upstream tests are
+  translated, and the new 13-frame Silver case is byte-exact.
+  Upstream: `74c0d601c516f86db4847521198dba42080db06a`.
+  Work: [UNIV-1674](https://universe.basis.dev/issue/UNIV-1674).
 - Generated shader provenance remains
   `2b2203f45a67f813cb662272962192ecfdfd923e`: renderer shader inputs are unchanged.
 - Intervening `8efe18ec7b52a02139844ffe71438c00de13037e` needs no Rust

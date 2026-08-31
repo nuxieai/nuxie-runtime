@@ -26,7 +26,7 @@ use crate::mechanical_port::source::{
         },
         layout::layout_sizing_style_base::LayoutSizingStyleBase,
         node_base::NodeBase,
-        shapes::shape_base::ShapeBase,
+        shapes::{paint::color_channels_base::ColorChannelsBase, shape_base::ShapeBase},
         solo_base::SoloBase,
         viewmodel::viewmodel_instance_viewmodel_base::ViewModelInstanceViewModelBase,
     },
@@ -676,6 +676,10 @@ impl DataBind {
                 | ScrollConstraintBase::SCROLL_ACTIVE_PROPERTY_KEY
                 | ScrollConstraintBase::COMPUTED_CONTENT_WIDTH_PROPERTY_KEY
                 | ScrollConstraintBase::COMPUTED_CONTENT_HEIGHT_PROPERTY_KEY
+                | ColorChannelsBase::COLOR_ALPHA_PROPERTY_KEY
+                | ColorChannelsBase::COLOR_RED_PROPERTY_KEY
+                | ColorChannelsBase::COLOR_BLUE_PROPERTY_KEY
+                | ColorChannelsBase::COLOR_GREEN_PROPERTY_KEY
         ) {
             return false;
         }

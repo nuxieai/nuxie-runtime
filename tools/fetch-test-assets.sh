@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-e949498e05483a852c10fbbdad2cd1941c15aebc}
+ref=${RIVE_RUNTIME_REF:-74c0d601c516f86db4847521198dba42080db06a}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -42,6 +42,7 @@ assets=(
   "sync/text_style_background.riv|3209af9b117313f36521dbc3beffd40256168b516e0fc9b5ca6a0c4d10bdc360|1f04919af881fe51c929924dc773c835ca9071f0"
   "sync/scripted_path_effect_clip.riv|6bc76d33f6b3761cfd689a8de7f3dfc9dbc5ae34ae75921c63bde4ab9e7c9583|ddd1a2aacf62ee6e550b65b445d0ccdafe284e6a"
   "sync/ik_anim_test.riv|064492b51c369ebf843f16abd4e9915c89b8086d5f3e6bdc60c04e85e4fbce02|d25e6a4b6c1b8382b588f08371231373780fbcd5"
+  "sync/color_passthrough_test.riv|83abb360ef1ee85e6c135b1f9975583e44c324b6e24537d12b1dc9ccb0b8aa5f|74c0d601c516f86db4847521198dba42080db06a"
   "sync/bidirectional_stateful_property.riv|c2813f0ad0f5aedff70ec666f21118b41e611ab87951b5192960599c9be82583|e85a11604edd9a2a50bbe2f04da4a91b0293ccd6"
   "sync/paused_nested_artboard_opacity.riv|642c9f7fd909b9955a875e0bb745d0998d3ac4b64a11b863b09e3b0ee5682944"
   "sync/solo_index_test.riv|e857c0d1f76cec0be8d8b9d8308ea9a0f581de29ed752b952940d90b5f6a16f2|38c924123ffb8ad9541ad724ef4de860e5705482"
@@ -182,6 +183,23 @@ fi
 silver_actual=$(sha256 "$silver_destination")
 if [[ "$silver_actual" != "$silver_expected" ]]; then
   echo "fixture checksum mismatch: sync/data_bind_blob_test.sriv (expected $silver_expected, got $silver_actual)" >&2
+  exit 1
+fi
+
+color_silver_destination="$repo_root/fixtures/sync/color_passthrough_test.sriv"
+color_silver_expected="6f6482774fb736db12b4fb150b8219237c9c97cc82fd65ba83c69fc349dd76b6"
+if [[ -n "$runtime_dir" ]]; then
+  git -C "$runtime_dir" show \
+    "74c0d601c516f86db4847521198dba42080db06a:tests/unit_tests/silvers/color_passthrough_test.sriv" \
+    > "$color_silver_destination"
+elif [[ ! -f "$color_silver_destination" || "$(sha256 "$color_silver_destination")" != "$color_silver_expected" ]]; then
+  curl --fail --location --silent --show-error \
+    "$base_url/74c0d601c516f86db4847521198dba42080db06a/tests/unit_tests/silvers/color_passthrough_test.sriv" \
+    --output "$color_silver_destination"
+fi
+color_silver_actual=$(sha256 "$color_silver_destination")
+if [[ "$color_silver_actual" != "$color_silver_expected" ]]; then
+  echo "fixture checksum mismatch: sync/color_passthrough_test.sriv (expected $color_silver_expected, got $color_silver_actual)" >&2
   exit 1
 fi
 

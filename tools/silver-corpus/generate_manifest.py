@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "e949498e05483a852c10fbbdad2cd1941c15aebc"
+UPSTREAM_REF = "74c0d601c516f86db4847521198dba42080db06a"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -195,6 +195,7 @@ EXACT = (
     "artboard_list_overrides_vertical",
     "bankcard",
     "clear_viewmodel_list",
+    "color_passthrough_test",
     "collapsable_data_binding",
     "collapse_data_binds-test_2",
     "collapsing_elements",
@@ -2622,6 +2623,16 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             )
                         )
                         blocker = None
+                    if silver_id == "color_passthrough_test":
+                        # color_channels_test.cpp binds the authored default
+                        # view-model instance to state machine 0, draws after
+                        # .1 seconds, then adds twelve .25-second frames.
+                        actions = (
+                            action("bind-default-view-model"),
+                            action("advance", target="state-machine", seconds=0.1),
+                            action("draw"),
+                        ) + tuple(repeated_frames(12, 0.25))
+                        blocker = None
                     blocker = FORCED_BLOCKERS.get(
                         silver_id, CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id, blocker)
                     )
@@ -2662,6 +2673,13 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             "pass the nullable authored view-model instance 0 lookup unchanged "
                             "to binding, advance 0 then 0.1, then "
                             "four 0.5-second frames. Enrollment alone is not a validation result."
+                        )
+                    if silver_id == "color_passthrough_test":
+                        note = (
+                            "Exact comparison contract for the literal thirteen-draw color "
+                            "passthrough producer: bind the authored default view-model instance "
+                            "to state machine 0, advance 0.1, then twelve 0.25-second frames. "
+                            "Enrollment alone is not a validation result."
                         )
                 else:
                     difference = DIVERGENCES.get(silver_id)
@@ -2991,7 +3009,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (254, 209, 42, 3):
+    if (len(producers), runtime, scripted, unknown) != (255, 210, 42, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3004,8 +3022,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 254",
-        "expected_runtime = 209",
+        "expected_entries = 255",
+        "expected_runtime = 210",
         "expected_scripted = 42",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

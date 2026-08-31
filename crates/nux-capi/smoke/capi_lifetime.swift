@@ -14,13 +14,15 @@ guard CommandLine.arguments.count == 2 else {
 }
 
 var bytes: Data? = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
+var callbacks = NuxRenderCallbacks()
+callbacks.struct_size = UInt32(MemoryLayout<NuxRenderCallbacks>.size)
 var file: OpaquePointer?
 var importResult: OpaquePointer?
 let importStatus = bytes!.withUnsafeBytes { raw in
     nux_file_import_with_result(
         raw.bindMemory(to: UInt8.self).baseAddress,
         raw.count,
-        nil,
+        &callbacks,
         &file,
         &importResult
     )

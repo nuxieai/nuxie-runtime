@@ -4,14 +4,14 @@ struct CC {
     ff: f32,
     gf: f32,
     m6_: u32,
-    Fg: u32,
+    Gg: u32,
     Re: u32,
     Se: u32,
     R7_: vec4<i32>,
-    Bg: vec2<f32>,
+    Cg: vec2<f32>,
     pd: vec2<f32>,
     a2_: u32,
-    Gg: f32,
+    Hg: f32,
     Z5_: u32,
     P2_: f32,
     qd: f32,
@@ -19,11 +19,11 @@ struct CC {
     z3_: f32,
     A3_: f32,
     rd: f32,
-    yg: u32,
+    zg: u32,
 }
 
-@id(7) override fh: bool = true;
-@id(6) override eh: bool = true;
+@id(7) override gh: bool = true;
+@id(6) override fh: bool = true;
 
 @group(1) @binding(11)
 var IC: texture_2d<f32>;
@@ -35,20 +35,20 @@ var<uniform> n: CC;
 var<private> H1_1: f32;
 var<private> A1_1: u32;
 @group(0) @binding(12)
-var SD: texture_2d<f32>;
+var TD: texture_2d<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
-var<private> Jg: vec4<f32>;
+var<private> Kg: vec4<f32>;
 var<private> I3_1: f32;
 
 fn main_1() {
     var local: vec3<f32>;
     var local_1: vec3<f32>;
     var local_2: vec3<f32>;
-    var phi_2475_: f32;
-    var phi_2477_: f32;
-    var phi_2548_: vec4<f32>;
-    var phi_2536_: i32;
-    var phi_2588_: vec3<f32>;
+    var phi_2476_: f32;
+    var phi_2478_: f32;
+    var phi_2549_: vec4<f32>;
+    var phi_2537_: i32;
+    var phi_2589_: vec3<f32>;
 
     let _e42 = E5_1;
     let _e44 = n.qd;
@@ -57,27 +57,27 @@ fn main_1() {
     let _e47 = (_e45 * _e46);
     let _e50 = (_e47.w != 0f);
     if _e50 {
-        phi_2475_ = (1f / _e47.w);
+        phi_2476_ = (1f / _e47.w);
     } else {
-        phi_2475_ = 0f;
+        phi_2476_ = 0f;
     }
-    let _e53 = phi_2475_;
+    let _e53 = phi_2476_;
     let _e54 = (_e47.xyz * _e53);
     let _e60 = vec4<f32>(_e54.x, _e47.y, _e47.z, _e47.w);
     let _e66 = vec4<f32>(_e60.x, _e54.y, _e60.z, _e60.w);
     let _e72 = vec4<f32>(_e66.x, _e66.y, _e54.z, _e66.w);
     let _e73 = A1_1;
     let _e74 = gl_FragCoord_1;
-    let _e78 = textureLoad(SD, vec2<i32>(floor(_e74.xy)), 0i);
+    let _e78 = textureLoad(TD, vec2<i32>(floor(_e74.xy)), 0i);
     let _e79 = _e72.xyz;
     local_2 = _e79;
     let _e80 = _e78.xyz;
     if (_e78.w != 0f) {
-        phi_2477_ = (1f / _e78.w);
+        phi_2478_ = (1f / _e78.w);
     } else {
-        phi_2477_ = 0f;
+        phi_2478_ = 0f;
     }
-    let _e85 = phi_2477_;
+    let _e85 = phi_2478_;
     let _e86 = (_e80 * _e85);
     local = _e86;
     switch bitcast<i32>(_e73) {
@@ -123,11 +123,11 @@ fn main_1() {
             let _e139 = clamp(_e80, vec3<f32>(0f, 0f, 0f), _e78.www);
             let _e145 = vec4<f32>(_e139.x, _e78.y, _e78.z, _e78.w);
             let _e151 = vec4<f32>(_e145.x, _e139.y, _e145.z, _e145.w);
-            phi_2548_ = vec4<f32>(_e151.x, _e151.y, _e139.z, _e151.w);
+            phi_2549_ = vec4<f32>(_e151.x, _e151.y, _e139.z, _e151.w);
             if (_e78.w == 0f) {
-                phi_2548_ = vec4<f32>(_e139.x, _e139.y, _e139.z, 1f);
+                phi_2549_ = vec4<f32>(_e139.x, _e139.y, _e139.z, 1f);
             }
-            let _e161 = phi_2548_;
+            let _e161 = phi_2549_;
             let _e165 = (vec3(_e161.w) - _e161.xyz);
             let _e166 = local_2;
             local_1 = (vec3<f32>(1f, 1f, 1f) - select(min(vec3<f32>(1f, 1f, 1f), (_e165 / (_e166 * _e161.w))), sign(_e165), (_e166 == vec3<f32>(0f, 0f, 0f))));
@@ -140,9 +140,9 @@ fn main_1() {
             break;
         }
         case 8: {
-            phi_2536_ = 0i;
+            phi_2537_ = 0i;
             loop {
-                let _e183 = phi_2536_;
+                let _e183 = phi_2537_;
                 if (_e183 < 3i) {
                     let _e186 = local_2[_e183];
                     if (_e186 <= 0.5f) {
@@ -164,7 +164,7 @@ fn main_1() {
                     break;
                 }
                 continuing {
-                    phi_2536_ = (_e183 + 1i);
+                    phi_2537_ = (_e183 + 1i);
                 }
             }
             let _e207 = local_2;
@@ -183,7 +183,7 @@ fn main_1() {
             break;
         }
         case 12: {
-            if eh {
+            if fh {
                 let _e222 = local_2;
                 let _e223 = clamp(_e222, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e223;
@@ -197,7 +197,7 @@ fn main_1() {
             break;
         }
         case 13: {
-            if eh {
+            if fh {
                 let _e271 = local_2;
                 let _e272 = clamp(_e271, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e272;
@@ -211,7 +211,7 @@ fn main_1() {
             break;
         }
         case 14: {
-            if eh {
+            if fh {
                 let _e320 = local_2;
                 let _e321 = clamp(_e320, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e321;
@@ -223,7 +223,7 @@ fn main_1() {
             break;
         }
         case 15: {
-            if eh {
+            if fh {
                 let _e346 = local_2;
                 let _e347 = clamp(_e346, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e347;
@@ -250,15 +250,15 @@ fn main_1() {
     let _e414 = gl_FragCoord_1;
     let _e416 = n.z3_;
     let _e418 = n.A3_;
-    if (fh && _e50) {
-        phi_2588_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e414.x) + (0.00583715f * _e414.y))))) * _e416) + _e418)) + _e413);
+    if (gh && _e50) {
+        phi_2589_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e414.x) + (0.00583715f * _e414.y))))) * _e416) + _e418)) + _e413);
     } else {
-        phi_2588_ = _e413;
+        phi_2589_ = _e413;
     }
-    let _e433 = phi_2588_;
+    let _e433 = phi_2589_;
     let _e439 = vec4<f32>(_e433.x, _e412.y, _e412.z, _e412.w);
     let _e445 = vec4<f32>(_e439.x, _e433.y, _e439.z, _e439.w);
-    Jg = vec4<f32>(_e445.x, _e445.y, _e433.z, _e445.w);
+    Kg = vec4<f32>(_e445.x, _e445.y, _e433.z, _e445.w);
     return;
 }
 
@@ -270,6 +270,6 @@ fn main(@location(0) E5_: vec2<f32>, @location(3) @interpolate(flat, either) H1_
     gl_FragCoord_1 = gl_FragCoord;
     I3_1 = I3_;
     main_1();
-    let _e11 = Jg;
+    let _e11 = Kg;
     return _e11;
 }

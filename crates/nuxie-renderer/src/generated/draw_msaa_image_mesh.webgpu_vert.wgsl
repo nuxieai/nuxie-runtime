@@ -13,14 +13,14 @@ struct CC {
     ff: f32,
     gf: f32,
     m6_: u32,
-    Fg: u32,
+    Gg: u32,
     Re: u32,
     Se: u32,
     R7_: vec4<i32>,
-    Bg: vec2<f32>,
+    Cg: vec2<f32>,
     pd: vec2<f32>,
     a2_: u32,
-    Gg: f32,
+    Hg: f32,
     Z5_: u32,
     P2_: f32,
     qd: f32,
@@ -28,7 +28,7 @@ struct CC {
     z3_: f32,
     A3_: f32,
     rd: f32,
-    yg: u32,
+    zg: u32,
 }
 
 struct VertexOutput {
@@ -40,8 +40,8 @@ struct VertexOutput {
     @location(4) @interpolate(flat, either) member_3: u32,
 }
 
-@id(0) override Yg: bool = true;
-@id(1) override Zg: bool = true;
+@id(0) override Zg: bool = true;
+@id(1) override ah: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
@@ -59,7 +59,7 @@ var<private> H1_: f32;
 var<private> A1_: u32;
 
 fn main_1() {
-    var phi_384_: f32;
+    var phi_385_: f32;
 
     let _e31 = WB_1;
     let _e39 = OC_1;
@@ -67,18 +67,18 @@ fn main_1() {
     let _e43 = ((mat2x2<f32>(vec2<f32>(_e31.x, _e31.y), vec2<f32>(_e31.z, _e31.w)) * _e39) + _e41.xy);
     let _e44 = PC_1;
     E5_ = _e44;
-    if Yg {
+    if Zg {
         let _e46 = IB_1[1u];
         let _e48 = n.Z5_;
         if (_e46 == 0u) {
-            phi_384_ = 0f;
+            phi_385_ = 0f;
         } else {
-            phi_384_ = unpack2x16float(((_e46 + 1023u) * _e48)).x;
+            phi_385_ = unpack2x16float(((_e46 + 1023u) * _e48)).x;
         }
-        let _e55 = phi_384_;
+        let _e55 = phi_385_;
         I3_ = _e55;
     }
-    if Zg {
+    if ah {
         let _e56 = QB_1;
         if any((_e56 != vec4<f32>(0f, 0f, 0f, 0f))) {
             let _e68 = ((mat2x2<f32>(vec2<f32>(_e56.x, _e56.y), vec2<f32>(_e56.z, _e56.w)) * _e43) + _e41.zw);

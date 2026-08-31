@@ -1,5 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/vulkan_context.cpp`.
+//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
 
 #![allow(non_snake_case)]
 
@@ -89,6 +90,13 @@ impl VulkanContext {
                 c"vkSetDebugUtilsObjectNameEXT",
             )
         };
+        let properties = unsafe { ash_instance.get_physical_device_properties(physicalDevice) };
+        let mut features = features;
+        if properties.vendor_id == super::vkutil_decl::Qualcomm
+            || properties.vendor_id == super::vkutil_decl::Imagination
+        {
+            features.colorWriteEnable = false;
+        }
         let mut allocator_info = AllocatorCreateInfo::new(&ash_instance, &ash_device, physicalDevice);
         allocator_info.flags = AllocatorCreateFlags::EXTERNALLY_SYNCHRONIZED;
         allocator_info.vulkan_api_version = features.apiVersion;
@@ -96,7 +104,6 @@ impl VulkanContext {
             Ok(allocator) => allocator,
             Err(result) => vk_abort(result, file!(), line!()),
         };
-        let properties = unsafe { ash_instance.get_physical_device_properties(physicalDevice) };
         assert!(properties.api_version >= features.apiVersion,
             "Supplied API version should not be newer than the physical device");
         let d24 = unsafe { ash_instance.get_physical_device_format_properties(
@@ -145,6 +152,7 @@ impl VulkanContext {
             CmdFillBuffer: load_device_command!(CmdFillBuffer),
             CmdNextSubpass: load_device_command!(CmdNextSubpass),
             CmdPipelineBarrier: load_device_command!(CmdPipelineBarrier),
+            CmdPushConstants: load_device_command!(CmdPushConstants),
             CmdSetBlendConstants: load_device_command!(CmdSetBlendConstants),
             CmdSetColorWriteEnableEXT: load_device_command!(CmdSetColorWriteEnableEXT),
             CmdSetCullMode: load_device_command!(CmdSetCullMode),
@@ -190,7 +198,7 @@ impl VulkanContext {
             m_ashInstance: ash_instance,
             m_ashDevice: ash_device,
             m_vmaAllocator: ManuallyDrop::new(allocator),
-            m_physicalDeviceProperties: properties,
+            physicalDeviceProperties: properties,
             m_supportsD24S8: d24,
         })
     }

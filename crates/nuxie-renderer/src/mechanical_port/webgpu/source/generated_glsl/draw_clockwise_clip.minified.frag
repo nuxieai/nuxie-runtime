@@ -17,15 +17,15 @@ w2;E M0;c I5,r3;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
 if(BORROWED_COVERAGE_PASS){r3=r0;}else
 #endif
-{M0=unpackHalf2x16(Y0(h0));I5=M0.y;c O4=I5==k1?M0.x:G0(.0);r3=O4+r0;}
+{M0=unpackHalf2x16(Z0(h0));I5=M0.y;c O4=I5==k1?M0.x:G0(.0);r3=O4+r0;}
 #ifdef ENABLE_NESTED_CLIPPING
 c G5=U1.y;if(ENABLE_NESTED_CLIPPING&&G5!=.0){c m4=.0;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
-if(BORROWED_COVERAGE_PASS){M0=unpackHalf2x16(Y0(h0));I5=M0.y;}
+if(BORROWED_COVERAGE_PASS){M0=unpackHalf2x16(Z0(h0));I5=M0.y;}
 #endif
-if(I5!=k1){m4=I5==G5?M0.x:.0;c1(P0,packHalf2x16(A2(m4,Df)));}else{m4=unpackHalf2x16(Y0(P0)).x;d2(P0);}r3=min(r3,m4);}else
+if(I5!=k1){m4=I5==G5?M0.x:.0;d1(P0,packHalf2x16(A2(m4,Df)));}else{m4=unpackHalf2x16(Z0(P0)).x;d2(P0);}r3=min(r3,m4);}else
 #endif
-{d2(P0);}c1(h0,packHalf2x16(A2(r3,k1)));
+{d2(P0);}d1(h0,packHalf2x16(A2(r3,k1)));
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
 v2(j0);
 #endif

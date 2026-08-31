@@ -18,9 +18,9 @@ pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_gl_gl_u
 const GLSL_GLSL_VERSION: &str = "MC";
 const GLSL_VERTEX: &str = "DB";
 const GLSL_FRAGMENT: &str = "GB";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "YD";
-const GLSL_TESS_TEXTURE_FLOATING_POINT: &str = "GF";
-const GLSL_GL_RENDERER_MALI: &str = "HF";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "AE";
+const GLSL_TESS_TEXTURE_FLOATING_POINT: &str = "HF";
+const GLSL_GL_RENDERER_MALI: &str = "IF";
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 
 fn generatedObject(kind: GLObjectKind) -> GLObject {
@@ -528,9 +528,9 @@ mod tests {
             "#define MC 300\n",
             "#define GB\n",
             "#define CUSTOM true\n",
-            "#define YD _baseInstance\n",
-            "#define GF\n",
+            "#define AE _baseInstance\n",
             "#define HF\n",
+            "#define IF\n",
         );
         assert!(source.starts_with(expectedPrefix));
         assert!(source.ends_with("void main() {}\n"));

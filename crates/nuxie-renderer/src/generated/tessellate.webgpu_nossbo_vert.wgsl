@@ -4,14 +4,14 @@ struct CC {
     ff: f32,
     gf: f32,
     m6_: u32,
-    Fg: u32,
+    Gg: u32,
     Re: u32,
     Se: u32,
     R7_: vec4<i32>,
-    Bg: vec2<f32>,
+    Cg: vec2<f32>,
     pd: vec2<f32>,
     a2_: u32,
-    Gg: f32,
+    Hg: f32,
     Z5_: u32,
     P2_: f32,
     qd: f32,
@@ -19,7 +19,7 @@ struct CC {
     z3_: f32,
     A3_: f32,
     rd: f32,
-    yg: u32,
+    zg: u32,
 }
 
 struct gl_PerVertex {
@@ -39,8 +39,8 @@ struct VertexOutput {
 }
 
 var<private> gl_VertexIndex_1: i32;
-var<private> GD_1: vec4<f32>;
 var<private> HD_1: vec4<f32>;
+var<private> ID_1: vec4<f32>;
 var<private> UC_1: vec4<f32>;
 var<private> TB_1: vec4<u32>;
 @group(0) @binding(0)
@@ -110,10 +110,10 @@ fn main_1() {
     var local_7: f32;
 
     let _e61 = gl_VertexIndex_1;
-    let _e62 = GD_1;
+    let _e62 = HD_1;
     let _e63 = _e62.xy;
     let _e64 = _e62.zw;
-    let _e65 = HD_1;
+    let _e65 = ID_1;
     let _e66 = _e65.xy;
     let _e67 = _e65.zw;
     let _e68 = (_e61 < 4i);
@@ -457,10 +457,10 @@ fn main_1() {
 }
 
 @vertex
-fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) GD: vec4<f32>, @location(1) HD: vec4<f32>, @location(2) UC: vec4<f32>, @location(3) TB: vec4<u32>) -> VertexOutput {
+fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) HD: vec4<f32>, @location(1) ID: vec4<f32>, @location(2) UC: vec4<f32>, @location(3) TB: vec4<u32>) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
-    GD_1 = GD;
     HD_1 = HD;
+    ID_1 = ID;
     UC_1 = UC;
     TB_1 = TB;
     main_1();

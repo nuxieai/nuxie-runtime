@@ -1,5 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/include/rive/renderer/vulkan/vkutil.hpp`.
+//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
 
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
@@ -67,6 +68,21 @@ pub(crate) fn vkCullMode(face: CullFace) -> vk::CullModeFlags {
 
 pub(crate) fn hasPipelineDynamicState(draw_type: DrawType) -> bool {
     draw_type == DrawType::msaaDynamicMidpointFans
+}
+
+// Vertex shaders multiply paint by this float: one writes, zero suppresses.
+pub(crate) const ColorWriteEnablePushConstant: vk::PushConstantRange = vk::PushConstantRange {
+    stage_flags: vk::ShaderStageFlags::VERTEX,
+    offset: 0,
+    size: std::mem::size_of::<f32>() as u32,
+};
+
+#[cfg(test)]
+#[test]
+fn color_write_enable_push_constant_matches_vertex_float_contract() {
+    assert_eq!(ColorWriteEnablePushConstant.stage_flags, vk::ShaderStageFlags::VERTEX);
+    assert_eq!(ColorWriteEnablePushConstant.offset, 0);
+    assert_eq!(ColorWriteEnablePushConstant.size, 4);
 }
 
 #[repr(i32)]

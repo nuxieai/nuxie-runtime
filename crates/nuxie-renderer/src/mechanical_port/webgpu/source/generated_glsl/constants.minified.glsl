@@ -121,12 +121,13 @@
 #define Xf 11
 #define Yf 12
 #define Zf 13
+#define ag 14
 #define Pc 65536.
 #define sa 8.
 #define ta 32u
 #define e6 5u
-#ifdef ag
-#if ag>=201703
-ri(ta==1u<<e6);
+#ifdef bg
+#if bg>=201703
+vi(ta==1u<<e6);
 #endif
 #endif

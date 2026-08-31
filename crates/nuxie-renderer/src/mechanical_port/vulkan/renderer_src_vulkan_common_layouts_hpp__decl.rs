@@ -1,5 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/src/vulkan/common_layouts.hpp`.
+//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -303,23 +304,6 @@ pub(crate) static DYNAMIC_VIEWPORT_SCISSOR: LazyLock<
         .dynamic_states(&DYNAMIC_VIEWPORT_SCISSOR_VALUES)
 });
 
-pub(crate) static DYNAMIC_PIPELINE_STATE_VALUES: [vk::DynamicState; 8] = [
-    vk::DynamicState::VIEWPORT,
-    vk::DynamicState::SCISSOR,
-    vk::DynamicState::DEPTH_WRITE_ENABLE,
-    vk::DynamicState::STENCIL_COMPARE_MASK,
-    vk::DynamicState::STENCIL_WRITE_MASK,
-    vk::DynamicState::STENCIL_OP,
-    vk::DynamicState::CULL_MODE,
-    vk::DynamicState::COLOR_WRITE_ENABLE_EXT,
-];
-pub(crate) static DYNAMIC_PIPELINE_STATE: LazyLock<
-    vk::PipelineDynamicStateCreateInfo<'static>,
-> = LazyLock::new(|| {
-    vk::PipelineDynamicStateCreateInfo::default()
-        .dynamic_states(&DYNAMIC_PIPELINE_STATE_VALUES)
-});
-
 pub(crate) static SINGLE_ATTACHMENT_SUBPASS_REFERENCE: LazyLock<vk::AttachmentReference> =
     LazyLock::new(|| {
         vk::AttachmentReference::default()
@@ -403,21 +387,6 @@ mod tests {
             core::ptr::from_ref(&*BLEND_DISABLED_VALUES)
         );
         assert_eq!(DYNAMIC_VIEWPORT_SCISSOR_VALUES, [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
-        assert_eq!(DYNAMIC_PIPELINE_STATE_VALUES, [
-            vk::DynamicState::VIEWPORT,
-            vk::DynamicState::SCISSOR,
-            vk::DynamicState::DEPTH_WRITE_ENABLE,
-            vk::DynamicState::STENCIL_COMPARE_MASK,
-            vk::DynamicState::STENCIL_WRITE_MASK,
-            vk::DynamicState::STENCIL_OP,
-            vk::DynamicState::CULL_MODE,
-            vk::DynamicState::COLOR_WRITE_ENABLE_EXT,
-        ]);
-        assert_eq!(DYNAMIC_PIPELINE_STATE.dynamic_state_count, 8);
-        assert_eq!(
-            DYNAMIC_PIPELINE_STATE.p_dynamic_states,
-            DYNAMIC_PIPELINE_STATE_VALUES.as_ptr()
-        );
         assert_eq!(SINGLE_ATTACHMENT_SUBPASS_REFERENCE.attachment, 0);
         assert_eq!(SINGLE_ATTACHMENT_SUBPASS_REFERENCE.layout, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
         assert_eq!(SINGLE_ATTACHMENT_SUBPASS.pipeline_bind_point, vk::PipelineBindPoint::GRAPHICS);

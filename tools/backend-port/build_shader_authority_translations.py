@@ -47,7 +47,7 @@ def target_content(owner: dict[str, str], snapshot_name: str, content: bytes) ->
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = {rust_string(owner["upstream_commit"])};
 pub const PINNED_SOURCE_PATH: &str = {rust_string(owner["source_path"])};
 pub const PINNED_SOURCE_SHA256: &str = {rust_string(owner["source_sha256"])};
 pub const OWNERSHIP_UNIT: &str = {rust_string(owner["ownership_unit"])};
@@ -73,6 +73,7 @@ def render(repo: Path, upstream: Path) -> list[Output]:
                 raise ValueError(f"missing {name} in {target}")
             return match[1]
         shader_owners.append({
+            "upstream_commit": constant("PINNED_UPSTREAM_COMMIT"),
             "source_path": constant("PINNED_SOURCE_PATH"),
             "source_sha256": constant("PINNED_SOURCE_SHA256"),
             "ownership_unit": constant("OWNERSHIP_UNIT"),

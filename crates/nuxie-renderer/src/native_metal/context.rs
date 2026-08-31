@@ -70,10 +70,10 @@ thread_local! {
 const RESOURCE_METALLIB: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/native_metal_resources.metallib"));
 
-const COLOR_RAMP_VERTEX_MAIN: &str = "EF";
-const COLOR_RAMP_FRAGMENT_MAIN: &str = "FF";
-const TESSELLATE_VERTEX_MAIN: &str = "WF";
-const TESSELLATE_FRAGMENT_MAIN: &str = "XF";
+const COLOR_RAMP_VERTEX_MAIN: &str = "FF";
+const COLOR_RAMP_FRAGMENT_MAIN: &str = "GF";
+const TESSELLATE_VERTEX_MAIN: &str = "XF";
+const TESSELLATE_FRAGMENT_MAIN: &str = "YF";
 
 /// Coherent retained owners published by one successful preparation.
 ///

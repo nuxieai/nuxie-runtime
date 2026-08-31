@@ -4,14 +4,14 @@ struct CC {
     ff: f32,
     gf: f32,
     m6_: u32,
-    Fg: u32,
+    Gg: u32,
     Re: u32,
     Se: u32,
     R7_: vec4<i32>,
-    Bg: vec2<f32>,
+    Cg: vec2<f32>,
     pd: vec2<f32>,
     a2_: u32,
-    Gg: f32,
+    Hg: f32,
     Z5_: u32,
     P2_: f32,
     qd: f32,
@@ -19,7 +19,7 @@ struct CC {
     z3_: f32,
     A3_: f32,
     rd: f32,
-    yg: u32,
+    zg: u32,
 }
 
 struct q4Bd {
@@ -38,7 +38,7 @@ struct Ke {
     c2_: array<vec4<f32>>,
 }
 
-@id(0) override Yg: bool = true;
+@id(0) override Zg: bool = true;
 
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
@@ -50,7 +50,7 @@ var<storage, read_write> h0_: h0Bd;
 @group(3) @binding(9)
 var aa: sampler;
 @group(0) @binding(8)
-var KD: texture_2d<f32>;
+var LD: texture_2d<f32>;
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(1) @binding(11)
@@ -72,7 +72,7 @@ fn main_1() {
     let _e60 = bitcast<i32>((((((_e29.y >> bitcast<u32>(5u)) * (((_e31 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e29.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e29.x & 28u) << bitcast<u32>(5u)) + ((_e29.y & 28u) << bitcast<u32>(2i)))) + (((_e29.y & 3u) << bitcast<u32>(2i)) + (_e29.x & 3u))));
     let _e62 = n.Se;
     q4_.c2_[_e60] = _e62;
-    if Yg {
+    if Zg {
         h0_.c2_[_e60] = 0u;
     }
     discard;

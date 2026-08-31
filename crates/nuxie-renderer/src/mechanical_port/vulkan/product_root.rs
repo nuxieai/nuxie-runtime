@@ -132,7 +132,7 @@ impl VulkanProductBackend {
             });
         }
         let entry = load_vulkan_entry()?;
-        let (instance, get_instance_proc_addr) = create_instance(&entry)?;
+        let (instance, get_instance_proc_addr, instance_api_version) = create_instance(&entry)?;
         let (physical_device, queue_family_index) = select_physical_device(&instance)?;
         let properties = unsafe { instance.get_physical_device_properties(physical_device) };
         let adapter_name = unsafe { CStr::from_ptr(properties.device_name.as_ptr()) }
@@ -142,7 +142,8 @@ impl VulkanProductBackend {
             &instance,
             physical_device,
             queue_family_index,
-            properties.api_version,
+            // Core features require both the instance request and device support.
+            instance_api_version.min(properties.api_version),
         )?;
         let queue = unsafe { device.get_device_queue(queue_family_index, 0) };
         let mut context = unsafe {
@@ -739,7 +740,7 @@ unsafe fn destroy_target_resources(device: &ash::Device, resources: &TargetResou
 
 fn create_instance(
     entry: &ash::Entry,
-) -> Result<(ash::Instance, vk::PFN_vkGetInstanceProcAddr), RendererError> {
+) -> Result<(ash::Instance, vk::PFN_vkGetInstanceProcAddr, u32), RendererError> {
     let application_name = CString::new("Nuxie exact Vulkan renderer").unwrap();
     let supported = unsafe { entry.enumerate_instance_extension_properties(None) }
         .map_err(|error| RendererError::Adapter(format!("enumerate Vulkan extensions: {error:?}")))?;
@@ -770,7 +771,7 @@ fn create_instance(
         .enabled_extension_names(&extensions);
     let instance = unsafe { entry.create_instance(&create, None) }
         .map_err(|error| RendererError::Adapter(format!("create Vulkan instance: {error:?}")))?;
-    Ok((instance, entry.static_fn().get_instance_proc_addr))
+    Ok((instance, entry.static_fn().get_instance_proc_addr, api_version))
 }
 
 fn select_physical_device(

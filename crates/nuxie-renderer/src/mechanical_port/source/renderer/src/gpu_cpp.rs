@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/gpu.cpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: 2b2203f45a67f813cb662272962192ecfdfd923e
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -1627,7 +1627,20 @@
 //         case InterlockMode::msaa:
 //             if (enums::is_flag_set(drawContents, DrawContents::opaquePaint))
 //             {
-//                 return BlendEquation::none;
+//                 // ShaderMiscFlags::emulateDynamicColorWriteDisable suppresses
+//                 // color writes by outputting color == 0, which only works if
+//                 // blending is ENABLED (if you output "color == 0" with blending
+//                 // enabled, it's a no-op like we want; if you output "color ==
+//                 // 0" with blending DISABLED, the pixel turns blank and erases
+//                 // whatever used to be there).
+//                 // NOTE: Other than disabling color write, the output is
+//                 // equivalent with or without blend, since opaquePaint emits
+//                 // alpha == 1.
+//                 return enums::is_flag_set(
+//                            shaderMiscFlags,
+//                            ShaderMiscFlags::emulateDynamicColorWriteDisable)
+//                            ? BlendEquation::srcOver
+//                            : BlendEquation::none;
 //             }
 //             else if (!platformFeatures.supportsBlendAdvancedKHR ||
 //                      blendMode == BlendMode::srcOver)
@@ -3687,7 +3700,16 @@ fn get_blend_equation(
         }
         InterlockMode::msaa => {
             if has_u32(drawContents.0, DrawContents::opaquePaint.0) {
-                BlendEquation::none
+                // A transparent shader output suppresses color writes only
+                // with blending enabled; otherwise it erases the destination.
+                if has_u32(
+                    shaderMiscFlags.0,
+                    ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
+                ) {
+                    BlendEquation::srcOver
+                } else {
+                    BlendEquation::none
+                }
             } else if !platformFeatures.supportsBlendAdvancedKHR || blendMode == BlendMode::SrcOver
             {
                 debug_assert!(
@@ -3720,6 +3742,82 @@ fn get_blend_equation(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod dynamic_color_write_tests {
+    use super::*;
+
+    #[test]
+    fn opaque_msaa_keeps_blending_when_color_write_is_emulated() {
+        // Upstream 2b2203f4: transparent shader output must preserve the
+        // destination even for content normally drawn without blending.
+        for supports_advanced_blend in [false, true] {
+            let platform = PlatformFeatures {
+                supportsBlendAdvancedKHR: supports_advanced_blend,
+                ..PlatformFeatures::default()
+            };
+            for draw_type in [
+                DrawType::msaaMidpointFans,
+                DrawType::msaaMidpointFanBorrowedCoverage,
+                DrawType::msaaMidpointFanStencilReset,
+            ] {
+                for (flags, expected) in [
+                    (ShaderMiscFlags::none, BlendEquation::none),
+                    (
+                        ShaderMiscFlags::emulateDynamicColorWriteDisable,
+                        BlendEquation::srcOver,
+                    ),
+                ] {
+                    let state = get_pipeline_state(
+                        draw_type,
+                        InterlockMode::msaa,
+                        flags,
+                        DrawContents::opaquePaint,
+                        false,
+                        BlendMode::SrcOver,
+                        &platform,
+                    );
+                    assert_eq!(state.blendEquation, expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn emulation_does_not_change_translucent_advanced_blending() {
+        let platform = PlatformFeatures {
+            supportsBlendAdvancedKHR: true,
+            ..PlatformFeatures::default()
+        };
+        for flags in [
+            ShaderMiscFlags::none,
+            ShaderMiscFlags::emulateDynamicColorWriteDisable,
+        ] {
+            assert_eq!(
+                get_blend_equation(
+                    DrawType::msaaMidpointFans,
+                    InterlockMode::msaa,
+                    flags,
+                    DrawContents::none,
+                    BlendMode::Multiply,
+                    false,
+                    &platform,
+                ),
+                BlendEquation::multiply,
+            );
+        }
+    }
+
+    #[test]
+    fn shader_misc_flags_preserve_upstream_bit_positions() {
+        assert_eq!(ShaderMiscFlags::borrowedCoveragePass.0, 1 << 4);
+        assert_eq!(ShaderMiscFlags::emulateDynamicColorWriteDisable.0, 1 << 5);
+        assert_eq!(ShaderMiscFlags::storeColorClear.0, 1 << 6);
+        assert_eq!(ShaderMiscFlags::loadColorFromDstTexture.0, 1 << 7);
+        assert_eq!(ShaderMiscFlags::swizzleColorBGRAToRGBA.0, 1 << 8);
+        assert_eq!(ShaderMiscFlags::coalescedResolveAndTransfer.0, 1 << 9);
     }
 }
 

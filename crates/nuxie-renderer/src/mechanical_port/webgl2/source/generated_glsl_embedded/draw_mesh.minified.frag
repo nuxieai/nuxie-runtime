@@ -36,7 +36,7 @@ L1(JB)
 #endif
 {
 #ifdef FB
-A(f1,g);A(C2,d);
+A(X0,g);A(C2,d);
 #endif
 #ifdef I
 A(I3,c);
@@ -54,7 +54,7 @@ A(A1,N);
 #endif
 #endif
 #ifdef FB
-i j=J7(f1,1. S2);c o=clamp(n2(BD,Q9,C2,.0).x,G0(.0),G0(1.));
+i j=J7(X0,1. S2);c o=clamp(n2(BD,Q9,C2,.0).x,G0(.0),G0(1.));
 #endif
 #ifdef OB
 i j=x7(IC,S5,E5,n.qd);c o=1.;
@@ -68,7 +68,7 @@ w2;
 #if defined(I)
 if(I&&I3!=.0){c r3;
 #ifndef SB
-E M0=unpackHalf2x16(Y0(h0));c B6=M0.y;r3=max(B6==I3?M0.x:G0(.0),G0(.0));
+E M0=unpackHalf2x16(Z0(h0));c B6=M0.y;r3=max(B6==I3?M0.x:G0(.0),G0(.0));
 #else
 r3=H0(h0).x;
 #endif

@@ -1,7 +1,7 @@
 /*
  * Mechanical translation of the complete pinned source
  * renderer/src/shaders/minify.py.
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 2b2203f45a67f813cb662272962192ecfdfd923e
  *
  * This Phase-1 owner intentionally retains the Python tool's source-shaped
  * lexer/parser, global accounting/rename state, ordering, command-line surface,
@@ -1472,6 +1472,7 @@ pub const GLSL_RESERVED: &[&str] = &[
     "blend_support_difference",
     "blend_support_exclusion",
     "rgb10_a2",
+    "push_constant",
 ];
 
 fn glsl_reserved() -> &'static HashSet<&'static str> {

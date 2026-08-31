@@ -14,9 +14,9 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-layout(binding=0,std140)uniform yi{uniform highp vec4 Rg;}Sg;
+layout(binding=0,std140)uniform Ci{uniform highp vec4 Sg;}Tg;
 #else
-uniform mediump vec4 RE;
+uniform mediump vec4 SE;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
@@ -37,9 +37,9 @@ layout(location=0)out mediump vec4 Wa;
 void main(){
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-j0=Sg.Rg;
+j0=Tg.Sg;
 #else
-j0=RE;
+j0=SE;
 #endif
 #endif
 #ifdef LOAD_COLOR
@@ -60,6 +60,6 @@ Wa=j0;
 #endif
 }
 #else
-layout(location=0)out mediump vec4 Tg;void main(){Tg=vec4(0,1,0,1);}
+layout(location=0)out mediump vec4 Ug;void main(){Ug=vec4(0,1,0,1);}
 #endif
 #endif

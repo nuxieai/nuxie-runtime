@@ -1,5 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/include/rive/renderer/vulkan/vulkan_context.hpp`.
+//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -51,12 +52,12 @@ pub(crate) const RIVE_VULKAN_INSTANCE_COMMANDS: [&str; 5] = [
     "SetDebugUtilsObjectNameEXT",
 ];
 
-pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 59] = [
+pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 60] = [
     "AllocateCommandBuffers", "AllocateDescriptorSets", "BeginCommandBuffer",
     "CmdBeginRenderPass", "CmdBindDescriptorSets", "CmdBindIndexBuffer",
     "CmdBindPipeline", "CmdBindVertexBuffers", "CmdBlitImage", "CmdClearColorImage",
     "CmdCopyBufferToImage", "CmdDraw", "CmdDrawIndexed", "CmdEndRenderPass",
-    "CmdFillBuffer", "CmdNextSubpass", "CmdPipelineBarrier", "CmdSetBlendConstants",
+    "CmdFillBuffer", "CmdNextSubpass", "CmdPipelineBarrier", "CmdPushConstants", "CmdSetBlendConstants",
     "CmdSetColorWriteEnableEXT", "CmdSetCullMode", "CmdSetDepthWriteEnable",
     "CmdSetScissor", "CmdSetStencilCompareMask", "CmdSetStencilOp",
     "CmdSetStencilReference", "CmdSetStencilWriteMask", "CmdSetViewport",
@@ -75,7 +76,6 @@ pub(crate) struct VulkanContext {
     pub(crate) instance: vk::Instance,
     pub(crate) physicalDevice: vk::PhysicalDevice,
     pub(crate) device: vk::Device,
-    pub(crate) features: VulkanFeatures,
     pub(crate) GetDeviceProcAddr: Option<vk::PFN_vkGetDeviceProcAddr>,
     pub(crate) GetPhysicalDeviceFormatProperties: Option<vk::PFN_vkGetPhysicalDeviceFormatProperties>,
     pub(crate) GetPhysicalDeviceProperties: Option<vk::PFN_vkGetPhysicalDeviceProperties>,
@@ -98,6 +98,7 @@ pub(crate) struct VulkanContext {
     pub(crate) CmdFillBuffer: Option<vk::PFN_vkCmdFillBuffer>,
     pub(crate) CmdNextSubpass: Option<vk::PFN_vkCmdNextSubpass>,
     pub(crate) CmdPipelineBarrier: Option<vk::PFN_vkCmdPipelineBarrier>,
+    pub(crate) CmdPushConstants: Option<vk::PFN_vkCmdPushConstants>,
     pub(crate) CmdSetBlendConstants: Option<vk::PFN_vkCmdSetBlendConstants>,
     pub(crate) CmdSetColorWriteEnableEXT: Option<vk::PFN_vkCmdSetColorWriteEnableEXT>,
     pub(crate) CmdSetCullMode: Option<vk::PFN_vkCmdSetCullMode>,
@@ -140,12 +141,13 @@ pub(crate) struct VulkanContext {
     pub(crate) ResetFences: Option<vk::PFN_vkResetFences>,
     pub(crate) UpdateDescriptorSets: Option<vk::PFN_vkUpdateDescriptorSets>,
     pub(crate) WaitForFences: Option<vk::PFN_vkWaitForFences>,
+    pub(crate) physicalDeviceProperties: vk::PhysicalDeviceProperties,
+    pub(crate) features: VulkanFeatures,
     // Ash loaders remain execution helpers; the source-published command
     // fields above retain the exact per-command identity and order.
     pub(crate) m_ashInstance: ash::Instance,
     pub(crate) m_ashDevice: ash::Device,
     pub(crate) m_vmaAllocator: ManuallyDrop<vk_mem::Allocator>,
-    pub(crate) m_physicalDeviceProperties: vk::PhysicalDeviceProperties,
     pub(crate) m_supportsD24S8: bool,
     // Source inheritance destroys the GPUResourceManager base last.
     pub(crate) m_managerOwner: GPUResourceManagerOwner,
@@ -154,9 +156,6 @@ pub(crate) struct VulkanContext {
 impl VulkanContext {
     pub(crate) fn manager(&self) -> GPUResourceManager { self.m_managerOwner.manager() }
     pub(crate) fn allocator(&self) -> &vk_mem::Allocator { &self.m_vmaAllocator }
-    pub(crate) fn physicalDeviceProperties(&self) -> &vk::PhysicalDeviceProperties {
-        &self.m_physicalDeviceProperties
-    }
     pub(crate) fn supportsD24S8(&self) -> bool { self.m_supportsD24S8 }
     pub(crate) fn ashDevice(&self) -> &ash::Device { &self.m_ashDevice }
     pub(crate) fn ashInstance(&self) -> &ash::Instance { &self.m_ashInstance }
@@ -173,7 +172,7 @@ mod tests {
             "GetPhysicalDeviceProperties", "GetPhysicalDeviceFeatures",
             "SetDebugUtilsObjectNameEXT",
         ]);
-        assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.len(), 59);
+        assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.len(), 60);
         assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.first(), Some(&"AllocateCommandBuffers"));
         assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.last(), Some(&"WaitForFences"));
     }

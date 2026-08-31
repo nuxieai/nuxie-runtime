@@ -1078,7 +1078,9 @@ mod tests {
                 atomic_resolve.shader_misc_flags,
             )
             .map(PipelineKey::get),
-            Ok(4_196_390)
+            // gpu.cpp::ShaderUniqueKey packs misc bit9, atomic mode1,
+            // advanced-blend feature bit2, and renderPassResolve draw key6.
+            Ok((1 << (9 + 3 + 8 + 3)) | (1 << (8 + 3)) | (4 << 3) | 6)
         );
 
         let msaa_midpoint = PipelineRequest::new(

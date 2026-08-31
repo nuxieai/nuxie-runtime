@@ -132,6 +132,9 @@ pub enum Action {
     BindDefaultViewModel,
     BindFreshViewModel,
     BindAuthoredViewModel,
+    BindAuthoredViewModelInstance {
+        instance_index: usize,
+    },
     BindNamedDefaultViewModel {
         view_model: String,
     },
@@ -474,6 +477,21 @@ impl Execution {
                     let context = complete_context(&file, Some(main));
                     bind_context(&instance, state_machine.as_ref(), &context);
                     owned_context = Some(context);
+                }
+                Action::BindAuthoredViewModelInstance { instance_index } => {
+                    let id = instance.with_artboard(|artboard| artboard.base.view_model_id());
+                    let main = file.with_file(|file| {
+                        file.create_view_model_instance_at(id as usize, *instance_index)
+                    });
+                    let machine = state_machine
+                        .as_ref()
+                        .context("authored instance binding requires a state machine")?;
+                    // C++ passes the nullable lookup directly to bind: None
+                    // clears/unbinds context, without a default-instance fallback.
+                    owned_context = machine.with_instance_mut(|machine| {
+                        machine.bind_view_model_instance(main);
+                        machine.data_context()
+                    });
                 }
                 Action::BindNamedDefaultViewModel { view_model } => {
                     let main = named_model_instance(&file, view_model, true)?;
@@ -1623,6 +1641,7 @@ seconds = 0.016
             "global_viewmodels_test-set_instance",
             "image_fit_alignment",
             "interactive_scrolling",
+            "ik_anim_test",
         ] {
             let case = manifest
                 .cases

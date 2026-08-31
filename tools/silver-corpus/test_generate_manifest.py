@@ -500,6 +500,20 @@ TEST_CASE("renders selected board", "[silver]")
         if not runtime_dir.is_dir() or not manifest.is_file():
             self.skipTest("pinned upstream or checked-in manifest is unavailable")
         producers = generate_manifest.discover(runtime_dir)
+        ik = next(item for item in producers if item.id == "ik_anim_test")
+        self.assertEqual(ik.source, "ik_anim_test.riv")
+        self.assertEqual(ik.lane, "runtime")
+        self.assertEqual(
+            ik.actions[0],
+            {"kind": "bind-authored-view-model-instance", "instance_index": 0},
+        )
+        self.assertEqual(
+            [action["seconds"] for action in ik.actions if action["kind"] == "advance"],
+            [0.0, 0.1, 0.5, 0.5, 0.5, 0.5],
+        )
+        self.assertEqual(sum(action["kind"] == "draw" for action in ik.actions), 6)
+        self.assertEqual(sum(action["kind"] == "frame" for action in ik.actions), 5)
+        self.assertEqual(ik.provenance_file, "tests/unit_tests/runtime/ik_constraint_test.cpp")
         clip = next(item for item in producers if item.id == "scripted_path_effect_clip")
         # Exact scripted cases retain the owned C++ body as source; this body
         # imports a fixture, which must remain an explicit input dependency.

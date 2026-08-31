@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-77804e86f121f293fe31f5c51773390e45ba0218}
+ref=${RIVE_RUNTIME_REF:-d25e6a4b6c1b8382b588f08371231373780fbcd5}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -35,6 +35,7 @@ assets=(
   "sync/scope_probe.riv|fe8c68d337616c0e0f6747012b592298a48a60655d88b28ca7a8fd91e1c02347|b73bc6755421c41281f9d5c8c04d8444fc43f585"
   "sync/text_style_background.riv|3209af9b117313f36521dbc3beffd40256168b516e0fc9b5ca6a0c4d10bdc360|1f04919af881fe51c929924dc773c835ca9071f0"
   "sync/scripted_path_effect_clip.riv|6bc76d33f6b3761cfd689a8de7f3dfc9dbc5ae34ae75921c63bde4ab9e7c9583|ddd1a2aacf62ee6e550b65b445d0ccdafe284e6a"
+  "sync/ik_anim_test.riv|064492b51c369ebf843f16abd4e9915c89b8086d5f3e6bdc60c04e85e4fbce02|d25e6a4b6c1b8382b588f08371231373780fbcd5"
   "sync/bidirectional_stateful_property.riv|c2813f0ad0f5aedff70ec666f21118b41e611ab87951b5192960599c9be82583|e85a11604edd9a2a50bbe2f04da4a91b0293ccd6"
   "sync/paused_nested_artboard_opacity.riv|642c9f7fd909b9955a875e0bb745d0998d3ac4b64a11b863b09e3b0ee5682944"
   "sync/solo_index_test.riv|e857c0d1f76cec0be8d8b9d8308ea9a0f581de29ed752b952940d90b5f6a16f2|38c924123ffb8ad9541ad724ef4de860e5705482"

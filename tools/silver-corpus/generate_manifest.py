@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "77804e86f121f293fe31f5c51773390e45ba0218"
+UPSTREAM_REF = "d25e6a4b6c1b8382b588f08371231373780fbcd5"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -189,6 +189,7 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "ik_anim_test",
     "ai_assitant",
     "artboard_list_overrides_horizontal",
     "artboard_list_overrides_vertical",
@@ -2600,6 +2601,27 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             else action
                             for action in actions
                         )
+                    if silver_id == "ik_anim_test":
+                        # ik_constraint_test.cpp binds createViewModelInstance(
+                        # artboard->viewModelId(), 0), then draws at 0, .1,
+                        # and four further .5-second advances. Not default VMI.
+                        actions = (
+                            {"kind": "bind-authored-view-model-instance", "instance_index": 0},
+                            {"kind": "advance", "target": "state-machine", "seconds": 0.0},
+                            {"kind": "draw"},
+                            {"kind": "frame"},
+                            {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+                            {"kind": "draw"},
+                        ) + tuple(
+                            action
+                            for _ in range(4)
+                            for action in (
+                                {"kind": "frame"},
+                                {"kind": "advance", "target": "state-machine", "seconds": 0.5},
+                                {"kind": "draw"},
+                            )
+                        )
+                        blocker = None
                     blocker = FORCED_BLOCKERS.get(
                         silver_id, CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id, blocker)
                     )
@@ -2634,6 +2656,13 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         "Rust renderer stream is operation-exact with the pinned C++ silver "
                         "baseline after replaying the TEST_CASE actions."
                     )
+                    if silver_id == "ik_anim_test":
+                        note = (
+                            "Exact comparison contract for the literal six-draw IK producer: "
+                            "pass the nullable authored view-model instance 0 lookup unchanged "
+                            "to binding, advance 0 then 0.1, then "
+                            "four 0.5-second frames. Enrollment alone is not a validation result."
+                        )
                 else:
                     difference = DIVERGENCES.get(silver_id)
                     if difference is None:
@@ -2962,7 +2991,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (253, 208, 42, 3):
+    if (len(producers), runtime, scripted, unknown) != (254, 209, 42, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -2975,8 +3004,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 253",
-        "expected_runtime = 208",
+        "expected_entries = 254",
+        "expected_runtime = 209",
         "expected_scripted = 42",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

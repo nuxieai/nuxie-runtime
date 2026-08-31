@@ -14,6 +14,10 @@ class BuildkitePipelineContractTests(unittest.TestCase):
         test_targets = []
         for line in recipe.splitlines():
             words = shlex.split(line)
+            if "-p" in words and words[words.index("-p") + 1] == "nuxie-renderer":
+                self.assertIn("--features", words)
+                features = words[words.index("--features") + 1].split(",")
+                self.assertIn("renderer-metal", features, "validate the stable product root")
             if "--test" not in words:
                 continue
             package = words[words.index("-p") + 1]

@@ -196,8 +196,8 @@ test: fixtures
 .PHONY: pure-runtime-boundary-test pure-runtime-boundary-check pure-runtime-boundary-gate
 
 renderer-native-metal-v3:
-	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features native-ore-metal-experimental,rive-decoders --lib -- --test-threads=1
-	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features native-ore-metal-experimental,rive-decoders --test native_metal_resource_shaders -- --test-threads=1
+	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental --lib -- --test-threads=1
+	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental --test native_metal_resource_shaders -- --test-threads=1
 	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features -- --test-threads=1
 	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features --features tools -- --test-threads=1
 

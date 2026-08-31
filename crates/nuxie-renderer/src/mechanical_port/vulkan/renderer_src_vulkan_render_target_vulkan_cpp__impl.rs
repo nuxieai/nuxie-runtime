@@ -5,6 +5,7 @@
 
 use super::render_target_vulkan_decl::{
     RenderTargetVulkan, RenderTargetVulkanApi, RenderTargetVulkanImpl,
+    RenderTargetVulkanKind,
 };
 use super::vkutil_decl::{ImageAccess, ImageAccessAction, Texture2D};
 use super::vulkan_context_decl::VulkanContext;
@@ -47,6 +48,7 @@ pub(crate) fn makeRenderTarget(
                 m_offscreenColorTexture: ManuallyDrop::new(rcp::new()),
                 m_msaaColorTexture: ManuallyDrop::new(rcp::new()),
                 m_msaaDepthStencilTexture: ManuallyDrop::new(rcp::new()),
+                rust_complete_kind: RenderTargetVulkanKind::External,
             }),
             m_targetImageView: vk::ImageView::null(),
             m_targetImage: vk::Image::null(),

@@ -35,39 +35,46 @@ pub(crate) trait RenderTargetVulkanApi {
     ) -> vk::ImageView;
 }
 
-/// A Vulkan render-target interface pointer paired with the intrusive owner
-/// that keeps its complete concrete allocation alive.
+/// The two complete-object layouts represented by the pinned C++
+/// `RenderTargetVulkan` virtual interface.
+///
+/// This Rust-only sidecar is the stable equivalent of the source vtable's
+/// concrete dispatch identity. It is initialized only by the two translated
+/// complete-object constructors.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum RenderTargetVulkanKind {
+    External,
+    Texture,
+}
+
+/// A Vulkan render-target base pointer paired with the intrusive owner that
+/// keeps its complete concrete allocation alive.
 pub(crate) struct RetainedRenderTargetVulkan {
-    target: NonNull<dyn RenderTargetVulkanApi>,
+    target: NonNull<RenderTarget>,
     owner: rcp<RenderTarget>,
 }
 
 impl RetainedRenderTargetVulkan {
     /// # Safety
-    /// `target` must be a live, heap-published intrusive render target whose
-    /// offset-zero `RenderTarget` base owns the complete concrete allocation.
-    pub(crate) unsafe fn fromLiveTarget(target: &mut dyn RenderTargetVulkanApi) -> Self {
-        let borrowed_target_ptr = NonNull::from(&mut *target);
-        let owner_ptr = core::ptr::from_mut(&mut *target.baseMut().base);
-        let owner = unsafe { rcp::from_ptr(safe_ref(owner_ptr)) };
-        // SAFETY: `owner` is acquired from the same offset-zero complete
-        // allocation before the borrowed lifetime is erased. It retains that
-        // allocation for the complete lifetime of this wrapper and every
-        // clone, so the trait-object pointer cannot outlive its storage.
-        let target = unsafe {
-            core::mem::transmute::<
-                NonNull<dyn RenderTargetVulkanApi + '_>,
-                NonNull<dyn RenderTargetVulkanApi>,
-            >(borrowed_target_ptr)
-        };
+    /// `target` must carry the original allocation provenance for a live,
+    /// heap-published intrusive render target whose offset-zero base owns a
+    /// tagged Vulkan complete object.
+    pub(crate) unsafe fn fromLiveTarget(target: NonNull<RenderTarget>) -> Self {
+        let owner = unsafe { rcp::from_ptr(safe_ref(target.as_ptr())) };
         Self { target, owner }
     }
 
-    pub(crate) fn targetMut(&mut self) -> &mut dyn RenderTargetVulkanApi {
-        // SAFETY: every clone retains `owner`, which owns the complete target
-        // allocation. Mutable access is scoped to this exclusive wrapper
-        // borrow and never escapes it.
-        unsafe { self.target.as_mut() }
+    pub(crate) fn updateLastAccess(&mut self, access: ImageAccess) {
+        // SAFETY: every clone retains `owner`, which owns this exact
+        // offset-zero target allocation. The narrow dispatch does not return
+        // a reference, so cloned wrappers cannot manufacture aliased mutable
+        // borrows in safe Rust.
+        unsafe {
+            super::render_context_vulkan_impl::updateLiveRenderTargetVulkanLastAccess(
+                self.target,
+                access,
+            )
+        }
     }
 }
 
@@ -89,6 +96,8 @@ pub(crate) struct RenderTargetVulkan {
     pub(crate) m_offscreenColorTexture: ManuallyDrop<rcp<Texture2D>>,
     pub(crate) m_msaaColorTexture: ManuallyDrop<rcp<Texture2D>>,
     pub(crate) m_msaaDepthStencilTexture: ManuallyDrop<rcp<Texture2D>>,
+    /// Rust-only concrete dispatch identity for the source virtual interface.
+    pub(super) rust_complete_kind: RenderTargetVulkanKind,
 }
 
 impl RenderTargetVulkan {

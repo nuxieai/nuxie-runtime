@@ -206,7 +206,7 @@ unsafe impl GpuResourcePayload for BufferVulkan {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_ore_metal::gpu_resource::GPUResourceManagerOwner;
+    use nuxie_ore_metal::gpu_resource::{GPUResourceManagerOwner, ResourceHandle};
 
     #[test]
     fn preserves_offset_zero_buffer_base_and_source_defaults() {
@@ -214,7 +214,8 @@ mod tests {
 
         assert_eq!(offset_of!(BufferVulkan, base), 0);
         let owner = GPUResourceManagerOwner::new();
-        let buffer = BufferVulkan::new(owner.manager(), 64, BufferUsage::uniform);
+        let manager = owner.manager();
+        let buffer = BufferVulkan::new(manager.clone(), 64, BufferUsage::uniform);
         assert_eq!(buffer.size(), 64);
         assert_eq!(buffer.usage(), BufferUsage::uniform);
         assert!(buffer.current().is_null());
@@ -224,6 +225,12 @@ mod tests {
         assert_eq!(buffer.m_currentIndex.get(), 0);
         assert!(!buffer.m_boundSinceUpdate.get());
         assert!(buffer.m_vkUsage.is_empty());
+
+        let buffer = ResourceHandle::new_buffer_with_installed_manager(buffer);
+        assert!(buffer.manager().is_some_and(|value| value.ptr_eq(&manager)));
+        let buffer = buffer.erase();
+        assert_eq!(buffer.size(), Some(64));
+        assert_eq!(buffer.usage(), Some(BufferUsage::uniform));
         drop(buffer);
         owner.shutdown();
     }

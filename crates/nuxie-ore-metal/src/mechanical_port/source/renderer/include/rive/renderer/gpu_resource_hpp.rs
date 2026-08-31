@@ -888,6 +888,18 @@ impl<T: GpuResourcePayload> ResourceHandle<T> {
         Self::publish(None, payload, plain_vtable::<T>())
     }
 
+    /// Adopts a source allocation whose concrete constructor already
+    /// initialized `GPUResource::m_manager`, while retaining the concrete
+    /// backend's recording-thread domain.
+    pub fn new_with_installed_manager_in_domain(domain: ResourceDomain, payload: T) -> Self {
+        domain.assert_recording_thread();
+        assert!(
+            payload.gpu_resource().manager().is_some(),
+            "a pre-managed GPUResource must carry its manager before publication"
+        );
+        Self::publish(Some(domain), payload, plain_vtable::<T>())
+    }
+
     pub fn new_in_domain(
         manager: Option<GPUResourceManager>,
         domain: ResourceDomain,
@@ -903,6 +915,17 @@ impl<T: GpuResourcePayload> ResourceHandle<T> {
         Self::new_with_vtable(manager, None, payload, buffer_vtable::<T>())
     }
 
+    pub fn new_buffer_with_installed_manager(payload: T) -> Self
+    where
+        T: BufferApi,
+    {
+        assert!(
+            payload.gpu_resource().manager().is_some(),
+            "a pre-managed GPUResource must carry its manager before publication"
+        );
+        Self::publish(None, payload, buffer_vtable::<T>())
+    }
+
     pub fn new_buffer_in_domain(
         manager: Option<GPUResourceManager>,
         domain: ResourceDomain,
@@ -912,6 +935,18 @@ impl<T: GpuResourcePayload> ResourceHandle<T> {
         T: BufferApi,
     {
         Self::new_with_vtable(manager, Some(domain), payload, buffer_vtable::<T>())
+    }
+
+    pub fn new_buffer_with_installed_manager_in_domain(domain: ResourceDomain, payload: T) -> Self
+    where
+        T: BufferApi,
+    {
+        domain.assert_recording_thread();
+        assert!(
+            payload.gpu_resource().manager().is_some(),
+            "a pre-managed GPUResource must carry its manager before publication"
+        );
+        Self::publish(Some(domain), payload, buffer_vtable::<T>())
     }
 
     pub fn new_texture(manager: Option<GPUResourceManager>, payload: T) -> Self
@@ -930,6 +965,18 @@ impl<T: GpuResourcePayload> ResourceHandle<T> {
         T: TextureApi,
     {
         Self::new_with_vtable(manager, Some(domain), payload, texture_vtable::<T>())
+    }
+
+    pub fn new_texture_with_installed_manager_in_domain(domain: ResourceDomain, payload: T) -> Self
+    where
+        T: TextureApi,
+    {
+        domain.assert_recording_thread();
+        assert!(
+            payload.gpu_resource().manager().is_some(),
+            "a pre-managed GPUResource must carry its manager before publication"
+        );
+        Self::publish(Some(domain), payload, texture_vtable::<T>())
     }
 
     fn new_with_vtable(
@@ -1817,6 +1864,108 @@ mod tests {
             DropProbe::new(1, &drops),
         ));
         assert_eq!(dropped(&drops), [1]);
+        owner.shutdown();
+    }
+
+    #[test]
+    fn pre_managed_texture_publication_preserves_manager_domain_dispatch_and_release() {
+        #[repr(C)]
+        struct PreManagedTexture {
+            base: GPUResource,
+            drops: Arc<Mutex<Vec<usize>>>,
+            uploads: Arc<AtomicUsize>,
+        }
+        impl_test_gpu_resource!(PreManagedTexture);
+
+        impl TextureApi for PreManagedTexture {
+            fn width(&self) -> u32 {
+                17
+            }
+
+            fn height(&self) -> u32 {
+                23
+            }
+
+            fn depthOrArrayLayers(&self) -> u32 {
+                1
+            }
+
+            fn format(&self) -> TextureFormat {
+                TextureFormat::rgba8unorm
+            }
+
+            fn r#type(&self) -> TextureType {
+                TextureType::texture2D
+            }
+
+            fn numMipmaps(&self) -> u32 {
+                1
+            }
+
+            fn sampleCount(&self) -> u32 {
+                1
+            }
+
+            fn isRenderTarget(&self) -> bool {
+                true
+            }
+
+            fn upload(&self, _data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
+                self.uploads.fetch_add(1, Ordering::Relaxed);
+                Ok(())
+            }
+        }
+
+        impl Drop for PreManagedTexture {
+            fn drop(&mut self) {
+                self.drops
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(41);
+            }
+        }
+
+        let drops = Arc::new(Mutex::new(Vec::new()));
+        let uploads = Arc::new(AtomicUsize::new(0));
+        let owner = GPUResourceManagerOwner::new();
+        let manager = owner.manager();
+        manager.advanceFrameNumber(2, 0);
+        let drain = ResourceFinalReleaseDrain::new();
+        drain.set_always_defer();
+        let identity = Arc::new(());
+        let domain = drain.resource_domain(&identity);
+
+        let resource = ResourceHandle::new_texture_with_installed_manager_in_domain(
+            domain.clone(),
+            PreManagedTexture {
+                base: GPUResource::new(Some(manager.clone())),
+                drops: Arc::clone(&drops),
+                uploads: Arc::clone(&uploads),
+            },
+        );
+        assert!(
+            resource
+                .manager()
+                .is_some_and(|value| value.ptr_eq(&manager))
+        );
+
+        let resource = resource.erase();
+        assert!(resource.belongsTo(&domain));
+        assert_eq!(resource.width(), Some(17));
+        assert_eq!(resource.height(), Some(23));
+        assert_eq!(resource.format(), Some(TextureFormat::rgba8unorm));
+        assert_eq!(resource.isRenderTarget(), Some(true));
+        assert_eq!(resource.upload(&TextureDataDesc::default()), Ok(()));
+        assert_eq!(uploads.load(Ordering::Relaxed), 1);
+
+        drop(resource);
+        assert!(dropped(&drops).is_empty());
+        assert_eq!(drain.drain(), Ok(0));
+
+        manager.advanceFrameNumber(2, 2);
+        assert!(dropped(&drops).is_empty());
+        assert_eq!(drain.drain(), Ok(1));
+        assert_eq!(dropped(&drops), [41]);
         owner.shutdown();
     }
 

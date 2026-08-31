@@ -301,7 +301,9 @@ pub(crate) fn upload(
     staging
         .update(bytes, required as u32, 0)
         .map_err(|_| TextureUploadError::SizeOverflow)?;
-    let staging = ResourceHandle::new_buffer(Some(manager), staging).erase();
+    let domain = nuxie_ore_metal::context_backend_domain(&texture.oreContextMut().base);
+    let staging =
+        ResourceHandle::new_buffer_with_installed_manager_in_domain(domain, staging).erase();
     let region = vk::BufferImageCopy {
         buffer_offset: 0,
         buffer_row_length: if data.bytesPerRow != 0 {

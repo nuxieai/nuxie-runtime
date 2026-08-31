@@ -1040,7 +1040,9 @@ fn find_memory_type(
 
 #[cfg(all(test, feature = "native-ore-vulkan-experimental"))]
 mod gpu_canvas_frame_number_tests {
-    use super::gpu_canvas_frame_numbers;
+    use super::*;
+    use super::super::ore_texture_vulkan_decl::{TextureViewVulkan, TextureVulkan};
+    use super::super::vkutil_decl::Texture2D;
 
     #[test]
     fn gpu_canvas_uses_the_single_monotonic_host_frame_stream() {
@@ -1054,5 +1056,69 @@ mod gpu_canvas_frame_number_tests {
 
         assert_eq!(gpu_canvas_frame_numbers(&mut frame_number, false), (3, 4));
         assert_eq!(frame_number, 4);
+    }
+
+    #[test]
+    #[ignore = "requires a configured Vulkan test host"]
+    fn wrap_canvas_texture_uses_the_texture_backed_target_and_publishes_resources() {
+        let mut backend =
+            VulkanProductBackend::new(2, 2).expect("configured Vulkan test host");
+        let canvas = unsafe { Pin::get_unchecked_mut(backend.context_pin()) }
+            .makeRenderCanvasExecutable(2, 2);
+        assert!(canvas.operator_bool());
+
+        let canvas_ptr = canvas.get();
+        let (expected_image, expected_view) = {
+            let canvas = unsafe { &mut *canvas_ptr };
+            let texture_ptr = unsafe { &mut *canvas.renderImage() }.getTexture();
+            assert!(!texture_ptr.is_null());
+            let texture = unsafe { &*texture_ptr.cast::<Texture2D>() };
+            (texture.vkImage(), texture.vkImageView())
+        };
+        assert_ne!(expected_image, vk::Image::null());
+        assert_ne!(expected_view, vk::ImageView::null());
+
+        let ore_context = unsafe { Pin::get_unchecked_mut(backend.context_pin()) }.oreExecutable();
+        let mut ore_context = NonNull::new(ore_context).expect("source-owned Vulkan ORE context");
+        let context = match unsafe { ore_context.as_mut() } {
+            OreContext::Vulkan(context) => context.as_mut(),
+            #[allow(unreachable_patterns)]
+            _ => panic!("exact Vulkan RenderContext returned a foreign ORE context"),
+        };
+        let expected_manager = nuxie_ore_metal::context_backend_manager(&*context)
+            .expect("source-owned Vulkan resource manager");
+        let expected_domain = nuxie_ore_metal::context_backend_domain(&*context);
+        let wrapped = unsafe { context.wrapCanvasTexture(canvas_ptr.cast::<c_void>()) }
+            .expect("production wrapCanvasTexture result");
+
+        assert!(wrapped.belongsTo(&expected_domain));
+        assert!(wrapped
+            .manager()
+            .is_some_and(|manager| manager.ptr_eq(&expected_manager)));
+        {
+            let view = wrapped
+                .downcast_ref::<TextureViewVulkan>()
+                .expect("Vulkan texture-view payload");
+            assert_eq!(view.m_vkImageView, expected_view);
+            assert!(view.m_vkDestroyImageView.is_none());
+            assert!(view.m_vkRenderTarget.is_some());
+
+            let retained_texture = view.texture();
+            assert!(retained_texture.belongsTo(&expected_domain));
+            assert!(retained_texture
+                .manager()
+                .is_some_and(|manager| manager.ptr_eq(&expected_manager)));
+            assert_eq!(retained_texture.width(), Some(2));
+            assert_eq!(retained_texture.height(), Some(2));
+            assert_eq!(retained_texture.isRenderTarget(), Some(true));
+            let texture = retained_texture
+                .downcast_ref::<TextureVulkan>()
+                .expect("Vulkan texture payload");
+            assert_eq!(texture.m_vkImage, expected_image);
+            assert!(texture.m_vmaAllocation.is_none());
+            assert_eq!(texture.m_vkLayout.get(), vk::ImageLayout::UNDEFINED);
+        }
+        drop(wrapped);
+        drop(canvas);
     }
 }

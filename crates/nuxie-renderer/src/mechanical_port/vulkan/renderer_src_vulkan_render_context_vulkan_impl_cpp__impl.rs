@@ -12,6 +12,7 @@ use super::render_context_vulkan_decl::*;
 use super::render_pass_vulkan_decl::RenderPassOptionsVulkan;
 use super::render_target_vulkan_decl::{
     RenderTargetVulkan, RenderTargetVulkanApi, RenderTargetVulkanImpl,
+    RenderTargetVulkanKind,
 };
 use super::vkutil_decl::{
     self as vkutil, ImageAccess, ImageAccessAction, Mappability, Texture2D, ViewportFromRect2D,
@@ -492,6 +493,7 @@ pub(crate) fn makeRenderCanvas(
                 m_offscreenColorTexture: ManuallyDrop::new(rcp::new()),
                 m_msaaColorTexture: ManuallyDrop::new(rcp::new()),
                 m_msaaDepthStencilTexture: ManuallyDrop::new(rcp::new()),
+                rust_complete_kind: RenderTargetVulkanKind::Texture,
             }),
             m_texture: ManuallyDrop::new(texture),
         }
@@ -1718,95 +1720,205 @@ fn clearPLSOffscreenColorTexture(
     )
 }
 
-enum RenderTargetVulkanDispatch<'a> {
-    External(&'a mut RenderTargetVulkanImpl),
-    Texture(&'a mut RenderTargetVulkanTexture),
+/// Non-owning equivalent of a pinned C++ `RenderTargetVulkan*`. The handle
+/// carries no Rust reference; every virtual operation creates one temporary
+/// concrete borrow and destroys it before returning.
+struct LiveRenderTargetVulkan {
+    target: NonNull<RenderTarget>,
 }
 
-impl RenderTargetVulkanApi for RenderTargetVulkanDispatch<'_> {
-    fn base(&self) -> &RenderTargetVulkan {
-        match self {
-            Self::External(target) => target.base(),
-            Self::Texture(target) => target.base(),
+impl LiveRenderTargetVulkan {
+    /// # Safety
+    ///
+    /// `target` must remain a live, exclusively operated Vulkan target for
+    /// every call made through this handle.
+    unsafe fn fromTarget(target: NonNull<RenderTarget>) -> Self {
+        Self { target }
+    }
+
+    fn withDispatch<R>(
+        &mut self,
+        callback: impl for<'a> FnOnce(&'a mut dyn RenderTargetVulkanApi) -> R,
+    ) -> R {
+        // SAFETY: construction establishes the live Vulkan complete-object
+        // invariant. Keep the allocation-origin raw pointer intact and cast it
+        // directly to the tagged complete type before creating a reference;
+        // never perform a container-of cast from a base-subobject reference.
+        // The higher-ranked callback cannot return the temporary borrow.
+        let kind = unsafe {
+            self.target
+                .cast::<RenderTargetVulkan>()
+                .as_ref()
+                .rust_complete_kind
+        };
+        match kind {
+            RenderTargetVulkanKind::External => callback(unsafe {
+                &mut *self.target.as_ptr().cast::<RenderTargetVulkanImpl>()
+            }),
+            RenderTargetVulkanKind::Texture => callback(unsafe {
+                &mut *self.target.as_ptr().cast::<RenderTargetVulkanTexture>()
+            }),
         }
     }
-    fn baseMut(&mut self) -> &mut RenderTargetVulkan {
-        match self {
-            Self::External(target) => target.baseMut(),
-            Self::Texture(target) => target.baseMut(),
-        }
+
+    fn framebufferFormat(&mut self) -> vk::Format {
+        self.withDispatch(|target| target.base().m_framebufferFormat)
     }
-    fn targetImage(&self) -> vk::Image {
-        match self {
-            Self::External(target) => target.targetImage(),
-            Self::Texture(target) => target.targetImage(),
-        }
+
+    fn targetUsageFlags(&mut self) -> vk::ImageUsageFlags {
+        self.withDispatch(|target| target.base().m_targetUsageFlags)
     }
-    fn targetImageView(&self) -> vk::ImageView {
-        match self {
-            Self::External(target) => target.targetImageView(),
-            Self::Texture(target) => target.targetImageView(),
-        }
+
+    fn width(&mut self) -> u32 {
+        self.withDispatch(|target| target.base().width())
     }
+
+    fn height(&mut self) -> u32 {
+        self.withDispatch(|target| target.base().height())
+    }
+
+    fn bounds(&mut self) -> IAABB {
+        self.withDispatch(|target| target.base().bounds())
+    }
+
     fn updateLastAccess(&mut self, access: ImageAccess) {
-        match self {
-            Self::External(target) => target.updateLastAccess(access),
-            Self::Texture(target) => target.updateLastAccess(access),
-        }
+        self.withDispatch(|target| target.updateLastAccess(access));
     }
+
     fn accessTargetImage(
         &mut self,
         command_buffer: vk::CommandBuffer,
         dst_access: ImageAccess,
         action: ImageAccessAction,
     ) -> vk::Image {
-        match self {
-            Self::External(target) => target.accessTargetImage(command_buffer, dst_access, action),
-            Self::Texture(target) => target.accessTargetImage(command_buffer, dst_access, action),
-        }
+        self.withDispatch(|target| {
+            target.accessTargetImage(command_buffer, dst_access, action)
+        })
     }
+
     fn accessTargetImageView(
         &mut self,
         command_buffer: vk::CommandBuffer,
         dst_access: ImageAccess,
         action: ImageAccessAction,
     ) -> vk::ImageView {
-        match self {
-            Self::External(target) => {
-                target.accessTargetImageView(command_buffer, dst_access, action)
-            }
-            Self::Texture(target) => {
-                target.accessTargetImageView(command_buffer, dst_access, action)
-            }
-        }
+        self.withDispatch(|target| {
+            target.accessTargetImageView(command_buffer, dst_access, action)
+        })
+    }
+
+    fn msaaColorTexture(&mut self) -> *mut Texture2D {
+        self.withDispatch(super::render_target_vulkan_impl::msaaColorTexture)
+    }
+
+    fn msaaDepthStencilTexture(&mut self) -> *mut Texture2D {
+        self.withDispatch(super::render_target_vulkan_impl::msaaDepthStencilTexture)
+    }
+
+    fn copyTargetImageToOffscreenColorTexture(
+        &mut self,
+        command_buffer: vk::CommandBuffer,
+        dst_access: ImageAccess,
+        copy_bounds: &IAABB,
+    ) -> *mut Texture2D {
+        self.withDispatch(|target| {
+            super::render_target_vulkan_impl::copyTargetImageToOffscreenColorTexture(
+                target,
+                command_buffer,
+                dst_access,
+                copy_bounds,
+            )
+        })
+    }
+
+    fn clearTargetImageView(
+        &mut self,
+        command_buffer: vk::CommandBuffer,
+        clear_color: ColorInt,
+        dst_access: ImageAccess,
+    ) -> vk::ImageView {
+        self.withDispatch(|target| {
+            super::render_target_vulkan_impl::clearTargetImageView(
+                target,
+                command_buffer,
+                clear_color,
+                dst_access,
+            )
+        })
+    }
+
+    fn accessOffscreenColorTexture(
+        &mut self,
+        command_buffer: vk::CommandBuffer,
+        dst_access: ImageAccess,
+        action: ImageAccessAction,
+    ) -> *mut Texture2D {
+        self.withDispatch(|target| {
+            super::render_target_vulkan_impl::accessOffscreenColorTexture(
+                target,
+                command_buffer,
+                dst_access,
+                action,
+            )
+        })
     }
 }
 
-fn target_impl(desc: &FlushDescriptor) -> RenderTargetVulkanDispatch<'_> {
-    let target = desc.renderTarget.expect("Vulkan flush render target");
-    let base = unsafe { target.as_ref() };
-    if std::ptr::fn_addr_eq(
-        base.destroy_complete,
-        destroy_render_target_vulkan_texture as unsafe fn(*mut RenderTarget),
-    ) {
-        return RenderTargetVulkanDispatch::Texture(unsafe {
-            &mut *target.as_ptr().cast::<RenderTargetVulkanTexture>()
-        });
-    }
-    debug_assert!(std::ptr::fn_addr_eq(
-        base.destroy_complete,
-        super::render_target_vulkan_impl::destroy_render_target_vulkan_impl
-            as unsafe fn(*mut RenderTarget),
-    ));
-    RenderTargetVulkanDispatch::External(unsafe {
-        &mut *target.as_ptr().cast::<RenderTargetVulkanImpl>()
+pub(crate) struct RenderTargetVulkanTextureBinding {
+    pub(crate) image: vk::Image,
+    pub(crate) imageView: vk::ImageView,
+    pub(crate) framebufferFormat: vk::Format,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+}
+
+/// Snapshots the by-value source virtual results needed by
+/// `ContextVulkan::wrapCanvasTexture` without allowing a concrete borrow to
+/// escape this operation.
+///
+/// # Safety
+///
+/// `target` must carry the original allocation provenance for a live target
+/// created by one of the two translated Vulkan constructors.
+pub(crate) unsafe fn liveRenderTargetVulkanTextureBinding(
+    target: NonNull<RenderTarget>,
+) -> RenderTargetVulkanTextureBinding {
+    let mut target = unsafe { LiveRenderTargetVulkan::fromTarget(target) };
+    target.withDispatch(|target| RenderTargetVulkanTextureBinding {
+        image: target.targetImage(),
+        imageView: target.targetImageView(),
+        framebufferFormat: target.base().framebufferFormat(),
+        width: target.base().width(),
+        height: target.base().height(),
     })
+}
+
+/// Applies the source virtual `updateLastAccess` operation without allowing a
+/// mutable reference to escape a retained, clonable target owner.
+///
+/// # Safety
+///
+/// `target` must be retained for the duration of this call and carry the
+/// original allocation provenance for one of the two tagged complete types.
+pub(crate) unsafe fn updateLiveRenderTargetVulkanLastAccess(
+    target: NonNull<RenderTarget>,
+    access: ImageAccess,
+) {
+    let mut target = unsafe { LiveRenderTargetVulkan::fromTarget(target) };
+    target.updateLastAccess(access);
+}
+
+unsafe fn target_impl(desc: &FlushDescriptor) -> LiveRenderTargetVulkan {
+    let target = desc.renderTarget.expect("Vulkan flush render target");
+    // SAFETY: FlushDescriptor's source contract keeps its Vulkan target live
+    // and serializes all virtual operations for the duration of a flush.
+    unsafe { LiveRenderTargetVulkan::fromTarget(target) }
 }
 
 fn copyRenderTargetToPLSOffscreenColorTexture(
     implementation: &mut RenderContextVulkanImpl,
     command_buffer: vk::CommandBuffer,
-    target: &mut dyn RenderTargetVulkanApi,
+    target: &mut LiveRenderTargetVulkan,
     copy_bounds: &IAABB,
     dst_access: ImageAccess,
 ) -> *mut Texture2D {
@@ -2199,7 +2311,7 @@ impl DrawRenderPass {
     ) -> *const DrawPipelineLayoutVulkan {
         let implementation = unsafe { &mut *self.m_impl };
         let desc = unsafe { &*self.m_desc };
-        let mut target = target_impl(desc);
+        let mut target = unsafe { target_impl(desc) };
         let command = vk::CommandBuffer::from_raw(
             desc.externalCommandBuffer
                 .expect("Vulkan command buffer")
@@ -2210,7 +2322,7 @@ impl DrawRenderPass {
             let render_pass = manager.getRenderPassSynchronous(
                 desc.interlockMode,
                 options,
-                target.base().m_framebufferFormat,
+                target.framebufferFormat(),
                 override_load,
             );
             (
@@ -2278,8 +2390,8 @@ impl DrawRenderPass {
                     let full = self.m_drawBounds.contains(IAABB {
                         left: 0,
                         top: 0,
-                        right: target.base().width() as i32,
-                        bottom: target.base().height() as i32,
+                        right: target.width() as i32,
+                        bottom: target.height() as i32,
                     });
                     views.push(target.accessTargetImageView(
                         command,
@@ -2307,7 +2419,7 @@ impl DrawRenderPass {
             }
             InterlockMode::msaa => {
                 debug_assert_eq!(views.len(), MSAA_DEPTH_STENCIL_IDX);
-                let depth = super::render_target_vulkan_impl::msaaDepthStencilTexture(&mut target);
+                let depth = target.msaaDepthStencilTexture();
                 views.push(unsafe { (&*depth).vkImageView() });
                 clears.push(vk::ClearValue {
                     depth_stencil: vk::ClearDepthStencilValue {
@@ -2332,8 +2444,8 @@ impl DrawRenderPass {
             vk::FramebufferCreateInfo::default()
                 .render_pass(render_pass_handle)
                 .attachments(&views)
-                .width(target.base().width())
-                .height(target.base().height())
+                .width(target.width())
+                .height(target.height())
                 .layers(1),
         );
         let begin = vk::RenderPassBeginInfo::default()
@@ -2350,8 +2462,8 @@ impl DrawRenderPass {
             let viewport = ViewportFromRect2D::new(vk::Rect2D {
                 offset: vk::Offset2D::default(),
                 extent: vk::Extent2D {
-                    width: target.base().width(),
-                    height: target.base().height(),
+                    width: target.width(),
+                    height: target.height(),
                 },
             });
             implementation.m_vk.ashDevice().cmd_set_viewport(
@@ -2448,7 +2560,7 @@ fn write_image(
 }
 
 pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &FlushDescriptor) {
-    let mut target = target_impl(desc);
+    let mut target = unsafe { target_impl(desc) };
     let mut draw_bounds = desc.renderTargetUpdateBounds;
     if draw_bounds.empty() {
         return;
@@ -2460,12 +2572,12 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     if desc.manuallyResolved {
         options |= RenderPassOptionsVulkan::manuallyResolved;
     } else if desc.interlockMode == InterlockMode::msaa {
-        draw_bounds = target.base().bounds();
+        draw_bounds = target.bounds();
     }
     debug_assert!(
         desc.interlockMode != InterlockMode::msaa
             || desc.manuallyResolved
-            || draw_bounds == target.base().bounds()
+            || draw_bounds == target.bounds()
     );
     let command = vk::CommandBuffer::from_raw(
         desc.externalCommandBuffer
@@ -3054,8 +3166,8 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     let full_target = draw_bounds.contains(IAABB {
         left: 0,
         top: 0,
-        right: target.base().width() as i32,
-        bottom: target.base().height() as i32,
+        right: target.width() as i32,
+        bottom: target.height() as i32,
     });
     let target_action = if full_target && desc.colorLoadAction != LoadAction::preserveRenderTarget {
         ImageAccessAction::invalidateContents
@@ -3072,12 +3184,9 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     let mut msaa_resolve_view = vk::ImageView::null();
     let mut msaa_seed_view = vk::ImageView::null();
     if desc.interlockMode == InterlockMode::msaa {
-        color_view = unsafe {
-            (&*super::render_target_vulkan_impl::msaaColorTexture(&mut target)).vkImageView()
-        };
+        color_view = unsafe { (&*target.msaaColorTexture()).vkImageView() };
         if desc.colorLoadAction == LoadAction::preserveRenderTarget {
-            let copied = super::render_target_vulkan_impl::copyTargetImageToOffscreenColorTexture(
-                &mut target,
+            let copied = target.copyTargetImageToOffscreenColorTexture(
                 command,
                 ImageAccess {
                     pipelineStages: vk::PipelineStageFlags::FRAGMENT_SHADER,
@@ -3106,8 +3215,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
         || ((desc.interlockMode == InterlockMode::rasterOrdering
             || desc.interlockMode == InterlockMode::atomics)
             && target
-                .base()
-                .m_targetUsageFlags
+                .targetUsageFlags()
                 .contains(vk::ImageUsageFlags::INPUT_ATTACHMENT))
     {
         color_view = target.accessTargetImageView(command, color_load_access, target_action);
@@ -3118,14 +3226,12 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             layout: vk::ImageLayout::GENERAL,
         };
         if target
-            .base()
-            .m_targetUsageFlags
+            .targetUsageFlags()
             .contains(vk::ImageUsageFlags::STORAGE)
-            && target.base().m_framebufferFormat == vk::Format::R8G8B8A8_UNORM
+            && target.framebufferFormat() == vk::Format::R8G8B8A8_UNORM
         {
             color_view = if desc.colorLoadAction == LoadAction::clear {
-                super::render_target_vulkan_impl::clearTargetImageView(
-                    &mut target,
+                target.clearTargetImageView(
                     command,
                     desc.colorClearValue,
                     storage_access,
@@ -3169,9 +3275,8 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     } else {
         color_view = if desc.colorLoadAction == LoadAction::preserveRenderTarget {
             unsafe {
-                (&*super::render_target_vulkan_impl::copyTargetImageToOffscreenColorTexture(
-                    &mut target,
-                    command,
+                    (&*target.copyTargetImageToOffscreenColorTexture(
+                        command,
                     color_load_access,
                     &draw_bounds,
                 ))
@@ -3179,9 +3284,8 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             }
         } else {
             unsafe {
-                (&*super::render_target_vulkan_impl::accessOffscreenColorTexture(
-                    &mut target,
-                    command,
+                    (&*target.accessOffscreenColorTexture(
+                        command,
                     color_load_access,
                     ImageAccessAction::invalidateContents,
                 ))
@@ -3521,8 +3625,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             }
         } else {
             unsafe {
-                (&*super::render_target_vulkan_impl::accessOffscreenColorTexture(
-                    &mut target,
+                (&*target.accessOffscreenColorTexture(
                     command,
                     copy_access,
                     ImageAccessAction::preserveContents,
@@ -3645,7 +3748,7 @@ fn submitDrawList(
     mut pending_tess_patches: u32,
 ) {
     let command = vk::CommandBuffer::from_raw(desc.externalCommandBuffer.unwrap().as_ptr() as u64);
-    let target = target_impl(desc);
+    let mut target = unsafe { target_impl(desc) };
     let render_pass_scissor = draw_pass.m_scissor;
     let mut binder = PipelineBinder::new(&implementation.m_vk);
     for batch in draw_list(desc).iter() {
@@ -3744,7 +3847,7 @@ fn submitDrawList(
                     blendMode: batch.firstBlendMode,
                     drawPipelineOptions: draw_options,
                     renderPassOptions: draw_pass.m_renderPassOptions,
-                    renderTargetFormat: target.base().m_framebufferFormat,
+                    renderTargetFormat: target.framebufferFormat(),
                     colorLoadAction: desc.colorLoadAction,
                     #[cfg(feature = "with-rive-tools")]
                     synthesizedFailureType: desc.synthesizedFailureType,

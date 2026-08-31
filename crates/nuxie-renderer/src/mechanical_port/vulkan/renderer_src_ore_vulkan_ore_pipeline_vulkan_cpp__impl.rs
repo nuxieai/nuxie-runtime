@@ -442,7 +442,8 @@ pub(crate) fn makePipeline(
         }
     }
     pipeline.m_vkDestroyPipeline = Some(context.m_vk.m_ashDevice.fp_v1_0().destroy_pipeline);
-    Some(ResourceHandle::new(Some(manager), pipeline).erase())
+    let domain = nuxie_ore_metal::context_backend_domain(&context.base);
+    Some(ResourceHandle::new_with_installed_manager_in_domain(domain, pipeline).erase())
 }
 
 #[cfg(test)]

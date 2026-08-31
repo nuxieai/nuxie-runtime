@@ -22,6 +22,7 @@ use nuxie_runtime::mechanical_port::source::{
     renderer::{from_render_raw_path, to_render_raw_path},
 };
 
+use super::ProtectedScriptCall;
 use super::lua_artboards::ScriptedNode as LuaScriptedNode;
 use super::lua_mat2d::{ScriptedMat2D, number_arg};
 
@@ -429,7 +430,7 @@ pub(super) fn call_path_effect_update(
     let function: luaur_rt::Function = table.get("update")?;
     let source = create_scripted_path(&lua, ScriptedPath::from_render_raw_path(source))?;
     let node = lua.create_userdata(LuaScriptedNode::new(node))?;
-    let output: AnyUserData = function.call((table.clone(), source, node))?;
+    let output: AnyUserData = function.protected_call((table.clone(), source, node))?;
     let output = output.borrow::<ScriptedPath>()?;
     Ok(to_render_raw_path(&output.raw_path))
 }

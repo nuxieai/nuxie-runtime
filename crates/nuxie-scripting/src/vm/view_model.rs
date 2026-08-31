@@ -1916,39 +1916,9 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("features", |lua, this, ()| {
             this.require_live("features")?;
-            // The Rust renderer seam deliberately exposes the same
-            // conservative no-render-context defaults used by pinned C++.
-            // `lua_scripted_context.cpp:84-122`.
-            let features = lua.create_table();
-            for name in [
-                "bc",
-                "etc2",
-                "astc",
-                "anisotropicFiltering",
-                "texture3D",
-                "textureArrays",
-                "colorBufferFloat",
-                "colorBufferHalfFloat",
-                "perTargetBlend",
-                "perTargetWriteMask",
-                "drawBaseInstance",
-                "depthBiasClamp",
-            ] {
-                features.set(name, false)?;
-            }
-            for (name, value) in [
-                ("maxTextureSize2D", 4096_u32),
-                ("maxTextureSizeCube", 4096),
-                ("maxTextureSize3D", 256),
-                ("maxColorAttachments", 4),
-                ("maxUniformBufferSize", 16_384),
-                ("maxSamplers", 16),
-                ("maxSamples", 4),
-            ] {
-                features.set(name, value)?;
-            }
-            features.set_readonly(true);
-            Ok(features)
+            super::lua_renderer_library::RendererBindings::for_lua(lua)
+                .unwrap_or_default()
+                .gpu_features(lua)
         });
         methods.add_method("shader", |lua, this, name: String| {
             this.require_live("shader")?;
@@ -4041,9 +4011,16 @@ mod tests {
         use super::*;
         use nuxie_render_api::{Mat2D, RenderImage};
 
-        struct TestImage;
+        #[derive(Clone, Default)]
+        struct TestImage(Rc<()>);
 
         impl RenderImage for TestImage {
+            fn retain_image(&self) -> Rc<dyn RenderImage> {
+                Rc::new(self.clone())
+            }
+            fn image_identity(&self) -> usize {
+                Rc::as_ptr(&self.0) as usize
+            }
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }
@@ -4201,7 +4178,7 @@ mod tests {
             let image_id = image
                 .with_downcast::<ImageAsset, _>(|asset| asset.base.asset_id())
                 .unwrap();
-            owners.insert(image_id, Box::new(TestImage));
+            owners.insert(image_id, Box::new(TestImage::default()));
             crate::vm::lua_image::set_image_asset_owners(&lua, owners);
             crate::vm::lua_image::set_script_image_assets(
                 &lua,

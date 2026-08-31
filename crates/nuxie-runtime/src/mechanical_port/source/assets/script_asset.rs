@@ -158,7 +158,7 @@ impl OptionalScriptedMethods {
     const RESIZES_BIT: i32 = 1 << 12;
     const LISTENER_PERFORMS_BIT: i32 = 1 << 13;
     const LISTENER_PERFORMS_ACTION_BIT: i32 = 1 << 14;
-    const DRAWS_CANVAS_BIT: i32 = 1 << 15;
+    // Bit 15 remains reserved for the retired drawCanvas callback.
     const WANTS_KEYBOARD_INPUT_BIT: i32 = 1 << 16;
     const WANTS_TEXT_INPUT_BIT: i32 = 1 << 17;
     const WANTS_GAMEPAD_CONNECT_BIT: i32 = 1 << 18;
@@ -245,9 +245,6 @@ impl OptionalScriptedMethods {
     }
     pub fn data_reverse_converts(&self) -> bool {
         self.has(Self::DATA_REVERSE_CONVERTS_BIT)
-    }
-    pub fn draws_canvas(&self) -> bool {
-        self.has(Self::DRAWS_CANVAS_BIT)
     }
     pub fn wants_keyboard_input(&self) -> bool {
         self.has(Self::WANTS_KEYBOARD_INPUT_BIT)
@@ -577,9 +574,21 @@ impl ScriptAsset {
                 (self.base.serialized_implemented_methods() & OptionalScriptedMethods::METHOD_MASK)
                     as i32,
             );
+            self.warn_retired_draw_canvas();
             self.initted = true;
         }
         self.optional_methods.implemented_methods() as u32
+    }
+
+    fn warn_retired_draw_canvas(&self) {
+        #[cfg(feature = "tools")]
+        if self.base.serialized_implemented_methods() != (1 << 21) - 1
+            && self.base.serialized_implemented_methods() & (1 << 15) != 0
+        {
+            eprintln!(
+                "rive: script implements drawCanvas, which is no longer called; move its body into draw"
+            );
+        }
     }
 
     /// Snapshot the asset before invoking the generator. User code may resolve
@@ -597,6 +606,7 @@ impl ScriptAsset {
                     (asset.base.serialized_implemented_methods()
                         & OptionalScriptedMethods::METHOD_MASK) as i32,
                 );
+                asset.warn_retired_draw_canvas();
                 asset.initted = true;
             }
             Some((

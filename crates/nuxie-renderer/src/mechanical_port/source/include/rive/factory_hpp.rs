@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // include/rive/factory.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
 
 // /*
 //  * Copyright 2022 Rive
@@ -30,6 +30,10 @@
 // namespace ore
 // {
 // class Context;
+// }
+// namespace cmd
+// {
+// class DeferredCanvasHost;
 // }
 //
 // class Factory
@@ -77,6 +81,19 @@
 //     // shifting existing vtable slots.
 //     virtual ore::Context* ore() { return nullptr; }
 //
+//     // The GPU render context an import through this factory should give its
+//     // scripts, as a Factory so this header stays free of gpu types. A render
+//     // context answers with itself; a recording session answers with the one it
+//     // records for, which on web is null until a render texture attaches, so
+//     // callers that deferred an allocation ask again rather than caching the
+//     // null they saw at import. Null means the importer cannot route GPU
+//     // scripting.
+//     virtual Factory* renderContext() { return nullptr; }
+//
+//     // Set when script canvas work must record rather than issue. Null means
+//     // scripts draw straight to the driver.
+//     virtual cmd::DeferredCanvasHost* deferredCanvasHost() { return nullptr; }
+//
 //     rcp<Font> decodeFont(Span<const uint8_t>);
 //
 //     rcp<AudioSource> decodeAudio(Span<const uint8_t>);
@@ -100,7 +117,7 @@ use nuxie_render_api::{
     Aabb, AudioDecodeError, AudioSource, ColorInt, DecodedFont, FillRule, FontDecodeError, RawPath,
 };
 
-use super::refcnt_hpp::{rcp, RefCnt, RefCntTarget};
+use super::refcnt_hpp::{RefCnt, RefCntTarget, rcp};
 use super::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
     RenderShader,
@@ -118,13 +135,34 @@ use super::renderer_hpp::{
 ))]
 pub enum OreContext {
     #[cfg(feature = "native-ore-metal-experimental")]
-    Metal(Box<nuxie_ore_metal::metal::context::ContextMetal>),
+    Metal(std::rc::Rc<std::cell::RefCell<nuxie_ore_metal::metal::context::ContextMetal>>),
     #[cfg(feature = "native-ore-vulkan-experimental")]
-    Vulkan(Box<crate::mechanical_port::vulkan::ContextVulkan>),
+    Vulkan(std::rc::Rc<std::cell::RefCell<crate::mechanical_port::vulkan::ContextVulkan>>),
     #[cfg(feature = "native-webgpu-experimental")]
-    WGPU(Box<crate::mechanical_port::webgpu::ContextWGPU>),
+    WGPU(std::rc::Rc<std::cell::RefCell<crate::mechanical_port::webgpu::ContextWGPU>>),
     #[cfg(feature = "ore-gl")]
-    GL(Box<crate::mechanical_port::webgl2::ContextGL>),
+    GL(std::rc::Rc<std::cell::RefCell<crate::mechanical_port::webgl2::ContextGL>>),
+}
+
+#[cfg(any(
+    feature = "native-ore-metal-experimental",
+    feature = "native-ore-vulkan-experimental",
+    feature = "native-webgpu-experimental",
+    feature = "ore-gl"
+))]
+impl OreContext {
+    pub fn shared_handle(&self) -> nuxie_render_api::OreContextHandle {
+        match self {
+            #[cfg(feature = "native-ore-metal-experimental")]
+            Self::Metal(context) => context.clone(),
+            #[cfg(feature = "native-ore-vulkan-experimental")]
+            Self::Vulkan(context) => context.clone(),
+            #[cfg(feature = "native-webgpu-experimental")]
+            Self::WGPU(context) => context.clone(),
+            #[cfg(feature = "ore-gl")]
+            Self::GL(context) => context.clone(),
+        }
+    }
 }
 #[cfg(not(any(
     feature = "native-ore-metal-experimental",

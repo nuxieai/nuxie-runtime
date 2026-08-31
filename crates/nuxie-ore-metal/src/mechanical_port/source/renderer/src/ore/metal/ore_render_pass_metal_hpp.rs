@@ -32,50 +32,50 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
 // `Retained<T>` is the corresponding strong owner; `Option` preserves each
 // source `nil` state. The non-Apple stand-ins keep this source-shaped
 // translation available to tools that inspect it off Apple.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::runtime::ProtocolObject;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::{
     MTLBuffer, MTLCommandBuffer, MTLIndexType, MTLPrimitiveType, MTLRenderCommandEncoder,
 };
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalEncoder = Option<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalEncoder = Option<()>;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalCommandBuffer = Option<Retained<ProtocolObject<dyn MTLCommandBuffer>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalCommandBuffer = Option<()>;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalBuffer = Option<Retained<ProtocolObject<dyn MTLBuffer>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalBuffer = Option<()>;
 
 // The scalar Metal enum members remain values rather than owners. Stand-ins
 // retain the authored source defaults on non-Apple inspection targets while
 // the Apple branch uses the SDK enum types directly.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalIndexType = MTLIndexType;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NativeMetalIndexType {
     UInt16,
     UInt32,
 }
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalPrimitiveType = MTLPrimitiveType;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NativeMetalPrimitiveType {
     Point,
@@ -119,7 +119,7 @@ pub(crate) struct RenderPassMetalState {
 
 impl Drop for RenderPassMetalState {
     fn drop(&mut self) {
-        #[cfg(target_vendor = "apple")]
+        #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
         if !self.base.m_finished && self.m_mtlEncoder.is_some() {
             self.finish();
         }
@@ -303,7 +303,7 @@ mod tests {
         assert!(std::mem::size_of::<RenderPassMetalInner>() > 0);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn live_encoder_covers_state_binding_draw_and_finish_ownership() {
         use objc2_metal::MTLCreateSystemDefaultDevice;
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn conversion_helpers_cover_every_source_enum_value() {
-        #[cfg(target_vendor = "apple")]
+        #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
         {
             assert_eq!(
                 crate::types::PrimitiveTopology::triangleStrip as u8,

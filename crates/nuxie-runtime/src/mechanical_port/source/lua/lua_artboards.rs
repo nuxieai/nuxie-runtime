@@ -222,14 +222,6 @@ fn artboard_draw(state: &mut LuaState) -> i32 {
     0
 }
 
-fn artboard_draw_canvas(state: &mut LuaState) -> i32 {
-    state
-        .to_rive_mut::<ScriptedArtboard>(1)
-        .artboard_mut()
-        .internal_draw_canvases();
-    0
-}
-
 fn apply_pointer_event(state: &mut LuaState, atom: LuaAtoms) -> i32 {
     let (artboard, event) = state.rive2_mut::<ScriptedArtboard, ScriptedPointerEvent>();
     let result = if let Some(machine) = artboard.state_machine_mut() {
@@ -278,7 +270,6 @@ fn artboard_namecall(state: &mut LuaState) -> i32 {
     let (name, atom) = state.namecall_atom();
     match atom {
         LuaAtoms::Draw => artboard_draw(state),
-        LuaAtoms::DrawCanvas => artboard_draw_canvas(state),
         LuaAtoms::Advance => {
             let seconds = state.check_number(2) as f32;
             let advanced = state.to_rive_mut::<ScriptedArtboard>(1).advance(seconds);

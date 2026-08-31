@@ -814,9 +814,7 @@ pub(crate) fn makeVertexBufferRing(
     ))
 }
 
-fn newBlitTextureAsDrawPipeline(
-    context: &RenderContextWebGPUImpl,
-) -> BlitTextureAsDrawPipeline {
+fn newBlitTextureAsDrawPipeline(context: &RenderContextWebGPUImpl) -> BlitTextureAsDrawPipeline {
     let device = context.device();
     let entries = [
         textureLayoutEntry(
@@ -859,8 +857,7 @@ fn newBlitTextureAsDrawPipeline(
     descriptor.layout = pipelineLayout.Get();
     descriptor.vertex.module = vertex.Get();
     descriptor.vertex.entryPoint = stringView("main");
-    descriptor.primitive.topology =
-        super::webgpu_cpp_decl::PrimitiveTopology::TriangleStrip.into();
+    descriptor.primitive.topology = super::webgpu_cpp_decl::PrimitiveTopology::TriangleStrip.into();
     descriptor.fragment = &fragmentState;
     let renderPipeline = unsafe { device.CreateRenderPipeline(&descriptor) };
     BlitTextureAsDrawPipeline {
@@ -872,7 +869,8 @@ fn newBlitTextureAsDrawPipeline(
 pub(crate) fn generateMipmaps(context: &mut RenderContextWebGPUImpl, texture: &WagyuTexture) {
     let encoder = unsafe { context.m_device.CreateCommandEncoder(std::ptr::null()) };
     if context.m_blitTextureAsDrawPipeline.is_none() {
-        *context.m_blitTextureAsDrawPipeline = Some(Box::new(newBlitTextureAsDrawPipeline(context)));
+        *context.m_blitTextureAsDrawPipeline =
+            Some(Box::new(newBlitTextureAsDrawPipeline(context)));
     }
     let pipeline = context
         .m_blitTextureAsDrawPipeline
@@ -1636,12 +1634,13 @@ pub(crate) fn makeDrawPipeline(
     fragmentState.targets = colorAttachments.as_ptr();
     #[cfg(feature = "native-wagyu-experimental")]
     let mut inputAttachments: [super::webgpu_wagyu_decl::WGPUWagyuInputAttachmentState;
-        PLS_PLANE_COUNT] = std::array::from_fn(
-        |index| super::webgpu_wagyu_decl::WGPUWagyuInputAttachmentState {
-            format: colorAttachments[index].format,
-            usedAsColor: super::webgpu_decl::WGPUOptionalBool_True,
-        },
-    );
+        PLS_PLANE_COUNT] =
+        std::array::from_fn(
+            |index| super::webgpu_wagyu_decl::WGPUWagyuInputAttachmentState {
+                format: colorAttachments[index].format,
+                usedAsColor: super::webgpu_decl::WGPUOptionalBool_True,
+            },
+        );
     #[cfg(feature = "native-wagyu-experimental")]
     let mut wagyuFragmentState = super::webgpu_wagyu_decl::WGPUWagyuFragmentState {
         chain: super::webgpu_decl::WGPUChainedStruct {
@@ -1944,7 +1943,9 @@ pub(crate) fn newDrawPipeline(
                 DrawType::interiorTriangulation => (
                     include_str!("../../generated/atomic_draw_interior_triangles.webgpu_vert.wgsl"),
                     if fixedColor {
-                        include_str!("../../generated/atomic_draw_interior_triangles.webgpu_fixedcolor_frag.wgsl")
+                        include_str!(
+                            "../../generated/atomic_draw_interior_triangles.webgpu_fixedcolor_frag.wgsl"
+                        )
                     } else {
                         include_str!(
                             "../../generated/atomic_draw_interior_triangles.webgpu_frag.wgsl"
@@ -1953,42 +1954,42 @@ pub(crate) fn newDrawPipeline(
                     "atomic_draw_interior_triangles.webgpu.vert",
                     "atomic_draw_interior_triangles.webgpu.frag",
                 ),
-                DrawType::featherAtlasBlit => {
-                    (
-                        include_str!("../../generated/atomic_draw_atlas_blit.webgpu_vert.wgsl"),
-                        if fixedColor {
-                            include_str!("../../generated/atomic_draw_atlas_blit.webgpu_fixedcolor_frag.wgsl")
-                        } else {
-                            include_str!("../../generated/atomic_draw_atlas_blit.webgpu_frag.wgsl")
-                        },
-                        "atomic_draw_atlas_blit.webgpu.vert",
-                        "atomic_draw_atlas_blit.webgpu.frag",
-                    )
-                }
-                DrawType::imageRect => {
-                    (
-                        include_str!("../../generated/atomic_draw_image_rect.webgpu_vert.wgsl"),
-                        if fixedColor {
-                            include_str!("../../generated/atomic_draw_image_rect.webgpu_fixedcolor_frag.wgsl")
-                        } else {
-                            include_str!("../../generated/atomic_draw_image_rect.webgpu_frag.wgsl")
-                        },
-                        "atomic_draw_image_rect.webgpu.vert",
-                        "atomic_draw_image_rect.webgpu.frag",
-                    )
-                }
-                DrawType::imageMesh => {
-                    (
-                        include_str!("../../generated/atomic_draw_image_mesh.webgpu_vert.wgsl"),
-                        if fixedColor {
-                            include_str!("../../generated/atomic_draw_image_mesh.webgpu_fixedcolor_frag.wgsl")
-                        } else {
-                            include_str!("../../generated/atomic_draw_image_mesh.webgpu_frag.wgsl")
-                        },
-                        "atomic_draw_image_mesh.webgpu.vert",
-                        "atomic_draw_image_mesh.webgpu.frag",
-                    )
-                }
+                DrawType::featherAtlasBlit => (
+                    include_str!("../../generated/atomic_draw_atlas_blit.webgpu_vert.wgsl"),
+                    if fixedColor {
+                        include_str!(
+                            "../../generated/atomic_draw_atlas_blit.webgpu_fixedcolor_frag.wgsl"
+                        )
+                    } else {
+                        include_str!("../../generated/atomic_draw_atlas_blit.webgpu_frag.wgsl")
+                    },
+                    "atomic_draw_atlas_blit.webgpu.vert",
+                    "atomic_draw_atlas_blit.webgpu.frag",
+                ),
+                DrawType::imageRect => (
+                    include_str!("../../generated/atomic_draw_image_rect.webgpu_vert.wgsl"),
+                    if fixedColor {
+                        include_str!(
+                            "../../generated/atomic_draw_image_rect.webgpu_fixedcolor_frag.wgsl"
+                        )
+                    } else {
+                        include_str!("../../generated/atomic_draw_image_rect.webgpu_frag.wgsl")
+                    },
+                    "atomic_draw_image_rect.webgpu.vert",
+                    "atomic_draw_image_rect.webgpu.frag",
+                ),
+                DrawType::imageMesh => (
+                    include_str!("../../generated/atomic_draw_image_mesh.webgpu_vert.wgsl"),
+                    if fixedColor {
+                        include_str!(
+                            "../../generated/atomic_draw_image_mesh.webgpu_fixedcolor_frag.wgsl"
+                        )
+                    } else {
+                        include_str!("../../generated/atomic_draw_image_mesh.webgpu_frag.wgsl")
+                    },
+                    "atomic_draw_image_mesh.webgpu.vert",
+                    "atomic_draw_image_mesh.webgpu.frag",
+                ),
                 DrawType::renderPassResolve if fixedColor => (
                     include_str!("../../generated/atomic_resolve.webgpu_vert.wgsl"),
                     include_str!("../../generated/atomic_resolve.webgpu_fixedcolor_frag.wgsl"),
@@ -2071,11 +2072,22 @@ pub(crate) fn newDrawPipeline(
                     "draw_msaa_stencil.frag",
                 ),
                 DrawType::featherAtlasBlit => {
-                    let vertex = match (context.m_capabilities.polyfillVertexStorageBuffers, clipRect) {
-                        (true, true) => include_str!("../../generated/draw_msaa_atlas_blit.webgpu_nossbo_vert.wgsl"),
-                        (true, false) => include_str!("../../generated/draw_msaa_atlas_blit.webgpu_nossbo_noclipdistance_vert.wgsl"),
-                        (false, true) => include_str!("../../generated/draw_msaa_atlas_blit.webgpu_vert.wgsl"),
-                        (false, false) => include_str!("../../generated/draw_msaa_atlas_blit.webgpu_noclipdistance_vert.wgsl"),
+                    let vertex = match (
+                        context.m_capabilities.polyfillVertexStorageBuffers,
+                        clipRect,
+                    ) {
+                        (true, true) => include_str!(
+                            "../../generated/draw_msaa_atlas_blit.webgpu_nossbo_vert.wgsl"
+                        ),
+                        (true, false) => include_str!(
+                            "../../generated/draw_msaa_atlas_blit.webgpu_nossbo_noclipdistance_vert.wgsl"
+                        ),
+                        (false, true) => {
+                            include_str!("../../generated/draw_msaa_atlas_blit.webgpu_vert.wgsl")
+                        }
+                        (false, false) => include_str!(
+                            "../../generated/draw_msaa_atlas_blit.webgpu_noclipdistance_vert.wgsl"
+                        ),
                     };
                     (
                         vertex,
@@ -2090,24 +2102,24 @@ pub(crate) fn newDrawPipeline(
                         "draw_msaa_atlas_blit.webgpu.frag",
                     )
                 }
-                DrawType::imageMesh => {
-                    (
-                        if clipRect {
-                            include_str!("../../generated/draw_msaa_image_mesh.webgpu_vert.wgsl")
-                        } else {
-                            include_str!("../../generated/draw_msaa_image_mesh.webgpu_noclipdistance_vert.wgsl")
-                        },
-                        if fixedColor {
-                            include_str!(
-                                "../../generated/draw_msaa_image_mesh.webgpu_fixedcolor_frag.wgsl"
-                            )
-                        } else {
-                            include_str!("../../generated/draw_msaa_image_mesh.webgpu_frag.wgsl")
-                        },
-                        "draw_msaa_image_mesh.webgpu.vert",
-                        "draw_msaa_image_mesh.webgpu.frag",
-                    )
-                }
+                DrawType::imageMesh => (
+                    if clipRect {
+                        include_str!("../../generated/draw_msaa_image_mesh.webgpu_vert.wgsl")
+                    } else {
+                        include_str!(
+                            "../../generated/draw_msaa_image_mesh.webgpu_noclipdistance_vert.wgsl"
+                        )
+                    },
+                    if fixedColor {
+                        include_str!(
+                            "../../generated/draw_msaa_image_mesh.webgpu_fixedcolor_frag.wgsl"
+                        )
+                    } else {
+                        include_str!("../../generated/draw_msaa_image_mesh.webgpu_frag.wgsl")
+                    },
+                    "draw_msaa_image_mesh.webgpu.vert",
+                    "draw_msaa_image_mesh.webgpu.frag",
+                ),
                 DrawType::renderPassInitialize => (
                     include_str!("../../generated/blit_texture_as_draw_filtered.webgpu_vert.wgsl"),
                     include_str!("../../generated/blit_texture_as_draw_filtered.webgpu_frag.wgsl"),
@@ -4485,13 +4497,14 @@ impl RenderContextHelperBackendContract for RenderContextWebGPUImpl {
         &mut self,
         width: u32,
         height: u32,
-    ) -> rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas> {
+    ) -> rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>{
         makeRenderCanvas(self, width, height)
     }
 
     #[cfg(any(
         feature = "native-ore-metal-experimental",
         feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
         feature = "ore-gl"
     ))]
     fn makeOreContext(
@@ -4500,7 +4513,7 @@ impl RenderContextHelperBackendContract for RenderContextWebGPUImpl {
         makeOreContext(self).map(|context| {
             Box::new(
                 crate::mechanical_port::source::include::rive::factory_hpp::OreContext::WGPU(
-                    context,
+                    std::rc::Rc::new(std::cell::RefCell::new(*context)),
                 ),
             )
         })

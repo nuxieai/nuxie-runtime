@@ -39,6 +39,9 @@ use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRe
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 use crate::{RenderMode, RendererError};
 
+mod ore_context_owner;
+use ore_context_owner::OreContextOwnerCache;
+
 /// Shared renderer projection used when a product adapter owns an exact
 /// `RiveRenderer` outside the primary onscreen frame wrapper (notably a Lua
 /// RenderCanvas frame).
@@ -312,6 +315,17 @@ pub(crate) trait ExactSourceBackend: 'static {
 pub(crate) struct ExactSourceFactoryCore<B: ExactSourceBackend> {
     backend: Rc<RefCell<B>>,
     resource_domain: RenderResourceDomain,
+    ore_owner_cache: OreContextOwnerCache,
+}
+
+impl<B: ExactSourceBackend> Clone for ExactSourceFactoryCore<B> {
+    fn clone(&self) -> Self {
+        Self {
+            backend: self.backend.clone(),
+            resource_domain: self.resource_domain.clone(),
+            ore_owner_cache: self.ore_owner_cache.clone(),
+        }
+    }
 }
 
 impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
@@ -319,6 +333,7 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
         Self {
             backend: Rc::new(RefCell::new(backend)),
             resource_domain: RenderResourceDomain::new(),
+            ore_owner_cache: OreContextOwnerCache::default(),
         }
     }
 
@@ -439,6 +454,34 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
 }
 
 impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
+    fn is_render_context(&self) -> bool {
+        true
+    }
+    fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+        #[cfg(any(
+            feature = "native-ore-metal-experimental",
+            feature = "native-ore-vulkan-experimental",
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        ))]
+        {
+            let context = {
+                let mut backend = self.backend.borrow_mut();
+                unsafe { Pin::get_unchecked_mut(backend.context_mut()) }.oreHandleExecutable()?
+            };
+            return Some(
+                self.ore_owner_cache
+                    .retain(context, self.execution_anchor()),
+            );
+        }
+        #[cfg(not(any(
+            feature = "native-ore-metal-experimental",
+            feature = "native-ore-vulkan-experimental",
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        )))]
+        None
+    }
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
         self.backend.borrow().gpu_canvas_shader_profile()
     }
@@ -606,6 +649,25 @@ impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
         }
         Ok(image)
     }
+
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvasContract>, RenderCanvasError> {
+        let source =
+            self.with_context(|context| context.makeDeferredRenderCanvasExecutable(width, height));
+        if source.get().is_null() {
+            return Err(RenderCanvasError::new(
+                "Deferred RenderCanvas creation returned null",
+            ));
+        }
+        Ok(Box::new(ExactSourceRenderCanvas {
+            source,
+            backend: self.backend.clone(),
+            resource_domain: self.resource_domain.clone(),
+        }))
+    }
 }
 
 struct ExactSourceRenderCanvas<B: ExactSourceBackend> {
@@ -623,6 +685,11 @@ impl<B: ExactSourceBackend> ExactSourceRenderCanvas<B> {
 }
 
 impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceRenderCanvas<B> {
+    fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
+        let mut info = self.render_image().ore_texture_info()?;
+        info.canvas = self.source.get().cast();
+        Some(info)
+    }
     fn width(&self) -> u32 {
         self.source_ref().width()
     }

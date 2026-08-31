@@ -31,23 +31,23 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
 // source `nil` state. The mechanical header is source-shaped and is not wired
 // into the runtime module, but the non-Apple stand-in keeps this translation's
 // declaration shape available to tools that inspect it off Apple.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::runtime::ProtocolObject;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::{MTLBuffer, MTLDevice};
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub(super) type NativeMetalBuffer = Option<Retained<ProtocolObject<dyn MTLBuffer>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 pub(super) type NativeMetalBuffer = Option<()>;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalDevice = Retained<ProtocolObject<dyn MTLDevice>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalDevice = ();
 
 pub trait BufferErrorSink: Send + Sync {
@@ -294,7 +294,7 @@ mod tests {
     use crate::gpu_resource::GPUResourceManagerOwner;
     use crate::types::BufferUsage;
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn live_buffer(size: u32, label: Option<&str>) -> Option<BufferMetal> {
         use objc2_metal::{MTLCreateSystemDefaultDevice, MTLDevice, MTLResourceOptions};
 
@@ -314,7 +314,7 @@ mod tests {
         Some(buffer)
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn current_bytes(buffer: &BufferMetal) -> Vec<u8> {
         let native = buffer.current().expect("initialized Metal backing");
         unsafe {
@@ -326,7 +326,7 @@ mod tests {
         }
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn live_unbound_update_writes_the_current_backing_in_place() {
         let Some(buffer) = live_buffer(8, None) else {
@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(current_bytes(&buffer), [0, 0, 1, 2, 3, 4, 0, 0]);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn live_bound_partial_update_orphans_copies_and_reuses_completed_backing() {
         let Some(buffer) = live_buffer(8, Some("versioned")) else {
@@ -372,7 +372,7 @@ mod tests {
         assert_eq!(current_bytes(&buffer), [11, 12, 13, 14, 15, 16, 17, 18]);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn bound_backing_token_remains_the_exact_backing_after_an_orphaning_update() {
         let Some(buffer) = live_buffer(8, None) else {
@@ -391,7 +391,7 @@ mod tests {
         );
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn update_rejects_out_of_bounds_without_mutating_contents() {
         let Some(buffer) = live_buffer(8, None) else {
@@ -413,7 +413,7 @@ mod tests {
         assert_eq!(current_bytes(&buffer), [0; 8]);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn allocation_failure_reports_error_keeps_current_and_retries_next_update() {
         let Some(buffer) = live_buffer(4, None) else {
@@ -453,7 +453,7 @@ mod tests {
         assert_eq!(context_state.completedSerial(), 5);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn buffer_resource_retains_manager_and_rejects_wrong_backend() {
         let Some(buffer) = live_buffer(4, None) else {

@@ -546,7 +546,12 @@ impl NestedArtboard {
         }
 
         if let Some(artboard) = artboard {
-            let artboard_instance = Artboard::nested_instance_from_handle(&artboard);
+            let factory = self.parent_artboard_handle().and_then(|host| {
+                host.with_downcast::<Artboard, _>(Artboard::factory)
+                    .flatten()
+            });
+            let artboard_instance =
+                Artboard::nested_instance_from_handle_with_factory(&artboard, factory);
             let state_machine_count = artboard
                 .with_downcast::<Artboard, _>(Artboard::state_machine_count)
                 .unwrap_or_default();

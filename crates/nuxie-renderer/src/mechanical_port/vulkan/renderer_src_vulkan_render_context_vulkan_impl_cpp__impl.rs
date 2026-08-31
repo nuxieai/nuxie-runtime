@@ -12,8 +12,7 @@ use super::pipeline_manager_vulkan_decl::{PipelineManagerVulkan, ShaderCompilati
 use super::render_context_vulkan_decl::*;
 use super::render_pass_vulkan_decl::RenderPassOptionsVulkan;
 use super::render_target_vulkan_decl::{
-    RenderTargetVulkan, RenderTargetVulkanApi, RenderTargetVulkanImpl,
-    RenderTargetVulkanKind,
+    RenderTargetVulkan, RenderTargetVulkanApi, RenderTargetVulkanImpl, RenderTargetVulkanKind,
 };
 use super::vkutil_decl::{
     self as vkutil, ImageAccess, ImageAccessAction, Mappability, Texture2D, ViewportFromRect2D,
@@ -21,12 +20,12 @@ use super::vkutil_decl::{
 use super::vulkan_context_decl::{VulkanContext, VulkanFeatures};
 use super::vulkan_shaders_decl as spirv;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast;
-use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp, RefCntTarget};
+use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCntTarget, make_rcp, rcp};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferContract, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
+    CONST_ID, LiteRttiCastFrom, LiteRttiTypeId,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::*;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
@@ -36,17 +35,15 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::{
     RenderContextImpl, RenderContextImplContract,
 };
-use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::{
-    RenderTarget,
-};
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
 use ash::vk;
 use ash::vk::Handle;
 use nuxie_ore_metal::gpu_resource::{GpuResourcePayload, ResourceHandle};
 use nuxie_render_api::{BlendMode, ColorInt};
-use std::ffi::{c_void, CStr};
-use std::mem::{size_of, ManuallyDrop};
+use std::ffi::{CStr, c_void};
+use std::mem::{ManuallyDrop, size_of};
 use std::ptr::NonNull;
 use std::sync::Arc;
 use std::time::Instant;
@@ -1751,12 +1748,12 @@ impl LiveRenderTargetVulkan {
                 .rust_complete_kind
         };
         match kind {
-            RenderTargetVulkanKind::External => callback(unsafe {
-                &mut *self.target.as_ptr().cast::<RenderTargetVulkanImpl>()
-            }),
-            RenderTargetVulkanKind::Texture => callback(unsafe {
-                &mut *self.target.as_ptr().cast::<RenderTargetVulkanTexture>()
-            }),
+            RenderTargetVulkanKind::External => {
+                callback(unsafe { &mut *self.target.as_ptr().cast::<RenderTargetVulkanImpl>() })
+            }
+            RenderTargetVulkanKind::Texture => {
+                callback(unsafe { &mut *self.target.as_ptr().cast::<RenderTargetVulkanTexture>() })
+            }
         }
     }
 
@@ -1790,9 +1787,7 @@ impl LiveRenderTargetVulkan {
         dst_access: ImageAccess,
         action: ImageAccessAction,
     ) -> vk::Image {
-        self.withDispatch(|target| {
-            target.accessTargetImage(command_buffer, dst_access, action)
-        })
+        self.withDispatch(|target| target.accessTargetImage(command_buffer, dst_access, action))
     }
 
     fn accessTargetImageView(
@@ -1801,9 +1796,7 @@ impl LiveRenderTargetVulkan {
         dst_access: ImageAccess,
         action: ImageAccessAction,
     ) -> vk::ImageView {
-        self.withDispatch(|target| {
-            target.accessTargetImageView(command_buffer, dst_access, action)
-        })
+        self.withDispatch(|target| target.accessTargetImageView(command_buffer, dst_access, action))
     }
 
     fn msaaColorTexture(&mut self) -> *mut Texture2D {
@@ -2611,9 +2604,11 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     if desc.interlockMode == InterlockMode::rasterOrdering
         && pending_tess_patches > implementation.m_workarounds.maxInstancesPerRenderPass
     {
-        debug_assert!(!implementation
-            .m_plsTransientUsageFlags
-            .contains(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT));
+        debug_assert!(
+            !implementation
+                .m_plsTransientUsageFlags
+                .contains(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT)
+        );
         debug_assert!(!desc.manuallyResolved);
         options |= RenderPassOptionsVulkan::rasterOrderingInterruptible;
     }
@@ -3230,11 +3225,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             && target.framebufferFormat() == vk::Format::R8G8B8A8_UNORM
         {
             color_view = if desc.colorLoadAction == LoadAction::clear {
-                target.clearTargetImageView(
-                    command,
-                    desc.colorClearValue,
-                    storage_access,
-                )
+                target.clearTargetImageView(command, desc.colorClearValue, storage_access)
             } else {
                 target.accessTargetImageView(command, storage_access, target_action)
             };
@@ -3274,8 +3265,8 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     } else {
         color_view = if desc.colorLoadAction == LoadAction::preserveRenderTarget {
             unsafe {
-                    (&*target.copyTargetImageToOffscreenColorTexture(
-                        command,
+                (&*target.copyTargetImageToOffscreenColorTexture(
+                    command,
                     color_load_access,
                     &draw_bounds,
                 ))
@@ -3283,8 +3274,8 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             }
         } else {
             unsafe {
-                    (&*target.accessOffscreenColorTexture(
-                        command,
+                (&*target.accessOffscreenColorTexture(
+                    command,
                     color_load_access,
                     ImageAccessAction::invalidateContents,
                 ))
@@ -3668,8 +3659,13 @@ impl<'a> PipelineBinder<'a> {
             have_scissor: false,
         }
     }
-    fn bind(&mut self, command: vk::CommandBuffer, pipeline: vk::Pipeline, scissor: IAABB,
-        layout: &DrawPipelineLayoutVulkan) {
+    fn bind(
+        &mut self,
+        command: vk::CommandBuffer,
+        pipeline: vk::Pipeline,
+        scissor: IAABB,
+        layout: &DrawPipelineLayoutVulkan,
+    ) {
         unsafe {
             if pipeline != self.pipeline {
                 self.vk.ashDevice().cmd_bind_pipeline(
@@ -3691,20 +3687,36 @@ impl<'a> PipelineBinder<'a> {
             }
         }
     }
-    fn setEmulatedColorWriteEnable(&self, command: vk::CommandBuffer,
-        layout: &DrawPipelineLayoutVulkan, enabled: bool) {
+    fn setEmulatedColorWriteEnable(
+        &self,
+        command: vk::CommandBuffer,
+        layout: &DrawPipelineLayoutVulkan,
+        enabled: bool,
+    ) {
         assert!(layout.hasColorWriteDisablePushConstant());
         let value: f32 = if enabled { 1.0 } else { 0.0 };
         let range = vkutil::ColorWriteEnablePushConstant;
         unsafe {
-            (self.vk.CmdPushConstants.expect("Vulkan push constants command"))(
-                command, layout.vkPipelineLayout(), range.stage_flags, range.offset,
-                range.size, std::ptr::from_ref(&value).cast());
+            (self
+                .vk
+                .CmdPushConstants
+                .expect("Vulkan push constants command"))(
+                command,
+                layout.vkPipelineLayout(),
+                range.stage_flags,
+                range.offset,
+                range.size,
+                std::ptr::from_ref(&value).cast(),
+            );
         }
     }
 
-    fn setDynamicState(&self, command: vk::CommandBuffer, state: &PipelineState,
-        layout: &DrawPipelineLayoutVulkan) {
+    fn setDynamicState(
+        &self,
+        command: vk::CommandBuffer,
+        state: &PipelineState,
+        layout: &DrawPipelineLayoutVulkan,
+    ) {
         unsafe {
             (self
                 .vk
@@ -3749,8 +3761,10 @@ impl<'a> PipelineBinder<'a> {
             );
             if self.vk.features.colorWriteEnable {
                 let color_write: vk::Bool32 = state.colorWriteEnabled.into();
-                (self.vk.CmdSetColorWriteEnableEXT.expect("color write enable command"))(
-                    command, 1, &color_write);
+                (self
+                    .vk
+                    .CmdSetColorWriteEnableEXT
+                    .expect("color write enable command"))(command, 1, &color_write);
             } else {
                 self.setEmulatedColorWriteEnable(command, layout, state.colorWriteEnabled);
             }
@@ -3893,7 +3907,12 @@ fn submitDrawList(
             } else {
                 render_pass_scissor
             };
-            binder.bind(command, pipeline.m_vkPipeline, desired, draw_pass.pipelineLayout());
+            binder.bind(
+                command,
+                pipeline.m_vkPipeline,
+                desired,
+                draw_pass.pipelineLayout(),
+            );
         }
         match batch.drawType {
             DrawType::midpointFanPatches
@@ -3954,9 +3973,11 @@ fn submitDrawList(
                 if pipeline.is_none() {
                     continue;
                 }
-                debug_assert!(!implementation
-                    .m_workarounds
-                    .needsInterruptibleRenderPasses());
+                debug_assert!(
+                    !implementation
+                        .m_workarounds
+                        .needsInterruptibleRenderPasses()
+                );
                 unsafe {
                     implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
                         command,
@@ -4345,7 +4366,9 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
     ) -> Option<Box<crate::mechanical_port::source::include::rive::factory_hpp::OreContext>> {
         let context = super::ore_context_vulkan_decl::ContextVulkan::Make(Arc::clone(&self.m_vk))?;
         Some(Box::new(
-            crate::mechanical_port::source::include::rive::factory_hpp::OreContext::Vulkan(context),
+            crate::mechanical_port::source::include::rive::factory_hpp::OreContext::Vulkan(
+                std::rc::Rc::new(std::cell::RefCell::new(*context)),
+            ),
         ))
     }
     resize_buffer!(
@@ -4511,12 +4534,16 @@ pub(crate) unsafe fn MakeContext(
         return None;
     }
     if properties.vendor_id == vkutil::Imagination && properties.api_version < vk::API_VERSION_1_3 {
-        eprintln!("ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.3 on PowerVR chipsets.");
+        eprintln!(
+            "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.3 on PowerVR chipsets."
+        );
         return None;
     }
     let mut implementation = Box::new(RenderContextVulkanImpl::new(vk_context, options));
     if options.forceAtomicMode && !implementation.platformFeatures().supportsAtomicMode {
-        eprintln!("ERROR: Requested \"atomic\" mode but Vulkan does not support fragmentStoresAndAtomics on this platform.");
+        eprintln!(
+            "ERROR: Requested \"atomic\" mode but Vulkan does not support fragmentStoresAndAtomics on this platform."
+        );
         return None;
     }
     implementation.initGPUObjects(options.shaderCompilationMode);

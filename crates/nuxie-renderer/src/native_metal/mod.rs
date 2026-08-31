@@ -59,13 +59,13 @@ mod render_canvas;
 #[cfg(test)]
 #[allow(dead_code)]
 mod render_target;
-mod source_capabilities;
 #[cfg(test)]
 #[allow(dead_code)]
 mod samplers;
 #[cfg(test)]
 #[allow(dead_code)]
 mod shader_compile_plan;
+mod source_capabilities;
 #[cfg(test)]
 #[allow(dead_code)]
 mod tessellation_resource;
@@ -77,15 +77,13 @@ mod upload_buffer_ring;
 use super::gpu;
 use super::{BackendWorkMetrics, RenderMode, RendererError};
 use crate::mechanical_port::source::include::rive::renderer_hpp::RendererContract;
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RiveRenderBufferHandle;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::RiveRenderer;
 use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
-use source_capabilities::MetalCapabilitySelection;
-#[cfg(test)]
-use source_capabilities::AtomicBarrierType;
 #[cfg(test)]
 use capabilities::{select_capabilities, ApplePlatform, MetalDeviceCapabilities};
 #[cfg(any())]
@@ -95,25 +93,27 @@ use nuxie_render_api::{
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderCanvas, RenderCanvasError,
     RenderImage, RenderPaint, RenderPath, RenderShader, Renderer,
 };
-use objc2::runtime::{AnyObject, ProtocolObject};
 #[cfg(test)]
 use objc2::msg_send;
 use objc2::rc::Retained;
+use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2_execution::ActualMetalExecutionInventory;
 #[cfg(test)]
 use objc2_foundation::NSError;
-use objc2_metal::{
-    MTLBuffer, MTLCreateSystemDefaultDevice, MTLDevice, MTLOrigin,
-    MTLPixelFormat, MTLRegion, MTLResource,
-    MTLSize, MTLStorageMode, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
-};
 #[cfg(test)]
 use objc2_metal::MTLGPUFamily;
 #[cfg(test)]
-use objc2_metal::{MTLRenderPipelineDescriptor, MTLRenderPipelineState};
-#[cfg(test)]
 use objc2_metal::MTLLibrary;
+use objc2_metal::{
+    MTLBuffer, MTLCreateSystemDefaultDevice, MTLDevice, MTLOrigin, MTLPixelFormat, MTLRegion,
+    MTLResource, MTLSize, MTLStorageMode, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
+};
+#[cfg(test)]
+use objc2_metal::{MTLRenderPipelineDescriptor, MTLRenderPipelineState};
 pub use render_canvas::NativeMetalRenderCanvas;
+#[cfg(test)]
+use source_capabilities::AtomicBarrierType;
+use source_capabilities::MetalCapabilitySelection;
 use std::any::Any;
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -122,10 +122,10 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::Arc;
 
-pub use drawable::NativeMetalDrawableFrame;
 pub use context_options::{
     NativeMetalContextOptions, NativeMetalSynthesizedFailureType, ShaderCompilationMode,
 };
+pub use drawable::NativeMetalDrawableFrame;
 #[cfg(test)]
 const INLINE_VERTEX_BYTE_LIMIT: usize = 4_096;
 
@@ -171,7 +171,6 @@ impl objc2_execution::NativeMetalHostCallbacks for MechanicalMetalHost {
             None
         }
     }
-
 }
 
 #[link(name = "System")]
@@ -452,6 +451,20 @@ impl NativeMetalFactory {
         clear_color: u32,
         collect_work_metrics: bool,
     ) -> Result<NativeMetalFrame, RendererError> {
+        self.begin_frame_with_load_action(clear_color, collect_work_metrics, LoadAction::clear)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn begin_frame_preserving(&self) -> Result<NativeMetalFrame, RendererError> {
+        self.begin_frame_with_load_action(0, false, LoadAction::preserveRenderTarget)
+    }
+
+    fn begin_frame_with_load_action(
+        &self,
+        clear_color: u32,
+        collect_work_metrics: bool,
+        load_action: LoadAction,
+    ) -> Result<NativeMetalFrame, RendererError> {
         let mechanical = self.mechanical_context()?;
         let (renderer, frame_number, resource_domain) = {
             let mut mechanical_context = mechanical.borrow_mut();
@@ -467,7 +480,7 @@ impl NativeMetalFactory {
                     self.target_height,
                 )?;
             }
-            mechanical_context.begin_frame(clear_color)?;
+            mechanical_context.begin_frame_with_load_action(clear_color, load_action)?;
             let context =
                 unsafe { Pin::get_unchecked_mut(mechanical_context.render_context_mut()) };
             (
@@ -625,12 +638,12 @@ impl NativeMetalFactory {
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
-    pub(crate) fn begin_drawable_frame_parts<'a>(
+    pub(crate) fn begin_drawable_frame_parts(
         &self,
-        drawable: &'a ProtocolObject<dyn objc2_metal::MTLDrawable>,
+        drawable: &ProtocolObject<dyn objc2_metal::MTLDrawable>,
         texture: Retained<ProtocolObject<dyn MTLTexture>>,
         clear_color: u32,
-    ) -> Result<NativeMetalDrawableFrame<'a>, RendererError> {
+    ) -> Result<NativeMetalDrawableFrame, RendererError> {
         let (expected_width, expected_height) = self.dimensions();
         if texture.pixelFormat() != MTLPixelFormat::BGRA8Unorm {
             return Err(RendererError::InvalidDrawable(
@@ -666,7 +679,103 @@ impl NativeMetalFactory {
     }
 }
 
+/// Project the exact renderer-owned image through ORE's typed Metal bridge.
+/// The mechanical execution anchor proves the source texture's backend before
+/// interpreting its nativeHandle as an Objective-C MTLTexture.
+#[cfg(feature = "native-ore-metal-experimental")]
+pub(crate) fn ore_image_texture_info(
+    image: &RiveRenderImageHandle,
+    execution_anchor: &Rc<dyn Any>,
+    width: u32,
+    height: u32,
+) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
+    if !execution_anchor.is::<RefCell<mechanical_render_context::MechanicalRenderContext>>() {
+        return None;
+    }
+    let source = image.source_texture_for_execution_anchor(execution_anchor)?;
+    // SAFETY: the checked mechanical execution anchor and retained source
+    // image identify the exact TextureMetal nativeHandle implementation.
+    let native = unsafe { source.as_ref().nativeHandle() };
+    let texture = unsafe { Retained::<AnyObject>::retain(native.cast()) }.map(|texture| unsafe {
+        Retained::cast_unchecked::<ProtocolObject<dyn MTLTexture>>(texture)
+    });
+    let owner = Rc::new((
+        nuxie_ore_metal::metal::context::MetalRiveTextureBridge { texture },
+        image.clone(),
+    ));
+    let texture = std::ptr::from_ref(&owner.0).cast_mut().cast();
+    Some(nuxie_ore_metal::context::CanvasTextureInfo {
+        canvas: std::ptr::null_mut(),
+        texture,
+        width,
+        height,
+        owner: Some(owner),
+    })
+}
+
 impl Factory for NativeMetalFactory {
+    fn gpu_canvas_shader_profile(&self) -> nuxie_render_api::GpuCanvasShaderProfile {
+        nuxie_render_api::GpuCanvasShaderProfile::TrustedAppleMetal
+    }
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        artifact: &nuxie_render_api::GpuCanvasShaderArtifact,
+    ) -> Result<
+        std::sync::Arc<dyn nuxie_render_api::RenderGpuCanvasShader>,
+        nuxie_render_api::GpuCanvasError,
+    > {
+        let context = self
+            .ore()
+            .ok_or_else(nuxie_render_api::GpuCanvasError::unsupported)?;
+        let anchor = self
+            .mechanical_context()
+            .map_err(|error| nuxie_render_api::GpuCanvasError::new(error.to_string()))?;
+        let occurrence = crate::authored_ore_shader::ExactGpuCanvasShaderOccurrence::compile(
+            &mut *context.borrow_mut(),
+            self.gpu_canvas_shader_profile(),
+            artifact,
+            anchor,
+        )?;
+        #[allow(clippy::arc_with_non_send_sync)]
+        Ok(std::sync::Arc::new(occurrence))
+    }
+    fn make_gpu_canvas_shader_occurrence(
+        &mut self,
+        prepared: &std::sync::Arc<dyn nuxie_render_api::RenderGpuCanvasShader>,
+    ) -> Result<
+        std::sync::Arc<dyn nuxie_render_api::RenderGpuCanvasShader>,
+        nuxie_render_api::GpuCanvasError,
+    > {
+        let prepared = prepared
+            .as_any()
+            .downcast_ref::<crate::authored_ore_shader::ExactGpuCanvasShaderOccurrence>()
+            .ok_or_else(|| {
+                nuxie_render_api::GpuCanvasError::new("prepared shader belongs to another renderer")
+            })?;
+        let anchor: Rc<dyn Any> = self
+            .mechanical_context()
+            .map_err(|error| nuxie_render_api::GpuCanvasError::new(error.to_string()))?;
+        if !Rc::ptr_eq(&prepared.execution_anchor, &anchor) {
+            return Err(nuxie_render_api::GpuCanvasError::new(
+                "prepared shader belongs to another Metal context",
+            ));
+        }
+        self.make_gpu_canvas_shader_artifact(&prepared.artifact)
+    }
+    fn is_render_context(&self) -> bool {
+        true
+    }
+    fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+        #[cfg(feature = "native-ore-metal-experimental")]
+        {
+            let mechanical = self.mechanical_context().ok()?;
+            let mut mechanical = mechanical.borrow_mut();
+            return unsafe { std::pin::Pin::get_unchecked_mut(mechanical.render_context_mut()) }
+                .oreHandleExecutable();
+        }
+        #[cfg(not(feature = "native-ore-metal-experimental"))]
+        None
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -791,9 +900,7 @@ impl Factory for NativeMetalFactory {
             ));
         };
         let mechanical = self.mechanical_context().map_err(|_| {
-            nuxie_render_api::GpuCanvasError::new(
-                "GPU context not available for Image:view()",
-            )
+            nuxie_render_api::GpuCanvasError::new("GPU context not available for Image:view()")
         })?;
         let domain = mechanical.borrow().resource_domain();
         if source.source_base_for(&domain).is_none() || !source.has_source_texture() {
@@ -1715,6 +1822,14 @@ impl NativeMetalFrame {
 }
 
 impl NativeMetalFrame {
+    #[cfg(test)]
+    pub(crate) fn finish_without_readback(self) -> Result<(), RendererError> {
+        self.mechanical
+            .borrow_mut()
+            .finish(self.frame_number, self.frame_number)?;
+        Ok(())
+    }
+
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
         Ok(self.finish_for_benchmark()?.pixels)
     }
@@ -2699,10 +2814,9 @@ fn make_native_target_texture(
     };
     descriptor.setStorageMode(MTLStorageMode::Shared);
     descriptor.setUsage(MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead);
-    device.newTextureWithDescriptor(&descriptor)
-        .ok_or_else(|| {
-            RendererError::NativeMetal("failed to allocate native target texture".into())
-        })
+    device.newTextureWithDescriptor(&descriptor).ok_or_else(|| {
+        RendererError::NativeMetal("failed to allocate native target texture".into())
+    })
 }
 
 fn source_image_sampler(
@@ -3036,6 +3150,40 @@ mod tests {
         expected.push("oreContext");
         expected.extend(["implementation", "base"]);
         assert_eq!(takeRenderContextDropTrace(), expected);
+    }
+
+    #[cfg(feature = "native-ore-metal-experimental")]
+    #[test]
+    fn source_canvas_and_image_project_retained_typed_ore_bridges() {
+        use nuxie_ore_metal::metal::context::{MetalRenderCanvasBridge, MetalRiveTextureBridge};
+
+        let mut factory = NativeMetalFactory::new(4, 3).expect("native Metal factory");
+        let ore = factory.ore().expect("the renderer's shared ORE context");
+        let canvas = factory
+            .make_metal_render_canvas(4, 3)
+            .expect("source canvas");
+        let native = canvas.retained_metal_texture().expect("canvas texture");
+        let image = canvas.render_image();
+        let image_info = image.ore_texture_info().expect("typed image projection");
+        let canvas: nuxie_render_api::RenderCanvasHandle = Rc::new(RefCell::new(Box::new(canvas)));
+        let canvas_info = nuxie_render_api::canvas_texture_info(&canvas);
+        // Both packets must keep their actual bridge allocations alive after
+        // the temporary upper handles leave scope.
+        drop(image);
+        drop(canvas);
+        let image_bridge = unsafe { &*image_info.texture.cast::<MetalRiveTextureBridge>() };
+        assert_eq!(
+            Retained::as_ptr(image_bridge.texture.as_ref().unwrap()),
+            Retained::as_ptr(&native)
+        );
+        let canvas_bridge = unsafe { &*canvas_info.canvas.cast::<MetalRenderCanvasBridge>() };
+        assert_eq!((canvas_bridge.width, canvas_bridge.height), (4, 3));
+        assert_eq!(
+            Retained::as_ptr(canvas_bridge.texture.as_ref().unwrap()),
+            Retained::as_ptr(&native)
+        );
+        assert!(unsafe { ore.borrow_mut().wrapCanvasTextureInfo(canvas_info) }.is_some());
+        assert!(unsafe { ore.borrow_mut().wrapImageSampleView(image_info) }.is_some());
     }
 
     #[cfg(feature = "native-ore-metal-experimental")]

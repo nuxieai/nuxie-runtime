@@ -38,14 +38,16 @@ impl ScriptedLayout {
         };
         let mut host = ScriptUpdateRequestHost::default();
         // Upstream passes one native Vec2D, not two scalar arguments.
-        let _ = instance.borrow_mut().call_optional_method(
+        if let Err(error) = instance.borrow_mut().call_optional_method(
             ScriptMethod::Resize,
             &[ScriptValue::Vec2 {
                 x: size.x,
                 y: size.y,
             }],
             &mut host,
-        );
+        ) {
+            eprintln!("resize failed: {error}");
+        }
         if host.take_requested() {
             self.base.base.mark_needs_update();
         }

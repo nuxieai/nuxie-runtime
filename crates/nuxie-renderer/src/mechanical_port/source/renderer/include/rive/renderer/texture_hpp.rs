@@ -17,10 +17,7 @@
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCnt, RefCntTarget};
 use core::ffi::c_void;
-#[cfg(any(
-    feature = "native-webgpu-experimental",
-    feature = "ore-gl"
-))]
+#[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
 use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalReleaseRoute};
 
 pub type NativeHandleFn = unsafe fn(*const Texture) -> *mut c_void;
@@ -90,15 +87,9 @@ pub struct Texture {
     // weak route returns destruction to the owner thread, while the scalar
     // identity allows raw native-name adoption to reject a stale or foreign
     // context before invoking `nativeHandle()`.
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
     pub(crate) rust_final_release_route: Option<OwnerThreadFinalReleaseRoute>,
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
     pub(crate) rust_execution_identity: Option<(u64, u64)>,
 }
 
@@ -117,10 +108,7 @@ unsafe impl RefCntTarget for Texture {
 
     unsafe fn onRefCntReachedZero(ptr: *const Self) {
         let ptr = ptr.cast_mut();
-        #[cfg(any(
-            feature = "native-webgpu-experimental",
-            feature = "ore-gl"
-        ))]
+        #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
         if let Some(route) = unsafe { &*ptr }.rust_final_release_route.as_ref() {
             unsafe fn destroy_on_owner_thread(payload: usize) {
                 let ptr = payload as *mut Texture;
@@ -179,10 +167,20 @@ impl Texture {
         self.m_nativeHandle = dispatch;
     }
 
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
+    /// Rebind the Rust lifetime sidecar when GL materializes a deferred canvas backing.
+    #[cfg(feature = "ore-gl")]
+    pub(crate) fn rebind_owner_thread_execution(
+        &mut self,
+        route: OwnerThreadFinalReleaseRoute,
+        domain: u64,
+        generation: u64,
+    ) {
+        self.rust_final_release_route = Some(route);
+        self.rust_execution_identity = Some((domain, generation));
+    }
+
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
     pub(crate) fn install_owner_thread_execution(
         &mut self,
         route: OwnerThreadFinalReleaseRoute,
@@ -197,15 +195,8 @@ impl Texture {
         self.rust_execution_identity = Some((domain, generation));
     }
 
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
-    pub(crate) fn belongs_to_owner_thread_execution(
-        &self,
-        domain: u64,
-        generation: u64,
-    ) -> bool {
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
+    pub(crate) fn belongs_to_owner_thread_execution(&self, domain: u64, generation: u64) -> bool {
         self.rust_execution_identity == Some((domain, generation))
     }
 }

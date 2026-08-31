@@ -793,6 +793,10 @@ impl File {
         let Some(vm) = vm else {
             return;
         };
+        let factory = file.with_file(|file| file.factory.clone());
+        vm.with_vm_mut(|vm| {
+            factory.with_factory_mut(|factory| vm.route_to_import_factory(factory))
+        });
         if let Err(error) = vm.with_vm_mut(|vm| vm.install_native_file_assets(file.downgrade())) {
             eprintln!("{error}");
         }

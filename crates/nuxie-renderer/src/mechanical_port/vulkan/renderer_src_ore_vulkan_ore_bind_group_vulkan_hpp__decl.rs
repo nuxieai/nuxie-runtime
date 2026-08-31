@@ -116,6 +116,9 @@ impl DerefMut for BindGroupVulkan {
 }
 
 unsafe impl GpuResourcePayload for BindGroupVulkan {
+    fn bind_group_base(&self) -> Option<&BindGroup> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
     }

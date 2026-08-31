@@ -3,9 +3,7 @@
 
 #![allow(non_camel_case_types, non_snake_case)]
 
-use super::gles3_decl::{
-    stampCurrentGLObject, GLCapabilities, GLExecutionStamp, GLenum, GLuint,
-};
+use super::gles3_decl::{GLCapabilities, GLExecutionStamp, GLenum, GLuint, stampCurrentGLObject};
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_include_rive_renderer_gl_gl_utils.hpp");
@@ -13,6 +11,24 @@ pub(crate) const PINNED_SOURCE: &str =
 // The leading underscore is source-significant: generated minification never
 // collides with this fallback uniform name.
 pub(crate) const BASE_INSTANCE_UNIFORM_NAME: &str = "_baseInstance";
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum GLObjectType {
+    buffer,
+    texture,
+    framebuffer,
+    renderbuffer,
+    vertexArray,
+    shader,
+    program,
+}
+pub(crate) type GLContextID = u64;
+pub(crate) fn CurrentContextID() -> GLContextID {
+    super::gles3_decl::currentGLExecutionIdentity().map_or(0, |v| v.0)
+}
+pub(crate) use super::gl_utils_impl::{
+    AbandonedNameCount, ReclaimAbandonedNames, ReclaimedNameCount,
+};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -45,6 +61,33 @@ pub(crate) struct GLObject {
 }
 
 impl GLObject {
+    pub(crate) fn destroy(&mut self, kind: GLObjectType) {
+        if self.m_id == 0 {
+            return;
+        }
+        if let Some(stamp) = &self.executionStamp {
+            let owner = (stamp.domain().key(), stamp.generation());
+            if Some(owner) != super::gles3_decl::currentGLExecutionIdentity() {
+                super::gl_utils_impl::abandon_name(kind, self.m_id, owner);
+                self.m_id = 0;
+                self.executionStamp = None;
+                return;
+            }
+        }
+        self.withDeleteCurrent(|| super::gl_utils_impl::delete_name(kind, self.m_id));
+        self.m_id = 0;
+        self.executionStamp = None;
+    }
+    pub(crate) fn adopt(&mut self, kind: GLObjectType, rhs: &mut Self) {
+        self.destroy(kind);
+        self.m_id = std::mem::replace(&mut rhs.m_id, 0);
+        self.executionStamp = rhs.executionStamp.take();
+    }
+    pub(crate) fn adoptName(&mut self, kind: GLObjectType, id: GLuint) {
+        self.destroy(kind);
+        self.m_id = id;
+        self.executionStamp = stampCurrentGLObject(id);
+    }
     pub(crate) fn fromAdoptedID(adoptedID: GLuint) -> Self {
         Self {
             m_id: adoptedID,
@@ -105,7 +148,10 @@ impl GLObject {
         callback();
 
         #[cfg(not(test))]
-        debug_assert_eq!(self.m_id, 0, "nonzero GL objects always carry an execution stamp");
+        debug_assert_eq!(
+            self.m_id, 0,
+            "nonzero GL objects always carry an execution stamp"
+        );
     }
 }
 
@@ -294,13 +340,7 @@ impl Shader {
         sources: &[&str],
         capabilities: &GLCapabilities,
     ) {
-        super::gl_utils_impl::compileOwnedShader(
-            self,
-            shaderType,
-            defines,
-            sources,
-            capabilities,
-        )
+        super::gl_utils_impl::compileOwnedShader(self, shaderType, defines, sources, capabilities)
     }
 
     pub(crate) fn reset(&mut self, adoptedID: GLuint) {

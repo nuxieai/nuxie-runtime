@@ -276,7 +276,7 @@ impl RenderPass {
 }
 
 // } // namespace rive::ore
-#[cfg(all(test, target_vendor = "apple"))]
+#[cfg(all(test, all(target_vendor = "apple", feature = "metal-backend")))]
 mod tests {
     use super::*;
     use crate::gpu_resource::ResourceHandle;
@@ -297,9 +297,11 @@ mod tests {
             sampleCount: sample_count,
             ..TextureDesc::default()
         };
-        let texture =
-            crate::gpu_resource::ResourceHandle::new(None, TextureMetal::new(&texture_desc))
-                .erase();
+        let texture = crate::gpu_resource::ResourceHandle::new_texture(
+            None,
+            TextureMetal::new(&texture_desc),
+        )
+        .erase();
         let view_desc = TextureViewDesc {
             texture: Some(&texture),
             dimension: TextureViewDimension::texture2D,

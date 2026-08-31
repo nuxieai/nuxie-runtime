@@ -1,6 +1,6 @@
 /*
  * Mechanical translation of the complete pinned source file.
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
  * The literal source is retained below in declaration/order form.
  */
 
@@ -105,6 +105,7 @@
 // void RiveRenderPath::addRenderPathBackwards(const RenderPath* path,
 //                                             const Mat2D& transform)
 // {
+//     assert(m_rawPathMutationLockCount == 0);
 //     auto riveRenderPath = static_cast<const RiveRenderPath*>(path);
 //     RawPath::Iter transformedPathIter =
 //         m_rawPath.addPathBackwards(riveRenderPath->m_rawPath, &transform);
@@ -118,7 +119,9 @@
 //
 // void RiveRenderPath::addRawPath(const RawPath& path)
 // {
+//     assert(m_rawPathMutationLockCount == 0);
 //     m_rawPath.addPath(path, nullptr);
+//     m_dirt = kAllDirt;
 // }
 //
 // const AABB& RiveRenderPath::getBounds() const
@@ -517,6 +520,7 @@ impl RiveRenderPath {
         self.m_dirt.set(u32::MAX);
     }
     pub fn addRenderPathBackwardsSource(&mut self, path: &RiveRenderPath, matrix: Mat2D) {
+        assert_eq!(self.m_rawPathMutationLockCount.get(), 0);
         let verb_start = self.m_rawPath.verbs().len();
         let point_start = self.m_rawPath.points().len();
         self.m_rawPath.add_path_backwards(&path.m_rawPath, matrix);

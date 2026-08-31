@@ -403,6 +403,8 @@ pub(crate) struct CanvasSourceTextureGLImpl {
     pub(crate) m_owner: *mut RenderContextGLImpl,
     pub(crate) m_glID: GLuint,
     pub(crate) rust_canvas_registry: WeakCanvasMirrorRegistry,
+    pub(crate) rust_released_canvas_targets: std::sync::Weak<Mutex<Vec<GLuint>>>,
+    pub(crate) rust_has_released_canvas_targets: std::sync::Weak<std::sync::atomic::AtomicBool>,
 }
 
 #[repr(C)]
@@ -483,6 +485,8 @@ pub(crate) struct RenderContextGLImpl {
     pub(crate) m_state: ManuallyDrop<GLStateOwner>,
     pub(crate) m_testForAdvancedBlendError: bool,
     pub(crate) m_canvasMirrors: ManuallyDrop<CanvasMirrorRegistry>,
+    pub(crate) m_releasedCanvasTargets: std::sync::Arc<Mutex<Vec<GLuint>>>,
+    pub(crate) m_hasReleasedCanvasTargets: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
     pub(crate) rust_execution: ManuallyDrop<GLExecutionStamp>,
     pub(crate) rust_source_renderer_string: ManuallyDrop<Vec<u8>>,
@@ -599,7 +603,7 @@ pub(crate) fn MakeContextDefault(
 }
 
 pub(crate) const SOURCE_CONTEXT_OPTION_FIELD_COUNT: usize = 3;
-pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 40;
+pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 43;
 pub(crate) const SOURCE_CANVAS_MIRROR_ENTRY_FIELD_COUNT: usize = 6;
 pub(crate) const SOURCE_FEATHER_ATLAS_PROGRAM_FIELD_COUNT: usize = 2;
 pub(crate) const SOURCE_DRAW_SHADER_FIELD_COUNT: usize = 1;
@@ -607,9 +611,9 @@ pub(crate) const SOURCE_DRAW_PROGRAM_FIELD_COUNT: usize = 7;
 pub(crate) const SOURCE_GL_FLUSH_INJECTOR_FIELD_COUNT: usize = 2;
 pub(crate) const SOURCE_GL_PIPELINE_MANAGER_FIELD_COUNT: usize = 1;
 pub(crate) const SOURCE_PLS_IMPL_FIELD_COUNT: usize = 1;
-pub(crate) const SOURCE_FIELD_DENOMINATOR: usize = 63;
+pub(crate) const SOURCE_FIELD_DENOMINATOR: usize = 66;
 pub(crate) const RUST_RENDER_CONTEXT_SIDECAR_COUNT: usize = 2;
-const _: [(); 21_790] = [(); PINNED_SOURCE.len()];
+const _: [(); 23132] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -617,9 +621,9 @@ mod tests {
 
     #[test]
     fn frozen_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 580);
+        assert_eq!(PINNED_SOURCE.lines().count(), 611);
         assert_eq!(SOURCE_CONTEXT_OPTION_FIELD_COUNT, 3);
-        assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 40);
+        assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 43);
         assert_eq!(SOURCE_CANVAS_MIRROR_ENTRY_FIELD_COUNT, 6);
         assert_eq!(SOURCE_FEATHER_ATLAS_PROGRAM_FIELD_COUNT, 2);
         assert_eq!(SOURCE_DRAW_SHADER_FIELD_COUNT, 1);
@@ -627,7 +631,7 @@ mod tests {
         assert_eq!(SOURCE_GL_FLUSH_INJECTOR_FIELD_COUNT, 2);
         assert_eq!(SOURCE_GL_PIPELINE_MANAGER_FIELD_COUNT, 1);
         assert_eq!(SOURCE_PLS_IMPL_FIELD_COUNT, 1);
-        assert_eq!(SOURCE_FIELD_DENOMINATOR, 63);
+        assert_eq!(SOURCE_FIELD_DENOMINATOR, 66);
         assert_eq!(std::mem::offset_of!(RenderContextGLImpl, base), 0);
         assert!(
             std::mem::offset_of!(RenderContextGLImpl, rust_execution)

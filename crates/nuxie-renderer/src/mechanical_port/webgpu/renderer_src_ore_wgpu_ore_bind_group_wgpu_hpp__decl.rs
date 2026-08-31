@@ -75,9 +75,7 @@ pub(crate) struct BindGroupWGPU {
 impl BindGroupWGPU {
     pub(crate) fn new(context: &mut ContextWGPU) -> Self {
         Self {
-            base: ManuallyDrop::new(
-                nuxie_ore_metal::new_bind_group_backend_base_without_manager(),
-            ),
+            base: ManuallyDrop::new(nuxie_ore_metal::new_bind_group_backend_base_without_manager()),
             m_uboEntries: ManuallyDrop::new(Vec::new()),
             m_texEntries: ManuallyDrop::new(Vec::new()),
             m_sampEntries: ManuallyDrop::new(Vec::new()),
@@ -138,6 +136,9 @@ impl DerefMut for BindGroupWGPU {
 }
 
 unsafe impl GpuResourcePayload for BindGroupWGPU {
+    fn bind_group_base(&self) -> Option<&BindGroup> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
     }

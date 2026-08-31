@@ -50,6 +50,12 @@ impl WebGl2Factory {
 }
 
 impl Factory for WebGl2Factory {
+    fn is_render_context(&self) -> bool {
+        true
+    }
+    fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+        self.core.ore()
+    }
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
         self.core.gpu_canvas_shader_profile()
     }
@@ -141,6 +147,13 @@ impl Factory for WebGl2Factory {
         height: u32,
     ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
         self.core.make_render_canvas(width, height)
+    }
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.core.make_deferred_render_canvas(width, height)
     }
 }
 

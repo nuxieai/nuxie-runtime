@@ -126,12 +126,13 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    DrawContents, FlushDescriptor, InterlockMode, IAABB,
+    DrawContents, FlushDescriptor, IAABB, InterlockMode,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 #[cfg(any(
     feature = "native-ore-metal-experimental",
     feature = "native-ore-vulkan-experimental",
+    feature = "native-webgpu-experimental",
     feature = "ore-gl"
 ))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::OreContext;
@@ -341,9 +342,13 @@ pub trait RenderContextHelperBackendContract:
         let _ = (width, height);
         rcp::new()
     }
+    fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
+        self.makeRenderCanvas(width, height)
+    }
     #[cfg(any(
         feature = "native-ore-metal-experimental",
         feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
         feature = "ore-gl"
     ))]
     fn makeOreContext(&mut self) -> Option<Box<OreContext>>;
@@ -429,9 +434,13 @@ where
     fn makeRenderCanvas(&mut self, w: u32, h: u32) -> rcp<RenderCanvas> {
         RenderContextHelperBackendContract::makeRenderCanvas(self, w, h)
     }
+    fn makeDeferredRenderCanvas(&mut self, w: u32, h: u32) -> rcp<RenderCanvas> {
+        RenderContextHelperBackendContract::makeDeferredRenderCanvas(self, w, h)
+    }
     #[cfg(any(
         feature = "native-ore-metal-experimental",
         feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
         feature = "ore-gl"
     ))]
     fn makeOreContext(&mut self) -> Option<Box<OreContext>> {

@@ -3,8 +3,8 @@
 
 #![allow(non_snake_case)]
 
-use super::webgpu_cpp_decl::{Queue as WagyuQueue, Texture as WagyuTexture};
 use super::webgpu_cpp_decl::TextureView as WagyuTextureView;
+use super::webgpu_cpp_decl::{Queue as WagyuQueue, Texture as WagyuTexture};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, GPUResource, GpuResourcePayload};
 use nuxie_ore_metal::texture::{Texture, TextureApi, TextureUploadError, TextureView};
 use nuxie_ore_metal::types::{
@@ -35,10 +35,18 @@ impl TextureWGPU {
         }
     }
 
-    pub(crate) fn nativeTexture(&self) -> &WagyuTexture { &self.m_wgpuTexture }
-    pub(crate) fn queue(&self) -> &WagyuQueue { &self.m_wgpuQueue }
-    pub(crate) fn setNativeTexture(&mut self, texture: WagyuTexture) { *self.m_wgpuTexture = texture; }
-    pub(crate) fn setQueue(&mut self, queue: WagyuQueue) { *self.m_wgpuQueue = queue; }
+    pub(crate) fn nativeTexture(&self) -> &WagyuTexture {
+        &self.m_wgpuTexture
+    }
+    pub(crate) fn queue(&self) -> &WagyuQueue {
+        &self.m_wgpuQueue
+    }
+    pub(crate) fn setNativeTexture(&mut self, texture: WagyuTexture) {
+        *self.m_wgpuTexture = texture;
+    }
+    pub(crate) fn setQueue(&mut self, queue: WagyuQueue) {
+        *self.m_wgpuQueue = queue;
+    }
 }
 
 impl Drop for TextureWGPU {
@@ -54,27 +62,51 @@ impl Drop for TextureWGPU {
 
 impl Deref for TextureWGPU {
     type Target = Texture;
-    fn deref(&self) -> &Self::Target { &self.base }
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
 }
 impl DerefMut for TextureWGPU {
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.base }
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
 }
 
 unsafe impl Send for TextureWGPU {}
 unsafe impl GpuResourcePayload for TextureWGPU {
-    fn gpu_resource(&self) -> &GPUResource { self.base.gpu_resource() }
-    fn gpu_resource_mut(&mut self) -> &mut GPUResource { self.base.gpu_resource_mut() }
+    fn gpu_resource(&self) -> &GPUResource {
+        self.base.gpu_resource()
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        self.base.gpu_resource_mut()
+    }
 }
 
 impl TextureApi for TextureWGPU {
-    fn width(&self) -> u32 { self.base.width() }
-    fn height(&self) -> u32 { self.base.height() }
-    fn depthOrArrayLayers(&self) -> u32 { self.base.depthOrArrayLayers() }
-    fn format(&self) -> TextureFormat { self.base.format() }
-    fn r#type(&self) -> TextureType { self.base.r#type() }
-    fn numMipmaps(&self) -> u32 { self.base.numMipmaps() }
-    fn sampleCount(&self) -> u32 { self.base.sampleCount() }
-    fn isRenderTarget(&self) -> bool { self.base.isRenderTarget() }
+    fn width(&self) -> u32 {
+        self.base.width()
+    }
+    fn height(&self) -> u32 {
+        self.base.height()
+    }
+    fn depthOrArrayLayers(&self) -> u32 {
+        self.base.depthOrArrayLayers()
+    }
+    fn format(&self) -> TextureFormat {
+        self.base.format()
+    }
+    fn r#type(&self) -> TextureType {
+        self.base.r#type()
+    }
+    fn numMipmaps(&self) -> u32 {
+        self.base.numMipmaps()
+    }
+    fn sampleCount(&self) -> u32 {
+        self.base.sampleCount()
+    }
+    fn isRenderTarget(&self) -> bool {
+        self.base.isRenderTarget()
+    }
     fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
         super::ore_texture_wgpu_impl::upload(self, data)
     }
@@ -87,10 +119,7 @@ pub(crate) struct TextureViewWGPU {
 }
 
 impl TextureViewWGPU {
-    pub(crate) fn new(
-        texture: AnyResourceHandle,
-        desc: &TextureViewDesc<'_>,
-    ) -> Self {
+    pub(crate) fn new(texture: AnyResourceHandle, desc: &TextureViewDesc<'_>) -> Self {
         Self {
             base: ManuallyDrop::new(
                 nuxie_ore_metal::new_texture_view_backend_base_without_manager(texture, desc),
@@ -99,8 +128,12 @@ impl TextureViewWGPU {
         }
     }
 
-    pub(crate) fn native(&self) -> &WagyuTextureView { &self.m_wgpuTextureView }
-    pub(crate) fn setNative(&mut self, view: WagyuTextureView) { *self.m_wgpuTextureView = view; }
+    pub(crate) fn native(&self) -> &WagyuTextureView {
+        &self.m_wgpuTextureView
+    }
+    pub(crate) fn setNative(&mut self, view: WagyuTextureView) {
+        *self.m_wgpuTextureView = view;
+    }
 }
 
 impl Drop for TextureViewWGPU {
@@ -114,15 +147,26 @@ impl Drop for TextureViewWGPU {
 
 impl Deref for TextureViewWGPU {
     type Target = TextureView;
-    fn deref(&self) -> &Self::Target { &self.base }
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
 }
 impl DerefMut for TextureViewWGPU {
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.base }
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
 }
 unsafe impl Send for TextureViewWGPU {}
 unsafe impl GpuResourcePayload for TextureViewWGPU {
-    fn gpu_resource(&self) -> &GPUResource { self.base.gpu_resource() }
-    fn gpu_resource_mut(&mut self) -> &mut GPUResource { self.base.gpu_resource_mut() }
+    fn texture_view_base(&self) -> Option<&TextureView> {
+        Some(&self.base)
+    }
+    fn gpu_resource(&self) -> &GPUResource {
+        self.base.gpu_resource()
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        self.base.gpu_resource_mut()
+    }
 }
 
 pub(crate) const SOURCE_CLASS_COUNT: usize = 3;

@@ -16,6 +16,9 @@ use nuxie::{
 use nuxie_render_api::RawPath;
 use nuxie_schema::definition_by_name;
 
+#[path = "../../nuxie-scripting/tests/support/recording_gpu.rs"]
+mod recording_gpu;
+
 const SCRIPT: &[u8] = br#"
 return function(context)
     local canvas = context:gpuCanvas()
@@ -29,15 +32,13 @@ return function(context)
     local sampler = ImageSampler("clamp", "clamp", "nearest")
     canvas:resize(32, 24)
     return {
-        drawCanvas = function(self)
+        draw = function(self, renderer)
             local pass = canvas:beginRenderPass {
                 color = { { loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 } } },
             }
             pass:setPipeline(pipeline)
             pass:draw(3)
             pass:finish()
-        end,
-        draw = function(self, renderer)
             renderer:drawImage(canvas.image, sampler, "srcOver", 1.0)
         end,
     }
@@ -442,12 +443,20 @@ fn colliding_shader_alias_file() -> Vec<u8> {
     bytes
 }
 
+#[derive(Clone)]
 struct TestImage {
+    identity: Rc<()>,
     width: u32,
     height: u32,
 }
 
 impl RenderImage for TestImage {
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Rc::as_ptr(&self.identity) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -461,9 +470,19 @@ impl RenderImage for TestImage {
     }
 }
 
-struct TestGpuCanvasShader(GpuCanvasShader);
+struct TestGpuCanvasShader(
+    GpuCanvasShader,
+    nuxie_ore_metal::gpu_resource::AnyResourceHandle,
+);
 
 impl RenderGpuCanvasShader for TestGpuCanvasShader {
+    fn ore_shader_entry(
+        &self,
+        _: GpuCanvasShaderStage,
+        _: &str,
+    ) -> Option<nuxie_ore_metal::gpu_resource::AnyResourceHandle> {
+        Some(self.1.clone())
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -473,6 +492,7 @@ struct GpuRecordingFactory {
     inner: RecordingFactory,
     shader_occurrences: Rc<RefCell<Vec<Arc<dyn RenderGpuCanvasShader>>>>,
     calls: Rc<RefCell<Vec<(GpuCanvasShader, GpuCanvasPlan)>>>,
+    gpu: recording_gpu::RecordingGpu,
 }
 
 impl GpuRecordingFactory {
@@ -481,11 +501,25 @@ impl GpuRecordingFactory {
             inner: RecordingFactory::new(),
             shader_occurrences: Rc::new(RefCell::new(Vec::new())),
             calls: Rc::new(RefCell::new(Vec::new())),
+            gpu: recording_gpu::RecordingGpu::new(),
         }
     }
 }
 
 impl Factory for GpuRecordingFactory {
+    fn is_render_context(&self) -> bool {
+        true
+    }
+    fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+        Some(self.gpu.context.clone())
+    }
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn nuxie_render_api::RenderCanvas>, nuxie_render_api::RenderCanvasError> {
+        Ok(recording_gpu::canvas(width, height))
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -541,8 +575,11 @@ impl Factory for GpuRecordingFactory {
         &mut self,
         shader: &GpuCanvasShader,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
-        let occurrence: Arc<dyn RenderGpuCanvasShader> =
-            Arc::new(TestGpuCanvasShader(shader.clone()));
+        let occurrence: Arc<dyn RenderGpuCanvasShader> = Arc::new(TestGpuCanvasShader(
+            shader.clone(),
+            self.gpu
+                .shader(self.shader_occurrences.borrow().len() as u64 + 1, shader),
+        ));
         self.shader_occurrences
             .borrow_mut()
             .push(Arc::clone(&occurrence));
@@ -571,6 +608,7 @@ impl Factory for GpuRecordingFactory {
             .borrow_mut()
             .push((vertex_shader.0.clone(), plan.clone()));
         Ok(Box::new(TestImage {
+            identity: Rc::new(()),
             width: plan.width,
             height: plan.height,
         }))
@@ -687,13 +725,17 @@ fn imported_shader_and_script_execute_and_composite_through_one_factory() {
     artboard.draw(&mut renderer);
 
     let factory_ref = factory.borrow();
-    let calls = factory_ref.calls.borrow();
-    assert_eq!(
-        calls.len(),
-        1,
-        "drawCanvas must submit exactly one typed plan"
+    assert!(
+        factory_ref.calls.borrow().is_empty(),
+        "recorded draws must not use the retired immediate plan submission"
     );
-    let (shader, plan) = &calls[0];
+    let occurrences = factory_ref.shader_occurrences.borrow();
+    assert_eq!(occurrences.len(), 1);
+    let shader = &occurrences[0]
+        .as_any()
+        .downcast_ref::<TestGpuCanvasShader>()
+        .expect("authored shader occurrence")
+        .0;
     assert_eq!(
         shader
             .entry(GpuCanvasShaderStage::Vertex, "chosen_vertex")
@@ -708,23 +750,18 @@ fn imported_shader_and_script_execute_and_composite_through_one_factory() {
             .physical_entry_point,
         "physical_fragment_1",
     );
+    assert_eq!(&*factory_ref.gpu.pipelines.borrow(), &[(1, 1, true)]);
     assert_eq!(
-        plan.vertex_entry
-            .as_ref()
-            .expect("resolved vertex pipeline entry")
-            .logical_entry_point,
-        "chosen_vertex",
+        &*factory_ref.gpu.pipeline_entries.borrow(),
+        &[(
+            "physical_vertex_1".to_owned(),
+            "physical_fragment_1".to_owned()
+        )]
     );
-    assert_eq!(
-        plan.fragment_entry
-            .as_ref()
-            .expect("resolved fragment pipeline entry")
-            .physical_entry_point,
-        "physical_fragment_1",
-    );
-    assert_eq!((plan.width, plan.height), (32, 24));
-    assert_eq!(plan.vertex_count, 3);
-    drop(calls);
+    assert_eq!(factory_ref.gpu.draws.get(), 1);
+    assert_eq!(&*factory_ref.gpu.draw_vertices.borrow(), &[3]);
+    assert_eq!(&*factory_ref.gpu.canvas_sizes.borrow(), &[(32, 24)]);
+    drop(occurrences);
     let stream = factory_ref.inner.stream();
     assert!(stream.contains("drawImage image=0"), "{stream}");
     assert!(
@@ -757,9 +794,8 @@ fn default_factory_does_not_silently_draw_an_unsupported_gpu_canvas() {
     let (_file, artboard) = import_default_artboard(&imported_file(), &mut factory);
     let mut renderer = factory.borrow().make_renderer();
 
-    // Pinned lua_scripted_context.cpp:547-556 returns zero values when backend
-    // shader creation fails, so the downstream pipeline sees nil and cannot
-    // submit a GPU canvas image.
+    // A factory without an ORE recorder cannot create a scripted GPU canvas;
+    // script failure must not publish an immediate fallback image.
     artboard.advance_default(0.0);
     artboard.draw(&mut renderer);
     let stream = factory.borrow().stream();

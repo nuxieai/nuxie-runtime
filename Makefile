@@ -5,7 +5,7 @@
 .PHONY: renderer-native-metal-platform-matrix renderer-native-metal-v3
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
-RIVE_RUNTIME_REF ?= d25e6a4b6c1b8382b588f08371231373780fbcd5
+RIVE_RUNTIME_REF ?= e949498e05483a852c10fbbdad2cd1941c15aebc
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
 SILVER_CORPUS_MANIFEST ?= $(CURDIR)/silver-corpus.toml
@@ -93,7 +93,7 @@ WASM_PERF_RUNS ?= 5
 WASM_PERF_WARMUPS ?= 1
 WASM_PERF_OUTPUT ?= $(CURDIR)/target/wasm-perf.json
 WASM_PERF_MARKDOWN ?= $(CURDIR)/target/wasm-perf.md
-PERF_EXPECTED_RIVE_RUNTIME_REF ?= d25e6a4b6c1b8382b588f08371231373780fbcd5
+PERF_EXPECTED_RIVE_RUNTIME_REF ?= e949498e05483a852c10fbbdad2cd1941c15aebc
 RENDERER_PERF_TARGET_DIR ?= $(CURDIR)/target/renderer-perf
 RENDERER_PERF_CPP_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-cpp-runner
 RENDERER_PERF_RUST_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-rust-runner
@@ -196,10 +196,10 @@ test: fixtures
 .PHONY: pure-runtime-boundary-test pure-runtime-boundary-check pure-runtime-boundary-gate
 
 renderer-native-metal-v3:
-	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental --lib -- --test-threads=1
+	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental --lib -- --test-threads=1
 	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features renderer-metal,native-ore-metal-experimental --test native_metal_resource_shaders -- --test-threads=1
-	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features -- --test-threads=1
-	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features --features tools -- --test-threads=1
+	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features --features metal-backend -- --test-threads=1
+	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features --features tools,metal-backend -- --test-threads=1
 
 runtime-source-correspondence-check:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_runtime_source_correspondence.py tools/test_buildkite_pipeline.py

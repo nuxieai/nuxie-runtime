@@ -1437,86 +1437,6 @@ impl Artboard {
         vm.is_some_and(|vm| vm.with_vm_mut(|vm| vm.advance_detached_view_models()))
     }
 
-    pub fn internal_draw_canvases_handle(root: &CoreHandle) {
-        let (object_count, host_count, factory) = root
-            .with_downcast::<Artboard, _>(|artboard| {
-                (
-                    artboard.scripted_objects.len(),
-                    artboard.artboard_hosts.len(),
-                    artboard.factory(),
-                )
-            })
-            .expect("live Artboard canvas pass");
-        if let Some(factory) = factory {
-            for index in 0..object_count {
-                let object = root
-                    .with_downcast::<Artboard, _>(|artboard| {
-                        artboard.scripted_objects.get(index).cloned()
-                    })
-                    .flatten()
-                    .expect("scripted object array remains stable during canvas drawing");
-                factory.with_factory_mut(|factory| crate::mechanical_port::source::scripted::scripted_object::ScriptedObject::draw_canvas_occurrence(&object, factory));
-            }
-        }
-        for host_index in 0..host_count {
-            let host = root
-                .with_downcast::<Artboard, _>(|artboard| {
-                    artboard.artboard_hosts.get(host_index).cloned()
-                })
-                .flatten()
-                .expect("Artboard host array remains stable during canvas drawing");
-            let nested_count = host
-                .with(|host| host.as_artboard_host().map(ArtboardHost::artboard_count))
-                .flatten()
-                .unwrap_or(0);
-            for nested_index in 0..nested_count {
-                let instance = host
-                    .with_mut(|host| {
-                        host.as_artboard_host_mut()?
-                            .artboard_instance(nested_index as i32)
-                    })
-                    .flatten();
-                if let Some(instance) = instance {
-                    instance.internal_draw_canvases();
-                }
-            }
-        }
-    }
-
-    pub fn find_draw_canvas_luau_state(&self) -> Option<RuntimeScriptingVmHandle> {
-        for object in &self.scripted_objects {
-            let state = object
-                .with(|object| {
-                    object.as_scripted_object().and_then(|object| {
-                        object
-                            .draws_canvas()
-                            .then(|| object.scripting_vm())
-                            .flatten()
-                    })
-                })
-                .flatten();
-            if state.is_some() {
-                return state;
-            }
-        }
-        for host in &self.artboard_hosts {
-            let state = host
-                .with_mut(|host| {
-                    let host = host.as_artboard_host_mut()?;
-                    (0..host.artboard_count() as i32).find_map(|index| {
-                        host.artboard_instance(index).and_then(|nested| {
-                            nested.with_artboard(|nested| nested.find_draw_canvas_luau_state())
-                        })
-                    })
-                })
-                .flatten();
-            if state.is_some() {
-                return state;
-            }
-        }
-        None
-    }
-
     pub fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
         self.objects.get(id as usize)?.clone()
     }
@@ -2277,7 +2197,6 @@ impl Artboard {
 
     pub fn draw_handle(root: &CoreHandle, renderer: &mut Renderer) {
         nuxie_render_api::increment_artboard_draw_frame_id();
-        Self::internal_draw_canvases_handle(root);
         Self::draw_internal_handle(root, renderer);
     }
 
@@ -3762,7 +3681,14 @@ impl Artboard {
     }
 
     pub fn instance_from_handle(source: &CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
-        Self::instance_from_handle_internal(source, true)
+        Self::instance_from_handle_internal(source, true, None)
+    }
+
+    pub fn instance_from_handle_with_factory(
+        source: &CoreHandle,
+        factory: Option<RuntimeFactoryHandle>,
+    ) -> Option<RuntimeArtboardInstanceHandle> {
+        Self::instance_from_handle_internal(source, true, factory)
     }
 
     /// An embedded instance's source definitions are owned by its containing
@@ -3771,12 +3697,20 @@ impl Artboard {
     pub fn nested_instance_from_handle(
         source: &CoreHandle,
     ) -> Option<RuntimeArtboardInstanceHandle> {
-        Self::instance_from_handle_internal(source, false)
+        Self::instance_from_handle_internal(source, false, None)
+    }
+
+    pub fn nested_instance_from_handle_with_factory(
+        source: &CoreHandle,
+        factory: Option<RuntimeFactoryHandle>,
+    ) -> Option<RuntimeArtboardInstanceHandle> {
+        Self::instance_from_handle_internal(source, false, factory)
     }
 
     fn instance_from_handle_internal(
         source: &CoreHandle,
         retain_definitions: bool,
+        factory: Option<RuntimeFactoryHandle>,
     ) -> Option<RuntimeArtboardInstanceHandle> {
         let (mut definition, objects, data_binds, animations, state_machines) = source
             .with_downcast::<Artboard, _>(|source| {
@@ -3788,6 +3722,14 @@ impl Artboard {
                     source.state_machines.clone(),
                 )
             })?;
+        let reroute = factory.as_ref().is_some_and(|factory| {
+            definition.base.factory.as_ref().is_none_or(|original| {
+                original.persistent_context().identity() != factory.persistent_context().identity()
+            })
+        });
+        if let Some(factory) = factory.as_ref() {
+            definition.base.factory = Some(factory.clone());
+        }
         if !retain_definitions {
             definition.base.definition_owner = None;
         }
@@ -3820,7 +3762,44 @@ impl Artboard {
             instance.base.animations = animations;
             instance.base.state_machines = state_machines;
         });
+        if reroute {
+            Self::reinstance_nested_artboards_handle(&root, factory.as_ref().unwrap());
+        }
         (Self::initialize_handle(&root) == StatusCode::Ok).then_some(instance)
+    }
+
+    pub fn reinstance_nested_artboards_handle(root: &CoreHandle, factory: &RuntimeFactoryHandle) {
+        let objects = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.objects.clone())
+            .expect("live artboard");
+        for object in objects.into_iter().flatten() {
+            let source = object
+                .with(|object| {
+                    let nested = object.as_nested_artboard()?;
+                    let current = nested.source_artboard()?;
+                    current
+                        .with_downcast::<Artboard, _>(|current| {
+                            current
+                                .is_instance
+                                .then(|| current.artboard_source.clone())
+                                .flatten()
+                        })
+                        .flatten()
+                })
+                .flatten();
+            if let Some(source) = source {
+                if let Some(replacement) =
+                    Self::nested_instance_from_handle_with_factory(&source, Some(factory.clone()))
+                {
+                    object.with_mut(|object| {
+                        object
+                            .as_nested_artboard_mut()
+                            .unwrap()
+                            .referenced_artboard_instance(replacement);
+                    });
+                }
+            }
+        }
     }
 
     fn artboard_file(&self) -> Option<RuntimeFileWeakHandle> {
@@ -4207,6 +4186,10 @@ impl RuntimeArtboardInstanceHandle {
         Artboard::instance_from_handle(&self.core_handle())
     }
 
+    pub fn instance_with_factory(&self, factory: Option<RuntimeFactoryHandle>) -> Option<Self> {
+        Artboard::instance_from_handle_with_factory(&self.core_handle(), factory)
+    }
+
     pub fn advance_internal(&self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
         Artboard::advance_internal_handle(&self.core_handle(), elapsed_seconds, flags)
     }
@@ -4308,9 +4291,6 @@ impl RuntimeArtboardInstanceHandle {
     }
     pub fn draw_internal(&self, renderer: &mut Renderer) {
         Artboard::draw_internal_handle(&self.core_handle(), renderer);
-    }
-    pub fn internal_draw_canvases(&self) {
-        Artboard::internal_draw_canvases_handle(&self.core_handle());
     }
     pub fn sync_style_changes(&self) -> bool {
         Artboard::sync_style_changes_handle(&self.core_handle())

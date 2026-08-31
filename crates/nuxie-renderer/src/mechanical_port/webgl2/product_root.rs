@@ -63,13 +63,11 @@ impl WebGl2ProductBackend {
         #[cfg(feature = "rive-decoders")]
         crate::exact_source_adapter::install_bitmap_decoder(context.as_mut());
         let implementation = unsafe {
-            &mut *Pin::get_unchecked_mut(context.as_mut())
-                .static_impl_cast::<RenderContextGLImpl>()
+            &mut *Pin::get_unchecked_mut(context.as_mut()).static_impl_cast::<RenderContextGLImpl>()
         };
         let execution = (&*implementation.rust_execution).clone();
-        let target = make_rcp(|| {
-            FramebufferRenderTargetGL::new(width, height, 0, sample_count, execution)
-        });
+        let target =
+            make_rcp(|| FramebufferRenderTargetGL::new(width, height, 0, sample_count, execution));
         implementation.invalidateGLState();
         Ok(Self {
             context: Some(context),
@@ -104,19 +102,30 @@ impl WebGl2ProductBackend {
         self.implementation_mut().rust_execution.domain().clone()
     }
 
-    fn gpu_canvas_mut(
-        &mut self,
-    ) -> Result<&mut ExactGpuCanvas<super::ContextGL>, GpuCanvasError> {
+    fn gpu_canvas_mut(&mut self) -> Result<&mut ExactGpuCanvas<super::ContextGL>, GpuCanvasError> {
         if self.gpu_canvas.is_none() {
-            let execution = (&*self.implementation_mut().rust_execution).clone();
-            let context = super::ContextGL::Make(execution)
-                .ok_or_else(|| GpuCanvasError::new("exact WebGL2 ORE context is unavailable"))?;
-            self.gpu_canvas = Some(ExactGpuCanvas::new(
+            let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) }.oreExecutable();
+            let context = match unsafe { context.as_ref() } {
+                Some(
+                    crate::mechanical_port::source::include::rive::factory_hpp::OreContext::GL(
+                        context,
+                    ),
+                ) => context.clone(),
+                _ => {
+                    return Err(GpuCanvasError::new(
+                        "exact WebGL2 ORE context is unavailable",
+                    ));
+                }
+            };
+            self.gpu_canvas = Some(ExactGpuCanvas::new_shared(
                 context,
                 GpuCanvasShaderProfile::WebGl2,
             )?);
         }
-        Ok(self.gpu_canvas.as_mut().expect("initialized WebGL2 ORE context"))
+        Ok(self
+            .gpu_canvas
+            .as_mut()
+            .expect("initialized WebGL2 ORE context"))
     }
 
     fn resize_target(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
@@ -271,7 +280,9 @@ impl ExactSourceBackend for WebGl2ProductBackend {
         // execution domain, but the GPU canvas owns its own framebuffer and
         // frame lifecycle. Invalidate the outer context afterwards so its
         // deferred presentation flush restores every GL binding it needs.
-        let canvas = self.implementation_mut().makeRenderCanvas(plan.width, plan.height);
+        let canvas = self
+            .implementation_mut()
+            .makeRenderCanvas(plan.width, plan.height);
         if !canvas.operator_bool() {
             return Err(GpuCanvasError::new(
                 "exact WebGL2 failed to create a GPU-canvas render target",
@@ -281,12 +292,8 @@ impl ExactSourceBackend for WebGl2ProductBackend {
             let gpu_canvas = self.gpu_canvas_mut()?;
             let frame_number = gpu_canvas.next_frame_number();
             gpu_canvas.begin_frame(frame_number);
-            let result = gpu_canvas.execute_current_frame(
-                &canvas,
-                pipelines,
-                plan,
-                &execution_anchor,
-            );
+            let result =
+                gpu_canvas.execute_current_frame(&canvas, pipelines, plan, &execution_anchor);
             gpu_canvas.end_frame();
             result
         };
@@ -305,7 +312,5 @@ impl Drop for WebGl2ProductBackend {
 }
 
 fn js_error(error: wasm_bindgen::JsValue) -> String {
-    error
-        .as_string()
-        .unwrap_or_else(|| format!("{error:?}"))
+    error.as_string().unwrap_or_else(|| format!("{error:?}"))
 }

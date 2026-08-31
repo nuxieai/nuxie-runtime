@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/render_context.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -322,9 +322,17 @@
 //     // Creates a RenderCanvas: a GPU texture usable as both a render target
 //     // (for rendering into) and a render image (for compositing into draws).
 //     rcp<RenderCanvas> makeRenderCanvas(uint32_t width, uint32_t height);
+//
+//     // Like makeRenderCanvas, but on GL the deferred replay worker lazily
+//     // allocates the texture on its own context instead of this one.
+//     rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width, uint32_t height);
+//
 //     rive::ore::Context* ore() override;
 //     rive::ore::Context* getOreContext() { return ore(); }
 // #endif
+//
+//     // Importing straight through a render context routes scripts to it.
+//     Factory* renderContext() override { return this; }
 //
 // private:
 //     friend class Draw;
@@ -1066,7 +1074,7 @@ pub use crate::mechanical_port::source::include::rive::factory_hpp::OreContext;
 use crate::mechanical_port::source::include::rive::factory_hpp::{
     Factory, FactoryAccess, FactoryContract,
 };
-use crate::mechanical_port::source::include::rive::refcnt_hpp::{rcp, RefCnt, RefCntTarget};
+use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCnt, RefCntTarget, rcp};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage,
 };
@@ -1083,8 +1091,8 @@ pub type ColorInt = u32;
 pub type float4 = [f32; 4];
 pub type Vec2D = [f32; 2];
 pub type AABB = [f32; 4];
-pub use gpu::IAABB;
 pub use gpu::AABBu16;
+pub use gpu::IAABB;
 
 pub use gpu::LoadAction;
 // The concrete Gradient owner is declared by the pinned renderer/src/gradient.hpp
@@ -1598,11 +1606,7 @@ pub use gpu::{
 
 #[derive(Default)]
 pub struct TrivialBlockAllocator {
-    allocations: Vec<(
-        *mut u8,
-        core::alloc::Layout,
-        Option<unsafe fn(*mut u8)>,
-    )>,
+    allocations: Vec<(*mut u8, core::alloc::Layout, Option<unsafe fn(*mut u8)>)>,
 }
 
 impl TrivialBlockAllocator {
@@ -2135,7 +2139,12 @@ impl RenderContextImplOwner {
 pub struct RenderContextMembers {
     pub(crate) m_impl: RenderContextImplOwner,
     pub(crate) m_max_path_id: usize,
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
     pub(crate) m_ore_context: Option<Box<OreContext>>,
     pub(crate) m_current_resource_allocations: ResourceAllocationCounts,
     pub(crate) m_max_recent_resource_requirements: ResourceAllocationCounts,
@@ -2209,8 +2218,8 @@ mod render_context_layout_tests {
     #[test]
     fn source_members_keep_authored_physical_order_after_offset_zero_base() {
         assert_eq!(offset_of!(RenderContext, base), 0);
-        let expected_members_offset = size_of::<RiveRenderFactory>()
-            .next_multiple_of(align_of::<RenderContextMembers>());
+        let expected_members_offset =
+            size_of::<RiveRenderFactory>().next_multiple_of(align_of::<RenderContextMembers>());
         assert_eq!(offset_of!(RenderContext, members), expected_members_offset);
         assert_eq!(offset_of!(RenderContextMembers, m_impl), 0);
 
@@ -2218,7 +2227,12 @@ mod render_context_layout_tests {
             offset_of!(RenderContextMembers, m_impl),
             offset_of!(RenderContextMembers, m_max_path_id),
         ];
-        #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+        #[cfg(any(
+            feature = "native-ore-metal-experimental",
+            feature = "native-ore-vulkan-experimental",
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        ))]
         offsets.push(offset_of!(RenderContextMembers, m_ore_context));
         offsets.extend([
             offset_of!(RenderContextMembers, m_current_resource_allocations),
@@ -2275,7 +2289,9 @@ impl RenderContext {
                 m_max_path_id: max_path_id,
                 #[cfg(any(
                     feature = "native-ore-metal-experimental",
-                    feature = "native-ore-vulkan-experimental"
+                    feature = "native-ore-vulkan-experimental",
+                    feature = "native-webgpu-experimental",
+                    feature = "ore-gl"
                 ))]
                 m_ore_context: None,
                 m_current_resource_allocations: ResourceAllocationCounts::default(),
@@ -2451,7 +2467,15 @@ pub trait RenderContextContract: RiveRenderFactoryContract {
     fn polarSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16>;
     fn parametricSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16>;
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas>;
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
+        self.makeRenderCanvas(width, height)
+    }
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
     fn getOreContext(&mut self) -> *mut OreContext;
     fn resetContainers(&mut self);
     fn setResourceSizes(&mut self, counts: ResourceAllocationCounts, force_realloc: bool);

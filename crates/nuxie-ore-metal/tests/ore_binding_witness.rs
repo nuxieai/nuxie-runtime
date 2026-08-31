@@ -1,4 +1,4 @@
-#![cfg(target_os = "macos")]
+#![cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 
 use std::collections::BTreeMap;
 use std::ffi::c_void;
@@ -157,7 +157,7 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     let incomplete_layout = context
         .makeBindGroupLayout(&BindGroupLayoutDesc {
             groupIndex: 0,
-            entries: &layout_entries[..1],
+            entries: Some(&layout_entries[..1]),
             entryCount: 1,
             label: Some("intentionally incomplete witness group 0"),
         })
@@ -187,7 +187,7 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     let layout = context
         .makeBindGroupLayout(&BindGroupLayoutDesc {
             groupIndex: 0,
-            entries: &layout_entries,
+            entries: Some(&layout_entries),
             entryCount: u32::try_from(layout_entries.len()).expect("small witness layout"),
             label: Some("pinned witness group 0"),
         })

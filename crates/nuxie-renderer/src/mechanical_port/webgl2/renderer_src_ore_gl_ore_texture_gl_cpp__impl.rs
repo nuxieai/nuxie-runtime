@@ -6,7 +6,7 @@
 use super::gles3_decl::*;
 use super::ore_texture_gl_decl::{TextureGL, TextureViewGL};
 use nuxie_ore_metal::texture::TextureUploadError;
-use nuxie_ore_metal::types::{textureFormatBytesPerTexel, TextureDataDesc, TextureFormat};
+use nuxie_ore_metal::types::{TextureDataDesc, TextureFormat, textureFormatBytesPerTexel};
 use std::mem::ManuallyDrop;
 
 pub(crate) const PINNED_SOURCE: &str =
@@ -309,6 +309,8 @@ impl Drop for TextureViewGL {
                 recordGLCommand(GLCommand::DeleteTexture(self.m_glTextureView));
             }
         });
+        *self.m_retainedCanvasMirror.get_mut() =
+            crate::mechanical_port::source::include::rive::refcnt_hpp::rcp::new();
         unsafe { ManuallyDrop::drop(&mut self.base) };
     }
 }

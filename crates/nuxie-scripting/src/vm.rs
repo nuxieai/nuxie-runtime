@@ -12,16 +12,15 @@
 
 mod buffer_ext;
 mod bytecode;
-mod canvas_drawing_phase;
 mod command_server;
 mod listener_invocation;
 mod logging_scripting_context;
 pub(crate) mod lua_blob;
-mod lua_canvas;
+pub(crate) mod lua_canvas;
 mod lua_color;
 mod lua_data_value;
 mod lua_font;
-mod lua_image;
+pub(crate) mod lua_image;
 mod lua_image_decode;
 mod lua_mat4;
 mod lua_math;
@@ -31,6 +30,10 @@ mod lua_rive_base;
 mod lua_vec2d;
 mod native_registration;
 mod renderer;
+#[cfg(all(test, feature = "compiler"))]
+pub(crate) mod upstream_scripting_gpu_features;
+#[cfg(all(test, feature = "compiler"))]
+mod upstream_scripting_routing;
 
 mod lua_artboards;
 mod lua_audio;
@@ -88,7 +91,6 @@ use crate::gpu_canvas::{
     RegisteredGpuCanvasShaderAsset,
 };
 
-pub use canvas_drawing_phase::{CanvasDrawingPhase, ScopedCanvasDrawingPhase};
 pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub use luaur_rt::{Error, Result};
 pub use resource_limits::{ScriptResourceGuard, ScriptResourceLimit};
@@ -435,23 +437,22 @@ const RIVE_LUA_ATOMS: &[(&[u8], i16)] = &[
     (b"resize", 212),
     (b"canvas", 213),
     (b"gpuCanvas", 214),
-    (b"features", 216),
-    (b"drawCanvas", 215),
-    (b"shader", 217),
-    (b"format", 218),
-    (b"andThen", 219),
-    (b"catch", 220),
-    (b"finally", 221),
-    (b"cancel", 222),
-    (b"onCancel", 223),
-    (b"getStatus", 224),
-    (b"decodeImage", 225),
-    (b"transpose", 226),
-    (b"transformPoint", 227),
-    (b"transformVec4", 228),
-    (b"writeToBuffer", 229),
-    (b"invertAffine", 230),
-    (b"writeVec4", 231),
+    (b"features", 215),
+    (b"shader", 216),
+    (b"format", 217),
+    (b"andThen", 218),
+    (b"catch", 219),
+    (b"finally", 220),
+    (b"cancel", 221),
+    (b"onCancel", 222),
+    (b"getStatus", 223),
+    (b"decodeImage", 224),
+    (b"transpose", 225),
+    (b"transformPoint", 226),
+    (b"transformVec4", 227),
+    (b"writeToBuffer", 228),
+    (b"invertAffine", 229),
+    (b"writeVec4", 230),
 ];
 
 const RIVE_LUA_ATOM_SLOT_COUNT: usize = 1024;
@@ -696,6 +697,42 @@ impl DetachedViewModelFrame {
     }
 }
 
+/// Upstream rive_lua_pcall cleanup occurs after every protected return.
+trait ProtectedScriptCall {
+    fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R>;
+}
+
+impl ProtectedScriptCall for Function {
+    fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
+        let result = self.call(args);
+        let lua = self.lua();
+        close_orphan_script_work(&lua);
+        result
+    }
+}
+
+fn close_orphan_script_work(lua: &Lua) {
+    if let Some(bindings) = RendererBindings::for_lua(lua) {
+        let logging = lua
+            .app_data_ref::<LoggingScriptingContext>()
+            .map(|logging| logging.clone())
+            .unwrap_or_default();
+        let report = |closed: Result<bool>, warning: &str| match closed {
+            Ok(true) => logging.print_error(Some(warning.as_bytes())),
+            Ok(false) => {}
+            Err(error) => logging.log_error(&error),
+        };
+        report(
+            crate::gpu_canvas::close_orphan_render_pass(&bindings),
+            "GPU render pass left open at script return. Call :finish() on render passes before returning.",
+        );
+        report(
+            lua_canvas::close_orphan_canvas_frames(&bindings),
+            "Canvas frame left open at script return. Call canvas:endFrame() before returning.",
+        );
+    }
+}
+
 /// File-registered protocol generator. The script chunk has already executed;
 /// each drawable occurrence calls this generator to create a fresh table.
 #[derive(Clone)]
@@ -717,7 +754,7 @@ impl ScriptProgram {
             .environment()
             .ok_or_else(|| Error::runtime("script generator has no Lua environment"))?;
         let getter: Function = environment.get(getter)?;
-        getter.call(())
+        getter.protected_call(())
     }
 }
 
@@ -918,7 +955,7 @@ impl LuaScriptInstance {
             call_args.push_back(Value::UserData(context.clone()));
         }
         function
-            .call(call_args)
+            .protected_call(call_args)
             .map_err(|error| self.script_error(error))
     }
 
@@ -943,9 +980,9 @@ impl LuaScriptInstance {
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
         }
-        table
-            .call_function_truthy(ScriptMethod::Advance.as_str(), call_args)
-            .map_err(|error| self.script_error(error))
+        let result = table.call_function_truthy(ScriptMethod::Advance.as_str(), call_args);
+        close_orphan_script_work(&lua);
+        result.map_err(|error| self.script_error(error))
     }
 
     fn dispose_script_lifetime(&mut self) {
@@ -988,7 +1025,7 @@ impl LuaScriptInstance {
                 args.push_back(Value::UserData(context.clone()));
             }
             let value = function
-                .call(args)
+                .protected_call(args)
                 .map_err(|error| self.script_error(error));
             let missing_during = self.context_missing_requested_data.replace(false);
             let value = value?;
@@ -1052,7 +1089,7 @@ impl LuaScriptInstance {
                 .map_err(|error| self.script_error(error))?;
             self.reset_execution_budget();
             let table = generator
-                .call(context.clone())
+                .protected_call(context.clone())
                 .map_err(|error| self.script_error(error))?;
             Ok((table, context, missing_requested_data))
         };
@@ -1127,7 +1164,7 @@ impl LuaScriptInstance {
         let input = lua_data_value::create_data_value(&lua, value)
             .map_err(|error| self.script_error(error))?;
         let output: AnyUserData = function
-            .call((table, input))
+            .protected_call((table, input))
             .map_err(|error| self.script_error(error))?;
         let output = output
             .borrow::<lua_data_value::ScriptedDataValue>()
@@ -1185,6 +1222,34 @@ impl ScriptVm {
         self.renderer_bindings
             .bootstrap_render_context(factory)
             .map_err(|error| self.script_error(error))
+    }
+
+    pub fn set_render_context(&self, context: Option<nuxie_render_api::PersistentFactoryContext>) {
+        self.renderer_bindings.set_render_context(context);
+    }
+    pub fn render_context(&self) -> Option<nuxie_render_api::PersistentFactoryContext> {
+        self.renderer_bindings.render_context()
+    }
+    pub fn render_context_is_late_bound(&self) -> bool {
+        self.renderer_bindings.render_context_is_late_bound()
+    }
+    pub fn set_ore_context(&self, context: Option<nuxie_render_api::OreContextHandle>) {
+        self.renderer_bindings.set_ore_context(context);
+    }
+    pub fn ore_context(&self) -> Option<nuxie_render_api::OreContextHandle> {
+        self.renderer_bindings.ore_context()
+    }
+    pub fn ore_context_override(&self) -> Option<nuxie_render_api::OreContextHandle> {
+        self.renderer_bindings.ore_context_override()
+    }
+    pub fn set_deferred_canvas_host(
+        &self,
+        host: Option<nuxie_render_api::DeferredCanvasHostHandle>,
+    ) {
+        self.renderer_bindings.set_deferred_canvas_host(host);
+    }
+    pub fn deferred_canvas_host(&self) -> Option<nuxie_render_api::DeferredCanvasHostHandle> {
+        self.renderer_bindings.deferred_canvas_host()
     }
 
     pub fn instantiate_script_with_factory(
@@ -1322,7 +1387,7 @@ impl ScriptVm {
             .map_err(|error| self.script_error(error))?;
         self.reset_execution_budget();
         let instance: Table =
-            match self.track_resource_result(program.generator.call(context.clone())) {
+            match self.track_resource_result(program.generator.protected_call(context.clone())) {
                 Ok(instance) => instance,
                 Err(error) => {
                     context_alive.set(false);
@@ -1422,8 +1487,8 @@ impl ScriptVm {
                 ))
                 .map_err(|error| self.script_error(error))?;
             self.reset_execution_budget();
-            let generated =
-                self.track_resource_result(program.generator.call::<Table>(context.clone()));
+            let generated = self
+                .track_resource_result(program.generator.protected_call::<Table>(context.clone()));
             let requested = context
                 .borrow::<ScriptedContext>()
                 .map_err(|error| self.script_error(error))?
@@ -1881,6 +1946,7 @@ impl ScriptVm {
         self.reserve_parent_stack_headroom()?;
         self.reset_execution_budget();
         let result = self.lua.load(source).eval();
+        close_orphan_script_work(&self.lua);
         self.track_resource_result(result)
     }
 
@@ -1968,7 +2034,7 @@ impl ScriptVm {
         self.reserve_parent_stack_headroom()?;
         let chunk = self.load_bytecode(chunk_name, bytecode)?;
         self.reset_execution_budget();
-        let result = chunk.call(());
+        let result = chunk.protected_call(());
         self.track_resource_result(result)
     }
 
@@ -1996,7 +2062,7 @@ impl ScriptVm {
                 "module '{display_name}' could not install its sandbox environment"
             )));
         }
-        self.track_resource_result(chunk.call(()))
+        self.track_resource_result(chunk.protected_call(()))
     }
 
     /// Load a raw `ScriptAsset` payload as it appears in a `.riv` file:
@@ -2165,7 +2231,7 @@ impl ScriptVm {
     pub fn call_global<R: FromLuaMulti>(&self, name: &str, args: impl IntoLuaMulti) -> Result<R> {
         self.reset_execution_budget();
         let function: Function = self.lua.globals().get(name)?;
-        let result = function.call(args);
+        let result = function.protected_call(args);
         self.track_resource_result(result)
     }
 
@@ -2202,12 +2268,6 @@ impl ScriptVm {
     /// A cloneable terminal-resource side channel for an injected host module.
     pub fn resource_guard(&self) -> ScriptResourceGuard {
         ScriptResourceGuard::new(self.resource_limits.clone())
-    }
-
-    /// VM-owned counterpart of pinned
-    /// `ScriptingContext::canvasDrawingPhase()`.
-    pub fn canvas_drawing_phase(&self) -> &CanvasDrawingPhase {
-        self.renderer_bindings.canvas_drawing_phase()
     }
 
     /// Register an embedding-host module for lookup through Rive `require`.
@@ -2325,6 +2385,10 @@ impl RuntimeScriptingVm for ScriptVm {
         ScriptVm::install_render_factory(self, factory)
     }
 
+    fn route_to_import_factory(&self, factory: &mut dyn RenderFactory) {
+        self.renderer_bindings.route_to_import_factory(factory);
+    }
+
     fn install_rive_globals(&self) -> std::result::Result<(), ScriptError> {
         ScriptVm::install_rive_globals(self).map_err(|error| self.script_error(error))
     }
@@ -2375,7 +2439,7 @@ impl RuntimeScriptingVm for ScriptVm {
             .map_err(|error| self.script_error(error))?;
         self.reset_execution_budget();
         let instance: Table = match self
-            .track_resource_result(generator.call(context.clone()))
+            .track_resource_result(generator.protected_call(context.clone()))
             .map_err(|error| self.script_error(error))
         {
             Ok(instance) => instance,
@@ -2610,7 +2674,7 @@ impl ScriptInstance for LuaScriptInstance {
             call_args.push_back(script_value_to_lua(&lua, arg));
         }
         let returned: Value = function
-            .call(call_args)
+            .protected_call(call_args)
             .map_err(|error| self.script_error(error))?;
         script_value_from_lua(returned)
             .map(ScriptOptionalMethodResult::Returned)
@@ -2640,7 +2704,7 @@ impl ScriptInstance for LuaScriptInstance {
             call_args.push_back(Value::Number(f64::from(*value)));
         }
         let returned: Value = function
-            .call(call_args)
+            .protected_call(call_args)
             .map_err(|error| self.script_error(error))?;
         let number = lua
             .coerce_number(returned)
@@ -2704,7 +2768,7 @@ impl ScriptInstance for LuaScriptInstance {
         let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
             .map_err(|error| self.script_error(error))?;
         function
-            .call((table, invocation))
+            .protected_call((table, invocation))
             .map_err(|error| self.script_error(error))
     }
 
@@ -2744,7 +2808,7 @@ impl ScriptInstance for LuaScriptInstance {
         let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
             .map_err(|error| self.script_error(error))?;
         function
-            .call::<()>((table, invocation))
+            .protected_call::<()>((table, invocation))
             .map_err(|error| self.script_error(error))?;
         Ok(true)
     }
@@ -2795,7 +2859,7 @@ impl ScriptInstance for LuaScriptInstance {
             // `ScriptedDrawable::gamepadDispatch` consumes protected-call
             // failures and reports the drawable as dispatched whenever the
             // selected method exists.
-            return match function.call::<()>((table, argument)) {
+            return match function.protected_call::<()>((table, argument)) {
                 Ok(()) => Ok(nuxie_runtime::ScriptedDrawableInputResult {
                     invoked: true,
                     handled: true,
@@ -2814,7 +2878,7 @@ impl ScriptInstance for LuaScriptInstance {
             };
         }
 
-        match function.call::<Value>((table, argument)) {
+        match function.protected_call::<Value>((table, argument)) {
             Ok(Value::Boolean(handled)) => Ok(nuxie_runtime::ScriptedDrawableInputResult {
                 invoked: true,
                 handled,
@@ -2864,7 +2928,7 @@ impl ScriptInstance for LuaScriptInstance {
         )
         .map_err(|error| self.script_error(error))?;
 
-        let call_result = function.call::<()>((table, argument));
+        let call_result = function.protected_call::<()>((table, argument));
         let hit = match hit_result.get() {
             listener_invocation::ScriptedPointerHitResult::None => {
                 nuxie_runtime::ScriptedDrawablePointerHit::None
@@ -2900,7 +2964,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(());
         };
         let result = function
-            .call::<()>(table)
+            .protected_call::<()>(table)
             .map_err(|error| self.script_error(error));
         // Pinned `ScriptedObject::trigger` dirties after the protected call,
         // regardless of its ordinary success/failure result
@@ -2927,7 +2991,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(());
         };
         let result = function
-            .call::<()>(table)
+            .protected_call::<()>(table)
             .map_err(|error| self.script_error(error));
         host.mark_script_update();
         result
@@ -3024,23 +3088,6 @@ impl ScriptInstance for LuaScriptInstance {
                 }
             }
         }
-    }
-
-    fn call_draw_canvas(
-        &mut self,
-        factory: &mut dyn RenderFactory,
-    ) -> std::result::Result<(), ScriptError> {
-        if self.table.is_none() {
-            return Ok(());
-        }
-        let table = self.live_table()?;
-        self.reset_execution_budget();
-        let Some(gpu_canvas) = self.gpu_canvas.as_ref() else {
-            return Ok(());
-        };
-        gpu_canvas
-            .execute_draw_canvas(&table, factory)
-            .map_err(|error| self.script_error(error))
     }
 
     fn call_data_converter(
@@ -3334,7 +3381,9 @@ mod context_init_tests {
             assert!(!lua_tostringatom(state, -1, &mut atom).is_null());
             lua_pop(state, 1);
         }
-        assert_eq!(atom, 230);
+        // e949 removes drawCanvas from LuaAtoms before invertAffine.
+        assert_eq!(atom, 229);
+        assert_eq!(find_rive_lua_atom(b"drawCanvas"), -1);
     }
 
     #[test]

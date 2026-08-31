@@ -149,11 +149,11 @@ use core::mem::MaybeUninit;
 use nuxie_render_api::ColorInt;
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{
-    make_rcp as allocate_rcp, rcp, RefCnt, RefCntTarget,
+    RefCnt, RefCntTarget, make_rcp as allocate_rcp, rcp,
 };
 use crate::mechanical_port::source::include::rive::renderer_hpp::RenderShader;
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
+    CONST_ID, LiteRttiCastFrom, LiteRttiTypeId,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
 
@@ -526,6 +526,14 @@ impl GradientShader {
 }
 
 impl nuxie_render_api::RenderShader for GradientShader {
+    fn retain_shader(&self) -> std::rc::Rc<dyn nuxie_render_api::RenderShader> {
+        std::rc::Rc::new(Self {
+            gradient: self.gradient.clone(),
+        })
+    }
+    fn shader_identity(&self) -> usize {
+        self.gradient.get() as usize
+    }
     fn as_any(&self) -> &dyn core::any::Any {
         self
     }

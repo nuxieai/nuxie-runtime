@@ -99,6 +99,7 @@ impl TextureApi for TextureGL {
 pub(crate) struct TextureViewGL {
     pub(crate) base: ManuallyDrop<TextureView>,
     pub(crate) m_glTextureView: u32,
+    pub(crate) m_retainedCanvasMirror: std::cell::RefCell<crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage>>,
     /// Rust execution/lifetime sidecar after the complete source prefix.
     pub(crate) rust_execution: GLExecutionStamp,
 }
@@ -114,6 +115,9 @@ impl TextureViewGL {
                 nuxie_ore_metal::new_texture_view_backend_base_without_manager(texture, desc),
             ),
             m_glTextureView: 0,
+            m_retainedCanvasMirror: std::cell::RefCell::new(
+                crate::mechanical_port::source::include::rive::refcnt_hpp::rcp::new(),
+            ),
             rust_execution: execution,
         }
     }
@@ -134,6 +138,9 @@ impl DerefMut for TextureViewGL {
     }
 }
 unsafe impl GpuResourcePayload for TextureViewGL {
+    fn texture_view_base(&self) -> Option<&TextureView> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
     }
@@ -148,7 +155,7 @@ mod tests {
 
     #[test]
     fn complete_header_denominator_and_base_layouts_are_frozen() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 35);
+        assert_eq!(PINNED_SOURCE.lines().count(), 44);
         assert_eq!(std::mem::offset_of!(TextureGL, base), 0);
         assert_eq!(std::mem::offset_of!(TextureViewGL, base), 0);
         assert!(

@@ -11,7 +11,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
-#![cfg(target_vendor = "apple")]
+#![cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 // namespace rive::ore
 
 // The pinned Objective-C++ implementation contains no declarations or

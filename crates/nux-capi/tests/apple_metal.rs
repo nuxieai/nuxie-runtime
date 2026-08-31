@@ -25,6 +25,10 @@ mod composed_import;
 #[cfg(feature = "scripting")]
 use composed_import::scripted_view_model_asset_fixture;
 
+#[cfg(all(feature = "scripting", feature = "apple-authored-msl"))]
+#[path = "support/apple_metal_authored_gpu_canvas.rs"]
+mod authored_gpu_canvas;
+
 struct AppleDecodeProbe {
     pixels: Vec<u8>,
     calls: usize,

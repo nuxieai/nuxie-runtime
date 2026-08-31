@@ -409,6 +409,10 @@ impl ShaderAsset {
                 std::sync::Arc::from(binding_map),
                 entry_reflection,
                 binding_reflection,
+                self.asset
+                    .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
+                    .unwrap_or(0),
+                self.texture_sampler_pairs(),
             )
         }
         .ok_or_else(|| {

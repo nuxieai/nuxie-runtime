@@ -6,6 +6,7 @@ use super::logging_scripting_context::LoggingScriptingContext;
 
 /// Install the host-routed `print` before the VM globals are sandboxed.
 pub(super) fn install_host_print(lua: &Lua, logging: LoggingScriptingContext) -> Result<()> {
+    lua.set_app_data(logging.clone());
     let print = lua.create_function(move |lua, args: MultiValue| {
         if args.is_empty() {
             return Ok(());

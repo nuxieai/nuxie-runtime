@@ -6,7 +6,7 @@ pub mod bind_group {
 pub mod buffer {
     pub use crate::mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::*;
 }
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub mod context {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_context_metal_hpp::*;
     pub use crate::mechanical_port::source::renderer::src::ore::metal::ore_context_metal_mm::{
@@ -17,7 +17,7 @@ pub mod context {
 pub mod pipeline {
     pub use crate::mechanical_port::source::renderer::src::ore::metal::ore_pipeline_metal_hpp::*;
 }
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub mod render_pass {
     pub use crate::mechanical_port::source::renderer::src::ore::metal::ore_render_pass_metal_hpp::*;
 }

@@ -1,30 +1,54 @@
 // Translated from:
 // /Users/levi/dev/oss/rive-runtime/src/lua/renderer/lua_renderer_library.cpp
-use luaur_rt::{Lua, Result};
+use luaur_rt::{AnyUserData, Lua, Result};
 use nuxie_render_api::Factory as RenderFactory;
+use nuxie_render_api::{DeferredCanvasHostHandle, OreContextHandle, PersistentFactoryContext};
+use std::{cell::RefCell, rc::Rc};
 
-use super::CanvasDrawingPhase;
 use super::command_server::PersistentRenderContext;
 use super::view_model::ScriptViewModelFrameContext;
 
 #[derive(Clone, Default)]
 pub(crate) struct RendererBindings {
     render_context: PersistentRenderContext,
-    canvas_drawing_phase: CanvasDrawingPhase,
+    routing: Rc<RefCell<ScriptingRouting>>,
+    open_canvas_frames: Rc<RefCell<Vec<AnyUserData>>>,
     pub(super) view_model_frame_context: ScriptViewModelFrameContext,
+}
+
+#[derive(Default)]
+struct ScriptingRouting {
+    render_context: Option<PersistentFactoryContext>,
+    ore_override: Option<OreContextHandle>,
+    canvas_host: Option<DeferredCanvasHostHandle>,
 }
 
 impl RendererBindings {
     pub(crate) fn new(view_model_frame_context: ScriptViewModelFrameContext) -> Self {
         Self {
             render_context: PersistentRenderContext::default(),
-            canvas_drawing_phase: CanvasDrawingPhase::default(),
+            routing: Rc::default(),
+            open_canvas_frames: Rc::default(),
             view_model_frame_context,
         }
     }
 
     pub(crate) fn bootstrap_render_context(&self, factory: &mut dyn RenderFactory) -> Result<()> {
         self.render_context.install(factory)
+    }
+
+    pub(crate) fn register_open_canvas_frame(&self, canvas: AnyUserData) {
+        self.open_canvas_frames.borrow_mut().push(canvas);
+    }
+
+    pub(crate) fn unregister_open_canvas_frame(&self, canvas: &AnyUserData) {
+        self.open_canvas_frames
+            .borrow_mut()
+            .retain(|open| open != canvas);
+    }
+
+    pub(crate) fn take_open_canvas_frames(&self) -> Vec<AnyUserData> {
+        std::mem::take(&mut *self.open_canvas_frames.borrow_mut())
     }
 
     pub(crate) fn verify_render_context(&self, factory: &mut dyn RenderFactory) -> Result<()> {
@@ -54,7 +78,128 @@ impl RendererBindings {
         self.render_context.with_factory(f)
     }
 
-    pub(crate) fn canvas_drawing_phase(&self) -> &CanvasDrawingPhase {
-        &self.canvas_drawing_phase
+    pub(crate) fn set_render_context(&self, context: Option<PersistentFactoryContext>) {
+        self.routing.borrow_mut().render_context = context;
+    }
+    pub(crate) fn render_context_is_late_bound(&self) -> bool {
+        self.routing.borrow().render_context.is_none()
+    }
+    pub(crate) fn render_context(&self) -> Option<PersistentFactoryContext> {
+        if let Some(context) = self.routing.borrow().render_context.clone() {
+            return Some(context);
+        }
+        self.with_factory(|factory| Ok(factory.render_context()))
+            .ok()
+            .flatten()
+    }
+    pub(crate) fn set_ore_context(&self, context: Option<OreContextHandle>) {
+        self.routing.borrow_mut().ore_override = context;
+    }
+    pub(crate) fn ore_context_override(&self) -> Option<OreContextHandle> {
+        self.routing.borrow().ore_override.clone()
+    }
+    pub(crate) fn ore_context(&self) -> Option<OreContextHandle> {
+        if let Some(context) = self.ore_context_override() {
+            return Some(context);
+        }
+        if let Some(context) = self
+            .with_factory(|factory| Ok(factory.ore()))
+            .ok()
+            .flatten()
+        {
+            return Some(context);
+        }
+        // Upstream's final fallback uses only the explicitly supplied device.
+        self.routing
+            .borrow()
+            .render_context
+            .clone()
+            .and_then(|mut context| context.ore())
+    }
+    pub(crate) fn set_deferred_canvas_host(&self, host: Option<DeferredCanvasHostHandle>) {
+        self.routing.borrow_mut().canvas_host = host;
+    }
+    pub(crate) fn deferred_canvas_host(&self) -> Option<DeferredCanvasHostHandle> {
+        self.routing.borrow().canvas_host.clone()
+    }
+    pub(crate) fn route_to_import_factory(&self, factory: &mut dyn RenderFactory) {
+        if self.render_context_is_late_bound() {
+            if let Some(context) = factory.render_context() {
+                self.set_render_context(Some(context));
+            }
+        }
+        if self.deferred_canvas_host().is_none() {
+            if let Some(host) = factory.deferred_canvas_host() {
+                self.set_deferred_canvas_host(Some(host));
+                self.set_ore_context(factory.ore());
+            }
+        }
+    }
+
+    pub(crate) fn gpu_features(&self, lua: &Lua) -> Result<luaur_rt::Table> {
+        let table = lua.create_table();
+        if let Some(context) = self.ore_context() {
+            let context = context.borrow();
+            if !context.featuresKnown() {
+                return Err(luaur_rt::Error::runtime(
+                    "context.features is not available yet: this script is recording for a GPU device that has not been attached, so no capability can be reported without guessing at it. Read features from a method that runs after the first frame instead of at module scope",
+                ));
+            }
+            let features = context.features();
+            macro_rules! field {
+                ($($name:ident),*) => { $(table.set(stringify!($name), features.$name)?;)* };
+            }
+            field!(
+                bc,
+                etc2,
+                astc,
+                maxTextureSize2D,
+                maxTextureSizeCube,
+                maxTextureSize3D,
+                anisotropicFiltering,
+                texture3D,
+                textureArrays,
+                colorBufferFloat,
+                colorBufferHalfFloat,
+                perTargetBlend,
+                perTargetWriteMask,
+                drawBaseInstance,
+                depthBiasClamp,
+                maxColorAttachments,
+                maxUniformBufferSize,
+                maxSamplers,
+                maxSamples
+            );
+        } else {
+            for name in [
+                "bc",
+                "etc2",
+                "astc",
+                "anisotropicFiltering",
+                "texture3D",
+                "textureArrays",
+                "colorBufferFloat",
+                "colorBufferHalfFloat",
+                "perTargetBlend",
+                "perTargetWriteMask",
+                "drawBaseInstance",
+                "depthBiasClamp",
+            ] {
+                table.set(name, false)?;
+            }
+            for (name, value) in [
+                ("maxTextureSize2D", 4096u32),
+                ("maxTextureSizeCube", 4096),
+                ("maxTextureSize3D", 256),
+                ("maxColorAttachments", 4),
+                ("maxUniformBufferSize", 16384),
+                ("maxSamplers", 16),
+                ("maxSamples", 4),
+            ] {
+                table.set(name, value)?;
+            }
+        }
+        table.set_readonly(true);
+        Ok(table)
     }
 }

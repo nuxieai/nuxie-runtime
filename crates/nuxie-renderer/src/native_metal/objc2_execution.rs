@@ -3,14 +3,14 @@
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject, Sel};
-use objc2::{msg_send, ClassType, Message};
+use objc2::{ClassType, Message, msg_send};
 use objc2_foundation::{NSError, NSString};
 use objc2_metal::{
-    MTLBuffer, MTLCommandBuffer, MTLCommandBufferStatus, MTLCommandQueue, MTLDevice, MTLLibrary,
-    MTLPixelFormat, MTLRenderPipelineDescriptor, MTLResourceOptions, MTLSamplerDescriptor, MTLTexture,
-    MTLTextureDescriptor, MTLTextureUsage, MTLGPUFamily,
+    MTLBuffer, MTLCommandBuffer, MTLCommandBufferStatus, MTLCommandQueue, MTLDevice, MTLGPUFamily,
+    MTLLibrary, MTLPixelFormat, MTLRenderPipelineDescriptor, MTLResourceOptions,
+    MTLSamplerDescriptor, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
 };
-use std::ffi::{c_void, CString};
+use std::ffi::{CString, c_void};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -33,13 +33,13 @@ unsafe extern "C" {
     fn NXGetLocalArchInfo() -> *const NxArchInfo;
 }
 
-use crate::mechanical_metal_implementation::source_execution::{
-    DrawType, Handle, HostExecution, InterlockMode, MetalAliasValidity, MetalExecution,
-    MetalObjectKind, ObjectCreation, OwnedMetalHandle, PipelineSemantic, PipelineSemanticKind, Value,
-    PixelFormat,
-};
 #[cfg(test)]
 use crate::mechanical_metal_implementation::source_execution::SOURCE_STATIC_FUNCTION_NAMES;
+use crate::mechanical_metal_implementation::source_execution::{
+    DrawType, Handle, HostExecution, InterlockMode, MetalAliasValidity, MetalExecution,
+    MetalObjectKind, ObjectCreation, OwnedMetalHandle, PipelineSemantic, PipelineSemanticKind,
+    PixelFormat, Value,
+};
 
 fn source_static_function_name(name: &str) -> Option<&'static NSString> {
     Some(match name {
@@ -334,9 +334,7 @@ impl Objc2MetalExecution {
         // SAFETY: the registry kind check above is the typed provenance for
         // this protocol projection; the registry entry keeps the object live
         // for the synchronous selector call.
-        Some(unsafe {
-            &*(object as *const AnyObject as *const ProtocolObject<dyn MTLDevice>)
-        })
+        Some(unsafe { &*(object as *const AnyObject as *const ProtocolObject<dyn MTLDevice>) })
     }
 
     fn insert<T: Message + 'static>(
@@ -490,9 +488,9 @@ impl Objc2MetalExecution {
     ) -> Option<Retained<AnyObject>> {
         match self.owner(handle, expected)? {
             RetainedMetalObject::ObjectiveC(object) => Some(object.clone()),
-            RetainedMetalObject::BorrowedObjectiveC { object, .. } => {
-                unsafe { Retained::retain(object.as_ptr()) }
-            }
+            RetainedMetalObject::BorrowedObjectiveC { object, .. } => unsafe {
+                Retained::retain(object.as_ptr())
+            },
             RetainedMetalObject::Dispatch { .. } | RetainedMetalObject::Host(_) => None,
         }
     }
@@ -562,10 +560,7 @@ impl Objc2MetalExecution {
         if !matches!(entry.object, RetainedMetalObject::ObjectiveC(_)) {
             return None;
         }
-        let old = core::mem::replace(
-            &mut entry.object,
-            RetainedMetalObject::Host(Box::new(())),
-        );
+        let old = core::mem::replace(&mut entry.object, RetainedMetalObject::Host(Box::new(())));
         let mut old = core::mem::ManuallyDrop::new(old);
         let RetainedMetalObject::ObjectiveC(object) = &mut *old else {
             unreachable!("entry kind checked before ownership transfer")
@@ -974,8 +969,7 @@ impl Objc2MetalExecution {
         let command = self.object(command_buffer, MetalObjectKind::CommandBuffer)?;
         unsafe {
             Retained::retain(
-                (command as *const AnyObject as *mut ProtocolObject<dyn MTLCommandBuffer>)
-                    .cast(),
+                (command as *const AnyObject as *mut ProtocolObject<dyn MTLCommandBuffer>).cast(),
             )
         }
     }
@@ -1097,11 +1091,8 @@ impl Objc2MetalExecution {
         }
         let pointer = NonNull::new(bytes.as_ptr().cast_mut().cast::<c_void>())?;
         let options = resource_options(Self::u64_arg(args, 3)?);
-        unsafe {
-            device
-                .newBufferWithBytes_length_options(pointer, length, options)
-        }
-        .map(|buffer| self.insert(buffer, MetalObjectKind::Buffer))
+        unsafe { device.newBufferWithBytes_length_options(pointer, length, options) }
+            .map(|buffer| self.insert(buffer, MetalObjectKind::Buffer))
     }
 
     fn new_texture(&mut self, args: &[Value]) -> Option<Handle> {
@@ -1133,7 +1124,9 @@ impl MetalExecution for Objc2MetalExecution {
     fn device_is_apple_silicon(&mut self, device: Handle) -> bool {
         #[cfg(any(target_os = "ios", target_os = "tvos", target_os = "visionos"))]
         {
-            let Some(device) = self.device_for_handle(device) else { return false; };
+            let Some(device) = self.device_for_handle(device) else {
+                return false;
+            };
             if objc2::available!(ios = 13.0, tvos = 13.0, visionos = 1.0) {
                 return device.supportsFamily(MTLGPUFamily::Apple4);
             }
@@ -1151,14 +1144,11 @@ impl MetalExecution for Objc2MetalExecution {
             let info = unsafe { NXGetLocalArchInfo() };
             return !info.is_null()
                 && unsafe {
-                    (*info)
-                        ._name
-                        .as_ref()
-                        .is_some_and(|_| {
-                            std::ffi::CStr::from_ptr((*info)._name)
-                                .to_bytes()
-                                .starts_with(b"arm64")
-                        })
+                    (*info)._name.as_ref().is_some_and(|_| {
+                        std::ffi::CStr::from_ptr((*info)._name)
+                            .to_bytes()
+                            .starts_with(b"arm64")
+                    })
                 };
         }
         #[cfg(not(all(target_vendor = "apple", target_os = "ios", target_abi = "sim")))]
@@ -1208,21 +1198,13 @@ impl MetalExecution for Objc2MetalExecution {
             && texture.pixelFormat() == expected_format
     }
 
-    fn take_owned(
-        &mut self,
-        handle: Handle,
-        kind: MetalObjectKind,
-    ) -> Option<OwnedMetalHandle> {
+    fn take_owned(&mut self, handle: Handle, kind: MetalObjectKind) -> Option<OwnedMetalHandle> {
         self.drain_retirements();
         let (object, validity) = self.take_owned_object(handle, kind)?;
         Some(unsafe { OwnedMetalHandle::native(handle, object, validity) })
     }
 
-    fn clone_owned(
-        &mut self,
-        handle: Handle,
-        kind: MetalObjectKind,
-    ) -> Option<OwnedMetalHandle> {
+    fn clone_owned(&mut self, handle: Handle, kind: MetalObjectKind) -> Option<OwnedMetalHandle> {
         let duplicate = self.duplicate(handle, kind)?;
         self.take_owned(duplicate, kind)
     }
@@ -1254,15 +1236,10 @@ impl MetalExecution for Objc2MetalExecution {
         let function_base_name = CString::new(function_base_name).ok()?;
         let selector = Sel::register(c"stringWithFormat:");
         let class = core::ptr::from_ref(NSString::class()).cast::<AnyObject>();
-        type StringWithFormat = unsafe extern "C" fn(
-            *const AnyObject,
-            Sel,
-            *const NSString,
-            ...,
-        ) -> *mut NSString;
-        let string_with_format: StringWithFormat = unsafe {
-            core::mem::transmute(objc2::ffi::objc_msgSend as *const ())
-        };
+        type StringWithFormat =
+            unsafe extern "C" fn(*const AnyObject, Sel, *const NSString, ...) -> *mut NSString;
+        let string_with_format: StringWithFormat =
+            unsafe { core::mem::transmute(objc2::ffi::objc_msgSend as *const ()) };
         let native = unsafe {
             string_with_format(
                 class,
@@ -1440,6 +1417,11 @@ impl MetalExecution for Objc2MetalExecution {
             ("gpu", "newBufferWithLength:options:") => self.new_buffer(&args),
             ("gpu", "newBufferWithBytes:length:options:") => self.new_static_buffer(&args),
             ("gpu", "newTextureWithDescriptor:") => self.new_texture(&args),
+            ("gpu", "newCommandQueue") => {
+                let device = self.device_for_handle(Self::handle_arg(&args, 0)?)?;
+                let queue = device.newCommandQueue()?;
+                Some(self.insert(queue, MetalObjectKind::CommandQueue))
+            }
             ("gpu", "newSamplerStateWithDescriptor:") => {
                 let device = self.device_for_handle(Self::handle_arg(&args, 0)?)?;
                 let descriptor_handle = Self::handle_arg(&args, 1)?;
@@ -1475,10 +1457,7 @@ impl MetalExecution for Objc2MetalExecution {
             }
             ("descriptor", "colorAttachmentAtIndex:") => {
                 let descriptor_handle = Self::handle_arg(&args, 0)?;
-                self.object(
-                    descriptor_handle,
-                    MetalObjectKind::RenderPipelineDescriptor,
-                )?;
+                self.object(descriptor_handle, MetalObjectKind::RenderPipelineDescriptor)?;
                 let attachments = self.object(
                     Self::handle_arg(&args, 1)?,
                     MetalObjectKind::RenderPipelineColorAttachmentDescriptorArray,
@@ -1497,10 +1476,8 @@ impl MetalExecution for Objc2MetalExecution {
             }
             ("descriptor", "colorAttachments") => {
                 let descriptor_handle = Self::handle_arg(&args, 0)?;
-                let descriptor = self.object(
-                    descriptor_handle,
-                    MetalObjectKind::RenderPipelineDescriptor,
-                )?;
+                let descriptor =
+                    self.object(descriptor_handle, MetalObjectKind::RenderPipelineDescriptor)?;
                 let attachments = unsafe {
                     let attachments: *mut AnyObject = msg_send![descriptor, colorAttachments];
                     NonNull::new(attachments)
@@ -1592,9 +1569,11 @@ impl MetalExecution for Objc2MetalExecution {
         let mut error: Option<Retained<NSError>> = None;
         let object: Option<Retained<AnyObject>> = match (receiver, selector) {
             ("gpu", "newLibraryWithData:error:") => {
-                let Some(device) = self.device_for_handle(
-                    Self::handle_arg(&args, 0).unwrap_or(Handle::NIL),
-                ) else { return ObjectCreation::default(); };
+                let Some(device) =
+                    self.device_for_handle(Self::handle_arg(&args, 0).unwrap_or(Handle::NIL))
+                else {
+                    return ObjectCreation::default();
+                };
                 let Some(handle) = Self::handle_arg(&args, 1) else {
                     return ObjectCreation::default();
                 };
@@ -1614,9 +1593,11 @@ impl MetalExecution for Objc2MetalExecution {
                 library
             }
             ("gpu", "newRenderPipelineStateWithDescriptor:error:") => {
-                let Some(device) = self.device_for_handle(
-                    Self::handle_arg(&args, 0).unwrap_or(Handle::NIL),
-                ) else { return ObjectCreation::default(); };
+                let Some(device) =
+                    self.device_for_handle(Self::handle_arg(&args, 0).unwrap_or(Handle::NIL))
+                else {
+                    return ObjectCreation::default();
+                };
                 let Some(descriptor_handle) = Self::handle_arg(&args, 1) else {
                     return ObjectCreation::default();
                 };
@@ -1737,7 +1718,6 @@ impl HostExecution for Objc2MetalExecution {
         }?;
         Some(self.insert_host(owner, MetalObjectKind::OreContext))
     }
-
 }
 
 impl Objc2MetalExecution {
@@ -1754,7 +1734,9 @@ impl Objc2MetalExecution {
         match (receiver, selector) {
             ("commandBuffer", "commit (__bridge_transfer)") => {
                 if let Some(object) = self.take_owner(handle, MetalObjectKind::CommandBuffer) {
-                    let RetainedMetalObject::ObjectiveC(command) = &object else { return; };
+                    let RetainedMetalObject::ObjectiveC(command) = &object else {
+                        return;
+                    };
                     unsafe {
                         let _: () = msg_send![&*command, commit];
                     }
@@ -1762,16 +1744,16 @@ impl Objc2MetalExecution {
             }
             (_, "endEncoding") => {
                 let expected = match handle.kind {
-                    MetalObjectKind::RenderCommandEncoder => {
-                        MetalObjectKind::RenderCommandEncoder
-                    }
+                    MetalObjectKind::RenderCommandEncoder => MetalObjectKind::RenderCommandEncoder,
                     MetalObjectKind::BlitCommandEncoder => MetalObjectKind::BlitCommandEncoder,
                     _ => return,
                 };
                 let Some(object) = self.object(handle, expected) else {
                     return;
                 };
-                unsafe { let _: () = msg_send![object, endEncoding]; }
+                unsafe {
+                    let _: () = msg_send![object, endEncoding];
+                }
             }
             ("textureDescriptor", selector)
                 if matches!(
@@ -1792,14 +1774,30 @@ impl Objc2MetalExecution {
                 let value = some!(Self::u64_arg(args, 1));
                 unsafe {
                     match selector {
-                        "setPixelFormat:" => { let _: () = msg_send![descriptor, setPixelFormat: value]; }
-                        "setTextureType:" => { let _: () = msg_send![descriptor, setTextureType: value]; }
-                        "setWidth:" => { let _: () = msg_send![descriptor, setWidth: value as usize]; }
-                        "setHeight:" => { let _: () = msg_send![descriptor, setHeight: value as usize]; }
-                        "setMipmapLevelCount:" => { let _: () = msg_send![descriptor, setMipmapLevelCount: value as usize]; }
-                        "setArrayLength:" => { let _: () = msg_send![descriptor, setArrayLength: value as usize]; }
-                        "setUsage:" => { let _: () = msg_send![descriptor, setUsage: value]; }
-                        "setStorageMode:" => { let _: () = msg_send![descriptor, setStorageMode: value]; }
+                        "setPixelFormat:" => {
+                            let _: () = msg_send![descriptor, setPixelFormat: value];
+                        }
+                        "setTextureType:" => {
+                            let _: () = msg_send![descriptor, setTextureType: value];
+                        }
+                        "setWidth:" => {
+                            let _: () = msg_send![descriptor, setWidth: value as usize];
+                        }
+                        "setHeight:" => {
+                            let _: () = msg_send![descriptor, setHeight: value as usize];
+                        }
+                        "setMipmapLevelCount:" => {
+                            let _: () = msg_send![descriptor, setMipmapLevelCount: value as usize];
+                        }
+                        "setArrayLength:" => {
+                            let _: () = msg_send![descriptor, setArrayLength: value as usize];
+                        }
+                        "setUsage:" => {
+                            let _: () = msg_send![descriptor, setUsage: value];
+                        }
+                        "setStorageMode:" => {
+                            let _: () = msg_send![descriptor, setStorageMode: value];
+                        }
                         _ => {}
                     }
                 }
@@ -1812,7 +1810,9 @@ impl Objc2MetalExecution {
                 let descriptor = some!(descriptor);
                 let function = Self::handle_arg(args, 1)
                     .and_then(|handle| self.object(handle, MetalObjectKind::Function));
-                unsafe { let _: () = msg_send![descriptor, setVertexFunction: function]; }
+                unsafe {
+                    let _: () = msg_send![descriptor, setVertexFunction: function];
+                }
             }
             ("descriptor", "setFragmentFunction:") => {
                 let descriptor = self.object(
@@ -1822,7 +1822,9 @@ impl Objc2MetalExecution {
                 let descriptor = some!(descriptor);
                 let function = Self::handle_arg(args, 1)
                     .and_then(|handle| self.object(handle, MetalObjectKind::Function));
-                unsafe { let _: () = msg_send![descriptor, setFragmentFunction: function]; }
+                unsafe {
+                    let _: () = msg_send![descriptor, setFragmentFunction: function];
+                }
             }
             ("colorAttachments[0]" | "framebuffer", "setPixelFormat:") => {
                 let attachment = Self::handle_arg(args, 0).and_then(|handle| {
@@ -1833,39 +1835,61 @@ impl Objc2MetalExecution {
                 });
                 let attachment = some!(attachment);
                 let pixel_format = some!(Self::u64_arg(args, 1));
-                unsafe { let _: () = msg_send![attachment, setPixelFormat: pixel_format]; }
+                unsafe {
+                    let _: () = msg_send![attachment, setPixelFormat: pixel_format];
+                }
             }
             ("clipAttachment", "setPixelFormat:") => {
                 let attachment = Self::handle_arg(args, 0).and_then(|handle| {
-                    self.object(handle, MetalObjectKind::RenderPipelineColorAttachmentDescriptor)
+                    self.object(
+                        handle,
+                        MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+                    )
                 });
                 let attachment = some!(attachment);
                 let pixel_format = some!(Self::u64_arg(args, 1));
-                unsafe { let _: () = msg_send![attachment, setPixelFormat: pixel_format]; }
+                unsafe {
+                    let _: () = msg_send![attachment, setPixelFormat: pixel_format];
+                }
             }
             ("scratchAttachment", "setPixelFormat:") => {
                 let attachment = Self::handle_arg(args, 0).and_then(|handle| {
-                    self.object(handle, MetalObjectKind::RenderPipelineColorAttachmentDescriptor)
+                    self.object(
+                        handle,
+                        MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+                    )
                 });
                 let attachment = some!(attachment);
                 let pixel_format = some!(Self::u64_arg(args, 1));
-                unsafe { let _: () = msg_send![attachment, setPixelFormat: pixel_format]; }
+                unsafe {
+                    let _: () = msg_send![attachment, setPixelFormat: pixel_format];
+                }
             }
             ("coverageAttachment", "setPixelFormat:") => {
                 let attachment = Self::handle_arg(args, 0).and_then(|handle| {
-                    self.object(handle, MetalObjectKind::RenderPipelineColorAttachmentDescriptor)
+                    self.object(
+                        handle,
+                        MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+                    )
                 });
                 let attachment = some!(attachment);
                 let pixel_format = some!(Self::u64_arg(args, 1));
-                unsafe { let _: () = msg_send![attachment, setPixelFormat: pixel_format]; }
+                unsafe {
+                    let _: () = msg_send![attachment, setPixelFormat: pixel_format];
+                }
             }
             ("colorAttachments[0]" | "framebuffer", "setBlendingEnabled:") => {
                 let attachment = Self::handle_arg(args, 0).and_then(|handle| {
-                    self.object(handle, MetalObjectKind::RenderPipelineColorAttachmentDescriptor)
+                    self.object(
+                        handle,
+                        MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+                    )
                 });
                 let attachment = some!(attachment);
                 let enabled = some!(Self::bool_arg(args, 1));
-                unsafe { let _: () = msg_send![attachment, setBlendingEnabled: enabled]; }
+                unsafe {
+                    let _: () = msg_send![attachment, setBlendingEnabled: enabled];
+                }
             }
             ("samplerDescriptor", selector)
                 if matches!(
@@ -1883,11 +1907,21 @@ impl Objc2MetalExecution {
                 let value = some!(Self::u64_arg(args, 1));
                 unsafe {
                     match selector {
-                        "setMinFilter:" => { let _: () = msg_send![descriptor, setMinFilter: value]; }
-                        "setMagFilter:" => { let _: () = msg_send![descriptor, setMagFilter: value]; }
-                        "setMipFilter:" => { let _: () = msg_send![descriptor, setMipFilter: value]; }
-                        "setSAddressMode:" => { let _: () = msg_send![descriptor, setSAddressMode: value]; }
-                        "setTAddressMode:" => { let _: () = msg_send![descriptor, setTAddressMode: value]; }
+                        "setMinFilter:" => {
+                            let _: () = msg_send![descriptor, setMinFilter: value];
+                        }
+                        "setMagFilter:" => {
+                            let _: () = msg_send![descriptor, setMagFilter: value];
+                        }
+                        "setMipFilter:" => {
+                            let _: () = msg_send![descriptor, setMipFilter: value];
+                        }
+                        "setSAddressMode:" => {
+                            let _: () = msg_send![descriptor, setSAddressMode: value];
+                        }
+                        "setTAddressMode:" => {
+                            let _: () = msg_send![descriptor, setTAddressMode: value];
+                        }
                         _ => {}
                     }
                 }
@@ -1905,19 +1939,37 @@ impl Objc2MetalExecution {
                 ) =>
             {
                 let attachment = Self::handle_arg(args, 0).and_then(|handle| {
-                    self.object(handle, MetalObjectKind::RenderPipelineColorAttachmentDescriptor)
+                    self.object(
+                        handle,
+                        MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+                    )
                 });
                 let attachment = some!(attachment);
                 let value = some!(Self::u64_arg(args, 1));
                 unsafe {
                     match selector {
-                        "setSourceRGBBlendFactor:" => { let _: () = msg_send![attachment, setSourceRGBBlendFactor: value]; }
-                        "setDestinationRGBBlendFactor:" => { let _: () = msg_send![attachment, setDestinationRGBBlendFactor: value]; }
-                        "setRgbBlendOperation:" => { let _: () = msg_send![attachment, setRgbBlendOperation: value]; }
-                        "setSourceAlphaBlendFactor:" => { let _: () = msg_send![attachment, setSourceAlphaBlendFactor: value]; }
-                        "setDestinationAlphaBlendFactor:" => { let _: () = msg_send![attachment, setDestinationAlphaBlendFactor: value]; }
-                        "setAlphaBlendOperation:" => { let _: () = msg_send![attachment, setAlphaBlendOperation: value]; }
-                        "setWriteMask:" => { let _: () = msg_send![attachment, setWriteMask: value]; }
+                        "setSourceRGBBlendFactor:" => {
+                            let _: () = msg_send![attachment, setSourceRGBBlendFactor: value];
+                        }
+                        "setDestinationRGBBlendFactor:" => {
+                            let _: () = msg_send![attachment, setDestinationRGBBlendFactor: value];
+                        }
+                        "setRgbBlendOperation:" => {
+                            let _: () = msg_send![attachment, setRgbBlendOperation: value];
+                        }
+                        "setSourceAlphaBlendFactor:" => {
+                            let _: () = msg_send![attachment, setSourceAlphaBlendFactor: value];
+                        }
+                        "setDestinationAlphaBlendFactor:" => {
+                            let _: () =
+                                msg_send![attachment, setDestinationAlphaBlendFactor: value];
+                        }
+                        "setAlphaBlendOperation:" => {
+                            let _: () = msg_send![attachment, setAlphaBlendOperation: value];
+                        }
+                        "setWriteMask:" => {
+                            let _: () = msg_send![attachment, setWriteMask: value];
+                        }
                         _ => {}
                     }
                 }
@@ -1936,25 +1988,23 @@ impl Objc2MetalExecution {
                     let _: () = msg_send![descriptor, setRenderTargetHeight: height];
                 }
             }
-            (
-                "pass" | "gradPass" | "tessPass" | "atlasPass",
-                "setRenderTargetWidth:",
-            ) => {
+            ("pass" | "gradPass" | "tessPass" | "atlasPass", "setRenderTargetWidth:") => {
                 let descriptor = Self::handle_arg(args, 0)
                     .and_then(|handle| self.object(handle, MetalObjectKind::RenderPassDescriptor));
                 let descriptor = some!(descriptor);
                 let width = some!(Self::u64_arg(args, 1)) as usize;
-                unsafe { let _: () = msg_send![descriptor, setRenderTargetWidth: width]; }
+                unsafe {
+                    let _: () = msg_send![descriptor, setRenderTargetWidth: width];
+                }
             }
-            (
-                "pass" | "gradPass" | "tessPass" | "atlasPass",
-                "setRenderTargetHeight:",
-            ) => {
+            ("pass" | "gradPass" | "tessPass" | "atlasPass", "setRenderTargetHeight:") => {
                 let descriptor = Self::handle_arg(args, 0)
                     .and_then(|handle| self.object(handle, MetalObjectKind::RenderPassDescriptor));
                 let descriptor = some!(descriptor);
                 let height = some!(Self::u64_arg(args, 1)) as usize;
-                unsafe { let _: () = msg_send![descriptor, setRenderTargetHeight: height]; }
+                unsafe {
+                    let _: () = msg_send![descriptor, setRenderTargetHeight: height];
+                }
             }
             (receiver, "setTexture:") if is_render_pass_attachment_receiver(receiver) => {
                 let attachment = Self::handle_arg(args, 0).and_then(|handle| {
@@ -1963,7 +2013,9 @@ impl Objc2MetalExecution {
                 let attachment = some!(attachment);
                 let texture = Self::handle_arg(args, 1)
                     .and_then(|handle| self.object(handle, MetalObjectKind::Texture));
-                unsafe { let _: () = msg_send![attachment, setTexture: texture]; }
+                unsafe {
+                    let _: () = msg_send![attachment, setTexture: texture];
+                }
                 if texture.is_some() {
                     match receiver {
                         "colorAttachment" => {
@@ -1985,7 +2037,9 @@ impl Objc2MetalExecution {
                 });
                 let attachment = some!(attachment);
                 let action = some!(Self::u64_arg(args, 1));
-                unsafe { let _: () = msg_send![attachment, setLoadAction: action]; }
+                unsafe {
+                    let _: () = msg_send![attachment, setLoadAction: action];
+                }
             }
             (receiver, "setStoreAction:") if is_render_pass_attachment_receiver(receiver) => {
                 let attachment = Self::handle_arg(args, 0).and_then(|handle| {
@@ -1993,7 +2047,9 @@ impl Objc2MetalExecution {
                 });
                 let attachment = some!(attachment);
                 let action = some!(Self::u64_arg(args, 1));
-                unsafe { let _: () = msg_send![attachment, setStoreAction: action]; }
+                unsafe {
+                    let _: () = msg_send![attachment, setStoreAction: action];
+                }
             }
             (receiver, "setClearColor:") if is_render_pass_attachment_receiver(receiver) => {
                 let attachment = Self::handle_arg(args, 0).and_then(|handle| {
@@ -2007,7 +2063,9 @@ impl Objc2MetalExecution {
                     blue: clear.blue,
                     alpha: clear.alpha,
                 };
-                unsafe { let _: () = msg_send![attachment, setClearColor: clear]; }
+                unsafe {
+                    let _: () = msg_send![attachment, setClearColor: clear];
+                }
             }
             (
                 "gaussianTexture",
@@ -2077,7 +2135,9 @@ impl Objc2MetalExecution {
                 let texture = Self::handle_arg(args, 1)
                     .and_then(|handle| self.object(handle, MetalObjectKind::Texture));
                 let Some(texture) = texture else { return };
-                unsafe { let _: () = msg_send![encoder, generateMipmapsForTexture: texture]; }
+                unsafe {
+                    let _: () = msg_send![encoder, generateMipmapsForTexture: texture];
+                }
             }
             (
                 "copyEncoder",
@@ -2132,7 +2192,9 @@ impl Objc2MetalExecution {
                     znear: viewport.znear,
                     zfar: viewport.zfar,
                 };
-                unsafe { let _: () = msg_send![encoder, setViewport: viewport]; }
+                unsafe {
+                    let _: () = msg_send![encoder, setViewport: viewport];
+                }
             }
             (receiver, "setScissorRect:") if is_render_encoder(receiver) => {
                 let encoder = some!(self.object(handle, MetalObjectKind::RenderCommandEncoder));
@@ -2143,7 +2205,9 @@ impl Objc2MetalExecution {
                     width: scissor.width,
                     height: scissor.height,
                 };
-                unsafe { let _: () = msg_send![encoder, setScissorRect: scissor]; }
+                unsafe {
+                    let _: () = msg_send![encoder, setScissorRect: scissor];
+                }
             }
             (receiver, "setRenderPipelineState:") if is_render_encoder(receiver) => {
                 let encoder = some!(self.object(handle, MetalObjectKind::RenderCommandEncoder));
@@ -2151,7 +2215,9 @@ impl Objc2MetalExecution {
                 let semantic = self.pipeline_semantic(pipeline_handle);
                 let pipeline = self.object(pipeline_handle, MetalObjectKind::RenderPipelineState);
                 let Some(pipeline) = pipeline else { return };
-                unsafe { let _: () = msg_send![encoder, setRenderPipelineState: pipeline]; }
+                unsafe {
+                    let _: () = msg_send![encoder, setRenderPipelineState: pipeline];
+                }
                 self.bind_pipeline_semantic(handle, semantic);
             }
             (receiver, "setVertexBuffer:offset:atIndex:") if is_render_encoder(receiver) => {
@@ -2186,7 +2252,9 @@ impl Objc2MetalExecution {
                         16 => self.execution_inventory.snapshot.color_atomic_buffer_binds += 1,
                         17 => self.execution_inventory.snapshot.clip_atomic_buffer_binds += 1,
                         19 => {
-                            self.execution_inventory.snapshot.coverage_atomic_buffer_binds += 1
+                            self.execution_inventory
+                                .snapshot
+                                .coverage_atomic_buffer_binds += 1
                         }
                         _ => {}
                     }
@@ -2197,14 +2265,18 @@ impl Objc2MetalExecution {
                 let texture = Self::handle_arg(args, 1)
                     .and_then(|handle| self.object(handle, MetalObjectKind::Texture));
                 let index = some!(Self::u64_arg(args, 2)) as usize;
-                unsafe { let _: () = msg_send![encoder, setVertexTexture: texture, atIndex: index]; }
+                unsafe {
+                    let _: () = msg_send![encoder, setVertexTexture: texture, atIndex: index];
+                }
             }
             (receiver, "setFragmentTexture:atIndex:") if is_render_encoder(receiver) => {
                 let encoder = some!(self.object(handle, MetalObjectKind::RenderCommandEncoder));
                 let texture = Self::handle_arg(args, 1)
                     .and_then(|handle| self.object(handle, MetalObjectKind::Texture));
                 let index = some!(Self::u64_arg(args, 2)) as usize;
-                unsafe { let _: () = msg_send![encoder, setFragmentTexture: texture, atIndex: index]; }
+                unsafe {
+                    let _: () = msg_send![encoder, setFragmentTexture: texture, atIndex: index];
+                }
                 if texture.is_some() && index == 8 {
                     self.execution_inventory.snapshot.gradient_texture_binds += 1;
                 } else if texture.is_some() && index == 11 {
@@ -2216,17 +2288,24 @@ impl Objc2MetalExecution {
                 let sampler = Self::handle_arg(args, 1)
                     .and_then(|handle| self.object(handle, MetalObjectKind::SamplerState));
                 let index = some!(Self::u64_arg(args, 2)) as usize;
-                unsafe { let _: () = msg_send![encoder, setFragmentSamplerState: sampler, atIndex: index]; }
+                unsafe {
+                    let _: () =
+                        msg_send![encoder, setFragmentSamplerState: sampler, atIndex: index];
+                }
             }
             (receiver, "setCullMode:") if is_render_encoder(receiver) => {
                 let encoder = some!(self.object(handle, MetalObjectKind::RenderCommandEncoder));
                 let mode = some!(Self::u64_arg(args, 1));
-                unsafe { let _: () = msg_send![encoder, setCullMode: mode]; }
+                unsafe {
+                    let _: () = msg_send![encoder, setCullMode: mode];
+                }
             }
             (receiver, "setTriangleFillMode:") if is_render_encoder(receiver) => {
                 let encoder = some!(self.object(handle, MetalObjectKind::RenderCommandEncoder));
                 let mode = some!(Self::u64_arg(args, 1));
-                unsafe { let _: () = msg_send![encoder, setTriangleFillMode: mode]; }
+                unsafe {
+                    let _: () = msg_send![encoder, setTriangleFillMode: mode];
+                }
             }
             (receiver, "setVertexBytes:length:atIndex:") if is_render_encoder(receiver) => {
                 let encoder = some!(self.object(handle, MetalObjectKind::RenderCommandEncoder));
@@ -2259,9 +2338,7 @@ impl Objc2MetalExecution {
                     ];
                 }
                 self.execution_inventory.snapshot.memory_barriers += 1;
-                self.execution_inventory
-                    .snapshot
-                    .semantic_atomic_barriers += 1;
+                self.execution_inventory.snapshot.semantic_atomic_barriers += 1;
                 self.execution_inventory.atomic_group_boundary = true;
             }
             (receiver, "drawPrimitives:vertexStart:vertexCount:")
@@ -2484,14 +2561,11 @@ mod ownership_transfer_tests {
         ) -> Option<Box<dyn std::any::Any>> {
             None
         }
-
     }
 
     fn execution_without_real_device() -> Objc2MetalExecution {
         let object = NSObject::new();
-        let device = unsafe {
-            Retained::cast_unchecked::<ProtocolObject<dyn MTLDevice>>(object)
-        };
+        let device = unsafe { Retained::cast_unchecked::<ProtocolObject<dyn MTLDevice>>(object) };
         let device_ptr = NonNull::from(&*device);
         let mut execution = Objc2MetalExecution {
             registry_id: next_registry_id(),
@@ -2524,15 +2598,19 @@ mod ownership_transfer_tests {
         let mut execution = execution_without_real_device();
         let (handle, observer) = insert_probe(&mut execution, MetalObjectKind::Texture);
 
-        assert!(execution
-            .take_owned(handle, MetalObjectKind::Buffer)
-            .is_none());
+        assert!(
+            execution
+                .take_owned(handle, MetalObjectKind::Buffer)
+                .is_none()
+        );
         let owner = execution
             .take_owned(handle, MetalObjectKind::Texture)
             .expect("first exact typed transfer must succeed");
-        assert!(execution
-            .take_owned(handle, MetalObjectKind::Texture)
-            .is_none());
+        assert!(
+            execution
+                .take_owned(handle, MetalObjectKind::Texture)
+                .is_none()
+        );
         assert!(execution.object(handle, MetalObjectKind::Texture).is_some());
 
         let cloned_owner = execution
@@ -2601,12 +2679,14 @@ mod ownership_transfer_tests {
         assert_ne!(framebuffer.handle(), attachment_alias);
         assert_eq!(attachment_observer.retainCount(), attachment_count + 1);
         execution.retire_handle(attachment_alias);
-        assert!(execution
-            .object(
-                framebuffer.handle(),
-                MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
-            )
-            .is_some());
+        assert!(
+            execution
+                .object(
+                    framebuffer.handle(),
+                    MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+                )
+                .is_some()
+        );
         assert_eq!(attachment_observer.retainCount(), attachment_count + 1);
         drop(framebuffer);
         assert_eq!(attachment_observer.retainCount(), attachment_count);
@@ -2639,23 +2719,29 @@ mod ownership_transfer_tests {
             retain_count_before_alias,
             "publishing a descriptor-owned +0 child must not retain it"
         );
-        assert!(execution
-            .object(
-                alias,
-                MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
-            )
-            .is_some());
+        assert!(
+            execution
+                .object(
+                    alias,
+                    MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+                )
+                .is_some()
+        );
 
         execution.retire_handle(parent);
-        assert!(execution
-            .object(parent, MetalObjectKind::RenderPipelineDescriptor)
-            .is_none());
-        assert!(execution
-            .object(
-                alias,
-                MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
-            )
-            .is_none());
+        assert!(
+            execution
+                .object(parent, MetalObjectKind::RenderPipelineDescriptor)
+                .is_none()
+        );
+        assert!(
+            execution
+                .object(
+                    alias,
+                    MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+                )
+                .is_none()
+        );
         assert_eq!(parent_observer.retainCount(), 1);
         assert_eq!(child_observer.retainCount(), retain_count_before_alias);
         drop(child);
@@ -2702,7 +2788,11 @@ mod ownership_transfer_tests {
             assert_eq!(collection_observer.retainCount(), collection_retain_count);
             assert_eq!(child_observer.retainCount(), child_retain_count);
             execution.retire_handle(collection_alias);
-            assert!(execution.object(collection_alias, collection_kind).is_none());
+            assert!(
+                execution
+                    .object(collection_alias, collection_kind)
+                    .is_none()
+            );
             assert!(execution.object(child_alias, child_kind).is_some());
             assert_eq!(collection_observer.retainCount(), collection_retain_count);
             assert_eq!(child_observer.retainCount(), child_retain_count);
@@ -2740,7 +2830,10 @@ mod ownership_transfer_tests {
         let mut observers = Vec::new();
         for kind in kinds {
             let (handle, observer) = insert_probe(&mut execution, kind);
-            assert_eq!(execution.entry(handle, kind).map(|entry| entry.kind), Some(kind));
+            assert_eq!(
+                execution.entry(handle, kind).map(|entry| entry.kind),
+                Some(kind)
+            );
             let owner = execution
                 .take_owned(handle, kind)
                 .expect("selector creation +1 must transfer for every live kind");
@@ -2748,7 +2841,9 @@ mod ownership_transfer_tests {
             owners.push((handle, kind, owner));
             observers.push(observer);
         }
-        for ((handle, kind, owner), observer) in owners.into_iter().rev().zip(observers.into_iter().rev()) {
+        for ((handle, kind, owner), observer) in
+            owners.into_iter().rev().zip(observers.into_iter().rev())
+        {
             drop(owner);
             assert!(execution.object(handle, kind).is_none());
             assert_eq!(observer.retainCount(), 1, "owner release must be exact");
@@ -2757,7 +2852,11 @@ mod ownership_transfer_tests {
         // A failed typed transfer is the source failpoint equivalent: it
         // must not consume the creation owner or leave a second alias.
         let (handle, observer) = insert_probe(&mut execution, MetalObjectKind::Texture);
-        assert!(execution.take_owned(handle, MetalObjectKind::Buffer).is_none());
+        assert!(
+            execution
+                .take_owned(handle, MetalObjectKind::Buffer)
+                .is_none()
+        );
         assert!(execution.object(handle, MetalObjectKind::Texture).is_some());
         let owner = execution
             .take_owned(handle, MetalObjectKind::Texture)
@@ -2775,9 +2874,17 @@ mod ownership_transfer_tests {
             .expect("native NSString owner must be created");
         let handle = owner.handle();
         assert_eq!(handle.kind, MetalObjectKind::NSString);
-        assert!(execution.object(handle, MetalObjectKind::NSString).is_some());
+        assert!(
+            execution
+                .object(handle, MetalObjectKind::NSString)
+                .is_some()
+        );
         drop(owner);
-        assert!(execution.object(handle, MetalObjectKind::NSString).is_none());
+        assert!(
+            execution
+                .object(handle, MetalObjectKind::NSString)
+                .is_none()
+        );
     }
 
     #[test]
@@ -2801,18 +2908,30 @@ mod ownership_transfer_tests {
             // alias ends before the pool drains; it is never turned into a
             // synthetic strong owner by the bridge.
             execution.retire_handle(handle);
-            assert!(execution.object(handle, MetalObjectKind::NSString).is_none());
+            assert!(
+                execution
+                    .object(handle, MetalObjectKind::NSString)
+                    .is_none()
+            );
             handle
         });
-        assert!(execution.object(handle, MetalObjectKind::NSString).is_none());
+        assert!(
+            execution
+                .object(handle, MetalObjectKind::NSString)
+                .is_none()
+        );
 
         let slots_before_failure = execution.objects.len();
-        assert!(execution
-            .make_precompiled_function_name(b'p', "bad\0namespace", "GC")
-            .is_none());
-        assert!(execution
-            .make_precompiled_function_name(b'p', "0000000000", "bad\0base")
-            .is_none());
+        assert!(
+            execution
+                .make_precompiled_function_name(b'p', "bad\0namespace", "GC")
+                .is_none()
+        );
+        assert!(
+            execution
+                .make_precompiled_function_name(b'p', "0000000000", "bad\0base")
+                .is_none()
+        );
         assert_eq!(execution.objects.len(), slots_before_failure);
     }
 
@@ -2912,9 +3031,11 @@ mod ownership_transfer_tests {
         assert_eq!(replacement.slot, handle.slot);
         assert_eq!(replacement.generation, handle.generation + 1);
         assert!(execution.object(handle, MetalObjectKind::Texture).is_none());
-        assert!(execution
-            .take_owned(handle, MetalObjectKind::Texture)
-            .is_none());
+        assert!(
+            execution
+                .take_owned(handle, MetalObjectKind::Texture)
+                .is_none()
+        );
     }
 
     #[test]
@@ -2948,16 +3069,22 @@ mod ownership_transfer_tests {
             .publish_owned(&mut owner)
             .expect("owner must republish after the old executor invalidates its alias");
         assert_ne!(replacement.registry, handle.registry);
-        assert!(replacement_execution
-            .object(handle, MetalObjectKind::Buffer)
-            .is_none());
-        assert!(replacement_execution
-            .object(replacement, MetalObjectKind::Buffer)
-            .is_some());
+        assert!(
+            replacement_execution
+                .object(handle, MetalObjectKind::Buffer)
+                .is_none()
+        );
+        assert!(
+            replacement_execution
+                .object(replacement, MetalObjectKind::Buffer)
+                .is_some()
+        );
         drop(owner);
-        assert!(replacement_execution
-            .object(replacement, MetalObjectKind::Buffer)
-            .is_none());
+        assert!(
+            replacement_execution
+                .object(replacement, MetalObjectKind::Buffer)
+                .is_none()
+        );
         assert_eq!(observer.retainCount(), 1);
     }
 
@@ -2975,12 +3102,16 @@ mod ownership_transfer_tests {
             .publish_owned(&mut owner)
             .expect("canonical owner must move its alias to the new executor");
         assert_ne!(second_handle.registry, first_handle.registry);
-        assert!(first
-            .object(first_handle, MetalObjectKind::Texture)
-            .is_none());
-        assert!(second
-            .object(second_handle, MetalObjectKind::Texture)
-            .is_some());
+        assert!(
+            first
+                .object(first_handle, MetalObjectKind::Texture)
+                .is_none()
+        );
+        assert!(
+            second
+                .object(second_handle, MetalObjectKind::Texture)
+                .is_some()
+        );
         assert_eq!(
             observer.retainCount(),
             2,
@@ -2988,26 +3119,29 @@ mod ownership_transfer_tests {
         );
 
         drop(owner);
-        assert!(second
-            .object(second_handle, MetalObjectKind::Texture)
-            .is_none());
+        assert!(
+            second
+                .object(second_handle, MetalObjectKind::Texture)
+                .is_none()
+        );
         assert_eq!(observer.retainCount(), 1);
     }
 
     #[test]
     fn compiled_library_adoption_transfers_exact_plus_one_and_publishes_alias() {
         let mut execution = execution_without_real_device();
-        assert!(unsafe { execution
-            .adopt_compiled_library(core::ptr::null_mut())
-            .is_none() });
+        assert!(unsafe {
+            execution
+                .adopt_compiled_library(core::ptr::null_mut())
+                .is_none()
+        });
 
         let library = NSObject::new();
         let observer = library.clone();
         let raw = Retained::into_raw(library).cast::<
             crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::MTLLibrary,
         >();
-        let handle = unsafe { execution
-            .adopt_compiled_library(raw) }
+        let handle = unsafe { execution.adopt_compiled_library(raw) }
             .expect("non-null compiler +1 must become a library handle");
         assert_eq!(handle.kind, MetalObjectKind::Library);
         assert_eq!(observer.retainCount(), 2, "adoption must not add a retain");
@@ -3034,12 +3168,10 @@ mod ownership_transfer_tests {
 
         objc2::rc::autoreleasepool(|_| {
             let _ = background::take_owner_detail_events();
-            let device = objc2_metal::MTLCreateSystemDefaultDevice()
-                .expect("native Metal device required");
+            let device =
+                objc2_metal::MTLCreateSystemDefaultDevice().expect("native Metal device required");
             let compiler_device = unsafe {
-                SourceRetained::from_raw_retained(
-                    Retained::into_raw(device.clone()).cast(),
-                )
+                SourceRetained::from_raw_retained(Retained::into_raw(device.clone()).cast())
             }
             .expect("compiler device transfer");
             let compiler = background::new_for_device_with_sources(
@@ -3086,9 +3218,7 @@ mod ownership_transfer_tests {
 
             let phases = background::take_owner_detail_events()
                 .into_iter()
-                .filter(|event| {
-                    event.ledger_id == "BG-LIB-COMPILED" && event.identity == identity
-                })
+                .filter(|event| event.ledger_id == "BG-LIB-COMPILED" && event.identity == identity)
                 .map(|event| event.phase)
                 .collect::<Vec<_>>();
             assert_eq!(
@@ -3116,9 +3246,11 @@ mod ownership_transfer_tests {
 
         drop(owner);
         assert_eq!(observer.retainCount(), 1);
-        assert!(execution
-            .object(handle, MetalObjectKind::CommandQueue)
-            .is_none());
+        assert!(
+            execution
+                .object(handle, MetalObjectKind::CommandQueue)
+                .is_none()
+        );
         assert!(execution.retire_command_queue(handle));
         assert!(!execution.retire_command_queue(handle));
 
@@ -3127,9 +3259,11 @@ mod ownership_transfer_tests {
         assert_eq!(replacement.slot, handle.slot);
         assert!(replacement.generation > handle.generation);
         assert!(!execution.retire_command_queue(handle));
-        assert!(execution
-            .object(replacement, MetalObjectKind::CommandQueue)
-            .is_some());
+        assert!(
+            execution
+                .object(replacement, MetalObjectKind::CommandQueue)
+                .is_some()
+        );
     }
 
     #[test]
@@ -3141,9 +3275,11 @@ mod ownership_transfer_tests {
                 MetalAliasValidity::live(),
             )
         };
-        assert!(owner
-            .new_buffer_with_length(16, MTLResourceOptions::StorageModeShared)
-            .is_none());
+        assert!(
+            owner
+                .new_buffer_with_length(16, MTLResourceOptions::StorageModeShared)
+                .is_none()
+        );
         assert!(owner.buffer_contents().is_none());
     }
 }

@@ -16,6 +16,7 @@ use nuxie::{
 };
 use std::any::Any;
 use std::ffi::c_void;
+use std::rc::Rc;
 
 /// Borrowed view of a [`RawPath`]: `verbs` holds `NuxPathVerb` values and
 /// `points` holds `point_count` interleaved x,y pairs. Only valid for the
@@ -428,12 +429,20 @@ impl RenderPaint for CallbackRenderPaint {
     }
 }
 
-pub(crate) struct CallbackRenderShader {
+#[derive(Clone)]
+pub(crate) struct CallbackRenderShader(Rc<CallbackShaderOwner>);
+pub(crate) struct CallbackShaderOwner {
     callbacks: NuxRenderCallbacks,
     handle: u64,
 }
 
-impl Drop for CallbackRenderShader {
+impl std::ops::Deref for CallbackRenderShader {
+    type Target = CallbackShaderOwner;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl Drop for CallbackShaderOwner {
     fn drop(&mut self) {
         if self.handle != 0 {
             call!(self.callbacks, release_render_shader, self.handle);
@@ -442,19 +451,33 @@ impl Drop for CallbackRenderShader {
 }
 
 impl RenderShader for CallbackRenderShader {
+    fn retain_shader(&self) -> Rc<dyn RenderShader> {
+        Rc::new(self.clone())
+    }
+    fn shader_identity(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
-pub(crate) struct CallbackRenderImage {
+#[derive(Clone)]
+pub(crate) struct CallbackRenderImage(Rc<CallbackImageOwner>);
+pub(crate) struct CallbackImageOwner {
     callbacks: NuxRenderCallbacks,
     handle: u64,
     width: u32,
     height: u32,
 }
 
-impl Drop for CallbackRenderImage {
+impl std::ops::Deref for CallbackRenderImage {
+    type Target = CallbackImageOwner;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl Drop for CallbackImageOwner {
     fn drop(&mut self) {
         if self.handle != 0 {
             call!(self.callbacks, release_render_image, self.handle);
@@ -463,6 +486,12 @@ impl Drop for CallbackRenderImage {
 }
 
 impl RenderImage for CallbackRenderImage {
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -579,10 +608,10 @@ impl Factory for CallbackFactory {
             stops.as_ptr(),
             count
         );
-        Box::new(CallbackRenderShader {
+        Box::new(CallbackRenderShader(Rc::new(CallbackShaderOwner {
             callbacks: self.callbacks,
             handle,
-        })
+        })))
     }
 
     fn make_radial_gradient(
@@ -604,10 +633,10 @@ impl Factory for CallbackFactory {
             stops.as_ptr(),
             count
         );
-        Box::new(CallbackRenderShader {
+        Box::new(CallbackRenderShader(Rc::new(CallbackShaderOwner {
             callbacks: self.callbacks,
             handle,
-        })
+        })))
     }
 
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
@@ -640,12 +669,12 @@ impl Factory for CallbackFactory {
         let mut width = 0u32;
         let mut height = 0u32;
         let Some(decode_image) = self.callbacks.decode_image else {
-            return Ok(Box::new(CallbackRenderImage {
+            return Ok(Box::new(CallbackRenderImage(Rc::new(CallbackImageOwner {
                 callbacks: self.callbacks,
                 handle: 0,
                 width,
                 height,
-            }));
+            }))));
         };
         // SAFETY: Factory calls run only while the caller-owned callback table is valid.
         let handle = unsafe {
@@ -660,12 +689,12 @@ impl Factory for CallbackFactory {
         if handle == 0 {
             return Err(ImageDecodeError);
         }
-        Ok(Box::new(CallbackRenderImage {
+        Ok(Box::new(CallbackRenderImage(Rc::new(CallbackImageOwner {
             callbacks: self.callbacks,
             handle,
             width,
             height,
-        }))
+        }))))
     }
 }
 

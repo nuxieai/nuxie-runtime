@@ -80,25 +80,12 @@ impl SkinnableBehavior for Mesh {
 
 impl Mesh {
     pub fn clone_definition(&self) -> Self {
-        let factory = self
-            .base
-            .with_artboard(|artboard| artboard.factory())
-            .flatten()
-            .expect("Mesh renderer factory");
         let mut twin = Self::default();
         let mut base = std::mem::take(&mut twin.base.base);
         base.copy(&self.base.base, &mut twin);
         twin.base.base = base;
         twin.index_buffer = self.index_buffer.clone();
         twin.vertex_render_buffer_dirty = true;
-        twin.mesh.vertex_render_buffer =
-            Some(Rc::new(RefCell::new(factory.with_factory_mut(|factory| {
-                factory.make_render_buffer(
-                    RenderBufferType::Vertex,
-                    RenderBufferFlags::None,
-                    self.vertices.len() * std::mem::size_of::<Vec2D>(),
-                )
-            }))));
         twin.mesh.uv_render_buffer = self.mesh.uv_render_buffer.clone();
         twin.mesh.index_render_buffer = self.mesh.index_render_buffer.clone();
         twin
@@ -280,6 +267,24 @@ impl Mesh {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
+        if self.vertex_render_buffer_dirty
+            && self.mesh.vertex_render_buffer.is_none()
+            && !self.vertices.is_empty()
+        {
+            let factory = self
+                .base
+                .with_artboard(|artboard| artboard.factory())
+                .flatten()
+                .expect("Mesh renderer factory");
+            self.mesh.vertex_render_buffer =
+                Some(Rc::new(RefCell::new(factory.with_factory_mut(|factory| {
+                    factory.make_render_buffer(
+                        RenderBufferType::Vertex,
+                        RenderBufferFlags::None,
+                        self.vertices.len() * std::mem::size_of::<Vec2D>(),
+                    )
+                }))));
+        }
         if self.vertex_render_buffer_dirty {
             if let Some(buffer) = self.mesh.vertex_render_buffer.as_ref() {
                 let mut buffer = buffer.borrow_mut();

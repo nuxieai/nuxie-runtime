@@ -21,14 +21,14 @@ use super::image_texture::NativeMetalImageTexture;
 use super::mechanical_render_context::MechanicalRenderContext;
 #[cfg(test)]
 use super::render_target::RenderTargetMetal;
-#[cfg(test)]
-use crate::RendererError;
 use crate::exact_source_adapter::ExactSourceRendererAdapter;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::FrameDescriptor;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
+#[cfg(test)]
+use crate::RendererError;
 #[cfg(feature = "native-ore-metal-experimental")]
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 #[cfg(feature = "native-ore-metal-experimental")]
@@ -266,6 +266,31 @@ impl NativeMetalRenderCanvas {
 }
 
 impl RenderCanvasContract for NativeMetalRenderCanvas {
+    fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
+        match &self.inner {
+            NativeMetalRenderCanvasInner::Guarded { target_texture, .. } => {
+                let mut info = RenderCanvasContract::render_image(self).ore_texture_info()?;
+                #[cfg(feature = "native-ore-metal-experimental")]
+                {
+                    let owner = Rc::new((
+                        nuxie_ore_metal::metal::context::MetalRenderCanvasBridge {
+                            width: self.width(),
+                            height: self.height(),
+                            texture: target_texture.clone(),
+                        },
+                        info.owner.take(),
+                    ));
+                    info.canvas = std::ptr::from_ref(&owner.0).cast_mut().cast();
+                    info.owner = Some(owner);
+                }
+                #[cfg(not(feature = "native-ore-metal-experimental"))]
+                let _ = target_texture;
+                Some(info)
+            }
+            #[cfg(test)]
+            NativeMetalRenderCanvasInner::Allocated { .. } => None,
+        }
+    }
     fn width(&self) -> u32 {
         NativeMetalRenderCanvas::width(self)
     }
@@ -329,11 +354,11 @@ impl RenderCanvasFrame for NativeMetalRenderCanvasFrame {
 
     fn finish(self: Box<Self>) -> Result<(), RenderCanvasError> {
         let mut mechanical = self.execution_guard.borrow_mut();
-        let context = unsafe { Pin::get_unchecked_mut(mechanical.render_context_mut()) };
         // SAFETY: the canvas frame retains this nonnull exact source owner and
         // is the sole owner allowed to finish its begun frame.
-        context.finishRenderCanvasExecutable(unsafe { &mut *self.source.get() });
-        Ok(())
+        mechanical
+            .finish_canvas(unsafe { &mut *self.source.get() })
+            .map_err(|error| RenderCanvasError::new(error.to_string()))
     }
 }
 

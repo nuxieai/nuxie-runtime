@@ -223,11 +223,12 @@ pub(crate) fn mip_layout(
 }
 
 /// Retained wrapper for a shader-readable Metal texture.
+#[derive(Clone)]
 pub(crate) struct NativeMetalImageTexture {
     width: u32,
     height: u32,
     texture: Retained<ProtocolObject<dyn MTLTexture>>,
-    mips_dirty: Cell<bool>,
+    mips_dirty: std::rc::Rc<Cell<bool>>,
 }
 
 impl NativeMetalImageTexture {
@@ -318,7 +319,7 @@ impl NativeMetalImageTexture {
             width,
             height,
             texture,
-            mips_dirty: Cell::new(generate_remaining_mips && mip_level_count > 1),
+            mips_dirty: std::rc::Rc::new(Cell::new(generate_remaining_mips && mip_level_count > 1)),
         })
     }
 
@@ -336,7 +337,7 @@ impl NativeMetalImageTexture {
             width,
             height,
             texture: texture?,
-            mips_dirty: Cell::new(false),
+            mips_dirty: std::rc::Rc::new(Cell::new(false)),
         })
     }
 
@@ -367,6 +368,12 @@ impl NativeMetalImageTexture {
 }
 
 impl RenderImage for NativeMetalImageTexture {
+    fn retain_image(&self) -> std::rc::Rc<dyn RenderImage> {
+        std::rc::Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        std::rc::Rc::as_ptr(&self.mips_dirty) as usize
+    }
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

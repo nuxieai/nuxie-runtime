@@ -13,38 +13,47 @@ use nuxie::{
     BlendMode, ColorInt, Factory, File, FileAssetLoader, FileAssetLoaderRef, FillRule,
     ImageDecodeError, PersistentFactory, RecordingFactory, RenderBuffer, RenderBufferFlags,
     RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle, StrokeCap, StrokeJoin,
-    ViewModelInstanceRuntime,
+    Renderer, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle, StrokeCap,
+    StrokeJoin, ViewModelInstanceRuntime,
     render_api::{Mat2D as RenderMat2D, RawPath as RenderRawPath},
     runtime::assets::image_asset::ImageAsset,
 };
 
-struct DropTrackedRenderImage {
+#[derive(Clone)]
+struct DropTrackedRenderImage(Rc<DropTrackedRenderImageOwner>);
+
+struct DropTrackedRenderImageOwner {
     inner: Box<dyn RenderImage>,
     dropped: Rc<Cell<usize>>,
 }
 
-impl Drop for DropTrackedRenderImage {
+impl Drop for DropTrackedRenderImageOwner {
     fn drop(&mut self) {
         self.dropped.set(self.dropped.get() + 1);
     }
 }
 
 impl RenderImage for DropTrackedRenderImage {
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
     fn as_any(&self) -> &dyn std::any::Any {
-        self.inner.as_any()
+        self.0.inner.as_any()
     }
 
     fn width(&self) -> u32 {
-        self.inner.width()
+        self.0.inner.width()
     }
 
     fn height(&self) -> u32 {
-        self.inner.height()
+        self.0.inner.height()
     }
 
     fn uv_transform(&self) -> RenderMat2D {
-        self.inner.uv_transform()
+        self.0.inner.uv_transform()
     }
 }
 
@@ -193,10 +202,12 @@ impl Factory for FailFirstImageDecodeFactory {
         }
         let image = self.inner.decode_image(data)?;
         self.images_created.set(self.images_created.get() + 1);
-        Ok(Box::new(DropTrackedRenderImage {
-            inner: image,
-            dropped: Rc::clone(&self.images_dropped),
-        }))
+        Ok(Box::new(DropTrackedRenderImage(Rc::new(
+            DropTrackedRenderImageOwner {
+                inner: image,
+                dropped: Rc::clone(&self.images_dropped),
+            },
+        ))))
     }
 }
 
@@ -429,6 +440,7 @@ fn imported_artboard_renders_pixels_with_the_explicit_metal_renderer() {
     let artboard = file
         .with_file(File::artboard_default)
         .expect("default artboard");
+    artboard.advance_default(0.0);
     let mut frame = factory
         .borrow_mut()
         .begin_frame(0xff_12_34_56)

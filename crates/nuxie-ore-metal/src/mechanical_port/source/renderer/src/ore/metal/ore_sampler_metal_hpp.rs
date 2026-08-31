@@ -23,17 +23,17 @@ use std::mem::ManuallyDrop;
 // Rust's `Retained<T>` is the corresponding strong owner; `Option` preserves
 // the source `nil` state. The non-Apple stand-in keeps this source-shaped
 // translation available to tools that inspect it off Apple.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::runtime::ProtocolObject;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::MTLSamplerState;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalSampler = Option<Retained<ProtocolObject<dyn MTLSamplerState>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalSampler = Option<()>;
 
 // namespace rive::ore
@@ -119,7 +119,7 @@ mod tests {
         owner.shutdown();
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn live_sampler_retains_the_native_state() {
         use objc2_metal::{

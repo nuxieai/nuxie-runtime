@@ -7,16 +7,17 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d25e6a4b6c1b8382b588f08371231373780fbcd5`
+- LAST_SYNCED_SHA: `e949498e05483a852c10fbbdad2cd1941c15aebc`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest applied change: IK rebuilds each FK bone's local transform from its
-  current authored values, recomputes its world transform, then decomposes the
-  local transform before solving, avoiding reuse of a stale constrained pose.
-  Upstream: `d25e6a4b6c1b8382b588f08371231373780fbcd5`.
-  Its six-draw, non-full-strength regression and exact fixtures are translated
-  and enrolled in the existing Silver corpus with authored view-model instance0.
-  Work: [UNIV-1672](https://universe.basis.dev/issue/UNIV-1672).
+  Latest applied change: explicit deferred sessions record 2D/ORE commands and
+  resources, then replay them through the real backend in upstream canvas/screen
+  order. Runtime factories, scripted GPUCanvas, serialization, supported
+  backends, and the upstream regression tests follow the new contract.
+  Apple C API imports and presentation use the same deferred session, retaining
+  native shader authorization, device generations, and the acquired drawable.
+  Upstream: `e949498e05483a852c10fbbdad2cd1941c15aebc`.
+  Work: [UNIV-1678](https://universe.basis.dev/issue/UNIV-1678).
 - Generated shader provenance remains
   `2b2203f45a67f813cb662272962192ecfdfd923e`: renderer shader inputs are unchanged.
 - Intervening `8efe18ec7b52a02139844ffe71438c00de13037e` needs no Rust
@@ -30,6 +31,16 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   adaptations below remain in force. The user authorized merging each reviewed
   manual update as it is completed on 2026-08-31. This is not standing automation
   authorization.
+- On 2026-08-31 the user approved the full deferred-rendering redesign in
+  `e949498e05483a852c10fbbdad2cd1941c15aebc`: upstream is authoritative,
+  including removed APIs. Translate the complete applicable delta, then run
+  separate source-equivalence and Rust-integration reviews before validation
+  and merge. [UNIV-1678](https://universe.basis.dev/issue/UNIV-1678) records
+  the implementation, review, and validation evidence.
+  The user also approved migrating the Apple C API caller before merge,
+  including API changes where needed: import and replay through an explicit
+  deferred session so scripted GPUCanvas follows the new upstream contract.
+  Do not restore immediate-context GPUCanvas as a compatibility fallback.
 
 ## One upstream commit at a time
 

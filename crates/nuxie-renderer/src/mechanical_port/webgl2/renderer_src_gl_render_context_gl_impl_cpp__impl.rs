@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 153_801] = [(); PINNED_SOURCE.len()];
+const _: [(); 157394] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -122,8 +122,7 @@ const GLSL_sourceTexture: &str = "JC";
 const GLSL_tessVertexTexture: &str = "LC";
 
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
-const GLSL_CONSTANTS: &str =
-    include_str!("source/generated_glsl_embedded/constants.minified.glsl");
+const GLSL_CONSTANTS: &str = include_str!("source/generated_glsl_embedded/constants.minified.glsl");
 const GLSL_FLUSH_UNIFORMS: &str =
     include_str!("source/generated_glsl_embedded/flush_uniforms.minified.glsl");
 const GLSL_COMMON: &str = include_str!("source/generated_glsl_embedded/common.minified.glsl");
@@ -236,10 +235,7 @@ impl TextureGLImpl {
         );
         Self {
             base: ManuallyDrop::new(base),
-            m_texture: ManuallyDrop::new(GLTexture::AdoptInExecution(
-                textureID,
-                execution.clone(),
-            )),
+            m_texture: ManuallyDrop::new(GLTexture::AdoptInExecution(textureID, execution.clone())),
             rust_execution: ManuallyDrop::new(execution),
         }
     }
@@ -284,6 +280,16 @@ impl CanvasSourceTextureGLImpl {
             m_owner: owner,
             m_glID: textureID,
             rust_canvas_registry: canvasRegistry,
+            rust_has_released_canvas_targets: if owner.is_null() {
+                std::sync::Weak::new()
+            } else {
+                unsafe { std::sync::Arc::downgrade(&(*owner).m_hasReleasedCanvasTargets) }
+            },
+            rust_released_canvas_targets: if owner.is_null() {
+                std::sync::Weak::new()
+            } else {
+                unsafe { std::sync::Arc::downgrade(&(*owner).m_releasedCanvasTargets) }
+            },
         }
     }
 }
@@ -302,6 +308,23 @@ unsafe impl RefCntTarget for CanvasSourceTextureGLImpl {
 
 impl Drop for CanvasSourceTextureGLImpl {
     fn drop(&mut self) {
+        if self.m_glID != 0
+            && super::gles3_decl::currentGLExecutionIdentity()
+                != Some((
+                    self.base.rust_execution.domain().key(),
+                    self.base.rust_execution.generation(),
+                ))
+        {
+            if let Some(queue) = self.rust_released_canvas_targets.upgrade() {
+                let mut queue = queue.lock().unwrap();
+                queue.push(self.m_glID);
+                if let Some(flag) = self.rust_has_released_canvas_targets.upgrade() {
+                    flag.store(true, std::sync::atomic::Ordering::Release);
+                }
+            }
+            unsafe { ManuallyDrop::drop(&mut self.base) };
+            return;
+        }
         let entry = self.rust_canvas_registry.upgrade().and_then(|registry| {
             let entry = registry.borrow_mut().remove(&self.m_glID);
             entry
@@ -703,6 +726,8 @@ fn newContextOwner(
         m_state: ManuallyDrop::new(state),
         m_testForAdvancedBlendError: false,
         m_canvasMirrors: ManuallyDrop::new(Rc::new(RefCell::new(BTreeMap::new()))),
+        m_releasedCanvasTargets: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+        m_hasReleasedCanvasTargets: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         rust_execution: ManuallyDrop::new(execution.clone()),
         rust_source_renderer_string: ManuallyDrop::new(rendererString),
     });
@@ -757,11 +782,16 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
         }
         let features = &mut context.base.base.m_platformFeatures;
         if context.m_capabilities.KHR_blend_equation_advanced()
-            || context.m_capabilities.KHR_blend_equation_advanced_coherent()
+            || context
+                .m_capabilities
+                .KHR_blend_equation_advanced_coherent()
         {
             features.supportsBlendAdvancedKHR = true;
         }
-        if context.m_capabilities.KHR_blend_equation_advanced_coherent() {
+        if context
+            .m_capabilities
+            .KHR_blend_equation_advanced_coherent()
+        {
             features.supportsBlendAdvancedCoherentKHR = true;
         }
         if context.m_capabilities.EXT_clip_cull_distance() {
@@ -780,8 +810,9 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
         features.supportsClipScissor = !(context.m_capabilities.isAdreno()
             && (600..700).contains(&context.m_capabilities.adrenoSeries)
             || context.m_capabilities.isANGLESystemDriver());
-        features.supportsTextureCompressionBC = context.m_capabilities.EXT_texture_compression_s3tc()
-            && context.m_capabilities.EXT_texture_compression_bptc();
+        features.supportsTextureCompressionBC =
+            context.m_capabilities.EXT_texture_compression_s3tc()
+                && context.m_capabilities.EXT_texture_compression_bptc();
         features.supportsTextureCompressionASTC =
             context.m_capabilities.KHR_texture_compression_astc_ldr();
         features.supportsTextureCompressionETC2 = context.m_capabilities.supportsETC2();
@@ -1208,32 +1239,116 @@ pub(crate) fn makeRenderCanvas(
             width,
             height,
         });
-        let source = make_rcp(|| {
-            CanvasSourceTextureGLImpl::new(
-                width,
-                height,
-                textureID,
-                execution.clone(),
-                context,
-                Rc::downgrade(&context.m_canvasMirrors),
-            )
-        });
-        let source: rcp<RiveTexture> = unsafe { static_rcp_cast(source) };
-        let image = make_rcp(|| unsafe { RiveRenderImage::new(source) });
-        let mut target = make_rcp(|| TextureRenderTargetGL::new(width, height, execution.clone()));
-        unsafe { (&mut *target.get()).setTargetTexture(textureID) };
-        let target: rcp<RenderTarget> = unsafe { static_rcp_cast(target) };
+        let canvas = wrapCanvasBacking(context, width, height, textureID);
         registerCanvasTarget(context, textureID);
-        make_rcp(|| unsafe { RenderCanvas::new(image, target) })
+        canvas
     })
+}
+
+fn wrapCanvasBacking(
+    context: &mut RenderContextGLImpl,
+    width: u32,
+    height: u32,
+    textureID: GLuint,
+) -> rcp<RenderCanvas> {
+    let execution = (&*context.rust_execution).clone();
+    let source = make_rcp(|| {
+        CanvasSourceTextureGLImpl::new(
+            width,
+            height,
+            textureID,
+            execution.clone(),
+            context,
+            Rc::downgrade(&context.m_canvasMirrors),
+        )
+    });
+    let source: rcp<RiveTexture> = unsafe { static_rcp_cast(source) };
+    let image = make_rcp(|| unsafe { RiveRenderImage::new(source) });
+    let mut target = make_rcp(|| TextureRenderTargetGL::new(width, height, execution.clone()));
+    unsafe { (&mut *target.get()).setTargetTexture(textureID) };
+    let target: rcp<RenderTarget> = unsafe { static_rcp_cast(target) };
+    make_rcp(|| unsafe { RenderCanvas::new(image, target) })
+}
+
+pub(crate) fn makeDeferredRenderCanvas(
+    context: &mut RenderContextGLImpl,
+    width: u32,
+    height: u32,
+) -> rcp<RenderCanvas> {
+    wrapCanvasBacking(context, width, height, 0)
+}
+
+pub(crate) unsafe fn ensureDeferredCanvasBacking(
+    context: &mut RenderContextGLImpl,
+    canvas: *mut RenderCanvas,
+) {
+    let canvas = unsafe { &mut *canvas };
+    let target = unsafe { &mut *canvas.renderTarget().cast::<TextureRenderTargetGL>() };
+    if target.externalTextureID() != 0 {
+        return;
+    }
+    let execution = (&*context.rust_execution).clone();
+    target.base.base.rebind_owner_thread_execution(
+        execution.domain().ownerThreadFinalReleaseRoute(),
+        execution.domain().key(),
+        execution.generation(),
+    );
+    *target.base.rust_execution = execution.clone();
+    let textureID = generateGLObject(GLObjectKind::Texture);
+    recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
+    recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, textureID));
+    recordGLCommand(GLCommand::TexStorage2D {
+        target: GL_TEXTURE_2D,
+        levels: 1,
+        internal_format: GL_RGBA8,
+        width: canvas.width(),
+        height: canvas.height(),
+    });
+    recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));
+    target.setTargetTexture(textureID);
+    let source = unsafe {
+        &mut *(*canvas.renderImage())
+            .getTexture()
+            .cast::<CanvasSourceTextureGLImpl>()
+    };
+    if !source.m_owner.is_null() && source.m_glID != 0 {
+        if let Some(queue) = source.rust_released_canvas_targets.upgrade() {
+            let mut queue = queue.lock().unwrap();
+            queue.push(source.m_glID);
+            if let Some(flag) = source.rust_has_released_canvas_targets.upgrade() {
+                flag.store(true, std::sync::atomic::Ordering::Release);
+            }
+        }
+    }
+    super::gl_utils_impl::resetTexture(&mut source.base.m_texture, textureID);
+    source.base.base.rebind_owner_thread_execution(
+        execution.domain().ownerThreadFinalReleaseRoute(),
+        execution.domain().key(),
+        execution.generation(),
+    );
+    *source.base.rust_execution = execution;
+    source.m_owner = context;
+    source.m_glID = textureID;
+    source.rust_canvas_registry = Rc::downgrade(&context.m_canvasMirrors);
+    source.rust_released_canvas_targets =
+        std::sync::Arc::downgrade(&context.m_releasedCanvasTargets);
+    source.rust_has_released_canvas_targets =
+        std::sync::Arc::downgrade(&context.m_hasReleasedCanvasTargets);
+    registerCanvasTarget(context, textureID);
 }
 
 pub(crate) fn makeOreContext(
     context: &mut RenderContextGLImpl,
 ) -> Option<Box<crate::mechanical_port::source::include::rive::factory_hpp::OreContext>> {
-    super::ore_context_gl_decl::ContextGL::Make((&*context.rust_execution).clone()).map(|context| {
+    super::ore_context_gl_decl::ContextGL::Make(
+        (&*context.rust_execution).clone(),
+        context as *mut _ as *mut std::ffi::c_void,
+    )
+    .map(|context| {
         Box::new(
-            crate::mechanical_port::source::include::rive::factory_hpp::OreContext::GL(context),
+            crate::mechanical_port::source::include::rive::factory_hpp::OreContext::GL(
+                std::rc::Rc::new(std::cell::RefCell::new(*context)),
+            ),
         )
     })
 }
@@ -1255,10 +1370,9 @@ pub(crate) unsafe fn getCanvasImportMirror(
         return rcp::new();
     }
     let execution = (&*context.rust_execution).clone();
-    if !unsafe { &*sourceTex }.belongs_to_owner_thread_execution(
-        execution.domain().key(),
-        execution.generation(),
-    ) {
+    if !unsafe { &*sourceTex }
+        .belongs_to_owner_thread_execution(execution.domain().key(), execution.generation())
+    {
         return rcp::new();
     }
     let glID = unsafe { (&*sourceTex).nativeHandle() } as usize as GLuint;
@@ -2643,10 +2757,8 @@ unsafe fn renderTargetGL<'a>(
 ) -> &'a mut dyn RenderTargetGLApi {
     let targetBase = unsafe { target.as_ref() };
     assert!(
-        targetBase.belongs_to_owner_thread_execution(
-            execution.domain().key(),
-            execution.generation(),
-        ),
+        targetBase
+            .belongs_to_owner_thread_execution(execution.domain().key(), execution.generation(),),
         "RenderContextGLImpl received a non-GL, stale, or foreign render target"
     );
     let base = target.as_ptr().cast::<RenderTargetGL>();
@@ -2675,10 +2787,8 @@ unsafe fn textureGL<'a>(
 ) -> &'a TextureGLImpl {
     let textureBase = unsafe { texture.as_ref() };
     assert!(
-        textureBase.belongs_to_owner_thread_execution(
-            execution.domain().key(),
-            execution.generation(),
-        ),
+        textureBase
+            .belongs_to_owner_thread_execution(execution.domain().key(), execution.generation(),),
         "RenderContextGLImpl received a non-GL, stale, or foreign texture"
     );
     unsafe { &*texture.as_ptr().cast::<TextureGLImpl>() }
@@ -2882,7 +2992,9 @@ pub(crate) fn testingOnly_setBlendAdvancedCoherentKHRSupported(
 ) -> bool {
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
-        let previous = context.m_capabilities.KHR_blend_equation_advanced_coherent();
+        let previous = context
+            .m_capabilities
+            .KHR_blend_equation_advanced_coherent();
         assert_eq!(
             previous,
             context
@@ -3005,9 +3117,7 @@ pub(crate) unsafe fn preBeginFrame(
             context
                 .m_capabilities
                 .setKHR_blend_equation_advanced_coherent(false);
-            context
-                .m_capabilities
-                .setKHR_blend_equation_advanced(false);
+            context.m_capabilities.setKHR_blend_equation_advanced(false);
             context
                 .base
                 .base
@@ -3033,6 +3143,17 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
         renderTargetGL(renderTargetHandle, &execution)
             .base()
             .assertSameExecution(&execution);
+
+        if context.m_hasReleasedCanvasTargets.load(std::sync::atomic::Ordering::Acquire) {
+            let released = {
+                let mut queue = context.m_releasedCanvasTargets.lock().unwrap();
+                let released = std::mem::take(&mut *queue);
+                context.m_hasReleasedCanvasTargets.store(false, std::sync::atomic::Ordering::Release);
+                released
+            };
+            for sourceTex in released { unregisterCanvasTarget(context, sourceTex); }
+        }
+        super::gl_utils_impl::ReclaimAbandonedNames();
 
         recordGLCommand(GLCommand::BindBufferRange {
             target: GL_UNIFORM_BUFFER,
@@ -4031,9 +4152,8 @@ fn makeContextOwnerInCurrent(
     capabilities.setOES_texture_half_float_linear(
         executionDomain.enableWebGLExtension("OES_texture_half_float_linear"),
     );
-    capabilities.setEXT_color_buffer_float(
-        executionDomain.enableWebGLExtension("EXT_color_buffer_float"),
-    );
+    capabilities
+        .setEXT_color_buffer_float(executionDomain.enableWebGLExtension("EXT_color_buffer_float"));
     capabilities.setEXT_float_blend(executionDomain.enableWebGLExtension("EXT_float_blend"));
     capabilities.setKHR_parallel_shader_compile(
         executionDomain.enableWebGLExtension("KHR_parallel_shader_compile"),
@@ -4121,9 +4241,10 @@ fn makeContextInCurrent(
     executionDomain: GLExecutionDomain,
     finalPLSFactory: Option<&dyn PixelLocalStorageFactory>,
 ) -> Option<std::pin::Pin<Box<RenderContext>>> {
-    let implementation =
-        makeContextOwnerInCurrent(options, executionDomain, finalPLSFactory)?;
-    Some(<RenderContext as RenderContextContract>::new(implementation))
+    let implementation = makeContextOwnerInCurrent(options, executionDomain, finalPLSFactory)?;
+    Some(<RenderContext as RenderContextContract>::new(
+        implementation,
+    ))
 }
 
 pub(crate) fn MakeContext(
@@ -4221,6 +4342,15 @@ impl RenderContextHelperBackendContract for RenderContextGLImpl {
     ))]
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
         makeRenderCanvas(self, width, height)
+    }
+
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "ore-gl"
+    ))]
+    fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
+        makeDeferredRenderCanvas(self, width, height)
     }
 
     #[cfg(any(
@@ -4477,7 +4607,12 @@ mod tests {
             &mut self,
             ingress: GLFinalReleaseIngress,
         ) -> std::sync::Arc<dyn nuxie_ore_metal::gpu_resource::ResourceFinalReleaseWake> {
-            assert!(self.finalReleaseIngress.borrow_mut().replace(ingress).is_none());
+            assert!(
+                self.finalReleaseIngress
+                    .borrow_mut()
+                    .replace(ingress)
+                    .is_none()
+            );
             self.finalReleaseWake.clone()
         }
 
@@ -4545,13 +4680,7 @@ mod tests {
             0
         }
 
-        fn readPixelsRGBA8(
-            &mut self,
-            _x: i32,
-            _y: i32,
-            width: u32,
-            height: u32,
-        ) -> Vec<u8> {
+        fn readPixelsRGBA8(&mut self, _x: i32, _y: i32, width: u32, height: u32) -> Vec<u8> {
             vec![0; width as usize * height as usize * 4]
         }
 
@@ -4560,8 +4689,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 3_985);
-        assert_eq!(PINNED_SOURCE.len(), 153_801);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4088);
+        assert_eq!(PINNED_SOURCE.len(), 157394);
     }
 
     #[test]

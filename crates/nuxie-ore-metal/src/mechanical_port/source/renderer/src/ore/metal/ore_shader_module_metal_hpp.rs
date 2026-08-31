@@ -24,17 +24,17 @@ use std::mem::ManuallyDrop;
 // source `nil` state while the library is being constructed. The non-Apple
 // stand-in keeps this source-shaped translation available to tools that
 // inspect it off Apple.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::runtime::ProtocolObject;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::MTLLibrary;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalLibrary = Option<Retained<ProtocolObject<dyn MTLLibrary>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalLibrary = Option<()>;
 
 // namespace rive::ore
@@ -68,6 +68,12 @@ pub struct ShaderModuleMetal {
 unsafe impl Send for ShaderModuleMetal {}
 
 unsafe impl GpuResourcePayload for ShaderModuleMetal {
+    fn shader_module_base(&self) -> Option<&ShaderModule> {
+        Some(&self.base)
+    }
+    fn shader_module_base_mut(&mut self) -> Option<&mut ShaderModule> {
+        Some(&mut self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         &self.base.base
     }
@@ -90,7 +96,7 @@ impl ShaderModuleMetal {
 
     /// Product inspection seam over the source friend-owned native library.
     /// The returned borrow cannot outlive this exact ShaderModuleMetal owner.
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     pub fn mtlLibrary(&self) -> Option<&ProtocolObject<dyn objc2_metal::MTLLibrary>> {
         self.m_mtlLibrary.as_deref()
     }
@@ -127,7 +133,7 @@ mod tests {
         assert_eq!(handle.debugging_refcnt(), 1);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn nil_compilation_publishes_no_module_and_live_library_is_retained() {
         use objc2_foundation::NSString;

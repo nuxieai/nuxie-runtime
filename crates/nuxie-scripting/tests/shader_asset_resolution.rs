@@ -3,6 +3,9 @@
 use std::any::Any;
 use std::sync::{Arc, Weak};
 
+#[path = "support/recording_gpu.rs"]
+mod recording_gpu;
+
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie_render_api::{
     ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPlan, GpuCanvasShader, ImageDecodeError,
@@ -113,7 +116,7 @@ return function(context)
     }
     canvas:resize(8, 8)
     return {
-        drawCanvas = function(self)
+        draw = function(self)
             local pass = canvas:beginRenderPass {
                 color = { { loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 } } },
             }
@@ -144,7 +147,7 @@ return function(context)
     local frame = 0
     canvas:resize(8, 8)
     return {
-        drawCanvas = function(self)
+        draw = function(self)
             frame = frame + 1
             local pass = canvas:beginRenderPass {
                 color = { { loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 } } },
@@ -170,7 +173,7 @@ return function(context)
     }
     canvas:resize(8, 8)
     return {
-        drawCanvas = function(self)
+        draw = function(self)
             local pass = canvas:beginRenderPass {
                 color = { { loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 } } },
             }
@@ -193,7 +196,7 @@ return function(context)
     }
     canvas:resize(8, 8)
     return {
-        drawCanvas = function(self)
+        draw = function(self)
             local pass = canvas:beginRenderPass {
                 color = { { loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 } } },
             }
@@ -210,7 +213,7 @@ return function(context)
     local canvas = context:gpuCanvas()
     canvas:resize(8, 8)
     return {
-        drawCanvas = function(self)
+        draw = function(self)
             local shader = context:shader("scene")
             local pipeline = GPUPipeline.new {
                 vertex = { module = shader, entryPoint = "first_vertex" },
@@ -337,21 +340,36 @@ fn empty_plan() -> GpuCanvasPlan {
     }
 }
 
-#[derive(Debug)]
 struct ObservedShader {
     id: u64,
     domain: Weak<()>,
+    module: nuxie_ore_metal::gpu_resource::AnyResourceHandle,
 }
 
 impl RenderGpuCanvasShader for ObservedShader {
+    fn ore_shader_entry(
+        &self,
+        _: nuxie_render_api::GpuCanvasShaderStage,
+        _: &str,
+    ) -> Option<nuxie_ore_metal::gpu_resource::AnyResourceHandle> {
+        Some(self.module.clone())
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
-struct TestImage;
+#[derive(Clone, Default)]
+struct TestImage(std::rc::Rc<()>);
 
 impl RenderImage for TestImage {
+    fn retain_image(&self) -> std::rc::Rc<dyn RenderImage> {
+        std::rc::Rc::new(self.clone())
+    }
+
+    fn image_identity(&self) -> usize {
+        std::rc::Rc::as_ptr(&self.0) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -371,6 +389,7 @@ struct ObservingFactory {
     module_error: Option<&'static str>,
     module_sources: Vec<String>,
     image_calls: Vec<(u64, u64, bool)>,
+    gpu: recording_gpu::RecordingGpu,
 }
 
 impl ObservingFactory {
@@ -381,6 +400,7 @@ impl ObservingFactory {
             module_error: None,
             module_sources: Vec::new(),
             image_calls: Vec::new(),
+            gpu: recording_gpu::RecordingGpu::new(),
         }
     }
 
@@ -394,6 +414,19 @@ fn persistent_observing_factory() -> PersistentFactory<ObservingFactory> {
 }
 
 impl Factory for ObservingFactory {
+    fn is_render_context(&self) -> bool {
+        true
+    }
+    fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+        Some(self.gpu.context.clone())
+    }
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn nuxie_render_api::RenderCanvas>, nuxie_render_api::RenderCanvasError> {
+        Ok(recording_gpu::canvas(width, height))
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -457,6 +490,7 @@ impl Factory for ObservingFactory {
         Ok(Arc::new(ObservedShader {
             id,
             domain: Arc::downgrade(&self.domain),
+            module: self.gpu.shader(id, shader),
         }))
     }
 
@@ -490,7 +524,7 @@ impl Factory for ObservingFactory {
             fragment.id,
             Arc::ptr_eq(vertex_shader, fragment_shader),
         ));
-        Ok(Box::new(TestImage))
+        Ok(Box::new(TestImage::default()))
     }
 }
 
@@ -886,10 +920,21 @@ fn first_shader_lookup_inside_draw_canvas_uses_active_factory_and_combined_handl
         "generator construction must not resolve the shader"
     );
 
-    instance.call_draw_canvas(&mut factory).unwrap();
+    instance
+        .call_draw(
+            &mut factory,
+            &mut nuxie_render_api::NullRenderer,
+            &mut NoopScriptHost,
+        )
+        .unwrap();
 
     assert_eq!(factory.borrow().module_sources.len(), 1);
-    assert_eq!(factory.borrow().image_calls, vec![(1, 1, true)]);
+    assert_eq!(*factory.borrow().gpu.pipelines.borrow(), vec![(1, 1, true)]);
+    assert!(
+        factory.borrow().image_calls.is_empty(),
+        "recording must not invoke the immediate image renderer"
+    );
+    assert_eq!(factory.borrow().gpu.draws.get(), 1);
 }
 
 #[test]
@@ -907,15 +952,28 @@ fn one_occurrence_keeps_one_identity_across_two_pipeline_keys() {
             &mut factory,
         )
         .unwrap();
-    instance.call_draw_canvas(&mut factory).unwrap();
-    instance.call_draw_canvas(&mut factory).unwrap();
+    instance
+        .call_draw(
+            &mut factory,
+            &mut nuxie_render_api::NullRenderer,
+            &mut NoopScriptHost,
+        )
+        .unwrap();
+    instance
+        .call_draw(
+            &mut factory,
+            &mut nuxie_render_api::NullRenderer,
+            &mut NoopScriptHost,
+        )
+        .unwrap();
 
     assert_eq!(factory.borrow().module_sources.len(), 1);
     assert_eq!(
-        factory.borrow().image_calls,
+        *factory.borrow().gpu.pipelines.borrow(),
         vec![(1, 1, true), (1, 1, true)],
         "both pipeline descriptors retain the exact lookup occurrence"
     );
+    assert_eq!(factory.borrow().gpu.draws.get(), 2);
 }
 
 #[test]
@@ -934,14 +992,23 @@ fn two_same_name_lookups_create_distinct_module_identities() {
             &mut factory,
         )
         .unwrap();
-    instance.call_draw_canvas(&mut factory).unwrap();
+    instance
+        .call_draw(
+            &mut factory,
+            &mut nuxie_render_api::NullRenderer,
+            &mut NoopScriptHost,
+        )
+        .unwrap();
 
     assert_eq!(factory.borrow().module_sources.len(), 2);
     assert_eq!(
         factory.borrow().module_sources[0],
         factory.borrow().module_sources[1]
     );
-    assert_eq!(factory.borrow().image_calls, vec![(1, 2, false)]);
+    assert_eq!(
+        *factory.borrow().gpu.pipelines.borrow(),
+        vec![(1, 2, false)]
+    );
 }
 
 #[test]
@@ -967,13 +1034,22 @@ fn explicit_different_name_stages_and_combined_fallback_keep_exact_handles() {
             &mut factory,
         )
         .unwrap();
-    instance.call_draw_canvas(&mut factory).unwrap();
+    instance
+        .call_draw(
+            &mut factory,
+            &mut nuxie_render_api::NullRenderer,
+            &mut NoopScriptHost,
+        )
+        .unwrap();
 
     assert_eq!(
         factory.borrow().module_sources,
         vec!["vertex-only-source", "fragment-only-source"]
     );
-    assert_eq!(factory.borrow().image_calls, vec![(1, 2, false)]);
+    assert_eq!(
+        *factory.borrow().gpu.pipelines.borrow(),
+        vec![(1, 2, false)]
+    );
 
     let mut combined_vm = ScriptVm::new();
     combined_vm
@@ -988,10 +1064,19 @@ fn explicit_different_name_stages_and_combined_fallback_keep_exact_handles() {
             &mut combined_factory,
         )
         .unwrap();
-    combined.call_draw_canvas(&mut combined_factory).unwrap();
+    combined
+        .call_draw(
+            &mut combined_factory,
+            &mut nuxie_render_api::NullRenderer,
+            &mut NoopScriptHost,
+        )
+        .unwrap();
 
     assert_eq!(combined_factory.borrow().module_sources.len(), 1);
-    assert_eq!(combined_factory.borrow().image_calls, vec![(1, 1, true)]);
+    assert_eq!(
+        *combined_factory.borrow().gpu.pipelines.borrow(),
+        vec![(1, 1, true)]
+    );
 }
 
 #[test]

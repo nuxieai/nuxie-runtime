@@ -52,11 +52,11 @@ pub(crate) unsafe fn createDSLFromLayoutDesc(
     device: vk::Device,
     desc: &BindGroupLayoutDesc<'_>,
 ) -> vk::DescriptorSetLayout {
-    let mut bindings = [vk::DescriptorSetLayoutBinding::default();
-        kVkMaxBindingsPerGroup as usize];
-    let count = desc.entries.len().min(kVkMaxBindingsPerGroup as usize);
+    let mut bindings = [vk::DescriptorSetLayoutBinding::default(); kVkMaxBindingsPerGroup as usize];
+    let entries = desc.entries.unwrap_or(&[]);
+    let count = entries.len().min(kVkMaxBindingsPerGroup as usize);
 
-    for (binding, entry) in bindings.iter_mut().zip(desc.entries.iter()).take(count) {
+    for (binding, entry) in bindings.iter_mut().zip(entries.iter()).take(count) {
         let dynamic = entry.kind == BindingKind::uniformBuffer && entry.hasDynamicOffset;
         let native_binding = if entry.nativeSlotVS != BindGroupLayoutEntry::kNativeSlotAbsent {
             entry.nativeSlotVS

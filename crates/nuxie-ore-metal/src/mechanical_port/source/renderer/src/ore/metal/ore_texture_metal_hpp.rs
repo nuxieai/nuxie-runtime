@@ -30,17 +30,17 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
 // source `nil` state. The mechanical header is source-shaped and is not wired
 // into the runtime module, but the non-Apple stand-in keeps this translation's
 // declaration shape available to tools that inspect it off Apple.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::runtime::ProtocolObject;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::MTLTexture;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalTexture = Option<Retained<ProtocolObject<dyn MTLTexture>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalTexture = Option<()>;
 
 // namespace rive::ore
@@ -155,6 +155,9 @@ pub struct TextureViewMetal {
 unsafe impl Send for TextureViewMetal {}
 
 unsafe impl GpuResourcePayload for TextureViewMetal {
+    fn texture_view_base(&self) -> Option<&TextureView> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         &self.base.base
     }
@@ -195,7 +198,7 @@ impl TextureViewMetal {
     }
 
     pub fn baseTexture(&self) -> Option<&TextureMetal> {
-        self.base.m_texture.downcast_ref::<TextureMetal>()
+        self.base.m_texture.as_ref()?.downcast_ref::<TextureMetal>()
     }
 
     pub fn base(&self) -> &TextureView {
@@ -298,7 +301,7 @@ mod tests {
         assert_eq!(source.debugging_refcnt(), 2);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn live_texture_upload_calls_metal_and_view_falls_back_to_source() {
         use objc2_metal::{

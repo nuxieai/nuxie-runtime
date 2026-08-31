@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/render_context_impl.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
 
 // /*
 //  * Copyright 2023 Rive
@@ -87,6 +87,15 @@
 //     virtual rcp<RenderCanvas> makeRenderCanvas(uint32_t width, uint32_t height)
 //     {
 //         return nullptr;
+//     }
+//
+//     // Deferred allocation is only distinct on GL, where the replay worker
+//     // must own the texture on its own context. Everywhere else the device
+//     // is shared and eager allocation is correct.
+//     virtual rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width,
+//                                                        uint32_t height)
+//     {
+//         return makeRenderCanvas(width, height);
 //     }
 //
 //     // If canvas is enabled then the backend Impl MUST implement this.
@@ -262,11 +271,12 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    DrawContents, FlushDescriptor, InterlockMode, PlatformFeatures, StorageBufferStructure, IAABB,
+    DrawContents, FlushDescriptor, IAABB, InterlockMode, PlatformFeatures, StorageBufferStructure,
 };
 #[cfg(any(
     feature = "native-ore-metal-experimental",
     feature = "native-ore-vulkan-experimental",
+    feature = "native-webgpu-experimental",
     feature = "ore-gl"
 ))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::OreContext;
@@ -422,9 +432,14 @@ pub trait RenderContextImplContract {
         rcp::new()
     }
 
+    fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
+        self.makeRenderCanvas(width, height)
+    }
+
     #[cfg(any(
         feature = "native-ore-metal-experimental",
         feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
         feature = "ore-gl"
     ))]
     // virtual std::unique_ptr<rive::ore::Context> makeOreContext() = 0;

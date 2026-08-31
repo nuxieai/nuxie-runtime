@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -88,6 +89,10 @@ class EnsureRunnerIntegrationTest(unittest.TestCase):
     """End-to-end acceptance for the poisoned-cache scenario."""
 
     def setUp(self):
+        environment = mock.patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop("CARGO_TARGET_DIR", None)
         self.raw = tempfile.TemporaryDirectory()
         self.addCleanup(self.raw.cleanup)
         self.root = Path(self.raw.name)
@@ -121,14 +126,16 @@ class EnsureRunnerIntegrationTest(unittest.TestCase):
     def ensure(self):
         guard.ensure_runner(self.root, "ordinary", "debug")
 
-    def runner_output(self):
-        binary = self.root / "target" / "debug" / "rust-golden-runner"
+    def runner_output(self, target_dir=None):
+        target_dir = target_dir or self.root / "target"
+        binary = target_dir / "debug" / "rust-golden-runner"
         return subprocess.run(
             [binary], check=True, stdout=subprocess.PIPE, text=True
         ).stdout.strip()
 
-    def stamp(self):
-        with open(self.root / "target/golden-gate/ordinary-debug.json") as handle:
+    def stamp(self, target_dir=None):
+        target_dir = target_dir or self.root / "target"
+        with open(target_dir / "golden-gate/ordinary-debug.json") as handle:
             return json.load(handle)
 
     def test_poisoned_cache_is_detected_and_rebuilt(self):
@@ -169,6 +176,43 @@ class EnsureRunnerIntegrationTest(unittest.TestCase):
         uplift.write_bytes(b"not the verified runner")
         self.ensure()
         self.assertEqual(self.runner_output(), "1")
+
+    def test_environment_target_directories_do_not_touch_default_artifacts(self):
+        self.ensure()
+        default_stamp = self.stamp()
+        default_runner = self.root / "target/debug/rust-golden-runner"
+        default_mtime = default_runner.stat().st_mtime_ns
+        for configured in ("target/isolated", str(self.root / "absolute-target")):
+            with self.subTest(target_dir=configured):
+                os.environ["CARGO_TARGET_DIR"] = configured
+                target_dir = (self.root / configured).resolve()
+                self.assertEqual(guard.cargo_target_directory(self.root), target_dir)
+                self.ensure()
+                self.assertEqual(self.runner_output(target_dir), "1")
+                self.assertEqual(self.stamp(target_dir)["variant"], "ordinary")
+                artifact = target_dir / "debug/rust-golden-runner-ordinary"
+                before = artifact.stat().st_mtime_ns
+                self.ensure()
+                self.assertEqual(artifact.stat().st_mtime_ns, before)
+                guard.ensure_sources(self.root)
+                self.assertTrue((target_dir / "golden-gate/rust-sources.json").is_file())
+                self.assertEqual(self.stamp(), default_stamp)
+                self.assertEqual(default_runner.stat().st_mtime_ns, default_mtime)
+
+    def test_cargo_configuration_target_directory_is_used(self):
+        (self.root / ".cargo").mkdir()
+        (self.root / ".cargo/config.toml").write_text(
+            '[build]\ntarget-dir = "configured-target"\n'
+        )
+        target_dir = self.root / "configured-target"
+        self.assertEqual(guard.cargo_target_directory(self.root), target_dir.resolve())
+        guard.ensure_runner(self.root, "scripted", "debug")
+        self.assertEqual(self.runner_output(target_dir), "1")
+        self.assertTrue((target_dir / "debug/rust-golden-runner-scripted").is_file())
+        self.assertTrue((target_dir / "golden-gate/scripted-debug.json").is_file())
+        guard.ensure_sources(self.root)
+        self.assertTrue((target_dir / "golden-gate/rust-sources.json").is_file())
+        self.assertFalse((self.root / "target/golden-gate").exists())
 
 
 if __name__ == "__main__":

@@ -4,8 +4,8 @@
 #![allow(non_snake_case)]
 
 use super::gl_utils_decl::{
-    Buffer, DebugPrintErrorAndAbort, Framebuffer, GLObject, GLUtilsSourceConfiguration, Program,
-    Renderbuffer, Shader, Texture, VAO,
+    Buffer, DebugPrintErrorAndAbort, Framebuffer, GLObject, GLObjectType,
+    GLUtilsSourceConfiguration, Program, Renderbuffer, Shader, Texture, VAO,
 };
 use super::gles3_decl::*;
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::{
@@ -14,6 +14,62 @@ use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::IAABB;
 
 pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_gl_gl_utils.cpp");
+
+use std::{
+    collections::HashMap,
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicU32, Ordering},
+    },
+};
+static ABANDONED_COUNT: AtomicU32 = AtomicU32::new(0);
+static RECLAIMED_COUNT: AtomicU32 = AtomicU32::new(0);
+fn abandoned_names() -> &'static Mutex<HashMap<(u64, u64), Vec<(GLObjectType, GLuint)>>> {
+    static NAMES: OnceLock<Mutex<HashMap<(u64, u64), Vec<(GLObjectType, GLuint)>>>> =
+        OnceLock::new();
+    NAMES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+pub(crate) fn delete_name(kind: GLObjectType, id: GLuint) {
+    recordGLCommand(match kind {
+        GLObjectType::buffer => GLCommand::DeleteBuffer(id),
+        GLObjectType::texture => GLCommand::DeleteTexture(id),
+        GLObjectType::framebuffer => GLCommand::DeleteFramebuffer(id),
+        GLObjectType::renderbuffer => GLCommand::DeleteRenderbuffer(id),
+        GLObjectType::vertexArray => GLCommand::DeleteVertexArray(id),
+        GLObjectType::shader => GLCommand::DeleteShader(id),
+        GLObjectType::program => GLCommand::DeleteProgram(id),
+    });
+}
+pub(crate) fn abandon_name(kind: GLObjectType, id: GLuint, owner: (u64, u64)) {
+    abandoned_names()
+        .lock()
+        .unwrap()
+        .entry(owner)
+        .or_default()
+        .push((kind, id));
+    ABANDONED_COUNT.fetch_add(1, Ordering::Relaxed);
+}
+pub(crate) fn ReclaimAbandonedNames() {
+    if ABANDONED_COUNT.load(Ordering::Acquire) == RECLAIMED_COUNT.load(Ordering::Relaxed) {
+        return;
+    }
+    let Some(owner) = currentGLExecutionIdentity() else {
+        return;
+    };
+    let Some(mine) = abandoned_names().lock().unwrap().remove(&owner) else {
+        return;
+    };
+    for &(kind, id) in &mine {
+        delete_name(kind, id);
+    }
+    RECLAIMED_COUNT.fetch_add(mine.len() as u32, Ordering::Release);
+}
+pub(crate) fn AbandonedNameCount() -> u32 {
+    ABANDONED_COUNT.load(Ordering::Relaxed)
+}
+pub(crate) fn ReclaimedNameCount() -> u32 {
+    RECLAIMED_COUNT.load(Ordering::Relaxed)
+}
 
 const GLSL_GLSL_VERSION: &str = "MC";
 const GLSL_VERTEX: &str = "DB";
@@ -57,86 +113,60 @@ pub(crate) fn newProgram() -> Program {
 }
 
 pub(crate) fn resetTexture(texture: &mut Texture, adoptedID: GLuint) {
-    let old = texture.0.replaceWithAdoptedID(adoptedID);
-    if old.id() != 0 {
-        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteTexture(old.id())));
-    }
+    texture.0.adoptName(GLObjectType::texture, adoptedID);
 }
 
 pub(crate) fn moveAssignTexture(texture: &mut Texture, mut rhs: Texture) {
-    let adopted = rhs.0.takeObject();
-    let old = texture.0.replaceWithObject(adopted);
-    if old.id() != 0 {
-        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteTexture(old.id())));
-    }
+    texture.0.adopt(GLObjectType::texture, &mut rhs.0);
 }
 
 pub(crate) fn resetFramebuffer(framebuffer: &mut Framebuffer, adoptedID: GLuint) {
-    let old = framebuffer.0.replaceWithAdoptedID(adoptedID);
-    if old.id() != 0 {
-        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteFramebuffer(old.id())));
-    }
+    framebuffer
+        .0
+        .adoptName(GLObjectType::framebuffer, adoptedID);
 }
 
 pub(crate) fn moveAssignFramebuffer(framebuffer: &mut Framebuffer, mut rhs: Framebuffer) {
-    let adopted = rhs.0.takeObject();
-    let old = framebuffer.0.replaceWithObject(adopted);
-    if old.id() != 0 {
-        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteFramebuffer(old.id())));
-    }
+    framebuffer.0.adopt(GLObjectType::framebuffer, &mut rhs.0);
 }
 
 pub(crate) fn resetRenderbuffer(renderbuffer: &mut Renderbuffer, adoptedID: GLuint) {
-    let old = renderbuffer.0.replaceWithAdoptedID(adoptedID);
-    if old.id() != 0 {
-        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteRenderbuffer(old.id())));
-    }
+    renderbuffer
+        .0
+        .adoptName(GLObjectType::renderbuffer, adoptedID);
 }
 
 pub(crate) fn moveAssignRenderbuffer(renderbuffer: &mut Renderbuffer, mut rhs: Renderbuffer) {
-    let adopted = rhs.0.takeObject();
-    let old = renderbuffer.0.replaceWithObject(adopted);
-    if old.id() != 0 {
-        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteRenderbuffer(old.id())));
-    }
+    renderbuffer.0.adopt(GLObjectType::renderbuffer, &mut rhs.0);
 }
 
 pub(crate) fn resetShader(shader: &mut Shader, adoptedID: GLuint) {
-    let old = shader.0.replaceWithAdoptedID(adoptedID);
-    if old.id() != 0 {
-        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteShader(old.id())));
-    }
+    shader.0.adoptName(GLObjectType::shader, adoptedID);
 }
 
 pub(crate) fn resetProgram(program: &mut Program, adoptedProgramID: GLuint) {
-    // Source order is significant: retained fragment shader, retained vertex
-    // shader, then the program itself.
-    program.m_fragmentShader.reset(0);
-    program.m_vertexShader.reset(0);
-    let old = program.m_object.replaceWithAdoptedID(adoptedProgramID);
-    if old.id() != 0 {
-        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteProgram(old.id())));
-    }
+    program
+        .m_object
+        .adoptName(GLObjectType::program, adoptedProgramID);
 }
 
 pub(crate) fn moveAssignProgram(program: &mut Program, mut rhs: Program) {
-    program.m_fragmentShader.reset(0);
-    program.m_vertexShader.reset(0);
-    let adoptedProgram = rhs.m_object.takeObject();
-    let old = program.m_object.replaceWithObject(adoptedProgram);
-    if old.id() != 0 {
-        old.withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteProgram(old.id())));
-    }
-
-    program.m_vertexShader.0 = rhs.m_vertexShader.0.takeObject();
-    program.m_fragmentShader.0 = rhs.m_fragmentShader.0.takeObject();
+    program
+        .m_object
+        .adopt(GLObjectType::program, &mut rhs.m_object);
+    program
+        .m_vertexShader
+        .0
+        .adopt(GLObjectType::shader, &mut rhs.m_vertexShader.0);
+    program
+        .m_fragmentShader
+        .0
+        .adopt(GLObjectType::shader, &mut rhs.m_fragmentShader.0);
 }
 
 impl Drop for Buffer {
     fn drop(&mut self) {
-        // The source calls glDeleteBuffers even when m_id is zero.
-        self.0
-            .withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteBuffer(self.0.id())));
+        self.0.destroy(GLObjectType::buffer);
     }
 }
 
@@ -160,9 +190,7 @@ impl Drop for Renderbuffer {
 
 impl Drop for VAO {
     fn drop(&mut self) {
-        // The source calls glDeleteVertexArrays even when m_id is zero.
-        self.0
-            .withDeleteCurrent(|| recordGLCommand(GLCommand::DeleteVertexArray(self.0.id())));
+        self.0.destroy(GLObjectType::vertexArray);
     }
 }
 
@@ -174,7 +202,10 @@ impl Drop for Shader {
 
 impl Drop for Program {
     fn drop(&mut self) {
-        self.reset(0);
+        self.m_object.destroy(GLObjectType::program);
+        // C++ members then destruct in reverse declaration order.
+        self.m_fragmentShader.reset(0);
+        self.m_vertexShader.reset(0);
     }
 }
 
@@ -496,9 +527,9 @@ mod tests {
     fn complete_source_and_generated_input_denominators_are_frozen() {
         assert_eq!(
             super::super::gl_utils_decl::PINNED_SOURCE.lines().count(),
-            271
+            289
         );
-        assert_eq!(PINNED_SOURCE.lines().count(), 373);
+        assert_eq!(PINNED_SOURCE.lines().count(), 501);
         assert_eq!(GLSL_GLSL.as_bytes().len(), 10326);
     }
 
@@ -569,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn program_reset_destroys_fragment_vertex_then_program() {
+    fn program_destroys_program_then_fragment_then_vertex() {
         resetGLCommandStream();
         {
             let mut program = Program::new();
@@ -581,9 +612,9 @@ mod tests {
         assert_eq!(
             takeGLCommands(),
             vec![
+                GLCommand::DeleteProgram(13),
                 GLCommand::DeleteShader(12),
                 GLCommand::DeleteShader(11),
-                GLCommand::DeleteProgram(13),
             ]
         );
     }

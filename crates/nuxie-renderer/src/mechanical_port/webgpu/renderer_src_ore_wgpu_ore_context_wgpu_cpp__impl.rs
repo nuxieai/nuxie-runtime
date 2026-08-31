@@ -30,15 +30,15 @@ use super::webgpu_cpp_decl::{
     VertexStepMode as WgpuVertexStepMode,
 };
 use super::webgpu_decl::{
-    WGPUBindGroupLayout, WGPUBlendState, WGPUBufferDescriptor, WGPUChainedStruct,
-    WGPUColorTargetState, WGPUDepthStencilState, WGPUFragmentState, WGPUIndexFormat_Undefined,
-    WGPULoadOp_Clear, WGPULoadOp_Load, WGPUMultisampleState, WGPUOptionalBool_False,
-    WGPUOptionalBool_True, WGPUPipelineLayoutDescriptor, WGPUPrimitiveState,
-    WGPURenderPassColorAttachment, WGPURenderPassDepthStencilAttachment, WGPURenderPassDescriptor,
-    WGPURenderPipelineDescriptor, WGPUSamplerDescriptor, WGPUShaderModuleDescriptor,
-    WGPUShaderSourceWGSL, WGPUStoreOp_Discard, WGPUStoreOp_Store, WGPUStringView,
-    WGPUTextureDescriptor, WGPUTextureViewDescriptor, WGPUVertexAttribute, WGPUVertexBufferLayout,
-    WGPUVertexState, WGPU_FALSE, WGPU_STRLEN, WGPU_TRUE,
+    WGPU_FALSE, WGPU_STRLEN, WGPU_TRUE, WGPUBindGroupLayout, WGPUBlendState, WGPUBufferDescriptor,
+    WGPUChainedStruct, WGPUColorTargetState, WGPUDepthStencilState, WGPUFragmentState,
+    WGPUIndexFormat_Undefined, WGPULoadOp_Clear, WGPULoadOp_Load, WGPUMultisampleState,
+    WGPUOptionalBool_False, WGPUOptionalBool_True, WGPUPipelineLayoutDescriptor,
+    WGPUPrimitiveState, WGPURenderPassColorAttachment, WGPURenderPassDepthStencilAttachment,
+    WGPURenderPassDescriptor, WGPURenderPipelineDescriptor, WGPUSamplerDescriptor,
+    WGPUShaderModuleDescriptor, WGPUShaderSourceWGSL, WGPUStoreOp_Discard, WGPUStoreOp_Store,
+    WGPUStringView, WGPUTextureDescriptor, WGPUTextureViewDescriptor, WGPUVertexAttribute,
+    WGPUVertexBufferLayout, WGPUVertexState,
 };
 use super::webgpu_wagyu_decl::{
     WGPUSType_WagyuShaderModuleDescriptor, WGPUWagyuShaderLanguage, WGPUWagyuShaderLanguage_GLSL,
@@ -47,16 +47,15 @@ use super::webgpu_wagyu_decl::{
 use nuxie_ore_metal::bind_group_layout::{
     BindGroupLayout, validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,
 };
-use nuxie_ore_metal::context::{ActiveRenderPass, ContextApi, FrameDescriptor, ShaderTarget};
+use nuxie_ore_metal::context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::types::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindingKind, BlendFactor, BlendOp,
-    BufferDesc, BufferUsage, ColorWriteMask, CompareFunction, CullMode, FaceWinding, Features,
-    Filter, IndexFormat, LoadOp, PipelineDesc, PrimitiveTopology, RenderPassDesc, SamplerDesc,
-    ShaderLanguage, ShaderModuleDesc, StencilOp, StoreOp, TextureAspect, TextureDesc,
-    TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, VertexFormat,
-    VertexStepMode, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindingKind, BlendFactor, BlendOp, BufferDesc, BufferUsage,
+    ColorWriteMask, CompareFunction, CullMode, FaceWinding, Features, Filter, IndexFormat, LoadOp,
+    PipelineDesc, PrimitiveTopology, RenderPassDesc, SamplerDesc, ShaderLanguage, ShaderModuleDesc,
+    StencilOp, StoreOp, TextureAspect, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
+    TextureViewDimension, VertexFormat, VertexStepMode, WrapMode, kMaxBindGroups,
 };
 use std::rc::Weak as RcWeak;
 
@@ -575,7 +574,7 @@ pub(crate) fn makePipeline(
         wBuffers[bufferIndex].stepMode = oreStepModeToWGPU(layout.stepMode).into();
         wBuffers[bufferIndex].attributeCount = attributeCount;
         wBuffers[bufferIndex].attributes = unsafe { wAttribs.as_ptr().add(attrIdx) };
-        for attr in layout.attributes.iter().take(attributeCount) {
+        for attr in layout.attributes.unwrap_or(&[]).iter().take(attributeCount) {
             let wa = &mut wAttribs[attrIdx];
             *wa = WGPUVertexAttribute::default();
             wa.format = oreVertexFormatToWGPU(attr.format).into();
@@ -799,12 +798,11 @@ pub(crate) fn makeBindGroupLayout(
         &mut layout,
         &context.base,
         desc.groupIndex,
-        desc.entries[..entryCount].to_vec(),
+        desc.entries.unwrap_or(&[])[..entryCount].to_vec(),
     );
-    layout.setNative(super::ore_wgpu_layout_decl::buildWGPUBindGroupLayoutFromDesc(
-        &context.m_wgpuDevice,
-        desc,
-    ));
+    layout.setNative(
+        super::ore_wgpu_layout_decl::buildWGPUBindGroupLayoutFromDesc(&context.m_wgpuDevice, desc),
+    );
     if layout.native().Get().is_null() {
         context.setLastError(&format!(
             "makeBindGroupLayout: CreateBindGroupLayout returned null (group={})",
@@ -1255,6 +1253,9 @@ pub(crate) fn endFrame(context: &mut ContextWGPU) {
 }
 
 impl ContextApi for ContextWGPU {
+    fn contextBase(&self) -> &Context {
+        &self.base
+    }
     fn features(&self) -> Features {
         self.base.features()
     }

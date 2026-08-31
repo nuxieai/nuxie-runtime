@@ -15,7 +15,7 @@ use super::ore_sampler_gl_decl::SamplerGL;
 use super::ore_shader_module_gl_decl::ShaderModuleGL;
 use super::ore_texture_gl_decl::{TextureGL, TextureViewGL};
 use super::render_target_gl_decl::{
-    RenderTargetGL, TextureRenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID,
+    RenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, TextureRenderTargetGL,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::LiteRttiBase;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
@@ -23,16 +23,16 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::texture_h
 use nuxie_ore_metal::bind_group_layout::BindGroupLayout;
 use nuxie_ore_metal::binding_map::BindingMap;
 use nuxie_ore_metal::buffer::BufferApi;
-use nuxie_ore_metal::context::{ActiveRenderPass, ContextApi, FrameDescriptor, ShaderTarget};
+use nuxie_ore_metal::context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::shader_module::GLFixupKind;
 use nuxie_ore_metal::texture::TextureApi;
 use nuxie_ore_metal::types::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
-    BufferDesc, BufferUsage, CompareFunction, Features, Filter, LoadOp, PipelineDesc,
-    RenderPassDesc, SamplerDesc, ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc,
-    TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
+    CompareFunction, Features, Filter, LoadOp, PipelineDesc, RenderPassDesc, SamplerDesc,
+    ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc, TextureFormat, TextureType,
+    TextureViewDesc, TextureViewDimension, WrapMode, kMaxBindGroups,
 };
 use std::ffi::c_void;
 use std::rc::Weak as RcWeak;
@@ -229,9 +229,16 @@ fn queriedFeatures(executionDomain: &GLExecutionDomain) -> Features {
     features
 }
 
-pub(crate) fn Make(executionStamp: GLExecutionStamp) -> Option<Box<ContextGL>> {
+pub(crate) fn Make(
+    executionStamp: GLExecutionStamp,
+    renderContextImpl: *mut c_void,
+) -> Option<Box<ContextGL>> {
     let features = executionStamp.withCurrent(|| queriedFeatures(executionStamp.domain()));
-    Some(Box::new(ContextGL::newBase(features, executionStamp)))
+    Some(Box::new(ContextGL::newBase(
+        features,
+        executionStamp,
+        renderContextImpl,
+    )))
 }
 
 /// The authored destructor body is empty.
@@ -987,7 +994,7 @@ fn makePipelineCurrent(
         .take(vertexBufferCount)
     {
         let attributeCount = layout.attributeCount().ok()? as usize;
-        for attribute in layout.attributes.iter().take(attributeCount) {
+        for attribute in layout.attributes.unwrap_or(&[]).iter().take(attributeCount) {
             submit(
                 context,
                 GLCommand::BindAttribLocation {
@@ -1295,7 +1302,12 @@ fn makeBindGroupLayoutCurrent(
         &mut layout.base,
         &context.base,
         desc.groupIndex,
-        desc.entries.iter().take(entryCount).copied().collect(),
+        desc.entries
+            .unwrap_or(&[])
+            .iter()
+            .take(entryCount)
+            .copied()
+            .collect(),
     );
     let domain = nuxie_ore_metal::context_backend_domain(&context.base);
     Some(ResourceHandle::new_in_domain(None, domain, layout).erase())
@@ -1633,6 +1645,14 @@ unsafe fn wrapCanvasTextureCurrent(
     canvas: *mut c_void,
 ) -> Option<AnyResourceHandle> {
     debug_assert!(!canvas.is_null());
+    if !context.m_renderContextImpl.is_null() {
+        unsafe {
+            super::render_context_gl_impl::ensureDeferredCanvasBacking(
+                &mut *context.m_renderContextImpl.cast(),
+                canvas.cast(),
+            )
+        };
+    }
     let canvas = unsafe { canvas.cast::<RenderCanvas>().as_mut() }?;
     let target = unsafe { canvas.renderTarget().as_ref() }?;
     let execution = context.executionStamp();
@@ -1851,7 +1871,70 @@ pub(crate) unsafe fn wrapRiveTexture(
     })
 }
 
+pub(crate) unsafe fn wrapCanvasSampleView(
+    context: &mut ContextGL,
+    canvas: *mut c_void,
+) -> Option<AnyResourceHandle> {
+    withCurrentContext(context, |context| unsafe {
+        debug_assert!(!canvas.is_null());
+        let canvas = canvas.cast::<RenderCanvas>().as_mut()?;
+        if !context.m_renderContextImpl.is_null() {
+            super::render_context_gl_impl::ensureDeferredCanvasBacking(
+                &mut *context.m_renderContextImpl.cast(),
+                canvas,
+            );
+        }
+        let source = (*canvas.renderImage()).getTexture();
+        wrapImageSampleViewCurrent(context, source, canvas.width(), canvas.height())
+    })
+}
+
+// Both the deferred canvas sampling virtual and immediate lua_gpu.cpp's
+// Image:view import boundary sample the same retained Y-flipped companion.
+unsafe fn wrapImageSampleViewCurrent(
+    context: &mut ContextGL,
+    source: *mut RiveTexture,
+    width: u32,
+    height: u32,
+) -> Option<AnyResourceHandle> {
+    let mut texture = source;
+    let mut mirror = crate::mechanical_port::source::include::rive::refcnt_hpp::rcp::new();
+    if !context.m_renderContextImpl.is_null() {
+        mirror = unsafe {
+            super::render_context_gl_impl::getCanvasImportMirror(
+                &mut *context.m_renderContextImpl.cast(),
+                source,
+                width,
+                height,
+            )
+        };
+        if !mirror.get().is_null() {
+            let mirror_texture = unsafe { (*mirror.get()).getTexture() };
+            if !mirror_texture.is_null() {
+                texture = mirror_texture;
+            }
+        }
+    }
+    let view = unsafe { wrapRiveTextureCurrent(context, texture.cast(), width, height) };
+    if !mirror.get().is_null() {
+        if let Some(view) = &view {
+            *view
+                .downcast_ref::<TextureViewGL>()
+                .unwrap()
+                .m_retainedCanvasMirror
+                .borrow_mut() = mirror;
+        }
+    }
+    view
+}
+
 impl ContextApi for ContextGL {
+    fn usesDeferredFrameReplay(&self) -> bool {
+        false
+    }
+    fn contextBase(&self) -> &Context {
+        &self.base
+    }
     fn features(&self) -> Features {
         withCurrentContextRef(self, |context| context.base.features())
     }
@@ -1940,6 +2023,22 @@ impl ContextApi for ContextGL {
         unsafe { wrapCanvasTexture(self, canvas) }
     }
 
+    unsafe fn wrapCanvasSampleView(
+        &mut self,
+        canvas: nuxie_ore_metal::context::CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
+        unsafe { wrapCanvasSampleView(self, canvas.canvas) }
+    }
+
+    unsafe fn wrapImageSampleView(
+        &mut self,
+        image: nuxie_ore_metal::context::CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
+        withCurrentContext(self, |context| unsafe {
+            wrapImageSampleViewCurrent(context, image.texture.cast(), image.width, image.height)
+        })
+    }
+
     unsafe fn wrapRiveTexture(
         &mut self,
         texture: *mut c_void,
@@ -1957,7 +2056,7 @@ impl ContextApi for ContextGL {
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 16;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 14;
-const _: [(); 44512] = [(); PINNED_SOURCE.len()];
+const _: [(); 46479] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2103,7 +2202,8 @@ mod tests {
     }
 
     fn context(domain: &GLExecutionDomain) -> Box<ContextGL> {
-        ContextGL::Make(domain.stamp()).expect("fake WebGL2 context is constructible")
+        ContextGL::Make(domain.stamp(), std::ptr::null_mut())
+            .expect("fake WebGL2 context is constructible")
     }
 
     fn clearTrace(state: &Rc<RefCell<FakeProviderState>>) {
@@ -2114,8 +2214,200 @@ mod tests {
     }
 
     #[test]
+    fn deferred_canvas_dispatch_stays_lazy_and_immediate_image_sampling_retains_mirror() {
+        use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::RenderContextImplContract;
+
+        let (domain, state) = execution(1..=512);
+        let mut owner = domain.withCurrent(|| {
+            super::super::render_context_gl_impl::newComponent097TestContextOwner(
+                GLCapabilities::default(),
+                domain.clone(),
+            )
+        });
+        let generated_before = state.borrow().generated.len();
+        let canvas = RenderContextImplContract::makeDeferredRenderCanvas(&mut *owner, 3, 4);
+        assert_eq!(state.borrow().generated.len(), generated_before);
+        let target = unsafe {
+            &*(*canvas.get())
+                .renderTarget()
+                .cast::<TextureRenderTargetGL>()
+        };
+        assert_eq!(target.externalTextureID(), 0);
+        let mut context = ContextGL::Make(domain.stamp(), std::ptr::from_mut(&mut *owner).cast())
+            .expect("ORE context on the same GL owner");
+        let color_view = unsafe { context.wrapCanvasTexture(canvas.get().cast()) }.unwrap();
+        let source = unsafe { (*(*canvas.get()).renderImage()).getTexture() };
+        let source_name = unsafe { (*source).nativeHandle() } as usize as GLuint;
+        assert_ne!(source_name, 0);
+        let info = nuxie_ore_metal::context::CanvasTextureInfo {
+            canvas: canvas.get().cast(),
+            texture: source.cast(),
+            width: 3,
+            height: 4,
+            owner: Some(Rc::new(canvas.clone())),
+        };
+        let sampled =
+            unsafe { context.wrapImageSampleView(info) }.expect("immediate sampling view");
+        let sampled = sampled.downcast_ref::<TextureViewGL>().unwrap();
+        let mirror = sampled.m_retainedCanvasMirror.borrow();
+        assert!(
+            !mirror.get().is_null(),
+            "sampling view must retain its mirror owner"
+        );
+        let mirror_name =
+            unsafe { (*(*mirror.get()).getTexture()).nativeHandle() } as usize as GLuint;
+        assert_ne!(source_name, mirror_name);
+        assert_eq!(
+            sampled
+                .texture()
+                .downcast_ref::<TextureGL>()
+                .unwrap()
+                .m_glTexture,
+            mirror_name
+        );
+        drop(mirror);
+        drop(color_view);
+        // sampled's handle drops before the context and implementation owners.
+    }
+
+    #[cfg(feature = "renderer-webgl2")]
+    #[test]
+    fn product_end_frame_finishes_inline_recording_without_borrowing_context_twice() {
+        use nuxie_ore_metal::ore_cmd::ore_deferred_render_pass::InlineDeferredRenderPass;
+        let (domain, _) = execution(1..=16);
+        let context = Rc::new(RefCell::new(*context(&domain)));
+        let mut product = crate::exact_gpu_canvas::ExactGpuCanvas::new_shared(
+            context.clone(),
+            nuxie_render_api::GpuCanvasShaderProfile::WebGl2,
+        )
+        .unwrap();
+        product.begin_frame(1);
+        let pass = InlineDeferredRenderPass::new(context.clone(), &RenderPassDesc::default());
+        context.borrow().setActiveRenderPass(Some(&pass));
+        let token = pass.activeToken().upgrade().unwrap();
+        product.end_frame();
+        assert!(token.isFinished());
+    }
+
+    #[test]
+    fn public_ore_handle_retains_factory_backend_without_an_ownership_cycle() {
+        use crate::exact_source_adapter::{ExactSourceBackend, ExactSourceFactoryCore};
+        use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::RenderContext;
+        use nuxie_ore_metal::ore_cmd::ore_deferred_render_pass::InlineDeferredRenderPass;
+        use nuxie_render_api::Factory;
+        use std::{cell::Cell, pin::Pin};
+
+        struct Backend {
+            context: Option<Pin<Box<RenderContext>>>,
+            destroyed: Rc<Cell<bool>>,
+        }
+        impl ExactSourceBackend for Backend {
+            fn context_mut(&mut self) -> Pin<&mut RenderContext> {
+                self.context.as_mut().unwrap().as_mut()
+            }
+            fn begin_frame(
+                &mut self,
+                _: u32,
+                _: crate::RenderMode,
+            ) -> Result<u64, crate::RendererError> {
+                unreachable!("this witness only exercises the ORE host boundary")
+            }
+            fn finish_frame(&mut self, _: u64) -> Result<Vec<u8>, crate::RendererError> {
+                unreachable!("this witness only exercises the ORE host boundary")
+            }
+            fn abort_frame(&mut self) {}
+        }
+        impl Drop for Backend {
+            fn drop(&mut self) {
+                self.context.take();
+                self.destroyed.set(true);
+            }
+        }
+
+        let (domain, _) = execution(1..=2048);
+        let implementation = domain.withCurrent(|| {
+            super::super::render_context_gl_impl::newComponent097TestContextOwner(
+                GLCapabilities::default(),
+                domain.clone(),
+            )
+        });
+        let destroyed = Rc::new(Cell::new(false));
+        let mut factory = ExactSourceFactoryCore::new(Backend {
+            context: Some(RenderContext::from_impl(implementation)),
+            destroyed: destroyed.clone(),
+        });
+        let mut factory_clone = factory.clone();
+        let external = factory.ore().unwrap();
+        let another = factory_clone.ore().unwrap();
+        assert!(Rc::ptr_eq(&external, &another));
+        // Cache lookup must not borrow a live wrapper just to return its Rc.
+        let borrowed = external.borrow_mut();
+        assert!(Rc::ptr_eq(&external, &factory.ore().unwrap()));
+        drop(borrowed);
+
+        let mut native = None;
+        factory.with_backend_mut_for_test(|backend| {
+            native = unsafe { Pin::get_unchecked_mut(backend.context_mut()) }.oreHandleExecutable();
+        });
+        let native = native.unwrap();
+        assert!(!Rc::ptr_eq(&native, &external));
+        let resource = native
+            .borrow_mut()
+            .makeBuffer(&BufferDesc {
+                usage: BufferUsage::uniform,
+                size: 16,
+                data: None,
+                immutable: false,
+                label: None,
+            })
+            .unwrap();
+        assert!(resource.belongsTo(&nuxie_ore_metal::context_backend_domain(
+            external.borrow().contextBase()
+        )));
+        external.borrow().contextBase().setDeferredRecording(true);
+        assert!(native.borrow().deferredRecording());
+        assert!(Rc::ptr_eq(
+            &native.borrow().pendingFrame(),
+            &external.borrow().contextBase().pendingFrame()
+        ));
+        native.borrow().setLastError("shared native state");
+        assert_eq!(
+            external.borrow().contextBase().lastError(),
+            "shared native state"
+        );
+        let native_weak = Rc::downgrade(&native);
+        drop(native);
+
+        external
+            .borrow_mut()
+            .beginFrame(&FrameDescriptor::new(0, 1));
+        let mut pass = InlineDeferredRenderPass::new(external.clone(), &RenderPassDesc::default());
+        external.borrow().setActiveRenderPass(Some(&pass));
+        assert!(external.borrow().contextBase().activeRenderPass().is_some());
+        drop(factory);
+        drop(factory_clone);
+        assert!(!destroyed.get());
+        pass.finish();
+        assert!(pass.activeToken().upgrade().unwrap().isFinished());
+        external.borrow_mut().endFrame();
+        drop(pass);
+        drop(resource);
+        drop(another);
+        assert!(!destroyed.get());
+        drop(external);
+        assert!(
+            destroyed.get(),
+            "the weak cache must not retain its backend"
+        );
+        assert!(
+            native_weak.upgrade().is_none(),
+            "native context dies before its backend device"
+        );
+    }
+
+    #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1221);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1275);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 16);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 14);
@@ -2222,10 +2514,12 @@ mod tests {
 
         drop(bufferOwner);
         domain.withCurrent(|| {});
-        assert!(state
-            .borrow()
-            .commands
-            .contains(&GLCommand::DeleteBuffer(701)));
+        assert!(
+            state
+                .borrow()
+                .commands
+                .contains(&GLCommand::DeleteBuffer(701))
+        );
         drop(context);
         domain.shutdown();
     }
@@ -2308,9 +2602,11 @@ mod tests {
             ..TextureViewDesc::default()
         };
         assert!(makeTextureView(&mut second, &viewDesc).is_none());
-        assert!(second
-            .lastError()
-            .contains("different GL execution generation"));
+        assert!(
+            second
+                .lastError()
+                .contains("different GL execution generation")
+        );
 
         let lifecycle = firstState
             .borrow()
@@ -2354,10 +2650,12 @@ mod tests {
         drop(buffer);
         drop(context);
         domain.shutdown();
-        assert!(!state
-            .borrow()
-            .commands
-            .contains(&GLCommand::DeleteBuffer(31337)));
+        assert!(
+            !state
+                .borrow()
+                .commands
+                .contains(&GLCommand::DeleteBuffer(31337))
+        );
     }
 
     #[test]

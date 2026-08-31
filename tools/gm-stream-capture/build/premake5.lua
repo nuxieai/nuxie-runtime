@@ -25,6 +25,7 @@ local include_dirs = {
     '../../golden-runner',
     rive_runtime .. '/include',
     rive_runtime .. '/renderer/include',
+    rive_runtime .. '/decoders/include',
     rive_runtime .. '/tests',
     rive_runtime .. '/tests/gm',
     rive_runtime .. '/tests/include',
@@ -84,6 +85,15 @@ files({
     '../../golden-runner/recording_renderer.cpp',
     rive_runtime .. '/tests/gm/gm.cpp',
     rive_runtime .. '/tests/gm/gmutils.cpp',
+    -- e949's two backend-independent replay GMs enter the generated registry.
+    -- Link their upstream implementation owners, not a parallel capture shim.
+    rive_runtime .. '/renderer/src/deferred_cmd.cpp',
+    rive_runtime .. '/utils/serialized_replay.cpp',
+    rive_runtime .. '/utils/serializing_factory.cpp',
+    -- This capture host is macOS-only. SerializingFactory's Bitmap::decode
+    -- uses the upstream CoreGraphics branch (also the default Apple decoder).
+    rive_runtime .. '/decoders/src/bitmap_decoder.cpp',
+    rive_runtime .. '/decoders/src/bitmap_decoder_thirdparty.cpp',
     rive_runtime .. '/tests/unit_tests/assets/batdude.png.cpp',
     rive_runtime .. '/tests/unit_tests/assets/montserrat.ttf.cpp',
     rive_runtime .. '/tests/unit_tests/assets/nomoon.png.cpp',
@@ -106,6 +116,8 @@ links({
     'rive_yoga',
     'Cocoa.framework',
     'CoreFoundation.framework',
+    'ApplicationServices.framework',
+    'ImageIO.framework',
     'IOKit.framework',
     'Security.framework',
     'bz2',

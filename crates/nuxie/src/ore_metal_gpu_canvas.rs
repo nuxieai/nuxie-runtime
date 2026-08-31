@@ -467,7 +467,7 @@ impl OreMetalGpuCanvas {
                 .context
                 .makeBindGroupLayout(&BindGroupLayoutDesc {
                     groupIndex: u32::from(group),
-                    entries: &entries,
+                    entries: Some(&entries),
                     entryCount: u32::try_from(entries.len())
                         .map_err(|_| unsupported("binding-group entry count exceeds u32"))?,
                     label: Some("authenticated GPUCanvas group layout"),
@@ -635,11 +635,23 @@ struct OreMetalShaderOccurrence {
 }
 
 impl RenderGpuCanvasShader for OreMetalShaderOccurrence {
+    fn ore_shader_entry(
+        &self,
+        stage: nuxie_render_api::GpuCanvasShaderStage,
+        physical_entry: &str,
+    ) -> Option<AnyResourceHandle> {
+        self.artifact
+            .entries()
+            .iter()
+            .any(|entry| entry.stage == stage && entry.physical_entry_point == physical_entry)
+            .then(|| self.module.clone())
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
+#[derive(Clone)]
 pub struct OreMetalGpuCanvasImage {
     width: u32,
     height: u32,
@@ -661,6 +673,12 @@ impl OreMetalGpuCanvasImage {
 }
 
 impl RenderImage for OreMetalGpuCanvasImage {
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        self._view.allocation_identity()
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }

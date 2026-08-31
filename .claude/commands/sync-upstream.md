@@ -15,7 +15,7 @@ command may be invoked manually or by a scheduled job.
    clones any candidate dependency forks needed by the runners. Keep the pinned
    checkout untouched.
 2. **Scout and probe.** Sandboxed scouts inventory the span, run
-   `port-manifest-check`, bucket every commit, and run every locally available
+   `make runtime-source-correspondence-check`, bucket every commit, and run every locally available
    ordinary/scripted probe. The orchestrator completes network-blocked fetches,
    dependency setup, and probes. Every final-cut diff must be attributed to an
    upstream row or the pass stops for re-triage.

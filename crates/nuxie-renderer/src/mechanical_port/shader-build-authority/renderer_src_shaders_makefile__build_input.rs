@@ -15,6 +15,6 @@ pub const PINNED_SOURCE_LINE_COUNT: usize = 502;
 pub const PINNED_SOURCE_BYTE_COUNT: usize = 22_079;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_makefile.source");
 pub const FROZEN_GENERATED_ARTIFACT_COUNT: usize = 520;
-pub const EXECUTION_CONTRACT: &str = "Execute the independently compiled complete Rust translation or the pinned upstream Makefile with the frozen toolchain; accept output only when every retained artifact matches docs/backend-port-generated-artifacts.tsv.";
+pub const EXECUTION_CONTRACT: &str = "Execute the independently compiled complete Rust translation or the pinned upstream Makefile with the frozen toolchain; compare emitted bytes with the retained shader inputs and backend import checksums before replacing artifacts.";
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

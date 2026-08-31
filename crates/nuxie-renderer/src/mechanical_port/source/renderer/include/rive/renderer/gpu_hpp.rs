@@ -2020,8 +2020,7 @@
 // renderer/include/rive/renderer/gpu.hpp.
 // Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
 // Ownership unit: generic-gpu-contract.
-// Include/dependency authority: docs/render-context-metal-includes.tsv and
-// docs/metal-port-source-dependencies.tsv.
+// Include/dependency authority: the pinned header and source-shaped modules.
 
 // Rust declaration pass for the complete source header above.  The source
 // comments are intentionally retained verbatim; this file is a mechanical

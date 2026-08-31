@@ -4,7 +4,6 @@ env:
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
   RIVE_RUNTIME_REF: "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
-  PORT_MANIFEST_RIVE_RUNTIME_REF: "4ac7b32798da0482e441ef09304dc3b480ed3ee5"
   RIVE_PREMAKE_TAG: "v5.0.0-beta7"
 
 steps:
@@ -40,7 +39,10 @@ steps:
       - Cargo.{toml,lock}
       - Makefile
       - crates/**
-      - tools/{port-manifest,rust-attribution,pure-runtime-boundary,runtime-drawing-port,runtime-frame-loop-port,test-correspondence,layout-style-handler}/**
+      - tools/pure-runtime-boundary/**
+      - tools/check_runtime_source_correspondence.py
+      - tools/test_runtime_source_correspondence.py
+      - .buildkite/pipeline.yml
       - fixtures/**
     command: |
       set -euo pipefail
@@ -50,8 +52,7 @@ steps:
       git clone --filter=blob:none https://github.com/rive-app/rive-runtime.git rive-runtime
       git -C rive-runtime checkout "$RIVE_RUNTIME_REF"
       make fixtures
-      make port-manifest-gate rust-attribution-gate pure-runtime-boundary-gate
-      make runtime-drawing-port-gate runtime-frame-loop-port-gate
+      make runtime-source-correspondence-check pure-runtime-boundary-gate
     agents:
       queue: nuxie-pr
       nuxie-platform: linux
@@ -130,8 +131,7 @@ steps:
       rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
       make fixtures
       make fmt-check check
-      make port-manifest-gate rust-attribution-gate pure-runtime-boundary-gate
-      make runtime-drawing-port-gate runtime-frame-loop-port-gate
+      make runtime-source-correspondence-check pure-runtime-boundary-gate
       make lint-gate feature-compile-gate-portable
       (
         cd "$RIVE_RUNTIME_DIR"

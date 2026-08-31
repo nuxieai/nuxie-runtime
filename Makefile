@@ -1,48 +1,13 @@
-.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-metal-atomic-oracle-tracer renderer-native-metal-tracer-binary ore-metal-binding-witness ore-metal-authenticated-gpu-canvas renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks nux-capi-android-contract-test nux-capi-android-plan nux-capi-android cpp-binary-compare cpp-runtime-compare cpp-compare crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check metal-port-test metal-port-check metal-assert-parity-check metal-port-progress metal-port-progress-check backend-port-source-inventory backend-port-source-inventory-check backend-port-ownership-inventory backend-port-ownership-inventory-check
-.PHONY: backend-port-ownership-inventory backend-port-ownership-inventory-check backend-port-dependency-inventory backend-port-dependency-inventory-check backend-port-generated-inventory backend-port-generated-inventory-check backend-port-configuration-inventory backend-port-configuration-inventory-check backend-port-field-inventory backend-port-field-inventory-check backend-port-lifecycle-inventory backend-port-lifecycle-inventory-check backend-port-legacy-wgpu-inventory backend-port-legacy-wgpu-inventory-check backend-port-repeatability-inventory backend-port-repeatability-inventory-check backend-port-denominators-check backend-port-preparation-check backend-port-translation-check backend-port-source-review-admission backend-port-source-review-check backend-port-ownership-review-admission backend-port-ownership-review-check backend-port-shader-authority backend-port-shader-authority-check
+.PHONY: rust-sources-fresh rust-runner-provenance-test runtime-differential-report-test fixtures schema check test inspect cpp-probe cpp-probe-scripted blob-differential cpp-atlas-mask-oracle cpp-atlas-mask-oracle-preflight golden-runner scripted-golden-runner rust-golden-runner scripted-rust-golden-runner golden-compare scripted-golden-compare e2e-composed-compare silver-corpus silver-corpus-validate silver-corpus-test silver-corpus-manifest-check cpp-oracle-workspace-tests renderer-replay renderer-references renderer-shaders-check renderer-decoder-oracle renderer-rust-replay-release renderer-metal-reference-bootstrap renderer-metal-reference-replay renderer-metal-reference-check renderer-metal-oracle-tracers renderer-metal-atomic-oracle-tracer renderer-native-metal-tracer-binary ore-metal-binding-witness ore-metal-authenticated-gpu-canvas renderer-dawn-reference-bootstrap renderer-dawn-reference-replay renderer-dawn-reference-check renderer-dawn-live-reference-bootstrap renderer-dawn-live-reference-replay renderer-dawn-live-reference-check renderer-golden-same-runner renderer-stub-baseline perf-compare perf-corpus perf-corpus-check perf-runtime-ref-check perf-hot-loop perf-json perf-gate-measure perf-gate perf-gate-tighten capi-smoke nux-capi-layout-contract nux-capi-surface-contract nux-capi-distribution-contract-test nux-capi-distribution-contract-gate nux-capi-pr-gate nux-capi-distribution-plan nux-capi-xcframeworks nux-capi-android-contract-test nux-capi-android-plan nux-capi-android cpp-binary-compare cpp-runtime-compare cpp-compare crate-seams-baseline-check crate-seams-browser-check crate-seams-apple-check crate-seams-full-check
+.PHONY: runtime-source-correspondence-check renderer-shader-authority renderer-shader-authority-check
 .PHONY: renderer-metal-msaa-contract renderer-metal-msaa-probe renderer-metal-cpp-parity renderer-metal-wgpu-diagnostic renderer-metal-wgpu-parity
 .PHONY: renderer-native-metal-replay
-.PHONY: renderer-native-metal-platform-matrix renderer-native-metal-v3 metal-test-census-check
+.PHONY: renderer-native-metal-platform-matrix renderer-native-metal-v3
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
 RIVE_RUNTIME_REF ?= 4ac7b32798da0482e441ef09304dc3b480ed3ee5
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
-METAL_PORT_TOOL ?= $(CURDIR)/tools/metal-port/check.py
-METAL_PORT_MANIFEST ?= $(CURDIR)/docs/metal-port-manifest.toml
-METAL_PORT_OWNERSHIP ?= $(CURDIR)/docs/metal-port-ownership.toml
-METAL_ASSERT_PARITY_TOOL ?= $(CURDIR)/tools/metal-port/check_assert_translation.py
-METAL_ASSERT_AUTHORITY ?= $(CURDIR)/docs/metal-port-assert-authority.tsv
-METAL_TEST_CENSUS_TOOL ?= $(CURDIR)/tools/metal-port/check_test_census.py
-METAL_TEST_CENSUS ?= $(CURDIR)/docs/metal-test-census.toml
-BACKEND_PORT_INVENTORY_TOOL ?= $(CURDIR)/tools/backend-port/build_source_inventory.py
-BACKEND_PORT_CAMPAIGN ?= $(CURDIR)/docs/backend-port-campaign.toml
-BACKEND_PORT_SOURCE_INVENTORY ?= $(CURDIR)/docs/backend-port-source-inventory.tsv
-BACKEND_PORT_OWNERSHIP_TOOL ?= $(CURDIR)/tools/backend-port/build_ownership_inventory.py
-BACKEND_PORT_OWNERSHIP_INVENTORY ?= $(CURDIR)/docs/backend-port-source-ownership.tsv
-BACKEND_PORT_DEPENDENCY_TOOL ?= $(CURDIR)/tools/backend-port/build_dependency_inventory.py
-BACKEND_PORT_DEPENDENCY_INVENTORY ?= $(CURDIR)/docs/backend-port-dependency-edges.tsv
-BACKEND_PORT_OWNERSHIP_ORDER ?= $(CURDIR)/docs/backend-port-ownership-order.tsv
-BACKEND_PORT_GENERATED_TOOL ?= $(CURDIR)/tools/backend-port/build_generated_inventory.py
-BACKEND_PORT_TOOLCHAIN ?= $(CURDIR)/docs/backend-port-toolchain.toml
-BACKEND_PORT_GENERATED_INVENTORY ?= $(CURDIR)/docs/backend-port-generated-artifacts.tsv
-BACKEND_PORT_CONFIGURATION_TOOL ?= $(CURDIR)/tools/backend-port/build_configuration_inventory.py
-BACKEND_PORT_CONFIGURATION_INVENTORY ?= $(CURDIR)/docs/backend-port-configurations.tsv
-BACKEND_PORT_FIELD_TOOL ?= $(CURDIR)/tools/backend-port/extract_field_inventory.py
-BACKEND_PORT_FIELD_PROFILES ?= $(CURDIR)/docs/backend-port-field-profiles.toml
-BACKEND_PORT_FIELD_INVENTORY ?= $(CURDIR)/docs/backend-port-fields.tsv
-BACKEND_PORT_LIFECYCLE_TOOL ?= $(CURDIR)/tools/backend-port/build_lifecycle_inventory.py
-BACKEND_PORT_LIFECYCLE_INVENTORY ?= $(CURDIR)/docs/backend-port-lifecycle-events.tsv
-BACKEND_PORT_LEGACY_WGPU_TOOL ?= $(CURDIR)/tools/backend-port/build_legacy_wgpu_inventory.py
-BACKEND_PORT_LEGACY_WGPU_INVENTORY ?= $(CURDIR)/docs/backend-port-legacy-wgpu.tsv
-BACKEND_PORT_REPEATABILITY_TOOL ?= $(CURDIR)/tools/backend-port/build_repeatability_inventory.py
-BACKEND_PORT_REPEATABILITY_INVENTORY ?= $(CURDIR)/docs/backend-port-repeatability.tsv
-BACKEND_PORT_REPEATABILITY_CAPTURES ?=
-BACKEND_PORT_PREPARATION_TOOL ?= $(CURDIR)/tools/backend-port/check_preparation.py
-BACKEND_PORT_TRANSLATION_TOOL ?= $(CURDIR)/tools/backend-port/check_translation.py
-BACKEND_PORT_SOURCE_REVIEW_TOOL ?= $(CURDIR)/tools/backend-port/check_source_review.py
-BACKEND_PORT_OWNERSHIP_REVIEW_TOOL ?= $(CURDIR)/tools/backend-port/check_ownership_review.py
-BACKEND_PORT_SHADER_AUTHORITY_TOOL ?= $(CURDIR)/tools/backend-port/build_shader_authority_translations.py
 SILVER_CORPUS_MANIFEST ?= $(CURDIR)/silver-corpus.toml
 SILVER_CORPUS_GENERATOR ?= $(CURDIR)/tools/silver-corpus/generate_manifest.py
 RUNTIME_DIFFERENTIAL_REPORT_TOOL ?= $(CURDIR)/tools/runtime-differentials/report.py
@@ -68,9 +33,9 @@ RENDERER_METAL_BRIDGE_PATHS = $(addprefix $(CURDIR)/,Cargo.lock tools/renderer-r
 RENDERER_METAL_CANDIDATE_BUILD_DIR ?= $(CURDIR)/target/renderer-native-metal
 RENDERER_METAL_CANDIDATE_REPLAY ?= $(RENDERER_METAL_CANDIDATE_BUILD_DIR)/release/renderer-replay
 RENDERER_METAL_CANDIDATE_BACKEND ?= rust-metal
-RENDERER_METAL_TRACER_MANIFEST ?= $(CURDIR)/tools/metal-port/tracer-corpus.toml
-RENDERER_METAL_ATOMIC_TRACER_MANIFEST ?= $(CURDIR)/tools/metal-port/tracer-corpus-atomic.toml
-RENDERER_METAL_WGPU_TRACER_MANIFEST ?= $(CURDIR)/tools/metal-port/tracer-corpus-wgpu-secondary.toml
+RENDERER_METAL_TRACER_MANIFEST ?= $(CURDIR)/tools/renderer-tracers/tracer-corpus.toml
+RENDERER_METAL_ATOMIC_TRACER_MANIFEST ?= $(CURDIR)/tools/renderer-tracers/tracer-corpus-atomic.toml
+RENDERER_METAL_WGPU_TRACER_MANIFEST ?= $(CURDIR)/tools/renderer-tracers/tracer-corpus-wgpu-secondary.toml
 RENDERER_METAL_TRACER_OUTPUT_DIR ?= $(CURDIR)/target/renderer-metal-tracers
 RENDERER_METAL_WGPU_OUTPUT_DIR ?= $(RENDERER_METAL_TRACER_OUTPUT_DIR)/rust-wgpu-secondary
 RENDERER_METAL_WGPU_PARITY_MANIFEST ?= $(CURDIR)/target/renderer-metal-wgpu-parity/clockwise-atomic.toml
@@ -188,10 +153,6 @@ schema:
 	cargo fmt --all
 
 .PHONY: fmt fmt-check
-# `cargo fmt --all` formats the workspace members *and* their local path-based
-# dependencies, so it reaches the workspace-excluded vendored wgpu packages.
-# Each of those manifests carries an empty `[workspace]` table so cargo stops
-# its workspace search at the package itself; without it, a git worktree rooted
 # Keep formatting rooted at the current workspace so linked worktrees use the
 # same manifest and toolchain configuration.
 fmt:
@@ -234,120 +195,21 @@ test: fixtures
 # in one pass through tools/report-all.sh, which reports every failure.
 .PHONY: pure-runtime-boundary-test pure-runtime-boundary-check pure-runtime-boundary-gate
 
-metal-port-test:
-	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/metal-port -p 'test_*.py' -v
-
-metal-port-check:
-	@$(MAKE) --no-print-directory metal-assert-parity-check
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(METAL_PORT_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(METAL_PORT_MANIFEST)" --ownership "$(METAL_PORT_OWNERSHIP)" --replay-receipt-commands
-	@$(MAKE) --no-print-directory metal-test-census-check
-	@$(MAKE) --no-print-directory metal-port-progress-check
-
-metal-assert-parity-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(METAL_ASSERT_PARITY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(METAL_PORT_MANIFEST)" --authority "$(METAL_ASSERT_AUTHORITY)"
-
-metal-test-census-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(METAL_TEST_CENSUS_TOOL)" --repo-root "$(CURDIR)" --manifest "$(METAL_TEST_CENSUS)" --execute
-
 renderer-native-metal-v3:
 	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features native-ore-metal-experimental,rive-decoders --lib -- --test-threads=1
-	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features native-ore-metal-experimental,rive-decoders --test native_metal_tracer -- --test-threads=1
+	MTL_DEBUG_LAYER=1 MTL_SHADER_VALIDATION=1 NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-renderer --no-default-features --features native-ore-metal-experimental,rive-decoders --test native_metal_resource_shaders -- --test-threads=1
 	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features -- --test-threads=1
 	NUXIE_REQUIRE_LIVE_METAL_TESTS=1 cargo test --locked -p nuxie-ore-metal --no-default-features --features tools -- --test-threads=1
 
-metal-port-progress:
-	PYTHONDONTWRITEBYTECODE=1 python3 tools/metal-port/generate_progress.py --repo-root "$(CURDIR)" --output docs/metal-renderer-progress.html
+runtime-source-correspondence-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_runtime_source_correspondence.py tools/test_buildkite_pipeline.py
+	PYTHONDONTWRITEBYTECODE=1 python3 tools/check_runtime_source_correspondence.py --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --upstream-ref "$(RIVE_RUNTIME_REF)"
 
-metal-port-progress-check:
-	@tmp=$$(mktemp); \
-	trap 'rm -f "$$tmp"' EXIT; \
-	PYTHONDONTWRITEBYTECODE=1 python3 tools/metal-port/generate_progress.py --repo-root "$(CURDIR)" --output "$$tmp"; \
-	cmp -s docs/metal-renderer-progress.html "$$tmp" || { \
-		echo "Metal renderer progress page is stale; run make metal-port-progress" >&2; \
-		diff -u docs/metal-renderer-progress.html "$$tmp" || true; \
-		exit 1; \
-	}
+renderer-shader-authority:
+	PYTHONDONTWRITEBYTECODE=1 python3 tools/backend-port/build_shader_authority_translations.py --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)"
 
-backend-port-source-inventory:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_INVENTORY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)" --output "$(BACKEND_PORT_SOURCE_INVENTORY)"
-
-backend-port-source-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_INVENTORY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)" --output "$(BACKEND_PORT_SOURCE_INVENTORY)" --check
-
-backend-port-ownership-inventory:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_OWNERSHIP_TOOL)" --repo-root "$(CURDIR)" --source-inventory "$(BACKEND_PORT_SOURCE_INVENTORY)" --output "$(BACKEND_PORT_OWNERSHIP_INVENTORY)"
-
-backend-port-ownership-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_OWNERSHIP_TOOL)" --repo-root "$(CURDIR)" --source-inventory "$(BACKEND_PORT_SOURCE_INVENTORY)" --output "$(BACKEND_PORT_OWNERSHIP_INVENTORY)" --check
-
-backend-port-dependency-inventory:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_DEPENDENCY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --ownership-inventory "$(BACKEND_PORT_OWNERSHIP_INVENTORY)" --edges-output "$(BACKEND_PORT_DEPENDENCY_INVENTORY)" --units-output "$(BACKEND_PORT_OWNERSHIP_ORDER)"
-
-backend-port-dependency-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_DEPENDENCY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --ownership-inventory "$(BACKEND_PORT_OWNERSHIP_INVENTORY)" --edges-output "$(BACKEND_PORT_DEPENDENCY_INVENTORY)" --units-output "$(BACKEND_PORT_OWNERSHIP_ORDER)" --check
-
-backend-port-generated-inventory:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_GENERATED_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --toolchain "$(BACKEND_PORT_TOOLCHAIN)" --dependencies "$(BACKEND_PORT_DEPENDENCY_INVENTORY)" --output "$(BACKEND_PORT_GENERATED_INVENTORY)"
-
-backend-port-generated-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_GENERATED_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --toolchain "$(BACKEND_PORT_TOOLCHAIN)" --dependencies "$(BACKEND_PORT_DEPENDENCY_INVENTORY)" --output "$(BACKEND_PORT_GENERATED_INVENTORY)" --check
-
-backend-port-configuration-inventory:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_CONFIGURATION_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --ownership-inventory "$(BACKEND_PORT_OWNERSHIP_INVENTORY)" --output "$(BACKEND_PORT_CONFIGURATION_INVENTORY)"
-
-backend-port-configuration-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_CONFIGURATION_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --ownership-inventory "$(BACKEND_PORT_OWNERSHIP_INVENTORY)" --output "$(BACKEND_PORT_CONFIGURATION_INVENTORY)" --check
-
-backend-port-field-inventory:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_FIELD_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --ownership-inventory "$(BACKEND_PORT_OWNERSHIP_INVENTORY)" --profiles "$(BACKEND_PORT_FIELD_PROFILES)" --output "$(BACKEND_PORT_FIELD_INVENTORY)"
-
-backend-port-field-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_FIELD_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --ownership-inventory "$(BACKEND_PORT_OWNERSHIP_INVENTORY)" --profiles "$(BACKEND_PORT_FIELD_PROFILES)" --output "$(BACKEND_PORT_FIELD_INVENTORY)" --check
-
-backend-port-lifecycle-inventory:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_LIFECYCLE_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --ownership-inventory "$(BACKEND_PORT_OWNERSHIP_INVENTORY)" --output "$(BACKEND_PORT_LIFECYCLE_INVENTORY)"
-
-backend-port-lifecycle-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_LIFECYCLE_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --ownership-inventory "$(BACKEND_PORT_OWNERSHIP_INVENTORY)" --output "$(BACKEND_PORT_LIFECYCLE_INVENTORY)" --check
-
-backend-port-legacy-wgpu-inventory:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_LEGACY_WGPU_TOOL)" --repo-root "$(CURDIR)" --output "$(BACKEND_PORT_LEGACY_WGPU_INVENTORY)"
-
-backend-port-legacy-wgpu-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_LEGACY_WGPU_TOOL)" --repo-root "$(CURDIR)" --output "$(BACKEND_PORT_LEGACY_WGPU_INVENTORY)" --check
-
-backend-port-repeatability-inventory:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_REPEATABILITY_TOOL)" --repo-root "$(CURDIR)" --corpus "$(RENDERER_CORPUS_MANIFEST)" $(BACKEND_PORT_REPEATABILITY_CAPTURES) --output "$(BACKEND_PORT_REPEATABILITY_INVENTORY)"
-
-backend-port-repeatability-inventory-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_REPEATABILITY_TOOL)" --repo-root "$(CURDIR)" --corpus "$(RENDERER_CORPUS_MANIFEST)" --output "$(BACKEND_PORT_REPEATABILITY_INVENTORY)" --check
-
-backend-port-denominators-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_PREPARATION_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)" --denominators-only
-
-backend-port-preparation-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_PREPARATION_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)"
-
-backend-port-translation-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_TRANSLATION_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)"
-
-backend-port-source-review-admission:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_SOURCE_REVIEW_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)" --admission
-
-backend-port-source-review-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_SOURCE_REVIEW_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)"
-
-backend-port-ownership-review-admission:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_OWNERSHIP_REVIEW_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)" --admission
-
-backend-port-ownership-review-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_OWNERSHIP_REVIEW_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)"
-
-backend-port-shader-authority:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_SHADER_AUTHORITY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)"
-
-backend-port-shader-authority-check:
-	PYTHONDONTWRITEBYTECODE=1 python3 "$(BACKEND_PORT_SHADER_AUTHORITY_TOOL)" --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --manifest "$(BACKEND_PORT_CAMPAIGN)" --check
+renderer-shader-authority-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 tools/backend-port/build_shader_authority_translations.py --repo-root "$(CURDIR)" --upstream-root "$(RIVE_RUNTIME_DIR)" --check
 
 renderer-native-metal-tracer-binary:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_check_native_metal_product_dependencies.py
@@ -646,14 +508,14 @@ renderer-metal-atomic-oracle-tracer: renderer-native-metal-replay renderer-metal
 # tolerances unchanged; neither candidate output nor this target can widen
 # them. Run serially because both replay processes share one physical adapter.
 renderer-metal-cpp-parity: renderer-native-metal-replay renderer-metal-reference-check
-	python3 tools/metal-port/derive_clockwise_atomic_manifest.py --input "$(RENDERER_CORPUS_MANIFEST)" --output "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --expected "$(RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS)"
+	python3 tools/renderer-tracers/derive_clockwise_atomic_manifest.py --input "$(RENDERER_CORPUS_MANIFEST)" --output "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --expected "$(RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS)"
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_METAL_REFERENCE_REPLAY)" --reference-backend ffi-metal --reference-input-manifest "$(RENDERER_METAL_REFERENCE_INPUT_MANIFEST)" --output-dir "$(RENDERER_METAL_CPP_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)"
 
 # Secondary backend differential. This never overrules the pinned C++ Metal
 # oracle: completed WebGPU pixel differences are reported as diagnostics, while
 # replay crashes, timeouts, and malformed outputs still fail the command.
 renderer-metal-wgpu-diagnostic: renderer-native-metal-replay renderer-rust-replay-release
-	python3 tools/metal-port/derive_clockwise_atomic_manifest.py --input "$(RENDERER_CORPUS_MANIFEST)" --output "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --expected "$(RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS)"
+	python3 tools/renderer-tracers/derive_clockwise_atomic_manifest.py --input "$(RENDERER_CORPUS_MANIFEST)" --output "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --expected "$(RENDERER_METAL_WGPU_PARITY_EXPECTED_ROWS)"
 	cargo run --quiet -p pixel-compare --bin corpus-r -- --manifest "$(RENDERER_METAL_WGPU_PARITY_MANIFEST)" --replay "$(RENDERER_METAL_CANDIDATE_REPLAY)" --backend rust-metal-atomic --reference-replay "$(RENDERER_GOLDEN_RUST_REPLAY)" --reference-backend rust-webgpu-exact --output-dir "$(RENDERER_METAL_WGPU_PARITY_OUTPUT_DIR)" --jobs 1 --replay-timeout-seconds "$(RENDERER_REPLAY_TIMEOUT_SECONDS)" --report-divergences
 
 # Compatibility spelling retained for existing local scripts. This target is

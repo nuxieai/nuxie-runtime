@@ -101,7 +101,7 @@ every linked archive; the native tracer remains a deliberately narrow trial,
 not a claim of full renderer parity.
 
 UNIV-2088 adds a separate `rust-metal-atomic` backend and the checked-in
-`tools/metal-port/tracer-corpus-atomic.toml`; `make
+`tools/renderer-tracers/tracer-corpus-atomic.toml`; `make
 renderer-metal-atomic-oracle-tracer` compares a forced generic-atomic triangle,
 linear-gradient cubic, four-draw `gm/overfill_opaque` flush, and nested-clip
 outer-curve/interior slice, plus the three-draw `riv/deterministic_mode`

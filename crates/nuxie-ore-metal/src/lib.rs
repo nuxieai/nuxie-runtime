@@ -1,8 +1,8 @@
 //! Mechanical Rust port of Rive's ORE interface and Metal adapter.
 //!
-//! The source correspondence and translation queue are pinned in
-//! `docs/metal-port-manifest.toml`. This crate deliberately remains separate
-//! from the built-in renderer-platform implementation.
+//! The `mechanical_port/source` tree mirrors the pinned upstream source paths.
+//! This crate deliberately remains separate from the built-in
+//! renderer-platform implementation.
 
 #[cfg(test)]
 pub(crate) fn live_metal_test_unavailable(context: &str) {

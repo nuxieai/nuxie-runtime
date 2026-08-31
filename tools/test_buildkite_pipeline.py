@@ -1,4 +1,6 @@
 import unittest
+import re
+import shlex
 from pathlib import Path
 
 
@@ -6,6 +8,40 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class BuildkitePipelineContractTests(unittest.TestCase):
+    def test_native_metal_validation_recipe_uses_existing_integration_tests(self) -> None:
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        recipe = makefile.split("\nrenderer-native-metal-v3:\n", 1)[1].split("\n\n", 1)[0]
+        test_targets = []
+        for line in recipe.splitlines():
+            words = shlex.split(line)
+            if "--test" not in words:
+                continue
+            package = words[words.index("-p") + 1]
+            target = words[words.index("--test") + 1]
+            test_targets.append(target)
+            self.assertTrue(
+                (REPO_ROOT / "crates" / package / "tests" / f"{target}.rs").is_file(),
+                f"native Metal recipe invokes missing integration target: {package}/{target}",
+            )
+        self.assertEqual(test_targets, ["native_metal_resource_shaders"])
+
+    def test_all_pipeline_make_targets_exist(self) -> None:
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        targets = set()
+        for match in re.finditer(r"^([A-Za-z0-9_. -]+):(?!=)", makefile, re.MULTILINE):
+            targets.update(match.group(1).split())
+        pipeline = (REPO_ROOT / ".buildkite/pipeline.yml").read_text()
+        called = set()
+        for line in pipeline.splitlines():
+            if not line.strip().startswith("make "):
+                continue
+            words = shlex.split(line.strip(), comments=True)
+            if words and words[0] == "make":
+                called.update(word for word in words[1:]
+                              if not word.startswith("-") and "=" not in word)
+        self.assertTrue(called, "pipeline must contain checked make commands")
+        self.assertEqual(called - targets, set(), "pipeline invokes nonexistent make targets")
+
     @staticmethod
     def fast_checks_command() -> str:
         pipeline = (REPO_ROOT / ".buildkite" / "pipeline.yml").read_text()

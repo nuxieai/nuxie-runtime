@@ -11,12 +11,13 @@ use crate::{NativeMetalDrawableFrame, NativeMetalFactory, RendererError};
 impl NativeMetalFactory {
     /// Begins a native Metal frame from one caller-acquired drawable. The
     /// texture is derived from that same object so rendering and presentation
-    /// cannot accidentally target different native owners.
-    pub fn begin_drawable_frame<'a>(
+    /// cannot accidentally target different native owners. The frame retains
+    /// that drawable through replay and presentation.
+    pub fn begin_drawable_frame(
         &self,
-        drawable: &'a ProtocolObject<dyn CAMetalDrawable>,
+        drawable: &ProtocolObject<dyn CAMetalDrawable>,
         clear_color: u32,
-    ) -> Result<NativeMetalDrawableFrame<'a>, RendererError> {
+    ) -> Result<NativeMetalDrawableFrame, RendererError> {
         self.begin_drawable_frame_parts(drawable.as_ref(), drawable.texture(), clear_color)
     }
 }

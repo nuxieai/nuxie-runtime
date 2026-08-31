@@ -668,13 +668,14 @@ impl Default for VertexAttribute {
 pub struct VertexBufferLayout<'a> {
     pub stride: u32,
     pub stepMode: VertexStepMode,
-    pub attributes: &'a [VertexAttribute],
+    pub attributes: Option<&'a [VertexAttribute]>,
     pub attributeCount: u32,
 }
 
 impl VertexBufferLayout<'_> {
     pub fn attributeCount(&self) -> Result<u32, DescriptorSizeError> {
         self.attributes
+            .unwrap_or(&[])
             .get(..self.attributeCount as usize)
             .map(|_| self.attributeCount)
             .ok_or(DescriptorSizeError)
@@ -686,7 +687,7 @@ impl Default for VertexBufferLayout<'_> {
         Self {
             stride: 0,
             stepMode: VertexStepMode::vertex,
-            attributes: &[],
+            attributes: None,
             attributeCount: 0,
         }
     }
@@ -925,7 +926,7 @@ pub struct BindGroupLayoutDesc<'a> {
     // WGSL `@group(N)` this layout describes. Valid range [0, kMaxBindGroups).
     pub groupIndex: u32,
 
-    pub entries: &'a [BindGroupLayoutEntry],
+    pub entries: Option<&'a [BindGroupLayoutEntry]>,
     pub entryCount: u32,
     pub label: Option<&'a str>,
 }
@@ -933,6 +934,7 @@ pub struct BindGroupLayoutDesc<'a> {
 impl BindGroupLayoutDesc<'_> {
     pub fn entryCount(&self) -> Result<u32, DescriptorSizeError> {
         self.entries
+            .unwrap_or(&[])
             .get(..self.entryCount as usize)
             .map(|_| self.entryCount)
             .ok_or(DescriptorSizeError)
@@ -943,7 +945,7 @@ impl Default for BindGroupLayoutDesc<'_> {
     fn default() -> Self {
         Self {
             groupIndex: 0,
-            entries: &[],
+            entries: None,
             entryCount: 0,
             label: None,
         }
@@ -1520,7 +1522,7 @@ pub mod raw_abi {
             Ok(super::VertexBufferLayout {
                 stride: self.stride,
                 stepMode: self.stepMode,
-                attributes: unsafe { required_slice(self.attributes, self.attributeCount)? },
+                attributes: unsafe { optional_slice(self.attributes, self.attributeCount)? },
                 attributeCount: self.attributeCount,
             })
         }
@@ -1539,7 +1541,7 @@ pub mod raw_abi {
         pub unsafe fn borrow<'a>(&self) -> Result<super::BindGroupLayoutDesc<'a>, BorrowError> {
             Ok(super::BindGroupLayoutDesc {
                 groupIndex: self.groupIndex,
-                entries: unsafe { required_slice(self.entries, self.entryCount)? },
+                entries: unsafe { optional_slice(self.entries, self.entryCount)? },
                 entryCount: self.entryCount,
                 label: unsafe { optional_label(self.label)? },
             })
@@ -1845,6 +1847,37 @@ impl Default for Features {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_nullable_descriptor_spans_preserve_non_null_zero_count() {
+        let entries: [BindGroupLayoutEntry; 0] = [];
+        let attributes: [VertexAttribute; 0] = [];
+        for (entries_pointer, attributes_pointer, absent) in [
+            (core::ptr::null(), core::ptr::null(), true),
+            (entries.as_ptr(), attributes.as_ptr(), false),
+        ] {
+            let raw_layout = raw_abi::BindGroupLayoutDesc {
+                groupIndex: 0,
+                entries: entries_pointer,
+                entryCount: 0,
+                label: core::ptr::null(),
+            };
+            let raw_buffer = raw_abi::VertexBufferLayout {
+                stride: 0,
+                stepMode: VertexStepMode::vertex,
+                attributes: attributes_pointer,
+                attributeCount: 0,
+            };
+            // SAFETY: both pointers are null/zero pairs or live, aligned
+            // arrays retained for the full descriptor borrow.
+            let layout = unsafe { raw_layout.borrow() }.unwrap();
+            let buffer = unsafe { raw_buffer.borrow() }.unwrap();
+            assert_eq!(layout.entries.is_none(), absent);
+            assert_eq!(buffer.attributes.is_none(), absent);
+            assert_eq!(layout.entryCount(), Ok(0));
+            assert_eq!(buffer.attributeCount(), Ok(0));
+        }
+    }
 
     #[test]
     fn resource_traits_are_object_safe_thread_safe_and_checked() {
@@ -2205,7 +2238,7 @@ mod tests {
         let vertex_buffer = VertexBufferLayout::default();
         assert_eq!(vertex_buffer.stride, 0);
         assert_eq!(vertex_buffer.stepMode, VertexStepMode::vertex);
-        assert!(vertex_buffer.attributes.is_empty());
+        assert!(vertex_buffer.attributes.is_none());
 
         let blend = BlendState::default();
         assert_eq!(blend.srcColor, BlendFactor::one);
@@ -2252,7 +2285,7 @@ mod tests {
 
         let layout_desc = BindGroupLayoutDesc::default();
         assert_eq!(layout_desc.groupIndex, 0);
-        assert!(layout_desc.entries.is_empty());
+        assert!(layout_desc.entries.is_none());
         assert!(layout_desc.label.is_none());
 
         let pipeline = PipelineDesc::default();

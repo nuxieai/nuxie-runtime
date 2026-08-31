@@ -2,11 +2,17 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-d25e6a4b6c1b8382b588f08371231373780fbcd5}
+ref=${RIVE_RUNTIME_REF:-e949498e05483a852c10fbbdad2cd1941c15aebc}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "parity/Halloween_v3.riv|b786c27b0fc5ede17dca2365dd1830caa2e46654b89ac3f509337b792af48744|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/Halloween_v3.riv"
+  "parity/Knight_square_2.riv|cec7ff27afbf9506cd64c37cccf40b0e58a8eacd8a91dc7deb54c040ad9addb8|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/Knight_square_2.riv"
+  "parity/Tom_Morello.riv|2c2816f02811d6f349b6d73829d593e120939e554bde7f838b8c10f6c8ea0c82|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/Tom_Morello.riv"
+  "parity/UI_Swipe_left_to_delete.riv|712fdb564fc2cb2f646a0023999f8bb1be3f88558503a3c7da1d5610a03f40e2|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/UI_Swipe_left_to_delete.riv"
+  "parity/falling.riv|e130d00fc2317190c45f46f42900eaf7749bf03d89662574cacc8c101ff0f830|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/falling.riv"
+  "parity/popsicle_loader.riv|b97e2b06df39286470179205e4112bd72617a596fa1dbe21abeeed173631e7b5|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/popsicle_loader.riv"
   "animation/smi_test.riv|51fb2ef2ca7a2014b4f4586df1c0894fef7d92d422a27ac82fef1459407b73f8"
   "animation/state_machine_transition.riv|65fc100a82b1c2015cdd6267e5b3f3dea0d7a772c1710a7e9c4a09c883e26e3e"
   "flow/component_list_2.riv|b1541dfdba9f0a873245838ac560b27c21c181f9745d8052d9133163a530ef6e"
@@ -122,6 +128,25 @@ for entry in "${assets[@]}"; do
       cp "$destination" "$seed_dir/$name"
     done
   fi
+done
+
+# The GM code consumes the v4 header. The separately added .rstb is an older
+# v2 fixture and is retained byte-for-byte, never substituted for that header.
+gm_assets=(
+  "ore_gm_shaders.rstb.hpp|dda092b3d96973c4d924064e774bcb3428dcf31bfb96d5238aad19c771e7d9da"
+  "ore_gm_shaders.rstb|864847b09add07eb906922b696ce397c9b8d158560e67855e61d6676faf26c8f"
+)
+for entry in "${gm_assets[@]}"; do
+  IFS='|' read -r name expected <<< "$entry"
+  destination="$repo_root/fixtures/gm/$name"
+  mkdir -p "$(dirname "$destination")"
+  if [[ -n "$runtime_dir" ]]; then
+    git -C "$runtime_dir" show "e949498e05483a852c10fbbdad2cd1941c15aebc:tests/gm/$name" > "$destination"
+  elif [[ ! -f "$destination" || "$(sha256 "$destination")" != "$expected" ]]; then
+    curl --fail --location --silent --show-error \
+      "$base_url/e949498e05483a852c10fbbdad2cd1941c15aebc/tests/gm/$name" --output "$destination"
+  fi
+  [[ "$(sha256 "$destination")" == "$expected" ]] || { echo "fixture checksum mismatch: gm/$name" >&2; exit 1; }
 done
 
 raster_font_destination="$repo_root/fixtures/fonts/sbix.ttf"

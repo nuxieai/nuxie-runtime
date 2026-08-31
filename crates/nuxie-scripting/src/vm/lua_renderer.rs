@@ -45,18 +45,21 @@ impl RendererBindings {
     pub(super) fn call_draw_with_balance(
         &self,
         table: &Table,
-        factory: &mut dyn RenderFactory,
+        _factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
     ) -> Result<bool> {
         let lua = table.lua();
-        self.verify_render_context(factory)?;
+        // An e949 artboard instance may use a different factory facade. Its
+        // borrowed renderer is independent of the VM's retained allocation
+        // factory, which remains installed for script-created resources.
         let (scripted_renderer, _renderer_scope) =
             ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, self.clone())?;
         let field: Value = table.get("draw")?;
         let result = match field {
-            Value::Function(function) => {
-                function.call::<()>((table.clone(), scripted_renderer.clone()))
-            }
+            Value::Function(function) => super::ProtectedScriptCall::protected_call::<()>(
+                &function,
+                (table.clone(), scripted_renderer.clone()),
+            ),
             // Legacy files advertise every optional method. C++ treats a
             // currently missing or non-function draw field as a balanced
             // no-op after installing the renderer userdata.
@@ -485,6 +488,45 @@ mod tests {
             .unwrap();
         assert!(!valid);
         assert!(error.contains("Renderer is no longer valid"), "{error}");
+    }
+
+    #[test]
+    fn instance_factory_override_draws_without_rebinding_vm_allocations() {
+        let vm = ScriptVm::new();
+        let mut imported_factory = PersistentFactory::new(RecordingFactory::new());
+        let mut instance_factory = PersistentFactory::new(RecordingFactory::new());
+        vm.install_render_factory(&mut imported_factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let table: Table = vm
+            .eval(
+                r#"
+            return {draw = function(self, renderer)
+                renderer:drawPath(Path.new(), Paint.new())
+                retainedRenderer = renderer
+            end}
+        "#,
+            )
+            .unwrap();
+        let mut instance = vm.script_instance_from_table(table);
+        let mut renderer = instance_factory.borrow().make_renderer();
+
+        instance
+            .call_draw(&mut instance_factory, &mut renderer, &mut NoopScriptHost)
+            .unwrap();
+
+        let imported_stream = imported_factory.borrow().stream();
+        let instance_stream = instance_factory.borrow().stream();
+        assert!(imported_stream.contains("makeRenderPaint "));
+        assert!(!imported_stream.contains("drawPath "));
+        assert!(instance_stream.contains("drawPath "));
+        assert!(!instance_stream.contains("makeRenderPaint "));
+        vm.renderer_bindings
+            .verify_render_context(&mut imported_factory)
+            .unwrap();
+        assert!(
+            !vm.eval::<bool>("return pcall(function() retainedRenderer:save() end)")
+                .unwrap()
+        );
     }
 
     #[test]

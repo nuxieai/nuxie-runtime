@@ -6,10 +6,13 @@
 
 // #include <cstdarg>
 // #include <cstdio>
+// #include <cstdlib>
 // #include <memory>
 // #include <string>
 // #include <vector>
 // #include "rive/refcnt.hpp"
+// #include "rive/renderer/render_canvas.hpp"
+// #include "rive/renderer/rive_render_image.hpp"
 // #include "rive/renderer/ore/ore_types.hpp"
 // #include "rive/renderer/ore/ore_buffer.hpp"
 // #include "rive/renderer/ore/ore_texture.hpp"
@@ -18,20 +21,26 @@
 // #include "rive/renderer/ore/ore_pipeline.hpp"
 // #include "rive/renderer/ore/ore_bind_group.hpp"
 // #include "rive/renderer/ore/ore_render_pass.hpp"
+// #include "rive/renderer/ore/cmd/ore_command_buffer.hpp"
+//
+// namespace rive
+// {
+// class RenderImage;
+// }
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_context.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 use super::*;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::rc::Weak as RcWeak;
+use std::rc::{Rc, Weak as RcWeak};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::super::gpu_resource_hpp::{
@@ -41,9 +50,9 @@ use super::ore_types_hpp::{
     BindGroupDesc, BindGroupLayoutDesc, BufferDesc, Features, PipelineDesc, RenderPassDesc,
     SamplerDesc, ShaderModuleDesc, TextureDesc, TextureFormat, TextureViewDesc,
 };
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use crate::mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::BufferErrorSink;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use crate::mechanical_port::source::renderer::src::ore::metal::ore_texture_metal_hpp::TextureViewMetal;
 
 // namespace rive::gpu
@@ -151,7 +160,7 @@ impl ContextState {
     }
 }
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 impl BufferErrorSink for ContextState {
     fn setBufferError(&self, message: &str) {
         self.setLastError(message);
@@ -159,6 +168,61 @@ impl BufferErrorSink for ContextState {
 }
 
 pub trait ContextApi {
+    fn contextBase(&self) -> &Context;
+    fn canvasTargetFormat(&self) -> TextureFormat {
+        TextureFormat::rgba8unorm
+    }
+    fn isRecording(&self) -> bool {
+        false
+    }
+    fn featuresKnown(&self) -> bool {
+        true
+    }
+    fn deferredRecording(&self) -> bool {
+        self.contextBase().deferredRecording()
+    }
+    fn setDeferredRecording(&self, deferred: bool) {
+        self.contextBase().setDeferredRecording(deferred);
+    }
+    fn usesDeferredFrameReplay(&self) -> bool {
+        false
+    }
+    fn pendingFrame(&self) -> crate::ore_cmd::ore_command_buffer::SharedOreCommandBuffer {
+        self.contextBase().pendingFrame()
+    }
+    fn recordWrapCanvasImage(&mut self, _image: CanvasImageInfo) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn recordWrapImageView(
+        &mut self,
+        _image_id: u32,
+        _width: u32,
+        _height: u32,
+    ) -> Option<AnyResourceHandle> {
+        None
+    }
+    /// The source canvas' image/texture fields supplied across the opaque
+    /// host seam; GL overrides this operation to build its sampling mirror.
+    unsafe fn wrapCanvasSampleView(
+        &mut self,
+        canvas: CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
+        unsafe { self.wrapRiveTexture(canvas.texture, canvas.width, canvas.height) }
+    }
+    unsafe fn wrapCanvasTextureInfo(
+        &mut self,
+        canvas: CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
+        unsafe { self.wrapCanvasTexture(canvas.canvas) }
+    }
+    /// Immediate Image:view sampling boundary. GL substitutes its retained
+    /// canvas import mirror; other backends wrap the projected image texture.
+    unsafe fn wrapImageSampleView(
+        &mut self,
+        image: CanvasTextureInfo,
+    ) -> Option<AnyResourceHandle> {
+        unsafe { self.wrapRiveTexture(image.texture, image.width, image.height) }
+    }
     fn features(&self) -> Features;
     fn lastError(&self) -> String;
     fn activeRenderPass(&self) -> Option<RcWeak<dyn ActiveRenderPass>>;
@@ -225,10 +289,24 @@ pub trait ContextApi {
 // use). Code that only needs the cross-backend API takes Context*.
 pub struct Context {
     pub(crate) state: Arc<ContextState>,
-    activeRenderPass: RefCell<Option<RcWeak<dyn ActiveRenderPass>>>,
+    activeRenderPass: Rc<RefCell<Option<RcWeak<dyn ActiveRenderPass>>>>,
+    deferredRecording: Rc<Cell<bool>>,
+    pendingFrame: crate::ore_cmd::ore_command_buffer::SharedOreCommandBuffer,
 }
 
 impl Context {
+    // A host forwarding owner needs a stable base reference without escaping
+    // its native context's RefCell borrow. This projects the same state, not
+    // a second backend or independent recording/active-pass state machine.
+    pub(crate) fn shared_base(&self) -> Self {
+        Self {
+            state: self.state.clone(),
+            activeRenderPass: self.activeRenderPass.clone(),
+            deferredRecording: self.deferredRecording.clone(),
+            pendingFrame: self.pendingFrame.clone(),
+        }
+    }
+
     // public:
 
     // virtual ~Context() = default;
@@ -297,6 +375,16 @@ impl Context {
     // const Features& features() const { return m_features; }
     pub fn features(&self) -> Features {
         self.state.features()
+    }
+
+    pub fn deferredRecording(&self) -> bool {
+        self.deferredRecording.get()
+    }
+    pub fn setDeferredRecording(&self, deferred: bool) {
+        self.deferredRecording.set(deferred);
+    }
+    pub fn pendingFrame(&self) -> crate::ore_cmd::ore_command_buffer::SharedOreCommandBuffer {
+        self.pendingFrame.clone()
     }
 
     pub(crate) fn features_mut_unpublished(&self) -> MutexGuard<'_, Features> {
@@ -382,7 +470,11 @@ impl Context {
     // protected:
     // Context(rcp<rive::gpu::GPUResourceManager> manager) :
     //     m_manager(std::move(manager))
-    // {}
+    //     {
+    // #ifndef NO_GETENV
+    //         m_deferredRecording = getenv("RIVE_ORE_DEFER") != nullptr;
+    // #endif
+    //     }
     pub(crate) fn new(features: Features, manager: Option<GPUResourceManager>) -> Self {
         Self::newWithFinalReleaseDrain(features, manager, ResourceFinalReleaseDrain::new())
     }
@@ -395,9 +487,31 @@ impl Context {
     ) -> Self {
         Self {
             state: ContextState::newWithFinalReleaseDrain(features, manager, domainFinalReleases),
-            activeRenderPass: RefCell::new(None),
+            activeRenderPass: Rc::new(RefCell::new(None)),
+            deferredRecording: Rc::new(Cell::new(std::env::var_os("RIVE_ORE_DEFER").is_some())),
+            pendingFrame: Rc::new(RefCell::new(
+                crate::ore_cmd::ore_command_buffer::OreCommandBuffer::default(),
+            )),
         }
     }
+}
+
+/// Borrowed source RenderCanvas fields across the existing opaque GPU host seam.
+#[derive(Clone)]
+pub struct CanvasTextureInfo {
+    pub canvas: *mut c_void,
+    pub texture: *mut c_void,
+    pub width: u32,
+    pub height: u32,
+    pub owner: Option<Rc<dyn std::any::Any>>,
+}
+
+#[derive(Clone)]
+pub struct CanvasImageInfo {
+    pub identity: usize,
+    pub width: u32,
+    pub height: u32,
+    pub owner: Rc<dyn std::any::Any>,
 }
 
 // The source nested Context::FrameDescriptor record is emitted as a sibling
@@ -499,8 +613,7 @@ pub mod raw_abi {
 
 // inline void RenderPass::populateAttachmentMetadata(const RenderPassDesc& desc)
 impl RenderPass {
-    #[cfg(target_vendor = "apple")]
-    pub(crate) fn populateAttachmentMetadata(&mut self, desc: &RenderPassDesc<'_>) {
+    pub fn populateAttachmentMetadata(&mut self, desc: &RenderPassDesc<'_>) {
         // m_colorCount = desc.colorCount;
         self.m_colorCount = desc.colorCount;
         // for (uint32_t i = 0; i < desc.colorCount; ++i)
@@ -509,32 +622,36 @@ impl RenderPass {
             let Some(view) = desc.colorAttachments[i as usize].view else {
                 continue;
             };
-            let Some(view) = view.downcast_ref::<TextureViewMetal>() else {
+            let Some(view) = view.textureViewBase() else {
                 continue;
             };
             // if (!view || !view->texture())
-            let Some(texture) = view.baseTexture() else {
+            let Some(texture) = view.textureOption() else {
+                continue;
+            };
+            let Some(format) = texture.format() else {
                 continue;
             };
             // m_colorFormats[i] = view->texture()->format();
-            self.m_colorFormats[i as usize] = texture.format();
+            self.m_colorFormats[i as usize] = format;
             // m_sampleCount = view->texture()->sampleCount();
-            self.m_sampleCount = texture.sampleCount();
+            self.m_sampleCount = texture.sampleCount().expect("Texture source projection");
         }
         // if (desc.depthStencil.view && desc.depthStencil.view->texture())
         if let Some(view) = desc.depthStencil.view
-            && let Some(view) = view.downcast_ref::<TextureViewMetal>()
-            && let Some(texture) = view.baseTexture()
+            && let Some(view) = view.textureViewBase()
+            && let Some(texture) = view.textureOption()
+            && let Some(format) = texture.format()
         {
             // m_depthFormat = desc.depthStencil.view->texture()->format();
-            self.m_depthFormat = texture.format();
+            self.m_depthFormat = format;
             // m_hasDepth = true;
             self.m_hasDepth = true;
             // If no colour attachments drove sampleCount, take it from depth.
             // if (desc.colorCount == 0)
             if desc.colorCount == 0 {
                 // m_sampleCount = desc.depthStencil.view->texture()->sampleCount();
-                self.m_sampleCount = texture.sampleCount();
+                self.m_sampleCount = texture.sampleCount().expect("Texture source projection");
             }
         }
     }
@@ -620,7 +737,7 @@ impl RenderPass {
 }
 
 // } // namespace rive::ore
-#[cfg(all(test, target_vendor = "apple"))]
+#[cfg(all(test, all(target_vendor = "apple", feature = "metal-backend")))]
 mod tests {
     use super::*;
     use crate::gpu_resource::GPUResourceManagerOwner;

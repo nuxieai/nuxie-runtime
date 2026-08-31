@@ -12,17 +12,24 @@ use super::{
 };
 use super::{NuxFile, NuxFileImportConfig};
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
-#[cfg(feature = "apple-authored-msl")]
-use nuxie::ore_metal_gpu_canvas::{OreMetalGpuCanvas, OreMetalGpuCanvasImage};
-use nuxie::render_api::{Mat2D, RawPath};
+use nuxie::render_api::{
+    BlendMode, ImageSampler, Mat2D, OreContextHandle, PersistentFactoryContext, RawPath,
+    RenderCanvasFrame, RenderCanvasHandle,
+};
 use nuxie::{
-    ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan,
-    GpuCanvasShader, GpuCanvasShaderArtifact, GpuCanvasShaderLoad, GpuCanvasShaderProfile,
-    ImageDecodeError, PersistentFactory, RenderBuffer, RenderBufferFlags, RenderBufferType,
-    RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPath, RenderShader, Renderer,
+    ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasShader, GpuCanvasShaderArtifact,
+    GpuCanvasShaderLoad, GpuCanvasShaderProfile, ImageDecodeError, PersistentFactory, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
+    RenderPath, RenderShader, Renderer,
+};
+use nuxie_renderer::deferred::cmd::{
+    deferred_replayer::{DeferredFrameSink, DeferredReplayer, take_frame},
+    deferred_session::DeferredSession,
+    render_replay::RendererOwner,
 };
 use nuxie_renderer::{
-    NativeMetalExecutionInventory, NativeMetalFactory, RenderMode, RendererError,
+    NativeMetalDrawableFrame, NativeMetalExecutionInventory, NativeMetalFactory, RenderMode,
+    RendererError,
 };
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
@@ -30,9 +37,9 @@ use objc2_metal::MTLDevice;
 use objc2_quartz_core::CAMetalDrawable;
 use std::cell::RefCell;
 use std::ffi::c_void;
-use std::ops::{Deref, DerefMut};
 use std::ptr;
 use std::ptr::NonNull;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
@@ -330,48 +337,68 @@ pub(crate) struct RendererState {
 }
 
 pub(crate) struct AppleMetalFactory {
-    inner: NativeMetalFactory,
-    #[cfg(feature = "apple-authored-msl")]
-    gpu_canvas: OreMetalGpuCanvas,
+    // The import factory is the source DeferredSession; its real render
+    // context remains a separately borrowable owner used only by replay.
+    session: DeferredSession,
+    replayer: Rc<RefCell<DeferredReplayer>>,
+    native: PersistentFactory<NativeMetalFactory>,
 }
 
-#[cfg(feature = "apple-authored-msl")]
-fn make_gpu_canvas(factory: &NativeMetalFactory) -> Result<OreMetalGpuCanvas, ApiFailure> {
-    let queue = factory.retained_metal_queue().ok_or_else(|| {
-        ApiFailure::new(
-            NuxStatus::RuntimeError,
-            "Metal renderer did not publish its retained command queue",
-        )
-    })?;
-    Ok(OreMetalGpuCanvas::from_device_queue(
-        factory.retained_metal_device(),
-        queue,
-    ))
+// Source TestingWindowMetalTexture brackets each host draw with ORE's frame
+// lifecycle. Retain the same context and close it on early Rust error returns.
+struct OreFrame(Option<OreContextHandle>);
+
+impl OreFrame {
+    fn begin(context: Option<OreContextHandle>) -> Self {
+        if let Some(context) = &context {
+            context
+                .borrow_mut()
+                .beginFrame(&nuxie::render_api::OreFrameDescriptor::new(0, 0));
+        }
+        Self(context)
+    }
+}
+
+impl Drop for OreFrame {
+    fn drop(&mut self) {
+        if let Some(context) = &self.0 {
+            context.borrow_mut().endFrame();
+        }
+    }
 }
 
 impl AppleMetalFactory {
     fn new(inner: NativeMetalFactory) -> Result<Self, ApiFailure> {
-        #[cfg(feature = "apple-authored-msl")]
-        let gpu_canvas = make_gpu_canvas(&inner)?;
+        let mut native = PersistentFactory::new(inner);
+        let mut session = DeferredSession::new(native.ore());
+        session.bind_render_context(native.persistent_context());
         Ok(Self {
-            inner,
-            #[cfg(feature = "apple-authored-msl")]
-            gpu_canvas,
+            session,
+            replayer: Rc::new(RefCell::new(DeferredReplayer::default())),
+            native,
         })
     }
-}
 
-impl Deref for AppleMetalFactory {
-    type Target = NativeMetalFactory;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+    fn retained_metal_device(&self) -> Retained<ProtocolObject<dyn MTLDevice>> {
+        self.native.borrow().retained_metal_device()
     }
-}
 
-impl DerefMut for AppleMetalFactory {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
+    fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        self.native.borrow_mut().resize(width, height)
+    }
+
+    fn upload_rgba8_premul_srgb(
+        &mut self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, RendererError> {
+        // Explicit host image uploads remain real retained foreign images.
+        // DeferredRenderer registers them when a recorded draw references one.
+        self.native
+            .borrow_mut()
+            .upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
     }
 }
 
@@ -383,20 +410,44 @@ impl crate::asset_hooks::AssetUploadFactory for AppleMetalFactory {
         row_bytes: u32,
         pixels: &[u8],
     ) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
-        self.inner
-            .upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
+        self.upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
             .map_err(|_| ImageDecodeError)
     }
 }
 
 impl Factory for AppleMetalFactory {
+    fn ore(&mut self) -> Option<nuxie::render_api::OreContextHandle> {
+        self.session.ore()
+    }
+    fn render_context(&mut self) -> Option<nuxie::render_api::PersistentFactoryContext> {
+        self.session.render_context()
+    }
+    fn deferred_canvas_host(&mut self) -> Option<nuxie::render_api::DeferredCanvasHostHandle> {
+        self.session.deferred_canvas_host()
+    }
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn nuxie::render_api::RenderCanvas>, nuxie::render_api::RenderCanvasError>
+    {
+        self.native.make_render_canvas(width, height)
+    }
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn nuxie::render_api::RenderCanvas>, nuxie::render_api::RenderCanvasError>
+    {
+        self.native.make_deferred_render_canvas(width, height)
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
         flags: RenderBufferFlags,
         size_in_bytes: usize,
     ) -> Box<dyn RenderBuffer> {
-        self.inner
+        self.session
             .make_render_buffer(buffer_type, flags, size_in_bytes)
     }
 
@@ -409,7 +460,7 @@ impl Factory for AppleMetalFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        self.inner
+        self.session
             .make_linear_gradient(sx, sy, ex, ey, colors, stops)
     }
 
@@ -421,45 +472,45 @@ impl Factory for AppleMetalFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        self.inner
+        self.session
             .make_radial_gradient(cx, cy, radius, colors, stops)
     }
 
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
-        self.inner.make_render_path(raw_path, fill_rule)
+        self.session.make_render_path(raw_path, fill_rule)
     }
 
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
-        self.inner.make_empty_render_path()
+        self.session.make_empty_render_path()
     }
 
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
-        self.inner.make_render_paint()
+        self.session.make_render_paint()
     }
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
-        self.inner.decode_image(data)
+        self.session.decode_image(data)
     }
 
     fn make_gpu_canvas_shader(
         &mut self,
         shader: &GpuCanvasShader,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
-        self.inner.make_gpu_canvas_shader(shader)
+        self.session.make_gpu_canvas_shader(shader)
     }
 
     fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
-        self.inner.load_gpu_canvas_shader(shader)
+        self.session.load_gpu_canvas_shader(shader)
     }
 
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
         #[cfg(feature = "apple-authored-msl")]
         {
-            self.gpu_canvas.shader_profile()
+            self.session.gpu_canvas_shader_profile()
         }
         #[cfg(not(feature = "apple-authored-msl"))]
         {
-            self.inner.gpu_canvas_shader_profile()
+            GpuCanvasShaderProfile::WebGpu
         }
     }
 
@@ -469,11 +520,16 @@ impl Factory for AppleMetalFactory {
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         #[cfg(feature = "apple-authored-msl")]
         {
-            self.gpu_canvas.make_shader_artifact(shader)
+            self.session.make_gpu_canvas_shader_artifact(shader)
         }
         #[cfg(not(feature = "apple-authored-msl"))]
         {
-            self.inner.make_gpu_canvas_shader_artifact(shader)
+            match shader {
+                GpuCanvasShaderArtifact::WebGpu(shader) => {
+                    self.session.make_gpu_canvas_shader(shader)
+                }
+                _ => Err(GpuCanvasError::unsupported()),
+            }
         }
     }
 
@@ -481,14 +537,7 @@ impl Factory for AppleMetalFactory {
         &mut self,
         shader: &GpuCanvasShaderArtifact,
     ) -> GpuCanvasShaderLoad {
-        #[cfg(feature = "apple-authored-msl")]
-        {
-            GpuCanvasShaderLoad::Ready(self.gpu_canvas.make_shader_artifact(shader))
-        }
-        #[cfg(not(feature = "apple-authored-msl"))]
-        {
-            self.inner.load_gpu_canvas_shader_artifact(shader)
-        }
+        GpuCanvasShaderLoad::Ready(self.make_gpu_canvas_shader_artifact(shader))
     }
 
     fn make_gpu_canvas_shader_occurrence(
@@ -497,52 +546,231 @@ impl Factory for AppleMetalFactory {
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         #[cfg(feature = "apple-authored-msl")]
         {
-            self.gpu_canvas.make_shader_occurrence(prepared)
+            self.session.make_gpu_canvas_shader_occurrence(prepared)
         }
         #[cfg(not(feature = "apple-authored-msl"))]
         {
-            self.inner.make_gpu_canvas_shader_occurrence(prepared)
+            let _ = prepared;
+            Err(GpuCanvasError::unsupported())
+        }
+    }
+}
+
+enum ReplayFrame {
+    Screen(NativeMetalDrawableFrame),
+    Canvas(Box<dyn RenderCanvasFrame>),
+}
+
+impl ReplayFrame {
+    fn renderer(&mut self) -> &mut dyn Renderer {
+        match self {
+            Self::Screen(frame) => &mut **frame,
+            Self::Canvas(frame) => frame.renderer(),
+        }
+    }
+}
+
+// The replayer owns renderer projections independently of the sink. Each
+// projection retains the same frame slot, never a borrowed native pointer.
+struct ReplayFrameRenderer(Rc<RefCell<Option<ReplayFrame>>>);
+
+impl Renderer for ReplayFrameRenderer {
+    fn save(&mut self) {
+        self.0.borrow_mut().as_mut().unwrap().renderer().save();
+    }
+    fn restore(&mut self) {
+        self.0.borrow_mut().as_mut().unwrap().renderer().restore();
+    }
+    fn transform(&mut self, transform: Mat2D) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .transform(transform);
+    }
+    fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .draw_path(path, paint);
+    }
+    fn clip_path(&mut self, path: &dyn RenderPath) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .clip_path(path);
+    }
+    fn draw_image(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend: BlendMode,
+        opacity: f32,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .draw_image(image, sampler, blend, opacity);
+    }
+    fn draw_image_mesh(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uvs: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend: BlendMode,
+        opacity: f32,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .draw_image_mesh(
+                image,
+                sampler,
+                vertices,
+                uvs,
+                indices,
+                vertex_count,
+                index_count,
+                blend,
+                opacity,
+            );
+    }
+    fn modulate_opacity(&mut self, opacity: f32) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .modulate_opacity(opacity);
+    }
+}
+
+// tests/goldens/goldens_shared.hpp::GoldensFrameSink over the CAPI's one
+// acquired drawable. DeferredReplayer finishes canvas content before opening
+// this screen frame, and TestingWindowMetalTexture brackets ORE on its own
+// command buffer from the same queue before the screen flush/presentation.
+struct AppleMetalFrameSink<'a> {
+    native: PersistentFactory<NativeMetalFactory>,
+    drawable: &'a ProtocolObject<dyn CAMetalDrawable>,
+    clear_color: ColorInt,
+    screen: Rc<RefCell<Option<ReplayFrame>>>,
+    canvas: Rc<RefCell<Option<ReplayFrame>>>,
+    ore_frame: Option<OreFrame>,
+    failure: Option<ApiFailure>,
+}
+
+impl<'a> AppleMetalFrameSink<'a> {
+    fn new(
+        native: PersistentFactory<NativeMetalFactory>,
+        drawable: &'a ProtocolObject<dyn CAMetalDrawable>,
+        clear_color: ColorInt,
+    ) -> Self {
+        Self {
+            native,
+            drawable,
+            clear_color,
+            screen: Rc::new(RefCell::new(None)),
+            canvas: Rc::new(RefCell::new(None)),
+            ore_frame: None,
+            failure: None,
         }
     }
 
-    fn make_gpu_canvas_image(
-        &mut self,
-        vertex_shader: &Arc<dyn RenderGpuCanvasShader>,
-        fragment_shader: &Arc<dyn RenderGpuCanvasShader>,
-        plan: &GpuCanvasPlan,
-    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
-        self.inner
-            .make_gpu_canvas_image(vertex_shader, fragment_shader, plan)
+    fn finish(mut self) -> Result<NativeMetalExecutionInventory, ApiFailure> {
+        // An empty/inert artboard still clears and presents the acquired
+        // drawable, even when the replayer had no screen commands to visit.
+        if self.failure.is_none() && self.screen.borrow().is_none() {
+            self.begin_screen_frame(0);
+        }
+        if let Some(failure) = self.failure.take() {
+            return Err(failure);
+        }
+        let frame = self.screen.borrow_mut().take();
+        let Some(ReplayFrame::Screen(frame)) = frame else {
+            unreachable!("successful replay opened the presentation frame")
+        };
+        frame.finish().map_err(renderer_failure)
+    }
+}
+
+impl DeferredFrameSink for AppleMetalFrameSink<'_> {
+    fn factory(&mut self) -> PersistentFactoryContext {
+        self.native.persistent_context().unwrap()
     }
 
-    fn make_gpu_canvas_image_with_pipelines(
-        &mut self,
-        pipelines: &[GpuCanvasPipelineShaders],
-        plan: &GpuCanvasPlan,
-    ) -> Result<Box<dyn RenderImage>, GpuCanvasError> {
-        #[cfg(feature = "apple-authored-msl")]
-        {
-            let image = self.gpu_canvas.make_image_with_pipelines(pipelines, plan)?;
-            let image = image
-                .as_any()
-                .downcast_ref::<OreMetalGpuCanvasImage>()
-                .ok_or_else(|| GpuCanvasError::new("ORE returned an unknown Metal image"))?;
-            self.inner
-                .adopt_metal_image_texture(
-                    image.retained_metal_texture(),
-                    image.width(),
-                    image.height(),
-                )
-                .ok_or_else(|| {
-                    GpuCanvasError::new(
-                        "authenticated GPU-canvas output could not enter the renderer domain",
-                    )
-                })
+    fn begin_screen_frame(&mut self, target: u64) -> Option<RendererOwner> {
+        assert_eq!(target, 0);
+        if self.failure.is_some() {
+            return None;
         }
-        #[cfg(not(feature = "apple-authored-msl"))]
-        {
-            self.inner
-                .make_gpu_canvas_image_with_pipelines(pipelines, plan)
+        if self.screen.borrow().is_none() {
+            let frame = self
+                .native
+                .borrow()
+                .begin_drawable_frame(self.drawable, self.clear_color);
+            match frame {
+                Ok(frame) => *self.screen.borrow_mut() = Some(ReplayFrame::Screen(frame)),
+                Err(error) => {
+                    self.failure = Some(renderer_failure(error));
+                    return None;
+                }
+            }
+        }
+        Some(Rc::new(RefCell::new(Box::new(ReplayFrameRenderer(
+            self.screen.clone(),
+        )))))
+    }
+
+    fn begin_ore_frame(&mut self) {
+        self.ore_frame = Some(OreFrame::begin(self.native.ore()));
+    }
+
+    fn end_ore_frame(&mut self) {
+        self.ore_frame.take();
+    }
+
+    fn begin_canvas_content(
+        &mut self,
+        canvas: RenderCanvasHandle,
+        clear_color: u32,
+    ) -> Option<RendererOwner> {
+        if self.failure.is_some() {
+            return None;
+        }
+        let frame = canvas.borrow_mut().begin_frame(clear_color);
+        match frame {
+            Ok(frame) => *self.canvas.borrow_mut() = Some(ReplayFrame::Canvas(frame)),
+            Err(error) => {
+                self.failure = Some(ApiFailure::new(NuxStatus::RuntimeError, error.to_string()));
+                return None;
+            }
+        }
+        Some(Rc::new(RefCell::new(Box::new(ReplayFrameRenderer(
+            self.canvas.clone(),
+        )))))
+    }
+
+    fn end_canvas_content(&mut self) {
+        let frame = self.canvas.borrow_mut().take();
+        if let Some(ReplayFrame::Canvas(frame)) = frame {
+            if let Err(error) = frame.finish() {
+                self.failure.get_or_insert_with(|| {
+                    ApiFailure::new(NuxStatus::RuntimeError, error.to_string())
+                });
+            }
         }
     }
 }
@@ -1272,23 +1500,44 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     .cast::<ProtocolObject<dyn CAMetalDrawable>>()
                     .as_ref()
             };
-            let mut frame = state
-                .factory
-                .borrow()
-                .begin_drawable_frame(drawable, operation.clear_color)
-                .map_err(renderer_failure)?;
+            // Snapshot the retained routing owners, then release the import
+            // factory borrow before script callbacks allocate into it.
+            let (mut session, replayer, native) = {
+                let factory = state.factory.borrow();
+                (
+                    factory.session.clone(),
+                    factory.replayer.clone(),
+                    factory.native.clone(),
+                )
+            };
             let mut artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
                 ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
             })?;
-            if operation.fit == NUX_RENDERER_FIT_CONTAIN_CENTER {
-                frame.transform(centered_contain_transform(
+            let transform = if operation.fit == NUX_RENDERER_FIT_CONTAIN_CENTER {
+                Some(centered_contain_transform(
                     artboard.artboard_bounds(),
                     (state.pixel_width, state.pixel_height),
-                )?);
+                )?)
+            } else {
+                None
+            };
+            session.record_ore_replay_marker();
+            let mut recording = session.make_screen_renderer(0);
+            recording.save();
+            if let Some(transform) = transform {
+                recording.transform(transform);
             }
-            artboard.draw(&mut *frame);
+            artboard.draw(recording.as_mut());
+            recording.restore();
+            drop(recording);
             drop(artboard);
-            let inventory = frame.finish().map_err(renderer_failure)?;
+            // Source takeFrame snapshots every retained resource before
+            // resetting the producer. The consumer's resident tables persist
+            // across presentations in this exact renderer generation.
+            let frame = take_frame(&mut session);
+            let mut sink = AppleMetalFrameSink::new(native, drawable, operation.clear_color);
+            replayer.borrow_mut().replay_frame(&frame, &mut sink);
+            let inventory = sink.finish()?;
             player
                 .artboard
                 .acknowledge_presented(rendered_revision)

@@ -49,6 +49,9 @@ impl DerefMut for ShaderModuleGL {
 }
 unsafe impl Send for ShaderModuleGL {}
 unsafe impl GpuResourcePayload for ShaderModuleGL {
+    fn shader_module_base(&self) -> Option<&ShaderModule> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
     }

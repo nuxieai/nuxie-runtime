@@ -305,6 +305,7 @@ pub(crate) fn makePipeline(
         });
         let sourceAttributes = layout
             .attributes
+            .unwrap_or(&[])
             .get(..layout.attributeCount as usize)
             .expect("vertex attributeCount exceeds its authored span");
         for attribute in sourceAttributes {

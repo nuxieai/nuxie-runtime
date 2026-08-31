@@ -12,19 +12,20 @@
 // #include "ore_texture_metal.hpp"
 // #include "rive/renderer/render_canvas.hpp"
 // #include "rive/renderer/metal/render_context_metal_impl.h"
+// #include "rive/renderer/ore/cmd/ore_replay.hpp"
 // #include "rive/rive_types.hpp"
 // #include <string>
 // #import <Metal/Metal.h>
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/ore/metal/ore_context_metal.mm.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
-// Source coverage: pinned lines 1-1344, in source order.
+// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
+// Source correspondence: e949498e, 1354 upstream lines; retained excerpts follow their Rust owners.
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
-#![cfg(target_vendor = "apple")]
+#![cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use super::*;
 
 use core::ffi::c_void;
@@ -47,15 +48,15 @@ use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cp
     validateColorRequiresFragment, validateLayoutsAgainstBindingMap,
 };
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::msg_send;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::runtime::ProtocolObject;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_foundation::{NSError, NSRange, NSString};
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::{
     MTLBlendFactor, MTLBlendOperation, MTLClearColor, MTLColorWriteMask, MTLCommandBuffer,
     MTLCommandBufferStatus, MTLCommandEncoder, MTLCommandQueue, MTLCompareFunction, MTLDevice,
@@ -70,15 +71,15 @@ use objc2_metal::{
 // The native Objective-C protocols are retained owners. `None` is the source
 // `nil` state and is never treated as a valid initialized owner when a factory
 // requires a native object.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeDevice = Option<Retained<ProtocolObject<dyn objc2_metal::MTLDevice>>>;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeQueue = Option<Retained<ProtocolObject<dyn objc2_metal::MTLCommandQueue>>>;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub type NativeTexture = Option<Retained<ProtocolObject<dyn objc2_metal::MTLTexture>>>;
 
 /// Rust crate-boundary spelling of the source `gpu::RenderCanvas*` seam.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub trait MetalRenderCanvasHost {
     fn metalWidth(&self) -> u32;
     fn metalHeight(&self) -> u32;
@@ -86,7 +87,7 @@ pub trait MetalRenderCanvasHost {
 }
 
 /// Rust crate-boundary spelling of the source `gpu::Texture*` seam.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub trait MetalRiveTextureHost {
     fn metalNativeTexture(&self) -> NativeTexture;
 }
@@ -94,14 +95,14 @@ pub trait MetalRiveTextureHost {
 /// Type-erased bridge used only by the object-safe `ContextApi` virtual seam.
 /// The renderer crate constructs this transient view from its canonical
 /// RenderCanvas owner; this struct never becomes a second resource authority.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub struct MetalRenderCanvasBridge {
     pub width: u32,
     pub height: u32,
     pub texture: NativeTexture,
 }
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 impl MetalRenderCanvasHost for MetalRenderCanvasBridge {
     fn metalWidth(&self) -> u32 {
         self.width
@@ -117,20 +118,20 @@ impl MetalRenderCanvasHost for MetalRenderCanvasBridge {
 }
 
 /// Type-erased bridge used only by the object-safe `ContextApi` virtual seam.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub struct MetalRiveTextureBridge {
     pub texture: NativeTexture,
 }
 
 /// Product-facing result token for the one source command-buffer completion
 /// callback installed by `endFrame`.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 #[derive(Clone)]
 pub struct MetalSubmissionCompletion {
     result: Arc<Mutex<Option<Result<(), String>>>>,
 }
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 impl MetalSubmissionCompletion {
     pub fn result(&self) -> Option<Result<(), String>> {
         self.result
@@ -147,7 +148,7 @@ impl MetalSubmissionCompletion {
     }
 }
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn command_buffer_completion_result(
     status: MTLCommandBufferStatus,
     error: Option<String>,
@@ -160,7 +161,7 @@ fn command_buffer_completion_result(
     }
 }
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn finish_source_completion(
     deferredBindGroups: &mut Vec<AnyResourceHandle>,
     completedSerial: &AtomicU64,
@@ -183,14 +184,14 @@ fn finish_source_completion(
     publishProductResult();
 }
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 impl MetalRiveTextureHost for MetalRiveTextureBridge {
     fn metalNativeTexture(&self) -> NativeTexture {
         self.texture.clone()
     }
 }
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn same_native_texture(
     left: Option<&Retained<ProtocolObject<dyn objc2_metal::MTLTexture>>>,
     right: Option<&Retained<ProtocolObject<dyn objc2_metal::MTLTexture>>>,
@@ -207,7 +208,7 @@ fn same_native_texture(
 // ============================================================================
 
 // static MTLPixelFormat oreFormatToMTL(TextureFormat format)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
     match format {
         TextureFormat::r8unorm => MTLPixelFormat::R8Unorm,
@@ -299,7 +300,7 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
 }
 
 // static MTLTextureType oreTextureTypeToMTL(TextureType type)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreTextureTypeToMTL(value: TextureType) -> MTLTextureType {
     match value {
         TextureType::texture2D => MTLTextureType::Type2D,
@@ -310,7 +311,7 @@ fn oreTextureTypeToMTL(value: TextureType) -> MTLTextureType {
 }
 
 // static MTLSamplerMinMagFilter oreFilterToMTL(Filter filter)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreFilterToMTL(value: Filter) -> MTLSamplerMinMagFilter {
     match value {
         Filter::nearest => MTLSamplerMinMagFilter::Nearest,
@@ -319,7 +320,7 @@ fn oreFilterToMTL(value: Filter) -> MTLSamplerMinMagFilter {
 }
 
 // static MTLSamplerMipFilter oreMipFilterToMTL(Filter filter)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreMipFilterToMTL(value: Filter) -> MTLSamplerMipFilter {
     match value {
         Filter::nearest => MTLSamplerMipFilter::Nearest,
@@ -328,7 +329,7 @@ fn oreMipFilterToMTL(value: Filter) -> MTLSamplerMipFilter {
 }
 
 // static MTLSamplerAddressMode oreWrapToMTL(WrapMode mode)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreWrapToMTL(value: WrapMode) -> MTLSamplerAddressMode {
     match value {
         WrapMode::repeat => MTLSamplerAddressMode::Repeat,
@@ -338,7 +339,7 @@ fn oreWrapToMTL(value: WrapMode) -> MTLSamplerAddressMode {
 }
 
 // static MTLCompareFunction oreCompareFunctionToMTL(CompareFunction fn)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreCompareFunctionToMTL(value: CompareFunction) -> MTLCompareFunction {
     match value {
         CompareFunction::none | CompareFunction::never => MTLCompareFunction::Never,
@@ -353,7 +354,7 @@ fn oreCompareFunctionToMTL(value: CompareFunction) -> MTLCompareFunction {
 }
 
 // static MTLLoadAction oreLoadOpToMTL(LoadOp op)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreLoadOpToMTL(value: LoadOp) -> MTLLoadAction {
     match value {
         LoadOp::clear => MTLLoadAction::Clear,
@@ -363,7 +364,7 @@ fn oreLoadOpToMTL(value: LoadOp) -> MTLLoadAction {
 }
 
 // static MTLStoreAction oreStoreOpToMTL(StoreOp op)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreStoreOpToMTL(value: StoreOp) -> MTLStoreAction {
     match value {
         StoreOp::store => MTLStoreAction::Store,
@@ -372,7 +373,7 @@ fn oreStoreOpToMTL(value: StoreOp) -> MTLStoreAction {
 }
 
 // static MTLBlendFactor oreBlendFactorToMTL(BlendFactor f)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreBlendFactorToMTL(value: BlendFactor) -> MTLBlendFactor {
     match value {
         BlendFactor::zero => MTLBlendFactor::Zero,
@@ -392,7 +393,7 @@ fn oreBlendFactorToMTL(value: BlendFactor) -> MTLBlendFactor {
 }
 
 // static MTLBlendOperation oreBlendOpToMTL(BlendOp op)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreBlendOpToMTL(value: BlendOp) -> MTLBlendOperation {
     match value {
         BlendOp::add => MTLBlendOperation::Add,
@@ -404,7 +405,7 @@ fn oreBlendOpToMTL(value: BlendOp) -> MTLBlendOperation {
 }
 
 // static MTLStencilOperation oreStencilOpToMTL(StencilOp op)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreStencilOpToMTL(value: StencilOp) -> MTLStencilOperation {
     match value {
         StencilOp::keep => MTLStencilOperation::Keep,
@@ -419,7 +420,7 @@ fn oreStencilOpToMTL(value: StencilOp) -> MTLStencilOperation {
 }
 
 // static MTLVertexFormat oreVertexFormatToMTL(VertexFormat fmt)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreVertexFormatToMTL(value: VertexFormat) -> MTLVertexFormat {
     match value {
         VertexFormat::float1 => MTLVertexFormat::Float,
@@ -443,7 +444,7 @@ fn oreVertexFormatToMTL(value: VertexFormat) -> MTLVertexFormat {
 }
 
 // static MTLColorWriteMask oreColorWriteMaskToMTL(ColorWriteMask mask)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreColorWriteMaskToMTL(mask: ColorWriteMask) -> MTLColorWriteMask {
     let mut result = MTLColorWriteMask::None;
     if mask & ColorWriteMask::red != ColorWriteMask::none {
@@ -466,7 +467,7 @@ fn oreColorWriteMaskToMTL(mask: ColorWriteMask) -> MTLColorWriteMask {
 const kMetalVertexBufferBase: u32 = 16;
 
 // static TextureFormat mtlFormatToOre(MTLPixelFormat fmt)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn mtlFormatToOre(value: objc2_metal::MTLPixelFormat) -> TextureFormat {
     match value {
         objc2_metal::MTLPixelFormat::RGBA8Unorm => TextureFormat::rgba8unorm,
@@ -516,7 +517,7 @@ impl ContextMetal {
     }
 
     // inline void ContextMetal::mtlPopulateFeatures(id<MTLDevice> device)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlPopulateFeatures(&mut self, device: &NativeDevice) {
         let mut f = self.base.features_mut_unpublished();
         f.colorBufferFloat = true;
@@ -567,7 +568,7 @@ impl ContextMetal {
     }
 
     // inline rcp<Buffer> ContextMetal::mtlMakeBuffer(const BufferDesc& desc)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlMakeBuffer(&mut self, desc: &BufferDesc<'_>) -> Option<AnyResourceHandle> {
         let device = self.m_mtlDevice.as_ref()?.clone();
         let mut buffer = BufferMetal::new(
@@ -611,7 +612,7 @@ impl ContextMetal {
     }
 
     // inline rcp<Texture> ContextMetal::mtlMakeTexture(const TextureDesc& desc)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlMakeTexture(&mut self, desc: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
         if desc.width == 0
             || desc.height == 0
@@ -729,7 +730,7 @@ impl ContextMetal {
 
     // inline rcp<TextureView> ContextMetal::mtlMakeTextureView(
     //     const TextureViewDesc& desc)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlMakeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
         let texture = desc.texture?;
         if !self.ownsResource(texture) {
@@ -788,7 +789,7 @@ impl ContextMetal {
     }
 
     // inline rcp<Sampler> ContextMetal::mtlMakeSampler(const SamplerDesc& desc)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlMakeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
         let descriptor = MTLSamplerDescriptor::new();
         descriptor.setMinFilter(oreFilterToMTL(desc.minFilter));
@@ -825,7 +826,7 @@ impl ContextMetal {
 
     // inline rcp<ShaderModule> ContextMetal::mtlMakeShaderModule(
     //     const ShaderModuleDesc& desc)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlMakeShaderModule(&mut self, desc: &ShaderModuleDesc<'_>) -> Option<AnyResourceHandle> {
         let mut module = ShaderModuleMetal::new();
         let code_size = desc.codeSize().ok()? as usize;
@@ -868,7 +869,7 @@ impl ContextMetal {
 
     // inline rcp<Pipeline> ContextMetal::mtlMakePipeline(
     //     const PipelineDesc& desc, std::string* outError)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlMakePipeline(
         &mut self,
         desc: &PipelineDesc<'_>,
@@ -1019,7 +1020,10 @@ impl ContextMetal {
                     } else {
                         MTLVertexStepFunction::PerVertex
                     });
-                    let attributes = layout.attributes.get(..layout.attributeCount as usize)?;
+                    let attributes = layout
+                        .attributes
+                        .unwrap_or(&[])
+                        .get(..layout.attributeCount as usize)?;
                     for attr in attributes {
                         let native_attr = unsafe {
                             vertex_descriptor
@@ -1188,7 +1192,7 @@ impl ContextMetal {
 
     // inline rcp<BindGroup> ContextMetal::mtlMakeBindGroup(
     //     const BindGroupDesc& desc)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlMakeBindGroup(&mut self, desc: &BindGroupDesc<'_>) -> Option<AnyResourceHandle> {
         if desc.layout.is_none() {
             self.base
@@ -1381,7 +1385,7 @@ impl ContextMetal {
 
     // inline std::unique_ptr<RenderPass> ContextMetal::mtlBeginRenderPass(
     //     const RenderPassDesc& desc, std::string* outError)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlBeginRenderPass(
         &mut self,
         desc: &RenderPassDesc<'_>,
@@ -1560,7 +1564,7 @@ impl ContextMetal {
 
     // inline rcp<TextureView> ContextMetal::mtlWrapCanvasTexture(
     //     gpu::RenderCanvas* canvas)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     unsafe fn mtlWrapCanvasTexture<C: MetalRenderCanvasHost>(
         &mut self,
         canvas: *mut C,
@@ -1625,7 +1629,7 @@ impl ContextMetal {
 impl ContextMetal {
     // std::unique_ptr<ContextMetal> ContextMetal::Make(
     //     id<MTLDevice> device, id<MTLCommandQueue> queue)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     pub(crate) unsafe fn Make(
         device: NativeDevice,
         queue: NativeQueue,
@@ -1641,7 +1645,7 @@ impl ContextMetal {
     /// Safe product boundary for the source `Make` raw-service precondition.
     /// The pinned Objective-C++ method accepts its paired backend services
     /// without inspecting them; public Rust callers must prove that pairing.
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     pub fn MakeChecked(device: NativeDevice, queue: NativeQueue) -> Option<Box<ContextMetal>> {
         if let (Some(device), Some(queue)) = (device.as_ref(), queue.as_ref()) {
             let queue_device = queue.device();
@@ -1655,7 +1659,7 @@ impl ContextMetal {
     }
 
     // void ContextMetal::beginFrame(const FrameDescriptor&)
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     pub fn beginFrame(&mut self, _descriptor: &FrameDescriptor) {
         *self.m_mtlCommandBuffer = self
             .m_mtlQueue
@@ -1664,10 +1668,12 @@ impl ContextMetal {
         // Serial of the command buffer about to be recorded.
         self.m_bufferState
             .setCurrentSerial(self.currentSerial().wrapping_add(1));
+        // m_pendingFrame.reset();
+        self.base.pendingFrame().borrow_mut().reset();
     }
 
     // void ContextMetal::waitForGPU()
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     pub fn waitForGPU(&mut self) {
         // #if defined(ORE_BACKEND_METAL)
         if let Some(command_buffer) = self.m_mtlCommandBuffer.as_ref() {
@@ -1677,15 +1683,29 @@ impl ContextMetal {
     }
 
     // void ContextMetal::endFrame()
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     pub fn endFrame(&mut self) {
         let _ = self.end_frame_with_completion();
     }
 
     /// Commits through the single pinned completion callback while exposing
     /// the command-buffer status to the authenticated product readback seam.
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     pub fn end_frame_with_completion(&mut self) -> Option<MetalSubmissionCompletion> {
+        // if (m_mtlCommandBuffer) {
+        //     if (!m_pendingFrame.empty()) {
+        //         cmd::replayCommandBuffer(*this, m_pendingFrame);
+        //         m_pendingFrame.reset();
+        //     }
+        //     // Capture deferred BindGroups, then install completion and commit.
+        // }
+        if self.m_mtlCommandBuffer.is_some() {
+            let pending = self.base.pendingFrame();
+            if !pending.borrow().empty() {
+                crate::ore_cmd::ore_replay::replayCommandBuffer(self, &pending.borrow(), None);
+                pending.borrow_mut().reset();
+            }
+        }
         if let Some(command_buffer) = self.m_mtlCommandBuffer.take() {
             // Capture the exact authored deferred owner vector and clear it
             // before publishing the completed serial, as in the pinned block.
@@ -1818,7 +1838,7 @@ impl ContextMetal {
         let mut layout = BindGroupLayout::new();
         layout.m_context = Arc::downgrade(&self.base.state);
         layout.m_groupIndex = desc.groupIndex;
-        let Some(entries) = desc.entries.get(..desc.entryCount as usize) else {
+        let Some(entries) = desc.entries.unwrap_or(&[]).get(..desc.entryCount as usize) else {
             self.base
                 .setLastError("makeBindGroupLayout: entryCount exceeds entries span".to_owned());
             return None;
@@ -1989,6 +2009,12 @@ impl ContextMetal {
 }
 
 impl ContextApi for ContextMetal {
+    fn usesDeferredFrameReplay(&self) -> bool {
+        true
+    }
+    fn contextBase(&self) -> &Context {
+        &self.base
+    }
     fn features(&self) -> Features {
         ContextMetal::features(self)
     }
@@ -2106,7 +2132,7 @@ impl ContextApi for ContextMetal {
 mod tests {
     use super::*;
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     use crate::types::{ColorAttachment, SampEntry, TexEntry, TextureAspect, UBOEntry};
 
     #[test]
@@ -2119,7 +2145,7 @@ mod tests {
         assert!(65_536 > u16::MAX as u32);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn live_context() -> Option<Box<ContextMetal>> {
         use objc2_metal::{MTLCreateSystemDefaultDevice, MTLDevice};
 
@@ -2134,7 +2160,7 @@ mod tests {
         ContextMetal::MakeChecked(Some(device), Some(queue))
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn frame_serial_completion_outlives_context_and_begin_preserves_error() {
         let Some(mut context) = live_context() else {
@@ -2165,7 +2191,7 @@ mod tests {
         );
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn product_completion_is_published_after_source_serial_becomes_reusable() {
         let completed = AtomicU64::new(0);
@@ -2180,7 +2206,7 @@ mod tests {
         assert!(published.get());
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn completion_releases_captured_resources_before_serial_and_product_publication() {
         struct CompletionDropProbe(Arc<AtomicU64>);
@@ -2210,7 +2236,7 @@ mod tests {
         assert_eq!(stage.load(Ordering::Relaxed), 2);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn factories_publish_only_complete_native_resources() {
         let Some(mut context) = live_context() else {
@@ -2294,7 +2320,7 @@ mod tests {
         assert_eq!(wrapped_texture.base().format(), TextureFormat::rgba8unorm);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn nil_native_texture_view_and_sampler_still_publish_logical_resources() {
         let Some(mut context) = live_context() else {
@@ -2337,7 +2363,7 @@ mod tests {
         assert!(sampler.m_mtlSampler.is_some());
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn public_layout_factory_rejects_out_of_range_native_slots_without_publication() {
         let Some(mut context) = live_context() else {
@@ -2350,7 +2376,7 @@ mod tests {
         };
         let layout = context
             .makeBindGroupLayout(&BindGroupLayoutDesc {
-                entries: std::slice::from_ref(&entry),
+                entries: Some(std::slice::from_ref(&entry)),
                 entryCount: 1,
                 ..BindGroupLayoutDesc::default()
             })
@@ -2365,7 +2391,7 @@ mod tests {
         entry.nativeSlotFS = 128;
         let layout = context
             .makeBindGroupLayout(&BindGroupLayoutDesc {
-                entries: std::slice::from_ref(&entry),
+                entries: Some(std::slice::from_ref(&entry)),
                 entryCount: 1,
                 ..BindGroupLayoutDesc::default()
             })
@@ -2380,7 +2406,7 @@ mod tests {
         entry.nativeSlotCS = 16;
         let layout = context
             .makeBindGroupLayout(&BindGroupLayoutDesc {
-                entries: std::slice::from_ref(&entry),
+                entries: Some(std::slice::from_ref(&entry)),
                 entryCount: 1,
                 ..BindGroupLayoutDesc::default()
             })
@@ -2391,7 +2417,7 @@ mod tests {
         );
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn buffer_allocation_failure_immediately_replaces_and_clears_context_error() {
         let Some(mut context) = live_context() else {
@@ -2414,7 +2440,7 @@ mod tests {
         assert_eq!(context.lastError(), "");
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn native_shader_compile_failure_preserves_context_error() {
         let Some(mut context) = live_context() else {
@@ -2456,7 +2482,7 @@ mod tests {
         assert_eq!(context.lastError(), "earlier context error");
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn pipeline_validation_routes_to_out_error_without_overwriting_context_error() {
         let Some(mut context) = live_context() else {
@@ -2491,7 +2517,7 @@ mod tests {
         assert_eq!(context.lastError(), "earlier context error");
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn shader_and_pipeline_factories_publish_live_native_state_and_reject_bad_entry() {
         let Some(mut context) = live_context() else {
@@ -2539,7 +2565,7 @@ fragment float4 fs_main() { return float4(1.0); }
         );
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn pipeline_layout_validation_preserves_vertex_reflection_precedence() {
         let Some(mut context) = live_context() else {
@@ -2608,7 +2634,7 @@ fragment float4 fs_main() { return float4(1.0); }
         );
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn bind_group_skips_unresolved_entries_and_last_error_follows_kind_order() {
         let Some(mut context) = live_context() else {
@@ -2680,7 +2706,7 @@ fragment float4 fs_main() { return float4(1.0); }
         );
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn beginning_a_second_pass_auto_finishes_the_first() {
         let Some(mut context) = live_context() else {
@@ -2730,7 +2756,7 @@ fragment float4 fs_main() { return float4(1.0); }
         context.endFrame();
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn render_pass_is_not_published_without_a_frame_command_buffer() {
         let Some(mut context) = live_context() else {

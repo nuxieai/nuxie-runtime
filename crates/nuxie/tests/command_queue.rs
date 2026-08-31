@@ -874,10 +874,16 @@ impl TestListeners {
     }
 }
 
-#[derive(Debug)]
-struct ExternalImage(u8);
+#[derive(Debug, Clone)]
+struct ExternalImage(u8, Arc<()>);
 
 impl RenderImage for ExternalImage {
+    fn retain_image(&self) -> std::rc::Rc<dyn RenderImage> {
+        std::rc::Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Arc::as_ptr(&self.1) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -2011,7 +2017,7 @@ fn global_asset_set_and_remove() {
 #[test]
 fn external_resources() {
     let mut queue = CommandQueue::new();
-    let image: Box<dyn RenderImage + Send> = Box::new(ExternalImage(0));
+    let image: Box<dyn RenderImage + Send> = Box::new(ExternalImage(0, Arc::new(())));
     let audio = RuntimeAudioSource::from_encoded(AUDIO_FIXTURE).expect("decode audio");
     let audio_identity = Arc::as_ptr(&audio) as usize;
     let font = RawTextFont::decode(Arc::<[u8]>::from(FONT_FIXTURE)).expect("decode font");
@@ -2792,7 +2798,7 @@ fn view_model_property_set_get() {
         assert!(std::ptr::eq(actual.as_any(), expected.as_any()));
     }));
 
-    let external: Box<dyn RenderImage + Send> = Box::new(ExternalImage(7));
+    let external: Box<dyn RenderImage + Send> = Box::new(ExternalImage(7, Arc::new(())));
     let external_image = queue.add_external_image(Some(external), None, 0);
     queue.set_view_model_instance_image(root, "Test Image".to_owned(), external_image, 0);
     queue.run_once(Box::new(move |server| {

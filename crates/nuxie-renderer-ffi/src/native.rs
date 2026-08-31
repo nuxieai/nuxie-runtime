@@ -358,7 +358,10 @@ impl Factory for FfiFactory {
             )
         };
         Box::new(FfiRenderShader {
-            handle: non_null(handle, "rive_ffi_make_linear_gradient"),
+            handle: Rc::new(FfiShaderHandle(non_null(
+                handle,
+                "rive_ffi_make_linear_gradient",
+            ))),
         })
     }
 
@@ -383,7 +386,10 @@ impl Factory for FfiFactory {
             )
         };
         Box::new(FfiRenderShader {
-            handle: non_null(handle, "rive_ffi_make_radial_gradient"),
+            handle: Rc::new(FfiShaderHandle(non_null(
+                handle,
+                "rive_ffi_make_radial_gradient",
+            ))),
         })
     }
 
@@ -422,7 +428,9 @@ impl Factory for FfiFactory {
         let handle =
             unsafe { ffi::rive_ffi_decode_image(self.context.as_ptr(), data.as_ptr(), data.len()) };
         let handle = NonNull::new(handle).ok_or(ImageDecodeError)?;
-        Ok(Box::new(FfiRenderImage { handle }))
+        Ok(Box::new(FfiRenderImage {
+            handle: Rc::new(FfiImageHandle(handle)),
+        }))
     }
 }
 
@@ -584,33 +592,61 @@ impl Renderer for FfiFrame {
     }
 }
 
+#[derive(Clone)]
 struct FfiRenderShader {
-    handle: NonNull<ffi::RenderShader>,
+    handle: Rc<FfiShaderHandle>,
 }
 
-impl Drop for FfiRenderShader {
+struct FfiShaderHandle(NonNull<ffi::RenderShader>);
+impl std::ops::Deref for FfiShaderHandle {
+    type Target = NonNull<ffi::RenderShader>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl Drop for FfiShaderHandle {
     fn drop(&mut self) {
-        unsafe { ffi::rive_ffi_render_shader_delete(self.handle.as_ptr()) };
+        unsafe { ffi::rive_ffi_render_shader_delete(self.0.as_ptr()) };
     }
 }
 
 impl RenderShader for FfiRenderShader {
+    fn retain_shader(&self) -> Rc<dyn RenderShader> {
+        Rc::new(self.clone())
+    }
+    fn shader_identity(&self) -> usize {
+        self.handle.as_ptr() as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
+#[derive(Clone)]
 struct FfiRenderImage {
-    handle: NonNull<ffi::RenderImage>,
+    handle: Rc<FfiImageHandle>,
 }
 
-impl Drop for FfiRenderImage {
+struct FfiImageHandle(NonNull<ffi::RenderImage>);
+impl std::ops::Deref for FfiImageHandle {
+    type Target = NonNull<ffi::RenderImage>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl Drop for FfiImageHandle {
     fn drop(&mut self) {
-        unsafe { ffi::rive_ffi_render_image_delete(self.handle.as_ptr()) };
+        unsafe { ffi::rive_ffi_render_image_delete(self.0.as_ptr()) };
     }
 }
 
 impl RenderImage for FfiRenderImage {
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        self.handle.as_ptr() as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }

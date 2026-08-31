@@ -19,12 +19,9 @@
 #![allow(non_upper_case_globals)]
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCnt, RefCntTarget};
-pub use nuxie_render_api::IntegerAabb as IAABB;
-#[cfg(any(
-    feature = "native-webgpu-experimental",
-    feature = "ore-gl"
-))]
+#[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
 use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalReleaseRoute};
+pub use nuxie_render_api::IntegerAabb as IAABB;
 
 // `uint2` is `rive::simd::uvec<2>` in the pinned SIMD header.  A fixed-width
 // array retains its two uint32 lanes and aggregate return shape without
@@ -80,15 +77,9 @@ pub struct RenderTarget {
     // Rust-only safety sidecar after the complete source prefix. WebGL uses
     // this optional route because `rcp<RenderTarget>` erases the concrete
     // thread-affine owner before its atomic zero transition.
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
     rust_final_release_route: Option<OwnerThreadFinalReleaseRoute>,
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
     rust_execution_identity: Option<(u64, u64)>,
 }
 
@@ -107,10 +98,7 @@ unsafe impl RefCntTarget for RenderTarget {
 
     unsafe fn onRefCntReachedZero(ptr: *const Self) {
         let ptr = ptr.cast_mut();
-        #[cfg(any(
-            feature = "native-webgpu-experimental",
-            feature = "ore-gl"
-        ))]
+        #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
         if let Some(route) = unsafe { &*ptr }.rust_final_release_route.as_ref() {
             unsafe fn destroy_on_owner_thread(payload: usize) {
                 let ptr = payload as *mut RenderTarget;
@@ -178,23 +166,27 @@ impl RenderTarget {
             destroy_complete: |ptr| unsafe { drop(Box::from_raw(ptr)) },
             m_width: width,
             m_height: height,
-            #[cfg(any(
-                feature = "native-webgpu-experimental",
-                feature = "ore-gl"
-            ))]
+            #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
             rust_final_release_route: None,
-            #[cfg(any(
-                feature = "native-webgpu-experimental",
-                feature = "ore-gl"
-            ))]
+            #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
             rust_execution_identity: None,
         }
     }
 
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
+    /// Rebind the Rust lifetime sidecar when GL materializes a deferred canvas backing.
+    #[cfg(feature = "ore-gl")]
+    pub(crate) fn rebind_owner_thread_execution(
+        &mut self,
+        route: OwnerThreadFinalReleaseRoute,
+        domain: u64,
+        generation: u64,
+    ) {
+        self.rust_final_release_route = Some(route);
+        self.rust_execution_identity = Some((domain, generation));
+    }
+
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
     pub(crate) fn install_owner_thread_execution(
         &mut self,
         route: OwnerThreadFinalReleaseRoute,
@@ -209,15 +201,8 @@ impl RenderTarget {
         self.rust_execution_identity = Some((domain, generation));
     }
 
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
-    pub(crate) fn belongs_to_owner_thread_execution(
-        &self,
-        domain: u64,
-        generation: u64,
-    ) -> bool {
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
+    pub(crate) fn belongs_to_owner_thread_execution(&self, domain: u64, generation: u64) -> bool {
         self.rust_execution_identity == Some((domain, generation))
     }
 }

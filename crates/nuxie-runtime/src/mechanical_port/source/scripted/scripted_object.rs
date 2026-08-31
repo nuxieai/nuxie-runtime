@@ -48,7 +48,7 @@ pub const DATA_REVERSE_CONVERTS_BIT: u32 = 1 << 11;
 pub const RESIZES_BIT: u32 = 1 << 12;
 pub const LISTENER_PERFORMS_BIT: u32 = 1 << 13;
 pub const LISTENER_PERFORMS_ACTION_BIT: u32 = 1 << 14;
-pub const DRAWS_CANVAS_BIT: u32 = 1 << 15;
+// Bit 15 is reserved for the retired drawCanvas callback.
 pub const WANTS_KEYBOARD_INPUT_BIT: u32 = 1 << 16;
 pub const WANTS_TEXT_INPUT_BIT: u32 = 1 << 17;
 pub const WANTS_GAMEPAD_CONNECT_BIT: u32 = 1 << 18;
@@ -432,7 +432,13 @@ impl ScriptedObject {
             return false;
         }
         Self::initialize_occurrence(owner, properties, host);
-        Self::hydrate_occurrence(owner, properties, host)
+        let hydrated = Self::hydrate_occurrence(owner, properties, host);
+        owner.with_mut(|owner| {
+            if let Some(drawable) = owner.as_scripted_drawable_mut() {
+                drawable.did_reinit();
+            }
+        });
+        hydrated
     }
 
     pub fn custom_properties(owner: &CoreHandle) -> Vec<CoreHandle> {
@@ -779,20 +785,6 @@ impl ScriptedObject {
     pub fn take_update_request(&mut self) -> bool {
         std::mem::take(&mut self.callback_update_requested)
     }
-    pub fn draw_canvas_occurrence(owner: &CoreHandle, factory: &mut dyn nuxie_render_api::Factory) {
-        let instance = owner
-            .with(|owner| {
-                owner
-                    .as_scripted_object()
-                    .filter(|scripted| scripted.draws_canvas() && scripted.self_ref != 0)
-                    .and_then(|scripted| scripted.runtime_instance())
-            })
-            .flatten();
-        if let Some(instance) = instance {
-            let _ = instance.borrow_mut().call_draw_canvas(factory);
-        }
-    }
-
     pub fn script_update_occurrence(owner: &CoreHandle) {
         let instance = owner
             .with(|owner| {
@@ -979,9 +971,6 @@ impl ScriptedObject {
     }
     pub fn performs_action(&self) -> bool {
         self.implemented_methods & LISTENER_PERFORMS_ACTION_BIT != 0
-    }
-    pub fn draws_canvas(&self) -> bool {
-        self.implemented_methods & DRAWS_CANVAS_BIT != 0
     }
     pub fn wants_keyboard_input(&self) -> bool {
         self.implemented_methods & WANTS_KEYBOARD_INPUT_BIT != 0

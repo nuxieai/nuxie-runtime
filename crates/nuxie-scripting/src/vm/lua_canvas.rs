@@ -5,7 +5,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use luaur_rt::{AnyUserData, Lua, Result, UserData, UserDataFields, UserDataMethods, Value};
-use nuxie_render_api::{RenderCanvas, RenderCanvasFrame};
+use nuxie_render_api::{
+    BlendMode, ColorInt, DeferredCanvasHostHandle, Factory, ImageSampler, Mat2D,
+    PersistentFactoryContext, RenderBuffer, RenderCanvas, RenderCanvasError, RenderCanvasFrame,
+    RenderCanvasHandle, RenderImage, RenderPaint, RenderPath, Renderer,
+};
 
 use super::lua_image::ScriptedImage;
 use super::lua_renderer::ScriptedRenderer;
@@ -13,7 +17,10 @@ use super::lua_renderer_library::RendererBindings;
 
 pub(super) struct ScriptedCanvas {
     bindings: RendererBindings,
-    canvas: Option<Box<dyn RenderCanvas>>,
+    canvas: Option<RenderCanvasHandle>,
+    render_context: Option<PersistentFactoryContext>,
+    pending_width: u32,
+    pending_height: u32,
     image: Option<AnyUserData>,
     frame: Option<Rc<RefCell<Box<dyn RenderCanvasFrame>>>>,
     renderer: Option<AnyUserData>,
@@ -26,37 +33,78 @@ impl ScriptedCanvas {
         width: u32,
         height: u32,
     ) -> Result<AnyUserData> {
-        bindings.with_factory(|_| Ok(())).map_err(|_| {
-            luaur_rt::Error::runtime(
-                "context:canvas() requires a RenderContext — call setRenderContext() first",
-            )
-        })?;
+        let render_context = bindings.render_context();
         let mut canvas = Self {
             bindings,
             canvas: None,
+            render_context,
+            pending_width: 0,
+            pending_height: 0,
             image: None,
             frame: None,
             renderer: None,
         };
         if width != 0 && height != 0 {
-            canvas.replace_backing(lua, width, height, "context:canvas()")?;
+            if canvas.render_context.is_none() {
+                if canvas.bindings.deferred_canvas_host().is_none() {
+                    return Err(luaur_rt::Error::runtime(
+                        "context:canvas() requires a RenderContext — call setRenderContext() first",
+                    ));
+                }
+                canvas.pending_width = width;
+                canvas.pending_height = height;
+            } else {
+                canvas.replace_backing(lua, width, height, "context:canvas()")?;
+            }
         }
         lua.create_userdata(canvas)
     }
 
     fn replace_backing(&mut self, lua: &Lua, width: u32, height: u32, caller: &str) -> Result<()> {
-        // Pinned Canvas::resize allocates the replacement before releasing its
-        // old image/canvas pair, so an allocation error preserves that pair.
-        let canvas = self.bindings.with_factory(|factory| {
-            factory.make_render_canvas(width, height).map_err(|_| {
+        let context = self
+            .render_context
+            .as_mut()
+            .expect("present allocation device");
+        let canvas = allocate_script_render_canvas(&self.bindings, context, width, height)
+            .map_err(|_| {
                 luaur_rt::Error::runtime(format!("{caller} failed to create RenderCanvas"))
-            })
-        })?;
+            })?;
         let image =
             lua.create_userdata(ScriptedImage::from_render_image_rc(canvas.render_image()))?;
         self.image = Some(image);
-        self.canvas = Some(canvas);
+        self.canvas = Some(Rc::new(RefCell::new(canvas)));
+        self.pending_width = 0;
+        self.pending_height = 0;
         Ok(())
+    }
+
+    fn satisfy_pending(&mut self, lua: &Lua) -> Result<()> {
+        if self.pending_width == 0 || self.pending_height == 0 {
+            return Ok(());
+        }
+        let Some(context) = self.bindings.render_context() else {
+            return Ok(());
+        };
+        self.render_context = Some(context);
+        self.replace_backing(
+            lua,
+            self.pending_width,
+            self.pending_height,
+            "Canvas:resize()",
+        )
+    }
+
+    fn end_frame(&mut self, userdata: &AnyUserData) -> Result<()> {
+        self.bindings.unregister_open_canvas_frame(userdata);
+        self.end_renderer();
+        let frame = self.frame.take().expect("active Canvas frame");
+        Rc::try_unwrap(frame)
+            .map_err(|_| {
+                luaur_rt::Error::runtime("Canvas frame retained after renderer invalidation")
+            })?
+            .into_inner()
+            .finish()
+            .map_err(|error| luaur_rt::Error::runtime(error.to_string()))
     }
 
     fn end_renderer(&mut self) {
@@ -65,6 +113,111 @@ impl ScriptedCanvas {
                 renderer.end();
             }
         }
+    }
+}
+
+/// `allocScriptRenderCanvas`: only GL overrides deferred backing allocation.
+pub(crate) fn allocate_script_render_canvas(
+    bindings: &RendererBindings,
+    context: &mut PersistentFactoryContext,
+    width: u32,
+    height: u32,
+) -> std::result::Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+    if bindings.deferred_canvas_host().is_some() || bindings.render_context_is_late_bound() {
+        context.make_deferred_render_canvas(width, height)
+    } else {
+        context.make_render_canvas(width, height)
+    }
+}
+
+/// Called after every protected call, including a script error.
+pub(crate) fn close_orphan_canvas_frames(bindings: &RendererBindings) -> Result<bool> {
+    let frames = bindings.take_open_canvas_frames();
+    let had_orphans = !frames.is_empty();
+    for userdata in frames {
+        let mut canvas = userdata.borrow_mut::<ScriptedCanvas>()?;
+        if canvas.frame.is_some() {
+            canvas.end_frame(&userdata)?;
+        }
+    }
+    Ok(had_orphans)
+}
+
+struct DeferredCanvasFrame {
+    host: DeferredCanvasHostHandle,
+    canvas: RenderCanvasHandle,
+    renderer: Option<Box<dyn Renderer>>,
+}
+
+impl RenderCanvasFrame for DeferredCanvasFrame {
+    fn renderer(&mut self) -> &mut dyn Renderer {
+        self
+    }
+    fn finish(self: Box<Self>) -> std::result::Result<(), RenderCanvasError> {
+        self.host.borrow_mut().end_canvas_content(&self.canvas);
+        Ok(())
+    }
+}
+
+impl DeferredCanvasFrame {
+    fn target(&mut self) -> &mut dyn Renderer {
+        self.renderer
+            .as_deref_mut()
+            .expect("deferred host returned a null renderer")
+    }
+}
+
+impl Renderer for DeferredCanvasFrame {
+    fn save(&mut self) {
+        self.target().save();
+    }
+    fn restore(&mut self) {
+        self.target().restore();
+    }
+    fn transform(&mut self, transform: Mat2D) {
+        self.target().transform(transform);
+    }
+    fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
+        self.target().draw_path(path, paint);
+    }
+    fn clip_path(&mut self, path: &dyn RenderPath) {
+        self.target().clip_path(path);
+    }
+    fn draw_image(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend: BlendMode,
+        opacity: f32,
+    ) {
+        self.target().draw_image(image, sampler, blend, opacity);
+    }
+    fn draw_image_mesh(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend: BlendMode,
+        opacity: f32,
+    ) {
+        self.target().draw_image_mesh(
+            image,
+            sampler,
+            vertices,
+            uv,
+            indices,
+            vertex_count,
+            index_count,
+            blend,
+            opacity,
+        );
+    }
+    fn modulate_opacity(&mut self, opacity: f32) {
+        self.target().modulate_opacity(opacity);
     }
 }
 
@@ -79,18 +232,30 @@ impl Drop for ScriptedCanvas {
 
 impl UserData for ScriptedCanvas {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("image", |_, this| {
+        fields.add_field_function_get("image", |lua, userdata| {
+            let mut this = userdata.borrow_mut::<Self>()?;
+            this.satisfy_pending(lua)?;
             Ok(this
                 .image
                 .clone()
                 .map(Value::UserData)
                 .unwrap_or(Value::Nil))
         });
-        fields.add_field_method_get("width", |_, this| {
-            Ok(this.canvas.as_ref().map_or(0, |canvas| canvas.width()))
+        fields.add_field_function_get("width", |lua, userdata| {
+            let mut this = userdata.borrow_mut::<Self>()?;
+            this.satisfy_pending(lua)?;
+            Ok(this
+                .canvas
+                .as_ref()
+                .map_or(this.pending_width, |canvas| canvas.borrow().width()))
         });
-        fields.add_field_method_get("height", |_, this| {
-            Ok(this.canvas.as_ref().map_or(0, |canvas| canvas.height()))
+        fields.add_field_function_get("height", |lua, userdata| {
+            let mut this = userdata.borrow_mut::<Self>()?;
+            this.satisfy_pending(lua)?;
+            Ok(this
+                .canvas
+                .as_ref()
+                .map_or(this.pending_height, |canvas| canvas.borrow().height()))
         });
     }
 
@@ -104,16 +269,31 @@ impl UserData for ScriptedCanvas {
             if width == 0 || height == 0 {
                 this.image = None;
                 this.canvas = None;
+                this.pending_width = 0;
+                this.pending_height = 0;
                 return Ok(());
             }
-            this.replace_backing(lua, width, height, "Canvas:resize()")
+            if this.canvas.as_ref().is_some_and(|canvas| {
+                let canvas = canvas.borrow();
+                canvas.width() == width && canvas.height() == height
+            }) {
+                return Ok(());
+            }
+            this.pending_width = width;
+            this.pending_height = height;
+            this.satisfy_pending(lua)
         });
-        methods.add_method_mut(
+        methods.add_function(
             "beginFrame",
-            |lua, this, descriptor: Option<Value>| {
-                if !this.bindings.canvas_drawing_phase().is_active() {
+            |lua, (userdata, descriptor): (AnyUserData, Option<Value>)| {
+                let mut this = userdata.borrow_mut::<Self>()?;
+                this.satisfy_pending(lua)?;
+                if this.render_context.is_none() {
+                    return Err(luaur_rt::Error::runtime("Canvas: renderCtx not initialized"));
+                }
+                if !this.bindings.ore_context().is_some_and(|context| context.borrow().isRecording()) {
                     return Err(luaur_rt::Error::runtime(
-                        "Canvas:beginFrame() called outside drawing phase",
+                        "Canvas:beginFrame() requires the deferred recorder",
                     ));
                 }
                 if this.frame.is_some() {
@@ -121,48 +301,45 @@ impl UserData for ScriptedCanvas {
                         "Canvas:beginFrame() called during an active frame",
                     ));
                 }
-                let canvas = this.canvas.as_mut().ok_or_else(|| {
+                let canvas = this.canvas.clone().ok_or_else(|| {
                     luaur_rt::Error::runtime(
                         "Canvas:beginFrame() called on a zero-sized canvas; call canvas:resize(w, h) first",
                     )
                 })?;
                 let clear_color = match descriptor {
                     Some(Value::Table(descriptor)) => {
-                        descriptor.get::<Option<u32>>("clearColor")?.unwrap_or(0)
+                        lua.coerce_number(descriptor.get::<Value>("clearColor")?)?
+                            .unwrap_or(0.0) as u32
                     }
                     _ => 0,
                 };
-                let frame = canvas
-                    .begin_frame(clear_color)
-                    .map_err(|error| luaur_rt::Error::runtime(error.to_string()))?;
+                let frame: Box<dyn RenderCanvasFrame> = if let Some(host) = this.bindings.deferred_canvas_host() {
+                    let renderer = host.borrow_mut().begin_canvas_content(Rc::clone(&canvas), clear_color);
+                    Box::new(DeferredCanvasFrame { host, canvas, renderer })
+                } else {
+                    canvas.borrow_mut().begin_frame(clear_color)
+                        .map_err(|error| luaur_rt::Error::runtime(error.to_string()))?
+                };
                 let frame = Rc::new(RefCell::new(frame));
+                this.frame = Some(Rc::clone(&frame));
+                this.bindings.register_open_canvas_frame(userdata.clone());
                 let renderer = ScriptedRenderer::create_canvas_userdata(
                     lua,
                     Rc::clone(&frame),
                     this.bindings.clone(),
                 )?;
                 this.renderer = Some(renderer.clone());
-                this.frame = Some(frame);
                 Ok(renderer)
             },
         );
-        methods.add_method_mut("endFrame", |_, this, ()| {
+        methods.add_function("endFrame", |_, userdata: AnyUserData| {
+            let mut this = userdata.borrow_mut::<Self>()?;
             if this.frame.is_none() {
                 return Err(luaur_rt::Error::runtime(
                     "Canvas:endFrame() called without beginFrame()",
                 ));
             }
-            this.end_renderer();
-            let frame = this.frame.take().expect("checked active Canvas frame");
-            Rc::try_unwrap(frame)
-                .map_err(|_| {
-                    luaur_rt::Error::runtime(
-                        "Canvas frame still has a live renderer owner after endFrame",
-                    )
-                })?
-                .into_inner()
-                .finish()
-                .map_err(|error| luaur_rt::Error::runtime(error.to_string()))
+            this.end_frame(&userdata)
         });
     }
 }
@@ -185,11 +362,18 @@ mod tests {
 
     #[derive(Clone)]
     struct TestCanvasImage {
+        identity: Rc<()>,
         width: u32,
         height: u32,
     }
 
     impl RenderImage for TestCanvasImage {
+        fn retain_image(&self) -> Rc<dyn RenderImage> {
+            Rc::new(self.clone())
+        }
+        fn image_identity(&self) -> usize {
+            Rc::as_ptr(&self.identity) as usize
+        }
         fn as_any(&self) -> &dyn Any {
             self
         }
@@ -302,6 +486,9 @@ mod tests {
     }
 
     impl Factory for TestCanvasFactory {
+        fn is_render_context(&self) -> bool {
+            true
+        }
         fn make_render_buffer(
             &mut self,
             buffer_type: RenderBufferType,
@@ -370,10 +557,93 @@ mod tests {
             Ok(Box::new(TestCanvas {
                 width,
                 height,
-                image: Rc::new(TestCanvasImage { width, height }),
+                image: Rc::new(TestCanvasImage {
+                    identity: Rc::new(()),
+                    width,
+                    height,
+                }),
                 events: Rc::clone(&self.events),
             }))
         }
+    }
+
+    #[test]
+    fn path_effect_update_closes_orphan_gpu_pass_and_canvas_on_success_and_error() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(TestCanvasFactory::new(events.clone()));
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        vm.set_ore_context(Some(Rc::new(RefCell::new(
+            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+        ))));
+        let canvas = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 4, 3).unwrap();
+        vm.lua().globals().set("canvas", canvas).unwrap();
+        let (_gpu_instance, gpu_context) = crate::gpu_canvas::ImportedGpuCanvasInstance::new(
+            Default::default(),
+            vm.renderer_bindings.clone(),
+        );
+        let gpu = gpu_context.canvas_userdata(vm.lua()).unwrap();
+        vm.lua().globals().set("gpu", gpu).unwrap();
+        let effect: luaur_rt::Table = vm
+            .lua()
+            .load(
+                r#"
+            local texture = GPUTexture.new {width = 4, height = 3}
+            return { update = function(self, path, node)
+                retainedRenderer = canvas:beginFrame {clearColor = false}
+                retainedRenderer:save()
+                retainedPass = gpu:beginRenderPass {
+                    color = {{view = texture:view(), storeOp = 'store'}},
+                }
+                if failUpdate then error('injected update failure') end
+                return path
+            end }
+        "#,
+            )
+            .eval()
+            .unwrap();
+        for fail in [false, true] {
+            vm.lua().globals().set("failUpdate", fail).unwrap();
+            let result = super::super::lua_path::call_path_effect_update(
+                &effect,
+                RawPath::new(),
+                nuxie_runtime::ScriptNode::snapshot(None, None),
+            );
+            if fail {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("injected update failure")
+                );
+            } else {
+                assert!(result.is_ok());
+            }
+            vm.lua().load(r#"
+                local rendererOk, rendererError = pcall(function() retainedRenderer:save() end)
+                assert(not rendererOk and string.find(tostring(rendererError), 'Renderer is no longer valid', 1, true))
+                local passOk, passError = pcall(function() retainedPass:finish() end)
+                assert(not passOk and string.find(tostring(passError), 'render pass expired', 1, true))
+            "#).exec().unwrap();
+            assert_eq!(events.borrow().last().map(String::as_str), Some("finish"));
+        }
+        assert_eq!(
+            events
+                .borrow()
+                .iter()
+                .filter(|event| *event == "finish")
+                .count(),
+            2
+        );
+        assert_eq!(
+            events
+                .borrow()
+                .iter()
+                .filter(|event| *event == "begin:0x00000000")
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -390,11 +660,18 @@ mod tests {
             .lua()
             .load("canvas:beginFrame()")
             .exec()
-            .expect_err("drawing phase gate");
-        assert!(outside.to_string().contains("outside drawing phase"));
+            .expect_err("recorder gate");
+        assert!(
+            outside
+                .to_string()
+                .contains("requires the deferred recorder")
+        );
+
+        vm.set_ore_context(Some(Rc::new(RefCell::new(
+            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+        ))));
 
         {
-            let _drawing = vm.canvas_drawing_phase().scoped();
             vm.lua()
                 .load(
                     "firstImage = canvas.image\n\
@@ -433,12 +710,14 @@ mod tests {
             .exec()
             .expect_err("injected replacement failure");
         assert!(failed.to_string().contains("failed to create RenderCanvas"));
-        let preserved: bool = vm
-            .lua()
-            .load("return canvas.width == 4 and canvas.image == firstImage")
-            .eval()
-            .unwrap();
-        assert!(preserved);
+        // A failed allocation leaves the prior backing alive, but the pending
+        // size is retried on field access. Inspect the retained owner itself.
+        let canvas: AnyUserData = vm.lua().globals().get("canvas").unwrap();
+        let preserved = canvas.borrow::<ScriptedCanvas>().unwrap();
+        assert_eq!(preserved.canvas.as_ref().unwrap().borrow().width(), 4);
+        let first_image: AnyUserData = vm.lua().globals().get("firstImage").unwrap();
+        assert_eq!(preserved.image.as_ref(), Some(&first_image));
+        drop(preserved);
 
         vm.lua().load("canvas:resize(0, 8)").exec().unwrap();
         let deferred: bool = vm
@@ -450,7 +729,6 @@ mod tests {
 
         vm.lua().load("canvas:resize(4, 3)").exec().unwrap();
         {
-            let _drawing = vm.canvas_drawing_phase().scoped();
             vm.lua()
                 .load("canvas:beginFrame('non-table descriptors are ignored'); canvas:endFrame()")
                 .exec()

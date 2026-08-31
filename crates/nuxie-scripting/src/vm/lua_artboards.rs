@@ -232,15 +232,6 @@ impl UserData for ScriptedArtboard {
                 })
             })
         });
-        methods.add_method("drawCanvas", |_, this, ()| {
-            this.bindings.with_factory(|factory| {
-                this.owner
-                    .artboard
-                    .retained_handle()
-                    .draw_canvas(factory)
-                    .map_err(|error| Error::runtime(error.to_string()))
-            })
-        });
     }
 }
 

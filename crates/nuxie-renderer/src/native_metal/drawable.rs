@@ -12,6 +12,7 @@ use super::{
     mechanical_render_context::MechanicalRenderContext,
 };
 use crate::RendererError;
+use objc2::Message;
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_metal::{MTLDrawable, MTLTexture};
@@ -19,21 +20,25 @@ use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
-/// One renderer frame borrowing the platform caller's presentation owner.
-pub struct NativeMetalDrawableFrame<'a> {
+/// One renderer frame retaining the platform caller's presentation owner.
+///
+/// Deferred replay stores its screen renderer independently of the caller's
+/// stack. Retain the same acquired drawable, like the upstream Metal host's
+/// current-frame surface, rather than extending a Rust borrow or reacquiring it.
+pub struct NativeMetalDrawableFrame {
     frame: NativeMetalFrame,
-    drawable: &'a ProtocolObject<dyn MTLDrawable>,
+    drawable: Retained<ProtocolObject<dyn MTLDrawable>>,
     mechanical: Rc<RefCell<MechanicalRenderContext>>,
     restore_texture: Retained<ProtocolObject<dyn MTLTexture>>,
     restore_width: u32,
     restore_height: u32,
 }
 
-impl<'a> NativeMetalDrawableFrame<'a> {
+impl NativeMetalDrawableFrame {
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     pub(super) fn new(
         mechanical: Rc<RefCell<MechanicalRenderContext>>,
-        drawable: &'a ProtocolObject<dyn MTLDrawable>,
+        drawable: &ProtocolObject<dyn MTLDrawable>,
         texture: Retained<ProtocolObject<dyn MTLTexture>>,
         restore_texture: Retained<ProtocolObject<dyn MTLTexture>>,
         restore_width: u32,
@@ -69,7 +74,7 @@ impl<'a> NativeMetalDrawableFrame<'a> {
         };
         Ok(Self {
             frame,
-            drawable,
+            drawable: drawable.retain(),
             mechanical,
             restore_texture,
             restore_width,
@@ -77,10 +82,10 @@ impl<'a> NativeMetalDrawableFrame<'a> {
         })
     }
 
-    /// Commits renderer work, then presents the borrowed drawable on the next
+    /// Commits renderer work, then presents the retained drawable on the next
     /// command buffer from the same queue, matching the pinned product oracle.
     pub fn finish(mut self) -> Result<NativeMetalExecutionInventory, RendererError> {
-        let inventory = self.frame.finish_present(self.drawable)?;
+        let inventory = self.frame.finish_present(&self.drawable)?;
         self.mechanical.borrow_mut().replace_target(
             self.restore_texture.clone(),
             self.restore_width,
@@ -90,7 +95,7 @@ impl<'a> NativeMetalDrawableFrame<'a> {
     }
 }
 
-impl Deref for NativeMetalDrawableFrame<'_> {
+impl Deref for NativeMetalDrawableFrame {
     type Target = NativeMetalFrame;
 
     fn deref(&self) -> &Self::Target {
@@ -98,13 +103,13 @@ impl Deref for NativeMetalDrawableFrame<'_> {
     }
 }
 
-impl DerefMut for NativeMetalDrawableFrame<'_> {
+impl DerefMut for NativeMetalDrawableFrame {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.frame
     }
 }
 
-impl Drop for NativeMetalDrawableFrame<'_> {
+impl Drop for NativeMetalDrawableFrame {
     fn drop(&mut self) {
         if self.mechanical.borrow().is_active_frame() {
             self.mechanical.borrow_mut().abandon_frame();

@@ -161,6 +161,9 @@ impl DerefMut for TextureViewVulkan {
     }
 }
 unsafe impl GpuResourcePayload for TextureViewVulkan {
+    fn texture_view_base(&self) -> Option<&TextureView> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
     }

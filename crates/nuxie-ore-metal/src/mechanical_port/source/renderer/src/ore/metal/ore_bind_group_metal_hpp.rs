@@ -25,23 +25,23 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
 // `Retained<T>` is the corresponding strong owner; `Option` preserves the
 // source `nil` state. The non-Apple stand-in keeps this source-shaped
 // translation available to tools that inspect it off Apple.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::runtime::ProtocolObject;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::{MTLSamplerState, MTLTexture};
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalTexture = Option<Retained<ProtocolObject<dyn MTLTexture>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalTexture = Option<()>;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalSampler = Option<Retained<ProtocolObject<dyn MTLSamplerState>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalSampler = Option<()>;
 
 // namespace rive::ore
@@ -188,6 +188,7 @@ unsafe impl Send for BindGroupMetal {}
 unsafe impl crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::GpuResourcePayload
     for BindGroupMetal
 {
+    fn bind_group_base(&self) -> Option<&BindGroup> { Some(&self.base) }
     fn gpu_resource(
         &self,
     ) -> &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::GPUResource
@@ -290,7 +291,7 @@ mod tests {
         assert!(std::mem::size_of::<BindGroupMetal>() > 0);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn buffer_record_resolves_the_live_backing_without_a_second_logical_owner() {
         use crate::types::BufferUsage;
@@ -344,7 +345,7 @@ mod tests {
         assert_eq!(buffer.debugging_refcnt(), 2);
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn native_texture_and_sampler_records_retain_exact_binding_handles() {
         use objc2::rc::Weak;

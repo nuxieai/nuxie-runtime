@@ -22,10 +22,23 @@ fi
 
 cargo tree --locked -p nuxie --no-default-features \
   --features ore-metal-authored-msl --target "$host_target" \
-  -e normal,build,dev >"$tree_file"
+  -e normal,build >"$tree_file"
 if grep -Eiq '(^|[[:space:]│├└─])(wgpu($|[-_ @v])|naga($|[ @v])|nuxie-renderer($|[ @v])|apple-msl-catalog($|[ @v]))' "$tree_file"; then
   echo "error: authenticated ORE Metal resolves a forbidden renderer dependency" >&2
   grep -Ei 'wgpu|naga|nuxie-renderer|apple-msl-catalog' "$tree_file" >&2
+  exit 1
+fi
+
+# Imported GPUCanvas execution now records through upstream's DeferredOreContext.
+# The test uses that recorder from nuxie-renderer; the ORE-only product above must
+# still remain independent of the renderer. Neither graph may resolve a compiler
+# or a fallback backend.
+cargo tree --locked -p nuxie --no-default-features \
+  --features ore-metal-authored-msl --target "$host_target" \
+  -e normal,build,dev >"$tree_file"
+if grep -Eiq '(^|[[:space:]│├└─])(wgpu($|[-_ @v])|naga($|[ @v])|apple-msl-catalog($|[ @v]))' "$tree_file"; then
+  echo "error: authenticated ORE Metal test resolves a forbidden dependency" >&2
+  grep -Ei 'wgpu|naga|apple-msl-catalog' "$tree_file" >&2
   exit 1
 fi
 
@@ -49,13 +62,13 @@ if ! file "$artifact" | grep -q 'Mach-O'; then
 fi
 nm -j "$artifact" >"$symbols_file"
 strings "$artifact" >"$strings_file"
-forbidden_marker='wgpu_(core|hal|types)|(^|[^[:alpha:]])wgpu([^[:alpha:]]|$)|naga(::|_)|(^|[^[:alpha:]])naga([^[:alpha:]]|$)|nuxie[-_]renderer|apple[-_]msl[-_]catalog'
+forbidden_marker='wgpu_(core|hal|types)|(^|[^[:alpha:]])wgpu([^[:alpha:]]|$)|naga(::|_)|(^|[^[:alpha:]])naga([^[:alpha:]]|$)|apple[-_]msl[-_]catalog'
 if grep -Eiq "$forbidden_marker" "$symbols_file" "$strings_file"; then
   echo "error: authenticated ORE Metal probe retains a forbidden renderer marker" >&2
   grep -Ei "$forbidden_marker" "$symbols_file" "$strings_file" | head -40 >&2
   exit 1
 fi
-if otool -L "$artifact" | tail -n +2 | grep -Eiq 'dawn|webgpu|wgpu|naga|nuxie[-_]renderer|apple[-_]msl[-_]catalog'; then
+if otool -L "$artifact" | tail -n +2 | grep -Eiq 'dawn|webgpu|wgpu|naga|apple[-_]msl[-_]catalog'; then
   echo "error: authenticated ORE Metal probe links a forbidden renderer library" >&2
   otool -L "$artifact" >&2
   exit 1

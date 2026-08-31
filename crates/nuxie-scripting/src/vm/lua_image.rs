@@ -34,9 +34,9 @@ impl ScriptedImageAssetOwners {
 /// One Lua Image wrapper, whether sourced from a File ImageAsset identity or
 /// an already-created render-factory image.
 ///
-pub(super) struct ScriptedImage {
+pub(crate) struct ScriptedImage {
     image: Rc<dyn RenderImage>,
-    cached_gpu_view: RefCell<Option<crate::gpu_canvas::GpuImageView>>,
+    cached_gpu_view: RefCell<Option<nuxie_ore_metal::gpu_resource::AnyResourceHandle>>,
 }
 
 impl ScriptedImage {
@@ -55,7 +55,7 @@ impl ScriptedImage {
         Self::from_render_image_rc(Rc::from(image))
     }
 
-    pub(super) fn from_render_image_rc(image: Rc<dyn RenderImage>) -> Self {
+    pub(crate) fn from_render_image_rc(image: Rc<dyn RenderImage>) -> Self {
         Self {
             image,
             cached_gpu_view: RefCell::new(None),
@@ -84,21 +84,7 @@ impl UserData for ScriptedImage {
             this.with_render_image(RenderImage::height)
         });
         fields.add_field_method_get("view", |lua, this| {
-            let mut cached = this.cached_gpu_view.borrow_mut();
-            if cached.is_none() {
-                let bindings = super::lua_renderer_library::RendererBindings::for_lua(lua)
-                    .ok_or_else(|| Error::runtime("GPU context not available for Image:view()"))?;
-                let image = bindings.with_factory(|factory| {
-                    factory
-                        .make_gpu_canvas_image_view(this.render_image()?)
-                        .map_err(|error| Error::runtime(error.to_string()))
-                })?;
-                *cached = Some(crate::gpu_canvas::GpuImageView::new(image));
-            }
-            cached
-                .as_ref()
-                .expect("Image:view cache was initialized")
-                .create_userdata(lua)
+            crate::gpu_canvas::ore::image_view(lua, this.render_image()?, &this.cached_gpu_view)
         });
     }
 }
@@ -173,9 +159,16 @@ mod tests {
 
     use crate::vm::ScriptVm;
 
-    struct TestImage;
+    #[derive(Clone, Default)]
+    struct TestImage(Rc<()>);
 
     impl RenderImage for TestImage {
+        fn retain_image(&self) -> Rc<dyn RenderImage> {
+            Rc::new(self.clone())
+        }
+        fn image_identity(&self) -> usize {
+            Rc::as_ptr(&self.0) as usize
+        }
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
@@ -261,9 +254,17 @@ mod tests {
         let mut factory = PersistentFactory::new(ImageViewFactory(RecordingFactory::new()));
         vm.install_render_factory(&mut factory).unwrap();
         vm.install_rive_globals().unwrap();
+        let mut recorder =
+            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None);
+        recorder.setCanvasRegistry(Some(Rc::new(RefCell::new(
+            nuxie_renderer::deferred::cmd::foreign_image_registry::ForeignImageRegistry::default(),
+        ))));
+        vm.set_ore_context(Some(Rc::new(RefCell::new(recorder))));
         let lua = vm.lua();
         let image = lua
-            .create_userdata(ScriptedImage::from_render_image(Box::new(TestImage)))
+            .create_userdata(ScriptedImage::from_render_image(Box::new(
+                TestImage::default(),
+            )))
             .unwrap();
         lua.globals().set("image", image).unwrap();
 
@@ -283,22 +284,19 @@ mod tests {
 
         let image = lua.globals().get::<AnyUserData>("image").unwrap();
         let image = image.borrow::<ScriptedImage>().unwrap();
-        let binding = image
-            .cached_gpu_view
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .binding_for_test();
-        assert_eq!(binding.width, 7);
-        assert_eq!(binding.height, 11);
-        assert!(binding.external_image.is_some());
+        let cached = image.cached_gpu_view.borrow().as_ref().unwrap().clone();
+        let view = cached.textureViewBase().unwrap();
+        assert_eq!(view.texture().width(), Some(7));
+        assert_eq!(view.texture().height(), Some(11));
 
         let lua = Lua::new();
         lua.globals()
             .set(
                 "image",
-                lua.create_userdata(ScriptedImage::from_render_image(Box::new(TestImage)))
-                    .unwrap(),
+                lua.create_userdata(ScriptedImage::from_render_image(Box::new(
+                    TestImage::default(),
+                )))
+                .unwrap(),
             )
             .unwrap();
         let error = lua

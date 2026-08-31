@@ -433,7 +433,6 @@ pub enum LuaAtoms {
     Resize,
     Canvas,
     GpuCanvas,
-    DrawCanvas,
     Features,
     Shader,
     Format,
@@ -937,7 +936,6 @@ pub fn find_atom(name: &str) -> Option<LuaAtoms> {
         "canvas" => Some(LuaAtoms::Canvas),
         "gpuCanvas" => Some(LuaAtoms::GpuCanvas),
         "features" => Some(LuaAtoms::Features),
-        "drawCanvas" => Some(LuaAtoms::DrawCanvas),
         "shader" => Some(LuaAtoms::Shader),
         "format" => Some(LuaAtoms::Format),
         "andThen" => Some(LuaAtoms::AndThen),
@@ -2195,7 +2193,6 @@ pub struct ScriptingContextData {
     pub render_context: Option<*mut Factory>,
     pub owner_id: u64,
     pub ore_frame_open: bool,
-    pub canvas_drawing_phase: bool,
     pub gpu_canvas_defer_only: bool,
     pub previous_gl_context: isize,
     #[cfg(target_family = "wasm")]
@@ -2224,7 +2221,6 @@ impl ScriptingContextData {
             render_context: None,
             owner_id: 0,
             ore_frame_open: false,
-            canvas_drawing_phase: false,
             gpu_canvas_defer_only: false,
             previous_gl_context: 0,
             #[cfg(target_family = "wasm")]
@@ -2501,14 +2497,6 @@ pub trait ScriptingContext {
         self.data().ore_frame_open
     }
 
-    fn set_canvas_drawing_phase(&mut self, value: bool) {
-        self.data_mut().canvas_drawing_phase = value;
-    }
-
-    fn canvas_drawing_phase(&self) -> bool {
-        self.data().canvas_drawing_phase
-    }
-
     fn set_gpu_canvas_defer_only(&mut self, value: bool) {
         self.data_mut().gpu_canvas_defer_only = value;
     }
@@ -2654,35 +2642,6 @@ impl Drop for ScopedScriptedObjectContext {
     fn drop(&mut self) {
         if let Some(context) = self.context {
             unsafe { &mut *context }.set_current_scripted_object(self.previous);
-        }
-    }
-}
-
-pub struct ScopedCanvasDrawingPhase {
-    context: Option<*mut dyn ScriptingContext>,
-    previous: bool,
-}
-
-impl ScopedCanvasDrawingPhase {
-    pub fn new(context: Option<&mut dyn ScriptingContext>) -> Self {
-        let previous = context
-            .as_ref()
-            .is_some_and(|context| context.canvas_drawing_phase());
-        let context_pointer = context.map(|context| context as *mut dyn ScriptingContext);
-        if let Some(context) = context_pointer {
-            unsafe { &mut *context }.set_canvas_drawing_phase(true);
-        }
-        Self {
-            context: context_pointer,
-            previous,
-        }
-    }
-}
-
-impl Drop for ScopedCanvasDrawingPhase {
-    fn drop(&mut self) {
-        if let Some(context) = self.context {
-            unsafe { &mut *context }.set_canvas_drawing_phase(self.previous);
         }
     }
 }

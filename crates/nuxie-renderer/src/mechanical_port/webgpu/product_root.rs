@@ -11,36 +11,36 @@ use super::render_context_webgpu_decl::{
     ContextOptions, RenderContextWebGPUImpl, RenderTargetWebGPU,
 };
 use super::webgpu_cpp_decl::{
-    Adapter, AdapterInfo, BackendType, Buffer, BufferUsage, CallbackMode, CommandEncoder,
-    Device, ErrorType, FeatureName, Instance, InstanceFeatureName, MapAsyncStatus, MapMode,
+    Adapter, AdapterInfo, BackendType, Buffer, BufferUsage, CallbackMode, CommandEncoder, Device,
+    ErrorType, FeatureName, Instance, InstanceFeatureName, MapAsyncStatus, MapMode,
     PowerPreference, Queue, QueueWorkDoneStatus, RequestAdapterStatus, RequestDeviceStatus,
     Texture, TextureDimension, TextureFormat, TextureUsage, WaitStatus,
 };
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use super::webgpu_cpp_decl::{
-    CompositeAlphaMode, EmscriptenSurfaceSourceCanvasHTMLSelector, Surface,
-    SurfaceCapabilities, SurfaceConfiguration, SurfaceTexture, TextureViewDimension,
+    CompositeAlphaMode, EmscriptenSurfaceSourceCanvasHTMLSelector, Surface, SurfaceCapabilities,
+    SurfaceConfiguration, SurfaceTexture, TextureViewDimension,
 };
 use super::webgpu_decl::{
-    WGPUFeatureLevel_Undefined, WGPUFuture, WGPUFutureWaitInfo, WGPUOrigin3D,
-    WGPURequestAdapterOptions, WGPUStringView, WGPUTexelCopyBufferInfo,
-    WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo, WGPUTextureAspect_All,
-    WGPUTextureDescriptor, WGPUBufferDescriptor, WGPUExtent3D, WGPU_STRLEN,
+    WGPU_STRLEN, WGPUBufferDescriptor, WGPUExtent3D, WGPUFeatureLevel_Undefined, WGPUFuture,
+    WGPUFutureWaitInfo, WGPUOrigin3D, WGPURequestAdapterOptions, WGPUStringView,
+    WGPUTexelCopyBufferInfo, WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo,
+    WGPUTextureAspect_All, WGPUTextureDescriptor,
 };
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use super::webgpu_decl::{WGPUSurfaceDescriptor, WGPUTextureViewDescriptor};
-use crate::exact_source_adapter::ExactSourceBackend;
 use crate::exact_gpu_canvas::ExactGpuCanvas;
+use crate::exact_source_adapter::ExactSourceBackend;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, FrameDescriptor, RenderContext, RenderContextContract,
 };
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 use crate::{RenderMode, RendererError};
 use nuxie_render_api::{
     GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShaderArtifact,
     GpuCanvasShaderProfile, RenderGpuCanvasShader,
 };
-use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 
 const WAIT_FOREVER: u64 = u64::MAX;
 const COPY_ROW_ALIGNMENT: usize = 256;
@@ -259,8 +259,7 @@ impl WebGpuProductBackend {
                     "create exact Dawn WebGPU target view".into(),
                 ));
             }
-            unsafe { &mut *target.get() }
-                .setTargetTextureView(target_view, target_texture.clone());
+            unsafe { &mut *target.get() }.setTargetTextureView(target_view, target_texture.clone());
             (target, target_texture)
         };
 
@@ -347,16 +346,28 @@ impl WebGpuProductBackend {
         &mut self,
     ) -> Result<&mut ExactGpuCanvas<super::ContextWGPU>, GpuCanvasError> {
         if self.gpu_canvas.is_none() {
-            let context = self
-                .implementation_mut()
-                .makeOreContext()
-                .ok_or_else(|| GpuCanvasError::new("exact WebGPU ORE context is unavailable"))?;
-            self.gpu_canvas = Some(ExactGpuCanvas::new(
+            let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) }.oreExecutable();
+            let context = match unsafe { context.as_ref() } {
+                Some(
+                    crate::mechanical_port::source::include::rive::factory_hpp::OreContext::WGPU(
+                        context,
+                    ),
+                ) => context.clone(),
+                _ => {
+                    return Err(GpuCanvasError::new(
+                        "exact WebGPU ORE context is unavailable",
+                    ));
+                }
+            };
+            self.gpu_canvas = Some(ExactGpuCanvas::new_shared(
                 context,
                 GpuCanvasShaderProfile::WebGpu,
             )?);
         }
-        Ok(self.gpu_canvas.as_mut().expect("initialized WebGPU ORE context"))
+        Ok(self
+            .gpu_canvas
+            .as_mut()
+            .expect("initialized WebGPU ORE context"))
     }
 
     fn resize_target(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
@@ -379,12 +390,8 @@ impl WebGpuProductBackend {
 
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
-            let configuration = browser_surface_configuration(
-                &self.device,
-                self.surface_format,
-                width,
-                height,
-            );
+            let configuration =
+                browser_surface_configuration(&self.device, self.surface_format, width, height);
             unsafe { self.surface.Configure(&configuration) };
             self.width = width;
             self.height = height;
@@ -397,7 +404,10 @@ impl WebGpuProductBackend {
         ))
     }
 
-    fn submit_and_wait(&self, command_buffer: &super::webgpu_cpp_decl::CommandBuffer) -> Result<(), RendererError> {
+    fn submit_and_wait(
+        &self,
+        command_buffer: &super::webgpu_cpp_decl::CommandBuffer,
+    ) -> Result<(), RendererError> {
         let raw = command_buffer.Get();
         unsafe { self.queue.Submit(1, &raw) };
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -405,27 +415,25 @@ impl WebGpuProductBackend {
 
         #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         {
-        let completion = Rc::new(RefCell::new(None));
-        let callback_completion = Rc::clone(&completion);
-        let future = unsafe {
-            self.queue.OnSubmittedWorkDone(
-                CallbackMode::WaitAnyOnly,
-                move |status, message| {
-                    *callback_completion.borrow_mut() = Some((status, copy_string(&message)));
-                },
-            )
-        };
-        await_future(&self.instance, future, "wait for Dawn queue")?;
-        let (status, message) = completion
-            .borrow_mut()
-            .take()
-            .ok_or_else(|| RendererError::Device("Dawn queue callback did not run".into()))?;
-        if status != QueueWorkDoneStatus::Success {
-            return Err(RendererError::Device(format!(
-                "Dawn queue completion failed: {message}"
-            )));
-        }
-        Ok(())
+            let completion = Rc::new(RefCell::new(None));
+            let callback_completion = Rc::clone(&completion);
+            let future = unsafe {
+                self.queue
+                    .OnSubmittedWorkDone(CallbackMode::WaitAnyOnly, move |status, message| {
+                        *callback_completion.borrow_mut() = Some((status, copy_string(&message)));
+                    })
+            };
+            await_future(&self.instance, future, "wait for Dawn queue")?;
+            let (status, message) = completion
+                .borrow_mut()
+                .take()
+                .ok_or_else(|| RendererError::Device("Dawn queue callback did not run".into()))?;
+            if status != QueueWorkDoneStatus::Success {
+                return Err(RendererError::Device(format!(
+                    "Dawn queue completion failed: {message}"
+                )));
+            }
+            Ok(())
         }
     }
 
@@ -495,12 +503,7 @@ impl WebGpuProductBackend {
                 },
             )
         };
-        await_callback(
-            &self.instance,
-            future,
-            &mapping,
-            "map Dawn readback buffer",
-        )?;
+        await_callback(&self.instance, future, &mapping, "map Dawn readback buffer")?;
         let (status, message) = mapping
             .borrow_mut()
             .take()
@@ -521,8 +524,7 @@ impl WebGpuProductBackend {
         let mut pixels = vec![0; packed_row_bytes * self.height as usize];
         for row in 0..self.height as usize {
             let source_row = row;
-            let source_pixels =
-                &source[source_row * padded_row_bytes..][..packed_row_bytes];
+            let source_pixels = &source[source_row * padded_row_bytes..][..packed_row_bytes];
             let destination = &mut pixels[row * packed_row_bytes..][..packed_row_bytes];
             destination.copy_from_slice(source_pixels);
         }
@@ -546,6 +548,8 @@ impl ExactSourceBackend for WebGpuProductBackend {
                 "exact WebGPU context already has an active frame".into(),
             ));
         }
+        self.gpu_canvas_mut()
+            .map_err(|error| RendererError::Device(error.to_string()))?;
         #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         {
             let mut surface_texture = SurfaceTexture::default();
@@ -562,11 +566,8 @@ impl ExactSourceBackend for WebGpuProductBackend {
                 &mut *Pin::get_unchecked_mut(target.as_mut())
                     .static_impl_cast::<RenderContextWebGPUImpl>()
             };
-            let mut render_target = implementation.makeRenderTarget(
-                self.surface_format,
-                surface_width,
-                surface_height,
-            );
+            let mut render_target =
+                implementation.makeRenderTarget(self.surface_format, surface_width, surface_height);
             if !render_target.operator_bool() {
                 return Err(RendererError::Device(
                     "create exact wasm32 WebGPU render target".into(),
@@ -577,9 +578,7 @@ impl ExactSourceBackend for WebGpuProductBackend {
                 dimension: TextureViewDimension::e2D.into(),
                 ..Default::default()
             };
-            let target_view = unsafe {
-                surface_texture.texture.CreateView(&view_descriptor)
-            };
+            let target_view = unsafe { surface_texture.texture.CreateView(&view_descriptor) };
             if target_view.Get().is_null() {
                 return Err(RendererError::Device(
                     "create exact wasm32 WebGPU canvas texture view".into(),
@@ -612,6 +611,13 @@ impl ExactSourceBackend for WebGpuProductBackend {
         }
         unsafe { Pin::get_unchecked_mut(self.context_pin()) }.beginFrameExecutable(&descriptor);
         self.frame_number = self.frame_number.wrapping_add(1);
+        // TestingWindow::beginOreFrame retains a copy of the encoder shared
+        // with ORE; the product frame submits it after both ORE and 2D work.
+        self.gpu_canvas
+            .as_mut()
+            .expect("initialized ORE context")
+            .context_mut()
+            .beginFrameExternal(encoder.clone());
         self.command_encoder = Some(encoder);
         self.active_frame = true;
         Ok(self.frame_number)
@@ -639,6 +645,10 @@ impl ExactSourceBackend for WebGpuProductBackend {
 
     fn abort_frame(&mut self) {
         if self.active_frame {
+            self.gpu_canvas
+                .as_mut()
+                .expect("active ORE frame")
+                .end_frame();
             unsafe { Pin::get_unchecked_mut(self.context_pin()) }.abortFrameExecutable();
             self.command_encoder.take();
             self.active_frame = false;
@@ -678,11 +688,21 @@ impl ExactSourceBackend for WebGpuProductBackend {
         // encoder to submit at that point: queue order makes the completed
         // offscreen write visible before the still-unsubmitted presentation
         // commands sample it. The two ORE contexts never share an encoder.
-        let canvas = self.implementation_mut().makeRenderCanvas(plan.width, plan.height);
+        let canvas = self
+            .implementation_mut()
+            .makeRenderCanvas(plan.width, plan.height);
         if !canvas.operator_bool() {
             return Err(GpuCanvasError::new(
                 "exact WebGPU failed to create a GPU-canvas render target",
             ));
+        }
+        if self.active_frame {
+            return self.gpu_canvas_mut()?.execute_current_frame(
+                &canvas,
+                pipelines,
+                plan,
+                &execution_anchor,
+            );
         }
         let encoder = unsafe { self.device.CreateCommandEncoder(std::ptr::null()) };
         if encoder.Get().is_null() {
@@ -693,15 +713,9 @@ impl ExactSourceBackend for WebGpuProductBackend {
         let execution = {
             let gpu_canvas = self.gpu_canvas_mut()?;
             let frame_number = gpu_canvas.next_frame_number();
-            gpu_canvas
-                .context_mut()
-                .beginFrameExternal(encoder.clone());
-            let result = gpu_canvas.execute_current_frame(
-                &canvas,
-                pipelines,
-                plan,
-                &execution_anchor,
-            );
+            gpu_canvas.context_mut().beginFrameExternal(encoder.clone());
+            let result =
+                gpu_canvas.execute_current_frame(&canvas, pipelines, plan, &execution_anchor);
             gpu_canvas.end_frame();
             let _ = frame_number;
             result
@@ -725,6 +739,10 @@ impl WebGpuProductBackend {
                 "exact WebGPU frame ownership mismatch".into(),
             ));
         }
+        self.gpu_canvas
+            .as_mut()
+            .expect("active ORE frame")
+            .end_frame();
         let encoder = self
             .command_encoder
             .as_ref()

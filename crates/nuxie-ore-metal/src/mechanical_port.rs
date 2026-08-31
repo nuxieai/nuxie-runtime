@@ -2,5 +2,5 @@
 pub mod source;
 
 #[doc(hidden)]
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 mod target_inventory;

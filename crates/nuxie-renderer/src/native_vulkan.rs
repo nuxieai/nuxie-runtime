@@ -70,6 +70,12 @@ impl NativeVulkanFactory {
 }
 
 impl Factory for NativeVulkanFactory {
+    fn is_render_context(&self) -> bool {
+        true
+    }
+    fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+        self.core.ore()
+    }
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
         self.core.gpu_canvas_shader_profile()
     }

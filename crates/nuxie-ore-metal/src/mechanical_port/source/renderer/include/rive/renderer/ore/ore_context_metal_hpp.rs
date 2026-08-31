@@ -13,7 +13,9 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_context_metal.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
+// e949 public override: bool usesDeferredFrameReplay() const override { return true; }
+// Its executable dispatch lives with ContextApi in ore_context_metal_mm.rs.
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -35,29 +37,29 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resou
 // corresponding Rust owner; `Option` preserves each source `nil` state. The
 // non-Apple stand-ins keep this source-shaped translation available to tools
 // that inspect it off Apple.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::runtime::ProtocolObject;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::{MTLCommandBuffer, MTLCommandQueue, MTLDevice};
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalDevice = Option<Retained<ProtocolObject<dyn MTLDevice>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalDevice = Option<()>;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalQueue = Option<Retained<ProtocolObject<dyn MTLCommandQueue>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalQueue = Option<()>;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalCommandBuffer = Option<Retained<ProtocolObject<dyn MTLCommandBuffer>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalCommandBuffer = Option<()>;
 
 // namespace rive::ore

@@ -48,6 +48,8 @@ objc2 = { version = "0.6.4", optional = true }
 objc2-metal = { version = "0.3.2", optional = true, default-features = false, features = ["MTLAllocation", "MTLCommandQueue", "MTLDevice", "MTLPixelFormat", "MTLResource", "MTLTexture", "MTLTypes"] }
 
 [dev-dependencies]
+nuxie-ore-metal = { path = "../nuxie-ore-metal", default-features = false }
+nuxie-renderer = { path = "../nuxie-renderer", default-features = false }
 luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }

@@ -14,15 +14,15 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
-#![cfg(target_vendor = "apple")]
+#![cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use super::*;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use core::ffi::c_void;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use std::ptr::NonNull;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::{MTLOrigin, MTLRegion, MTLSize, MTLTexture};
 
 // namespace rive::ore

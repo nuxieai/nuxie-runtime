@@ -3,6 +3,8 @@
 //! Every product renderer is selected explicitly. This crate contains no
 //! legacy Rust-WGPU renderer and does not provide automatic backend fallback.
 
+use nuxie_render_api::authored_ore_shader;
+pub mod deferred;
 mod renderer_types;
 pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};
 

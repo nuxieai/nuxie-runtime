@@ -5,6 +5,9 @@
 //! Rust owns buffer bounds, pipeline layout, binding identity, pass lifecycle,
 //! and the typed renderer handoff.
 
+#[path = "gpu_canvas_ore/mod.rs"]
+pub(crate) mod ore;
+
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -15,10 +18,11 @@ use luaur_rt::{
     AnyUserData, Buffer as LuaBuffer, Function, MultiValue, Table, UserData, UserDataFields,
     UserDataMethods, Value, VmState,
 };
+use nuxie_render_api::authored_ore_shader::{ExactGpuCanvasShaderOccurrence, profile_for_target};
 use nuxie_render_api::{
-    Factory as RenderFactory, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShaderArtifact,
-    GpuCanvasShaderEntry, GpuCanvasShaderEntrySelection, GpuCanvasShaderProfile,
-    GpuCanvasShaderProvenance, GpuCanvasShaderStage, RenderGpuCanvasShader, RenderImage,
+    Factory as RenderFactory, GpuCanvasPlan, GpuCanvasShaderArtifact, GpuCanvasShaderEntry,
+    GpuCanvasShaderEntrySelection, GpuCanvasShaderProfile, GpuCanvasShaderProvenance,
+    GpuCanvasShaderStage, RenderGpuCanvasShader, RenderImage,
 };
 pub use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment, GpuCanvasColorTarget,
@@ -736,7 +740,6 @@ impl std::fmt::Debug for GpuCanvasState {
 #[derive(Debug, Clone)]
 struct GpuCanvas {
     state: Rc<RefCell<GpuCanvasState>>,
-    canvas_drawing_phase: crate::vm::CanvasDrawingPhase,
 }
 
 impl UserData for GpuCanvas {
@@ -789,11 +792,6 @@ impl UserData for GpuCanvas {
             })
         });
         methods.add_method("beginRenderPass", |lua, this, descriptor: Table| {
-            if !this.canvas_drawing_phase.is_active() {
-                return Err(Error::runtime(
-                    "GPUCanvas:beginRenderPass() called outside drawing phase",
-                ));
-            }
             reject_unknown_fields(
                 &descriptor,
                 &["color", "depthStencil", "label"],
@@ -942,8 +940,49 @@ pub(crate) struct RegisteredGpuCanvasShaderAsset {
     asset: RegisteredGpuCanvasShaderAssetState,
     provenance: Option<GpuCanvasShaderProvenance>,
     decoded: Option<(GpuCanvasShaderProfile, GpuCanvasShaderArtifact)>,
-    prepared_module: Option<Arc<dyn RenderGpuCanvasShader>>,
-    module_prepared: bool,
+    prepared_module: Option<PreparedGpuCanvasShader>,
+}
+
+struct PreparedGpuCanvasShader {
+    // Retaining the context also prevents its allocation identity being reused
+    // while the prepared module still names that device.
+    context: nuxie_render_api::OreContextHandle,
+    profile: GpuCanvasShaderProfile,
+    module: Arc<dyn RenderGpuCanvasShader>,
+}
+
+struct SelectedShaderContext {
+    context: nuxie_render_api::OreContextHandle,
+    profile: GpuCanvasShaderProfile,
+    factory_matches: bool,
+}
+
+impl SelectedShaderContext {
+    fn new(bindings: &RendererBindings) -> Option<Self> {
+        // lua_gpu.cpp obtains both the shader target and modules from the
+        // selected ORE context, which may override the construction factory.
+        let context = bindings.ore_context()?;
+        let profile = profile_for_target(context.borrow().shaderTarget());
+        let factory_matches = bindings
+            .with_factory(|factory| {
+                Ok(factory.ore().is_some_and(|factory_context| {
+                    Rc::ptr_eq(&context, &factory_context)
+                        && factory.gpu_canvas_shader_profile() == profile
+                }))
+            })
+            .unwrap_or(false);
+        Some(Self {
+            context,
+            profile,
+            factory_matches,
+        })
+    }
+
+    fn matches(&self, prepared: &PreparedGpuCanvasShader) -> bool {
+        self.factory_matches
+            && self.profile == prepared.profile
+            && Rc::ptr_eq(&self.context, &prepared.context)
+    }
 }
 
 impl std::fmt::Debug for RegisteredGpuCanvasShaderAsset {
@@ -952,7 +991,7 @@ impl std::fmt::Debug for RegisteredGpuCanvasShaderAsset {
             .debug_struct("RegisteredGpuCanvasShaderAsset")
             .field("asset", &self.asset)
             .field("decoded", &self.decoded)
-            .field("module_prepared", &self.module_prepared)
+            .field("module_prepared", &self.prepared_module.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -977,7 +1016,6 @@ impl RegisteredGpuCanvasShaderAsset {
             provenance,
             decoded: None,
             prepared_module: None,
-            module_prepared: false,
         }
     }
     pub(crate) fn new(
@@ -996,7 +1034,6 @@ impl RegisteredGpuCanvasShaderAsset {
             provenance,
             decoded: None,
             prepared_module: None,
-            module_prepared: false,
         }
     }
 
@@ -1021,7 +1058,6 @@ impl RegisteredGpuCanvasShaderAsset {
                 asset.decode_for_profile(name, profile, self.provenance.clone())?,
             ));
             self.prepared_module = None;
-            self.module_prepared = false;
         }
         self.decoded
             .as_ref()
@@ -1082,25 +1118,44 @@ impl GpuCanvasShaderCatalog {
                     }
                 }
                 let (registered_name, owner) = selected?;
-                let profile = renderer_bindings?
-                    .with_factory(|factory| Ok(factory.gpu_canvas_shader_profile()))
-                    .ok()?;
+                let bindings = renderer_bindings?;
+                let selected = SelectedShaderContext::new(bindings)?;
                 let mut owner = owner.borrow_mut();
-                let shader = owner.resolve(&registered_name, profile).ok()?.clone();
+                let shader = owner
+                    .resolve(&registered_name, selected.profile)
+                    .ok()?
+                    .clone();
                 if shader.entries().is_empty() {
                     return None;
                 }
-                let module = if owner.module_prepared {
-                    let prepared = owner.prepared_module.as_ref()?;
-                    renderer_bindings?
+                if owner
+                    .prepared_module
+                    .as_ref()
+                    .is_some_and(|prepared| !selected.matches(prepared))
+                {
+                    owner.prepared_module = None;
+                }
+                let module: Arc<dyn RenderGpuCanvasShader> = if !selected.factory_matches {
+                    let anchor: Rc<dyn std::any::Any> = Rc::new(selected.context.clone());
+                    Arc::new(
+                        ExactGpuCanvasShaderOccurrence::compile(
+                            &mut *selected.context.borrow_mut(),
+                            selected.profile,
+                            &shader,
+                            anchor,
+                        )
+                        .ok()?,
+                    )
+                } else if let Some(prepared) = owner.prepared_module.as_ref() {
+                    bindings
                         .with_factory(|factory| {
                             factory
-                                .make_gpu_canvas_shader_occurrence(prepared)
+                                .make_gpu_canvas_shader_occurrence(&prepared.module)
                                 .map_err(|error| Error::runtime(error.to_string()))
                         })
                         .ok()?
                 } else {
-                    renderer_bindings?
+                    bindings
                         .with_factory(|factory| {
                             factory
                                 .make_gpu_canvas_shader_artifact(&shader)
@@ -1123,7 +1178,6 @@ pub(crate) struct GpuCanvasContextBindings {
     canvases: Rc<RefCell<Vec<Rc<RefCell<GpuCanvasState>>>>>,
     shaders: GpuCanvasShaderCatalog,
     renderer_bindings: Option<RendererBindings>,
-    canvas_drawing_phase: crate::vm::CanvasDrawingPhase,
 }
 
 impl GpuCanvasContextBindings {
@@ -1138,14 +1192,25 @@ impl GpuCanvasContextBindings {
         };
         let entries = shaders.borrow().clone();
         for entry in entries {
+            let Some(selected) = SelectedShaderContext::new(bindings) else {
+                continue;
+            };
+            // Async preparation belongs to the selected factory/device only.
+            // Recorder overrides compile directly on that recorder at lookup.
+            if !selected.factory_matches {
+                continue;
+            }
             let shader = {
-                let profile =
-                    bindings.with_factory(|factory| Ok(factory.gpu_canvas_shader_profile()))?;
                 let mut owner = entry.owner.borrow_mut();
-                if owner.module_prepared {
+                if owner
+                    .prepared_module
+                    .as_ref()
+                    .is_some_and(|prepared| selected.matches(prepared))
+                {
                     continue;
                 }
-                match owner.resolve(&entry.name, profile) {
+                owner.prepared_module = None;
+                match owner.resolve(&entry.name, selected.profile) {
                     Ok(shader) => shader.clone(),
                     Err(_) => continue,
                 }
@@ -1153,9 +1218,26 @@ impl GpuCanvasContextBindings {
             let load = bindings
                 .with_factory(|factory| Ok(factory.load_gpu_canvas_shader_artifact(&shader)))?;
             if let Ok(module) = load.resolve().await {
+                let prepared = PreparedGpuCanvasShader {
+                    context: selected.context,
+                    profile: selected.profile,
+                    module,
+                };
+                // A device/recorder can be replaced while the browser awaits
+                // validation. Never publish a module into the new route.
+                if !SelectedShaderContext::new(bindings)
+                    .is_some_and(|current| current.matches(&prepared))
+                {
+                    continue;
+                }
                 let mut owner = entry.owner.borrow_mut();
-                owner.prepared_module = Some(module);
-                owner.module_prepared = true;
+                if owner
+                    .decoded
+                    .as_ref()
+                    .is_some_and(|(profile, _)| *profile == prepared.profile)
+                {
+                    owner.prepared_module = Some(prepared);
+                }
             }
         }
         Ok(())
@@ -1171,6 +1253,9 @@ impl GpuCanvasContextBindings {
         width: u32,
         height: u32,
     ) -> Result<AnyUserData> {
+        if let Some(bindings) = self.renderer_bindings.as_ref() {
+            return ore::Canvas::create(lua, bindings.clone(), width, height);
+        }
         if width > MAX_GPU_CANVAS_DIMENSION || height > MAX_GPU_CANVAS_DIMENSION {
             return Err(Error::runtime(format!(
                 "GPUCanvas:resize dimensions must be at most {MAX_GPU_CANVAS_DIMENSION}"
@@ -1182,10 +1267,7 @@ impl GpuCanvasContextBindings {
             ..GpuCanvasState::default()
         }));
         self.canvases.borrow_mut().push(Rc::clone(&state));
-        lua.create_userdata(GpuCanvas {
-            state,
-            canvas_drawing_phase: self.canvas_drawing_phase.clone(),
-        })
+        lua.create_userdata(GpuCanvas { state })
     }
 
     #[cfg(test)]
@@ -1194,7 +1276,6 @@ impl GpuCanvasContextBindings {
             canvases: Rc::new(RefCell::new(Vec::new())),
             shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::new())),
             renderer_bindings: None,
-            canvas_drawing_phase: crate::vm::CanvasDrawingPhase::default(),
         }
     }
 
@@ -1205,6 +1286,12 @@ impl GpuCanvasContextBindings {
         else {
             return Ok(MultiValue::new());
         };
+        if self.renderer_bindings.is_some() {
+            let Some(shader) = ore::shader_userdata(lua, shader)? else {
+                return Ok(MultiValue::new());
+            };
+            return Ok(MultiValue::from_vec(vec![Value::UserData(shader)]));
+        }
         lua.create_userdata(shader)
             .map(|shader| MultiValue::from_vec(vec![Value::UserData(shader)]))
     }
@@ -1237,7 +1324,6 @@ impl ImportedGpuCanvasInstance {
             canvases: Rc::clone(&canvases),
             shaders: GpuCanvasShaderCatalog::Imported(Rc::clone(&shaders)),
             renderer_bindings: Some(renderer_bindings.clone()),
-            canvas_drawing_phase: renderer_bindings.canvas_drawing_phase().clone(),
         };
         (
             Self {
@@ -1246,71 +1332,6 @@ impl ImportedGpuCanvasInstance {
             },
             bindings,
         )
-    }
-
-    pub(crate) fn execute_draw_canvas(
-        &self,
-        table: &Table,
-        factory: &mut dyn RenderFactory,
-    ) -> Result<()> {
-        let value: Value = table.get("drawCanvas")?;
-        let Value::Function(function) = value else {
-            return Ok(());
-        };
-        let _drawing_phase = self.renderer_bindings.canvas_drawing_phase().scoped();
-        let canvases = self.canvases.borrow().clone();
-        for canvas in &canvases {
-            let mut state = canvas.borrow_mut();
-            state.completed = None;
-            state.image = None;
-            state.unfinished_passes = 0;
-        }
-        self.renderer_bindings.verify_render_context(factory)?;
-        function.call::<()>((table.clone(),))?;
-        let mut completed_count = 0;
-        for canvas in canvases {
-            if canvas.borrow().unfinished_passes != 0 {
-                canvas.borrow_mut().completed = None;
-                return Err(Error::runtime(
-                    "GPU render pass left open at script return; call finish() on every pass",
-                ));
-            }
-            let Some(completed) = canvas.borrow_mut().completed.take() else {
-                continue;
-            };
-            completed_count += 1;
-            let pipelines = completed
-                .pipelines
-                .iter()
-                .map(|pipeline| {
-                    let vertex = pipeline.vertex_shader.module.clone().ok_or_else(|| {
-                        Error::runtime("GPU-canvas vertex shader has no backend module occurrence")
-                    })?;
-                    let fragment = pipeline
-                        .fragment_shader
-                        .as_ref()
-                        .map(|shader| {
-                            shader.module.clone().ok_or_else(|| {
-                                Error::runtime(
-                                    "GPU-canvas fragment shader has no backend module occurrence",
-                                )
-                            })
-                        })
-                        .transpose()?;
-                    Ok(GpuCanvasPipelineShaders { vertex, fragment })
-                })
-                .collect::<Result<Vec<_>>>()?;
-            let image = factory
-                .make_gpu_canvas_image_with_pipelines(&pipelines, &completed.plan)
-                .map_err(|error| Error::runtime(format!("GPU-canvas render failed: {error}")))?;
-            canvas.borrow_mut().image = Some(image);
-        }
-        if completed_count == 0 {
-            return Err(Error::runtime(
-                "gpu-canvas drawCanvas did not finish a render pass",
-            ));
-        }
-        Ok(())
     }
 }
 
@@ -1322,7 +1343,7 @@ pub(crate) fn with_gpu_canvas_image<R>(
     let image = state
         .image
         .as_deref()
-        .ok_or_else(|| Error::runtime("GPU-canvas image is unavailable before drawCanvas"))?;
+        .ok_or_else(|| Error::runtime("GPU-canvas image is unavailable before draw"))?;
     Ok(callback(image))
 }
 
@@ -2050,7 +2071,6 @@ pub struct GpuCanvasBytecodeProgram {
     instance: Table,
     state: Rc<RefCell<GpuCanvasState>>,
     execution_budget: Rc<Cell<u32>>,
-    canvas_drawing_phase: crate::vm::CanvasDrawingPhase,
 }
 
 impl std::fmt::Debug for GpuCanvasBytecodeProgram {
@@ -2082,7 +2102,6 @@ impl GpuCanvasBytecodeProgram {
         let resource_budget = Rc::new(RefCell::new(GpuCanvasResourceBudget::default()));
         install_gpu_canvas_globals_with_budget(&vm, resource_budget)?;
         let canvases = Rc::new(RefCell::new(Vec::new()));
-        let canvas_drawing_phase = crate::vm::CanvasDrawingPhase::default();
         let bindings = GpuCanvasContextBindings {
             canvases: Rc::clone(&canvases),
             shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::from([(
@@ -2101,7 +2120,6 @@ impl GpuCanvasBytecodeProgram {
                 ],
             )]))),
             renderer_bindings: None,
-            canvas_drawing_phase: canvas_drawing_phase.clone(),
         };
         let context = vm.lua().create_userdata(bindings)?;
         let chunk = vm.load_bytecode("gpu-canvas", bytecode)?;
@@ -2123,7 +2141,6 @@ impl GpuCanvasBytecodeProgram {
             instance,
             state,
             execution_budget,
-            canvas_drawing_phase,
         })
     }
 
@@ -2171,21 +2188,20 @@ impl GpuCanvasBytecodeProgram {
             .set(cpp_c_string_prefix(key), cpp_c_string_prefix(value))
     }
 
-    /// Execute `drawCanvas` and return the exact Rust-owned completed pass.
+    /// Execute the direct-host `draw` callback and return its completed plan.
     pub fn draw(&mut self) -> Result<GpuCanvasDrawPlan> {
         {
             let mut state = self.state.borrow_mut();
             state.completed = None;
             state.unfinished_passes = 0;
         }
-        let method: Value = self.instance.get("drawCanvas")?;
+        let method: Value = self.instance.get("draw")?;
         let Value::Function(method) = method else {
             return Err(Error::runtime(
-                "gpu-canvas script instance has no drawCanvas function",
+                "gpu-canvas script instance has no draw function",
             ));
         };
         self.execution_budget.set(MAX_LUAU_INTERRUPTS_PER_CALL);
-        let _drawing_phase = self.canvas_drawing_phase.scoped();
         method.call::<()>((self.instance.clone(),))?;
         if self.state.borrow().unfinished_passes != 0 {
             self.state.borrow_mut().completed = None;
@@ -2198,7 +2214,7 @@ impl GpuCanvasBytecodeProgram {
             .completed
             .take()
             .map(|completed| completed.plan)
-            .ok_or_else(|| Error::runtime("gpu-canvas drawCanvas did not finish a render pass"))
+            .ok_or_else(|| Error::runtime("gpu-canvas draw did not finish a render pass"))
     }
 
     pub fn vm(&self) -> &ScriptVm {
@@ -2211,10 +2227,11 @@ fn cpp_c_string_prefix(value: &str) -> &str {
 }
 
 pub(crate) fn install_gpu_canvas_globals(vm: &ScriptVm) -> Result<()> {
-    install_gpu_canvas_globals_with_budget(
-        vm,
-        Rc::new(RefCell::new(GpuCanvasResourceBudget::default())),
-    )
+    ore::install(vm.lua())
+}
+
+pub(crate) fn close_orphan_render_pass(bindings: &RendererBindings) -> Result<bool> {
+    ore::close_orphan_render_pass(bindings)
 }
 
 fn resolve_shader_entry(
@@ -3157,6 +3174,8 @@ mod tests {
         GpuCanvasContextBindings, GpuCanvasShaderEntry, GpuCanvasShaderStage, GpuShader,
         checked_gpu_buffer_write_range, resolve_shader_entry,
     };
+    #[cfg(feature = "compiler")]
+    use super::{Rc, RefCell, RendererBindings, ore};
     use crate::vm::ScriptVm;
 
     fn compile_source(source: &str) -> Vec<u8> {
@@ -3184,22 +3203,30 @@ mod tests {
     }
 
     #[test]
-    fn begin_render_pass_rejects_calls_outside_the_canvas_drawing_phase() {
+    #[cfg(feature = "compiler")]
+    fn begin_render_pass_requires_a_recording_context() {
         let vm = ScriptVm::new();
-        let bindings = GpuCanvasContextBindings::for_test();
-        let canvas = bindings.canvas_userdata(vm.lua()).unwrap();
+        vm.install_rive_globals().unwrap();
+        vm.set_ore_context(Some(Rc::new(RefCell::new(
+            crate::vm::upstream_scripting_gpu_features::FakeDeviceContext::new(
+                nuxie_ore_metal::types::Features::default(),
+            ),
+        ))));
+        let canvas =
+            ore::Canvas::create(vm.lua(), RendererBindings::for_lua(vm.lua()).unwrap(), 0, 0)
+                .unwrap();
         vm.lua().globals().set("canvas", canvas).unwrap();
 
         let error = vm
             .eval_bytecode::<()>(
-                "outside_canvas_drawing_phase",
+                "requires_deferred_recorder",
                 &compile_source("canvas:beginRenderPass({})"),
             )
-            .expect_err("beginRenderPass must be gated by ScopedCanvasDrawingPhase");
+            .expect_err("beginRenderPass must be gated by the recording context");
         assert!(
             error
                 .to_string()
-                .contains("GPUCanvas:beginRenderPass() called outside drawing phase"),
+                .contains("GPUCanvas:beginRenderPass() requires the deferred recorder"),
             "{error}",
         );
     }

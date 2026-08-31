@@ -129,6 +129,9 @@ impl Drop for ShaderModule {
 }
 
 unsafe impl GpuResourcePayload for ShaderModule {
+    fn shader_module_base(&self) -> Option<&ShaderModule> {
+        Some(self)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         &self.base
     }

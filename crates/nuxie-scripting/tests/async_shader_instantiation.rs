@@ -14,6 +14,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::task::{Context, Poll};
 
+#[path = "support/recording_gpu.rs"]
+mod recording_gpu;
+
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie_render_api::{
     ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasShader, GpuCanvasShaderLoad,
@@ -40,7 +43,7 @@ return function(context)
     }
     canvas:resize(8, 8)
     return {
-        drawCanvas = function(self)
+        draw = function(self)
             local pass = canvas:beginRenderPass {
                 color = { { loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 } } },
             }
@@ -48,7 +51,6 @@ return function(context)
             pass:draw(3)
             pass:finish()
         end,
-        draw = function(self, renderer) end,
     }
 end
 "#;
@@ -72,7 +74,7 @@ return function(context)
     local canvas = context:gpuCanvas()
     local pipeline = nil
     return {
-        drawCanvas = function(self)
+        draw = function(self)
             if pipeline == nil then
                 local shader = context:shader("scene")
                 pipeline = GPUPipeline.new {
@@ -90,7 +92,6 @@ return function(context)
             pass:draw(3)
             pass:finish()
         end,
-        draw = function(self, renderer) end,
     }
 end
 "#;
@@ -108,7 +109,7 @@ return function(context)
     }
     canvas:resize(8, 8)
     return {
-        drawCanvas = function(self)
+        draw = function(self)
             local pass = canvas:beginRenderPass {
                 color = { { loadOp = "clear", storeOp = "store", clearColor = { 0, 0, 0, 1 } } },
             }
@@ -116,7 +117,6 @@ return function(context)
             pass:draw(3)
             pass:finish()
         end,
-        draw = function(self, renderer) end,
     }
 end
 "#;
@@ -185,21 +185,37 @@ fn complete_shader_payload(color: &str) -> Vec<u8> {
     payload
 }
 
-#[derive(Debug)]
 struct ObservedShader {
     domain: Weak<()>,
     occurrence_id: u64,
+    source: GpuCanvasShader,
+    module: nuxie_ore_metal::gpu_resource::AnyResourceHandle,
 }
 
 impl RenderGpuCanvasShader for ObservedShader {
+    fn ore_shader_entry(
+        &self,
+        _: nuxie_render_api::GpuCanvasShaderStage,
+        _: &str,
+    ) -> Option<nuxie_ore_metal::gpu_resource::AnyResourceHandle> {
+        Some(self.module.clone())
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
-struct TestImage;
+#[derive(Clone, Default)]
+struct TestImage(std::rc::Rc<()>);
 
 impl RenderImage for TestImage {
+    fn retain_image(&self) -> std::rc::Rc<dyn RenderImage> {
+        std::rc::Rc::new(self.clone())
+    }
+
+    fn image_identity(&self) -> usize {
+        std::rc::Rc::as_ptr(&self.0) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -247,6 +263,7 @@ struct AsyncFactory {
     occurrence_calls: u32,
     next_occurrence_id: u64,
     image_occurrences: Vec<(u64, u64)>,
+    gpu: recording_gpu::RecordingGpu,
 }
 
 impl AsyncFactory {
@@ -260,20 +277,39 @@ impl AsyncFactory {
             occurrence_calls: 0,
             next_occurrence_id: 1,
             image_occurrences: Vec::new(),
+            gpu: recording_gpu::RecordingGpu::new(),
         }
     }
 
-    fn fresh_observed_shader(&mut self) -> Arc<dyn RenderGpuCanvasShader> {
+    fn fresh_observed_shader(
+        &mut self,
+        source: &GpuCanvasShader,
+    ) -> Arc<dyn RenderGpuCanvasShader> {
         let occurrence_id = self.next_occurrence_id;
         self.next_occurrence_id += 1;
         Arc::new(ObservedShader {
             domain: Arc::downgrade(&self.domain),
             occurrence_id,
+            source: source.clone(),
+            module: self.gpu.shader(occurrence_id, source),
         })
     }
 }
 
 impl Factory for AsyncFactory {
+    fn is_render_context(&self) -> bool {
+        true
+    }
+    fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+        Some(self.gpu.context.clone())
+    }
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn nuxie_render_api::RenderCanvas>, nuxie_render_api::RenderCanvasError> {
+        Ok(recording_gpu::canvas(width, height))
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -327,13 +363,13 @@ impl Factory for AsyncFactory {
 
     fn make_gpu_canvas_shader(
         &mut self,
-        _shader: &GpuCanvasShader,
+        shader: &GpuCanvasShader,
     ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
         self.make_calls += 1;
         if self.reject_modules {
             return Err(GpuCanvasError::new("device rejected the physical module"));
         }
-        Ok(self.fresh_observed_shader())
+        Ok(self.fresh_observed_shader(shader))
     }
 
     fn make_gpu_canvas_shader_occurrence(
@@ -354,7 +390,7 @@ impl Factory for AsyncFactory {
                 "shader belongs to another factory/device domain",
             ));
         }
-        Ok(self.fresh_observed_shader())
+        Ok(self.fresh_observed_shader(&observed.source))
     }
 
     fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {
@@ -391,7 +427,7 @@ impl Factory for AsyncFactory {
         }
         self.image_occurrences
             .push((occurrence_ids[0], occurrence_ids[1]));
-        Ok(Box::new(TestImage))
+        Ok(Box::new(TestImage::default()))
     }
 }
 
@@ -428,10 +464,140 @@ fn awaited_shader_closure_keeps_captured_canvas_after_coroutine_completes() {
 
     // The captured canvas/pipeline upvalues must still be the live userdata
     // once the coroutine is dead; UNIV-1764's browser abort surfaced here as
-    // a Luau index error inside drawCanvas.
+    // a Luau index error inside draw.
     instance
-        .call_draw_canvas(&mut factory)
-        .expect("drawCanvas method-indexes the captured canvas after the await");
+        .call_draw(
+            &mut factory,
+            &mut nuxie_render_api::NullRenderer,
+            &mut NoopScriptHost,
+        )
+        .expect("draw method-indexes the captured canvas after the await");
+    assert_eq!(factory.borrow().gpu.draws.get(), 1);
+}
+
+#[test]
+fn shader_lookup_uses_selected_ore_target_and_recorder_not_prepared_factory() {
+    use nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext;
+    use std::{cell::RefCell, rc::Rc};
+    let vm = ScriptVm::new();
+    vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("routing"))
+        .unwrap();
+    let mut factory = PersistentFactory::new(AsyncFactory::new(false));
+    let program = vm
+        .register_protocol_script_with_factory(
+            "routing",
+            &script_payload(
+                br#"
+        return function(context)
+            return { evaluate = function(self) return context:shader("scene") ~= nil end }
+        end
+    "#,
+            ),
+            &mut factory,
+        )
+        .unwrap();
+    let mut instance =
+        block_on(vm.instantiate_registered_script_with_factory_async(&program, &mut factory))
+            .unwrap();
+    assert_eq!(factory.borrow().load_calls, 1);
+
+    // An unbound recorder selects GLSL upstream. This WGSL-only asset must not
+    // silently use the construction factory's target/prepared module instead.
+    vm.set_ore_context(Some(Rc::new(RefCell::new(DeferredOreContext::new(None)))));
+    assert_eq!(
+        instance
+            .call_method(
+                nuxie_runtime::ScriptMethod::Evaluate,
+                &[],
+                &mut NoopScriptHost
+            )
+            .unwrap(),
+        nuxie_runtime::ScriptValue::Bool(false)
+    );
+
+    // Two distinct recording contexts with the same target must each own the
+    // modules their pipelines will consume. A profile-only cache is not enough.
+    for _ in 0..2 {
+        let recorder = Rc::new(RefCell::new(DeferredOreContext::new(Some(
+            factory.borrow().gpu.context.clone(),
+        ))));
+        vm.set_ore_context(Some(recorder.clone()));
+        assert_eq!(
+            instance
+                .call_method(
+                    nuxie_runtime::ScriptMethod::Evaluate,
+                    &[],
+                    &mut NoopScriptHost
+                )
+                .unwrap(),
+            nuxie_runtime::ScriptValue::Bool(true)
+        );
+        assert!(
+            !recorder.borrow().stream().borrow().empty(),
+            "selected recorder must receive module creation"
+        );
+    }
+    assert_eq!(
+        factory.borrow().make_calls,
+        1,
+        "override lookups must not compile on the construction device"
+    );
+    assert_eq!(
+        factory.borrow().occurrence_calls,
+        0,
+        "prepared device modules cannot cross recorder domains"
+    );
+}
+
+#[test]
+fn changing_selected_ore_during_async_preparation_discards_old_device_module() {
+    use nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext;
+    use std::{cell::RefCell, rc::Rc};
+    let vm = ScriptVm::new();
+    vm.register_gpu_canvas_shader_asset("scene", &complete_shader_payload("route-during-await"))
+        .unwrap();
+    let mut factory = PersistentFactory::new(AsyncFactory::new(false));
+    let program = vm
+        .register_protocol_script_with_factory(
+            "route-during-await",
+            &script_payload(
+                br#"
+        return function(context)
+            local shader = context:shader("scene")
+            return { evaluate = function(self) return shader ~= nil end }
+        end
+    "#,
+            ),
+            &mut factory,
+        )
+        .unwrap();
+    let recorder = Rc::new(RefCell::new(DeferredOreContext::new(Some(
+        factory.borrow().gpu.context.clone(),
+    ))));
+    let mut future =
+        Box::pin(vm.instantiate_registered_script_with_factory_async(&program, &mut factory));
+    let waker = std::task::Waker::noop();
+    assert!(
+        future
+            .as_mut()
+            .poll(&mut Context::from_waker(waker))
+            .is_pending()
+    );
+    vm.set_ore_context(Some(recorder.clone()));
+    let mut instance = block_on(future).unwrap();
+    assert_eq!(
+        instance
+            .call_method(
+                nuxie_runtime::ScriptMethod::Evaluate,
+                &[],
+                &mut NoopScriptHost
+            )
+            .unwrap(),
+        nuxie_runtime::ScriptValue::Bool(true)
+    );
+    assert!(!recorder.borrow().stream().borrow().empty());
+    assert_eq!(factory.borrow().load_calls, 1);
+    assert_eq!(factory.borrow().occurrence_calls, 0);
 }
 
 #[test]
@@ -453,9 +619,14 @@ fn prepared_shader_is_available_to_lazy_draw_canvas_lookup() {
     assert_eq!(factory.borrow().load_calls, 1);
 
     instance
-        .call_draw_canvas(&mut factory)
-        .expect("drawCanvas reuses the prepared physical module");
+        .call_draw(
+            &mut factory,
+            &mut nuxie_render_api::NullRenderer,
+            &mut NoopScriptHost,
+        )
+        .expect("draw reuses the prepared physical module");
     assert_eq!(factory.borrow().load_calls, 1);
+    assert_eq!(factory.borrow().gpu.draws.get(), 1);
 }
 
 #[test]
@@ -479,11 +650,20 @@ fn prepared_same_name_lookups_publish_distinct_shader_occurrences() {
     assert_eq!(factory.borrow().occurrence_calls, 2);
 
     instance
-        .call_draw_canvas(&mut factory)
+        .call_draw(
+            &mut factory,
+            &mut nuxie_render_api::NullRenderer,
+            &mut NoopScriptHost,
+        )
         .expect("distinct occurrences can be used in one pipeline");
-    let image_occurrences = factory.borrow().image_occurrences.clone();
+    let image_occurrences = factory.borrow().gpu.pipelines.borrow().clone();
     assert_eq!(image_occurrences.len(), 1);
     assert_ne!(image_occurrences[0].0, image_occurrences[0].1);
+    assert!(
+        factory.borrow().image_occurrences.is_empty(),
+        "recording must not submit an immediate image render"
+    );
+    assert_eq!(factory.borrow().gpu.draws.get(), 1);
 }
 
 #[test]

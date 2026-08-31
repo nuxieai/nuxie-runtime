@@ -94,6 +94,9 @@ impl DerefMut for BindGroupGL {
 unsafe impl Send for BindGroupGL {}
 
 unsafe impl GpuResourcePayload for BindGroupGL {
+    fn bind_group_base(&self) -> Option<&BindGroup> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
     }

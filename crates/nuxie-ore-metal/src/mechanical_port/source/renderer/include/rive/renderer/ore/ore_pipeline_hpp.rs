@@ -11,7 +11,10 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_pipeline.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
+// Both upstream Pipeline constructors now call ownVertexLayout(). The Rust
+// PipelineSnapshot below owns the copied buffers and their attribute vectors;
+// absent source layouts normalize to zero entries before snapshot construction.
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -27,7 +30,7 @@ use super::ore_types_hpp::{
     ColorTargetState, CullMode, DepthStencilState, FaceWinding, IndexFormat, PipelineDesc,
     PrimitiveTopology, StencilFaceState, VertexAttribute, VertexStepMode, kMaxBindGroups,
 };
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use crate::mechanical_port::source::renderer::src::ore::metal::ore_shader_module_metal_hpp::ShaderModuleMetal;
 
 #[derive(Clone)]
@@ -63,13 +66,18 @@ pub struct PipelineSnapshot {
 
 impl PipelineSnapshot {
     pub fn from_desc(desc: &PipelineDesc<'_>) -> Option<Self> {
-        let vertex_buffers = desc.vertexBuffers.unwrap_or(&[]);
-        let vertex_buffers = vertex_buffers.get(..desc.vertexBufferCount as usize)?;
+        // ownVertexLayout normalizes an absent layout pointer to zero entries.
+        let vertex_buffers = if let Some(layouts) = desc.vertexBuffers {
+            layouts.get(..desc.vertexBufferCount as usize)?
+        } else {
+            &[]
+        };
         let vertexBuffers = vertex_buffers
             .iter()
             .map(|layout| {
                 let attributes = layout
                     .attributes
+                    .unwrap_or(&[])
                     .get(..layout.attributeCount as usize)?
                     .to_vec();
                 Some(VertexBufferLayoutSnapshot {
@@ -169,17 +177,8 @@ impl Pipeline {
     pub(crate) fn new(desc: &PipelineDesc<'_>) -> Option<Self> {
         let mut m_bindingMap = BindingMap::default();
         let module = desc.vertexModule.or(desc.fragmentModule);
-        if let Some(module) = module {
-            #[cfg(target_vendor = "apple")]
-            if let Some(module) = module.downcast_ref::<ShaderModuleMetal>() {
-                m_bindingMap = module.base.m_bindingMap.clone();
-            } else if let Some(module) = module.downcast_ref::<ShaderModule>() {
-                m_bindingMap = module.m_bindingMap.clone();
-            }
-            #[cfg(not(target_vendor = "apple"))]
-            if let Some(module) = module.downcast_ref::<ShaderModule>() {
-                m_bindingMap = module.m_bindingMap.clone();
-            }
+        if let Some(module) = module.and_then(AnyResourceHandle::shaderModuleBase) {
+            m_bindingMap = module.m_bindingMap.clone();
         }
         let m_desc = PipelineSnapshot::from_desc(desc)?;
         let mut m_layouts = std::array::from_fn(|_| None);
@@ -234,7 +233,7 @@ mod tests {
         }];
         let layouts = [VertexBufferLayout {
             stride: 28,
-            attributes: &attrs,
+            attributes: Some(&attrs),
             attributeCount: attrs.len() as u32,
             ..VertexBufferLayout::default()
         }];

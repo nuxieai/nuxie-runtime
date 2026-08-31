@@ -61,7 +61,7 @@
 #![allow(non_upper_case_globals)]
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{
-    rcp, static_rcp_cast, RefCntTarget,
+    RefCntTarget, rcp, static_rcp_cast,
 };
 use crate::mechanical_port::source::include::rive::renderer_hpp::RenderImage;
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
@@ -257,21 +257,6 @@ impl Drop for RiveRenderImage {
     }
 }
 
-impl nuxie_render_api::RenderImage for RiveRenderImage {
-    fn as_any(&self) -> &dyn core::any::Any {
-        self
-    }
-    fn width(&self) -> u32 {
-        self.width().max(0) as u32
-    }
-    fn height(&self) -> u32 {
-        self.height().max(0) as u32
-    }
-    fn uv_transform(&self) -> Mat2D {
-        *self.uvTransform()
-    }
-}
-
 /// Immutable product handle for the exact intrusive RiveRenderImage produced
 /// by RenderContext image decoding. Cloning this wrapper performs the source
 /// rcp retain; it never copies or boxes the complete image allocation.
@@ -383,6 +368,45 @@ impl Clone for RiveRenderImageHandle {
 }
 
 impl nuxie_render_api::RenderImage for RiveRenderImageHandle {
+    fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
+        let texture = self.source().refTexture();
+        if texture.get().is_null() {
+            return None;
+        }
+        #[cfg(all(
+            feature = "native-ore-metal-experimental",
+            any(
+                target_os = "ios",
+                target_os = "macos",
+                target_os = "tvos",
+                target_os = "visionos"
+            )
+        ))]
+        if let Some(attached) = &self.execution_domain {
+            if let Some(info) = crate::native_metal::ore_image_texture_info(
+                self,
+                &attached._domain_guard,
+                self.source().width().max(0) as u32,
+                self.source().height().max(0) as u32,
+            ) {
+                return Some(info);
+            }
+        }
+        let retained: Rc<dyn nuxie_render_api::RenderImage> = Rc::new(self.clone());
+        Some(nuxie_ore_metal::context::CanvasTextureInfo {
+            canvas: std::ptr::null_mut(),
+            texture: texture.get().cast(),
+            width: self.source().width().max(0) as u32,
+            height: self.source().height().max(0) as u32,
+            owner: Some(Rc::new(retained)),
+        })
+    }
+    fn retain_image(&self) -> Rc<dyn nuxie_render_api::RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        self.source.get() as usize
+    }
     fn as_any(&self) -> &dyn core::any::Any {
         self
     }
@@ -436,10 +460,7 @@ mod tests {
 
         let attached = RiveRenderImageHandle::from_exact(image)
             .expect("source image")
-            .with_execution_domain(
-                RenderResourceDomain::new(),
-                Rc::clone(&matching_anchor),
-            );
+            .with_execution_domain(RenderResourceDomain::new(), Rc::clone(&matching_anchor));
         assert!(
             attached
                 .source_texture_for_execution_anchor(&foreign_anchor)

@@ -20384,7 +20384,7 @@ static DEF_236_PROPERTIES: &[Property] = &[
         declared_type: "uint",
         runtime_type: FieldKind::Uint,
         description: Some(
-            "Bitfield of the optional script methods (init/draw/drawCanvas/advance/etc.) the editor detected by executing the generator. Bit layout matches OptionalScriptedMethods (bits 0-20). The runtime reads these directly instead of detecting at load. Defaults to all bits set ((1<<21)-1 = 2097151) so files exported before this property existed behave as \'implements everything\' and rely on graceful dispatch (each callback no-ops when the method isn\'t actually present).",
+            "Bitfield of the optional script methods (init/draw/advance/etc.) the editor detected by executing the generator. Bit layout matches OptionalScriptedMethods (bits 0-20). The runtime reads these directly instead of detecting at load. Defaults to all bits set ((1<<21)-1 = 2097151) so files exported before this property existed behave as \'implements everything\' and rely on graceful dispatch (each callback no-ops when the method isn\'t actually present).",
         ),
         initial_value: Some("2097151"),
         initial_value_runtime: None,

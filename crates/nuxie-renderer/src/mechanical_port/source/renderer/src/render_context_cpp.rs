@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/render_context.cpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -199,6 +199,12 @@
 //                                                   uint32_t height)
 // {
 //     return m_impl->makeRenderCanvas(width, height);
+// }
+//
+// rcp<RenderCanvas> RenderContext::makeDeferredRenderCanvas(uint32_t width,
+//                                                           uint32_t height)
+// {
+//     return m_impl->makeDeferredRenderCanvas(width, height);
 // }
 // rive::ore::Context* RenderContext::ore()
 // {
@@ -4153,14 +4159,7 @@ fn emscripten_libcpp_sort_draw_entries(entries: &mut [DrawSortEntry]) {
         }
     }
 
-    fn sort5(
-        entries: &mut [DrawSortEntry],
-        x1: usize,
-        x2: usize,
-        x3: usize,
-        x4: usize,
-        x5: usize,
-    ) {
+    fn sort5(entries: &mut [DrawSortEntry], x1: usize, x2: usize, x3: usize, x4: usize, x5: usize) {
         sort4(entries, x1, x2, x3, x4);
         if less(entries, x5, x4) {
             entries.swap(x4, x5);
@@ -4225,11 +4224,7 @@ fn emscripten_libcpp_sort_draw_entries(entries: &mut [DrawSortEntry]) {
         }
     }
 
-    fn insertion_sort_incomplete(
-        entries: &mut [DrawSortEntry],
-        first: usize,
-        last: usize,
-    ) -> bool {
+    fn insertion_sort_incomplete(entries: &mut [DrawSortEntry], first: usize, last: usize) -> bool {
         match last - first {
             0 | 1 => return true,
             2 => {
@@ -4893,6 +4888,12 @@ impl RenderContext {
         self.m_impl.contract_mut().makeRenderCanvas(width, height)
     }
 
+    pub fn makeDeferredRenderCanvasExecutable(&mut self, width: u32, height: u32) -> crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>{
+        self.m_impl
+            .contract_mut()
+            .makeDeferredRenderCanvas(width, height)
+    }
+
     /// Product adapter for the exact `ScriptedCanvas::endFrame()` sequence in
     /// pinned `src/lua/renderer/lua_gpu.cpp`: allocate one backend command
     /// buffer, flush into the canvas target, then commit that same buffer.
@@ -4914,7 +4915,12 @@ impl RenderContext {
         };
     }
 
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
     pub fn oreExecutable(&mut self) -> *mut OreContext {
         if self.m_ore_context.is_none() {
             self.m_ore_context = self.m_impl.contract_mut().makeOreContext();
@@ -4922,6 +4928,19 @@ impl RenderContext {
         self.m_ore_context
             .as_deref_mut()
             .map_or(core::ptr::null_mut(), |value| value)
+    }
+
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
+    pub fn oreHandleExecutable(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+        self.oreExecutable();
+        self.m_ore_context
+            .as_ref()
+            .map(|context| context.shared_handle())
     }
 
     pub unsafe fn decodeImageExecutable(
@@ -5518,7 +5537,8 @@ impl RenderContext {
                     let members = &mut *self.members;
                     let implementation = members.m_impl.contract_mut();
                     if !unsafe {
-                        members.$field
+                        members
+                            .$field
                             .mapElementsWith(counts.$count, |bytes| implementation.$method(bytes))
                     } {
                         return false;
@@ -5562,7 +5582,8 @@ impl RenderContext {
                     let members = &mut *self.members;
                     let implementation = members.m_impl.contract_mut();
                     unsafe {
-                        members.$field
+                        members
+                            .$field
                             .unmapElementsWith(counts.$count, |bytes| implementation.$method(bytes))
                     };
                 }
@@ -5615,7 +5636,12 @@ impl Drop for RenderContext {
             self.m_bitmap_decoder = None;
         }
         self.m_logical_flushes.clear();
-        #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+        #[cfg(any(
+            feature = "native-ore-metal-experimental",
+            feature = "native-ore-vulkan-experimental",
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        ))]
         {
             self.m_ore_context = None;
         }
@@ -5660,9 +5686,19 @@ impl Drop for RenderContext {
             core::ptr::drop_in_place(&mut self.m_intersection_board);
             trace_drop!("indirectDrawList");
             core::ptr::drop_in_place(&mut self.m_indirect_draw_list);
-            #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+            #[cfg(any(
+                feature = "native-ore-metal-experimental",
+                feature = "native-ore-vulkan-experimental",
+                feature = "native-webgpu-experimental",
+                feature = "ore-gl"
+            ))]
             trace_drop!("oreContext");
-            #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+            #[cfg(any(
+                feature = "native-ore-metal-experimental",
+                feature = "native-ore-vulkan-experimental",
+                feature = "native-webgpu-experimental",
+                feature = "ore-gl"
+            ))]
             core::ptr::drop_in_place(&mut self.m_ore_context);
             trace_drop!("implementation");
             core::ptr::drop_in_place(&mut self.m_impl);
@@ -5960,8 +5996,7 @@ impl LogicalFlush {
                 bottom: iy as u16 + padded_height,
             };
             debug_assert!(
-                AABBu16::new(0, 0, atlas_max_width, atlas_max_height)
-                    .contains(*padded_region)
+                AABBu16::new(0, 0, atlas_max_width, atlas_max_height).contains(*padded_region)
             );
             self.m_feather_atlas_max_x = self
                 .m_feather_atlas_max_x
@@ -6777,9 +6812,7 @@ impl LogicalFlush {
                 if features.supportsClipScissor
                     && (draw.clipID() != 0 || draw.clippingPixelBounds().is_some())
                 {
-                    let mut clip = draw
-                        .clippingPixelBounds()
-                        .unwrap_or(IAABB::makeMaximal());
+                    let mut clip = draw.clippingPixelBounds().unwrap_or(IAABB::makeMaximal());
                     if draw.clipID() != 0 {
                         let tight = self.getClipInfo(draw.clipID()).tightenedBounds;
                         clip = clip.intersect(tight);
@@ -6876,7 +6909,9 @@ impl LogicalFlush {
             #[cfg(all(target_arch = "wasm32", feature = "native-webgl2-experimental"))]
             emscripten_libcpp_sort_draw_entries(&mut context.m_indirect_draw_list);
             #[cfg(not(all(target_arch = "wasm32", feature = "native-webgl2-experimental")))]
-            context.m_indirect_draw_list.sort_unstable_by_key(|entry| entry.sortKey);
+            context
+                .m_indirect_draw_list
+                .sort_unstable_by_key(|entry| entry.sortKey);
             self.writeSortedDrawsExecutable(&features);
         }
 
@@ -7889,13 +7924,23 @@ impl FactoryContract for RenderContext {
     }
 
     unsafe fn ore(&mut self) -> *mut OreContext {
-        #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+        #[cfg(any(
+            feature = "native-ore-metal-experimental",
+            feature = "native-ore-vulkan-experimental",
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        ))]
         {
             // SAFETY: the concrete RenderContext owns the configured ORE
             // context for the duration of this source virtual call.
             return self.oreExecutable();
         }
-        #[cfg(not(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental")))]
+        #[cfg(not(any(
+            feature = "native-ore-metal-experimental",
+            feature = "native-ore-vulkan-experimental",
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        )))]
         {
             core::ptr::null_mut()
         }
@@ -7977,7 +8022,15 @@ impl RenderContextContract for RenderContext {
     fn makeRenderCanvas(&mut self,width:u32,height:u32)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>{
         self.makeRenderCanvasExecutable(width, height)
     }
-    #[cfg(any(feature = "native-ore-metal-experimental", feature = "native-ore-vulkan-experimental"))]
+    fn makeDeferredRenderCanvas(&mut self,width:u32,height:u32)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>{
+        self.makeDeferredRenderCanvasExecutable(width, height)
+    }
+    #[cfg(any(
+        feature = "native-ore-metal-experimental",
+        feature = "native-ore-vulkan-experimental",
+        feature = "native-webgpu-experimental",
+        feature = "ore-gl"
+    ))]
     fn getOreContext(&mut self) -> *mut OreContext {
         self.oreExecutable()
     }

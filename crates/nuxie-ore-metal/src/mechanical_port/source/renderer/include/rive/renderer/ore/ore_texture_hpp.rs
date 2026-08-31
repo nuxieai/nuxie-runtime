@@ -257,7 +257,7 @@ pub struct TextureViewMembers {
     // Strong source owner: the view retains its texture for the entire view
     // lifetime, matching `rcp<Texture> m_texture` in the pinned header.
     // rcp<Texture> m_texture;
-    pub(crate) m_texture: AnyResourceHandle,
+    pub(crate) m_texture: Option<AnyResourceHandle>,
     // TextureViewDimension m_dimension;
     pub(crate) m_dimension: TextureViewDimension,
     // TextureAspect m_aspect;
@@ -307,6 +307,9 @@ impl Drop for TextureView {
 }
 
 unsafe impl GpuResourcePayload for TextureView {
+    fn texture_view_base(&self) -> Option<&TextureView> {
+        Some(self)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         &self.base
     }
@@ -323,7 +326,12 @@ impl TextureView {
     // The nullable raw-pointer result is represented as an optional borrow;
     // `m_texture` itself remains the owning `rcp<Texture>`.
     pub fn texture(&self) -> &AnyResourceHandle {
-        &self.m_texture
+        self.m_texture
+            .as_ref()
+            .expect("nonnull backend texture view")
+    }
+    pub fn textureOption(&self) -> Option<&AnyResourceHandle> {
+        self.m_texture.as_ref()
     }
 
     // TextureViewDimension dimension() const { return m_dimension; }
@@ -375,6 +383,13 @@ impl TextureView {
     //     m_layerCount(desc.layerCount)
     // {}
     pub(crate) fn new(texture: AnyResourceHandle, desc: &TextureViewDesc<'_>) -> Self {
+        Self::new_nullable(Some(texture), desc)
+    }
+
+    pub(crate) fn new_nullable(
+        texture: Option<AnyResourceHandle>,
+        desc: &TextureViewDesc<'_>,
+    ) -> Self {
         Self {
             base: ManuallyDrop::new(GPUResource::new(None)),
             members: ManuallyDrop::new(TextureViewMembers {

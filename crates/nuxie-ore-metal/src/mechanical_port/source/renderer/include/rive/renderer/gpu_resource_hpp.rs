@@ -24,11 +24,12 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
+use super::ore::ore_bind_group_hpp::BindGroup;
 use super::ore::ore_bind_group_layout_hpp::BindGroupLayout;
 use super::ore::ore_buffer_hpp::{BufferApi, BufferUpdateError};
 use super::ore::ore_pipeline_hpp::Pipeline;
 use super::ore::ore_shader_module_hpp::{ShaderModule, TextureSamplerPair};
-use super::ore::ore_texture_hpp::{TextureApi, TextureUploadError};
+use super::ore::ore_texture_hpp::{TextureApi, TextureUploadError, TextureView};
 use super::ore::ore_types_hpp::{BufferUsage, TextureDataDesc, TextureFormat, TextureType};
 
 // namespace rive::gpu
@@ -592,6 +593,17 @@ pub unsafe trait GpuResourcePayload: Any {
     fn gpu_resource(&self) -> &GPUResource;
     fn gpu_resource_mut(&mut self) -> &mut GPUResource;
 
+    /// Source base projection for deferred recording, independent of backend RTTI.
+    fn texture_view_base(&self) -> Option<&TextureView> {
+        None
+    }
+    fn shader_module_base(&self) -> Option<&ShaderModule> {
+        None
+    }
+    fn bind_group_base(&self) -> Option<&BindGroup> {
+        None
+    }
+
     /// Optional projection to the source's offset-zero `ore::Pipeline` base.
     ///
     /// C++ render passes accept `Pipeline*` before performing backend RTTI.
@@ -643,6 +655,9 @@ type TextureInfoDispatch = unsafe fn(NonNull<GPUResource>) -> TextureInfo;
 type TextureUploadDispatch =
     for<'a> unsafe fn(&ResourcePointer, &TextureDataDesc<'a>) -> Result<(), TextureUploadError>;
 type PipelineBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<Pipeline>>;
+type TextureViewBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<TextureView>>;
+type ShaderModuleBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<ShaderModule>>;
+type BindGroupBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<BindGroup>>;
 type BindGroupLayoutBaseDispatch =
     unsafe fn(NonNull<GPUResource>) -> Option<NonNull<BindGroupLayout>>;
 type ReplaceShaderTextureSamplerPairsDispatch =
@@ -657,6 +672,9 @@ pub(crate) struct ResourceVTable {
     texture_info: Option<TextureInfoDispatch>,
     texture_upload: Option<TextureUploadDispatch>,
     pipeline_base: PipelineBaseDispatch,
+    texture_view_base: TextureViewBaseDispatch,
+    shader_module_base: ShaderModuleBaseDispatch,
+    bind_group_base: BindGroupBaseDispatch,
     bind_group_layout_base: BindGroupLayoutBaseDispatch,
     replace_shader_texture_sampler_pairs: ReplaceShaderTextureSamplerPairsDispatch,
 }
@@ -674,6 +692,29 @@ unsafe fn pipeline_base<T: GpuResourcePayload>(
 ) -> Option<NonNull<Pipeline>> {
     let payload = unsafe { base.cast::<T>().as_ref() };
     payload.pipeline_base().map(NonNull::from)
+}
+
+unsafe fn texture_view_base<T: GpuResourcePayload>(
+    base: NonNull<GPUResource>,
+) -> Option<NonNull<TextureView>> {
+    unsafe { base.cast::<T>().as_ref() }
+        .texture_view_base()
+        .map(NonNull::from)
+}
+unsafe fn shader_module_base<T: GpuResourcePayload>(
+    base: NonNull<GPUResource>,
+) -> Option<NonNull<ShaderModule>> {
+    unsafe { base.cast::<T>().as_ref() }
+        .shader_module_base()
+        .map(NonNull::from)
+}
+
+unsafe fn bind_group_base<T: GpuResourcePayload>(
+    base: NonNull<GPUResource>,
+) -> Option<NonNull<BindGroup>> {
+    unsafe { base.cast::<T>().as_ref() }
+        .bind_group_base()
+        .map(NonNull::from)
 }
 
 unsafe fn bind_group_layout_base<T: GpuResourcePayload>(
@@ -748,6 +789,9 @@ fn plain_vtable<T: GpuResourcePayload>() -> ResourceVTable {
         texture_info: None,
         texture_upload: None,
         pipeline_base: pipeline_base::<T>,
+        texture_view_base: texture_view_base::<T>,
+        shader_module_base: shader_module_base::<T>,
+        bind_group_base: bind_group_base::<T>,
         bind_group_layout_base: bind_group_layout_base::<T>,
         replace_shader_texture_sampler_pairs: replace_shader_texture_sampler_pairs::<T>,
     }
@@ -1061,6 +1105,35 @@ pub struct AnyResourceHandle {
 }
 
 impl AnyResourceHandle {
+    pub fn bindGroupBase(&self) -> Option<&BindGroup> {
+        let pointer = self.pointer();
+        if !pointer.is_recording_thread() {
+            return None;
+        }
+        // SAFETY: the owner pins its exact base and the projection is thread-confined.
+        unsafe { (pointer.vtable.bind_group_base)(pointer.base).map(|base| base.as_ref()) }
+    }
+    pub fn textureViewBase(&self) -> Option<&TextureView> {
+        let pointer = self.pointer();
+        if !pointer.is_recording_thread() {
+            return None;
+        }
+        // SAFETY: the retained owner pins this exact source base, on its owning thread.
+        unsafe { (pointer.vtable.texture_view_base)(pointer.base).map(|base| base.as_ref()) }
+    }
+    pub fn shaderModuleBase(&self) -> Option<&ShaderModule> {
+        let pointer = self.pointer();
+        if !pointer.is_recording_thread() {
+            return None;
+        }
+        // SAFETY: same retained source-base projection contract as pipelineBase.
+        unsafe { (pointer.vtable.shader_module_base)(pointer.base).map(|base| base.as_ref()) }
+    }
+    /// The source GPUResource pointer identity, without exposing a dereference.
+    pub fn allocation_identity(&self) -> usize {
+        self.pointer().base.as_ptr() as usize
+    }
+
     pub fn belongsTo(&self, domain: &ResourceDomain) -> bool {
         self.pointer()
             .domain
@@ -1525,7 +1598,7 @@ mod tests {
             .clone()
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn ore_classes_preserve_offset_zero_base_chains_and_authored_member_order() {
         use core::mem::offset_of;
@@ -1718,7 +1791,7 @@ mod tests {
         assert!(!unsafe { sampler.replaceShaderTextureSamplerPairs(vec![pair]) });
     }
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn ore_classes_execute_exact_reverse_member_then_base_destruction() {
         use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_hpp::BindGroup;

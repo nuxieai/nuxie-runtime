@@ -233,6 +233,26 @@ impl<F> DerefMut for AssetFactory<F> {
 }
 
 impl<F: AssetUploadFactory> Factory for AssetFactory<F> {
+    fn is_render_context(&self) -> bool {
+        self.inner.is_render_context()
+    }
+    fn ore(&mut self) -> Option<nuxie::render_api::OreContextHandle> {
+        self.inner.ore()
+    }
+    fn render_context(&mut self) -> Option<nuxie::render_api::PersistentFactoryContext> {
+        self.inner.render_context()
+    }
+    fn deferred_canvas_host(&mut self) -> Option<nuxie::render_api::DeferredCanvasHostHandle> {
+        self.inner.deferred_canvas_host()
+    }
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn nuxie::render_api::RenderCanvas>, nuxie::render_api::RenderCanvasError>
+    {
+        self.inner.make_deferred_render_canvas(width, height)
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,

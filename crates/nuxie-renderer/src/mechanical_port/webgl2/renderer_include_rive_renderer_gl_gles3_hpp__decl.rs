@@ -5,8 +5,8 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_include_rive_renderer_gl_gles3.hpp");
@@ -1341,6 +1341,10 @@ fn currentGLExecutionDomain() -> Option<GLExecutionDomain> {
     })
 }
 
+pub(crate) fn currentGLExecutionIdentity() -> Option<(u64, u64)> {
+    currentGLExecutionDomain().map(|domain| (domain.key(), domain.generation()))
+}
+
 /// Captures the creation/adoption identity for a nonzero GL name. Production
 /// code may only publish a name while its owning execution domain is current;
 /// command-stream tests deliberately use an unstamped synthetic domain.
@@ -1631,33 +1635,153 @@ impl GLCapabilities {
         extensionFlags,
         0
     );
-    gl_capability_bit!(ANGLE_shader_pixel_local_storage, setANGLE_shader_pixel_local_storage, extensionFlags, 1);
-    gl_capability_bit!(ANGLE_shader_pixel_local_storage_coherent, setANGLE_shader_pixel_local_storage_coherent, extensionFlags, 2);
+    gl_capability_bit!(
+        ANGLE_shader_pixel_local_storage,
+        setANGLE_shader_pixel_local_storage,
+        extensionFlags,
+        1
+    );
+    gl_capability_bit!(
+        ANGLE_shader_pixel_local_storage_coherent,
+        setANGLE_shader_pixel_local_storage_coherent,
+        extensionFlags,
+        2
+    );
     gl_capability_bit!(ANGLE_polygon_mode, setANGLE_polygon_mode, extensionFlags, 3);
-    gl_capability_bit!(ANGLE_provoking_vertex, setANGLE_provoking_vertex, extensionFlags, 4);
-    gl_capability_bit!(ARM_shader_framebuffer_fetch, setARM_shader_framebuffer_fetch, extensionFlags, 5);
-    gl_capability_bit!(ARB_fragment_shader_interlock, setARB_fragment_shader_interlock, extensionFlags, 6);
-    gl_capability_bit!(ARB_shader_image_load_store, setARB_shader_image_load_store, extensionFlags, 7);
-    gl_capability_bit!(ARB_shader_storage_buffer_object, setARB_shader_storage_buffer_object, extensionFlags, 8);
-    gl_capability_bit!(OES_shader_image_atomic, setOES_shader_image_atomic, extensionFlags, 9);
-    gl_capability_bit!(KHR_blend_equation_advanced, setKHR_blend_equation_advanced, extensionFlags, 10);
-    gl_capability_bit!(KHR_blend_equation_advanced_coherent, setKHR_blend_equation_advanced_coherent, extensionFlags, 11);
-    gl_capability_bit!(KHR_parallel_shader_compile, setKHR_parallel_shader_compile, extensionFlags, 12);
+    gl_capability_bit!(
+        ANGLE_provoking_vertex,
+        setANGLE_provoking_vertex,
+        extensionFlags,
+        4
+    );
+    gl_capability_bit!(
+        ARM_shader_framebuffer_fetch,
+        setARM_shader_framebuffer_fetch,
+        extensionFlags,
+        5
+    );
+    gl_capability_bit!(
+        ARB_fragment_shader_interlock,
+        setARB_fragment_shader_interlock,
+        extensionFlags,
+        6
+    );
+    gl_capability_bit!(
+        ARB_shader_image_load_store,
+        setARB_shader_image_load_store,
+        extensionFlags,
+        7
+    );
+    gl_capability_bit!(
+        ARB_shader_storage_buffer_object,
+        setARB_shader_storage_buffer_object,
+        extensionFlags,
+        8
+    );
+    gl_capability_bit!(
+        OES_shader_image_atomic,
+        setOES_shader_image_atomic,
+        extensionFlags,
+        9
+    );
+    gl_capability_bit!(
+        KHR_blend_equation_advanced,
+        setKHR_blend_equation_advanced,
+        extensionFlags,
+        10
+    );
+    gl_capability_bit!(
+        KHR_blend_equation_advanced_coherent,
+        setKHR_blend_equation_advanced_coherent,
+        extensionFlags,
+        11
+    );
+    gl_capability_bit!(
+        KHR_parallel_shader_compile,
+        setKHR_parallel_shader_compile,
+        extensionFlags,
+        12
+    );
     gl_capability_bit!(EXT_base_instance, setEXT_base_instance, extensionFlags, 13);
-    gl_capability_bit!(EXT_clip_cull_distance, setEXT_clip_cull_distance, extensionFlags, 14);
-    gl_capability_bit!(EXT_color_buffer_half_float, setEXT_color_buffer_half_float, extensionFlags, 15);
-    gl_capability_bit!(OES_texture_half_float_linear, setOES_texture_half_float_linear, extensionFlags, 16);
-    gl_capability_bit!(EXT_color_buffer_float, setEXT_color_buffer_float, extensionFlags, 17);
+    gl_capability_bit!(
+        EXT_clip_cull_distance,
+        setEXT_clip_cull_distance,
+        extensionFlags,
+        14
+    );
+    gl_capability_bit!(
+        EXT_color_buffer_half_float,
+        setEXT_color_buffer_half_float,
+        extensionFlags,
+        15
+    );
+    gl_capability_bit!(
+        OES_texture_half_float_linear,
+        setOES_texture_half_float_linear,
+        extensionFlags,
+        16
+    );
+    gl_capability_bit!(
+        EXT_color_buffer_float,
+        setEXT_color_buffer_float,
+        extensionFlags,
+        17
+    );
     gl_capability_bit!(EXT_float_blend, setEXT_float_blend, extensionFlags, 18);
-    gl_capability_bit!(EXT_multisampled_render_to_texture, setEXT_multisampled_render_to_texture, extensionFlags, 19);
-    gl_capability_bit!(EXT_shader_framebuffer_fetch, setEXT_shader_framebuffer_fetch, extensionFlags, 20);
-    gl_capability_bit!(EXT_shader_pixel_local_storage, setEXT_shader_pixel_local_storage, extensionFlags, 21);
-    gl_capability_bit!(EXT_shader_pixel_local_storage2, setEXT_shader_pixel_local_storage2, extensionFlags, 22);
-    gl_capability_bit!(INTEL_fragment_shader_ordering, setINTEL_fragment_shader_ordering, extensionFlags, 23);
-    gl_capability_bit!(QCOM_shader_framebuffer_fetch_noncoherent, setQCOM_shader_framebuffer_fetch_noncoherent, extensionFlags, 24);
-    gl_capability_bit!(EXT_texture_compression_s3tc, setEXT_texture_compression_s3tc, extensionFlags, 25);
-    gl_capability_bit!(EXT_texture_compression_bptc, setEXT_texture_compression_bptc, extensionFlags, 26);
-    gl_capability_bit!(KHR_texture_compression_astc_ldr, setKHR_texture_compression_astc_ldr, extensionFlags, 27);
+    gl_capability_bit!(
+        EXT_multisampled_render_to_texture,
+        setEXT_multisampled_render_to_texture,
+        extensionFlags,
+        19
+    );
+    gl_capability_bit!(
+        EXT_shader_framebuffer_fetch,
+        setEXT_shader_framebuffer_fetch,
+        extensionFlags,
+        20
+    );
+    gl_capability_bit!(
+        EXT_shader_pixel_local_storage,
+        setEXT_shader_pixel_local_storage,
+        extensionFlags,
+        21
+    );
+    gl_capability_bit!(
+        EXT_shader_pixel_local_storage2,
+        setEXT_shader_pixel_local_storage2,
+        extensionFlags,
+        22
+    );
+    gl_capability_bit!(
+        INTEL_fragment_shader_ordering,
+        setINTEL_fragment_shader_ordering,
+        extensionFlags,
+        23
+    );
+    gl_capability_bit!(
+        QCOM_shader_framebuffer_fetch_noncoherent,
+        setQCOM_shader_framebuffer_fetch_noncoherent,
+        extensionFlags,
+        24
+    );
+    gl_capability_bit!(
+        EXT_texture_compression_s3tc,
+        setEXT_texture_compression_s3tc,
+        extensionFlags,
+        25
+    );
+    gl_capability_bit!(
+        EXT_texture_compression_bptc,
+        setEXT_texture_compression_bptc,
+        extensionFlags,
+        26
+    );
+    gl_capability_bit!(
+        KHR_texture_compression_astc_ldr,
+        setKHR_texture_compression_astc_ldr,
+        extensionFlags,
+        27
+    );
     gl_capability_bit!(supportsETC2, setSupportsETC2, extensionFlags, 28);
 
     pub(crate) const fn IsVersionAtLeast(
@@ -1717,7 +1841,7 @@ unsafe extern "C" {
 mod tests {
     use super::*;
     use std::collections::{HashMap, VecDeque};
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
 
     #[derive(Clone, Debug, PartialEq)]
     enum ProviderEvent {
@@ -2087,16 +2211,20 @@ mod tests {
         )));
         let originalDrain = domainA.resourceFinalReleaseDrain();
 
-        assert!(catch_unwind(AssertUnwindSafe(|| {
-            domainA.installFinalReleaseDrain(originalDrain)
-        }))
-        .is_err());
-        assert!(domainA
-            .ownerThreadFinalReleaseRoute()
-            .defer(unsafe {
-                nuxie_ore_metal::gpu_resource::OwnerThreadFinalRelease::new(0, |_| {})
-            })
-            .is_ok());
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                domainA.installFinalReleaseDrain(originalDrain)
+            }))
+            .is_err()
+        );
+        assert!(
+            domainA
+                .ownerThreadFinalReleaseRoute()
+                .defer(unsafe {
+                    nuxie_ore_metal::gpu_resource::OwnerThreadFinalRelease::new(0, |_| {})
+                })
+                .is_ok()
+        );
         domainA.withCurrent(|| {});
     }
 
@@ -2272,11 +2400,13 @@ mod tests {
             "retired destruction preserves source RAII while the retained generation is valid"
         );
         assert!(!ingress.drainFinalReleases());
-        assert!(route
-            .defer(unsafe {
-                nuxie_ore_metal::gpu_resource::OwnerThreadFinalRelease::new(0, |_| {})
-            })
-            .is_err());
+        assert!(
+            route
+                .defer(unsafe {
+                    nuxie_ore_metal::gpu_resource::OwnerThreadFinalRelease::new(0, |_| {})
+                })
+                .is_err()
+        );
     }
 
     #[test]
@@ -2474,10 +2604,12 @@ mod tests {
                 releaseFinalizerProbe,
             )
         };
-        assert!(domainA
-            .ownerThreadFinalReleaseRoute()
-            .defer(finalRelease)
-            .is_ok());
+        assert!(
+            domainA
+                .ownerThreadFinalReleaseRoute()
+                .defer(finalRelease)
+                .is_ok()
+        );
 
         let rawError = ResourceFinalReleaseDrainError::WrongExecutionDomain {
             expected_domain: domainA.key(),

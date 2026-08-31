@@ -15,13 +15,13 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
-#![cfg(target_vendor = "apple")]
+#![cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use super::ore_buffer_metal_hpp::{Backing, BufferMetalState, NativeMetalBuffer};
 use super::*;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_foundation::NSString;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::{MTLBuffer, MTLDevice, MTLResource, MTLResourceOptions};
 
 // namespace rive::ore

@@ -15,10 +15,19 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod aabb;
+pub mod authored_ore_shader;
 mod factory;
+mod routing;
+pub mod serialize_ops;
+pub mod serialized_replay;
 mod serializing;
 pub use aabb::{AABBi16, AABBu16, Aabb, AabbInteger, AabbScalarBounds, IntegerAabb, TypedAabb};
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
+pub use nuxie_ore_metal::context::FrameDescriptor as OreFrameDescriptor;
+pub use routing::{
+    DeferredCanvasHost, DeferredCanvasHostHandle, OreContextHandle, RenderCanvasHandle,
+    canvas_texture_info, canvas_texture_owner,
+};
 pub use serializing::{SerializingFactory, SerializingRenderer};
 
 // C++ owns this counter on Artboard, but its SerializingFactory also advances
@@ -730,6 +739,16 @@ fn raw_path_simd_bounds(points: &[Vec2D]) -> Aabb {
 }
 
 impl RawPath {
+    /// Upstream bulk deserialization constructor. The stream owns the
+    /// self-consistency invariant; do not normalize its verbs or contours.
+    pub fn from_verbs_and_points(verbs: Vec<PathVerb>, points: Vec<Vec2D>) -> Self {
+        Self {
+            verbs,
+            points,
+            mutation_id: next_raw_path_mutation_id(),
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             verbs: Vec::new(),
@@ -1327,6 +1346,10 @@ pub trait RenderBuffer: Any {
 
 pub trait RenderShader: Any {
     fn as_any(&self) -> &dyn Any;
+    /// Retain this shader occurrence, as upstream `ref_rcp` does.
+    fn retain_shader(&self) -> Rc<dyn RenderShader>;
+    /// Stable identity of that occurrence across retained Rust handles.
+    fn shader_identity(&self) -> usize;
 }
 
 /// One opaque, lookup-owned authored GPU-canvas shader module.
@@ -1335,6 +1358,14 @@ pub trait RenderShader: Any {
 /// their device/domain identity and physical shader module behind this seam.
 pub trait RenderGpuCanvasShader: Any {
     fn as_any(&self) -> &dyn Any;
+    /// The retained physical ORE module for an authored shader entry.
+    fn ore_shader_entry(
+        &self,
+        _stage: GpuCanvasShaderStage,
+        _physical_entry: &str,
+    ) -> Option<nuxie_ore_metal::gpu_resource::AnyResourceHandle> {
+        None
+    }
 }
 
 /// Backend shader occurrences paired with one [`GpuCanvasPipelinePlan`].
@@ -1356,6 +1387,18 @@ impl std::fmt::Debug for GpuCanvasPipelineShaders {
 
 pub trait RenderImage: Any {
     fn as_any(&self) -> &dyn Any;
+    /// Retain the same image occurrence, without decoding or copying it.
+    fn retain_image(&self) -> Rc<dyn RenderImage>;
+    /// Stable identity of that occurrence across retained Rust handles.
+    fn image_identity(&self) -> usize;
+    fn deferred_image_id(&self) -> Option<u32> {
+        None
+    }
+    /// Source `RiveRenderImage` RTTI projection. Foreign images have no GPU
+    /// texture; the returned owner keeps a supported texture alive.
+    fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
+        None
+    }
     fn width(&self) -> u32;
     fn height(&self) -> u32;
     fn uv_transform(&self) -> Mat2D {
@@ -1590,6 +1633,8 @@ pub struct GpuCanvasAppleMetalShader {
     binding_map_bytes: Arc<[u8]>,
     entry_reflection: Vec<GpuCanvasShaderEntryReflection>,
     binding_reflection: Vec<GpuCanvasShaderBindingReflection>,
+    shader_asset_id: u32,
+    texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
     provenance: GpuCanvasShaderProvenance,
 }
 
@@ -1618,6 +1663,8 @@ impl GpuCanvasAppleMetalShader {
         binding_map_bytes: Arc<[u8]>,
         entry_reflection: Vec<GpuCanvasShaderEntryReflection>,
         binding_reflection: Vec<GpuCanvasShaderBindingReflection>,
+        shader_asset_id: u32,
+        texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
     ) -> Option<Self> {
         provenance
             .authorizes_digest(artifact_size, &artifact_sha256)
@@ -1628,6 +1675,8 @@ impl GpuCanvasAppleMetalShader {
                 binding_map_bytes,
                 entry_reflection,
                 binding_reflection,
+                shader_asset_id,
+                texture_sampler_pairs,
                 provenance,
             })
     }
@@ -1654,6 +1703,12 @@ impl GpuCanvasAppleMetalShader {
     }
     pub fn binding_reflection(&self) -> &[GpuCanvasShaderBindingReflection] {
         &self.binding_reflection
+    }
+    pub fn shader_asset_id(&self) -> u32 {
+        self.shader_asset_id
+    }
+    pub fn texture_sampler_pairs(&self) -> &[GpuCanvasShaderTextureSamplerPair] {
+        &self.texture_sampler_pairs
     }
 }
 
@@ -2186,7 +2241,7 @@ pub struct GpuCanvasPipelinePlan {
     pub pipeline_state: GpuCanvasPipelineState,
 }
 
-/// Backend-neutral result of executing one imported script's `drawCanvas`.
+/// Backend-neutral result of the explicit direct-host GPU-canvas program utility.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuCanvasPlan {
     pub vertex_entry: Option<GpuCanvasShaderEntrySelection>,
@@ -2344,7 +2399,8 @@ pub trait RenderPath: Any {
     fn reserve(&mut self, _verbs: usize, _points: usize) {}
     fn fill_rule(&mut self, value: FillRule);
     fn add_render_path(&mut self, path: &dyn RenderPath, transform: Mat2D);
-    fn add_render_path_backwards(&mut self, path: &dyn RenderPath, transform: Mat2D);
+    // Upstream RenderPath's default is empty; RiveRenderPath overrides it.
+    fn add_render_path_backwards(&mut self, _path: &dyn RenderPath, _transform: Mat2D) {}
     fn add_raw_path(&mut self, path: &RawPath);
     fn move_to(&mut self, x: f32, y: f32);
     fn line_to(&mut self, x: f32, y: f32);
@@ -2418,6 +2474,11 @@ pub trait RenderCanvas {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
     fn render_image(&self) -> Rc<dyn RenderImage>;
+    /// Source native-canvas projection; deferred canvases instead route the
+    /// typed retained owner through their session's canvas-ID provider.
+    fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
+        self.render_image().ore_texture_info()
+    }
     fn begin_frame(
         &mut self,
         clear_color: ColorInt,
@@ -2534,6 +2595,25 @@ pub trait Factory {
         None
     }
 
+    /// Source `RenderContext::renderContext()` returns itself. A persistent
+    /// proxy uses this predicate to return its own retained identity, avoiding
+    /// a self-owning cycle on the concrete Rust factory.
+    fn is_render_context(&self) -> bool {
+        false
+    }
+
+    fn ore(&mut self) -> Option<OreContextHandle> {
+        None
+    }
+
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
+
+    fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
+        None
+    }
+
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -2580,6 +2660,16 @@ pub trait Factory {
         _height: u32,
     ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
         Err(RenderCanvasError::unsupported())
+    }
+
+    /// Source RenderContextImpl default: only GL distinguishes allocation
+    /// on the recording thread from allocation on the replay context.
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.make_render_canvas(width, height)
     }
 
     /// Validate the exact renderer-owned image occurrence used by pinned
@@ -2710,6 +2800,29 @@ impl Factory for PersistentFactoryContext {
     fn persistent_context(&self) -> Option<PersistentFactoryContext> {
         Some(self.clone())
     }
+    fn is_render_context(&self) -> bool {
+        self.with_factory(|factory| factory.is_render_context())
+    }
+    fn ore(&mut self) -> Option<OreContextHandle> {
+        self.with_factory(|factory| factory.ore())
+    }
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        if self.is_render_context() {
+            Some(self.clone())
+        } else {
+            self.with_factory(|factory| factory.render_context())
+        }
+    }
+    fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
+        self.with_factory(|factory| factory.deferred_canvas_host())
+    }
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.with_factory(|factory| factory.make_deferred_render_canvas(width, height))
+    }
     fn make_render_buffer(
         &mut self,
         kind: RenderBufferType,
@@ -2825,6 +2938,30 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
         let identity = Rc::as_ptr(&self.access).cast::<()>();
         let access: Rc<dyn PersistentFactoryAccess> = self.access.clone();
         Some(PersistentFactoryContext { access, identity })
+    }
+
+    fn is_render_context(&self) -> bool {
+        self.borrow().is_render_context()
+    }
+    fn ore(&mut self) -> Option<OreContextHandle> {
+        self.borrow_mut().ore()
+    }
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        if self.is_render_context() {
+            self.persistent_context()
+        } else {
+            self.borrow_mut().render_context()
+        }
+    }
+    fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
+        self.borrow_mut().deferred_canvas_host()
+    }
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.borrow_mut().make_deferred_render_canvas(width, height)
     }
 
     fn make_render_buffer(
@@ -3506,6 +3643,7 @@ impl Factory for RecordingFactory {
         line.push(']');
         self.stream.borrow_mut().line(line);
         Box::new(RecordingRenderShader {
+            identity: Rc::new(()),
             id,
             gradient: RecordingGradientSnapshot::Linear {
                 sx,
@@ -3539,6 +3677,7 @@ impl Factory for RecordingFactory {
         line.push(']');
         self.stream.borrow_mut().line(line);
         Box::new(RecordingRenderShader {
+            identity: Rc::new(()),
             id,
             gradient: RecordingGradientSnapshot::Radial {
                 cx,
@@ -3613,7 +3752,8 @@ impl Factory for RecordingFactory {
             id,
             width,
             height,
-            data: data.to_vec(),
+            data: Rc::from(data),
+            identity: Rc::new(()),
         }))
     }
 }
@@ -3641,7 +3781,7 @@ impl Factory for NullFactory {
         _colors: &[ColorInt],
         _stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        Box::new(NullRenderShader)
+        Box::new(NullRenderShader(Rc::new(())))
     }
 
     fn make_radial_gradient(
@@ -3652,7 +3792,7 @@ impl Factory for NullFactory {
         _colors: &[ColorInt],
         _stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        Box::new(NullRenderShader)
+        Box::new(NullRenderShader(Rc::new(())))
     }
 
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
@@ -3683,24 +3823,43 @@ impl Factory for NullFactory {
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         let (width, height) = encoded_image_dimensions(data);
-        Ok(Box::new(NullRenderImage { width, height }))
+        Ok(Box::new(NullRenderImage {
+            width,
+            height,
+            identity: Rc::new(()),
+        }))
     }
 }
 
-struct NullRenderShader;
+#[derive(Clone)]
+struct NullRenderShader(Rc<()>);
 
 impl RenderShader for NullRenderShader {
+    fn retain_shader(&self) -> Rc<dyn RenderShader> {
+        Rc::new(self.clone())
+    }
+    fn shader_identity(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
+#[derive(Clone)]
 struct NullRenderImage {
+    identity: Rc<()>,
     width: u32,
     height: u32,
 }
 
 impl RenderImage for NullRenderImage {
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Rc::as_ptr(&self.identity) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -3888,7 +4047,9 @@ fn null_path(path: &dyn RenderPath) -> &NullRenderPath {
         .expect("NullFactory requires NullRenderPath")
 }
 
+#[derive(Clone)]
 struct RecordingRenderShader {
+    identity: Rc<()>,
     id: u64,
     gradient: RecordingGradientSnapshot,
 }
@@ -3903,16 +4064,24 @@ impl RecordingRenderShader {
 }
 
 impl RenderShader for RecordingRenderShader {
+    fn retain_shader(&self) -> Rc<dyn RenderShader> {
+        Rc::new(self.clone())
+    }
+    fn shader_identity(&self) -> usize {
+        Rc::as_ptr(&self.identity) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
+#[derive(Clone)]
 struct RecordingRenderImage {
     id: u64,
     width: u32,
     height: u32,
-    data: Vec<u8>,
+    data: Rc<[u8]>,
+    identity: Rc<()>,
 }
 
 impl RecordingRenderImage {
@@ -3921,12 +4090,18 @@ impl RecordingRenderImage {
             id: self.id,
             width: self.width,
             height: self.height,
-            data: self.data.clone(),
+            data: self.data.to_vec(),
         }
     }
 }
 
 impl RenderImage for RecordingRenderImage {
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Rc::as_ptr(&self.identity) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }

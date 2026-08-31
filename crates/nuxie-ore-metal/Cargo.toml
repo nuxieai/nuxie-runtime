@@ -10,17 +10,20 @@ publish = false
 workspace = true
 
 [features]
-default = []
+default = ["metal-backend"]
+# The runtime Factory exposes the portable ORE interface without linking the
+# native Apple adapter. Existing GPU consumers retain their default adapter.
+metal-backend = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-metal"]
 with-rive-tools = []
 tools = ["with-rive-tools"]
 track-rive-shader-id = []
-rive-objc-exceptions = ["objc2/exception"]
+rive-objc-exceptions = ["metal-backend", "objc2/exception"]
 
 [dev-dependencies]
 sha2 = "0.10"
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
-block2 = "0.6.2"
-objc2 = "0.6.4"
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSString"] }
-objc2-metal = { version = "0.3.2", default-features = false, features = ["block2", "MTLAllocation", "MTLArgument", "MTLBuffer", "MTLCommandBuffer", "MTLCommandEncoder", "MTLCommandQueue", "MTLDepthStencil", "MTLDevice", "MTLLibrary", "MTLPixelFormat", "MTLRenderCommandEncoder", "MTLRenderPass", "MTLRenderPipeline", "MTLResource", "MTLSampler", "MTLTexture", "MTLTypes", "MTLVertexDescriptor"] }
+block2 = { version = "0.6.2", optional = true }
+objc2 = { version = "0.6.4", optional = true }
+objc2-foundation = { version = "0.3.2", optional = true, default-features = false, features = ["NSString"] }
+objc2-metal = { version = "0.3.2", optional = true, default-features = false, features = ["block2", "MTLAllocation", "MTLArgument", "MTLBuffer", "MTLCommandBuffer", "MTLCommandEncoder", "MTLCommandQueue", "MTLDepthStencil", "MTLDevice", "MTLLibrary", "MTLPixelFormat", "MTLRenderCommandEncoder", "MTLRenderPass", "MTLRenderPipeline", "MTLResource", "MTLSampler", "MTLTexture", "MTLTypes", "MTLVertexDescriptor"] }

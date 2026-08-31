@@ -15,6 +15,8 @@ use core::pin::Pin;
 use core::ptr::NonNull;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
+#[cfg(feature = "native-ore-metal-experimental")]
+use std::{cell::RefCell, rc::Rc};
 
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
@@ -31,7 +33,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::
     FlushDescriptor, StorageBufferStructure,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
-    FlushResources, FrameDescriptor, RenderContext,
+    FlushResources, FrameDescriptor, LoadAction, RenderContext,
 };
 #[cfg(feature = "rive-decoders")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
@@ -424,18 +426,21 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
 
     #[cfg(feature = "native-ore-metal-experimental")]
     fn makeOreContext(&mut self) -> Option<Box<OreContext>> {
-        // A queued nil transition is a failed-closed source boundary. Do not
-        // hand an invalid queue handle to the translated HostExecution
-        // callback or construct ORE without its required queue.
+        // The source lazily creates its shared queue when ORE is requested
+        // before the renderer's first flush.
         let handle = self.metal.make_ore_context(&mut self.execution)?;
         let owner = self.execution.take_ore_context_owner(handle)?;
         let context = owner.downcast::<OreContextMetal>().ok()?;
-        Some(Box::new(OreContext::Metal(context)))
+        Some(Box::new(OreContext::Metal(Rc::new(RefCell::new(*context)))))
     }
 
     #[cfg(all(
         not(feature = "native-ore-metal-experimental"),
-        any(feature = "native-ore-vulkan-experimental", feature = "ore-gl")
+        any(
+            feature = "native-ore-vulkan-experimental",
+            feature = "native-webgpu-experimental",
+            feature = "ore-gl"
+        )
     ))]
     fn makeOreContext(&mut self) -> Option<Box<OreContext>> {
         None
@@ -651,6 +656,14 @@ pub(super) struct MechanicalCompletionToken {
 }
 
 impl MechanicalCompletionToken {
+    fn is_complete(&self) -> bool {
+        *self
+            .state
+            .complete
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+
     fn mark_complete(&self, result: Result<(), String>) {
         if let Err(error) = result {
             *self
@@ -765,6 +778,8 @@ mod committed_frame_guard_tests {
     };
     use crate::native_metal::NativeMetalFactory;
     use crate::RendererError;
+    use nuxie_render_api::RenderCanvas;
+    use std::rc::Rc;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use std::thread;
@@ -860,17 +875,76 @@ mod committed_frame_guard_tests {
         let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = frame.finish_for_benchmark();
         }));
-        assert!(panic_result.is_err(), "actual postFlush unwind was not injected");
+        assert!(
+            panic_result.is_err(),
+            "actual postFlush unwind was not injected"
+        );
 
         // Cycle the three exact source slots plus one reuse. If recovery had
         // returned before the raw callback unlocked its member pointer, this
         // fourth frame would block or touch a destroyed/still-held slot.
         for _ in 0..4 {
-            let frame = factory.begin_frame(0).expect("frame after recovered unwind");
+            let frame = factory
+                .begin_frame(0)
+                .expect("frame after recovered unwind");
             frame
                 .finish_for_benchmark()
                 .expect("source ring remained reusable after unwind");
         }
+    }
+
+    #[test]
+    fn canvas_submission_retires_before_the_last_factory_owner_drops() {
+        let factory = NativeMetalFactory::new(4, 4).expect("native Metal test factory");
+        let weak = Rc::downgrade(&factory.mechanical_context().unwrap());
+        let mut canvas = factory.make_metal_render_canvas(4, 4).unwrap();
+        canvas.begin_frame(0xff123456).unwrap().finish().unwrap();
+        let completion = {
+            let mechanical = weak.upgrade().unwrap();
+            let mechanical = mechanical.borrow();
+            mechanical
+                .in_flight
+                .last()
+                .expect("committed canvas fence")
+                .1
+                .clone()
+        };
+        drop(canvas);
+        drop(factory);
+        assert!(
+            weak.upgrade().is_none(),
+            "submission must not create an owner cycle"
+        );
+        assert!(
+            completion.is_complete(),
+            "source ring callback must retire before context teardown"
+        );
+    }
+
+    #[test]
+    fn canvas_submission_unwind_commits_and_retires_its_armed_callback() {
+        let factory = NativeMetalFactory::new(4, 4).expect("native Metal test factory");
+        let mut canvas = factory.make_metal_render_canvas(4, 4).unwrap();
+        let frame = canvas.begin_frame(0).unwrap();
+        inject_panic_after_post_flush_once();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            frame.finish().unwrap();
+        }));
+        assert!(
+            result.is_err(),
+            "actual canvas postFlush unwind was not injected"
+        );
+        assert!(factory
+            .mechanical_context()
+            .unwrap()
+            .borrow()
+            .in_flight
+            .is_empty());
+        for _ in 0..4 {
+            canvas.begin_frame(0).unwrap().finish().unwrap();
+        }
+        drop(canvas);
+        drop(factory);
     }
 }
 
@@ -886,6 +960,21 @@ pub(super) struct MechanicalRenderContext {
     frame_number: u64,
     frame_queue: Option<Retained<ProtocolObject<dyn MTLCommandQueue>>>,
     resource_domain: RenderResourceDomain,
+    in_flight: Vec<(
+        Retained<ProtocolObject<dyn MTLCommandBuffer>>,
+        MechanicalCompletionToken,
+    )>,
+}
+
+impl Drop for MechanicalRenderContext {
+    fn drop(&mut self) {
+        // Source postFlush borrows a mutex in the pinned Metal context.
+        // A canvas submission is asynchronous, so the Rust host's final
+        // release must retire its callbacks before dropping that context.
+        for (command, _) in self.in_flight.drain(..) {
+            command.waitUntilCompleted();
+        }
+    }
 }
 
 impl MechanicalRenderContext {
@@ -950,6 +1039,7 @@ impl MechanicalRenderContext {
             frame_number: 0,
             frame_queue: None,
             resource_domain: RenderResourceDomain::new(),
+            in_flight: Vec::new(),
         })
     }
 
@@ -1136,6 +1226,14 @@ impl MechanicalRenderContext {
     }
 
     pub(super) fn begin_frame(&mut self, clear_color: u32) -> Result<(), RendererError> {
+        self.begin_frame_with_load_action(clear_color, LoadAction::clear)
+    }
+
+    pub(super) fn begin_frame_with_load_action(
+        &mut self,
+        clear_color: u32,
+        load_action: LoadAction,
+    ) -> Result<(), RendererError> {
         if self.active_frame {
             return Err(RendererError::NativeMetal(
                 "mechanical RenderContext already has an active frame".into(),
@@ -1145,6 +1243,7 @@ impl MechanicalRenderContext {
             renderTargetWidth: self.width,
             renderTargetHeight: self.height,
             clearColor: clear_color,
+            loadAction: load_action,
             ..FrameDescriptor::default()
         };
         match self.mode {
@@ -1243,20 +1342,13 @@ impl MechanicalRenderContext {
         &mut self,
         callback: impl FnOnce(&mut OreContextMetal) -> R,
     ) -> Option<R> {
-        if self.active_frame {
-            return None;
-        }
         let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
-        let context_metal = unsafe { metal_impl_mut(context) };
-        if context_metal.metal.command_queue().is_none() {
-            return None;
-        }
         let ore = context.oreExecutable();
         if ore.is_null() {
             return None;
         }
         match unsafe { &mut *ore } {
-            OreContext::Metal(context) => Some(callback(context)),
+            OreContext::Metal(context) => Some(callback(&mut context.borrow_mut())),
             #[cfg(feature = "native-ore-vulkan-experimental")]
             OreContext::Vulkan(_) => None,
             #[cfg(feature = "native-webgpu-experimental")]
@@ -1365,6 +1457,26 @@ impl MechanicalRenderContext {
             ));
         };
         let render_target = core::ptr::from_mut(&mut *target.metal.base);
+        let completion =
+            self.flush_and_commit(render_target, current_frame_number, safe_frame_number)?;
+        self.active_frame = false;
+        self.frame_queue = None;
+        Ok(completion)
+    }
+
+    pub(super) fn finish_canvas(&mut self, canvas: &mut RenderCanvas) -> Result<(), RendererError> {
+        // ScriptedCanvas::endFrame / finishRenderCanvasExecutable use the
+        // canvas target and default (zero) frame serials, then commit once.
+        self.flush_and_commit(canvas.renderTarget(), 0, 0)?;
+        Ok(())
+    }
+
+    fn flush_and_commit(
+        &mut self,
+        render_target: *mut RenderTarget,
+        current_frame_number: u64,
+        safe_frame_number: u64,
+    ) -> Result<MechanicalCompletionToken, RendererError> {
         let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
         let command_buffer =
             RenderContextImplContract::makeCommandBuffer(unsafe { metal_impl_mut(context) });
@@ -1440,13 +1552,16 @@ impl MechanicalRenderContext {
         // entering the commit bridge so a Rust unwind after native commit can
         // never release the pinned context ahead of the raw ring pointer.
         let mut source_guard =
-            CommittedFrameWaitGuard::with_command(completion.clone(), command_wait);
+            CommittedFrameWaitGuard::with_command(completion.clone(), command_wait.clone());
         unsafe {
             RenderContextImplContract::commitCommandBuffer(metal_impl_mut(context), command_buffer);
         }
+        // Only committed commands enter the teardown fence. The existing
+        // unwind guard commits/drains an armed callback before propagating a
+        // flush panic, so an unsent command can never deadlock final release.
+        self.in_flight.retain(|(_, token)| !token.is_complete());
+        self.in_flight.push((command_wait, completion.clone()));
         source_guard.disarm();
-        self.active_frame = false;
-        self.frame_queue = None;
         Ok(completion)
     }
 }

@@ -96,11 +96,11 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{
-    rcp, static_rcp_cast, RefCntTarget,
+    RefCntTarget, rcp, static_rcp_cast,
 };
 use crate::mechanical_port::source::include::rive::renderer_hpp::{RenderPath, RenderPathContract};
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
+    CONST_ID, LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId,
 };
 use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath, RenderPath as ApiRenderPath, Vec2D};
 use std::any::Any;
@@ -320,6 +320,7 @@ unsafe impl RenderPathContract for RiveRenderPath {
         self.m_dirt.set(u32::MAX);
     }
     unsafe fn addRenderPathBackwards(&mut self, path: *const RenderPath, matrix: &Mat2D) {
+        assert_eq!(self.m_rawPathMutationLockCount.get(), 0);
         let other = unsafe { &*(path.cast::<RiveRenderPath>()) };
         let verb_start = self.m_rawPath.verbs().len();
         let point_start = self.m_rawPath.points().len();
@@ -331,7 +332,9 @@ unsafe impl RenderPathContract for RiveRenderPath {
         self.m_dirt.set(u32::MAX);
     }
     fn addRawPath(&mut self, path: &RawPath) {
+        assert_eq!(self.m_rawPathMutationLockCount.get(), 0);
         self.m_rawPath.add_path(path, Mat2D::IDENTITY);
+        self.m_dirt.set(u32::MAX);
     }
 }
 impl ApiRenderPath for RiveRenderPath {
@@ -378,6 +381,25 @@ impl ApiRenderPath for RiveRenderPath {
 #[cfg(test)]
 mod mat2d_caller_tests {
     use super::{FillRule, Mat2D, RawPath, RiveRenderPath};
+
+    // tests/unit_tests/renderer/pls_path_test.cpp at e949498e.
+    #[test]
+    fn add_raw_path_invalidates_derived_state() {
+        use nuxie_render_api::{Aabb, PathDirection, RenderPath};
+        let mut path = RiveRenderPath::default();
+        let mut first = RawPath::new();
+        first.add_rect_with_direction(Aabb::new(0., 0., 10., 10.), PathDirection::Clockwise);
+        path.add_raw_path(&first);
+        assert_eq!(path.getBounds().max().x, 10.);
+        assert_eq!(path.getCoarseArea(), 100.);
+        let first_mutation = path.getRawPathMutationID();
+        let mut second = RawPath::new();
+        second.add_rect_with_direction(Aabb::new(20., 20., 40., 40.), PathDirection::Clockwise);
+        path.add_raw_path(&second);
+        assert_eq!(path.getBounds().max().x, 40.);
+        assert_eq!(path.getCoarseArea(), 100. + 400.);
+        assert_ne!(path.getRawPathMutationID(), first_mutation);
+    }
 
     #[test]
     fn clockwise_dominance_uses_pinned_contracted_view_determinant() {

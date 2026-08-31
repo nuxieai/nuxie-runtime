@@ -269,11 +269,6 @@ impl ScriptArtboard for NativeScriptArtboard {
         Ok(())
     }
 
-    fn draw_canvas(&mut self, _factory: &mut dyn RenderFactory) -> Result<(), ScriptError> {
-        self.owner.artboard.internal_draw_canvases();
-        Ok(())
-    }
-
     fn dispatch_input(
         &mut self,
         method: ScriptMethod,

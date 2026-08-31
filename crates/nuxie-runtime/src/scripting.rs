@@ -1753,15 +1753,6 @@ pub trait ScriptArtboard {
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
     ) -> Result<(), ScriptError>;
-
-    /// Invoke the projected artboard's scripted-canvas traversal.
-    ///
-    /// Pinned `Artboard:drawCanvas()` calls `internalDrawCanvases()` directly
-    /// and is intentionally callable both inside and outside an outer canvas
-    /// drawing phase.
-    fn draw_canvas(&mut self, _factory: &mut dyn RenderFactory) -> Result<(), ScriptError> {
-        Ok(())
-    }
 }
 
 /// Deferred Artboard construction produced by resolver validation.
@@ -2090,13 +2081,6 @@ pub trait ScriptInstance {
         ))
     }
 
-    /// Invoke this occurrence's authored `drawCanvas(self)` callback.
-    /// Missing/non-function callbacks are a no-op, matching
-    /// `ScriptedObject::scriptDrawCanvas`.
-    fn call_draw_canvas(&mut self, _factory: &mut dyn RenderFactory) -> Result<(), ScriptError> {
-        Ok(())
-    }
-
     fn call_data_converter(
         &mut self,
         method: ScriptDataConverterMethod,
@@ -2323,6 +2307,9 @@ pub trait ScriptProgramAdapter: std::fmt::Debug {
 /// Runtime-owned VM seam implemented by concrete scripting backends.
 
 impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
+    fn route_to_import_factory(&self, factory: &mut dyn RenderFactory) {
+        (**self).route_to_import_factory(factory)
+    }
     fn install_native_file_assets(
         &self,
         file: crate::mechanical_port::source::file::RuntimeFileWeakHandle,
@@ -2383,6 +2370,7 @@ impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
 }
 
 pub trait ScriptingVm {
+    fn route_to_import_factory(&self, _factory: &mut dyn RenderFactory) {}
     /// Install the importing file's asset catalog without making a File → VM
     /// → catalog → File ownership cycle. Executing chunks comes afterward.
     fn install_native_file_assets(

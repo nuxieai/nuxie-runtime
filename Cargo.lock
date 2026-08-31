@@ -1135,6 +1135,8 @@ version = "0.1.0"
 dependencies = [
  "harfrust",
  "nuxie-audio",
+ "nuxie-binary",
+ "nuxie-ore-metal",
 ]
 
 [[package]]
@@ -1247,7 +1249,9 @@ dependencies = [
  "luaur-vm",
  "nuxie-binary",
  "nuxie-image-codec",
+ "nuxie-ore-metal",
  "nuxie-render-api",
+ "nuxie-renderer",
  "nuxie-runtime",
  "nuxie-schema",
  "nuxie-sriv",

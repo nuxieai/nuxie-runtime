@@ -7,12 +7,11 @@ use super::webgpu_cpp_decl::{
     BindGroupLayout as WagyuBindGroupLayout, BindGroupLayoutEntry as WGPUBindGroupLayoutEntry,
     BufferBindingType, Device as WagyuDevice, SamplerBindingType, ShaderStage as WGPUShaderStage,
     StorageTextureAccess, TextureFormat as WGPUTextureFormat,
-    TextureSampleType as WGPUTextureSampleType,
-    TextureViewDimension as WGPUTextureViewDimension,
+    TextureSampleType as WGPUTextureSampleType, TextureViewDimension as WGPUTextureViewDimension,
 };
 use super::webgpu_decl::{
-    WGPUBindGroupLayoutDescriptor, WGPUStringView, WGPUTextureFormat_RGBA8Unorm, WGPU_FALSE,
-    WGPU_STRLEN, WGPU_TRUE,
+    WGPU_FALSE, WGPU_STRLEN, WGPU_TRUE, WGPUBindGroupLayoutDescriptor, WGPUStringView,
+    WGPUTextureFormat_RGBA8Unorm,
 };
 use nuxie_ore_metal::binding_map::{
     ResourceKind, TextureSampleType as OreTextureSampleType, TextureViewDim,
@@ -136,9 +135,7 @@ fn toWGPUDescSampleType(s: SampleType) -> WGPUTextureSampleType {
     }
 }
 
-pub(crate) fn makeWGPUBGLEntryFromDesc(
-    src: &OreBindGroupLayoutEntry,
-) -> WGPUBindGroupLayoutEntry {
+pub(crate) fn makeWGPUBGLEntryFromDesc(src: &OreBindGroupLayoutEntry) -> WGPUBindGroupLayoutEntry {
     let mut e = WGPUBindGroupLayoutEntry::default();
     e.binding = src.binding;
 
@@ -207,9 +204,10 @@ fn prepareWGPUBindGroupLayoutFromDesc(
     desc: &BindGroupLayoutDesc<'_>,
 ) -> ([WGPUBindGroupLayoutEntry; kMaxEntriesPerGroup], usize) {
     let mut entries = std::array::from_fn(|_| WGPUBindGroupLayoutEntry::default());
-    let authoredCount = (desc.entryCount as usize).min(desc.entries.len());
+    let authored = desc.entries.unwrap_or(&[]);
+    let authoredCount = (desc.entryCount as usize).min(authored.len());
     let n = authoredCount.min(kMaxEntriesPerGroup);
-    for (dst, src) in entries.iter_mut().zip(desc.entries.iter()).take(n) {
+    for (dst, src) in entries.iter_mut().zip(authored.iter()).take(n) {
         *dst = makeWGPUBGLEntryFromDesc(src);
     }
     (entries, n)
@@ -242,16 +240,15 @@ const _: [(); 11573] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::webgpu_decl::{
         WGPUBufferBindingType_ReadOnlyStorage, WGPUBufferBindingType_Storage,
         WGPUBufferBindingType_Undefined, WGPUBufferBindingType_Uniform,
         WGPUSamplerBindingType_Comparison, WGPUSamplerBindingType_Filtering,
         WGPUSamplerBindingType_Undefined, WGPUShaderStage_Compute, WGPUShaderStage_Fragment,
-        WGPUShaderStage_Vertex, WGPUStorageTextureAccess_WriteOnly,
-        WGPUTextureSampleType_Depth, WGPUTextureViewDimension_2D,
-        WGPUTextureViewDimension_CubeArray,
+        WGPUShaderStage_Vertex, WGPUStorageTextureAccess_WriteOnly, WGPUTextureSampleType_Depth,
+        WGPUTextureViewDimension_2D, WGPUTextureViewDimension_CubeArray,
     };
+    use super::*;
 
     #[test]
     fn complete_source_denominator_is_locked() {
@@ -292,16 +289,14 @@ mod tests {
 
     #[test]
     fn binding_map_resource_kinds_fill_only_the_source_selected_shape() {
-        let visibility =
-            (WGPUShaderStage::Vertex | WGPUShaderStage::Fragment).intoBitmask();
-        let uniform = makeWGPUBGLEntryWithSourceDefaults(
-            9,
-            ResourceKind::UniformBuffer,
-            true,
-            visibility,
-        );
+        let visibility = (WGPUShaderStage::Vertex | WGPUShaderStage::Fragment).intoBitmask();
+        let uniform =
+            makeWGPUBGLEntryWithSourceDefaults(9, ResourceKind::UniformBuffer, true, visibility);
         assert_eq!(uniform.binding, 9);
-        assert_eq!(uniform.visibility, WGPUShaderStage_Vertex | WGPUShaderStage_Fragment);
+        assert_eq!(
+            uniform.visibility,
+            WGPUShaderStage_Vertex | WGPUShaderStage_Fragment
+        );
         assert_eq!(uniform.buffer.r#type, WGPUBufferBindingType_Uniform);
         assert_eq!(uniform.buffer.hasDynamicOffset, WGPU_TRUE);
         assert_eq!(uniform.texture.sampleType, 0);
@@ -318,17 +313,16 @@ mod tests {
         );
         assert_eq!(sampled.visibility, WGPUShaderStage_Compute);
         assert_eq!(sampled.texture.sampleType, WGPUTextureSampleType_Depth);
-        assert_eq!(sampled.texture.viewDimension, WGPUTextureViewDimension_CubeArray);
+        assert_eq!(
+            sampled.texture.viewDimension,
+            WGPUTextureViewDimension_CubeArray
+        );
         assert_eq!(sampled.texture.multisampled, WGPU_TRUE);
         assert_eq!(sampled.buffer.r#type, 0);
         assert_eq!(sampled.sampler.r#type, 0);
 
-        let unknown = makeWGPUBGLEntryWithSourceDefaults(
-            1,
-            ResourceKind(255),
-            false,
-            WGPUShaderStage::None,
-        );
+        let unknown =
+            makeWGPUBGLEntryWithSourceDefaults(1, ResourceKind(255), false, WGPUShaderStage::None);
         assert_eq!(unknown.buffer.r#type, 0);
         assert_eq!(unknown.sampler.r#type, 0);
         assert_eq!(unknown.texture.sampleType, 0);
@@ -339,7 +333,10 @@ mod tests {
     fn public_desc_maps_every_resource_shape_and_stage_mask() {
         let cases = [
             (BindingKind::uniformBuffer, WGPUBufferBindingType_Uniform),
-            (BindingKind::storageBufferRO, WGPUBufferBindingType_ReadOnlyStorage),
+            (
+                BindingKind::storageBufferRO,
+                WGPUBufferBindingType_ReadOnlyStorage,
+            ),
             (BindingKind::storageBufferRW, WGPUBufferBindingType_Storage),
         ];
         for (kind, expected) in cases {
@@ -379,7 +376,10 @@ mod tests {
             textureViewDim: OreTextureViewDimension::cubeArray,
             ..Default::default()
         });
-        assert_eq!(storage.storageTexture.access, WGPUStorageTextureAccess_WriteOnly);
+        assert_eq!(
+            storage.storageTexture.access,
+            WGPUStorageTextureAccess_WriteOnly
+        );
         assert_eq!(storage.storageTexture.format, WGPUTextureFormat_RGBA8Unorm);
         assert_eq!(
             storage.storageTexture.viewDimension,
@@ -391,7 +391,7 @@ mod tests {
     fn descriptor_build_caps_at_sixteen_and_preserves_zero_entry_null_rule() {
         let authored = vec![OreBindGroupLayoutEntry::default(); 18];
         let desc = BindGroupLayoutDesc {
-            entries: &authored,
+            entries: Some(&authored),
             entryCount: 18,
             ..Default::default()
         };
@@ -400,7 +400,7 @@ mod tests {
         assert_eq!(entries[15].binding, 0);
 
         let explicitly_short = BindGroupLayoutDesc {
-            entries: &authored,
+            entries: Some(&authored),
             entryCount: 3,
             ..Default::default()
         };

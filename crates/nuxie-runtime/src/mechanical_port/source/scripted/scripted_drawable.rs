@@ -22,6 +22,7 @@ pub struct ScriptedDrawable {
     pub scripted: ScriptedObject,
     pub properties: Vec<CoreHandle>,
     is_advance_active: bool,
+    force_advance: bool,
 }
 
 impl std::ops::Deref for ScriptedDrawable {
@@ -42,6 +43,7 @@ impl Default for ScriptedDrawable {
             scripted: ScriptedObject::default(),
             properties: Vec::new(),
             is_advance_active: true,
+            force_advance: false,
         }
     }
 }
@@ -53,6 +55,12 @@ impl ScriptedDrawable {
     pub fn did_hydrate_script_inputs(&mut self) {
         self.is_advance_active = true;
         self.add_scripted_dirt(ComponentDirt::PAINT, false);
+    }
+
+    pub fn did_reinit(&mut self) {
+        self.is_advance_active = true;
+        self.force_advance = true;
+        self.add_scripted_dirt(ComponentDirt::PAINT | ComponentDirt::SCRIPT_UPDATE, false);
     }
 
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
@@ -149,7 +157,14 @@ impl ScriptedDrawable {
         elapsed_seconds: f32,
         flags: AdvanceFlags,
     ) -> bool {
-        if elapsed_seconds == 0.0 {
+        let forced = owner
+            .with_mut(|owner| {
+                let drawable = owner.as_scripted_drawable_mut()?;
+                Some(std::mem::take(&mut drawable.force_advance))
+            })
+            .flatten()
+            .unwrap_or(false);
+        if elapsed_seconds == 0.0 && !forced {
             return false;
         }
         let instance = owner

@@ -25,23 +25,23 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
 // ARC. `Retained<T>` is the corresponding strong owner; `Option` preserves
 // the source `nil` state. The non-Apple stand-in keeps this source-shaped
 // translation available to tools that inspect it off Apple.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::runtime::ProtocolObject;
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::{MTLDepthStencilState, MTLRenderPipelineState};
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalPipeline = Option<Retained<ProtocolObject<dyn MTLRenderPipelineState>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalPipeline = Option<()>;
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeMetalDepthStencil = Option<Retained<ProtocolObject<dyn MTLDepthStencilState>>>;
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
 type NativeMetalDepthStencil = Option<()>;
 
 // namespace rive::ore
@@ -126,10 +126,10 @@ impl Drop for PipelineMetal {
 mod tests {
     use super::*;
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     use objc2::rc::Weak;
 
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn native_states_publish_together_and_own_portable_dependencies() {
         use objc2_foundation::NSString;

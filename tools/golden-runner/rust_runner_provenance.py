@@ -15,15 +15,15 @@ This gives the Rust side the discipline runtime-provenance.sh gives librive:
 stamps that bind built artifacts to hashed inputs, with a forced honest
 rebuild whenever the two disagree.
 
-Model:
-- target/golden-gate/rust-sources.json records a digest per workspace member
+Model (all paths are relative to Cargo's resolved target directory):
+- golden-gate/rust-sources.json records a digest per workspace member
   as of the last verified state. Invariant: every cached artifact for that
   member in this target directory was compiled from content matching the
   digest, or is absent. The invariant is restored by `cargo clean -p
   <member>` for each member whose digest changed — a member with honest
   mtimes would be rebuilt by cargo anyway, so the clean only adds work when
   cargo's own tracking has been poisoned.
-- target/golden-gate/<variant>-<profile>.json binds the gate's runner binary
+- golden-gate/<variant>-<profile>.json binds the gate's runner binary
   (by sha256) to the digest state and toolchain that produced it. A matching
   stamp lets the gate reuse the binary without invoking cargo; any mismatch
   forces a rebuild from the (now honest) caches.
@@ -121,6 +121,22 @@ def workspace_members(repo_root: Path) -> dict[str, Path]:
     if RUNNER_PACKAGE not in members:
         raise ProvenanceError(f"workspace has no member named {RUNNER_PACKAGE}")
     return members
+
+
+def cargo_target_directory(repo_root: Path) -> Path:
+    """Use Cargo's resolution of CARGO_TARGET_DIR and .cargo configuration.
+
+    Running metadata from repo_root also gives relative environment paths the
+    same base as the clean/build commands below.
+    """
+    metadata = json.loads(
+        run(
+            ["cargo", "metadata", "--format-version", "1", "--no-deps", "--offline"],
+            cwd=repo_root,
+            capture=True,
+        )
+    )
+    return (repo_root / Path(metadata["target_directory"])).resolve()
 
 
 def member_digest(repo_root: Path, directory: Path) -> str:
@@ -235,8 +251,9 @@ def verify_quiescent(repo_root: Path, members: dict[str, Path], state: dict) -> 
 def ensure_sources(repo_root: Path) -> None:
     repo_root = repo_root.resolve()
     members = workspace_members(repo_root)
+    target_dir = cargo_target_directory(repo_root)
     state = current_digest_state(repo_root, members)
-    digests_path = repo_root / "target/golden-gate/rust-sources.json"
+    digests_path = target_dir / "golden-gate/rust-sources.json"
     changed = restore_sources_invariant(repo_root, members, state, digests_path)
     verify_quiescent(repo_root, members, state)
     write_json(digests_path, state)
@@ -253,13 +270,14 @@ def ensure_runner(repo_root: Path, variant: str, profile: str) -> None:
     repo_root = repo_root.resolve()
     settings = VARIANTS[variant]
     members = workspace_members(repo_root)
+    target_dir = cargo_target_directory(repo_root)
     state = current_digest_state(repo_root, members)
     state_id = digest_state_id(state)
 
-    digests_path = repo_root / "target/golden-gate/rust-sources.json"
-    stamp_path = repo_root / f"target/golden-gate/{variant}-{profile}.json"
-    uplift = repo_root / "target" / profile / RUNNER_PACKAGE
-    artifact = repo_root / "target" / profile / settings["artifact"]
+    digests_path = target_dir / "golden-gate/rust-sources.json"
+    stamp_path = target_dir / f"golden-gate/{variant}-{profile}.json"
+    uplift = target_dir / profile / RUNNER_PACKAGE
+    artifact = target_dir / profile / settings["artifact"]
 
     changed = restore_sources_invariant(repo_root, members, state, digests_path)
 

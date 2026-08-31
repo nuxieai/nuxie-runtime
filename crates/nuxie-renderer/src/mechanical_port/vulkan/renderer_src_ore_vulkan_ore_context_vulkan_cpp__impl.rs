@@ -7,8 +7,9 @@ use super::ore_bind_group_layout_vulkan_decl::BindGroupLayoutVulkan;
 use super::ore_bind_group_vulkan_decl::{BindGroupVulkan, ImageWrite, UBOWrite};
 use super::ore_buffer_vulkan_decl::BufferVulkan;
 use super::ore_context_vulkan_decl::{
-    ContextVulkan, DescriptorPoolGeneration, DescriptorSetAllocation, VKRenderPassKey,
-    VkPendingImageTransition, VkPendingTextureUpload, MAX_DESCRIPTOR_SETS_PER_GENERATION,
+    ContextVulkan, DescriptorPoolGeneration, DescriptorSetAllocation,
+    MAX_DESCRIPTOR_SETS_PER_GENERATION, VKRenderPassKey, VkPendingImageTransition,
+    VkPendingTextureUpload,
 };
 use super::ore_render_pass_vulkan_decl::RenderPassVulkan;
 use super::ore_sampler_vulkan_decl::SamplerVulkan;
@@ -22,15 +23,15 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_ca
 use ash::vk;
 use ash::vk::Handle;
 use nuxie_ore_metal::buffer::BufferApi;
-use nuxie_ore_metal::context::{ActiveRenderPass, ContextApi, FrameDescriptor, ShaderTarget};
+use nuxie_ore_metal::context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::texture::TextureApi;
 use nuxie_ore_metal::types::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
-    BufferDesc, BufferUsage, CompareFunction, Features, Filter, LoadOp, RenderPassDesc,
-    SamplerDesc, ShaderModuleDesc, StoreOp, TextureAspect, TextureDesc, TextureFormat, TextureType,
-    TextureViewDesc, TextureViewDimension, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
+    CompareFunction, Features, Filter, LoadOp, RenderPassDesc, SamplerDesc, ShaderModuleDesc,
+    StoreOp, TextureAspect, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
+    TextureViewDimension, WrapMode, kMaxBindGroups,
 };
 use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
@@ -887,7 +888,11 @@ pub(crate) fn makeBindGroupLayout(
         ));
         return None;
     }
-    let entries = desc.entries.get(..desc.entryCount as usize)?.to_vec();
+    let entries = desc
+        .entries
+        .unwrap_or(&[])
+        .get(..desc.entryCount as usize)?
+        .to_vec();
     let (manager, domain) = contextResourceParts(context);
     let mut layout = BindGroupLayoutVulkan::new();
     nuxie_ore_metal::install_bind_group_layout_backend_parts(
@@ -1358,9 +1363,8 @@ pub(crate) unsafe fn wrapCanvasTexture(
     // dispatch. Recover the actual Rust complete object so a texture-backed
     // RenderCanvas retains those same derived image/view overrides.
     let target = NonNull::new(canvas.renderTarget())?;
-    let binding = unsafe {
-        super::render_context_vulkan_impl::liveRenderTargetVulkanTextureBinding(target)
-    };
+    let binding =
+        unsafe { super::render_context_vulkan_impl::liveRenderTargetVulkanTextureBinding(target) };
     let image = binding.image;
     let imageView = binding.imageView;
     if image == vk::Image::null() || imageView == vk::ImageView::null() {
@@ -1386,11 +1390,9 @@ pub(crate) unsafe fn wrapCanvasTexture(
     let mut texture = TextureVulkan::new(manager.clone(), &desc, context);
     texture.m_vkImage = image;
     texture.m_vkLayout.set(vk::ImageLayout::UNDEFINED);
-    let texture = ResourceHandle::new_texture_with_installed_manager_in_domain(
-        domain.clone(),
-        texture,
-    )
-    .erase();
+    let texture =
+        ResourceHandle::new_texture_with_installed_manager_in_domain(domain.clone(), texture)
+            .erase();
     let viewDesc = TextureViewDesc {
         texture: Some(&texture),
         dimension: TextureViewDimension::texture2D,
@@ -1440,11 +1442,9 @@ pub(crate) unsafe fn wrapRiveTexture(
     wrapped
         .m_vkLayout
         .set(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-    let wrapped = ResourceHandle::new_texture_with_installed_manager_in_domain(
-        domain.clone(),
-        wrapped,
-    )
-    .erase();
+    let wrapped =
+        ResourceHandle::new_texture_with_installed_manager_in_domain(domain.clone(), wrapped)
+            .erase();
     let viewDesc = TextureViewDesc {
         texture: Some(&wrapped),
         dimension: TextureViewDimension::texture2D,
@@ -1460,6 +1460,9 @@ pub(crate) unsafe fn wrapRiveTexture(
 }
 
 impl ContextApi for ContextVulkan {
+    fn contextBase(&self) -> &Context {
+        &self.base
+    }
     fn features(&self) -> Features {
         self.base.features()
     }

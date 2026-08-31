@@ -19,6 +19,9 @@ pub(crate) fn live_metal_test_unavailable(context: &str) {
 // graphs directly.
 mod mechanical_port;
 
+pub mod cmd;
+pub mod ore_cmd;
+
 pub mod bind_group {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_hpp::*;
 }
@@ -42,7 +45,7 @@ pub mod context {
 pub mod gpu_resource {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::*;
 }
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub mod metal;
 pub mod pipeline {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_pipeline_hpp::*;
@@ -118,6 +121,19 @@ pub fn context_backend_manager(
 #[doc(hidden)]
 pub fn context_backend_domain(context: &context::Context) -> gpu_resource::ResourceDomain {
     context.state.resourceDomain()
+}
+
+/// Shares the native base's exact state with an owner-retaining host facade.
+/// No backend resources or recording state are independently reconstructed.
+#[doc(hidden)]
+pub fn share_context_backend_base(context: &context::Context) -> context::Context {
+    context.shared_base()
+}
+
+/// Source protected m_features assignment when a deferred context binds a device.
+#[doc(hidden)]
+pub fn context_backend_set_features(context: &context::Context, features: types::Features) {
+    *context.features_mut_unpublished() = features;
 }
 
 /// Clones the Rust safety-sidecar destruction drain into a concrete backend's

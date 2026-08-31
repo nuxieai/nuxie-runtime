@@ -2,6 +2,7 @@
 /vendor/*/target/
 /fixtures/**/*.riv
 /fixtures/command_queue/
+/fixtures/gm/
 /fixtures/fonts/
 !/fixtures/sync/data_bind_blob_test.riv
 !/fixtures/editor/

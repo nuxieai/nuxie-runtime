@@ -8,38 +8,10 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-const MAKE_RENDER_BUFFER: u64 = 0;
-const MAKE_LINEAR_GRADIENT: u64 = 1;
-const MAKE_RADIAL_GRADIENT: u64 = 2;
-const MAKE_RENDER_PATH: u64 = 3;
-const MAKE_RENDER_PAINT: u64 = 5;
-const DECODE_IMAGE: u64 = 6;
-const SAVE: u64 = 7;
-const RESTORE: u64 = 8;
-const TRANSFORM: u64 = 9;
-const DRAW_PATH: u64 = 10;
-const CLIP_PATH: u64 = 11;
-const DRAW_IMAGE: u64 = 12;
-const DRAW_IMAGE_MESH: u64 = 13;
-const SET_VERTEX_BUFFER_DATA: u64 = 14;
-const SET_INDEX_BUFFER_DATA: u64 = 15;
-const ADD_RAW_PATH: u64 = 16;
-const REWIND: u64 = 17;
-const FILL_RULE: u64 = 18;
-const STYLE: u64 = 20;
-const COLOR: u64 = 21;
-const THICKNESS: u64 = 22;
-const JOIN: u64 = 23;
-const CAP: u64 = 24;
-const FEATHER: u64 = 25;
-const BLEND_MODE: u64 = 26;
-const SHADER: u64 = 27;
-const FRAME: u64 = 28;
-const FRAME_SIZE: u64 = 29;
-const MODULATE_OPACITY: u64 = 30;
+use crate::serialize_ops::*;
 
 #[derive(Debug)]
-struct Writer {
+pub(crate) struct Writer {
     bytes: Vec<u8>,
 }
 
@@ -50,7 +22,7 @@ impl Writer {
         }
     }
 
-    fn varuint(&mut self, mut value: u64) {
+    pub(crate) fn varuint(&mut self, mut value: u64) {
         loop {
             let mut byte = (value & 0x7f) as u8;
             value >>= 7;
@@ -64,20 +36,12 @@ impl Writer {
         }
     }
 
-    fn float(&mut self, value: f32) {
+    pub(crate) fn float(&mut self, value: f32) {
         self.bytes.extend_from_slice(&value.to_le_bytes());
     }
 
     fn raw_path(&mut self, path: &RawPath) {
-        self.varuint(path.verbs().len() as u64);
-        for verb in path.verbs() {
-            self.varuint(*verb as u64);
-        }
-        self.varuint(path.points().len() as u64);
-        for point in path.points() {
-            self.float(point.x);
-            self.float(point.y);
-        }
+        serialize_raw_path(self, path);
     }
 }
 
@@ -176,7 +140,10 @@ impl Factory for SerializingFactory {
         for value in [sx, sy, ex, ey] {
             writer.float(value);
         }
-        Box::new(SerializingRenderShader { id })
+        Box::new(SerializingRenderShader {
+            id,
+            identity: Rc::new(()),
+        })
     }
 
     fn make_radial_gradient(
@@ -197,7 +164,10 @@ impl Factory for SerializingFactory {
         for value in [cx, cy, radius] {
             writer.float(value);
         }
-        Box::new(SerializingRenderShader { id })
+        Box::new(SerializingRenderShader {
+            id,
+            identity: Rc::new(()),
+        })
     }
 
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
@@ -256,7 +226,12 @@ impl Factory for SerializingFactory {
             writer.bytes.extend_from_slice(data);
         }
         let (width, height) = encoded_image_dimensions(data);
-        Ok(Box::new(SerializingRenderImage { id, width, height }))
+        Ok(Box::new(SerializingRenderImage {
+            id,
+            width,
+            height,
+            identity: Rc::new(()),
+        }))
     }
 }
 
@@ -286,23 +261,39 @@ fn write_stops(writer: &mut Writer, colors: &[ColorInt], stops: &[f32]) {
     }
 }
 
+#[derive(Clone)]
 struct SerializingRenderShader {
     id: u64,
+    identity: Rc<()>,
 }
 
 impl RenderShader for SerializingRenderShader {
+    fn retain_shader(&self) -> Rc<dyn RenderShader> {
+        Rc::new(self.clone())
+    }
+    fn shader_identity(&self) -> usize {
+        Rc::as_ptr(&self.identity) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
+#[derive(Clone)]
 struct SerializingRenderImage {
+    identity: Rc<()>,
     id: u64,
     width: u32,
     height: u32,
 }
 
 impl RenderImage for SerializingRenderImage {
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Rc::as_ptr(&self.identity) as usize
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }

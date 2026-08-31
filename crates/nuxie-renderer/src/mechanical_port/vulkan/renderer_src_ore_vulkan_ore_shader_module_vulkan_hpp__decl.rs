@@ -59,6 +59,9 @@ impl DerefMut for ShaderModuleVulkan {
 }
 
 unsafe impl GpuResourcePayload for ShaderModuleVulkan {
+    fn shader_module_base(&self) -> Option<&ShaderModule> {
+        Some(&self.base)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         self.base.gpu_resource()
     }

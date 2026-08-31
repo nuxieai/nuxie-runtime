@@ -28,9 +28,11 @@ luau = [
     "dep:luaur-vm",
     "dep:nuxie-image-codec",
     "dep:nuxie-render-api",
+    "dep:nuxie-ore-metal",
 ]
 
 [dependencies]
+nuxie-ore-metal = { path = "../nuxie-ore-metal", default-features = false, optional = true }
 nuxie-render-api = { path = "../nuxie-render-api", optional = true }
 nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
 # Pinned exactly: luaur-rt 0.1.8 (pure-Rust Luau translation, validated
@@ -44,6 +46,8 @@ nuxie-image-codec = { path = "../nuxie-image-codec", optional = true }
 sha2 = { version = "0.10", optional = true }
 
 [dev-dependencies]
+nuxie-ore-metal = { path = "../nuxie-ore-metal", default-features = false }
+nuxie-renderer = { path = "../nuxie-renderer", default-features = false }
 # Read-only use of the corpus reader to pull ScriptAsset payloads out of
 # real .riv files in tests. dev-dependency only: nuxie-binary never becomes
 # part of nuxie-scripting's public dependency surface.

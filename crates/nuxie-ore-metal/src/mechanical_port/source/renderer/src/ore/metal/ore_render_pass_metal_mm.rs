@@ -19,7 +19,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
-#![cfg(target_vendor = "apple")]
+#![cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use super::ore_render_pass_metal_hpp::{RenderPassMetalInner, RenderPassMetalState};
 use super::*;
 
@@ -33,10 +33,10 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
     CullMode, FaceWinding, IndexFormat, PrimitiveTopology,
 };
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2::rc::Retained;
-#[cfg(target_vendor = "apple")]
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use objc2_metal::{
     MTLCommandEncoder, MTLCullMode, MTLIndexType, MTLPrimitiveType, MTLRenderCommandEncoder,
     MTLScissorRect, MTLViewport, MTLWinding,
@@ -48,14 +48,14 @@ use objc2_metal::{
 // companion mechanical header uses these same `Option<Retained<...>>`
 // shapes; retaining the value here keeps the encoder, command buffer, and
 // index backing alive for exactly the pass lifetime.
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 // Vertex buffers are bound at slots [kMetalVertexBufferBase, ...) to avoid
 // colliding with uniform buffers mapped to the low buffer indices
 // ([[buffer(0)]] etc). Must stay in sync with ore_context_metal.mm.
 const kMetalVertexBufferBase: u32 = 16;
 
 // static MTLPrimitiveType orePrimitiveTopologyToMTL(PrimitiveTopology topo)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn orePrimitiveTopologyToMTL(topo: PrimitiveTopology) -> MTLPrimitiveType {
     match topo {
         PrimitiveTopology::pointList => MTLPrimitiveType::Point,
@@ -67,7 +67,7 @@ fn orePrimitiveTopologyToMTL(topo: PrimitiveTopology) -> MTLPrimitiveType {
 }
 
 // static MTLIndexType oreIndexFormatToMTL(IndexFormat format)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreIndexFormatToMTL(format: IndexFormat) -> MTLIndexType {
     match format {
         IndexFormat::uint16 => MTLIndexType::UInt16,
@@ -77,7 +77,7 @@ fn oreIndexFormatToMTL(format: IndexFormat) -> MTLIndexType {
 }
 
 // static MTLCullMode oreCullModeToMTL(CullMode mode)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreCullModeToMTL(mode: CullMode) -> MTLCullMode {
     match mode {
         CullMode::none => MTLCullMode::None,
@@ -87,7 +87,7 @@ fn oreCullModeToMTL(mode: CullMode) -> MTLCullMode {
 }
 
 // static MTLWinding oreWindingToMTL(FaceWinding winding)
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 fn oreWindingToMTL(winding: FaceWinding) -> MTLWinding {
     match winding {
         FaceWinding::clockwise => MTLWinding::Clockwise,
@@ -495,6 +495,9 @@ impl RenderPassMetalState {
         firstInstance: u32,
     ) {
         self.validate();
+        if self.m_currentPipeline.is_none() {
+            return;
+        }
         // [m_mtlEncoder drawPrimitives:m_mtlPrimitiveType
         //                  vertexStart:firstVertex
         //                  vertexCount:vertexCount
@@ -527,6 +530,9 @@ impl RenderPassMetalState {
         firstInstance: u32,
     ) {
         self.validate();
+        if self.m_currentPipeline.is_none() || self.m_mtlIndexBuffer.is_none() {
+            return;
+        }
         // assert(m_mtlIndexBuffer != nil &&
         //        "Must call setIndexBuffer before drawIndexed");
         debug_assert!(

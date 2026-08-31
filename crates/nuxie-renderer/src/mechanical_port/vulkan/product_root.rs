@@ -160,10 +160,8 @@ impl VulkanProductBackend {
         #[cfg(feature = "rive-decoders")]
         crate::exact_source_adapter::install_bitmap_decoder(context.as_mut());
         let context_ref = unsafe { Pin::get_unchecked_mut(context.as_mut()) };
-        let implementation = unsafe {
-            &mut *context_ref
-                .static_impl_cast::<RenderContextVulkanImpl>()
-        };
+        let implementation =
+            unsafe { &mut *context_ref.static_impl_cast::<RenderContextVulkanImpl>() };
         unsafe { implementation.setCanvasQueue(queue, queue_family_index) };
         let target = implementation.makeRenderTarget(width, height, TARGET_FORMAT, TARGET_USAGE);
         if !target.operator_bool() {
@@ -216,7 +214,7 @@ impl VulkanProductBackend {
             let mut ore_context = NonNull::new(ore_context)
                 .ok_or_else(|| GpuCanvasError::new("exact Vulkan ORE context is unavailable"))?;
             let context = match unsafe { ore_context.as_mut() } {
-                OreContext::Vulkan(context) => NonNull::from(context.as_mut()),
+                OreContext::Vulkan(context) => Rc::clone(context),
                 #[allow(unreachable_patterns)]
                 _ => {
                     return Err(GpuCanvasError::new(
@@ -224,12 +222,10 @@ impl VulkanProductBackend {
                     ));
                 }
             };
-            self.gpu_canvas = Some(unsafe {
-                ExactGpuCanvas::new_borrowed(
-                    context,
-                    GpuCanvasShaderProfile::TrustedVulkanSpirV,
-                )?
-            });
+            self.gpu_canvas = Some(ExactGpuCanvas::new_shared(
+                context,
+                GpuCanvasShaderProfile::TrustedVulkanSpirV,
+            )?);
         }
         Ok(self
             .gpu_canvas
@@ -260,15 +256,14 @@ impl VulkanProductBackend {
             return Ok(());
         }
         unsafe {
-            self.device
-                .device_wait_idle()
-                .map_err(|error| RendererError::Device(format!("wait to resize Vulkan target: {error:?}")))?;
+            self.device.device_wait_idle().map_err(|error| {
+                RendererError::Device(format!("wait to resize Vulkan target: {error:?}"))
+            })?;
         }
         let target = {
             let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
-            let implementation = unsafe {
-                &mut *context.static_impl_cast::<RenderContextVulkanImpl>()
-            };
+            let implementation =
+                unsafe { &mut *context.static_impl_cast::<RenderContextVulkanImpl>() };
             implementation.makeRenderTarget(width, height, TARGET_FORMAT, TARGET_USAGE)
         };
         if !target.operator_bool() {
@@ -335,14 +330,12 @@ impl VulkanProductBackend {
 
     fn finish_submission(&mut self, command: vk::CommandBuffer) -> Result<(), RendererError> {
         unsafe {
-            self.device.end_command_buffer(command).map_err(|error| {
-                RendererError::Device(format!("end Vulkan frame: {error:?}"))
-            })?;
+            self.device
+                .end_command_buffer(command)
+                .map_err(|error| RendererError::Device(format!("end Vulkan frame: {error:?}")))?;
             self.device
                 .reset_fences(&[self.resources.fence])
-                .map_err(|error| {
-                    RendererError::Device(format!("reset Vulkan fence: {error:?}"))
-                })?;
+                .map_err(|error| RendererError::Device(format!("reset Vulkan fence: {error:?}")))?;
             #[cfg(test)]
             if std::mem::take(&mut self.fail_next_finish) {
                 return Err(RendererError::Device(
@@ -445,6 +438,9 @@ impl ExactSourceBackend for VulkanProductBackend {
     }
 
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError> {
+        #[cfg(feature = "native-ore-vulkan-experimental")]
+        self.gpu_canvas_mut()
+            .map_err(|error| RendererError::Device(error.to_string()))?;
         if let Some(error) = &self.frame_recovery_error {
             return Err(RendererError::Device(format!(
                 "exact Vulkan frame synchronization is unavailable: {error}"
@@ -497,6 +493,18 @@ impl ExactSourceBackend for VulkanProductBackend {
         let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
         context.beginFrameExecutable(&descriptor);
         self.frame_number = self.frame_number.wrapping_add(1);
+        #[cfg(feature = "native-ore-vulkan-experimental")]
+        unsafe {
+            self.gpu_canvas
+                .as_mut()
+                .expect("initialized ORE context")
+                .begin_frame_external(
+                    self.frame_number.saturating_sub(1),
+                    self.frame_number,
+                    NonNull::new(self.resources.command_buffer.as_raw() as usize as *mut c_void)
+                        .expect("recording Vulkan command buffer"),
+                );
+        }
         self.active_frame = true;
         Ok(self.frame_number)
     }
@@ -507,6 +515,11 @@ impl ExactSourceBackend for VulkanProductBackend {
                 "exact Vulkan frame ownership mismatch".into(),
             ));
         }
+        #[cfg(feature = "native-ore-vulkan-experimental")]
+        self.gpu_canvas
+            .as_mut()
+            .expect("active ORE frame")
+            .end_frame();
         let target = self.target.get().cast();
         let command = self.resources.command_buffer;
         let external_command = NonNull::new(command.as_raw() as usize as *mut c_void)
@@ -579,6 +592,11 @@ impl ExactSourceBackend for VulkanProductBackend {
 
     fn abort_frame(&mut self) {
         if self.active_frame {
+            #[cfg(feature = "native-ore-vulkan-experimental")]
+            self.gpu_canvas
+                .as_mut()
+                .expect("active ORE frame")
+                .end_frame();
             unsafe { Pin::get_unchecked_mut(self.context_pin()) }.abortFrameExecutable();
             self.active_frame = false;
         }
@@ -624,11 +642,18 @@ impl ExactSourceBackend for VulkanProductBackend {
             ));
         }
 
+        if self.active_frame {
+            return self.gpu_canvas_mut()?.execute_current_frame(
+                &canvas,
+                pipelines,
+                plan,
+                &execution_anchor,
+            );
+        }
         let command = {
             let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
-            let implementation = unsafe {
-                &mut *context.static_impl_cast::<RenderContextVulkanImpl>()
-            };
+            let implementation =
+                unsafe { &mut *context.static_impl_cast::<RenderContextVulkanImpl>() };
             super::render_context_vulkan_impl::makeCommandBuffer(implementation)
         };
         let command = NonNull::new(command).ok_or_else(|| {
@@ -646,18 +671,10 @@ impl ExactSourceBackend for VulkanProductBackend {
         let execution = (|| {
             let gpu_canvas = self.gpu_canvas_mut()?;
             unsafe {
-                gpu_canvas.begin_frame_external(
-                    safe_frame_number,
-                    current_frame_number,
-                    command,
-                )
+                gpu_canvas.begin_frame_external(safe_frame_number, current_frame_number, command)
             };
-            let result = gpu_canvas.execute_current_frame(
-                &canvas,
-                pipelines,
-                plan,
-                &execution_anchor,
-            );
+            let result =
+                gpu_canvas.execute_current_frame(&canvas, pipelines, plan, &execution_anchor);
             gpu_canvas.end_frame();
             result
         })();
@@ -667,9 +684,8 @@ impl ExactSourceBackend for VulkanProductBackend {
         // canvas pre-pass must release its command-buffer allocation.
         {
             let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
-            let implementation = unsafe {
-                &mut *context.static_impl_cast::<RenderContextVulkanImpl>()
-            };
+            let implementation =
+                unsafe { &mut *context.static_impl_cast::<RenderContextVulkanImpl>() };
             unsafe {
                 super::render_context_vulkan_impl::commitCommandBuffer(
                     implementation,
@@ -687,10 +703,7 @@ fn gpu_canvas_frame_numbers(frame_number: &mut u64, active_frame: bool) -> (u64,
         *frame_number = frame_number.wrapping_add(1);
     }
     let current_frame_number = *frame_number;
-    (
-        current_frame_number.saturating_sub(1),
-        current_frame_number,
-    )
+    (current_frame_number.saturating_sub(1), current_frame_number)
 }
 
 impl Drop for VulkanProductBackend {
@@ -742,8 +755,10 @@ fn create_instance(
     entry: &ash::Entry,
 ) -> Result<(ash::Instance, vk::PFN_vkGetInstanceProcAddr, u32), RendererError> {
     let application_name = CString::new("Nuxie exact Vulkan renderer").unwrap();
-    let supported = unsafe { entry.enumerate_instance_extension_properties(None) }
-        .map_err(|error| RendererError::Adapter(format!("enumerate Vulkan extensions: {error:?}")))?;
+    let supported =
+        unsafe { entry.enumerate_instance_extension_properties(None) }.map_err(|error| {
+            RendererError::Adapter(format!("enumerate Vulkan extensions: {error:?}"))
+        })?;
     let portability = CString::new("VK_KHR_portability_enumeration").unwrap();
     let has_portability = supported.iter().any(|property| unsafe {
         CStr::from_ptr(property.extension_name.as_ptr()) == portability.as_c_str()
@@ -771,7 +786,11 @@ fn create_instance(
         .enabled_extension_names(&extensions);
     let instance = unsafe { entry.create_instance(&create, None) }
         .map_err(|error| RendererError::Adapter(format!("create Vulkan instance: {error:?}")))?;
-    Ok((instance, entry.static_fn().get_instance_proc_addr, api_version))
+    Ok((
+        instance,
+        entry.static_fn().get_instance_proc_addr,
+        api_version,
+    ))
 }
 
 fn select_physical_device(
@@ -818,14 +837,16 @@ fn create_device(
         .texture_compression_bc(supported_features.texture_compression_bc != 0)
         .texture_compression_astc_ldr(supported_features.texture_compression_astc_ldr != 0)
         .texture_compression_etc2(supported_features.texture_compression_etc2 != 0);
-    let supported_extensions = unsafe {
-        instance.enumerate_device_extension_properties(physical_device)
-    }
-    .map_err(|error| RendererError::Adapter(format!("enumerate Vulkan device extensions: {error:?}")))?;
+    let supported_extensions =
+        unsafe { instance.enumerate_device_extension_properties(physical_device) }.map_err(
+            |error| {
+                RendererError::Adapter(format!("enumerate Vulkan device extensions: {error:?}"))
+            },
+        )?;
     let supports = |name: &CStr| {
-        supported_extensions.iter().any(|property| unsafe {
-            CStr::from_ptr(property.extension_name.as_ptr()) == name
-        })
+        supported_extensions
+            .iter()
+            .any(|property| unsafe { CStr::from_ptr(property.extension_name.as_ptr()) == name })
     };
     let portability = CString::new("VK_KHR_portability_subset").unwrap();
     let raster_order = CString::new("VK_EXT_rasterization_order_attachment_access").unwrap();
@@ -850,13 +871,14 @@ fn create_device(
     let mut queried_features =
         vk::PhysicalDeviceFeatures2::default().push_next(&mut queried_interlock);
     unsafe { instance.get_physical_device_features2(physical_device, &mut queried_features) };
-    let has_fragment_interlock = supports(&fragment_interlock)
-        && queried_interlock.fragment_shader_pixel_interlock != 0;
+    let has_fragment_interlock =
+        supports(&fragment_interlock) && queried_interlock.fragment_shader_pixel_interlock != 0;
     if has_fragment_interlock {
         extensions.push(fragment_interlock.as_ptr());
     }
-    let mut raster_features = vk::PhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT::default()
-        .rasterization_order_color_attachment_access(selected_raster_extension.is_some());
+    let mut raster_features =
+        vk::PhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT::default()
+            .rasterization_order_color_attachment_access(selected_raster_extension.is_some());
     let mut interlock_features = vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT::default()
         .fragment_shader_pixel_interlock(has_fragment_interlock);
     let priority = [1.0f32];
@@ -907,7 +929,11 @@ fn create_target_resources(
             &vk::ImageCreateInfo::default()
                 .image_type(vk::ImageType::TYPE_2D)
                 .format(TARGET_FORMAT)
-                .extent(vk::Extent3D { width, height, depth: 1 })
+                .extent(vk::Extent3D {
+                    width,
+                    height,
+                    depth: 1,
+                })
                 .mip_levels(1)
                 .array_layers(1)
                 .samples(vk::SampleCountFlags::TYPE_1)
@@ -934,13 +960,7 @@ fn create_target_resources(
         )
     }
     .map_err(|error| RendererError::Device(format!("allocate Vulkan target: {error:?}")))?;
-    unsafe {
-        device.bind_image_memory(
-            pending.resources.image,
-            pending.resources.image_memory,
-            0,
-        )
-    }
+    unsafe { device.bind_image_memory(pending.resources.image, pending.resources.image_memory, 0) }
         .map_err(|error| RendererError::Device(format!("bind Vulkan target: {error:?}")))?;
     pending.resources.image_view = unsafe {
         device.create_image_view(
@@ -992,7 +1012,7 @@ fn create_target_resources(
             0,
         )
     }
-        .map_err(|error| RendererError::Device(format!("bind Vulkan readback: {error:?}")))?;
+    .map_err(|error| RendererError::Device(format!("bind Vulkan readback: {error:?}")))?;
     pending.resources.command_pool = unsafe {
         device.create_command_pool(
             &vk::CommandPoolCreateInfo::default()
@@ -1041,9 +1061,9 @@ fn find_memory_type(
 
 #[cfg(all(test, feature = "native-ore-vulkan-experimental"))]
 mod gpu_canvas_frame_number_tests {
-    use super::*;
     use super::super::ore_texture_vulkan_decl::{TextureViewVulkan, TextureVulkan};
     use super::super::vkutil_decl::Texture2D;
+    use super::*;
 
     #[test]
     fn gpu_canvas_uses_the_single_monotonic_host_frame_stream() {
@@ -1062,8 +1082,7 @@ mod gpu_canvas_frame_number_tests {
     #[test]
     #[ignore = "requires a configured Vulkan test host"]
     fn wrap_canvas_texture_uses_the_texture_backed_target_and_publishes_resources() {
-        let mut backend =
-            VulkanProductBackend::new(2, 2).expect("configured Vulkan test host");
+        let mut backend = VulkanProductBackend::new(2, 2).expect("configured Vulkan test host");
         let canvas = unsafe { Pin::get_unchecked_mut(backend.context_pin()) }
             .makeRenderCanvasExecutable(2, 2);
         assert!(canvas.operator_bool());
@@ -1082,7 +1101,7 @@ mod gpu_canvas_frame_number_tests {
         let ore_context = unsafe { Pin::get_unchecked_mut(backend.context_pin()) }.oreExecutable();
         let mut ore_context = NonNull::new(ore_context).expect("source-owned Vulkan ORE context");
         let context = match unsafe { ore_context.as_mut() } {
-            OreContext::Vulkan(context) => context.as_mut(),
+            OreContext::Vulkan(context) => &mut *context.borrow_mut(),
             #[allow(unreachable_patterns)]
             _ => panic!("exact Vulkan RenderContext returned a foreign ORE context"),
         };
@@ -1093,9 +1112,11 @@ mod gpu_canvas_frame_number_tests {
             .expect("production wrapCanvasTexture result");
 
         assert!(wrapped.belongsTo(&expected_domain));
-        assert!(wrapped
-            .manager()
-            .is_some_and(|manager| manager.ptr_eq(&expected_manager)));
+        assert!(
+            wrapped
+                .manager()
+                .is_some_and(|manager| manager.ptr_eq(&expected_manager))
+        );
         {
             let view = wrapped
                 .downcast_ref::<TextureViewVulkan>()
@@ -1106,9 +1127,11 @@ mod gpu_canvas_frame_number_tests {
 
             let retained_texture = view.texture();
             assert!(retained_texture.belongsTo(&expected_domain));
-            assert!(retained_texture
-                .manager()
-                .is_some_and(|manager| manager.ptr_eq(&expected_manager)));
+            assert!(
+                retained_texture
+                    .manager()
+                    .is_some_and(|manager| manager.ptr_eq(&expected_manager))
+            );
             assert_eq!(retained_texture.width(), Some(2));
             assert_eq!(retained_texture.height(), Some(2));
             assert_eq!(retained_texture.isRenderTarget(), Some(true));

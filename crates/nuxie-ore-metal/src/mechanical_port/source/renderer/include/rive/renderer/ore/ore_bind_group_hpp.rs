@@ -134,6 +134,9 @@ impl Drop for BindGroup {
 }
 
 unsafe impl GpuResourcePayload for BindGroup {
+    fn bind_group_base(&self) -> Option<&BindGroup> {
+        Some(self)
+    }
     fn gpu_resource(&self) -> &GPUResource {
         &self.base
     }

@@ -2577,6 +2577,9 @@ impl Artboard {
         if import_stack.latest_backboard_importer().is_none() {
             return StatusCode::MissingObject;
         }
+        self.base
+            .base
+            .set_compose_transform_from_import(import_stack);
         // Component::import's Artboard branch operates on this already-borrowed
         // root directly, then continues to Core::import.
         debug_assert!(self.objects.is_empty());

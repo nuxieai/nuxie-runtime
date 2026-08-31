@@ -12,6 +12,7 @@ use crate::mechanical_port::source::{
         layout_component_base::{LayoutComponentBase, LayoutComponentBaseCallbacks},
     },
     hit_info::HitInfo,
+    importers::import_stack::ImportStack,
     layout::{
         layout_component_style::LayoutComponentStyle,
         layout_data::LayoutData,
@@ -183,6 +184,11 @@ pub struct LayoutComponent {
     position_left_changed: bool,
     position_top_changed: bool,
     has_foreground_drawable: bool,
+    // Files exported before 7.3 never composed a layout's own rotation/scale,
+    // so any stored value was ignored. Import clears this for those files; it
+    // defaults to the current behavior so a layout built outside of import
+    // isn't stuck on the legacy path. See File::MINOR_VERSION.
+    compose_transform: bool,
 }
 
 impl Default for LayoutComponent {
@@ -224,6 +230,7 @@ impl Default for LayoutComponent {
             position_left_changed: true,
             position_top_changed: true,
             has_foreground_drawable: false,
+            compose_transform: true,
         }
     }
 }
@@ -250,6 +257,43 @@ impl ProxyDrawing for LayoutProxy {
 }
 
 impl LayoutComponent {
+    pub(crate) fn set_compose_transform_from_import(&mut self, import_stack: &ImportStack) {
+        // Files exported before 7.3 composed a layout's transform from the solved
+        // slot alone, so any stored rotation/scale was written but never applied.
+        // Keep that legacy behavior for those files; newer files compose it on top
+        // of the slot. See File::MINOR_VERSION.
+        let major = import_stack.major_version();
+        let minor = import_stack.minor_version();
+        self.compose_transform = major > 7 || (major == 7 && minor >= 3);
+    }
+
+    pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
+        self.set_compose_transform_from_import(import_stack);
+        Component::import(
+            &mut self
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base,
+            import_stack,
+        )
+    }
+
+    pub fn clone_core(&self) -> Self {
+        let mut callbacks = Self::default();
+        let mut twin = self.base.clone_into(&mut callbacks);
+        twin.compose_transform = self.compose_transform;
+        twin
+    }
+
     /// Pinned forEachLayoutProvider: groups are transparent, Solo exposes its
     /// active child, and a nested component list must explicitly opt in.
     pub fn layout_providers_occurrence(from: &CoreHandle) -> Vec<(CoreHandle, CoreHandle)> {
@@ -995,7 +1039,9 @@ impl LayoutComponent {
                 location -= origin;
             }
             let mut slot = Mat2D::from_translation(location);
-            if self.rotation() != 0.0 || self.scale_x() != 1.0 || self.scale_y() != 1.0 {
+            if self.compose_transform
+                && (self.rotation() != 0.0 || self.scale_x() != 1.0 || self.scale_y() != 1.0)
+            {
                 let mut local = if self.rotation() != 0.0 {
                     Mat2D::from_rotation(self.rotation())
                 } else {

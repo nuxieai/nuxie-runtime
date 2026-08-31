@@ -166,22 +166,24 @@ impl TextInput {
         &mut self,
         value: ComponentDirt,
     ) -> Option<(CoreHandle, super::cursor::CursorVisualPosition, bool)> {
-        if value.intersects(ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT) {
-            let font_size = self
-                .text_style
-                .as_ref()
-                .and_then(|style| {
-                    style
-                        .with(|style| style.as_text_style().map(|style| style.base.font_size()))
-                        .flatten()
-                })
-                .expect("TextInput style");
-            self.raw_text_input.set_font_size(font_size);
+        if let Some(style) = self.text_style.as_ref()
+            && value.intersects(ComponentDirt::TEXT_SHAPE | ComponentDirt::PAINT)
+        {
             let factory = self
                 .base
                 .with_artboard(|artboard| artboard.factory())
                 .flatten()
                 .expect("TextInput retains its imported renderer factory");
+            let (font, font_size) = style
+                .with_mut(|style| {
+                    style
+                        .as_text_style_mut()
+                        .map(|style| (style.font(), style.base.font_size()))
+                })
+                .flatten()
+                .expect("TextInput style");
+            self.raw_text_input.set_font(font);
+            self.raw_text_input.set_font_size(font_size);
             let changed = self.raw_text_input.update(&factory);
             if changed & Flags::ShapeDirty as u8 != 0 {
                 self.world_bounds = self

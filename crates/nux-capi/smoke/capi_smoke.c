@@ -156,9 +156,27 @@ int main(int argc, char** argv)
     size_t len = 0;
     uint8_t* bytes = read_file(argv[1], &len);
 
+    SmokeCounters counters;
+    memset(&counters, 0, sizeof(counters));
+
+    NuxRenderCallbacks callbacks;
+    memset(&callbacks, 0, sizeof(callbacks));
+    callbacks.struct_size = sizeof(callbacks);
+    callbacks.user_data = &counters;
+    callbacks.make_render_path = smoke_make_render_path;
+    callbacks.make_empty_render_path = smoke_make_handle;
+    callbacks.make_render_paint = smoke_make_handle;
+    callbacks.release_render_path = smoke_release;
+    callbacks.release_render_paint = smoke_release;
+    callbacks.release_render_shader = smoke_release;
+    callbacks.draw_path = smoke_draw_path;
+    callbacks.save = smoke_save;
+    callbacks.restore = smoke_restore;
+
     NuxFile* file = NULL;
     NuxCapiResult* import_result = NULL;
-    CHECK(nux_file_import_with_result(bytes, len, NULL, &file, &import_result) ==
+    CHECK(nux_file_import_with_result(
+              bytes, len, &callbacks, &file, &import_result) ==
           NUX_STATUS_OK);
     CHECK(file != NULL);
     CHECK(import_result != NULL);
@@ -360,27 +378,10 @@ int main(int argc, char** argv)
           NUX_STATUS_NULL_ARGUMENT);
     nux_view_model_instance_free(view_model); /* NULL-safe */
 
-    SmokeCounters counters;
-    memset(&counters, 0, sizeof(counters));
-
-    NuxRenderCallbacks callbacks;
-    memset(&callbacks, 0, sizeof(callbacks));
-    callbacks.struct_size = sizeof(callbacks);
-    callbacks.user_data = &counters;
-    callbacks.make_render_path = smoke_make_render_path;
-    callbacks.make_empty_render_path = smoke_make_handle;
-    callbacks.make_render_paint = smoke_make_handle;
-    callbacks.release_render_path = smoke_release;
-    callbacks.release_render_paint = smoke_release;
-    callbacks.release_render_shader = smoke_release;
-    callbacks.draw_path = smoke_draw_path;
-    callbacks.save = smoke_save;
-    callbacks.restore = smoke_restore;
-
-    CHECK(nux_artboard_instance_draw(instance, &callbacks) == NUX_STATUS_OK);
+    CHECK(nux_artboard_instance_draw(instance) == NUX_STATUS_OK);
     size_t made_after_first_draw = counters.made;
     size_t released_after_first_draw = counters.released;
-    CHECK(nux_artboard_instance_draw(instance, &callbacks) == NUX_STATUS_OK);
+    CHECK(nux_artboard_instance_draw(instance) == NUX_STATUS_OK);
     CHECK(counters.made == made_after_first_draw);
     CHECK(counters.released == released_after_first_draw);
     CHECK(counters.draw_paths > 0);

@@ -75,9 +75,9 @@ impl<'a> BytecodeGraphSerializer<'a> {
                     .emit_abc(LuauOpcode::LOP_SETUPVAL, reg_input, upval_input, 0);
             }
             LuauOpcode::LOP_CLOSEUPVALS => {
-                LUAU_ASSERT!(insn.ops.len() == 1 && insn.ops[0].kind == BcOpKind::VmReg);
+                let reg_input = self.get_reg_input(insn, 0);
                 self.bcb
-                    .emit_abc(LuauOpcode::LOP_CLOSEUPVALS, insn.ops[0].index as u8, 0, 0);
+                    .emit_abc(LuauOpcode::LOP_CLOSEUPVALS, reg_input, 0, 0);
             }
             LuauOpcode::LOP_GETIMPORT => {
                 let vm_const_input_d = self.get_vm_const_input_d(insn, 0);
@@ -121,7 +121,12 @@ impl<'a> BytecodeGraphSerializer<'a> {
                 let out = self.get_register(insn_op);
                 self.bcb.emit_abc(insn.op, out, reg_input_0, imm_int as u8);
                 let vm_const_input_aux = self.get_vm_const_input_aux(insn, 2);
-                self.bcb.emit_aux(vm_const_input_aux);
+                if insn.op == LuauOpcode::LOP_SETUDATAKS {
+                    let slot = self.get_imm_int(insn, 3) as u32;
+                    self.bcb.emit_aux(vm_const_input_aux | slot << 16);
+                } else {
+                    self.bcb.emit_aux(vm_const_input_aux);
+                }
             }
             LuauOpcode::LOP_SETUDATAKS | LuauOpcode::LOP_SETTABLEKS => {
                 let reg_input_0 = self.get_reg_input(insn, 0);
@@ -130,7 +135,12 @@ impl<'a> BytecodeGraphSerializer<'a> {
                 self.bcb
                     .emit_abc(insn.op, reg_input_0, reg_input_1, imm_int as u8);
                 let vm_const_input_aux = self.get_vm_const_input_aux(insn, 3);
-                self.bcb.emit_aux(vm_const_input_aux);
+                if insn.op == LuauOpcode::LOP_SETUDATAKS {
+                    let slot = self.get_imm_int(insn, 4) as u32;
+                    self.bcb.emit_aux(vm_const_input_aux | slot << 16);
+                } else {
+                    self.bcb.emit_aux(vm_const_input_aux);
+                }
             }
             LuauOpcode::LOP_GETTABLEN => {
                 let reg_input_0 = self.get_reg_input(insn, 0);
@@ -166,7 +176,12 @@ impl<'a> BytecodeGraphSerializer<'a> {
                 let out = self.get_register(insn_op);
                 self.bcb.emit_abc(insn.op, out, reg_input_0, imm_int as u8);
                 let vm_const_input_aux = self.get_vm_const_input_aux(insn, 2);
-                self.bcb.emit_aux(vm_const_input_aux);
+                if insn.op == LuauOpcode::LOP_NAMECALLUDATA {
+                    let slot = self.get_imm_int(insn, 3) as u32;
+                    self.bcb.emit_aux(vm_const_input_aux | slot << 16);
+                } else {
+                    self.bcb.emit_aux(vm_const_input_aux);
+                }
             }
             LuauOpcode::LOP_CALL => {
                 let reg_input_2 = self.get_reg_input(insn, 2);

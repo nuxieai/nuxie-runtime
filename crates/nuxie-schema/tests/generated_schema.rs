@@ -37,7 +37,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 605);
+    assert_eq!(runtime_property_count, 606);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -65,7 +65,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .flat_map(|definition| definition.properties)
         .filter(|property| property.description.is_some())
         .count();
-    assert_eq!(described_property_count, 454);
+    assert_eq!(described_property_count, 455);
 }
 
 #[test]

@@ -1638,6 +1638,59 @@ impl Artboard {
         self.base.base.layout().top()
     }
 
+    pub fn pivot_origin_x(&self) -> f32 {
+        self.origin_x()
+    }
+
+    pub fn pivot_origin_y(&self) -> f32 {
+        self.origin_y()
+    }
+
+    pub fn composed_translation(&self) -> Vec2D {
+        self.base.base.layout_translation()
+    }
+
+    pub fn origin_offset(&self) -> Vec2D {
+        Vec2D::new(
+            self.pivot_origin_x() * self.layout_width(),
+            self.pivot_origin_y() * self.layout_height(),
+        )
+    }
+
+    pub fn local_anchor(&self) -> Vec2D {
+        Vec2D::default()
+    }
+
+    pub fn computed_local_x(&self) -> f32 {
+        (self.base.base.layout_translation()
+            + *self.base.base.base.base.base.base.base.base.transform() * self.local_anchor())
+        .x
+    }
+
+    pub fn computed_local_y(&self) -> f32 {
+        (self.base.base.layout_translation()
+            + *self.base.base.base.base.base.base.base.base.transform() * self.local_anchor())
+        .y
+    }
+
+    pub fn computed_world_x(&self) -> f32 {
+        (*self.base.base.base.base.base.base.world_transform() * self.local_anchor()).x
+    }
+
+    pub fn computed_world_y(&self) -> f32 {
+        (*self.base.base.base.base.base.base.world_transform() * self.local_anchor()).y
+    }
+
+    pub fn computed_root_x(&mut self) -> f32 {
+        let point = *self.base.base.base.base.base.base.world_transform() * self.local_anchor();
+        self.root_transform(point).x
+    }
+
+    pub fn computed_root_y(&mut self) -> f32 {
+        let point = *self.base.base.base.base.base.base.world_transform() * self.local_anchor();
+        self.root_transform(point).y
+    }
+
     pub(crate) fn update_render_path(&mut self) {
         let background = Aabb::from_ltwh(
             -self.layout_width() * self.origin_x(),

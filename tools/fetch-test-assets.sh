@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-11217a528b34966eca3765dc88c4ec0c8417d09c}
+ref=${RIVE_RUNTIME_REF:-2bbd8820878f38398b6ea6e722cb88310588c8e8}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -69,6 +69,9 @@ assets=(
   "sync/nested_group_participant.riv|a053a2fff417d1a6b5cd1881a9bbddb2e5bd083abd183ebcf3fdc1295535b28a|f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c|layout/nested_group_participant.riv"
   "sync/solo_participant.riv|563aee63cf2470cf4eb56c152c698450fe6240cf4d7d68e32bf97c592260651d|f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c|layout/solo_participant.riv"
   "sync/stack.riv|e32a430711df3538b032d2a78e2ff25990db8ab6dd5dd4a25fb244acd1edc9e3|f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c|layout/stack.riv"
+  "sync/scroll_participant.riv|947f21a0b7ac50cb9bf15df34380b7a162219663cec6e262501f9d7959aee20e|2bbd8820878f38398b6ea6e722cb88310588c8e8|layout/scroll_participant.riv"
+  "sync/transform_offset.riv|fdbfb14e5aee19354bbc8fef7f51b19545d8cc95728cd5051f0895a3a2565602|2bbd8820878f38398b6ea6e722cb88310588c8e8|layout/transform_offset.riv"
+  "sync/transform_offset_legacy.riv|f947326b2a2d5e6b9213fdd3f9869ef414844eaa87e0b5cb7ea1edf9b566addf|2bbd8820878f38398b6ea6e722cb88310588c8e8|layout/transform_offset_legacy.riv"
   "sync/stack_participant.riv|4693b63499749ee3cb8b80bd95ebe6df0e1bffc9a82de225c3e843e8c2609400|f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c|layout/stack_participant.riv"
   "sync/styled_flex.riv|13e79bd1cba28909ff0ce1e718fe815348e6ed397b1522790b1e7dc95ab7baee|f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c|layout/styled_flex.riv"
   "sync/layout_grid_stack.riv|9b4d1c56735f16928396e079d39e62815dce7586842ac9dfd5937a4dca231724|f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c|layout_grid_stack.riv"

@@ -1,7 +1,7 @@
 use crate::enums::lua_type::lua_Type;
 use crate::functions::lua_gettop::lua_gettop;
 use crate::functions::lua_l_checktype::lua_l_checktype;
-use crate::functions::lua_l_pcallyieldable::lua_l_pcallyieldable;
+use crate::functions::lua_l_pcallyieldable::lua_pcallyieldable;
 use crate::functions::lua_pushvalue::lua_pushvalue;
 use crate::functions::lua_replace::lua_replace;
 use crate::macros::lua_multret::LUA_MULTRET;
@@ -18,5 +18,5 @@ pub unsafe fn lua_b_xpcally(L: *mut lua_State) -> i32 {
     lua_replace(L, 2);
     // at this point the stack looks like err, f, args
 
-    lua_l_pcallyieldable(L, lua_gettop(L) - 2, LUA_MULTRET, 1)
+    lua_pcallyieldable(L, lua_gettop(L) - 2, LUA_MULTRET, 1)
 }

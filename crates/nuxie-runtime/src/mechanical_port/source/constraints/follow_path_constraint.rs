@@ -2,8 +2,8 @@ use std::ops::{Deref, DerefMut};
 
 use crate::mechanical_port::source::{
     component::ComponentDirt,
-    constraints::constraint::get_parent_world,
-    core::CoreHandle,
+    constraints::constraint::{Constraint, get_parent_world},
+    core::{CoreHandle, CoreObject},
     core_context::{CoreContext, StatusCode},
     generated::{
         constraints::follow_path_constraint_base::{
@@ -16,7 +16,6 @@ use crate::mechanical_port::source::{
         transform_components::TransformComponents, vec2d::Vec2D,
     },
     shapes::{path::Path, path_flags::PathFlags, shape::Shape},
-    transform_component::TransformComponent,
     transform_space::TransformSpace,
 };
 
@@ -142,80 +141,84 @@ impl FollowPathConstraint {
         self.base.mark_constraint_dirty();
     }
 
-    pub fn target_transform(&self, distance_offset: f32) -> Mat2D {
-        let target = self.base.target().expect("caller validates target");
-        target
-            .with(|target| {
-                let transform = target
-                    .as_transform_component()
-                    .expect("validated FollowPathConstraint target");
-                if target.as_shape().is_some() || target.as_path().is_some() {
-                    let measured = self.path_measure.at_percentage(distance_offset);
-                    let position = measured.pos;
-                    let mut transform_b = *transform.world_transform();
-                    if self.base.orient() {
-                        let components_b = transform_b.decompose();
-                        let tangent_rotation = measured.tan.y.atan2(measured.tan.x);
-                        let angle_b = components_b.rotation() % (math_types::PI * 2.0);
-                        let mut diff = tangent_rotation - angle_b;
-                        if diff > math_types::PI {
-                            diff -= math_types::PI * 2.0;
-                        } else if diff < -math_types::PI {
-                            diff += math_types::PI * 2.0;
-                        }
-                        transform_b = Mat2D::from_rotation(angle_b + diff * self.base.strength());
-                    }
-                    let mut offset_position = Vec2D::default();
-                    if self.base.offset() {
-                        let components = self
-                            .base
-                            .parent_handle()
-                            .and_then(|parent| {
-                                parent.with(|parent| {
-                                    parent
-                                        .as_transform_component()
-                                        .map(|parent| *parent.transform())
-                                })
-                            })
-                            .flatten();
-                        if let Some(components) = components {
-                            offset_position.x = components[4];
-                            offset_position.y = components[5];
-                        }
-                    }
-                    transform_b[4] = position.x + offset_position.x;
-                    transform_b[5] = position.y + offset_position.y;
-                    transform_b
-                } else {
-                    *transform.world_transform()
+    pub fn target_transform_for(
+        &self,
+        target: &dyn CoreObject,
+        distance_offset: f32,
+        offset_position: Vec2D,
+    ) -> Mat2D {
+        let transform = target
+            .as_transform_component()
+            .expect("validated FollowPathConstraint target");
+        if target.as_shape().is_some() || target.as_path().is_some() {
+            let measured = self.path_measure.at_percentage(distance_offset);
+            let position = measured.pos;
+            let mut transform_b = *transform.world_transform();
+            if self.base.orient() {
+                let components_b = transform_b.decompose();
+                let tangent_rotation = measured.tan.y.atan2(measured.tan.x);
+                let angle_b = components_b.rotation() % (math_types::PI * 2.0);
+                let mut diff = tangent_rotation - angle_b;
+                if diff > math_types::PI {
+                    diff -= math_types::PI * 2.0;
+                } else if diff < -math_types::PI {
+                    diff += math_types::PI * 2.0;
                 }
-            })
-            .expect("FollowPathConstraint retains a live target")
+                transform_b = Mat2D::from_rotation(angle_b + diff * self.base.strength());
+            }
+            transform_b[4] = position.x + offset_position.x;
+            transform_b[5] = position.y + offset_position.y;
+            transform_b
+        } else {
+            *transform.world_transform()
+        }
     }
 
-    pub fn constrain(&mut self, component: &mut TransformComponent) {
+    pub fn constrain(&mut self, component: &mut dyn CoreObject) {
         let Some(target) = self.base.target() else {
             return;
         };
-        let target_collapsed = target
-            .with(|target| {
+        let read_target = |target: &dyn CoreObject| {
+            let transform = target
+                .as_transform_component()
+                .expect("validated FollowPathConstraint target");
+            (
+                transform.is_collapsed(),
+                get_parent_world(transform),
+                self.target_transform_for(
+                    target,
+                    self.base.distance(),
+                    if self.base.offset() {
+                        component.transform_component_composed_translation()
+                    } else {
+                        Vec2D::default()
+                    },
+                ),
+            )
+        };
+        let (target_collapsed, target_parent_world, mut transform_b) =
+            if component.core().handle().as_ref() == Some(&target) {
+                read_target(component)
+            } else {
                 target
-                    .as_transform_component()
-                    .expect("validated FollowPathConstraint target")
-                    .is_collapsed()
-            })
-            .expect("FollowPathConstraint retains a live target");
+                    .with(|target| read_target(target))
+                    .expect("FollowPathConstraint retains a live target")
+            };
         if target_collapsed {
             return;
         }
-        let mut transform_b = self.target_transform(self.base.distance());
-        let target_parent_world = get_parent_world(component);
+        let component_transform = component
+            .as_transform_component()
+            .expect("constraint TransformComponent");
+        let component_parent_world = get_parent_world(component_transform);
+        let world = *component_transform.world_transform();
         let components = self.constrain_helper(
-            component.world_transform(),
+            &world,
             &mut transform_b,
+            &component_parent_world,
             &target_parent_world,
         );
-        *component.mutable_world_transform() = Mat2D::compose(&components);
+        Constraint::compose_landing_anchor(component, &components, self.base.strength());
     }
 
     pub fn constrain_helper(
@@ -223,17 +226,10 @@ impl FollowPathConstraint {
         component_transform: &Mat2D,
         transform_b: &mut Mat2D,
         component_parent_world: &Mat2D,
+        target_parent_world: &Mat2D,
     ) -> TransformComponents {
         let transform_a = component_transform;
         if self.base.source_space() == TransformSpace::Local {
-            let target_parent_world = self
-                .base
-                .target()
-                .and_then(|target| {
-                    target.with(|target| target.as_transform_component().map(get_parent_world))
-                })
-                .flatten()
-                .expect("validated FollowPathConstraint target");
             let mut inverse = Mat2D::default();
             if !target_parent_world.invert(&mut inverse) {
                 return TransformComponents::default();

@@ -20,7 +20,7 @@ pub unsafe fn tremove(L: *mut lua_State) -> core::ffi::c_int {
 
     lua_rawgeti(L, 1, pos);
 
-    moveelements(L, 1, 1, pos + 1, n, pos);
+    moveelements(L, 1, 1, pos + 1, n, pos, false);
 
     lua_pushnil(L);
     lua_rawseti(L, 1, n);

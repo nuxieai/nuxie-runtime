@@ -12,13 +12,16 @@ use nuxie_runtime::source::{
     assets::script_asset::ScriptAsset,
     component::Component,
     component_origin::ComponentOrigin,
-    core::{CoreHandle, CoreType},
+    constraints::{
+        rotation_constraint::RotationConstraint, scale_constraint::ScaleConstraint,
+        translation_constraint::TranslationConstraint,
+    },
+    core::{CoreHandle, CoreObject, CoreType},
     factory::RuntimeFactoryHandle,
     file::{File as NativeFile, ImportResult, RuntimeFileHandle},
     generated::{
         artboard_base::ArtboardBase,
         assets::{image_asset_base::ImageAssetBase, script_asset_base::ScriptAssetBase},
-        component_origin_base::ComponentOriginBase,
         core_registry::CoreRegistry as NativeCoreRegistry,
         nested_artboard_base::NestedArtboardBase,
         node_base::NodeBase,
@@ -29,7 +32,7 @@ use nuxie_runtime::source::{
     status_code::StatusCode,
 };
 use serde::Deserialize;
-use std::{collections::HashSet, path::PathBuf};
+use std::collections::HashSet;
 
 mod cpp_probe_support;
 use cpp_probe_support::*;
@@ -182,6 +185,104 @@ fn native_world_transform(object: &CoreHandle) -> Mat2D {
             )
         })
         .expect("live native transform")
+}
+
+fn fixed_layout_box(artboard: &RuntimeArtboardInstanceHandle) -> CoreHandle {
+    artboard
+        .with_artboard(|artboard| {
+            artboard
+                .objects_typed::<LayoutComponent>()
+                .iter()
+                .filter(|object| !object.is_type_of(ArtboardBase::TYPE_KEY))
+                .filter(|object| {
+                    object
+                        .with(|object| object.as_layout_component().unwrap().style_handle())
+                        .flatten()
+                        .is_some_and(|style| {
+                            style
+                                .with_downcast::<LayoutComponentStyle, _>(|style| {
+                                    !style.is_stack()
+                                        && style.width_scale_type() != LayoutScaleType::Fill
+                                })
+                                .unwrap()
+                        })
+                })
+                .last()
+        })
+        .expect("fixed 40x40 box")
+}
+
+fn add_layout_origin(
+    artboard: &RuntimeArtboardInstanceHandle,
+    owner: &CoreHandle,
+    x: f32,
+    y: f32,
+) -> CoreHandle {
+    let origin = artboard
+        .core_handle()
+        .insert_sibling(ComponentOrigin::default())
+        .expect("insert ComponentOrigin");
+    artboard.with_artboard_mut(|artboard| artboard.base.add_object(Some(origin.clone())));
+    let parent_id = artboard.with_artboard(|artboard| artboard.base.id_of(owner));
+    assert!(NativeCoreRegistry::set_uint_handle(
+        &origin,
+        i32::from(property_key_for_name("Component", "parentId")),
+        parent_id,
+    ));
+    let status = artboard.with_artboard_mut(|artboard| {
+        origin
+            .with_mut(|origin| origin.on_added_dirty(&mut artboard.base))
+            .expect("live ComponentOrigin")
+    });
+    assert_eq!(status, StatusCode::Ok);
+    set_double(&origin, "ComponentOrigin", "originX", x);
+    set_double(&origin, "ComponentOrigin", "originY", y);
+    origin
+}
+
+fn add_layout_constraint<T: CoreObject + Default>(
+    artboard: &RuntimeArtboardInstanceHandle,
+    owner: &CoreHandle,
+) -> CoreHandle {
+    let constraint = artboard
+        .core_handle()
+        .insert_sibling(T::default())
+        .expect("insert constraint");
+    artboard.with_artboard_mut(|artboard| artboard.base.add_object(Some(constraint.clone())));
+    let target = artboard.core_handle();
+    let (parent_id, target_id) = artboard
+        .with_artboard(|artboard| (artboard.base.id_of(owner), artboard.base.id_of(&target)));
+    assert!(NativeCoreRegistry::set_uint_handle(
+        &constraint,
+        i32::from(property_key_for_name("Component", "parentId")),
+        parent_id,
+    ));
+    assert!(NativeCoreRegistry::set_uint_handle(
+        &constraint,
+        i32::from(property_key_for_name("TargetedConstraint", "targetId")),
+        target_id,
+    ));
+    let status = artboard.with_artboard_mut(|artboard| {
+        constraint
+            .with_mut(|constraint| constraint.on_added_dirty(&mut artboard.base))
+            .expect("live constraint")
+    });
+    assert_eq!(status, StatusCode::Ok);
+    constraint
+}
+
+fn native_layout_anchor(object: &CoreHandle) -> (f32, f32) {
+    object
+        .with(|object| {
+            let layout = object.as_layout_component().expect("LayoutComponent");
+            let anchor = layout.local_anchor();
+            let world = layout.base.world_transform();
+            (
+                world[0] * anchor.x + world[2] * anchor.y + world[4],
+                world[1] * anchor.x + world[3] * anchor.y + world[5],
+            )
+        })
+        .expect("live LayoutComponent")
 }
 
 fn native_animation(instance: &RuntimeArtboardInstanceHandle, index: usize) -> CoreHandle {
@@ -589,6 +690,117 @@ fn upstream_component_origin_pivots_a_layout_transform() {
     let world = native_world_transform(&layout);
     assert_close(world.0[4], 200.0, "pivoted box world tx");
     assert_close(world.0[5], 160.0, "pivoted box world ty");
+    layout.with(|object| {
+        let layout = object.as_layout_component().unwrap();
+        assert_close(layout.origin_offset().x, 20.0, "layout origin offset");
+        assert_close(
+            layout.local_bounds().left(),
+            0.0,
+            "layout local bounds left",
+        );
+        assert_close(layout.local_anchor().x, 20.0, "layout local anchor");
+    });
+}
+
+#[test]
+fn upstream_translation_constraint_lands_a_layout_origin_on_the_target() {
+    let bytes = std::fs::read(cpp_runtime_fixture("layout/stack.riv")).expect("read stack fixture");
+    let (_file, artboard) = read_native_instance_from_bytes(&bytes, "layout/stack.riv");
+    artboard.advance_default(0.0);
+    let layout = fixed_layout_box(&artboard);
+    add_layout_origin(&artboard, &layout, 0.5, 0.5);
+    let constraint = add_layout_constraint::<TranslationConstraint>(&artboard, &layout);
+    constraint
+        .with_downcast_mut::<TranslationConstraint, _>(|constraint| {
+            constraint.base.mark_constraint_dirty()
+        })
+        .expect("TranslationConstraint");
+    artboard.advance_default(0.0);
+
+    let anchor = native_layout_anchor(&layout);
+    let target = native_world_transform(&artboard.core_handle());
+    let world = native_world_transform(&layout);
+    assert_close(anchor.0, target.0[4], "translation anchor x");
+    assert_close(anchor.1, target.0[5], "translation anchor y");
+    assert_close(world.0[4], target.0[4] - 20.0, "translation corner x");
+    assert_close(world.0[5], target.0[5] - 20.0, "translation corner y");
+}
+
+#[test]
+fn upstream_translation_constraint_without_origin_is_uncorrected() {
+    let bytes = std::fs::read(cpp_runtime_fixture("layout/stack.riv")).expect("read stack fixture");
+    let (_file, artboard) = read_native_instance_from_bytes(&bytes, "layout/stack.riv");
+    artboard.advance_default(0.0);
+    let layout = fixed_layout_box(&artboard);
+    let constraint = add_layout_constraint::<TranslationConstraint>(&artboard, &layout);
+    constraint
+        .with_downcast_mut::<TranslationConstraint, _>(|constraint| {
+            constraint.base.mark_constraint_dirty()
+        })
+        .expect("TranslationConstraint");
+    artboard.advance_default(0.0);
+
+    let target = native_world_transform(&artboard.core_handle());
+    let world = native_world_transform(&layout);
+    layout.with(|object| assert_eq!(object.as_layout_component().unwrap().local_anchor().x, 0.0));
+    assert_close(world.0[4], target.0[4], "uncorrected corner x");
+    assert_close(world.0[5], target.0[5], "uncorrected corner y");
+}
+
+#[test]
+fn upstream_rotation_constraint_keeps_a_layout_anchor_fixed() {
+    let bytes = std::fs::read(cpp_runtime_fixture("layout/stack.riv")).expect("read stack fixture");
+    let (_file, artboard) = read_native_instance_from_bytes(&bytes, "layout/stack.riv");
+    let layout = fixed_layout_box(&artboard);
+    add_layout_origin(&artboard, &layout, 0.5, 0.5);
+    set_double(
+        &layout,
+        "TransformComponent",
+        "rotation",
+        std::f32::consts::FRAC_PI_2,
+    );
+    artboard.advance_default(0.0);
+    let before = native_layout_anchor(&layout);
+    let linear_before = native_world_transform(&layout).0[0];
+
+    let constraint = add_layout_constraint::<RotationConstraint>(&artboard, &layout);
+    constraint
+        .with_downcast_mut::<RotationConstraint, _>(|constraint| {
+            constraint.base.mark_constraint_dirty()
+        })
+        .expect("RotationConstraint");
+    artboard.advance_default(0.0);
+    let after = native_layout_anchor(&layout);
+    let linear_after = native_world_transform(&layout).0[0];
+    assert_close(after.0, before.0, "rotation anchor x");
+    assert_close(after.1, before.1, "rotation anchor y");
+    assert!((linear_after - linear_before).abs() > 0.01);
+}
+
+#[test]
+fn upstream_scale_constraint_keeps_a_layout_anchor_fixed() {
+    let bytes = std::fs::read(cpp_runtime_fixture("layout/stack.riv")).expect("read stack fixture");
+    let (_file, artboard) = read_native_instance_from_bytes(&bytes, "layout/stack.riv");
+    let layout = fixed_layout_box(&artboard);
+    add_layout_origin(&artboard, &layout, 0.5, 0.5);
+    set_double(&layout, "TransformComponent", "scaleX", 2.0);
+    set_double(&layout, "TransformComponent", "scaleY", 2.0);
+    artboard.advance_default(0.0);
+    let before = native_layout_anchor(&layout);
+    let linear_before = native_world_transform(&layout).0[0];
+
+    let constraint = add_layout_constraint::<ScaleConstraint>(&artboard, &layout);
+    constraint
+        .with_downcast_mut::<ScaleConstraint, _>(|constraint| {
+            constraint.base.mark_constraint_dirty()
+        })
+        .expect("ScaleConstraint");
+    artboard.advance_default(0.0);
+    let after = native_layout_anchor(&layout);
+    let linear_after = native_world_transform(&layout).0[0];
+    assert_close(after.0, before.0, "scale anchor x");
+    assert_close(after.1, before.1, "scale anchor y");
+    assert!((linear_after - linear_before).abs() > 0.01);
 }
 
 #[test]

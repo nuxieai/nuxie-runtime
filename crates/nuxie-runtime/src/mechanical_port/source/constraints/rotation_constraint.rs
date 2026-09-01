@@ -1,11 +1,11 @@
 use crate::mechanical_port::source::{
-    constraints::constraint::get_parent_world,
+    constraints::constraint::{Constraint, get_parent_world},
+    core::CoreObject,
     generated::{
         constraints::rotation_constraint_base::RotationConstraintBase,
         core_registry::CoreCapabilities,
     },
     math::{mat2d::Mat2D, math_types, transform_components::TransformComponents},
-    transform_component::TransformComponent,
     transform_space::TransformSpace,
 };
 
@@ -21,25 +21,33 @@ impl RotationConstraint {
         false
     }
 
-    pub fn constrain(&mut self, component: &mut TransformComponent) {
+    pub fn constrain(&mut self, component: &mut dyn CoreObject) {
         let target_state = self.base.target().map(|target| {
-            target
-                .with(|target| {
-                    let target = target
-                        .as_transform_component()
-                        .expect("validated targeted constraint target");
-                    (
-                        target.is_collapsed(),
-                        *target.world_transform(),
-                        get_parent_world(target),
-                    )
-                })
-                .expect("TargetedConstraint retains a live target")
+            let read_target = |target: &dyn CoreObject| {
+                let target = target
+                    .as_transform_component()
+                    .expect("validated targeted constraint target");
+                (
+                    target.is_collapsed(),
+                    *target.world_transform(),
+                    get_parent_world(target),
+                )
+            };
+            if component.core().handle().as_ref() == Some(&target) {
+                read_target(component)
+            } else {
+                target
+                    .with(|target| read_target(target))
+                    .expect("TargetedConstraint retains a live target")
+            }
         });
         if target_state.is_some_and(|target| target.0) {
             return;
         }
-        let transform_a = *component.world_transform();
+        let transform = component
+            .as_transform_component()
+            .expect("constraint TransformComponent");
+        let transform_a = *transform.world_transform();
         let mut transform_b;
         self.components_a = transform_a.decompose();
         if target_state.is_none() {
@@ -69,12 +77,12 @@ impl RotationConstraint {
                     .set_rotation(self.components_b.rotation() * self.base.copy_factor());
                 if self.base.offset() {
                     self.components_b
-                        .set_rotation(self.components_b.rotation() + component.rotation());
+                        .set_rotation(self.components_b.rotation() + transform.rotation());
                 }
             }
             if self.base.dest_space() == TransformSpace::Local {
                 transform_b = Mat2D::compose(&self.components_b);
-                transform_b = get_parent_world(component) * transform_b;
+                transform_b = get_parent_world(transform) * transform_b;
                 self.components_b = transform_b.decompose();
             }
         }
@@ -82,7 +90,7 @@ impl RotationConstraint {
         if clamp_local {
             transform_b = Mat2D::compose(&self.components_b);
             let mut inverse = Mat2D::default();
-            if !get_parent_world(component).invert(&mut inverse) {
+            if !get_parent_world(transform).invert(&mut inverse) {
                 return;
             }
             self.components_b = (inverse * transform_b).decompose();
@@ -95,7 +103,7 @@ impl RotationConstraint {
         }
         if clamp_local {
             transform_b = Mat2D::compose(&self.components_b);
-            transform_b = get_parent_world(component) * transform_b;
+            transform_b = get_parent_world(transform) * transform_b;
             self.components_b = transform_b.decompose();
         }
         let angle_a = self.components_a.rotation() % (math_types::PI * 2.0);
@@ -113,6 +121,6 @@ impl RotationConstraint {
         self.components_b.set_scale_x(self.components_a.scale_x());
         self.components_b.set_scale_y(self.components_a.scale_y());
         self.components_b.set_skew(self.components_a.skew());
-        *component.mutable_world_transform() = Mat2D::compose(&self.components_b);
+        Constraint::compose_keeping_anchor(component, &self.components_b);
     }
 }

@@ -13,10 +13,8 @@ use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
 pub unsafe fn lua_clonetable(L: *mut lua_State, idx: core::ffi::c_int) {
-    if luaur_common::FFlag::LuauCloneTableFix.get() {
-        luaC_checkGC!(L);
-        lua_c_threadbarrier_lapi(L);
-    }
+    luaC_checkGC!(L);
+    lua_c_threadbarrier_lapi(L);
 
     crate::ensure_stack!(L, 1);
     // The C++ source:

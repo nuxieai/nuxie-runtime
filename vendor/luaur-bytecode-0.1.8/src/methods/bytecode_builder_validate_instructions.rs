@@ -376,7 +376,10 @@ impl BytecodeBuilder {
                     VREG!(LUAU_INSN_A(insn) as u8, func);
                     VREG!(LUAU_INSN_B(insn) as u8, func);
                     VCONST!(LUAU_INSN_AUX_KV16(self.insns[i + 1]) as usize, String, self);
-                    LUAU_ASSERT!(LUAU_INSN_OP(self.insns[i + 2]) == LuauOpcode::LOP_CALL as u32);
+                    LUAU_ASSERT!(
+                        LUAU_INSN_OP(self.insns[i + 2]) == LuauOpcode::LOP_CALL as u32
+                            || LUAU_INSN_OP(self.insns[i + 2]) == LuauOpcode::LOP_CALLFB as u32
+                    );
                 }
                 LuauOpcode::LOP_CMPPROTO => {
                     VREG!(LUAU_INSN_A(insn) as u8, func);

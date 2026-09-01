@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
-    constraints::constraint::get_parent_world,
+    constraints::constraint::{Constraint, get_parent_world},
+    core::CoreObject,
     generated::{
         constraints::transform_constraint_base::TransformConstraintBase,
         core_registry::CoreCapabilities,
@@ -17,42 +18,49 @@ pub struct TransformConstraint {
 }
 
 impl TransformConstraint {
-    pub fn target_transform(&self) -> Mat2D {
-        let target = self.base.target().expect("targeted constraint has target");
-        target
-            .with(|target| {
-                let bounds = target
-                    .transform_component_constraint_bounds()
-                    .expect("validated targeted constraint target");
-                let target = target
-                    .as_transform_component()
-                    .expect("validated targeted constraint target");
-                let local = Mat2D::from_translate(
-                    bounds.left() + bounds.width() * self.base.origin_x(),
-                    bounds.top() + bounds.height() * self.base.origin_y(),
-                );
-                *target.world_transform() * local
-            })
-            .expect("TargetedConstraint retains a live target")
+    fn target_transform_for(&self, target: &dyn CoreObject) -> Mat2D {
+        let bounds = target
+            .transform_component_constraint_bounds()
+            .expect("validated targeted constraint target");
+        let target = target
+            .as_transform_component()
+            .expect("validated targeted constraint target");
+        let local = Mat2D::from_translate(
+            bounds.left() + bounds.width() * self.base.origin_x(),
+            bounds.top() + bounds.height() * self.base.origin_y(),
+        );
+        *target.world_transform() * local
     }
 
-    pub fn constrain(&mut self, component: &mut TransformComponent) {
+    pub fn constrain(&mut self, component: &mut dyn CoreObject) {
         let Some(target) = self.base.target() else {
             return;
         };
-        let (target_collapsed, target_parent_world) = target
-            .with(|target| {
-                let target = target
-                    .as_transform_component()
-                    .expect("validated targeted constraint target");
-                (target.is_collapsed(), get_parent_world(target))
-            })
-            .expect("TargetedConstraint retains a live target");
+        let read_target = |target: &dyn CoreObject| {
+            let transform = target
+                .as_transform_component()
+                .expect("validated targeted constraint target");
+            (
+                transform.is_collapsed(),
+                get_parent_world(transform),
+                self.target_transform_for(target),
+            )
+        };
+        let (target_collapsed, target_parent_world, mut transform_b) =
+            if component.core().handle().as_ref() == Some(&target) {
+                read_target(component)
+            } else {
+                target
+                    .with(|target| read_target(target))
+                    .expect("TargetedConstraint retains a live target")
+            };
         if target_collapsed {
             return;
         }
-        let transform_a = *component.world_transform();
-        let mut transform_b = self.target_transform();
+        let transform = component
+            .as_transform_component()
+            .expect("constraint TransformComponent");
+        let transform_a = *transform.world_transform();
         if self.base.source_space() == TransformSpace::Local {
             let mut inverse = Mat2D::default();
             if !target_parent_world.invert(&mut inverse) {
@@ -61,16 +69,20 @@ impl TransformConstraint {
             transform_b = inverse * transform_b;
         }
         if self.base.dest_space() == TransformSpace::Local {
-            transform_b = get_parent_world(component) * transform_b;
+            transform_b = get_parent_world(transform) * transform_b;
         }
+        let strength = self.base.strength();
         Self::constrain_world(
-            component,
+            component
+                .as_transform_component_mut()
+                .expect("constraint TransformComponent"),
             transform_a,
             self.components_a,
             transform_b,
             self.components_b,
-            self.base.strength(),
+            strength,
         );
+        Constraint::land_anchor(component, strength);
     }
 
     pub fn origin_x_changed(&mut self) {

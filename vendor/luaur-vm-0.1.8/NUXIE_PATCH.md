@@ -80,3 +80,10 @@ Provenance:
   Rive block at slots 243 and 245-255.
 - Added behavioral regressions for the repaired twins and an exhaustive
   256-index dispatch-table identity test.
+
+## Luau fork rung 10
+
+- Ported the reachable `rive_0_733` delta (upstream 86eb0096..f4a8c732).
+- Hardwired automatic API stack growth and clone-table GC barriers, promoted
+  yieldable calls to the public API with the upstream compatibility spellings,
+  and added the flag-gated sparse `table.move` path.

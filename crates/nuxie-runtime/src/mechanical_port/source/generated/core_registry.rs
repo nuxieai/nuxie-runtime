@@ -2088,12 +2088,27 @@ pub fn component_update_handle(
     handle.with_mut(|object| component_update_before_transform(object, dirt));
     if dirt.contains(ComponentDirt::TRANSFORM) {
         handle.with_mut(|object| {
-            let translation = object.transform_component_translation();
-            let (x, y) = (translation.x, translation.y);
-            object
-                .as_transform_component_mut()
-                .unwrap()
-                .update_transform_state(x, y);
+            if object.as_artboard().is_some() {
+                let (origin_x, origin_y) = object
+                    .as_artboard()
+                    .map(|artboard| (artboard.pivot_origin_x(), artboard.pivot_origin_y()))
+                    .expect("Artboard virtual receiver");
+                object
+                    .as_artboard_mut()
+                    .expect("Artboard virtual receiver")
+                    .base
+                    .base
+                    .update_transform_for_artboard(origin_x, origin_y);
+            } else if let Some(layout) = object.as_layout_component_mut() {
+                layout.update_transform();
+            } else {
+                let translation = object.transform_component_translation();
+                let (x, y) = (translation.x, translation.y);
+                object
+                    .as_transform_component_mut()
+                    .unwrap()
+                    .update_transform_state(x, y);
+            }
             if let Some(image) = object
                 .as_any_mut()
                 .downcast_mut::<crate::mechanical_port::source::shapes::image::Image>(
@@ -2114,7 +2129,10 @@ pub fn component_update_handle(
             if let Some(node) = object.as_node_mut() {
                 node.update_world_transform_before_super();
             }
-            let overridden = if let Some(text) = object.as_text_mut() {
+            let overridden = if let Some(layout) = object.as_layout_component_mut() {
+                layout.compose_world_transform();
+                true
+            } else if let Some(text) = object.as_text_mut() {
                 text.try_compose_world_transform_override()
             } else if let Some(shape) = object.as_shape_mut() {
                 shape.try_compose_world_transform_override()
@@ -2300,8 +2318,26 @@ fn component_update_after_transform(
 pub fn component_update_constraints_handle(handle: &CoreHandle) {
     use crate::mechanical_port::source::{
         artboard_component_list::ArtboardComponentList,
+        layout::layout_participant::LayoutParticipant,
         nested_artboard_layout::NestedArtboardLayout,
     };
+    let participant = handle
+        .with(|object| {
+            if object.as_shape().is_some()
+                || object.as_text().is_some()
+                || object
+                    .as_any()
+                    .is::<crate::mechanical_port::source::shapes::image::Image>()
+            {
+                object.layout_provider_handle()
+            } else {
+                None
+            }
+        })
+        .flatten();
+    if let Some(participant) = participant {
+        LayoutParticipant::apply_layout_constraints(&participant);
+    }
     let Some((layout, list, transforms, skip_lists)) = handle.with_mut(|object| {
         let transforms = object
             .as_transform_component()
@@ -3051,6 +3087,7 @@ pub enum CoreField {
     ScrollConstraintVelocityX,
     ScrollConstraintVelocityY,
     ScrollConstraintVirtualize,
+    ScrollConstraintVirtualizeBuffer,
     ScrollPhysicsConstraintId,
     SemanticDataHeadingLevel,
     SemanticDataHint,
@@ -3315,9 +3352,7 @@ pub trait CoreCapabilities: Any {
     fn transform_component_translation(
         &self,
     ) -> crate::mechanical_port::source::math::vec2d::Vec2D {
-        let (x, y) = if let Some(layout) = self.as_layout_component() {
-            (layout.layout_x(), layout.layout_y())
-        } else if let Some(root) = self.as_root_bone() {
+        let (x, y) = if let Some(root) = self.as_root_bone() {
             (root.x(), root.y())
         } else if self.as_bone().is_some() {
             let parent = self
@@ -3334,6 +3369,33 @@ pub trait CoreCapabilities: Any {
             (node.base.x(), node.base.y())
         };
         crate::mechanical_port::source::math::vec2d::Vec2D::new(x, y)
+    }
+    fn transform_component_composed_translation(
+        &self,
+    ) -> crate::mechanical_port::source::math::vec2d::Vec2D {
+        if let Some(artboard) = self.as_artboard() {
+            artboard.composed_translation()
+        } else if let Some(layout) = self.as_layout_component() {
+            layout.composed_translation()
+        } else {
+            let translation = self.transform_component_translation();
+            self.as_transform_component()
+                .map_or(translation, |component| {
+                    component.composed_translation(translation.x, translation.y)
+                })
+        }
+    }
+    fn transform_component_local_anchor(
+        &self,
+    ) -> crate::mechanical_port::source::math::vec2d::Vec2D {
+        if let Some(artboard) = self.as_artboard() {
+            artboard.local_anchor()
+        } else if let Some(layout) = self.as_layout_component() {
+            layout.local_anchor()
+        } else {
+            self.as_transform_component()
+                .map_or_else(Default::default, |component| component.local_anchor())
+        }
     }
     fn as_artboard_component_list_mut(
         &mut self,
@@ -6825,6 +6887,7 @@ impl CoreRegistry {
             722 => CoreField::DraggableConstraintDirectionValue,
             727 => CoreField::ScrollConstraintPhysicsTypeValue,
             726 => CoreField::ScrollConstraintPhysicsId,
+            221 => CoreField::ScrollConstraintVirtualizeBuffer,
             725 => CoreField::ScrollBarConstraintScrollConstraintId,
             23 => CoreField::DrawableBlendModeValue,
             129 => CoreField::DrawableDrawableFlags,
@@ -7492,6 +7555,7 @@ impl CoreRegistry {
             722 => CoreField::DraggableConstraintDirectionValue,
             727 => CoreField::ScrollConstraintPhysicsTypeValue,
             726 => CoreField::ScrollConstraintPhysicsId,
+            221 => CoreField::ScrollConstraintVirtualizeBuffer,
             725 => CoreField::ScrollBarConstraintScrollConstraintId,
             23 => CoreField::DrawableBlendModeValue,
             129 => CoreField::DrawableDrawableFlags,
@@ -8234,6 +8298,7 @@ impl CoreRegistry {
             722 => 0,
             727 => 0,
             726 => 0,
+            221 => 0,
             725 => 0,
             23 => 0,
             129 => 0,
@@ -8852,6 +8917,7 @@ impl CoreRegistry {
             722 => 520,
             727 => 521,
             726 => 521,
+            221 => 521,
             725 => 522,
             23 => 13,
             129 => 13,
@@ -15447,6 +15513,12 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::PHYSICS_ID_PROPERTY_KEY);
                 }
             }
+            CoreField::ScrollConstraintVirtualizeBuffer => {
+                if self.base.set_virtualize_buffer_value(value as u8) {
+                    <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::virtualize_buffer_changed(self);
+                    <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::VIRTUALIZE_BUFFER_PROPERTY_KEY);
+                }
+            }
             _ => {}
         }
     }
@@ -15557,6 +15629,7 @@ impl CoreRegistryObject
             CoreField::DraggableConstraintDirectionValue => self.base.base.base.direction_value(),
             CoreField::ScrollConstraintPhysicsTypeValue => self.base.physics_type_value(),
             CoreField::ScrollConstraintPhysicsId => self.base.physics_id(),
+            CoreField::ScrollConstraintVirtualizeBuffer => self.base.virtualize_buffer() as u32,
             _ => 0,
         }
     }
@@ -39826,33 +39899,33 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
             CoreField::NodeY => self.base.base.base.base.base.y(),
             CoreField::NodeYArtboard => self.base.base.base.base.base.y(),
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::computed_local_x(
-                    &mut self.base.base.base.base,
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_local_x(
+                    self,
                 )
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::computed_local_y(
-                    &mut self.base.base.base.base,
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_local_y(
+                    self,
                 )
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::computed_world_x(
-                    &mut self.base.base.base.base,
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_world_x(
+                    self,
                 )
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::computed_world_y(
-                    &mut self.base.base.base.base,
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_world_y(
+                    self,
                 )
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::computed_root_x(
-                    &mut self.base.base.base.base,
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_root_x(
+                    self,
                 )
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::computed_root_y(
-                    &mut self.base.base.base.base,
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_root_y(
+                    self,
                 )
             }
             CoreField::NodeComputedWidth => {
@@ -40335,34 +40408,22 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
             CoreField::NodeY => self.base.base.base.base.base.base.base.y(),
             CoreField::NodeYArtboard => self.base.base.base.base.base.base.base.y(),
             CoreField::NodeComputedLocalX => {
-                crate::mechanical_port::source::node::Node::computed_local_x(
-                    &mut self.base.base.base.base.base.base,
-                )
+                crate::mechanical_port::source::artboard::Artboard::computed_local_x(self)
             }
             CoreField::NodeComputedLocalY => {
-                crate::mechanical_port::source::node::Node::computed_local_y(
-                    &mut self.base.base.base.base.base.base,
-                )
+                crate::mechanical_port::source::artboard::Artboard::computed_local_y(self)
             }
             CoreField::NodeComputedWorldX => {
-                crate::mechanical_port::source::node::Node::computed_world_x(
-                    &mut self.base.base.base.base.base.base,
-                )
+                crate::mechanical_port::source::artboard::Artboard::computed_world_x(self)
             }
             CoreField::NodeComputedWorldY => {
-                crate::mechanical_port::source::node::Node::computed_world_y(
-                    &mut self.base.base.base.base.base.base,
-                )
+                crate::mechanical_port::source::artboard::Artboard::computed_world_y(self)
             }
             CoreField::NodeComputedRootX => {
-                crate::mechanical_port::source::node::Node::computed_root_x(
-                    &mut self.base.base.base.base.base.base,
-                )
+                crate::mechanical_port::source::artboard::Artboard::computed_root_x(self)
             }
             CoreField::NodeComputedRootY => {
-                crate::mechanical_port::source::node::Node::computed_root_y(
-                    &mut self.base.base.base.base.base.base,
-                )
+                crate::mechanical_port::source::artboard::Artboard::computed_root_y(self)
             }
             CoreField::NodeComputedWidth => {
                 crate::mechanical_port::source::node::Node::computed_width(
@@ -53591,9 +53652,9 @@ impl CoreCapabilities
         component: crate::mechanical_port::source::core::CoreHandle,
     ) -> bool {
         component.with_mut(|component| {
-            let Some(component) = component.as_transform_component_mut() else {
+            if component.as_transform_component().is_none() {
                 return false;
-            };
+            }
             crate::mechanical_port::source::constraints::distance_constraint::DistanceConstraint::constrain(self, component);
             true
         }).unwrap_or(false)
@@ -53661,9 +53722,9 @@ impl CoreCapabilities
         component: crate::mechanical_port::source::core::CoreHandle,
     ) -> bool {
         component.with_mut(|component| {
-            let Some(component) = component.as_transform_component_mut() else {
+            if component.as_transform_component().is_none() {
                 return false;
-            };
+            }
             crate::mechanical_port::source::constraints::follow_path_constraint::FollowPathConstraint::constrain(self, component);
             true
         }).unwrap_or(false)
@@ -54035,13 +54096,13 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
         true
     }
     fn constraint_apply(&mut self, component: crate::mechanical_port::source::core::CoreHandle) -> bool {
-        component.with_mut(|component| {
-            let Some(component) = component.as_transform_component_mut() else {
-                return false;
-            };
-            crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint::constrain(self, component);
-            true
-        }).unwrap_or(false)
+        if !component.is_type_of(
+            crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::TYPE_KEY,
+        ) {
+            return false;
+        }
+        crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint::constrain(self, &component);
+        true
     }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint::build_dependencies(self);
@@ -54090,9 +54151,9 @@ impl CoreCapabilities
         component: crate::mechanical_port::source::core::CoreHandle,
     ) -> bool {
         component.with_mut(|component| {
-            let Some(component) = component.as_transform_component_mut() else {
+            if component.as_transform_component().is_none() {
                 return false;
-            };
+            }
             crate::mechanical_port::source::constraints::transform_constraint::TransformConstraint::constrain(self, component);
             true
         }).unwrap_or(false)
@@ -54165,9 +54226,9 @@ impl CoreCapabilities
         component: crate::mechanical_port::source::core::CoreHandle,
     ) -> bool {
         component.with_mut(|component| {
-            let Some(component) = component.as_transform_component_mut() else {
+            if component.as_transform_component().is_none() {
                 return false;
-            };
+            }
             crate::mechanical_port::source::constraints::scale_constraint::ScaleConstraint::constrain(self, component);
             true
         }).unwrap_or(false)
@@ -54256,9 +54317,9 @@ impl CoreCapabilities
         component: crate::mechanical_port::source::core::CoreHandle,
     ) -> bool {
         component.with_mut(|component| {
-            let Some(component) = component.as_transform_component_mut() else {
+            if component.as_transform_component().is_none() {
                 return false;
-            };
+            }
             crate::mechanical_port::source::constraints::rotation_constraint::RotationConstraint::constrain(self, component);
             true
         }).unwrap_or(false)
@@ -56941,9 +57002,8 @@ impl CoreCapabilities for crate::mechanical_port::source::component_origin::Comp
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(
-            crate::mechanical_port::source::component::Component::on_added_dirty(
-                &mut self.base.base,
-                context,
+            crate::mechanical_port::source::component_origin::ComponentOrigin::on_added_dirty(
+                self, context,
             ),
         )
     }
@@ -73550,7 +73610,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_world_x(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_world_x(&mut self.base.base.base.base)
+        crate::mechanical_port::source::layout_component::LayoutComponent::computed_world_x(self)
     }
     fn set_computed_world_y(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_world_y(
@@ -73559,7 +73619,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_world_y(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_world_y(&mut self.base.base.base.base)
+        crate::mechanical_port::source::layout_component::LayoutComponent::computed_world_y(self)
     }
     fn set_computed_root_x(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_root_x(
@@ -73568,7 +73628,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_root_x(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_root_x(&mut self.base.base.base.base)
+        crate::mechanical_port::source::layout_component::LayoutComponent::computed_root_x(self)
     }
     fn set_computed_root_y(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_root_y(
@@ -73577,7 +73637,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_root_y(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_root_y(&mut self.base.base.base.base)
+        crate::mechanical_port::source::layout_component::LayoutComponent::computed_root_y(self)
     }
     fn set_computed_width(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_width(
@@ -73676,9 +73736,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_local_x(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_local_x(
-            &mut self.base.base.base.base.base.base,
-        )
+        crate::mechanical_port::source::artboard::Artboard::computed_local_x(self)
     }
     fn set_computed_local_y(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_local_y(
@@ -73687,9 +73745,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_local_y(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_local_y(
-            &mut self.base.base.base.base.base.base,
-        )
+        crate::mechanical_port::source::artboard::Artboard::computed_local_y(self)
     }
     fn set_computed_world_x(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_world_x(
@@ -73698,9 +73754,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_world_x(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_world_x(
-            &mut self.base.base.base.base.base.base,
-        )
+        crate::mechanical_port::source::artboard::Artboard::computed_world_x(self)
     }
     fn set_computed_world_y(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_world_y(
@@ -73709,9 +73763,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_world_y(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_world_y(
-            &mut self.base.base.base.base.base.base,
-        )
+        crate::mechanical_port::source::artboard::Artboard::computed_world_y(self)
     }
     fn set_computed_root_x(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_root_x(
@@ -73720,9 +73772,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_root_x(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_root_x(
-            &mut self.base.base.base.base.base.base,
-        )
+        crate::mechanical_port::source::artboard::Artboard::computed_root_x(self)
     }
     fn set_computed_root_y(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_root_y(
@@ -73731,9 +73781,7 @@ impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
         )
     }
     fn computed_root_y(&mut self) -> f32 {
-        crate::mechanical_port::source::node::Node::computed_root_y(
-            &mut self.base.base.base.base.base.base,
-        )
+        crate::mechanical_port::source::artboard::Artboard::computed_root_y(self)
     }
     fn set_computed_width(&mut self, value: f32) {
         crate::mechanical_port::source::node::Node::set_computed_width(

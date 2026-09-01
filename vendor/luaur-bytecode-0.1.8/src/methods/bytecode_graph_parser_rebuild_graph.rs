@@ -9,6 +9,8 @@ use luaur_common::functions::get_jump_target::get_jump_target;
 use luaur_common::functions::get_op_length::get_op_length;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 use luaur_common::macros::luau_insn_a::LUAU_INSN_A;
+use luaur_common::macros::luau_insn_aux_kv_16::LUAU_INSN_AUX_KV16;
+use luaur_common::macros::luau_insn_aux_slot::LUAU_INSN_AUX_SLOT;
 use luaur_common::macros::luau_insn_b::LUAU_INSN_B;
 use luaur_common::macros::luau_insn_c::LUAU_INSN_C;
 use luaur_common::macros::luau_insn_d::LUAU_INSN_D;
@@ -228,7 +230,12 @@ impl<'a> BytecodeGraphParser<'a> {
                 LuauOpcode::LOP_GETUDATAKS | LuauOpcode::LOP_GETTABLEKS => {
                     self.add_vm_reg_input(node, LUAU_INSN_B(insn) as u8);
                     self.add_imm_input_bc_inst_i32(node, LUAU_INSN_C(insn) as i32);
-                    self.add_vm_const_input(node, aux);
+                    if op == LuauOpcode::LOP_GETUDATAKS {
+                        self.add_vm_const_input(node, LUAU_INSN_AUX_KV16(aux));
+                        self.add_imm_input_bc_inst_i32(node, LUAU_INSN_AUX_SLOT!(aux) as i32);
+                    } else {
+                        self.add_vm_const_input(node, aux);
+                    }
                     self.add_producer(LUAU_INSN_A(insn) as u8, node_op);
                 }
 
@@ -236,7 +243,12 @@ impl<'a> BytecodeGraphParser<'a> {
                     self.add_vm_reg_input(node, LUAU_INSN_A(insn) as u8);
                     self.add_vm_reg_input(node, LUAU_INSN_B(insn) as u8);
                     self.add_imm_input_bc_inst_i32(node, LUAU_INSN_C(insn) as i32);
-                    self.add_vm_const_input(node, aux);
+                    if op == LuauOpcode::LOP_SETUDATAKS {
+                        self.add_vm_const_input(node, LUAU_INSN_AUX_KV16(aux));
+                        self.add_imm_input_bc_inst_i32(node, LUAU_INSN_AUX_SLOT!(aux) as i32);
+                    } else {
+                        self.add_vm_const_input(node, aux);
+                    }
                 }
 
                 LuauOpcode::LOP_GETTABLEN => {
@@ -259,7 +271,12 @@ impl<'a> BytecodeGraphParser<'a> {
                 LuauOpcode::LOP_NAMECALLUDATA | LuauOpcode::LOP_NAMECALL => {
                     self.add_vm_reg_input(node, LUAU_INSN_B(insn) as u8);
                     self.add_imm_input_bc_inst_i32(node, LUAU_INSN_C(insn) as i32);
-                    self.add_vm_const_input(node, aux);
+                    if op == LuauOpcode::LOP_NAMECALLUDATA {
+                        self.add_vm_const_input(node, LUAU_INSN_AUX_KV16(aux));
+                        self.add_imm_input_bc_inst_i32(node, LUAU_INSN_AUX_SLOT!(aux) as i32);
+                    } else {
+                        self.add_vm_const_input(node, aux);
+                    }
                     self.func.regs.insert(node_op, LUAU_INSN_A(insn) as u8);
                     let __proj4 = self.func.add_proj(node_op, 0);
                     self.add_producer(LUAU_INSN_A(insn) as u8, __proj4);

@@ -7,15 +7,15 @@ records the fork point, the carried patches, and the port plan. It owns the
 exit path for the historical WATCH `deferred-2026-07-19-luau-engine`
 (the retired register is available in git history): its exit criterion was **fork parity
 with the pinned C++ engine**, not "luaur publishes a newer base".
-**STATUS 2026-08-05: ladder complete — all nine rungs landed, WATCH CLOSED.**
+**STATUS 2026-08-31: ten rungs translated through the current runtime pin.**
 The vendored engine now carries every upstream delta from its 0.724-era
-base through official 0.732 plus the rive patch set at `rive_0_732`
-(`86eb0096`), which is what the pinned C++ runtime embeds.
+base through the Rive fork at `rive_0_733` (`f4a8c732`), which is what the
+pinned C++ runtime embeds.
 
 ## Why
 
 `deferred-2026-07-19-luau-engine` is the highest-urgency WATCH (rated 8/10,
-3+ triage cycles stale). Upstream C++ runs Luau `rive_0_732` internals
+3+ triage cycles stale). Upstream C++ now runs Luau `rive_0_733` internals
 (docs/sync/triage-2026-08-02-e0d4913f.md) while luaur 0.1.8 is based on
 Luau 0.724-era sources, and luaur's release cadence is the bottleneck.
 Owning the fork makes the engine bump our own port lane instead of an
@@ -178,9 +178,9 @@ carried (not version lag; all pre-date the fork and are gate-green today):
   registers its own `lua_require`); `Require/` deltas are out of the fork's
   port scope.
 
-## Port plan: Luau 0.724 → 0.732 (rung ladder)
+## Port plan: Luau 0.724 → rive_0_733 (rung ladder)
 
-Upstream C++ HEAD is on Luau `rive_0_732` (final pin via S4-43 `395defdb`).
+The runtime pin advances the Luau fork in explicit rungs.
 The fork advances one upstream release sync at a time — each rung lands as
 its own PR with the full gate battery green (corpus exactness is the
 ratchet floor at every rung):
@@ -196,6 +196,7 @@ ratchet floor at every rung):
 | 7 | `e8ae48c4..f8ca77ac` (0.731) | 2178+/566- | landed 2026-08-04: double-vector representation foundation (VECTORD tag, vectorPrecision, allocator/lvector, caller sweep), class hoisting, dark `LuauCompileIifeInline`/`LuauBytecodeFold`/`LuauXpcallFixMessageYieldPath`/`LuauBackedgeHeapCheck`, memorydump/allocationrate wrappers |
 | 8 | `f8ca77ac..decb2d05` (0.732) | 1162+/627- | landed 2026-08-04: class inheritance (LOP_NEWCLASS/super/luaR_inheritclass), custom-pcall retirement (rung-1 unit now unconditional), CstAttr retirement, dark v13 double-vector constants / export-table optimization / managed debug names; audit-driven fix: class-shape decode mirrors C's resize+append doubled layout |
 | 9 | `decb2d05..86eb0096` (rive_0_732 tip) | 304+/15- | landed 2026-08-05: ALL 28 rows ported, 0 deferred — Rive builtin ABI (LBF_RIVE_FROUND=243, Vector block 245-255), fastcall table wired, math.fround (native + library), Rive vector fast functions, lua_pushvector2 (stale-z quirk faithful), RIVE_LUAU baked ON (no print/newproxy/writestring; rive luaL_where/pusherror), LBC_VERSION_TARGET 7, unconditional lexeme capture |
+| 10 | `86eb0096..f4a8c732` (rive_0_733 tip) | reachable Ast/Bytecode/Compiler/VM delta | translated 2026-08-31: automatic stack growth and clone barriers hardwired, yieldable calls promoted to the public API with upstream compatibility aliases, flag-gated sparse `table.move`, concat target-top compilation, indexer-access pretty printing, and userdata-cache bytecode graph preservation |
 
 Rung 9 is the rive patch set: vector fast functions on 3 components,
 native `math.fround`, `LBC_VERSION_TARGET` held at 7 (which is why the
@@ -223,10 +224,10 @@ Additional plan points:
    ladder therefore does NOT claim credit for retiring it; the honest
    record is that the trap does not reproduce at either endpoint, and
    `scope_probe` is corpus-`exact` under the standing gates. The upstream
-   fix class `LuauAutoStack` remains ported-but-dark (rung 1); enabling it
-   stays a separate recorded change with its own gate evidence.
+   fix class `LuauAutoStack` was later retired by rung 10, which makes that
+   stack-growth path unconditional exactly as `rive_0_733` does.
 2. Oracles: the real bytecode-v7 fixture and the full forced-scripted
-   ratchet remain the floor; the exact-0.732 C++ runner is the target
+   ratchet remain the floor; the exact-0.733 C++ runner is the target
    comparison. The editor-emitted-bytecode compatibility matrix
    (upstream_ref `4ac7b327` discipline — read the repository
    `RIVE_RUNTIME_REF`, not triage briefs, for the pin) is a valid interim

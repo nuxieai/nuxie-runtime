@@ -123,6 +123,8 @@ pub struct ArtboardComponentList {
     layout_size: Vec2D,
     visible_start_index: i32,
     visible_end_index: i32,
+    realized_start_index: i32,
+    realized_end_index: i32,
     artboard_map_rules: HashMap<i32, i32>,
     list_scope_focus_node: Option<FocusNodeRef>,
     list_row_focus_nodes: Vec<Option<FocusNodeRef>>,
@@ -156,6 +158,8 @@ impl Default for ArtboardComponentList {
             layout_size: Vec2D::default(),
             visible_start_index: -1,
             visible_end_index: -1,
+            realized_start_index: -1,
+            realized_end_index: -1,
             artboard_map_rules: HashMap::new(),
             list_scope_focus_node: None,
             list_row_focus_nodes: Vec::new(),
@@ -343,13 +347,22 @@ impl ArtboardComponentList {
     }
 
     pub fn update_layout_bounds(&mut self, animate: bool) {
+        // Buffered items are realized but off screen. Writing their measured size
+        // into the artboard sizes would feed back into the virtualizer, which sums
+        // that same table to pick the visible window - so only visible items
+        // report their size.
+        let has_virtual_window = self.virtualization_enabled()
+            && self.visible_start_index >= 0
+            && self.visible_end_index >= 0;
         for index in 0..self.artboard_count() as i32 {
             if let Some(artboard) = self.artboard_instance(index) {
                 let bounds = artboard.with_artboard_mut(|artboard| {
                     artboard.update_layout_bounds(animate);
                     artboard.layout_bounds()
                 });
-                self.set_item_size(Vec2D::new(bounds.width(), bounds.height()), index);
+                if !has_virtual_window || self.is_within_visible_window(index) {
+                    self.set_item_size(Vec2D::new(bounds.width(), bounds.height()), index);
+                }
             }
         }
         self.compute_layout_bounds();
@@ -1132,6 +1145,20 @@ impl ArtboardComponentList {
         }
     }
 
+    fn is_within_visible_window(&self, index: i32) -> bool {
+        let count = self.list_items.len() as i32;
+        if count == 0 || self.visible_start_index < 0 || self.visible_end_index < 0 {
+            return false;
+        }
+        let start = self.visible_start_index % count;
+        let end = self.visible_end_index % count;
+        if start <= end {
+            index >= start && index <= end
+        } else {
+            index >= start || index <= end
+        }
+    }
+
     pub fn ensure_ordered_list_indices(&mut self) {
         let count = self.list_items.len() as i32;
         if count == 0 {
@@ -1144,11 +1171,11 @@ impl ArtboardComponentList {
         }
         self.cached_ordered_list_indices.clear();
         let use_virtual_window = self.virtualization_enabled()
-            && self.visible_start_index >= 0
-            && self.visible_end_index >= 0;
+            && self.realized_start_index >= 0
+            && self.realized_end_index >= 0;
         if use_virtual_window {
-            let start_index = self.visible_start_index % count;
-            let end_index = self.visible_end_index % count;
+            let start_index = self.realized_start_index % count;
+            let end_index = self.realized_end_index % count;
             let mut index = start_index;
             loop {
                 self.cached_ordered_list_indices.push(index);
@@ -1193,7 +1220,7 @@ impl ArtboardComponentList {
             self.layout_parent_ref(|parent| {
                 renderer.transform(nuxie_render_api::Mat2D(*parent.world_transform().values()));
             });
-            if self.visible_start_index != -1 && self.visible_end_index != -1 {
+            if self.realized_start_index != -1 && self.realized_end_index != -1 {
                 let indices = self.ordered_list_indices().to_vec();
                 for index in indices {
                     if let (Some(artboard), Some(item)) =
@@ -2182,6 +2209,11 @@ impl ArtboardComponentList {
     pub fn set_visible_indices(&mut self, start: i32, end: i32) {
         self.visible_start_index = start;
         self.visible_end_index = end;
+    }
+
+    pub fn set_realized_indices(&mut self, start: i32, end: i32) {
+        self.realized_start_index = start;
+        self.realized_end_index = end;
         self.invalidate_ordered_list_indices_cache();
     }
 
@@ -2299,6 +2331,10 @@ impl ConstrainableList for ArtboardComponentList {
         ArtboardComponentList::list_transform(self)
     }
 
+    fn list_composed_translation(&self) -> Vec2D {
+        Vec2D::new(self.x(), self.y())
+    }
+
     fn for_each_list_item_transform(&mut self, use_transform: &mut dyn FnMut(&mut Mat2D)) {
         ArtboardComponentList::for_each_list_item_transform(self, use_transform);
     }
@@ -2339,6 +2375,10 @@ impl VirtualizingComponent for ArtboardComponentList {
 
     fn set_visible_indices(&mut self, start: i32, end: i32) {
         ArtboardComponentList::set_visible_indices(self, start, end);
+    }
+
+    fn set_realized_indices(&mut self, start: i32, end: i32) {
+        ArtboardComponentList::set_realized_indices(self, start, end);
     }
 
     fn set_virtualizable_position(&mut self, index: i32, position: Vec2D) {

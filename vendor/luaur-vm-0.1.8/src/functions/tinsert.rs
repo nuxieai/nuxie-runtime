@@ -26,7 +26,7 @@ pub unsafe fn tinsert(L: *mut lua_State) -> core::ffi::c_int {
 
             // move up elements if necessary
             if 1 <= pos && pos <= n {
-                moveelements(L, 1, 1, pos, n, pos + 1);
+                moveelements(L, 1, 1, pos, n, pos + 1, false);
             }
         }
         _ => {

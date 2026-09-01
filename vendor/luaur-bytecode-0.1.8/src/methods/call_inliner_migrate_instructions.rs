@@ -40,6 +40,7 @@ impl<'a> CallInliner<'a> {
 
             if target_inst_data.op == LuauOpcode::LOP_RETURN
                 || target_inst_data.op == LuauOpcode::LOP_GETVARARGS
+                || target_inst_data.op == LuauOpcode::LOP_PREPVARARGS
             {
                 continue;
             }

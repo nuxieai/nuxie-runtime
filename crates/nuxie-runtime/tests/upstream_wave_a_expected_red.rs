@@ -8,6 +8,10 @@ use nuxie_runtime::source::{
     core::{CoreHandle, CoreType},
     factory::RuntimeFactoryHandle,
     file::{File, RuntimeFileHandle},
+    generated::{
+        constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
+        core_registry::CoreRegistry,
+    },
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     text::{
         text::{Text, TextValueRunHandle},
@@ -384,6 +388,67 @@ fn component_list_case_15_direct_port_expected_red() {
         assert_eq!(scroll.content_width(), 2200.0);
         assert_eq!(scroll.viewport_width(), 500.0);
     });
+}
+
+#[test]
+fn component_list_virtualized_buffer_direct_port() {
+    let f = Fixture::new("component_list_virtualized.riv");
+    let scroll = f
+        .artboard
+        .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+        .into_iter()
+        .next()
+        .expect("scroll constraint");
+    assert!(CoreRegistry::set_uint_handle(&scroll, 221, 2));
+    f.advance();
+
+    let realized = (0..f.count())
+        .filter(|index| f.item_artboard(*index).is_some())
+        .collect::<Vec<_>>();
+    assert_eq!(realized, vec![0, 1, 2, 3, 4, 5, 6, 18, 19]);
+}
+
+#[test]
+fn component_list_virtualized_buffer_clamps_when_not_infinite_direct_port() {
+    let f = Fixture::new("component_list_virtualized.riv");
+    let scroll = f
+        .artboard
+        .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+        .into_iter()
+        .next()
+        .expect("scroll constraint");
+    assert!(CoreRegistry::set_bool_handle(
+        &scroll,
+        i32::from(ScrollConstraintBase::INFINITE_PROPERTY_KEY),
+        false,
+    ));
+    assert!(CoreRegistry::set_uint_handle(&scroll, 221, 2));
+    f.advance();
+
+    let realized = (0..f.count())
+        .filter(|index| f.item_artboard(*index).is_some())
+        .collect::<Vec<_>>();
+    assert_eq!(realized, (0..7).collect::<Vec<_>>());
+}
+
+#[test]
+fn component_list_virtualized_buffer_realizes_both_sides_direct_port() {
+    let f = Fixture::new("component_list_virtualized.riv");
+    let scroll = f
+        .artboard
+        .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())
+        .into_iter()
+        .next()
+        .expect("scroll constraint");
+    assert!(CoreRegistry::set_uint_handle(&scroll, 221, 2));
+    f.advance();
+    write::<ScrollConstraint, _>(&scroll, |scroll| scroll.set_scroll_index(5.0));
+    f.advance();
+
+    let realized = (0..f.count())
+        .filter(|index| f.item_artboard(*index).is_some())
+        .collect::<Vec<_>>();
+    assert_eq!(realized, (3..12).collect::<Vec<_>>());
 }
 #[test]
 fn component_list_case_28_direct_port_expected_red() {

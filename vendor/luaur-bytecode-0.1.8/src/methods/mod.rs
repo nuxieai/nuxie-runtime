@@ -215,7 +215,6 @@ pub mod call_inliner_allocate_up_values;
 pub mod call_inliner_allocate_vm_consts;
 pub mod call_inliner_append_cmp_proto;
 pub mod call_inliner_call_inliner;
-pub mod call_inliner_drop_prep_var_args_in_inlined_path;
 pub mod call_inliner_fill_under_call_arguments;
 pub mod call_inliner_find_target_call_projections;
 pub mod call_inliner_get_var_arg_param;

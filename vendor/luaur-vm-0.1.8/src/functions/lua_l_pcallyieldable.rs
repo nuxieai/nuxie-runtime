@@ -27,7 +27,7 @@ unsafe fn call_context_run(L: *mut lua_State, ud: *mut c_void) {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_l_pcallyieldable(
+pub unsafe fn lua_pcallyieldable(
     L: *mut lua_State,
     nargs: c_int,
     nresults: c_int,
@@ -75,4 +75,15 @@ pub unsafe fn lua_l_pcallyieldable(
     (*(*L).ci).flags &= !(LUA_CALLINFO_HANDLE as u32);
 
     (*c).cont.unwrap()(L, status)
+}
+
+// `lualib.h` keeps this spelling as a backwards-compatibility macro.
+#[allow(non_snake_case)]
+pub unsafe fn lua_l_pcallyieldable(
+    L: *mut lua_State,
+    nargs: c_int,
+    nresults: c_int,
+    errfunc: c_int,
+) -> c_int {
+    lua_pcallyieldable(L, nargs, nresults, errfunc)
 }

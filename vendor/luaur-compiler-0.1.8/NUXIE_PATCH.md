@@ -52,3 +52,9 @@
 
 - Kept integer and integer-buffer builtin recognition dark unless both pinned
   runtime flags are enabled, matching the oracle's raw-default-OFF table.
+
+## Luau fork rung 10
+
+- Ported the reachable `rive_0_733` delta (upstream 86eb0096..f4a8c732).
+- Concatenation operands use top-aware temporary compilation under the new
+  upstream flag, including compound concatenation assignment.

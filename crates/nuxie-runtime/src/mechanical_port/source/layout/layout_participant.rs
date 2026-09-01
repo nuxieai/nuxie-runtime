@@ -147,6 +147,21 @@ impl LayoutParticipant {
     pub fn is_participating_in_layout(&self) -> bool {
         self.layout_data.is_some()
     }
+    pub fn layout_constraint_handles(&self) -> Vec<CoreHandle> {
+        self.provider.layout_constraints().to_vec()
+    }
+    pub fn apply_layout_constraints(owner: &CoreHandle) {
+        let constraints = owner
+            .with_downcast::<Self, _>(Self::layout_constraint_handles)
+            .unwrap_or_default();
+        for constraint in constraints {
+            let constrain = constraint
+                .with(|object| object.layout_constraint_child_handler())
+                .flatten()
+                .expect("registered LayoutConstraint exposes its child action");
+            constrain(&constraint, owner.clone());
+        }
+    }
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         let code = self.base.on_added_clean(context);
         if code != StatusCode::Ok {

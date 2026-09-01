@@ -1,8 +1,9 @@
 use crate::mechanical_port::source::{
+    constraints::constraint::get_parent_world,
     constraints::{constrainable_list::ConstrainableList, list_constraint::ListConstraint},
     core::CoreObject,
     generated::core_registry::CoreCapabilities,
-    math::{mat2d::Mat2D, transform_components::TransformComponents},
+    math::{mat2d::Mat2D, transform_components::TransformComponents, vec2d::Vec2D},
 };
 
 pub use crate::mechanical_port::source::generated::constraints::list_follow_path_constraint_base::ListFollowPathConstraintBase;
@@ -25,25 +26,34 @@ impl ListFollowPathConstraint {
         &mut self,
         component_transform: &Mat2D,
         parent_transform: &Mat2D,
+        offset_position: Vec2D,
         component_offset: f32,
     ) -> TransformComponents {
         let Some(target) = self.base.target() else {
             return TransformComponents::default();
         };
-        let target_collapsed = target
+        let (target_collapsed, target_parent_world, mut transform_b) = target
             .with(|target| {
-                target
+                let transform = target
                     .as_transform_component()
-                    .expect("validated ListFollowPathConstraint target")
-                    .is_collapsed()
+                    .expect("validated ListFollowPathConstraint target");
+                (
+                    transform.is_collapsed(),
+                    get_parent_world(transform),
+                    self.base
+                        .target_transform_for(target, component_offset, offset_position),
+                )
             })
             .expect("ListFollowPathConstraint retains a live target");
         if target_collapsed {
             return TransformComponents::default();
         }
-        let mut transform_b = self.base.target_transform(component_offset);
-        self.base
-            .constrain_helper(component_transform, &mut transform_b, parent_transform)
+        self.base.constrain_helper(
+            component_transform,
+            &mut transform_b,
+            parent_transform,
+            &target_parent_world,
+        )
     }
 
     pub fn build_dependencies(&mut self) {
@@ -65,6 +75,11 @@ impl ListFollowPathConstraint {
 impl ListConstraint for ListFollowPathConstraint {
     fn constrain_list(&mut self, list: &mut dyn ConstrainableList) {
         let list_transform = *list.list_transform();
+        let offset_position = if self.base.offset() {
+            list.list_composed_translation()
+        } else {
+            Vec2D::default()
+        };
         let mut count = 0usize;
         list.for_each_list_item_transform(&mut |_| count += 1);
         let start_offset = self.base.distance_offset() + self.base.distance();
@@ -79,6 +94,7 @@ impl ListConstraint for ListFollowPathConstraint {
             let components = self.constrain_at_offset(
                 transform,
                 &list_transform,
+                offset_position,
                 start_offset + index as f32 * offset_distance,
             );
             let transform_b = Mat2D::compose(&components);

@@ -88,3 +88,11 @@ allowing Android scripting builds to compile.
 - Preserved the pinned engine's raw-default-OFF profile for
   `LuauIntegerFastcalls` and `LuauIntegerBufferFastcalls` when test helpers
   enable all other flags.
+
+## Luau fork rung 10
+
+- Ported the reachable `rive_0_733` delta (upstream 86eb0096..f4a8c732).
+- Removed the retired auto-stack and clone-table flags and registered the new
+  concat, indexer-printing, and sparse-table-move flags. The static flags stay
+  in Nuxie's raw-default-OFF exception set; the dynamic sparse-move flag also
+  keeps its upstream default of false.

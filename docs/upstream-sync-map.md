@@ -7,15 +7,20 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `2cfa84e8103aeeeff4c2bfee92839ab580521660`
+- LAST_SYNCED_SHA: `11217a528b34966eca3765dc88c4ec0c8417d09c`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest applied change: dependency-sorted Lua registration skips cached utility
-  modules and modules whose requirements remain unresolved, preventing repeated
-  top-level side effects and errors. Script-input backlinks are also cleared at
-  disposal even when no scripting backend is active.
-  Upstream: `2cfa84e8103aeeeff4c2bfee92839ab580521660`.
-  Work: [UNIV-1878](https://universe.basis.dev/issue/UNIV-1878).
+  Latest accounted change: upstream's deferred host/player refactor is a
+  source-based **SKIP** for this Rust runtime. Its complete diff only adds or
+  changes C++ test/player harness and deferred-host files; it changes no
+  runtime/core implementation, schema, fixture, or supported product behavior.
+  The renderer additions are test/player-host infrastructure only.
+  The existing Rust `DeferredSession`/`DeferredReplayer` surface already covers
+  the product-side deferred path, so no speculative shared host abstraction was
+  added. Upstream: `11217a528b34966eca3765dc88c4ec0c8417d09c`.
+  Work: [UNIV-2906](https://universe.basis.dev/issue/UNIV-2906).
+- The preceding applicable port at `2cfa84e8103aeeeff4c2bfee92839ab580521660`
+  is complete in [UNIV-1878](https://universe.basis.dev/issue/UNIV-1878).
 - Intervening `1de56230e9ea062a2da2e25eee00942eafe3bdb4` and
   `0a8499b87a7d722b982d9c444172cab94d8320f2` need no Rust translation: they
   change upstream coverage and GMS test-host infrastructure, not runtime,

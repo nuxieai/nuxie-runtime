@@ -222,10 +222,12 @@ mod tests {
             MTLTextureUsage::RenderTarget | MTLTextureUsage::ShaderRead
         );
 
-        assert!(resource
-            .resize(&device, TESSELLATION_TEXTURE_WIDTH, 0)
-            .unwrap()
-            .is_none());
+        assert!(
+            resource
+                .resize(&device, TESSELLATION_TEXTURE_WIDTH, 0)
+                .unwrap()
+                .is_none()
+        );
         assert!(resource.texture().is_none());
         assert!(resource.descriptor().is_none());
     }

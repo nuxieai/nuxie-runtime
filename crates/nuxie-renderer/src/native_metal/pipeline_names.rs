@@ -2,14 +2,14 @@
 //!
 //! This is a direct Rust translation of `DrawPipeline::GetPrecompiledFunctionName`
 //! in upstream `renderer/src/metal/render_context_metal_impl.mm` pinned at
-//! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
+//! `3ed35ee0ded0d58fb8d380930a156041a4624a2f`.
 //! The bit positions are part of the generated-shader namespace contract and
 //! must stay in sync with upstream `generate_draw_combinations.py`.
 
 use super::super::gpu::DrawType;
 
 /// Number of feature bits in an upstream Metal draw-function namespace.
-pub(crate) const SHADER_FEATURE_COUNT: usize = 8;
+pub(crate) const SHADER_FEATURE_COUNT: usize = 9;
 
 // `ShaderFeatures` is not yet represented as a Rust type. Keep the upstream
 // bit positions explicit until the common platform-neutral shader-key type is
@@ -22,8 +22,9 @@ pub(crate) const ENABLE_EVEN_ODD: u32 = 1 << 4;
 pub(crate) const ENABLE_NESTED_CLIPPING: u32 = 1 << 5;
 pub(crate) const ENABLE_HSL_BLEND_MODES: u32 = 1 << 6;
 pub(crate) const ENABLE_DITHER: u32 = 1 << 7;
-pub(crate) const DRAW_INTERIOR_TRIANGLES: u32 = 1 << 8;
-pub(crate) const FEATHER_ATLAS_BLIT: u32 = 1 << 9;
+pub(crate) const ENABLE_MODULATED_IMAGE: u32 = 1 << 8;
+pub(crate) const DRAW_INTERIOR_TRIANGLES: u32 = 1 << 9;
+pub(crate) const FEATHER_ATLAS_BLIT: u32 = 1 << 10;
 
 /// Upstream `ShaderMiscFlags::clockwiseFill`.
 pub(crate) const CLOCKWISE_FILL: u32 = 1 << 1;
@@ -107,7 +108,7 @@ mod tests {
                 DrawType::MidpointFanPatches,
                 0,
                 0,
-                "p0000000000::drawPath",
+                "p00000000000::drawPath",
             ),
             (
                 "clockwise path with all shader features",
@@ -119,37 +120,38 @@ mod tests {
                     | ENABLE_EVEN_ODD
                     | ENABLE_NESTED_CLIPPING
                     | ENABLE_HSL_BLEND_MODES
-                    | ENABLE_DITHER,
+                    | ENABLE_DITHER
+                    | ENABLE_MODULATED_IMAGE,
                 CLOCKWISE_FILL,
-                "c1111111100::drawOuter",
+                "c11111111100::drawOuter",
             ),
             (
                 "interior triangulation",
                 DrawType::InteriorTriangulation,
                 0,
                 0,
-                "p0000000010::drawInterior",
+                "p00000000010::drawInterior",
             ),
             (
                 "feather atlas blit",
                 DrawType::AtlasBlit,
                 0,
                 0,
-                "p0000000011::drawFeatherAtlas",
+                "p00000000011::drawFeatherAtlas",
             ),
             (
                 "clockwise feather atlas blit",
                 DrawType::AtlasBlit,
                 ENABLE_FEATHER,
                 CLOCKWISE_FILL,
-                "c0001000011::drawFeatherAtlas",
+                "c00010000011::drawFeatherAtlas",
             ),
             (
                 "image mesh",
                 DrawType::ImageMesh,
                 ENABLE_CLIP_RECT,
                 0,
-                "m0100000000::drawImageMesh",
+                "m01000000000::drawImageMesh",
             ),
         ];
 

@@ -159,6 +159,15 @@
 //         return;
 //     }
 //
+//     Mat2D imageMatrix;
+//     Mat2D* imageMatrixPtr = nullptr;
+//     if (paint->getImageTexture() != nullptr)
+//     {
+//         imageMatrix =
+//             m_renderStateStack.back().matrix * paint->getImageTransform();
+//         imageMatrixPtr = &imageMatrix;
+//     }
+//
 //     if (paint->getFeather() != 0 && !paint->getIsStroked())
 //     {
 //         if (path->getFillRule() != FillRule::clockwise &&
@@ -173,6 +182,7 @@
 //             clipAndPushDraw(gpu::PathDraw::Make(
 //                 m_context,
 //                 m_renderStateStack.back().matrix,
+//                 imageMatrixPtr,
 //                 path->makeSoftenedCopyForFeathering(paint->getFeather(),
 //                                                     matrixMaxScale),
 //                 path->getFillRule(),
@@ -185,6 +195,7 @@
 //     clipAndPushDraw(
 //         gpu::PathDraw::Make(m_context,
 //                             m_renderStateStack.back().matrix,
+//                             imageMatrixPtr,
 //                             ref_rcp(path),
 //                             path->getFillRule(),
 //                             paint,
@@ -726,6 +737,7 @@
 //         gpu::DrawUniquePtr clipDraw =
 //             gpu::PathDraw::Make(m_context,
 //                                 clip.matrix,
+//                                 nullptr, // imageMatrix, unneeded for clips
 //                                 std::move(clipPath),
 //                                 clipFillRule,
 //                                 &clipUpdatePaint,
@@ -1463,6 +1475,7 @@ impl RiveRenderer {
                 make_path_draw_from_source(
                     &*self.m_context,
                     clip.matrix,
+                    None,
                     clip_path.clone(),
                     rule,
                     &paint,
@@ -1560,6 +1573,9 @@ impl RendererContract for RiveRenderer {
         {
             return;
         }
+        let image_matrix = (!q.getImageTexture().is_null()).then(|| {
+            mul(self.current_state().matrix, *q.getImageTransform())
+        });
         if q.getFeather() != 0.0 && !q.getIsStroked() {
             if p.getFillRule() != FillRule::Clockwise && !frame.clockwiseFillOverride {
                 return;
@@ -1571,6 +1587,7 @@ impl RendererContract for RiveRenderer {
                     make_path_draw_from_source(
                         &*self.m_context,
                         self.current_state().matrix,
+                        image_matrix,
                         softened,
                         p.getFillRule(),
                         q,
@@ -1589,6 +1606,7 @@ impl RendererContract for RiveRenderer {
             make_path_draw_from_source(
                 &*self.m_context,
                 self.current_state().matrix,
+                image_matrix,
                 path_owner,
                 p.getFillRule(),
                 q,

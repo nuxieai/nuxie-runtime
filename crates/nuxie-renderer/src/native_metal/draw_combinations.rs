@@ -3,15 +3,15 @@
 //! lookup owned by `pipeline_names`.
 //!
 //! Sources, pinned to rive-runtime commit
-//! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`:
+//! `3ed35ee0ded0d58fb8d380930a156041a4624a2f`:
 //!
-//! - `renderer/src/shaders/metal/generate_draw_combinations.py:1-161`
+//! - `renderer/src/shaders/metal/generate_draw_combinations.py:1-164`
 //! - `renderer/src/metal/render_context_metal_impl.mm:183-261`
 //!
 //! The upstream generator iterates Python sets of identity-hashed `Feature`
 //! objects. The inventory below records the ordering of a captured upstream
 //! generator emission whose full SHA-256 is
-//! `9f33bdcd7b8831c0654848677d5270698069f98ceebf698c28790d4b32ffed7c`.
+//! `d3ec0fcb16802b4081d04356e03560d244afb4799c408b0a7b633e591679e06d`.
 //! It was captured by running
 //! `python3 renderer/src/shaders/metal/generate_draw_combinations.py <output>`
 //! from the pinned checkout. Because `Feature` keeps identity hashing, separate
@@ -20,13 +20,16 @@
 //! that the upstream script has deterministic bytes.
 
 use super::pipeline_names::{
-    DRAW_INTERIOR_TRIANGLES, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT,
-    ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_FEATHER, ENABLE_HSL_BLEND_MODES, ENABLE_NESTED_CLIPPING,
-    FEATHER_ATLAS_BLIT,
+    DRAW_INTERIOR_TRIANGLES, ENABLE_ADVANCED_BLEND, ENABLE_CLIP_RECT, ENABLE_CLIPPING,
+    ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_FEATHER, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
+    ENABLE_NESTED_CLIPPING, FEATHER_ATLAS_BLIT,
 };
 
-const WHOLE_PROGRAM_FEATURES: u32 =
-    ENABLE_CLIPPING | ENABLE_CLIP_RECT | ENABLE_ADVANCED_BLEND | ENABLE_FEATHER;
+const WHOLE_PROGRAM_FEATURES: u32 = ENABLE_CLIPPING
+    | ENABLE_CLIP_RECT
+    | ENABLE_ADVANCED_BLEND
+    | ENABLE_FEATHER
+    | ENABLE_MODULATED_IMAGE;
 const FRAGMENT_ONLY_FEATURES: u32 =
     ENABLE_EVEN_ODD | ENABLE_NESTED_CLIPPING | ENABLE_HSL_BLEND_MODES | ENABLE_DITHER;
 const ALL_FEATURES: u32 = WHOLE_PROGRAM_FEATURES | FRAGMENT_ONLY_FEATURES;
@@ -35,7 +38,8 @@ const NON_IMAGE_MESH_FEATURES: u32 = ENABLE_FEATHER
     | ENABLE_EVEN_ODD
     | ENABLE_NESTED_CLIPPING
     | DRAW_INTERIOR_TRIANGLES
-    | FEATHER_ATLAS_BLIT;
+    | FEATHER_ATLAS_BLIT
+    | ENABLE_MODULATED_IMAGE;
 
 /// Upstream's `Feature` value, retained to preserve emitted `#define` order.
 #[derive(Clone, Copy, Debug)]
@@ -85,14 +89,19 @@ const FEATURE_DITHER: Feature = Feature {
     index: 7,
     bit: ENABLE_DITHER,
 };
+const FEATURE_MODULATED_IMAGE: Feature = Feature {
+    name: "ENABLE_MODULATED_IMAGE",
+    index: 8,
+    bit: ENABLE_MODULATED_IMAGE,
+};
 const FEATURE_INTERIOR_TRIANGLES: Feature = Feature {
     name: "DRAW_INTERIOR_TRIANGLES",
-    index: 8,
+    index: 9,
     bit: DRAW_INTERIOR_TRIANGLES,
 };
 const FEATURE_ATLAS_BLIT: Feature = Feature {
     name: "FEATHER_ATLAS_BLIT",
-    index: 9,
+    index: 10,
     bit: FEATHER_ATLAS_BLIT,
 };
 
@@ -118,9 +127,9 @@ pub(crate) const fn is_image_mesh_feature_set(feature_set: u32) -> bool {
     feature_set & NON_IMAGE_MESH_FEATURES == 0
 }
 
-/// Construct the ten-character namespace identifier used by the generator.
+/// Construct the eleven-character namespace identifier used by the generator.
 pub(crate) fn namespace_id(feature_set: u32) -> String {
-    let mut id = ['0'; 10];
+    let mut id = ['0'; 11];
     for feature in ALL_FEATURES_ARRAY
         .iter()
         .chain([FEATURE_INTERIOR_TRIANGLES, FEATURE_ATLAS_BLIT].iter())
@@ -163,64 +172,70 @@ pub(crate) struct DrawCombination {
     feature_order: &'static [Feature],
 }
 
-const PATH_VERTEX_FEATURES: [Feature; 4] = [
-    FEATURE_CLIP_RECT,
+const PATH_VERTEX_FEATURES: [Feature; 5] = [
     FEATURE_ADVANCED_BLEND,
+    FEATURE_MODULATED_IMAGE,
+    FEATURE_CLIP_RECT,
     FEATURE_FEATHER,
     FEATURE_CLIPPING,
 ];
-const PATH_FRAGMENT_FEATURES: [Feature; 8] = [
-    FEATURE_CLIPPING,
+const PATH_FRAGMENT_FEATURES: [Feature; 9] = [
+    FEATURE_ADVANCED_BLEND,
+    FEATURE_MODULATED_IMAGE,
     FEATURE_CLIP_RECT,
     FEATURE_NESTED_CLIPPING,
-    FEATURE_DITHER,
-    FEATURE_FEATHER,
     FEATURE_HSL_BLEND_MODES,
-    FEATURE_EVEN_ODD,
-    FEATURE_ADVANCED_BLEND,
-];
-const INTERIOR_VERTEX_FEATURES: [Feature; 5] = [
-    FEATURE_CLIPPING,
     FEATURE_FEATHER,
+    FEATURE_EVEN_ODD,
+    FEATURE_DITHER,
+    FEATURE_CLIPPING,
+];
+const INTERIOR_VERTEX_FEATURES: [Feature; 6] = [
+    FEATURE_FEATHER,
+    FEATURE_ADVANCED_BLEND,
+    FEATURE_MODULATED_IMAGE,
     FEATURE_INTERIOR_TRIANGLES,
     FEATURE_CLIP_RECT,
-    FEATURE_ADVANCED_BLEND,
-];
-const INTERIOR_FRAGMENT_FEATURES: [Feature; 9] = [
     FEATURE_CLIPPING,
-    FEATURE_INTERIOR_TRIANGLES,
+];
+const INTERIOR_FRAGMENT_FEATURES: [Feature; 10] = [
+    FEATURE_ADVANCED_BLEND,
+    FEATURE_MODULATED_IMAGE,
     FEATURE_CLIP_RECT,
     FEATURE_NESTED_CLIPPING,
-    FEATURE_DITHER,
+    FEATURE_HSL_BLEND_MODES,
     FEATURE_FEATHER,
-    FEATURE_HSL_BLEND_MODES,
+    FEATURE_INTERIOR_TRIANGLES,
     FEATURE_EVEN_ODD,
-    FEATURE_ADVANCED_BLEND,
-];
-const ATLAS_VERTEX_FEATURES: [Feature; 5] = [
-    FEATURE_CLIPPING,
-    FEATURE_INTERIOR_TRIANGLES,
-    FEATURE_CLIP_RECT,
-    FEATURE_ATLAS_BLIT,
-    FEATURE_ADVANCED_BLEND,
-];
-const ATLAS_FRAGMENT_FEATURES: [Feature; 7] = [
-    FEATURE_INTERIOR_TRIANGLES,
-    FEATURE_CLIP_RECT,
     FEATURE_DITHER,
-    FEATURE_ATLAS_BLIT,
+    FEATURE_CLIPPING,
+];
+const ATLAS_VERTEX_FEATURES: [Feature; 6] = [
     FEATURE_ADVANCED_BLEND,
+    FEATURE_MODULATED_IMAGE,
+    FEATURE_CLIP_RECT,
+    FEATURE_ATLAS_BLIT,
+    FEATURE_INTERIOR_TRIANGLES,
+    FEATURE_CLIPPING,
+];
+const ATLAS_FRAGMENT_FEATURES: [Feature; 8] = [
+    FEATURE_ADVANCED_BLEND,
+    FEATURE_MODULATED_IMAGE,
+    FEATURE_CLIP_RECT,
+    FEATURE_ATLAS_BLIT,
     FEATURE_HSL_BLEND_MODES,
+    FEATURE_INTERIOR_TRIANGLES,
+    FEATURE_DITHER,
     FEATURE_CLIPPING,
 ];
 const IMAGE_VERTEX_FEATURES: [Feature; 3] =
     [FEATURE_CLIP_RECT, FEATURE_ADVANCED_BLEND, FEATURE_CLIPPING];
 const IMAGE_FRAGMENT_FEATURES: [Feature; 5] = [
-    FEATURE_CLIPPING,
-    FEATURE_CLIP_RECT,
-    FEATURE_DITHER,
-    FEATURE_HSL_BLEND_MODES,
     FEATURE_ADVANCED_BLEND,
+    FEATURE_CLIP_RECT,
+    FEATURE_HSL_BLEND_MODES,
+    FEATURE_DITHER,
+    FEATURE_CLIPPING,
 ];
 
 /// The ten namespaces emitted by the pinned Python generator.
@@ -375,7 +390,7 @@ pub(crate) fn generated_shader_source() -> String {
     generate_draw_combinations()
 }
 
-const ALL_FEATURES_ARRAY: [Feature; 8] = [
+const ALL_FEATURES_ARRAY: [Feature; 9] = [
     FEATURE_CLIPPING,
     FEATURE_CLIP_RECT,
     FEATURE_ADVANCED_BLEND,
@@ -384,19 +399,20 @@ const ALL_FEATURES_ARRAY: [Feature; 8] = [
     FEATURE_NESTED_CLIPPING,
     FEATURE_HSL_BLEND_MODES,
     FEATURE_DITHER,
+    FEATURE_MODULATED_IMAGE,
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::gpu::DrawType;
-    use crate::native_metal::pipeline_names::{precompiled_function_name, CLOCKWISE_FILL};
+    use crate::native_metal::pipeline_names::{CLOCKWISE_FILL, precompiled_function_name};
 
     // The raw fixture deliberately has no provenance header because the test
     // compares every captured upstream byte. Its provenance and the reason a
     // single capture is necessary are recorded in this module's top-level docs.
     const CAPTURED_UPSTREAM_SOURCE: &str =
-        include_str!("../../tests/fixtures/native_metal/draw_combinations-4ac7b327-9f33bdcd.metal");
+        include_str!("../../tests/fixtures/native_metal/draw_combinations-3ed35ee0-d3ec0fcb.metal");
 
     #[test]
     fn generated_source_matches_pinned_upstream_oracle() {
@@ -410,16 +426,16 @@ mod tests {
     fn inventory_has_upstream_namespace_identifiers() {
         let source = generate_draw_combinations();
         for id in [
-            "p1111000000",
-            "p1111111100",
-            "c1111111100",
-            "p1111000010",
-            "p1111111110",
-            "c1111111110",
-            "p1110000011",
-            "p1110001111",
-            "m1110000000",
-            "m1110001100",
+            "p11110000100",
+            "p11111111100",
+            "c11111111100",
+            "p11110000110",
+            "p11111111110",
+            "c11111111110",
+            "p11100000111",
+            "p11100011111",
+            "m11100000000",
+            "m11100011000",
         ] {
             assert!(source.contains(&format!("namespace {id}")), "missing {id}");
         }
@@ -459,7 +475,7 @@ mod tests {
     fn precompiled_names_match_upstream_namespace_construction() {
         assert_eq!(
             precompiled_function_name(DrawType::MidpointFanPatches, 0, 0, "drawPath"),
-            Some("p0000000000::drawPath".to_owned())
+            Some("p00000000000::drawPath".to_owned())
         );
         assert_eq!(
             precompiled_function_name(
@@ -468,19 +484,19 @@ mod tests {
                 CLOCKWISE_FILL,
                 "drawOuter"
             ),
-            Some("c1111111100::drawOuter".to_owned())
+            Some("c11111111100::drawOuter".to_owned())
         );
         assert_eq!(
             precompiled_function_name(DrawType::InteriorTriangulation, 0, 0, "drawInterior"),
-            Some("p0000000010::drawInterior".to_owned())
+            Some("p00000000010::drawInterior".to_owned())
         );
         assert_eq!(
             precompiled_function_name(DrawType::AtlasBlit, 0, 0, "drawFeatherAtlas"),
-            Some("p0000000011::drawFeatherAtlas".to_owned())
+            Some("p00000000011::drawFeatherAtlas".to_owned())
         );
         assert_eq!(
             precompiled_function_name(DrawType::ImageMesh, ENABLE_CLIP_RECT, 0, "drawImageMesh"),
-            Some("m0100000000::drawImageMesh".to_owned())
+            Some("m01000000000::drawImageMesh".to_owned())
         );
         assert_eq!(
             precompiled_function_name(DrawType::RenderPassResolve, 0, 0, "resolve"),

@@ -1135,7 +1135,8 @@ pub struct Draw {
     pub(crate) image_texture: *mut gpu::Texture,
     pub(crate) image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
     pub(crate) pixel_bounds: IAABB,
-    pub(crate) matrix: nuxie_render_api::Mat2D,
+    pub(crate) paint_matrix: nuxie_render_api::Mat2D,
+    pub(crate) image_matrix: nuxie_render_api::Mat2D,
     pub(crate) blend_mode: nuxie_render_api::BlendMode,
     pub(crate) draw_type: DrawObjectType,
     pub(crate) clipped_pixel_bounds: IAABB,
@@ -1170,7 +1171,8 @@ impl Draw {
             image_texture: core::ptr::null_mut(),
             image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler::LinearClamp(),
             pixel_bounds: IAABB::default(),
-            matrix: nuxie_render_api::Mat2D::IDENTITY,
+            paint_matrix: nuxie_render_api::Mat2D::IDENTITY,
+            image_matrix: nuxie_render_api::Mat2D::IDENTITY,
             blend_mode: nuxie_render_api::BlendMode::SrcOver,
             draw_type: DrawObjectType::path,
             clipped_pixel_bounds: IAABB::default(),
@@ -1241,14 +1243,20 @@ impl Draw {
     pub fn imageTexture(&self) -> *mut gpu::Texture {
         self.image_texture
     }
+    pub fn hasImageTexture(&self) -> bool {
+        !self.image_texture.is_null()
+    }
     pub fn imageSampler(
         &self,
     ) -> crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler
     {
         self.image_sampler
     }
-    pub fn matrix(&self) -> &nuxie_render_api::Mat2D {
-        &self.matrix
+    pub fn paintMatrix(&self) -> &nuxie_render_api::Mat2D {
+        &self.paint_matrix
+    }
+    pub fn imageMatrix(&self) -> &nuxie_render_api::Mat2D {
+        &self.image_matrix
     }
     pub fn r#type(&self) -> DrawObjectType {
         self.draw_type

@@ -60,11 +60,11 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::metal::re
 };
 use crate::{RenderMode, RendererError};
 
-use super::command_submission::{make_command_buffer_on_queue, NativeMetalSubmissionCompletion};
+use super::MechanicalMetalHost;
+use super::command_submission::{NativeMetalSubmissionCompletion, make_command_buffer_on_queue};
 use super::context_options::{NativeMetalContextOptions, ShaderCompilationMode};
 use super::objc2_execution::{ActualMetalExecutionInventory, Objc2MetalExecution};
 use super::source_capabilities::MetalCapabilitySelection;
-use super::MechanicalMetalHost;
 
 use mechanical_metal::source_execution::{
     Handle, MetalExecution, PixelFormat, RenderContextMetal, RenderTargetMetal,
@@ -773,15 +773,15 @@ fn finish_present_result(
 #[cfg(test)]
 mod committed_frame_guard_tests {
     use super::{
-        finish_present_result, inject_panic_after_post_flush_once, CommittedFrameWaitGuard,
-        MechanicalCompletionToken,
+        CommittedFrameWaitGuard, MechanicalCompletionToken, finish_present_result,
+        inject_panic_after_post_flush_once,
     };
-    use crate::native_metal::NativeMetalFactory;
     use crate::RendererError;
+    use crate::native_metal::NativeMetalFactory;
     use nuxie_render_api::RenderCanvas;
     use std::rc::Rc;
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -934,12 +934,14 @@ mod committed_frame_guard_tests {
             result.is_err(),
             "actual canvas postFlush unwind was not injected"
         );
-        assert!(factory
-            .mechanical_context()
-            .unwrap()
-            .borrow()
-            .in_flight
-            .is_empty());
+        assert!(
+            factory
+                .mechanical_context()
+                .unwrap()
+                .borrow()
+                .in_flight
+                .is_empty()
+        );
         for _ in 0..4 {
             canvas.begin_frame(0).unwrap().finish().unwrap();
         }

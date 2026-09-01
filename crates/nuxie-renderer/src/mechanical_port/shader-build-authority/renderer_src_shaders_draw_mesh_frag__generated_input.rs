@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_mesh.frag";
-pub const PINNED_SOURCE_SHA256: &str = "d3a060c05d66e187ca2a0edab03788e7d885364ba833237e2e89f39a2b5e9c1f";
+pub const PINNED_SOURCE_SHA256: &str = "d6e7ec4585532526c9c225f5d49fe44c1e68a0acff94caa750a761212b5a3546";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_mesh";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 227;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 6989;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 234;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 7187;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_draw_mesh_frag__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

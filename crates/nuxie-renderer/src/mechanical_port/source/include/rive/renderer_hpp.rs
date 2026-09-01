@@ -37,6 +37,7 @@
 // namespace rive
 // {
 // class Vec2D;
+// class RenderImage;
 //
 // // Helper that computes a matrix to "align" content (source) to fit inside frame
 // // (destination).
@@ -610,6 +611,7 @@ impl RenderPaint {
 // virtual void blendMode(BlendMode value) = 0;
 // virtual void shader(rcp<RenderShader>) = 0;
 // virtual void invalidateStroke() = 0;
+// virtual void modulatedImage(const RenderImage*, ImageSampler, const Mat2D&) {}
 pub trait RenderPaintContract {
     fn style(&mut self, style: RenderPaintStyle);
     fn color(&mut self, value: ColorInt);
@@ -621,6 +623,13 @@ pub trait RenderPaintContract {
     // rcp<RenderShader> is an intrusive owning transfer, not a borrowed link.
     unsafe fn shader(&mut self, shader: rcp<RenderShader>);
     fn invalidateStroke(&mut self);
+    fn modulatedImage(
+        &mut self,
+        _image: *const RenderImage,
+        _sampler: ImageSampler,
+        _transform: &Mat2D,
+    ) {
+    }
 }
 
 // #if defined(__EMSCRIPTEN__)

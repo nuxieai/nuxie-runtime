@@ -3,7 +3,7 @@
 //! This module is the bounded translation of pinned upstream
 //! `renderer/include/rive/renderer/metal/render_context_metal_impl.h:93-109,222-229,235-266`
 //! and `renderer/src/metal/render_context_metal_impl.mm:651-704,1117-1224` at
-//! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
+//! `3ed35ee0ded0d58fb8d380930a156041a4624a2f`.
 //!
 //! The cache owns its backend by value. The production backend can therefore
 //! own the one long-lived `NativeBackgroundShaderCompiler` immediately, while
@@ -11,26 +11,24 @@
 //! compiler queue operation escapes this module: otherwise two consumers could
 //! steal each other's LIFO completions.
 
-use super::shader_compile_plan::{
-    InterlockMode, ShaderFeatures, ShaderMiscFlags, BORROWED_COVERAGE_PASS,
-    COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT,
-    ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_HSL_BLEND_MODES, ENABLE_NESTED_CLIPPING,
-    FIXED_FUNCTION_COLOR_OUTPUT, STORE_COLOR_CLEAR, SWIZZLE_COLOR_BGRA_TO_RGBA,
-};
-pub(crate) use super::context_options::{
-    NativeMetalContextOptions, ShaderCompilationMode,
-};
 #[cfg(test)]
 use super::context_options::NativeMetalSynthesizedFailureType;
+pub(crate) use super::context_options::{NativeMetalContextOptions, ShaderCompilationMode};
+use super::shader_compile_plan::{
+    BORROWED_COVERAGE_PASS, COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ADVANCED_BLEND,
+    ENABLE_CLIP_RECT, ENABLE_CLIPPING, ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_HSL_BLEND_MODES,
+    ENABLE_MODULATED_IMAGE, ENABLE_NESTED_CLIPPING, FIXED_FUNCTION_COLOR_OUTPUT, InterlockMode,
+    STORE_COLOR_CLEAR, SWIZZLE_COLOR_BGRA_TO_RGBA, ShaderFeatures, ShaderMiscFlags,
+};
 use crate::gpu::DrawType;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Mutex;
 
-const ALL_SHADER_FEATURES: ShaderFeatures = (1 << 8) - 1;
+const ALL_SHADER_FEATURES: ShaderFeatures = (1 << 9) - 1;
 const EXCLUSIVE_ATOMIC_UBERSHADER_FEATURES: ShaderFeatures = ENABLE_ADVANCED_BLEND;
 const INTERLOCK_MODE_BIT_COUNT: u32 = 3;
-const SHADER_FEATURE_COUNT: u32 = 8;
+const SHADER_FEATURE_COUNT: u32 = 9;
 const DRAW_TYPE_KEY_BIT_COUNT: u32 = 3;
 const CLOCKWISE_FILL: ShaderMiscFlags = 1 << 1;
 
@@ -155,13 +153,19 @@ pub(crate) fn shader_features_mask_for(
 ) -> Result<ShaderFeatures, PipelineCacheError> {
     let interlock_mask = match interlock_mode {
         InterlockMode::RasterOrdering => ALL_SHADER_FEATURES,
-        InterlockMode::Atomics => ALL_SHADER_FEATURES & !ENABLE_NESTED_CLIPPING,
+        InterlockMode::Atomics => {
+            ALL_SHADER_FEATURES & !(ENABLE_NESTED_CLIPPING | ENABLE_MODULATED_IMAGE)
+        }
         InterlockMode::Clockwise => ALL_SHADER_FEATURES & !ENABLE_EVEN_ODD,
         InterlockMode::ClockwiseAtomic => {
             ALL_SHADER_FEATURES & !ENABLE_EVEN_ODD & !ENABLE_NESTED_CLIPPING
         }
         InterlockMode::Msaa => {
-            ENABLE_CLIP_RECT | ENABLE_ADVANCED_BLEND | ENABLE_HSL_BLEND_MODES | ENABLE_DITHER
+            ENABLE_CLIP_RECT
+                | ENABLE_ADVANCED_BLEND
+                | ENABLE_HSL_BLEND_MODES
+                | ENABLE_DITHER
+                | ENABLE_MODULATED_IMAGE
         }
     };
 
@@ -169,11 +173,15 @@ pub(crate) fn shader_features_mask_for(
         DrawType::ImageRect | DrawType::ImageMesh | DrawType::AtlasBlit
             if interlock_mode != InterlockMode::Atomics =>
         {
-            ENABLE_CLIPPING
+            let mut mask = ENABLE_CLIPPING
                 | ENABLE_CLIP_RECT
                 | ENABLE_ADVANCED_BLEND
                 | ENABLE_HSL_BLEND_MODES
-                | ENABLE_DITHER
+                | ENABLE_DITHER;
+            if draw_type == DrawType::AtlasBlit {
+                mask |= ENABLE_MODULATED_IMAGE;
+            }
+            mask
         }
         DrawType::MidpointFanPatches
         | DrawType::MidpointFanCenterAaPatches
@@ -345,7 +353,7 @@ pub(crate) struct RasterPreloadSpec {
 }
 
 /// The exact seven constructor-time raster ubershaders and their metallib
-/// names. The short `GC`/`JB` exports are pinned by `DrawShaderLibrary`.
+/// names. The short `HC`/`JB` exports are pinned by `DrawShaderLibrary`.
 pub(crate) fn raster_preload_specs() -> Result<[RasterPreloadSpec; 7], PipelineCacheError> {
     let make =
         |draw_type, shader_features, shader_misc_flags, vertex_function, fragment_function| {
@@ -369,50 +377,50 @@ pub(crate) fn raster_preload_specs() -> Result<[RasterPreloadSpec; 7], PipelineC
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             0,
-            "p1111000000::GC",
-            "p1111111100::JB",
+            "p11110000100::HC",
+            "p11111111100::JB",
         )?,
         make(
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p1111000000::GC",
-            "c1111111100::JB",
+            "p11110000100::HC",
+            "c11111111100::JB",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             0,
-            "p1111000010::GC",
-            "p1111111110::JB",
+            "p11110000110::HC",
+            "p11111111110::JB",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p1111000010::GC",
-            "c1111111110::JB",
+            "p11110000110::HC",
+            "c11111111110::JB",
         )?,
         make(
             DrawType::AtlasBlit,
             shader_features_mask_for(DrawType::AtlasBlit, InterlockMode::RasterOrdering)?,
             0,
-            "p1110000011::GC",
-            "p1110001111::JB",
+            "p11100000111::HC",
+            "p11100011111::JB",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             0,
-            "m1110000000::GC",
-            "m1110001100::JB",
+            "m11100000000::HC",
+            "m11100011000::JB",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             CLOCKWISE_FILL,
-            "m1110000000::GC",
-            "m1110001100::JB",
+            "m11100000000::HC",
+            "m11100011000::JB",
         )?,
     ])
 }
@@ -699,7 +707,7 @@ mod metal_backend {
     use objc2_foundation::NSString;
     use objc2_metal::{MTLDevice, MTLLibrary};
 
-    const SPECIALIZED_VERTEX_MAIN: &str = "GC";
+    const SPECIALIZED_VERTEX_MAIN: &str = "HC";
     const SPECIALIZED_FRAGMENT_MAIN: &str = "JB";
 
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -898,9 +906,9 @@ mod metal_backend {
 }
 
 #[cfg(test)]
-pub(crate) use metal_backend::NativeCompatibleDrawPipelineCache;
-#[cfg(test)]
 pub(crate) use metal_backend::MetalPipelineCacheBackend;
+#[cfg(test)]
+pub(crate) use metal_backend::NativeCompatibleDrawPipelineCache;
 
 #[cfg(test)]
 mod tests {
@@ -1054,10 +1062,10 @@ mod tests {
             InterlockMode::RasterOrdering,
             0,
         );
-        assert_eq!(ubershader_features_mask_for(midpoint, platform), Ok(0xff));
+        assert_eq!(ubershader_features_mask_for(midpoint, platform), Ok(0x1ff));
         assert_eq!(
-            pipeline_key(midpoint.draw_type, 0xff, midpoint.interlock_mode, 0),
-            Ok(PipelineKey(0x07f8))
+            pipeline_key(midpoint.draw_type, 0x1ff, midpoint.interlock_mode, 0),
+            Ok(PipelineKey(0x0ff8))
         );
 
         let atomic_resolve = PipelineRequest::new(
@@ -1068,7 +1076,7 @@ mod tests {
         );
         assert_eq!(
             ubershader_features_mask_for(atomic_resolve, platform),
-            Ok(ALL_SHADER_FEATURES & !ENABLE_NESTED_CLIPPING)
+            Ok(ALL_SHADER_FEATURES & !(ENABLE_NESTED_CLIPPING | ENABLE_MODULATED_IMAGE))
         );
         assert_eq!(
             pipeline_key(
@@ -1080,7 +1088,7 @@ mod tests {
             .map(PipelineKey::get),
             // gpu.cpp::ShaderUniqueKey packs misc bit9, atomic mode1,
             // advanced-blend feature bit2, and renderPassResolve draw key6.
-            Ok((1 << (9 + 3 + 8 + 3)) | (1 << (8 + 3)) | (4 << 3) | 6)
+            Ok((1 << (9 + 3 + 9 + 3)) | (1 << (9 + 3)) | (4 << 3) | 6)
         );
 
         let msaa_midpoint = PipelineRequest::new(
@@ -1091,7 +1099,10 @@ mod tests {
         );
         assert_eq!(
             ubershader_features_mask_for(msaa_midpoint, platform),
-            Ok(ENABLE_ADVANCED_BLEND | ENABLE_HSL_BLEND_MODES | ENABLE_DITHER),
+            Ok(ENABLE_ADVANCED_BLEND
+                | ENABLE_HSL_BLEND_MODES
+                | ENABLE_DITHER
+                | ENABLE_MODULATED_IMAGE),
             "pinned Metal supports clip scissors but leaves clip-distance planes disabled"
         );
         assert_eq!(
@@ -1102,8 +1113,30 @@ mod tests {
                     ..platform
                 },
             ),
-            Ok(ENABLE_CLIP_RECT | ENABLE_ADVANCED_BLEND | ENABLE_HSL_BLEND_MODES | ENABLE_DITHER),
+            Ok(ENABLE_CLIP_RECT
+                | ENABLE_ADVANCED_BLEND
+                | ENABLE_HSL_BLEND_MODES
+                | ENABLE_DITHER
+                | ENABLE_MODULATED_IMAGE),
             "the pure key policy must still distinguish a backend that really has clip planes"
+        );
+
+        assert_ne!(
+            shader_features_mask_for(DrawType::AtlasBlit, InterlockMode::RasterOrdering).unwrap()
+                & ENABLE_MODULATED_IMAGE,
+            0
+        );
+        for draw_type in [DrawType::ImageRect, DrawType::ImageMesh] {
+            assert_eq!(
+                shader_features_mask_for(draw_type, InterlockMode::RasterOrdering).unwrap()
+                    & ENABLE_MODULATED_IMAGE,
+                0
+            );
+        }
+        assert_eq!(
+            shader_features_mask_for(DrawType::AtlasBlit, InterlockMode::Atomics).unwrap()
+                & ENABLE_MODULATED_IMAGE,
+            0
         );
     }
 
@@ -1124,10 +1157,12 @@ mod tests {
         let _ = cache.select(atomic_midpoint(0)).unwrap();
         let state = state.lock().unwrap();
         assert!(!state.scheduled.is_empty());
-        assert!(state
-            .scheduled
-            .iter()
-            .all(|job| job.failure_injection == PipelineFailureInjection::None));
+        assert!(
+            state
+                .scheduled
+                .iter()
+                .all(|job| job.failure_injection == PipelineFailureInjection::None)
+        );
     }
 
     #[test]
@@ -1142,7 +1177,7 @@ mod tests {
                 .iter()
                 .map(|spec| spec.key.get())
                 .collect::<Vec<_>>(),
-            vec![0x07f8, 0x87f8, 0x07f9, 0x87f9, 0x063a, 0x063c, 0x863c]
+            vec![0x0ff8, 0x10ff8, 0x0ff9, 0x10ff9, 0x0e3a, 0x063c, 0x1063c]
         );
         assert_eq!(
             state
@@ -1151,13 +1186,13 @@ mod tests {
                 .map(|spec| (spec.vertex_function, spec.fragment_function))
                 .collect::<Vec<_>>(),
             vec![
-                ("p1111000000::GC", "p1111111100::JB"),
-                ("p1111000000::GC", "c1111111100::JB"),
-                ("p1111000010::GC", "p1111111110::JB"),
-                ("p1111000010::GC", "c1111111110::JB"),
-                ("p1110000011::GC", "p1110001111::JB"),
-                ("m1110000000::GC", "m1110001100::JB"),
-                ("m1110000000::GC", "m1110001100::JB"),
+                ("p11110000100::HC", "p11111111100::JB"),
+                ("p11110000100::HC", "c11111111100::JB"),
+                ("p11110000110::HC", "p11111111110::JB"),
+                ("p11110000110::HC", "c11111111110::JB"),
+                ("p11100000111::HC", "p11100011111::JB"),
+                ("m11100000000::HC", "m11100011000::JB"),
+                ("m11100000000::HC", "m11100011000::JB"),
             ]
         );
         assert!(state.scheduled.is_empty());
@@ -1361,9 +1396,11 @@ mod tests {
             atomic_midpoint(ENABLE_DITHER).with_failure(PipelineFailureInjection::PipelineCreation);
         let _ = cache.select(request).unwrap();
         let state = state.lock().unwrap();
-        assert!(!state
-            .realized
-            .iter()
-            .any(|job| job.key() == unrelated.key()));
+        assert!(
+            !state
+                .realized
+                .iter()
+                .any(|job| job.key() == unrelated.key())
+        );
     }
 }

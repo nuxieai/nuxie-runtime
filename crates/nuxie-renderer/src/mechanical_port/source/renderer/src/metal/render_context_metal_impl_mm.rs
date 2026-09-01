@@ -6,7 +6,7 @@
  * as audit provenance. Executable owners and the native renderer connection
  * precede that source text.
  *
- * Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
+ * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
  */
 
 #![allow(dead_code)]
@@ -14,12 +14,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "e949498e05483a852c10fbbdad2cd1941c15aebc";
+pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/metal/render_context_metal_impl.mm";
 pub const PINNED_SOURCE_SHA256: &str =
-    "5e9ab54165a83fec115efba5e40633c0cbd28de268214fea3721df004d0fd827";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 2035;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 84809;
+    "d637edb35f3d87aa7ef9de73545e8e5c779cdec6b665bce854c0a9f7a203afde";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 2037;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 84918;
 pub const TRANSLATION_UNIT: &str = "metal-render-context-implementation";
 pub const TRANSLATION_TARGET: &str = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs";
 
@@ -172,7 +172,8 @@ pub fn precompiled_function_name(
     clockwise_fill: bool,
     function_base_name: &str,
 ) -> Option<String> {
-    const SHADER_FEATURE_COUNT: usize = 8;
+    const SHADER_FEATURE_COUNT: usize = 9;
+    const _: () = assert!(gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE.0 == 1 << 8);
     let mut namespace_id = [b'0'; SHADER_FEATURE_COUNT + 2];
     for (index, value) in namespace_id[..SHADER_FEATURE_COUNT].iter_mut().enumerate() {
         if shader_features & (1 << index) != 0 {
@@ -782,7 +783,7 @@ pub mod source_execution {
         /// Transfers the registry's creation +1 into the canonical source
         /// owner and leaves a generation-checked nonowning alias behind.
         fn take_owned(&mut self, handle: Handle, kind: MetalObjectKind)
-        -> Option<OwnedMetalHandle>;
+            -> Option<OwnedMetalHandle>;
         /// Creates the separate +1 required by a source strong assignment,
         /// publishes it under its own generation, and transfers that owner.
         fn clone_owned(
@@ -6815,23 +6816,22 @@ pub mod source_execution {
         }
     }
 
-    const VERTEX_SHADER_FEATURES_MASK: u32 = 0x0f;
+    const VERTEX_SHADER_FEATURES_MASK: u32 = 0x10f;
     fn interlock_features(interlock: InterlockMode) -> u32 {
         match interlock {
-            InterlockMode::RasterOrdering => 0xff,
+            InterlockMode::RasterOrdering => 0x1ff,
             InterlockMode::Atomics => 0xdf,
-            InterlockMode::Clockwise => 0xef,
-            InterlockMode::ClockwiseAtomic => 0xcf,
-            InterlockMode::Msaa => 0xc6,
+            InterlockMode::Clockwise => 0x1ef,
+            InterlockMode::ClockwiseAtomic => 0x1cf,
+            InterlockMode::Msaa => 0x1c6,
         }
     }
     fn features_mask_for(draw: DrawType, interlock: InterlockMode) -> u32 {
         let mask = match draw {
-            DrawType::ImageRect | DrawType::ImageMesh | DrawType::FeatherAtlasBlit
-                if interlock != InterlockMode::Atomics =>
-            {
+            DrawType::ImageRect | DrawType::ImageMesh if interlock != InterlockMode::Atomics => {
                 0xc7
             }
+            DrawType::FeatherAtlasBlit if interlock != InterlockMode::Atomics => 0x1c7,
             DrawType::MidpointFanPatches
             | DrawType::MidpointFanCenterAAPatches
             | DrawType::OuterCurvePatches
@@ -6846,14 +6846,14 @@ pub mod source_execution {
             | DrawType::MsaaOuterCubics
             | DrawType::ImageRect
             | DrawType::ImageMesh
-            | DrawType::FeatherAtlasBlit => 0xff,
+            | DrawType::FeatherAtlasBlit => 0x1ff,
             DrawType::ClipReset => 0x80,
             DrawType::RenderPassInitialize => match interlock {
                 InterlockMode::Atomics => 0x85,
                 InterlockMode::Msaa => 0x80,
                 _ => 0,
             },
-            DrawType::RenderPassResolve if interlock == InterlockMode::Atomics => 0xff,
+            DrawType::RenderPassResolve if interlock == InterlockMode::Atomics => 0x1ff,
             DrawType::RenderPassResolve => 0x80,
         };
         mask & interlock_features(interlock)
@@ -7176,7 +7176,7 @@ mod source_owner_regressions {
     #[test]
     fn fourth_ring_reuse_waits_for_completion_unlock() {
         let _owner_guard = owner_stream_test_guard();
-        use std::sync::{Arc, mpsc};
+        use std::sync::{mpsc, Arc};
         use std::time::Duration;
 
         let slots: Arc<[SourceMutex; 3]> =
@@ -7313,11 +7313,9 @@ mod source_owner_regressions {
         );
         assert_eq!(block[0].handle, block[1].handle);
         assert_ne!(block[0].handle, command);
-        assert!(
-            block
-                .iter()
-                .all(|event| event.parent_handle == Some(post[0].handle))
-        );
+        assert!(block
+            .iter()
+            .all(|event| event.parent_handle == Some(post[0].handle)));
         assert!(metal.retirements.contains(&block[0].handle));
     }
 
@@ -7494,11 +7492,9 @@ mod source_owner_regressions {
         assert!(context.current_ring_is_available_for_test());
         assert!(matches!(result.lock().unwrap().as_ref(), Some(Ok(()))));
         let block = row_events(&metal.owner_events, "RC-BLOCK-COMPLETE");
-        assert!(
-            block
-                .iter()
-                .all(|event| event.parent_handle == Some(command))
-        );
+        assert!(block
+            .iter()
+            .all(|event| event.parent_handle == Some(command)));
     }
 
     #[test]
@@ -7555,12 +7551,10 @@ mod source_owner_regressions {
                     OwnerEventPhase::Release,
                 ]
             );
-            assert!(
-                retained
-                    .iter()
-                    .chain(transfer.iter())
-                    .all(|event| event.handle == command && event.native_identity == command)
-            );
+            assert!(retained
+                .iter()
+                .chain(transfer.iter())
+                .all(|event| event.handle == command && event.native_identity == command));
             assert_eq!(post.len(), 3);
             assert_eq!(post[0].source_handle, command);
             assert!(block.iter().all(|event| {
@@ -7632,11 +7626,9 @@ mod source_owner_regressions {
         let selector = "commandBuffer (__bridge_retained)";
         let next = allocation_failure.selector_occurrence_count(selector) + 1;
         allocation_failure.fail_exact = Some((selector, next));
-        assert!(
-            context
-                .make_command_buffer(&mut allocation_failure)
-                .is_none()
-        );
+        assert!(context
+            .make_command_buffer(&mut allocation_failure)
+            .is_none());
         assert_eq!(allocation_failure.fail_exact, None);
         assert!(row_events(&allocation_failure.owner_events, "RC-CB-RETAINED").is_empty());
         assert!(row_events(&allocation_failure.owner_events, "RC-CB-TRANSFER").is_empty());
@@ -7795,12 +7787,10 @@ mod source_owner_regressions {
             assert_eq!(failed.fail_clone_exact, None);
             assert!(row_events(&failed.owner_events, ledger_id).is_empty());
             assert!(!failed.retirements.contains(&source));
-            assert!(
-                failed
-                    .calls
-                    .iter()
-                    .any(|call| call.selector == "renderCommandEncoderWithDescriptor:")
-            );
+            assert!(failed
+                .calls
+                .iter()
+                .any(|call| call.selector == "renderCommandEncoderWithDescriptor:"));
         }
     }
 
@@ -8990,12 +8980,10 @@ mod source_owner_regressions {
                 .chunks_exact(3)
                 .map(|triple| triple[0].handle)
                 .collect::<Vec<_>>();
-            assert!(
-                attachment_handles
-                    .iter()
-                    .enumerate()
-                    .all(|(index, handle)| !attachment_handles[..index].contains(handle))
-            );
+            assert!(attachment_handles
+                .iter()
+                .enumerate()
+                .all(|(index, handle)| !attachment_handles[..index].contains(handle)));
             let last_attachment_end = metal
                 .owner_events
                 .iter()
@@ -9016,11 +9004,9 @@ mod source_owner_regressions {
                 ]
             );
             assert!(pass.iter().all(|event| event.handle == pass[0].handle));
-            assert!(
-                encoder
-                    .iter()
-                    .all(|event| event.handle == encoder[0].handle)
-            );
+            assert!(encoder
+                .iter()
+                .all(|event| event.handle == encoder[0].handle));
             assert!(
                 event_position(
                     &metal.owner_events,
@@ -9033,11 +9019,9 @@ mod source_owner_regressions {
                 )
             );
             assert!(metal.retirements.contains(&encoder[0].handle));
-            assert!(
-                attachment
-                    .chunks_exact(3)
-                    .all(|triple| metal.retirements.contains(&triple[0].handle))
-            );
+            assert!(attachment
+                .chunks_exact(3)
+                .all(|triple| metal.retirements.contains(&triple[0].handle)));
             assert!(metal.retirements.contains(&pass[0].handle));
         }
 
@@ -9250,11 +9234,10 @@ mod source_owner_regressions {
             call.selector == "setRenderPipelineState:"
                 && call.args.contains(&Value::Handle(mesh_owner[0].handle))
         }));
-        assert!(
-            metal.calls.iter().any(|call| {
-                call.selector == "setCullMode:" && call.args.contains(&Value::U64(0))
-            })
-        );
+        assert!(metal
+            .calls
+            .iter()
+            .any(|call| { call.selector == "setCullMode:" && call.args.contains(&Value::U64(0)) }));
         assert!(!metal.calls.iter().any(|call| call.selector
             == "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:"));
     }
@@ -9693,11 +9676,9 @@ mod source_owner_regressions {
                         && event.native_identity == errors[0].native_identity
                 }));
                 assert!(metal.retirements.contains(&errors[0].handle));
-                assert!(
-                    states
-                        .first()
-                        .is_none_or(|state| state.native_identity != errors[0].native_identity)
-                );
+                assert!(states
+                    .first()
+                    .is_none_or(|state| state.native_identity != errors[0].native_identity));
                 let error_release = metal
                     .owner_events
                     .iter()
@@ -10024,18 +10005,14 @@ mod source_owner_regressions {
                     .into_iter()
                     .collect::<BTreeSet<_>>()
             );
-            assert!(
-                metal
-                    .owner_events
-                    .iter()
-                    .all(|event| event.ledger_id != "RC-STATIC-NS-LITERALS")
-            );
-            assert!(
-                metal
-                    .retirements
-                    .iter()
-                    .all(|handle| handle.kind != MetalObjectKind::NSString)
-            );
+            assert!(metal
+                .owner_events
+                .iter()
+                .all(|event| event.ledger_id != "RC-STATIC-NS-LITERALS"));
+            assert!(metal
+                .retirements
+                .iter()
+                .all(|handle| handle.kind != MetalObjectKind::NSString));
         };
 
         let baseline = run_static_literal_scenario(None);
@@ -10083,11 +10060,9 @@ mod source_owner_regressions {
             vec![Value::Handle(encoder), Value::Handle(pipeline)],
         );
 
-        assert!(
-            caller_owned
-                .iter()
-                .all(|handle| !metal.retirements.contains(handle))
-        );
+        assert!(caller_owned
+            .iter()
+            .all(|handle| !metal.retirements.contains(handle)));
         assert!(metal.owner_events.iter().all(|event| {
             event.ledger_id != "EXCL-OBJCPARAMS"
                 && !matches!(
@@ -10104,11 +10079,9 @@ mod source_owner_regressions {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        assert!(
-            caller_owned
-                .into_iter()
-                .all(|handle| passed_parameters.contains(&handle))
-        );
+        assert!(caller_owned
+            .into_iter()
+            .all(|handle| passed_parameters.contains(&handle)));
     }
 
     #[test]
@@ -10406,12 +10379,10 @@ mod source_owner_regressions {
             "the block capture clone drops exactly once"
         );
         assert!(!metal.retirements.contains(&metal.device_handle()));
-        assert!(
-            metal
-                .retirement_call_counts
-                .iter()
-                .all(|(retired, _)| *retired != captured_gpu)
-        );
+        assert!(metal
+            .retirement_call_counts
+            .iter()
+            .all(|(retired, _)| *retired != captured_gpu));
         assert_eq!(
             metal
                 .calls
@@ -10466,12 +10437,10 @@ mod source_owner_regressions {
                 1,
                 "the named framebuffer clone drops exactly once"
             );
-            assert!(
-                metal
-                    .retirement_call_counts
-                    .iter()
-                    .all(|(retired, _)| *retired != owner[1].handle)
-            );
+            assert!(metal
+                .retirement_call_counts
+                .iter()
+                .all(|(retired, _)| *retired != owner[1].handle));
             let alias_end = metal
                 .owner_events
                 .iter()
@@ -10670,28 +10639,24 @@ mod source_owner_regressions {
                     if occurrence == 1 {
                         match selector {
                             "alloc/init" => {
-                                assert!(
-                                    metal
-                                        .calls
-                                        .iter()
-                                        .filter(|call| call.selector == "colorAttachments")
-                                        .take(4)
-                                        .all(|call| {
-                                            call.args.first() == Some(&Value::Handle(Handle::NIL))
-                                        })
-                                );
-                                assert!(
-                                    metal
-                                        .calls
-                                        .iter()
-                                        .find(|call| {
-                                            call.selector
-                                                == "newRenderPipelineStateWithDescriptor:error:"
-                                        })
-                                        .unwrap()
-                                        .args
-                                        .contains(&Value::Handle(Handle::NIL))
-                                );
+                                assert!(metal
+                                    .calls
+                                    .iter()
+                                    .filter(|call| call.selector == "colorAttachments")
+                                    .take(4)
+                                    .all(|call| {
+                                        call.args.first() == Some(&Value::Handle(Handle::NIL))
+                                    }));
+                                assert!(metal
+                                    .calls
+                                    .iter()
+                                    .find(|call| {
+                                        call.selector
+                                            == "newRenderPipelineStateWithDescriptor:error:"
+                                    })
+                                    .unwrap()
+                                    .args
+                                    .contains(&Value::Handle(Handle::NIL)));
                             }
                             "colorAttachments" => {
                                 let child = metal
@@ -11126,22 +11091,20 @@ mod source_owner_regressions {
 
         let mut short = RecordingMetal::default();
         let device = short.device_handle();
-        assert!(
-            TextureMetal::new(
-                &mut short,
-                device,
-                7,
-                5,
-                2,
-                Arc::from(vec![0u8; 79]),
-                PixelFormat::ASTC4x4Ldr,
-                4,
-                4,
-                16,
-                false,
-            )
-            .is_none()
-        );
+        assert!(TextureMetal::new(
+            &mut short,
+            device,
+            7,
+            5,
+            2,
+            Arc::from(vec![0u8; 79]),
+            PixelFormat::ASTC4x4Ldr,
+            4,
+            4,
+            16,
+            false,
+        )
+        .is_none());
         assert!(
             short.calls.is_empty(),
             "safe admission precedes source selectors"
@@ -11514,11 +11477,9 @@ mod source_owner_regressions {
                     .iter()
                     .position(|call| call.selector == "newLibraryWithData:error:")
                     .unwrap();
-                assert!(
-                    metal.calls[library_call + 1..]
-                        .iter()
-                        .all(|call| call.receiver == "host" && call.selector == "log")
-                );
+                assert!(metal.calls[library_call + 1..]
+                    .iter()
+                    .all(|call| call.receiver == "host" && call.selector == "log"));
             } else {
                 assert!(context.has_color_ramp_pipeline_for_test());
             }
@@ -11586,11 +11547,9 @@ mod source_owner_regressions {
                 OwnerEventPhase::ReleaseLocal,
             ]
         );
-        assert!(
-            texture
-                .iter()
-                .all(|event| { event.native_identity == texture[0].native_identity })
-        );
+        assert!(texture
+            .iter()
+            .all(|event| { event.native_identity == texture[0].native_identity }));
         assert_ne!(texture[0].handle, texture[1].handle);
         assert_ne!(texture[0].handle, texture[2].handle);
         assert_ne!(texture[1].handle, texture[2].handle);
@@ -11896,11 +11855,9 @@ mod source_owner_regressions {
                     OwnerEventPhase::Release,
                     "{id} release phase"
                 );
-                assert!(
-                    events
-                        .iter()
-                        .all(|event| { event.native_identity == events[0].native_identity })
-                );
+                assert!(events
+                    .iter()
+                    .all(|event| { event.native_identity == events[0].native_identity }));
             }
             return;
         }
@@ -11961,11 +11918,9 @@ mod source_owner_regressions {
                 OwnerEventPhase::Release,
                 "{id} release phase"
             );
-            assert!(
-                triple
-                    .iter()
-                    .all(|event| event.native_identity == triple[0].native_identity)
-            );
+            assert!(triple
+                .iter()
+                .all(|event| event.native_identity == triple[0].native_identity));
         }
     }
 
@@ -12151,18 +12106,14 @@ mod source_owner_regressions {
         assert_eq!(libraries[5].identity, libraries[2].identity);
         let append = row("BG-NS-APPEND-TEMP");
         assert_eq!(append.len(), 6, "prefix plus two fragments per job");
-        assert!(
-            append
-                .iter()
-                .all(|event| event.phase == BackgroundOwnerPhase::Borrow)
-        );
+        assert!(append
+            .iter()
+            .all(|event| event.phase == BackgroundOwnerPhase::Borrow));
         let literals = row("BG-NS-MACRO-LITERALS");
         assert_eq!(literals.len(), 8, "four fixed macro setters per job");
-        assert!(
-            literals
-                .iter()
-                .all(|event| event.phase == BackgroundOwnerPhase::Borrow)
-        );
+        assert!(literals
+            .iter()
+            .all(|event| event.phase == BackgroundOwnerPhase::Borrow));
         let dynamic = row("BG-NS-MACRO-KEY-DYNAMIC");
         assert_eq!(dynamic.len(), 1, "one dynamic feature macro job");
         assert_eq!(dynamic[0].phase, BackgroundOwnerPhase::Borrow);
@@ -12906,11 +12857,9 @@ mod source_owner_regressions {
                 OwnerEventPhase::Release
             ]
         );
-        assert!(
-            transfer
-                .iter()
-                .all(|event| event.handle == retained[0].handle)
-        );
+        assert!(transfer
+            .iter()
+            .all(|event| event.handle == retained[0].handle));
         let post = by_id.get("RC-CB-POST-STRONG").unwrap();
         assert_eq!(
             post.iter().map(|event| event.phase).collect::<Vec<_>>(),
@@ -12920,10 +12869,9 @@ mod source_owner_regressions {
                 OwnerEventPhase::Release
             ]
         );
-        assert!(
-            post.iter()
-                .all(|event| event.native_identity == retained[0].native_identity)
-        );
+        assert!(post
+            .iter()
+            .all(|event| event.native_identity == retained[0].native_identity));
         assert_ne!(
             post[0].handle, retained[0].handle,
             "postFlush strong local must use its independent clone alias"
@@ -12938,17 +12886,13 @@ mod source_owner_regressions {
                 OwnerEventPhase::ReleaseCopy
             ]
         );
-        assert!(
-            block
-                .iter()
-                .all(|event| event.native_identity == block[0].native_identity)
-        );
+        assert!(block
+            .iter()
+            .all(|event| event.native_identity == block[0].native_identity));
         assert_ne!(block[0].native_identity, retained[0].native_identity);
-        assert!(
-            block
-                .iter()
-                .all(|event| event.parent_handle == Some(post[0].handle))
-        );
+        assert!(block
+            .iter()
+            .all(|event| event.parent_handle == Some(post[0].handle)));
         let state = by_id.get("RC-STATE-PIPE").unwrap();
         assert_eq!(state.len(), 12);
         for pair in state[..8].chunks_exact(2) {
@@ -12956,11 +12900,9 @@ mod source_owner_regressions {
             assert_eq!(pair[1].phase, OwnerEventPhase::Transfer);
             assert_eq!(pair[0].handle, pair[1].handle);
         }
-        assert!(
-            state[8..]
-                .iter()
-                .all(|event| event.phase == OwnerEventPhase::Release)
-        );
+        assert!(state[8..]
+            .iter()
+            .all(|event| event.phase == OwnerEventPhase::Release));
         assert_eq!(
             state[8..]
                 .iter()
@@ -13098,11 +13040,9 @@ mod source_owner_regressions {
         // The source destructor is also a real boundary, not a presence bit:
         // dropping the owner must record its complete reverse teardown trace.
         let trace = RENDER_CONTEXT_METAL_DROP_TRACE.lock().unwrap().clone();
-        assert!(
-            trace
-                .windows(2)
-                .any(|pair| pair == ["gpu", "contextOptions"])
-        );
+        assert!(trace
+            .windows(2)
+            .any(|pair| pair == ["gpu", "contextOptions"]));
 
         // Drive the actual completion-handler failure path.  This is kept in
         // the same production trace gate because it is the only source path
@@ -13318,7 +13258,7 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //     {
 //         // Each feature corresponds to a specific index in the namespaceID.
 //         // These must stay in sync with generate_draw_combinations.py.
-//         char namespaceID[] = "0000000000";
+//         char namespaceID[] = "00000000000";
 //         static_assert(sizeof(namespaceID) ==
 //                       gpu::kShaderFeatureCount + 1 /*DRAW_INTERIOR_TRIANGLES*/ +
 //                           1 /*FEATHER_ATLAS_BLIT*/ + 1 /*null terminator*/);
@@ -13339,6 +13279,8 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //             static_assert((int)ShaderFeatures::ENABLE_HSL_BLEND_MODES ==
 //                           1 << 6);
 //             static_assert((int)ShaderFeatures::ENABLE_DITHER == 1 << 7);
+//             static_assert((int)ShaderFeatures::ENABLE_MODULATED_IMAGE ==
+//                           1 << 8);
 //         }
 //         if (drawType == DrawType::interiorTriangulation)
 //         {
@@ -14955,9 +14897,9 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //
 //         {
 //             auto desiredScissorRect =
-//                 batch.scissorRectRect.has_value()
+//                 batch.scissorRect.has_value()
 //                     ? fullRenderTargetScissorRect.intersectOrEmpty(
-//                           batch.scissorRectRect.value())
+//                           batch.scissorRect.value())
 //                     : fullRenderTargetScissorRect;
 //
 //             if (desiredScissorRect != currentScissorRect)

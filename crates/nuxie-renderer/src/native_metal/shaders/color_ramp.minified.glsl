@@ -1,26 +1,26 @@
 #ifdef VERTEX
 g1(e0)
-#ifdef M3
-L(0,uint,PD);L(1,uint,QD);L(2,uint,RD);L(3,uint,SD);
+#ifdef O3
+L(0,uint,QD);L(1,uint,RD);L(2,uint,SD);L(3,uint,TD);
 #else
-L(0,G,KC);
+L(0,G,LC);
 #endif
 h1
 #endif
-k2 J0 W(0,i,R6);f2
+l2 H0 X(0,i,T6);f2
 #ifdef VERTEX
-S3 T3 z4 A4 i df(uint j){return dc((G(j,j,j,j)>>G(16,8,0,24))&0xffu)/255.;}y1(FF,e0,F,B,r){
-#ifdef M3
-M(r,F,PD,uint);M(r,F,QD,uint);M(r,F,RD,uint);M(r,F,SD,uint);G KC=G(PD,QD,RD,SD);
+U3 V3 B4 C4 i gf(uint j){return fc((G(j,j,j,j)>>G(16,8,0,24))&0xffu)/255.;}y1(GF,e0,F,B,v){
+#ifdef O3
+M(v,F,QD,uint);M(v,F,RD,uint);M(v,F,SD,uint);M(v,F,TD,uint);G LC=G(QD,RD,SD,TD);
 #else
-M(r,F,KC,G);
+M(v,F,LC,G);
 #endif
-V(R6,i);int k8=B>>1;float x=float(k8<=1?KC.x&0xffffu:KC.x>>16)/65536.;float W9=(B&1)==0?.0:1.;if(n.ec<.0){W9=1.-W9;}uint S6=KC.y;float y=float(S6&~ef)+W9;if((S6&fc)!=0u&&k8==0){if((S6&X9)!=0u)x=.0;else x-=gc;}if((S6&hc)!=0u&&k8==3){if((S6&X9)!=0u)x=1.;else x+=gc;}R6=df(k8<=1?KC.z:KC.w);g U=l8(d(x,y),2.,n.ec);
+V(T6,i);int m8=B>>1;float x=float(m8<=1?LC.x&0xffffu:LC.x>>16)/65536.;float W9=(B&1)==0?.0:1.;if(m.gc<.0){W9=1.-W9;}uint U6=LC.y;float y=float(U6&~hf)+W9;if((U6&hc)!=0u&&m8==0){if((U6&X9)!=0u)x=.0;else x-=ic;}if((U6&jc)!=0u&&m8==3){if((U6&X9)!=0u)x=1.;else x+=ic;}T6=gf(m8<=1?LC.z:LC.w);g W=n8(d(x,y),2.,m.gc);
 #ifdef POST_INVERT_Y
-U.y=-U.y;
+W.y=-W.y;
 #endif
-a0(R6);z1(U);}
+a0(T6);z1(W);}
 #endif
 #ifdef FRAGMENT
-C3 D3 Y2(i,GF){A(R6,i);G2(R6);}
+E3 F3 a3(i,HF){r(T6,i);I2(T6);}
 #endif

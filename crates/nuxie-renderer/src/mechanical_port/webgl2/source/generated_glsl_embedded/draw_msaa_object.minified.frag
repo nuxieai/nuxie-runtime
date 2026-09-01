@@ -1,47 +1,54 @@
 #ifdef GB
-#ifdef OB
-C3 X2(Z4,U3,IC);
+#ifdef PB
+E3 Z2(a5,W3,JC);
 #ifdef AB
-g7(TD);
+i7(UD);
 #endif
-D3 a5 V3(S5)c5
+F3 c5 X3(U5)d5
 #endif
-Y2(i,JB){
-#ifdef OB
-A(E5,d);A(H1,c);
+a3(i,JB){
+#ifdef PB
+r(F5,d);r(H1,c);
 #ifdef AB
-A(A1,N);
+r(A1,N);
 #endif
 #else
-A(X0,g);
+r(f1,g);
+#ifdef KB
+r(A2,R);
+#endif
 #ifdef FB
-A(C2,d);
+r(D2,d);
 #endif
 #ifdef AB
-A(e2,c);
+r(e2,c);
 #endif
 #endif
-#ifdef OB
-i j=x7(IC,S5,E5,n.qd)*H1;
+#ifdef PB
+i j=z7(JC,U5,F5,m.sd)*H1;
 #else
-c o=
+c n=
 #ifdef FB
-clamp(n2(BD,Q9,C2,.0).x,G0(.0),G0(1.));
+clamp(n2(CD,Q9,D2,.0).x,G0(.0),G0(1.));
 #else
 1.;
 #endif
-i j=J7(X0,o S2);
+i j=L7(f1,
+#ifdef KB
+A2,
+#endif
+n U2);
 #endif
 #if defined(AB)&&!defined(Q)
-#ifdef OB
-j.xyz=C6(j);N R3=A1;
+#ifdef PB
+j.xyz=E6(j);N T3=A1;
 #else
-N R3=X5(e2);
+N T3=Z5(e2);
 #endif
-i K1=Q8(TD);j.xyz=Q4(j.xyz,K1,R3);j.xyz*=j.w;
+i K1=S8(UD);j.xyz=S4(j.xyz,K1,T3);j.xyz*=j.w;
 #endif
-#ifdef BC
-if(BC){j=k3(j);}
+#ifdef CC
+if(CC){j=m3(j);}
 #endif
-j.xyz=E2(j.xyz,j.w,Y.xy,n.z3,n.A3);G2(j);}
+j.xyz=F2(j.xyz,j.w,Z.xy,m.B3,m.C3);I2(j);}
 #endif

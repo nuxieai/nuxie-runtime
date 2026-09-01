@@ -1,11 +1,6 @@
 /*
- * Mechanical source-shaped translation of the complete pinned
+ * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/bezier_utils.glsl.
- *
- * This Phase-1 owner retains the shader bytes exactly and exposes only the
- * authority-ledger conditionals, include dependency, exported symbols, and
- * function declarations as literal source-shaped data. It does not compile,
- * evaluate, simplify, or generate shader artifacts.
  *
  * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
  */
@@ -22,7 +17,7 @@ pub const PINNED_SOURCE_SHA256: &str =
 pub const PINNED_SOURCE_LINE_COUNT: usize = 245;
 pub const PINNED_SOURCE_BYTE_COUNT: usize = 8281;
 
-/// Exact pinned GLSL source, retained for provenance and line-for-line audit.
+/// Exact pinned upstream source bytes.
 pub const PINNED_BEZIER_UTILS_GLSL_SOURCE: &str = r###"/*
  * Copyright 2020 Google LLC.
  *
@@ -270,7 +265,7 @@ float find_cubic_max_height(float2 p0,
 }
 "###;
 
-/// Stable aliases used by later source-audit queues.
+/// Stable source aliases.
 pub const PINNED_BEZIER_UTILS_SOURCE: &str = PINNED_BEZIER_UTILS_GLSL_SOURCE;
 pub const BEZIER_UTILS_GLSL_SOURCE: &str = PINNED_BEZIER_UTILS_GLSL_SOURCE;
 
@@ -281,213 +276,3 @@ pub const SOURCE_BYTE_COUNT: usize = PINNED_SOURCE_BYTE_COUNT;
 pub const fn pinned_source() -> &'static str {
     PINNED_BEZIER_UTILS_GLSL_SOURCE
 }
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SourceMetadata {
-    pub upstream_commit: &'static str,
-    pub upstream_path: &'static str,
-    pub source_sha256: &'static str,
-    pub source_line_count: usize,
-    pub source_byte_count: usize,
-    pub target_path: &'static str,
-    pub translation_disposition: &'static str,
-}
-
-pub const SOURCE_METADATA: SourceMetadata = SourceMetadata {
-    upstream_commit: PINNED_UPSTREAM_COMMIT,
-    upstream_path: PINNED_SOURCE_PATH,
-    source_sha256: PINNED_SOURCE_SHA256,
-    source_line_count: PINNED_SOURCE_LINE_COUNT,
-    source_byte_count: PINNED_SOURCE_BYTE_COUNT,
-    target_path:
-        "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/bezier_utils_glsl.rs",
-    translation_disposition: "full-translation-source / source-shaped provenance",
-};
-
-/// Every semantic preprocessor block in the pinned source remains literal,
-/// including the disabled compatibility branch retained by #if 0.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ConditionalBlock {
-    pub block_id: &'static str,
-    pub block_start: u16,
-    pub block_end: u16,
-    pub block_depth: u8,
-    pub branch_count: u8,
-}
-
-pub const CONDITIONAL_BLOCKS: &[ConditionalBlock] = &[
-    ConditionalBlock {
-        block_id: "pp-0222",
-        block_start: 17,
-        block_end: 19,
-        block_depth: 0,
-        branch_count: 1,
-    },
-    ConditionalBlock {
-        block_id: "pp-0223",
-        block_start: 20,
-        block_end: 22,
-        block_depth: 0,
-        branch_count: 1,
-    },
-    ConditionalBlock {
-        block_id: "pp-0224",
-        block_start: 195,
-        block_end: 244,
-        block_depth: 0,
-        branch_count: 2,
-    },
-];
-
-/// Every branch entry remains literal, in authority/source order. The active
-/// paths are ledger spellings; they are not evaluated as Rust cfg expressions.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ConditionalBranch {
-    pub block_id: &'static str,
-    pub branch_ordinal: u8,
-    pub branch_line: u16,
-    pub directive: &'static str,
-    pub active_branch_path: &'static str,
-}
-
-pub const CONDITIONAL_BRANCHES: &[ConditionalBranch] = &[
-    ConditionalBranch {
-        block_id: "pp-0222",
-        branch_ordinal: 1,
-        branch_line: 17,
-        directive: "#ifndef make_float4",
-        active_branch_path: "(!defined(make_float4))",
-    },
-    ConditionalBranch {
-        block_id: "pp-0223",
-        branch_ordinal: 1,
-        branch_line: 20,
-        directive: "#ifndef make_float2",
-        active_branch_path: "(!defined(make_float2))",
-    },
-    ConditionalBranch {
-        block_id: "pp-0224",
-        branch_ordinal: 1,
-        branch_line: 195,
-        directive: "#if 0",
-        active_branch_path: "(0)",
-    },
-    ConditionalBranch {
-        block_id: "pp-0224",
-        branch_ordinal: 2,
-        branch_line: 211,
-        directive: "#else",
-        active_branch_path: "(!((0)))",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ExportedSymbol {
-    pub source_line: u16,
-    pub source_name: &'static str,
-    pub generated_name: &'static str,
-    pub generated_header_name: &'static str,
-}
-
-/// This shader has no @-prefixed minifier exports.
-pub const EXPORTED_SYMBOLS: &[ExportedSymbol] = &[];
-pub const EXPORTED_SWITCHES: &[ExportedSymbol] = EXPORTED_SYMBOLS;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ShaderFunction {
-    pub source_line: u16,
-    pub end_line: u16,
-    pub name: &'static str,
-    pub signature: &'static str,
-    pub guard_path: &'static str,
-    pub inline_qualifier: &'static str,
-}
-
-/// Function declarations are retained as source spellings and ranges. Their
-/// bodies remain in PINNED_BEZIER_UTILS_GLSL_SOURCE rather than being
-/// translated into executable Rust.
-pub const EXPORTED_FUNCTIONS: &[ShaderFunction] = &[
-    ShaderFunction {
-        source_line: 24,
-        end_line: 32,
-        name: "cosine_between_vectors",
-        signature: "INLINE float cosine_between_vectors(float2 a, float2 b)",
-        guard_path: "all",
-        inline_qualifier: "INLINE",
-    },
-    ShaderFunction {
-        source_line: 47,
-        end_line: 62,
-        name: "find_cubic_coeffs",
-        signature: "INLINE void find_cubic_coeffs(float2 p0, float2 p1, float2 p2, float2 p3, OUT(float2) A, OUT(float2) B, OUT(float2) C)",
-        guard_path: "all",
-        inline_qualifier: "INLINE",
-    },
-    ShaderFunction {
-        source_line: 65,
-        end_line: 71,
-        name: "find_cubic_tangents",
-        signature: "INLINE float2x2 find_cubic_tangents(float2 p0, float2 p1, float2 p2, float2 p3)",
-        guard_path: "all",
-        inline_qualifier: "INLINE",
-    },
-    ShaderFunction {
-        source_line: 77,
-        end_line: 156,
-        name: "measure_cubic_local_curvature",
-        signature: "INLINE float measure_cubic_local_curvature(float2 p0, float2 p1, float2 p2, float2 p3, float T, float desiredSpread)",
-        guard_path: "all",
-        inline_qualifier: "INLINE",
-    },
-    ShaderFunction {
-        source_line: 164,
-        end_line: 169,
-        name: "clamped_divide",
-        signature: "INLINE float clamped_divide(float a, float b)",
-        guard_path: "all",
-        inline_qualifier: "INLINE",
-    },
-    ShaderFunction {
-        source_line: 173,
-        end_line: 245,
-        name: "find_cubic_max_height",
-        signature: "float find_cubic_max_height(float2 p0, float2 p1, float2 p2, float2 p3, OUT(float) outT)",
-        guard_path: "all",
-        inline_qualifier: "",
-    },
-];
-
-pub const FUNCTION_DECLARATIONS: &[ShaderFunction] = EXPORTED_FUNCTIONS;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct IncludeDependency {
-    pub including_source: &'static str,
-    pub include_line: u16,
-    pub include_token: &'static str,
-    pub include_syntax: &'static str,
-    pub active_branch_path: &'static str,
-    pub resolution_kind: &'static str,
-    pub resolved_source: &'static str,
-    pub source_unit: &'static str,
-    pub dependency_unit: &'static str,
-    pub translation_disposition: &'static str,
-}
-
-/// The bezier_utils owner has no direct #include/#import directive. This
-/// incoming generated-source edge is retained from the include/source
-/// dependency authorities because it determines its artifact consumer.
-pub const INCLUDE_DEPENDENCIES: &[IncludeDependency] = &[IncludeDependency {
-    including_source: "renderer/src/shaders/metal/tessellate.metal",
-    include_line: 11,
-    include_token: "bezier_utils.minified.glsl",
-    include_syntax: "quote",
-    active_branch_path: "all",
-    resolution_kind: "generated-shader-source",
-    resolved_source: "renderer/src/shaders/bezier_utils.glsl",
-    source_unit: "metal-shader-source-batch",
-    dependency_unit: "metal-shader-source-batch",
-    translation_disposition: "preserve-source-dependency",
-}];
-
-pub const DIRECT_SOURCE_INCLUDES: &[&str] = &[];
-pub const SOURCE_DEPENDENCY_EDGES: &[IncludeDependency] = INCLUDE_DEPENDENCIES;

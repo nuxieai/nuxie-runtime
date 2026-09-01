@@ -11,11 +11,11 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_load_store_actions_ext.cpp");
 
-const GLSL_CLEAR_COLOR: &str = "RE";
-const GLSL_LOAD_COLOR: &str = "TE";
-const GLSL_STORE_COLOR: &str = "BE";
-const GLSL_CLEAR_COVERAGE: &str = "CE";
-const GLSL_CLEAR_CLIP: &str = "RF";
+const GLSL_CLEAR_COLOR: &str = "SE";
+const GLSL_LOAD_COLOR: &str = "UE";
+const GLSL_STORE_COLOR: &str = "CE";
+const GLSL_CLEAR_COVERAGE: &str = "DE";
+const GLSL_CLEAR_CLIP: &str = "SF";
 const GLSL_PLS_LOAD_STORE_EXT: &str =
     include_str!("source/generated_glsl_embedded/pls_load_store_ext.minified.glsl");
 
@@ -71,6 +71,17 @@ mod tests {
 
     #[test]
     fn every_source_action_emits_its_exact_minified_define_in_order() {
+        let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
+        for (source_name, generated_name) in [
+            ("CLEAR_COLOR", GLSL_CLEAR_COLOR),
+            ("LOAD_COLOR", GLSL_LOAD_COLOR),
+            ("STORE_COLOR", GLSL_STORE_COLOR),
+            ("CLEAR_COVERAGE", GLSL_CLEAR_COVERAGE),
+            ("CLEAR_CLIP", GLSL_CLEAR_CLIP),
+        ] {
+            assert!(exports.contains(&format!("#define GLSL_{source_name} \"{generated_name}\"")));
+        }
+
         let mut shader = String::new();
         let all = LoadStoreActionsEXT(
             LoadStoreActionsEXT::clearColor.0
@@ -80,7 +91,7 @@ mod tests {
                 | LoadStoreActionsEXT::clearClip.0,
         );
         BuildLoadStoreEXTGLSL(&mut shader, all);
-        assert!(shader.starts_with("#define RE\n#define TE\n#define BE\n#define CE\n#define RF\n"));
+        assert!(shader.starts_with("#define SE\n#define UE\n#define CE\n#define DE\n#define SF\n"));
         assert!(shader.ends_with(GLSL_PLS_LOAD_STORE_EXT));
     }
 }

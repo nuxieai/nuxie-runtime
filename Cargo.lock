@@ -1165,6 +1165,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-metal",
  "objc2-quartz-core",
+ "pixel-compare",
  "png",
  "raw-window-handle",
  "regex",

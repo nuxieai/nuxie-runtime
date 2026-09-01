@@ -1,6 +1,7 @@
 //! The eight deferred GM source owners added by upstream e949498e.
 //! These use the live Metal backend, not a command-only stand-in. The paired
 //! GMs use gmmain.cpp's non-atomic comparison (zero channel difference).
+mod image_paint;
 mod ore_deferred_context;
 mod ore_deferred_multipass;
 mod ore_deferred_replay;

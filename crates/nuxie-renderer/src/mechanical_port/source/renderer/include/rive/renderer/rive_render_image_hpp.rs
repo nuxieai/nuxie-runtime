@@ -321,7 +321,7 @@ impl RiveRenderImageHandle {
             .is_some_and(|attached| attached.resource_domain.same_domain(resource_domain))
     }
 
-    fn source(&self) -> &RiveRenderImage {
+    pub(crate) fn source(&self) -> &RiveRenderImage {
         // SAFETY: from_source rejects null and this handle owns a retain.
         unsafe { &*self.source.get() }
     }

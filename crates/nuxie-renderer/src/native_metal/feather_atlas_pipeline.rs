@@ -6,10 +6,10 @@
 //! declaration in `renderer/include/rive/renderer/metal/render_context_metal_impl.h`.
 //!
 //! Pinned upstream source: `rive-runtime`, commit
-//! `2b2203f45a67f813cb662272962192ecfdfd923e`.
+//! `3ed35ee0ded0d58fb8d380930a156041a4624a2f`.
 //!
-//! The precompiled Metal library uses the generated entry-point tokens `SF`
-//! (atlas vertex), `VE` (feathered fill), and `WE` (feathered stroke). The
+//! The precompiled Metal library uses the generated entry-point tokens `TF`
+//! (atlas vertex), `WE` (feathered fill), and `XE` (feathered stroke). The
 //! token names are intentionally kept here rather than inferred from Rust
 //! type names: they are part of the upstream shader artifact contract.
 
@@ -25,13 +25,13 @@ use std::error::Error;
 use std::fmt;
 
 /// Generated entry point for the feather-atlas vertex shader.
-pub(crate) const ATLAS_VERTEX_MAIN: &str = "SF";
+pub(crate) const ATLAS_VERTEX_MAIN: &str = "TF";
 
 /// Generated entry point for the feather-atlas fill fragment shader.
-pub(crate) const ATLAS_FILL_FRAGMENT_MAIN: &str = "VE";
+pub(crate) const ATLAS_FILL_FRAGMENT_MAIN: &str = "WE";
 
 /// Generated entry point for the feather-atlas stroke fragment shader.
-pub(crate) const ATLAS_STROKE_FRAGMENT_MAIN: &str = "WE";
+pub(crate) const ATLAS_STROKE_FRAGMENT_MAIN: &str = "XE";
 
 /// The two pipeline variants emitted by the upstream feather-atlas pass.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -305,11 +305,11 @@ mod tests {
 
     #[test]
     fn generated_entry_point_contract_matches_pinned_shader_exports() {
-        assert_eq!(ATLAS_VERTEX_MAIN, "SF");
-        assert_eq!(ATLAS_FILL_FRAGMENT_MAIN, "VE");
-        assert_eq!(ATLAS_STROKE_FRAGMENT_MAIN, "WE");
-        assert_eq!(FeatherAtlasPipelineKind::Fill.fragment_main(), "VE");
-        assert_eq!(FeatherAtlasPipelineKind::Stroke.fragment_main(), "WE");
+        assert_eq!(ATLAS_VERTEX_MAIN, "TF");
+        assert_eq!(ATLAS_FILL_FRAGMENT_MAIN, "WE");
+        assert_eq!(ATLAS_STROKE_FRAGMENT_MAIN, "XE");
+        assert_eq!(FeatherAtlasPipelineKind::Fill.fragment_main(), "WE");
+        assert_eq!(FeatherAtlasPipelineKind::Stroke.fragment_main(), "XE");
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]

@@ -6,7 +6,7 @@
  * emission order, output generation, command-line surface, and failure
  * behavior. It is not wired into build.rs in this phase.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
  */
 
 #![allow(dead_code)]
@@ -18,12 +18,12 @@ use std::env;
 use std::fs::File;
 use std::io::{self, Write};
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal/generate_draw_combinations.py";
 pub const PINNED_SOURCE_SHA256: &str =
-    "826df284fa0a03d043f8d54b067ffb806e9204de3cba54faf45b80546eb69fcf";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 161;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 7018;
+    "9e9360ccedf7270656216bed1061f1f40c6d92cf6bcf1f67cf9469b114c37c75";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 164;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 7187;
 pub const TRANSLATION_UNIT: &str = "metal-shader-generator";
 pub const TRANSLATION_TARGET: &str = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/generate_draw_combinations_py.rs";
 pub const TRANSLATION_DISPOSITION: &str = "required";
@@ -79,13 +79,15 @@ ENABLE_EVEN_ODD = Feature('ENABLE_EVEN_ODD', 4)
 ENABLE_NESTED_CLIPPING = Feature('ENABLE_NESTED_CLIPPING', 5)
 ENABLE_HSL_BLEND_MODES = Feature('ENABLE_HSL_BLEND_MODES', 6)
 ENABLE_DITHER = Feature('ENABLE_DITHER', 7)
-DRAW_INTERIOR_TRIANGLES = Feature('DRAW_INTERIOR_TRIANGLES', 8)
-FEATHER_ATLAS_BLIT = Feature('FEATHER_ATLAS_BLIT', 9)
+ENABLE_MODULATED_IMAGE = Feature('ENABLE_MODULATED_IMAGE', 8)
+DRAW_INTERIOR_TRIANGLES = Feature('DRAW_INTERIOR_TRIANGLES', 9)
+FEATHER_ATLAS_BLIT = Feature('FEATHER_ATLAS_BLIT', 10)
 
 whole_program_features = {ENABLE_CLIPPING,
                           ENABLE_CLIP_RECT,
                           ENABLE_ADVANCED_BLEND,
-                          ENABLE_FEATHER}
+                          ENABLE_FEATHER,
+                          ENABLE_MODULATED_IMAGE}
 
 fragment_only_features = {ENABLE_EVEN_ODD,
                           ENABLE_NESTED_CLIPPING,
@@ -118,7 +120,8 @@ non_image_mesh_features = {ENABLE_FEATHER,
                            ENABLE_EVEN_ODD,
                            ENABLE_NESTED_CLIPPING,
                            DRAW_INTERIOR_TRIANGLES,
-                           FEATHER_ATLAS_BLIT}
+                           FEATHER_ATLAS_BLIT,
+                           ENABLE_MODULATED_IMAGE}
 
 # Returns whether the given feature set is compatible with an image mesh shader.
 def is_image_mesh_feature_set(feature_set):
@@ -137,7 +140,7 @@ def emit_shader(out, shader_type, draw_type, fill_type, feature_set):
         out.write('#define FRAGMENT\n')
     if draw_type == DrawType.IMAGE_MESH:
         assert(is_image_mesh_feature_set(feature_set))
-    namespace_id = ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0']
+    namespace_id = ['0', '0', '0', '0', '0', '0', '0', '0', '0', '0', '0']
     for feature in feature_set:
         namespace_id[feature.index] = '1'
     for feature in feature_set:
@@ -261,13 +264,17 @@ pub const ENABLE_DITHER: Feature = Feature {
     name: "ENABLE_DITHER",
     index: 7,
 };
+pub const ENABLE_MODULATED_IMAGE: Feature = Feature {
+    name: "ENABLE_MODULATED_IMAGE",
+    index: 8,
+};
 pub const DRAW_INTERIOR_TRIANGLES: Feature = Feature {
     name: "DRAW_INTERIOR_TRIANGLES",
-    index: 8,
+    index: 9,
 };
 pub const FEATHER_ATLAS_BLIT: Feature = Feature {
     name: "FEATHER_ATLAS_BLIT",
-    index: 9,
+    index: 10,
 };
 
 /// A source-shaped ordered set. Python's set iteration is process-dependent;
@@ -338,6 +345,7 @@ pub fn whole_program_features() -> FeatureSet {
         ENABLE_CLIP_RECT,
         ENABLE_ADVANCED_BLEND,
         ENABLE_FEATHER,
+        ENABLE_MODULATED_IMAGE,
     ])
 }
 
@@ -365,6 +373,7 @@ pub fn non_image_mesh_features() -> FeatureSet {
         ENABLE_NESTED_CLIPPING,
         DRAW_INTERIOR_TRIANGLES,
         FEATHER_ATLAS_BLIT,
+        ENABLE_MODULATED_IMAGE,
     ])
 }
 
@@ -432,7 +441,7 @@ pub fn emit_shader<W: Write>(
         assert!(is_image_mesh_feature_set(feature_set));
     }
 
-    let mut namespace_id = ['0'; 10];
+    let mut namespace_id = ['0'; 11];
     for feature in feature_set.iter() {
         // Indexing deliberately retains Python's IndexError-like panic for an
         // invalid Feature index rather than silently accepting malformed data.

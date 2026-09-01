@@ -615,9 +615,11 @@ mod tests {
                     Ok(())
                 }
             };
-            assert!(target
-                .prepare_atomic_planes_with_control(true, &mut fail_once)
-                .is_err());
+            assert!(
+                target
+                    .prepare_atomic_planes_with_control(true, &mut fail_once)
+                    .is_err()
+            );
             assert_eq!(attempts, expected_attempts);
             assert_eq!(target.atomic_plane_inventory(), prior_inventory);
             assert_eq!(identities(&target), prior_identities);
@@ -685,7 +687,8 @@ mod tests {
             supports_texture_compression_etc2: false,
             supports_texture_compression_astc: false,
             supports_texture_compression_bc: false,
-            atomic_barrier_type: super::super::source_capabilities::AtomicBarrierType::renderPassBreak,
+            atomic_barrier_type:
+                super::super::source_capabilities::AtomicBarrierType::renderPassBreak,
         }
     }
 }

@@ -11,12 +11,12 @@
 //! typed results instead of storing a nil library and asserting.
 
 use super::shader_compile_plan::{
-    build_shader_compile_plan, ApplePlatform, BackgroundCompileJob, BackgroundCompilePlanError,
-    MacroDefinition, MetalFeatures, SynthesizedFailureType,
+    ApplePlatform, BackgroundCompileJob, BackgroundCompilePlanError, MacroDefinition,
+    MetalFeatures, SynthesizedFailureType, build_shader_compile_plan,
 };
 use std::any::Any;
 use std::collections::VecDeque;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 
@@ -143,8 +143,8 @@ impl<Library: Send + 'static> BackgroundShaderCompiler<Library> {
         metal_features: MetalFeatures,
         platform: ApplePlatform,
         compiler: impl Fn(&MetalShaderCompileRequest) -> Result<Library, MetalLibraryCompileFailure>
-            + Send
-            + 'static,
+        + Send
+        + 'static,
     ) -> Self {
         Self {
             metal_features,
@@ -332,7 +332,7 @@ fn wait_recovering_poison<'a, T>(
 ))]
 mod native {
     use super::*;
-    use objc2::rc::{autoreleasepool, Retained};
+    use objc2::rc::{Retained, autoreleasepool};
     use objc2::runtime::{NSObject, ProtocolObject};
     use objc2::{available, msg_send};
     use objc2_foundation::{NSError, NSMutableDictionary, NSString};
@@ -443,7 +443,7 @@ mod tests {
 
     // Independent current-source oracle: upstream background_shader_compiler.mm
     // appends these generated C++ string payloads in this order (lines 131–142,
-    // 230–233, 260–265 at 2b2203f4). The older assembled .metal captures remain
+    // 230–233, 260–265 at 3ed35ee0). The older assembled .metal captures remain
     // historical fixtures; they must not substitute for the current batch.
     fn current_source_oracle(atomic_path: bool) -> String {
         macro_rules! fragment {
@@ -465,9 +465,15 @@ mod tests {
             source.push('\n');
         }
         let tail = if atomic_path {
-            [fragment!("draw_path_common.glsl"), fragment!("atomic_draw.glsl")]
+            [
+                fragment!("draw_path_common.glsl"),
+                fragment!("atomic_draw.glsl"),
+            ]
         } else {
-            [fragment!("draw_image_mesh.vert"), fragment!("draw_mesh.frag")]
+            [
+                fragment!("draw_image_mesh.vert"),
+                fragment!("draw_mesh.frag"),
+            ]
         };
         for fragment in tail {
             source.push_str(fragment);
@@ -493,10 +499,7 @@ mod tests {
             MAC,
         )
         .expect("image mesh request");
-        assert_eq!(
-            request.source,
-            current_source_oracle(false)
-        );
+        assert_eq!(request.source, current_source_oracle(false));
         assert_eq!(
             request.preprocessor_macros,
             [
@@ -550,10 +553,7 @@ mod tests {
             MAC,
         )
         .expect("atomic path request");
-        assert_eq!(
-            atomic_request.source,
-            current_source_oracle(true)
-        );
+        assert_eq!(atomic_request.source, current_source_oracle(true));
     }
 
     #[test]
@@ -759,10 +759,7 @@ mod tests {
             localized_description.as_deref(),
             Some("compiler rejected source")
         );
-        assert_eq!(
-            source,
-            current_source_oracle(false)
-        );
+        assert_eq!(source, current_source_oracle(false));
 
         compiler.push_job(
             job(DrawType::ImageMesh)

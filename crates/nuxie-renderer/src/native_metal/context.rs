@@ -8,7 +8,7 @@
 //! - `renderer/src/render_context.cpp:2472-2817`
 //!
 //! Pinned upstream source: `rive-runtime` at
-//! `4ac7b32798da0482e441ef09304dc3b480ed3ee5`.
+//! `3ed35ee0ded0d58fb8d380930a156041a4624a2f`.
 
 use super::buffer_ring_coordinator::{
     BufferRingCompletion, BufferRingCoordinator, BufferRingLease,
@@ -19,34 +19,34 @@ use super::draw_pipeline::DrawPipeline;
 use super::draw_shader::DrawShaderLibrary;
 use super::feather_atlas_pipeline::FeatherAtlasPipelines;
 use super::feather_atlas_resource::FeatherAtlasResource;
-use super::gradient_resource::{GradientResource, GRADIENT_TEXTURE_WIDTH};
+use super::gradient_resource::{GRADIENT_TEXTURE_WIDTH, GradientResource};
 use super::image_texture::{NativeMetalImageTexture, NativeMetalTextureFormat};
 use super::new_library_from_metallib_bytes;
 use super::pipeline_cache::NativeCompatibleDrawPipelineCache;
-use super::pipeline_cache::{
-    shader_features_mask_for, NativeMetalContextOptions, PipelineFailureInjection, PipelineRequest,
-    PipelineSelection,
-};
 #[cfg(test)]
 use super::pipeline_cache::{
     CompatibleDrawPipelineCache, MetalPipelineCacheBackend, PipelinePlatformFeatures,
+};
+use super::pipeline_cache::{
+    NativeMetalContextOptions, PipelineFailureInjection, PipelineRequest, PipelineSelection,
+    shader_features_mask_for,
 };
 #[cfg(feature = "native-ore-metal-experimental")]
 use super::render_canvas::NativeMetalRenderCanvas;
 use super::samplers::NativeMetalSamplers;
 use super::tessellation_resource::{
-    TessellationResource, K_TESS_SPAN_INDICES, TESSELLATION_TEXTURE_WIDTH,
+    K_TESS_SPAN_INDICES, TESSELLATION_TEXTURE_WIDTH, TessellationResource,
 };
 use super::upload_buffer_ring::UploadBufferRing;
+use crate::RendererError;
 use crate::gpu::{self, DrawType};
-use crate::native_metal::shader_compile_plan::{
-    BackgroundCompileJob, InterlockMode, SynthesizedFailureType,
-    COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT,
-    ENABLE_DITHER, ENABLE_HSL_BLEND_MODES, FIXED_FUNCTION_COLOR_OUTPUT, STORE_COLOR_CLEAR,
-};
 #[cfg(test)]
 use crate::native_metal::shader_compile_plan::MetalFeatures;
-use crate::RendererError;
+use crate::native_metal::shader_compile_plan::{
+    BackgroundCompileJob, COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ADVANCED_BLEND, ENABLE_CLIP_RECT,
+    ENABLE_CLIPPING, ENABLE_DITHER, ENABLE_HSL_BLEND_MODES, FIXED_FUNCTION_COLOR_OUTPUT,
+    InterlockMode, STORE_COLOR_CLEAR, SynthesizedFailureType,
+};
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_foundation::NSString;
@@ -70,10 +70,10 @@ thread_local! {
 const RESOURCE_METALLIB: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/native_metal_resources.metallib"));
 
-const COLOR_RAMP_VERTEX_MAIN: &str = "FF";
-const COLOR_RAMP_FRAGMENT_MAIN: &str = "GF";
-const TESSELLATE_VERTEX_MAIN: &str = "XF";
-const TESSELLATE_FRAGMENT_MAIN: &str = "YF";
+const COLOR_RAMP_VERTEX_MAIN: &str = "GF";
+const COLOR_RAMP_FRAGMENT_MAIN: &str = "HF";
+const TESSELLATE_VERTEX_MAIN: &str = "YF";
+const TESSELLATE_FRAGMENT_MAIN: &str = "ZF";
 
 /// Coherent retained owners published by one successful preparation.
 ///
@@ -398,25 +398,27 @@ impl NativeMetalContext {
         #[cfg(not(test))]
         let samplers: Option<NativeMetalSamplers> = None;
         #[cfg(test)]
-        let pipeline_cache = Some(CompatibleDrawPipelineCache::new(
-            options,
-            PipelinePlatformFeatures {
-                supports_raster_ordering: capabilities.supports_raster_ordering,
-                // Pinned Metal advertises clip scissors, not clip-distance
-                // planes. `PlatformFeatures::supportsClipPlanes` retains its
-                // default false value (`gpu.hpp:140-141`).
-                supports_clip_planes: false,
-            },
-            MetalPipelineCacheBackend::new(
-                device.clone(),
-                draw_shader_library.clone(),
-                MetalFeatures {
-                    atomic_barrier_type: capabilities.atomic_barrier_type,
+        let pipeline_cache = Some(
+            CompatibleDrawPipelineCache::new(
+                options,
+                PipelinePlatformFeatures {
+                    supports_raster_ordering: capabilities.supports_raster_ordering,
+                    // Pinned Metal advertises clip scissors, not clip-distance
+                    // planes. `PlatformFeatures::supportsClipPlanes` retains its
+                    // default false value (`gpu.hpp:140-141`).
+                    supports_clip_planes: false,
                 },
-                platform,
-            ),
-        )
-        .map_err(|error| RendererError::NativeMetal(error.to_string()))?);
+                MetalPipelineCacheBackend::new(
+                    device.clone(),
+                    draw_shader_library.clone(),
+                    MetalFeatures {
+                        atomic_barrier_type: capabilities.atomic_barrier_type,
+                    },
+                    platform,
+                ),
+            )
+            .map_err(|error| RendererError::NativeMetal(error.to_string()))?,
+        );
         #[cfg(not(test))]
         let pipeline_cache = None;
         #[cfg(not(test))]
@@ -1803,13 +1805,15 @@ mod tests {
             return;
         };
         let fixture = UploadFixture::new();
-        assert!(context
-            .resources
-            .lock()
-            .unwrap()
-            .generation
-            .atomic_path_pipelines
-            .is_none());
+        assert!(
+            context
+                .resources
+                .lock()
+                .unwrap()
+                .generation
+                .atomic_path_pipelines
+                .is_none()
+        );
 
         drop(
             context
@@ -1904,9 +1908,11 @@ mod tests {
             Ok(_) => panic!("injected clip-rect pair compilation must fail"),
             Err(error) => error,
         };
-        assert!(error
-            .to_string()
-            .contains("injected atomic clip-rect resolve pipeline compilation failure"));
+        assert!(
+            error
+                .to_string()
+                .contains("injected atomic clip-rect resolve pipeline compilation failure")
+        );
         {
             let state = context.resources.lock().unwrap();
             let families = state.generation.atomic_path_pipelines.as_ref().unwrap();
@@ -2253,16 +2259,18 @@ mod tests {
                 Ok(())
             }
         };
-        assert!(context
-            .prepare_resources_with_control(
-                3,
-                4,
-                None,
-                fixture.batch(),
-                specialized_atlas_blit_job(),
-                &mut fail_tessellation,
-            )
-            .is_err());
+        assert!(
+            context
+                .prepare_resources_with_control(
+                    3,
+                    4,
+                    None,
+                    fixture.batch(),
+                    specialized_atlas_blit_job(),
+                    &mut fail_tessellation,
+                )
+                .is_err()
+        );
         assert_eq!(current_texture_identities(&context), baseline);
 
         let replacement = context
@@ -2331,16 +2339,18 @@ mod tests {
                 Ok(())
             }
         };
-        assert!(context
-            .prepare_resources_with_control(
-                3,
-                4,
-                Some([24, 20]),
-                fixture.batch(),
-                specialized_atlas_blit_job(),
-                &mut fail_atlas,
-            )
-            .is_err());
+        assert!(
+            context
+                .prepare_resources_with_control(
+                    3,
+                    4,
+                    Some([24, 20]),
+                    fixture.batch(),
+                    specialized_atlas_blit_job(),
+                    &mut fail_atlas,
+                )
+                .is_err()
+        );
         assert_eq!(current_texture_identities(&context), baseline);
         let state = context.resources.lock().unwrap();
         let retained = state
@@ -2559,17 +2569,21 @@ mod tests {
             Err(RendererError::NativeMetal(message))
                 if message == "native Metal tessellation spans upload ring is absent"
         ));
-        assert!(rings
-            .flush_uniforms
-            .as_ref()
-            .unwrap()
-            .retained_submitted_buffer()
-            .is_ok());
-        assert!(rings
-            .gradient_spans
-            .as_ref()
-            .unwrap()
-            .retained_submitted_buffer()
-            .is_ok());
+        assert!(
+            rings
+                .flush_uniforms
+                .as_ref()
+                .unwrap()
+                .retained_submitted_buffer()
+                .is_ok()
+        );
+        assert!(
+            rings
+                .gradient_spans
+                .as_ref()
+                .unwrap()
+                .retained_submitted_buffer()
+                .is_ok()
+        );
     }
 }

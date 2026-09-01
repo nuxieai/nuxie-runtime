@@ -1,6 +1,6 @@
 #ifdef DB
-g1(e0)L(0,L3,KB);h1 S3 T3 z4 A4 y1(WF,e0,F,B,r){M(B,F,KB,L3);g U=K3(KB.xy);uint ka=floatBitsToUint(KB.z)&0xffffu;U.z=ja(ka);z1(U);}
+g1(e0)L(0,N3,LB);h1 U3 V3 B4 C4 y1(XF,e0,F,B,v){M(B,F,LB,N3);g W=M3(LB.xy);uint ka=floatBitsToUint(LB.z)&0xffffu;W.z=ja(ka);z1(W);}
 #endif
 #ifdef GB
-C3 D3 Y2(i,ME){G2(C0(.0));}
+E3 F3 a3(i,NE){I2(C0(.0));}
 #endif

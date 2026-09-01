@@ -85,11 +85,14 @@ impl Renderer for ExactSourceRendererAdapter {
         let Some(paint) = paint.as_any().downcast_ref::<RiveRenderPaintHandle>() else {
             return;
         };
+        let Some(paint) = paint.source_base_for(&self.resource_domain) else {
+            return;
+        };
         unsafe {
             <RiveRenderer as RendererContract>::drawPath(
                 &mut self.renderer,
                 path.source_base() as *const _ as *mut _,
-                paint.source_base() as *const _ as *mut _,
+                paint as *const _ as *mut _,
             );
         }
     }
@@ -604,7 +607,8 @@ impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
         Box::new(
             self.with_context(|context| context.riveRenderFactoryMut().makeRenderPaintHandle())
-                .unwrap_or_else(|| panic!("exact source paint owner was not valid")),
+                .unwrap_or_else(|| panic!("exact source paint owner was not valid"))
+                .with_execution_domain(self.resource_domain.clone(), self.execution_anchor()),
         )
     }
 
@@ -775,11 +779,14 @@ impl<B: ExactSourceBackend> Renderer for ExactSourceRenderCanvasFrame<B> {
         let Some(paint) = paint.as_any().downcast_ref::<RiveRenderPaintHandle>() else {
             return;
         };
+        let Some(paint) = paint.source_base_for(&self.resource_domain) else {
+            return;
+        };
         unsafe {
             <RiveRenderer as RendererContract>::drawPath(
                 &mut self.renderer,
                 path.source_base() as *const _ as *mut _,
-                paint.source_base() as *const _ as *mut _,
+                paint as *const _ as *mut _,
             );
         }
     }
@@ -937,11 +944,14 @@ impl<B: ExactSourceBackend> Renderer for ExactSourceFrameCore<B> {
         let Some(paint) = paint.as_any().downcast_ref::<RiveRenderPaintHandle>() else {
             return;
         };
+        let Some(paint) = paint.source_base_for(&self.resource_domain) else {
+            return;
+        };
         unsafe {
             <RiveRenderer as RendererContract>::drawPath(
                 &mut self.renderer,
                 path.source_base() as *const _ as *mut _,
-                paint.source_base() as *const _ as *mut _,
+                paint as *const _ as *mut _,
             );
         }
     }

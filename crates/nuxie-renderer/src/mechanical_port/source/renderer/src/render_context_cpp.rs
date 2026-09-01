@@ -1556,6 +1556,7 @@
 //                                 GradTextureLayout(),
 //                                 /*clipID =*/0,
 //                                 /*hasClipRect =*/false,
+//                                 /*hasImage =*/false,
 //                                 BlendMode::srcOver);
 //     m_ctx->m_paintAuxData.skip_back();
 //
@@ -3054,7 +3055,7 @@
 //     ++m_currentPathID;
 //     assert(0 < m_currentPathID && m_currentPathID <= m_ctx->m_maxPathID);
 //
-//     m_ctx->m_pathData.set_back(draw->matrix(),
+//     m_ctx->m_pathData.set_back(draw->paintMatrix(),
 //                                draw->strokeRadius(),
 //                                draw->featherRadius(),
 //                                m_currentZIndex,
@@ -3066,8 +3067,10 @@
 //                                 m_gradTextureLayout,
 //                                 draw->clipID(),
 //                                 draw->hasClipRect(),
+//                                 draw->hasImageTexture(),
 //                                 draw->blendMode());
-//     m_ctx->m_paintAuxData.set_back(draw->matrix(),
+//     m_ctx->m_paintAuxData.set_back(draw->paintMatrix(),
+//                                    draw->imageMatrix(),
 //                                    draw->paintType(),
 //                                    draw->simplePaintValue(),
 //                                    draw->gradient(),
@@ -3526,7 +3529,7 @@
 //     const uint32_t imageDrawBaseInstance =
 //         math::lossless_numeric_cast<uint32_t>(
 //             m_ctx->m_imageDrawInstanceData.elementsWritten());
-//     m_ctx->m_imageDrawInstanceData.emplace_back(draw->matrix(),
+//     m_ctx->m_imageDrawInstanceData.emplace_back(draw->imageMatrix(),
 //                                                 draw->opacity(),
 //                                                 draw->clipRectInverseMatrix(),
 //                                                 draw->clipID(),
@@ -3536,7 +3539,7 @@
 //     DrawBatch& batch = pushDraw(draw,
 //                                 DrawType::imageRect,
 //                                 m_baselineShaderMiscFlags,
-//                                 PaintType::image,
+//                                 PaintType::solidColor,
 //                                 1,
 //                                 imageDrawBaseInstance);
 //     return batch;
@@ -3551,7 +3554,7 @@
 //     const uint32_t imageDrawBaseInstance =
 //         math::lossless_numeric_cast<uint32_t>(
 //             m_ctx->m_imageDrawInstanceData.elementsWritten());
-//     m_ctx->m_imageDrawInstanceData.emplace_back(draw->matrix(),
+//     m_ctx->m_imageDrawInstanceData.emplace_back(draw->imageMatrix(),
 //                                                 draw->opacity(),
 //                                                 draw->clipRectInverseMatrix(),
 //                                                 draw->clipID(),
@@ -3561,7 +3564,7 @@
 //     DrawBatch& batch = pushDraw(draw,
 //                                 DrawType::imageMesh,
 //                                 m_baselineShaderMiscFlags,
-//                                 PaintType::image,
+//                                 PaintType::solidColor,
 //                                 1, // one instance (the mesh)
 //                                 imageDrawBaseInstance);
 //     batch.indexCountPerInstance = draw->indexCount();
@@ -3985,6 +3988,13 @@
 //         shaderFeatures |= ShaderFeatures::ENABLE_DITHER;
 //     }
 //
+//     if (draw->imageTexture() != nullptr &&
+//         m_ctx->frameInterlockMode() != gpu::InterlockMode::atomics &&
+//         drawType != DrawType::imageRect && drawType != DrawType::imageMesh)
+//     {
+//         shaderFeatures |= ShaderFeatures::ENABLE_MODULATED_IMAGE;
+//     }
+//
 //     if (paintType != PaintType::clipUpdate &&
 //         !enums::is_flag_set(shaderMiscFlags,
 //                             gpu::ShaderMiscFlags::borrowedCoveragePass))
@@ -4022,15 +4032,24 @@
 //          gpu::ShaderFeaturesMaskFor(drawType, m_ctx->frameInterlockMode())) ==
 //         batch->shaderFeatures);
 //
-//     if (paintType == PaintType::image)
+//     if (draw->imageTexture() != nullptr)
 //     {
-//         assert(draw->imageTexture() != nullptr);
+//         if (batch->imageTexture == nullptr)
+//         {
+//             // We merged in with a batch that did not already have an image so
+//             // we need to ensure the sampler is correct.
+//             batch->imageSampler = draw->imageSampler();
+//         }
+//
 //         if (batch->imageTexture == nullptr)
 //         {
 //             batch->imageTexture = draw->imageTexture();
 //         }
 //         assert(batch->imageTexture == draw->imageTexture());
 //     }
+//
+//     assert(draw->imageTexture() == nullptr ||
+//            batch->imageSampler == draw->imageSampler());
 //
 //     m_combinedShaderFeatures |= batch->shaderFeatures;
 //     return *batch;
@@ -6098,7 +6117,7 @@ impl LogicalFlush {
         let atlas = draw.featherAtlasTransform();
         let coverage = draw.coverageBufferRange();
         path.set(
-            *draw.matrix(),
+            *draw.paintMatrix(),
             draw.strokeRadius(),
             draw.featherRadius(),
             self.m_current_z_index,
@@ -6114,6 +6133,7 @@ impl LogicalFlush {
             self.m_grad_texture_layout,
             draw.clipID(),
             draw.hasClipRect(),
+            draw.hasImageTexture(),
             draw.blendMode(),
         );
         unsafe { context.m_paint_data.emplace_back(paint) };
@@ -6137,7 +6157,8 @@ impl LogicalFlush {
         let target_height = unsafe { self.m_flush_desc.renderTarget.unwrap().as_ref().height() };
         let mut aux: gpu::PaintAuxData = unsafe { core::mem::zeroed() };
         aux.set(
-            *draw.matrix(),
+            *draw.paintMatrix(),
+            *draw.imageMatrix(),
             draw.paintType(),
             draw.simplePaintValue(),
             gradient_coeffs,
@@ -6314,7 +6335,7 @@ impl LogicalFlush {
             Some(*unsafe { (*(*draw).clipRectInverseMatrix()).inverseMatrix() })
         };
         let instance = gpu::ImageDrawInstance::new(
-            *unsafe { (*draw).matrix() },
+            *unsafe { (*draw).imageMatrix() },
             unsafe { (*draw).opacity() },
             clip,
             unsafe { (*draw).clipID() },
@@ -6327,7 +6348,7 @@ impl LogicalFlush {
                 &(*draw).base,
                 gpu::DrawType::imageRect,
                 self.m_baseline_shader_misc_flags,
-                gpu::PaintType::image,
+                gpu::PaintType::solidColor,
                 1,
                 base,
             )
@@ -6346,7 +6367,7 @@ impl LogicalFlush {
             Some(*unsafe { (*(*draw).clipRectInverseMatrix()).inverseMatrix() })
         };
         let instance = gpu::ImageDrawInstance::new(
-            *unsafe { (*draw).matrix() },
+            *unsafe { (*draw).imageMatrix() },
             unsafe { (*draw).opacity() },
             clip,
             unsafe { (*draw).clipID() },
@@ -6359,7 +6380,7 @@ impl LogicalFlush {
                 &(*draw).base,
                 gpu::DrawType::imageMesh,
                 self.m_baseline_shader_misc_flags,
-                gpu::PaintType::image,
+                gpu::PaintType::solidColor,
                 1,
                 base,
             )
@@ -6585,6 +6606,13 @@ impl LogicalFlush {
         if self.frameDescriptor().ditherMode == DitherMode::interleavedGradientNoise {
             shader_features |= gpu::ShaderFeatures::ENABLE_DITHER;
         }
+        if !draw.imageTexture().is_null()
+            && context.frameInterlockMode() != gpu::InterlockMode::atomics
+            && draw_type != gpu::DrawType::imageRect
+            && draw_type != gpu::DrawType::imageMesh
+        {
+            shader_features |= gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE;
+        }
         if paint_type != gpu::PaintType::clipUpdate
             && (misc.0 & gpu::ShaderMiscFlags::borrowedCoveragePass.0) == 0
         {
@@ -6616,15 +6644,22 @@ impl LogicalFlush {
         unsafe {
             (*batch).shaderFeatures |= shader_features & context.m_frame_shader_features_mask;
         }
-        if paint_type == gpu::PaintType::image {
+        if !draw.imageTexture().is_null() {
             debug_assert!(!draw.imageTexture().is_null());
             unsafe {
+                if (*batch).imageTexture.is_none() {
+                    (*batch).imageSampler = draw.imageSampler();
+                }
                 if (*batch).imageTexture.is_none() {
                     (*batch).imageTexture = NonNull::new(draw.imageTexture());
                 }
                 debug_assert_eq!((*batch).imageTexture.unwrap().as_ptr(), draw.imageTexture());
             }
         }
+        debug_assert!(
+            draw.imageTexture().is_null()
+                || unsafe { (*batch).imageSampler == draw.imageSampler() }
+        );
         self.m_combined_shader_features |= unsafe { (*batch).shaderFeatures };
         batch
     }
@@ -6754,6 +6789,7 @@ impl LogicalFlush {
             clear_value,
             gpu::GradTextureLayout::default(),
             0,
+            false,
             false,
             nuxie_render_api::BlendMode::SrcOver,
         );

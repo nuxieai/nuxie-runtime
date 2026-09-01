@@ -6,7 +6,7 @@
  * audit. The Rust owner follows its queue, worker, source assembly, Metal
  * compile, diagnostic, failure, and destruction order.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
  */
 
 #![allow(dead_code)]
@@ -41,7 +41,7 @@ macro_rules! debug_assert_abort {
     }};
 }
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/metal/background_shader_compiler.mm";
 pub const PINNED_SOURCE_SHA256: &str =
     "7618c621c233aa090935acc98cd484a497dcb82a96d28036f18713499b01af4a";
@@ -745,8 +745,7 @@ pub fn generated_shader_sources() -> GeneratedShaderSources {
         advanced_blend: runtime_generated_shader_sources::ADVANCED_BLEND,
         draw_path_common: runtime_generated_shader_sources::DRAW_PATH_COMMON,
         draw_path_vert: runtime_generated_shader_sources::DRAW_PATH_VERT,
-        draw_raster_order_path_frag:
-            runtime_generated_shader_sources::DRAW_RASTER_ORDER_PATH_FRAG,
+        draw_raster_order_path_frag: runtime_generated_shader_sources::DRAW_RASTER_ORDER_PATH_FRAG,
         draw_image_mesh_vert: runtime_generated_shader_sources::DRAW_IMAGE_MESH_VERT,
         draw_mesh_frag: runtime_generated_shader_sources::DRAW_MESH_FRAG,
         atomic_draw: runtime_generated_shader_sources::ATOMIC_DRAW,
@@ -819,11 +818,7 @@ unsafe fn native_new_library_with_source(
             BackgroundOwnerPhase::Create,
             objc_retained_identity(library),
         );
-        owner_detail_event(
-            "BG-LIB-COMPILED",
-            "Create",
-            objc_retained_identity(library),
-        );
+        owner_detail_event("BG-LIB-COMPILED", "Create", objc_retained_identity(library));
     }
     if let Some(error) = error.as_ref() {
         owner_event(
@@ -899,7 +894,7 @@ fn metal_retained_identity<T>(value: &Retained<T>) -> usize {
 #[cfg(feature = "with-rive-tools")]
 pub use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::SynthesizedFailureType;
 
-const K_SHADER_FEATURE_COUNT: usize = 8;
+const K_SHADER_FEATURE_COUNT: usize = 9;
 const GLSL_VERTEX: &str = runtime_generated_shader_exports::GLSL_VERTEX;
 const GLSL_FRAGMENT: &str = runtime_generated_shader_exports::GLSL_FRAGMENT;
 const GLSL_PLS_IMPL_DEVICE_BUFFER: &str =
@@ -914,8 +909,7 @@ const GLSL_ENABLE_INSTANCE_INDEX: &str =
 const GLSL_DRAW_PATH: &str = runtime_generated_shader_exports::GLSL_DRAW_PATH;
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str =
     runtime_generated_shader_exports::GLSL_DRAW_INTERIOR_TRIANGLES;
-const GLSL_FEATHER_ATLAS_BLIT: &str =
-    runtime_generated_shader_exports::GLSL_FEATHER_ATLAS_BLIT;
+const GLSL_FEATHER_ATLAS_BLIT: &str = runtime_generated_shader_exports::GLSL_FEATHER_ATLAS_BLIT;
 const GLSL_DRAW_IMAGE: &str = runtime_generated_shader_exports::GLSL_DRAW_IMAGE;
 const GLSL_DRAW_IMAGE_RECT: &str = runtime_generated_shader_exports::GLSL_DRAW_IMAGE_RECT;
 const GLSL_DRAW_IMAGE_MESH: &str = runtime_generated_shader_exports::GLSL_DRAW_IMAGE_MESH;
@@ -939,6 +933,7 @@ fn get_shader_feature_glsl_name(feature: ShaderFeatures) -> &'static str {
         runtime_generated_shader_exports::GLSL_ENABLE_NESTED_CLIPPING,
         runtime_generated_shader_exports::GLSL_ENABLE_HSL_BLEND_MODES,
         runtime_generated_shader_exports::GLSL_ENABLE_DITHER,
+        runtime_generated_shader_exports::GLSL_ENABLE_MODULATED_IMAGE,
     ];
     NAMES[feature.0.trailing_zeros() as usize]
 }
@@ -1035,7 +1030,7 @@ impl MetalCompileError {
     #[cfg(target_vendor = "apple")]
     fn localized_description(&self, iteration: &NativeCompileIteration) -> Option<String> {
         use objc2::runtime::{AnyObject, Sel};
-        use objc2::{Message, sel};
+        use objc2::{sel, Message};
         use objc2_foundation::NSString;
 
         // `err.localizedDescription` is a borrowed Objective-C expression in
@@ -1110,7 +1105,7 @@ pub struct NativeCompileIteration {
 impl NativeCompileIteration {
     pub fn new(seed: &str) -> Self {
         use objc2::AnyThread;
-        use std::ffi::{CString, c_char};
+        use std::ffi::{c_char, CString};
         use std::ptr::NonNull;
         let seed = CString::new(seed).expect("generated shader seed contains no NUL");
         let source = unsafe {
@@ -1185,9 +1180,9 @@ impl NativeCompileIteration {
 
     fn define_dynamic(&self, key: &str, value: &'static objc2_foundation::NSString) {
         use objc2::runtime::{AnyObject, Sel};
-        use objc2::{ClassType, msg_send, sel};
+        use objc2::{msg_send, sel, ClassType};
         use objc2_foundation::NSString;
-        use std::ffi::{CString, c_char};
+        use std::ffi::{c_char, CString};
         use std::ptr::NonNull;
         let Ok(key_bytes) = CString::new(key) else {
             return;
@@ -1250,7 +1245,7 @@ impl NativeCompileIteration {
     fn append_raw_source(&self, fragment: &str) {
         use objc2::runtime::{AnyObject, Sel};
         use objc2_foundation::NSString;
-        use std::ffi::{CString, c_char};
+        use std::ffi::{c_char, CString};
         let fragment = CString::new(fragment).expect("generated shader fragment contains no NUL");
         // The pinned source uses appendFormat:@"%s\n" directly. Calling the
         // known Objective-C variadic ABI avoids materializing a temporary
@@ -1292,7 +1287,7 @@ impl NativeCompileIteration {
     fn append_raw_source_prefix(&self, constants: &str, flush_uniforms: &str, common: &str) {
         use objc2::runtime::{AnyObject, Sel};
         use objc2_foundation::NSString;
-        use std::ffi::{CString, c_char};
+        use std::ffi::{c_char, CString};
         let constants = CString::new(constants).expect("generated shader fragment contains no NUL");
         let flush_uniforms =
             CString::new(flush_uniforms).expect("generated shader fragment contains no NUL");
@@ -1592,7 +1587,8 @@ impl MetalDeviceOwner {
         source: &str,
         options: &MetalCompileOptions,
     ) -> RetainedMetalLibraryCreation {
-        let creation = unsafe { native_new_library_with_source(self.retained.as_ptr(), source, options) };
+        let creation =
+            unsafe { native_new_library_with_source(self.retained.as_ptr(), source, options) };
         RetainedMetalLibraryCreation {
             library: unsafe { Retained::from_raw_retained(creation.library) },
             error: creation.error,
@@ -2275,6 +2271,15 @@ mod tests {
     ];
 
     #[test]
+    fn shader_feature_name_table_includes_modulated_image_tail() {
+        assert_eq!(super::K_SHADER_FEATURE_COUNT, 9);
+        assert_eq!(
+            super::get_shader_feature_glsl_name(super::ShaderFeatures(1 << 8)),
+            super::runtime_generated_shader_exports::GLSL_ENABLE_MODULATED_IMAGE
+        );
+    }
+
+    #[test]
     fn production_shader_sources_are_exact_translated_minifier_outputs() {
         use crate::mechanical_port::source::renderer::src::shaders::{
             advanced_blend_glsl, atomic_draw_glsl, common_glsl, constants_glsl,
@@ -2337,7 +2342,7 @@ mod tests {
         ];
         for (runtime, embedded) in generated.iter().zip(embedded_headers) {
             let payload_start = embedded.find("R\"===(").unwrap() + "R\"===(".len();
-            let payload_end = embedded[payload_start..].find(")===" ).unwrap() + payload_start;
+            let payload_end = embedded[payload_start..].find(")===").unwrap() + payload_start;
             assert_eq!(
                 *runtime,
                 &embedded[payload_start..payload_end],
@@ -2533,7 +2538,7 @@ mod tests {
     #[cfg(target_vendor = "apple")]
     #[test]
     fn native_append_format_sequence_matches_the_pinned_source_bytes() {
-        use super::{NativeCompileIteration, take_owner_detail_events};
+        use super::{take_owner_detail_events, NativeCompileIteration};
 
         let _owner_guard = super::owner_event_test_guard();
         objc2::rc::autoreleasepool(|_| {
@@ -2616,8 +2621,8 @@ mod tests {
 
             let macros_identity = super::objc_retained_identity(&*iteration.macros);
             let source_identity = super::objc_retained_identity(&*iteration.source);
-            let options = unsafe { (&*iteration.options).as_ref() }
-                .expect("source compile options owner");
+            let options =
+                unsafe { (&*iteration.options).as_ref() }.expect("source compile options owner");
             let options_identity = super::objc_retained_identity(options);
             let configured_macros = options
                 .preprocessorMacros()
@@ -2644,8 +2649,8 @@ mod tests {
     #[test]
     fn native_iteration_unwind_releases_options_source_and_defines_once_in_reverse_order() {
         use super::{
-            MetalCompileOptions, MetalLanguageVersion, NativeCompileIteration,
-            take_owner_detail_events,
+            take_owner_detail_events, MetalCompileOptions, MetalLanguageVersion,
+            NativeCompileIteration,
         };
 
         let _owner_guard = super::owner_event_test_guard();
@@ -2671,13 +2676,12 @@ mod tests {
         for id in ["BG-DICT-DEFINES", "BG-NS-SOURCE", "BG-COMPILE-OPTIONS"] {
             assert_identity_pairs(&detail, id);
         }
-        let release_order = ["BG-COMPILE-OPTIONS", "BG-NS-SOURCE", "BG-DICT-DEFINES"]
-            .map(|id| {
-                detail
-                    .iter()
-                    .position(|event| event.ledger_id == id && event.phase == "Release")
-                    .unwrap()
-            });
+        let release_order = ["BG-COMPILE-OPTIONS", "BG-NS-SOURCE", "BG-DICT-DEFINES"].map(|id| {
+            detail
+                .iter()
+                .position(|event| event.ledger_id == id && event.phase == "Release")
+                .unwrap()
+        });
         assert!(release_order.windows(2).all(|pair| pair[0] < pair[1]));
         assert!(events(&detail, "BG-ERR-COMPILE").is_empty());
     }
@@ -2686,15 +2690,15 @@ mod tests {
     #[test]
     fn native_compile_error_keeps_nserror_and_description_through_log_then_releases_reverse() {
         use super::{
-            MetalCompileOptions, MetalLanguageVersion, NativeCompileIteration,
-            native_new_library_with_source, take_owner_detail_events,
+            native_new_library_with_source, take_owner_detail_events, MetalCompileOptions,
+            MetalLanguageVersion, NativeCompileIteration,
         };
 
         let _owner_guard = super::owner_event_test_guard();
         objc2::rc::autoreleasepool(|_| {
             let _ = take_owner_detail_events();
-            let device = objc2_metal::MTLCreateSystemDefaultDevice()
-                .expect("native Metal device required");
+            let device =
+                objc2_metal::MTLCreateSystemDefaultDevice().expect("native Metal device required");
             let mut iteration = NativeCompileIteration::new(concat!(
                 "#include <metal_stdlib>\n",
                 "using namespace metal;\n",
@@ -2755,7 +2759,10 @@ mod tests {
             );
             let description = events(&detail, "BG-NS-ERR-DESC");
             assert_eq!(
-                description.iter().map(|event| event.phase).collect::<Vec<_>>(),
+                description
+                    .iter()
+                    .map(|event| event.phase)
+                    .collect::<Vec<_>>(),
                 vec!["Borrow", "LastUse(log)", "ExpressionEnd"]
             );
             assert!(description
@@ -2778,8 +2785,7 @@ mod tests {
             let description_end = detail
                 .iter()
                 .position(|event| {
-                    event.ledger_id == "BG-NS-ERR-DESC"
-                        && event.phase == "ExpressionEnd"
+                    event.ledger_id == "BG-NS-ERR-DESC" && event.phase == "ExpressionEnd"
                 })
                 .unwrap();
             assert!(description_end < release_order[1]);
@@ -2792,9 +2798,8 @@ mod tests {
             assert!(dynamic
                 .iter()
                 .all(|event| event.identity == dynamic[0].identity));
-            let dynamic_key = unsafe {
-                &*(dynamic[0].identity as *const objc2_foundation::NSString)
-            };
+            let dynamic_key =
+                unsafe { &*(dynamic[0].identity as *const objc2_foundation::NSString) };
             assert_eq!(
                 dynamic_key.to_string(),
                 super::runtime_generated_shader_exports::GLSL_ENABLE_CLIPPING
@@ -2940,7 +2945,12 @@ mod tests {
             assert_exact_identity_phases(
                 &detail,
                 "BG-LIB-COMPILED",
-                &["Create", "TransferJob", "TransferFinished", "ReleaseContext"],
+                &[
+                    "Create",
+                    "TransferJob",
+                    "TransferFinished",
+                    "ReleaseContext",
+                ],
             );
             for id in [
                 "BG-NS-MACRO-KEY-DYNAMIC",
@@ -3037,26 +3047,18 @@ mod tests {
             assert!(options_release < source_release && source_release < dict_release);
             let libraries = events(&detail, "BG-LIB-COMPILED");
             assert!(libraries.iter().any(|event| event.phase == "TransferJob"));
-            assert!(
-                libraries
-                    .iter()
-                    .any(|event| event.phase == "TransferFinished")
-            );
-            assert!(
-                libraries
-                    .iter()
-                    .any(|event| event.phase == "ReleaseContext")
-            );
-            assert!(
-                events(&detail, "BG-GPU-MEMBER")
-                    .iter()
-                    .any(|event| event.phase == "Borrow(worker)")
-            );
-            assert!(
-                events(&detail, "BG-GPU-MEMBER")
-                    .iter()
-                    .any(|event| event.phase == "ShutdownJoin")
-            );
+            assert!(libraries
+                .iter()
+                .any(|event| event.phase == "TransferFinished"));
+            assert!(libraries
+                .iter()
+                .any(|event| event.phase == "ReleaseContext"));
+            assert!(events(&detail, "BG-GPU-MEMBER")
+                .iter()
+                .any(|event| event.phase == "Borrow(worker)"));
+            assert!(events(&detail, "BG-GPU-MEMBER")
+                .iter()
+                .any(|event| event.phase == "ShutdownJoin"));
         });
     }
 
@@ -3133,8 +3135,8 @@ mod tests {
             assert!(events(&detail, "BG-ERR-COMPILE").is_empty());
             assert!(events(&detail, "BG-NS-ERR-DESC").is_empty());
             assert!(events(&detail, "BG-LIB-COMPILED").is_empty());
-            let release_order = ["BG-COMPILE-OPTIONS", "BG-NS-SOURCE", "BG-DICT-DEFINES"]
-                .map(|id| {
+            let release_order =
+                ["BG-COMPILE-OPTIONS", "BG-NS-SOURCE", "BG-DICT-DEFINES"].map(|id| {
                     detail
                         .iter()
                         .position(|event| event.ledger_id == id && event.phase == "Release")
@@ -3243,7 +3245,10 @@ mod tests {
             );
             let description = events(&detail, "BG-NS-ERR-DESC");
             assert_eq!(
-                description.iter().map(|event| event.phase).collect::<Vec<_>>(),
+                description
+                    .iter()
+                    .map(|event| event.phase)
+                    .collect::<Vec<_>>(),
                 vec!["Borrow", "LastUse(log)", "ExpressionEnd"]
             );
             assert_ne!(description[0].identity, error_identity);

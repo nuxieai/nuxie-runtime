@@ -434,6 +434,10 @@ impl RenderPath for SerializingRenderPath {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn rewind(&mut self) {
         self.raw_path.rewind();
         let mut writer = self.writer.borrow_mut();
@@ -462,10 +466,17 @@ impl RenderPath for SerializingRenderPath {
         self.add_raw_path(&appended);
     }
 
+    fn add_render_path_self(&mut self, transform: Mat2D) {
+        let source = self.raw_path.clone();
+        let mut appended = RawPath::new();
+        appended.add_path(&source, transform);
+        self.add_raw_path(&appended);
+    }
+
     fn add_render_path_backwards(&mut self, path: &dyn RenderPath, transform: Mat2D) {
         let path = serializing_path(path);
         let mut appended = RawPath::new();
-        appended.add_path_backwards(&path.raw_path, transform);
+        appended.add_path_backwards_with_transform(&path.raw_path, transform);
         self.add_raw_path(&appended);
     }
 

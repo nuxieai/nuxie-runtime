@@ -7,16 +7,16 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c`
+- LAST_SYNCED_SHA: `309e901fca858a692d5ed928a87f9841b65848b3`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest applied change: files exported before runtime format 7.3 retain the
-  legacy translation-only layout transform, while 7.3 and later compose stored
-  rotation and scale over the solved slot. The version gate is imported and
-  cloned through the same lifecycle as upstream. The exact updated layout
-  fixtures and a focused pre-7.3/7.3 regression are included.
-  Upstream: `f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c`.
-  Work: [UNIV-1874](https://universe.basis.dev/issue/UNIV-1874).
+  Latest applied change: Lua scripts can access globally registered view
+  models, and deferred render paths can optionally retain geometry for path
+  queries behind `with-rive-path-query`. The matching global-view-model
+  fixtures and focused feature-only deferred path-query regressions are
+  included.
+  Upstream: `309e901fca858a692d5ed928a87f9841b65848b3`.
+  Work: [UNIV-1875](https://universe.basis.dev/issue/UNIV-1875).
 - Intervening `1de56230e9ea062a2da2e25eee00942eafe3bdb4` and
   `0a8499b87a7d722b982d9c444172cab94d8320f2` need no Rust translation: they
   change upstream coverage and GMS test-host infrastructure, not runtime,

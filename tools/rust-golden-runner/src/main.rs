@@ -2324,13 +2324,14 @@ mod tests {
             &self,
             program: &nuxie_runtime::RuntimeScriptProgram,
             present: bool,
+            source: Option<nuxie_runtime::ScriptedContextSource>,
             view_model: Option<nuxie_runtime::ScriptViewModel>,
             parents: Vec<Option<nuxie_runtime::ScriptViewModel>>,
             host: &mut dyn nuxie_runtime::ScriptHost,
         ) -> std::result::Result<Box<dyn nuxie_runtime::ScriptInstance>, nuxie_runtime::ScriptError>
         {
             nuxie_runtime::ScriptingVm::instantiate_program(
-                &self.vm, program, present, view_model, parents, host,
+                &self.vm, program, present, source, view_model, parents, host,
             )
         }
         fn instantiate_script(

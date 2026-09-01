@@ -96,11 +96,11 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{
-    RefCntTarget, rcp, static_rcp_cast,
+    rcp, static_rcp_cast, RefCntTarget,
 };
 use crate::mechanical_port::source::include::rive::renderer_hpp::{RenderPath, RenderPathContract};
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    CONST_ID, LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId,
+    LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
 };
 use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath, RenderPath as ApiRenderPath, Vec2D};
 use std::any::Any;
@@ -139,7 +139,7 @@ impl RiveRenderPath {
     pub fn new_with_raw_path(fill_rule: FillRule, raw_path: &mut RawPath) -> Self {
         let mut path = Self::default();
         path.m_fillRule = fill_rule;
-        path.m_rawPath = core::mem::replace(raw_path, RawPath::new());
+        path.m_rawPath.swap(raw_path);
         path.m_rawPath.prune_empty_segments();
         path
     }
@@ -262,6 +262,19 @@ impl RiveRenderPath {
     pub(crate) const K_PATH_BOUNDS_DIRT: u32 = 1 << 0;
     pub(crate) const K_RAW_PATH_MUTATION_ID_DIRT: u32 = 1 << 1;
     pub(crate) const K_PATH_COARSE_AREA_DIRT: u32 = 1 << 2;
+
+    fn addRenderPathSelf(&mut self, matrix: &Mat2D) {
+        self.assertRawPathMutationsUnlocked();
+        let source = self.m_rawPath.clone();
+        let verb_start = self.m_rawPath.verbs().len();
+        let point_start = self.m_rawPath.points().len();
+        self.m_rawPath.add_path(&source, *matrix);
+        if *matrix != Mat2D::IDENTITY {
+            self.m_rawPath
+                .prune_empty_segments_from_offsets(verb_start, point_start);
+        }
+        self.m_dirt.set(u32::MAX);
+    }
 }
 
 impl LiteRttiBase for RiveRenderPath {
@@ -324,7 +337,8 @@ unsafe impl RenderPathContract for RiveRenderPath {
         let other = unsafe { &*(path.cast::<RiveRenderPath>()) };
         let verb_start = self.m_rawPath.verbs().len();
         let point_start = self.m_rawPath.points().len();
-        self.m_rawPath.add_path_backwards(&other.m_rawPath, *matrix);
+        self.m_rawPath
+            .add_path_backwards_with_transform(&other.m_rawPath, *matrix);
         if *matrix != Mat2D::IDENTITY {
             self.m_rawPath
                 .prune_empty_segments_from_offsets(verb_start, point_start);
@@ -341,6 +355,9 @@ impl ApiRenderPath for RiveRenderPath {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
     fn rewind(&mut self) {
         self.rewind();
     }
@@ -353,6 +370,9 @@ impl ApiRenderPath for RiveRenderPath {
                 self.addRenderPath(other.base.base.renderPath_const(), &matrix);
             }
         }
+    }
+    fn add_render_path_self(&mut self, matrix: Mat2D) {
+        self.addRenderPathSelf(&matrix);
     }
     fn add_render_path_backwards(&mut self, path: &dyn ApiRenderPath, matrix: Mat2D) {
         if let Some(other) = path.as_any().downcast_ref::<Self>() {
@@ -399,6 +419,61 @@ mod mat2d_caller_tests {
         assert_eq!(path.getBounds().max().x, 40.);
         assert_eq!(path.getCoarseArea(), 100. + 400.);
         assert_ne!(path.getRawPathMutationID(), first_mutation);
+    }
+
+    #[test]
+    fn raw_path_constructor_swaps_geometry_without_contour_bookkeeping() {
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(1.0, 1.0);
+        raw_path.move_to(2.0, 2.0); // source bookkeeping is open at point 1
+
+        let mut path = RiveRenderPath::new_with_raw_path(FillRule::NonZero, &mut raw_path);
+        path.line_to(3.0, 3.0);
+
+        assert!(raw_path.verbs().is_empty());
+        assert!(raw_path.points().is_empty());
+        assert_eq!(
+            path.m_rawPath.verbs(),
+            &[
+                nuxie_render_api::PathVerb::Move,
+                nuxie_render_api::PathVerb::Move,
+                nuxie_render_api::PathVerb::Move,
+                nuxie_render_api::PathVerb::Line,
+            ]
+        );
+        assert_eq!(
+            path.m_rawPath.points()[2],
+            nuxie_render_api::Vec2D::new(1.0, 1.0)
+        );
+    }
+
+    #[test]
+    fn render_path_backwards_keeps_the_source_non_null_identity_mapping() {
+        let mut source = RiveRenderPath::default();
+        source.move_to(-0.0, -0.0);
+        source.line_to(1.0, -0.0);
+
+        let mut forward = RiveRenderPath::default();
+        forward.addRenderPathSource(&source, Mat2D::IDENTITY);
+        assert_eq!(
+            forward.m_rawPath.points()[0].x.to_bits(),
+            (-0.0_f32).to_bits()
+        );
+
+        let mut backwards = RiveRenderPath::default();
+        backwards.addRenderPathBackwardsSource(&source, Mat2D::IDENTITY);
+        assert_eq!(
+            backwards.m_rawPath.points()[0].y.to_bits(),
+            0.0_f32.to_bits()
+        );
+        assert_eq!(
+            backwards.m_rawPath.points()[1].x.to_bits(),
+            0.0_f32.to_bits()
+        );
+        assert_eq!(
+            backwards.m_rawPath.points()[1].y.to_bits(),
+            0.0_f32.to_bits()
+        );
     }
 
     #[test]
@@ -480,6 +555,9 @@ impl ApiRenderPath for RiveRenderPathHandle {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
     fn rewind(&mut self) {
         self.source_mut().rewind();
     }
@@ -494,6 +572,9 @@ impl ApiRenderPath for RiveRenderPathHandle {
         unsafe {
             self.source_mut().addRenderPath(other, &matrix);
         }
+    }
+    fn add_render_path_self(&mut self, matrix: Mat2D) {
+        self.source_mut().addRenderPathSelf(&matrix);
     }
     fn add_render_path_backwards(&mut self, path: &dyn ApiRenderPath, matrix: Mat2D) {
         let Some(other) = path.as_any().downcast_ref::<Self>() else {

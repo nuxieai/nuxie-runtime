@@ -514,6 +514,27 @@ TEST_CASE("renders selected board", "[silver]")
         self.assertEqual(sum(action["kind"] == "draw" for action in ik.actions), 6)
         self.assertEqual(sum(action["kind"] == "frame" for action in ik.actions), 5)
         self.assertEqual(ik.provenance_file, "tests/unit_tests/runtime/ik_constraint_test.cpp")
+        global_scripting = next(
+            item
+            for item in producers
+            if item.id == "global_view_models_scripting_test"
+        )
+        self.assertEqual(global_scripting.source, "global_view_models_scripting_test.riv")
+        self.assertEqual(
+            global_scripting.actions,
+            (
+                {"kind": "bind-authored-view-model-instance", "instance_index": 0},
+                {"kind": "advance", "target": "state-machine", "seconds": 0.0},
+                {"kind": "draw"},
+                {"kind": "frame"},
+                {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+                {"kind": "draw"},
+            ),
+        )
+        self.assertEqual(
+            global_scripting.provenance_file,
+            "tests/unit_tests/runtime/global_viewmodels_test.cpp",
+        )
         clip = next(item for item in producers if item.id == "scripted_path_effect_clip")
         # Exact scripted cases retain the owned C++ body as source; this body
         # imports a fixture, which must remain an explicit input dependency.

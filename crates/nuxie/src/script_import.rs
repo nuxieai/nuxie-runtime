@@ -13,7 +13,8 @@ use nuxie_runtime::mechanical_port::source::{
 };
 use nuxie_runtime::{
     RuntimeScriptProgram, ScriptAssetRegistration, ScriptAssetRegistrationResult, ScriptError,
-    ScriptHost, ScriptInstance, ScriptModule, ScriptModuleFailure, ScriptViewModel, ScriptingVm,
+    ScriptHost, ScriptInstance, ScriptModule, ScriptModuleFailure, ScriptViewModel,
+    ScriptedContextSource, ScriptingVm,
 };
 use nuxie_scripting::host_commands::{HostCommand, HostCommandLimits};
 use nuxie_scripting::vm::{ScriptExecutionLimits, ScriptVm};
@@ -272,16 +273,24 @@ impl ScriptingVm for InstalledScripts {
         &self,
         program: &RuntimeScriptProgram,
         present: bool,
+        source: Option<ScriptedContextSource>,
         model: Option<ScriptViewModel>,
         parents: Vec<Option<ScriptViewModel>>,
         host: &mut dyn ScriptHost,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         if let Some(result) = self.program_adapter.as_ref().and_then(|adapter| {
-            adapter.instantiate_program(program, present, model.clone(), parents.clone(), host)
+            adapter.instantiate_program(
+                program,
+                present,
+                source.clone(),
+                model.clone(),
+                parents.clone(),
+                host,
+            )
         }) {
             return result;
         }
-        ScriptingVm::instantiate_program(&*self.vm, program, present, model, parents, host)
+        ScriptingVm::instantiate_program(&*self.vm, program, present, source, model, parents, host)
     }
     fn instantiate_script(
         &self,

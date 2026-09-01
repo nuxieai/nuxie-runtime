@@ -100,8 +100,8 @@ pub use nuxie_runtime::{
     RuntimeViewModelGraphTransactionError, RuntimeViewModelLinkError, ScriptAssetRegistration,
     ScriptAssetRegistrationResult, ScriptDataConverterMethod, ScriptDataConverterOptionalCall,
     ScriptError, ScriptHost, ScriptInstance, ScriptMethod, ScriptOptionalMethodResult,
-    ScriptProgramAdapter, ScriptValue, ScriptViewModel, ScriptingVm, StateMachineInstance,
-    StateMachineReportedEvent,
+    ScriptProgramAdapter, ScriptValue, ScriptViewModel, ScriptedContextSource, ScriptingVm,
+    StateMachineInstance, StateMachineReportedEvent,
 };
 pub use runtime::assets::{
     audio_asset::AudioAsset, font_asset::FontAsset, image_asset::ImageAsset,

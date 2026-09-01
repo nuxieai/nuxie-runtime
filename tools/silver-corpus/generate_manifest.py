@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c"
+UPSTREAM_REF = "309e901fca858a692d5ed928a87f9841b65848b3"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -349,6 +349,7 @@ EXACT = (
     "focus_collapsing",
     "gamepad_test",
     "global_variables_test",
+    "global_view_models_scripting_test",
     "global_viewmodels_test-set_instance",
     "hittest_ab_2_non_virtualized",
     "hittest_ab_2_virtualized",
@@ -395,7 +396,6 @@ SCRIPTED_EXACT_NOTES = {
         "the pinned C++ silver baseline."
     ),
 }
-
 
 def data_binding_viewmodel_actions(
     silver_id: str,
@@ -2633,6 +2633,22 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             action("draw"),
                         ) + tuple(repeated_frames(12, 0.25))
                         blocker = None
+                    if silver_id == "global_view_models_scripting_test":
+                        # global_viewmodels_test.cpp passes the nullable authored
+                        # instance at index 0 directly to bindViewModelInstance.
+                        # Do not replace that with default-instance resolution.
+                        actions = (
+                            action(
+                                "bind-authored-view-model-instance",
+                                instance_index=0,
+                            ),
+                            action("advance", target="state-machine", seconds=0.0),
+                            action("draw"),
+                            action("frame"),
+                            action("advance", target="state-machine", seconds=0.1),
+                            action("draw"),
+                        )
+                        blocker = None
                     blocker = FORCED_BLOCKERS.get(
                         silver_id, CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id, blocker)
                     )
@@ -3009,7 +3025,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (255, 210, 42, 3):
+    if (len(producers), runtime, scripted, unknown) != (256, 211, 42, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3022,8 +3038,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 255",
-        "expected_runtime = 210",
+        "expected_entries = 256",
+        "expected_runtime = 211",
         "expected_scripted = 42",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

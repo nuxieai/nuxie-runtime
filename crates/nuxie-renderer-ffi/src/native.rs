@@ -735,6 +735,10 @@ impl RenderPath for FfiRenderPath {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn rewind(&mut self) {
         unsafe { ffi::rive_ffi_render_path_rewind(self.handle.as_ptr()) };
     }
@@ -748,6 +752,16 @@ impl RenderPath for FfiRenderPath {
             ffi::rive_ffi_render_path_add_render_path(
                 self.handle.as_ptr(),
                 ffi_path(path).handle.as_ptr(),
+                transform.into(),
+            )
+        };
+    }
+
+    fn add_render_path_self(&mut self, transform: Mat2D) {
+        unsafe {
+            ffi::rive_ffi_render_path_add_render_path(
+                self.handle.as_ptr(),
+                self.handle.as_ptr(),
                 transform.into(),
             )
         };

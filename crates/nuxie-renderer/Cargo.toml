@@ -43,6 +43,9 @@ native-ore-vulkan-experimental = ["native-vulkan-experimental"]
 rive-generate-feather-lut = []
 rive-ktx2 = []
 rive-decoders = []
+# Exact `WITH_RIVE_PATH_QUERY` predicate. Query geometry remains a lazy,
+# per-path host opt-in when this compile-time surface is enabled.
+with-rive-path-query = []
 # Exact `ORE_BACKEND_GL && RIVE_CANVAS` predicate for the GL-only canvas
 # import helper. It is intentionally independent of the Metal canvas feature.
 ore-gl = []

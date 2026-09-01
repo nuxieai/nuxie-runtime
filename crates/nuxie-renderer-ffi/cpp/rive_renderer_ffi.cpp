@@ -3,6 +3,7 @@
 #include "render_context_null.hpp"
 #include "rive/math/raw_path.hpp"
 #include "rive/renderer/rive_renderer.hpp"
+#include "rive_render_path.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -415,7 +416,17 @@ extern "C" void rive_ffi_render_path_add_render_path(
 {
     if (path != nullptr && source != nullptr)
     {
-        path->path->addRenderPath(source->path.get(), to_mat2d(transform));
+        auto matrix = to_mat2d(transform);
+        if (path->path.get() == source->path.get())
+        {
+            const auto* riveSource =
+                static_cast<const rive::RiveRenderPath*>(source->path.get());
+            rive::RiveRenderPath sourceSnapshot;
+            sourceSnapshot.addRawPath(riveSource->getRawPath());
+            path->path->addRenderPath(&sourceSnapshot, matrix);
+            return;
+        }
+        path->path->addRenderPath(source->path.get(), matrix);
     }
 }
 

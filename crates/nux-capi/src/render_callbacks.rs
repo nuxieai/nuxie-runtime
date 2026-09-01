@@ -95,6 +95,8 @@ pub struct NuxRenderCallbacks {
     pub render_path_close: Option<unsafe extern "C" fn(*mut c_void, u64)>,
     pub render_path_add_raw_path:
         Option<unsafe extern "C" fn(*mut c_void, u64, *const NuxRawPathView)>,
+    /// When destination and source are the same handle, the callback must
+    /// snapshot the source geometry before mutating the destination.
     pub render_path_add_render_path:
         Option<unsafe extern "C" fn(*mut c_void, u64, u64, *const f32)>,
     pub render_path_add_render_path_backwards:
@@ -294,6 +296,10 @@ impl RenderPath for CallbackRenderPath {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn rewind(&mut self) {
         call!(self.callbacks, render_path_rewind, self.handle);
     }
@@ -313,6 +319,16 @@ impl RenderPath for CallbackRenderPath {
             render_path_add_render_path,
             self.handle,
             render_path_handle(path),
+            transform.0.as_ptr()
+        );
+    }
+
+    fn add_render_path_self(&mut self, transform: Mat2D) {
+        call!(
+            self.callbacks,
+            render_path_add_render_path,
+            self.handle,
+            self.handle,
             transform.0.as_ptr()
         );
     }
@@ -782,5 +798,58 @@ impl Renderer for CallbackRenderer {
 
     fn modulate_opacity(&mut self, opacity: f32) {
         call!(self.callbacks, modulate_opacity, opacity);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PATH_HANDLE: u64 = 37;
+
+    #[derive(Default)]
+    struct AppendCapture {
+        destination: u64,
+        source: u64,
+        transform: [f32; 6],
+    }
+
+    unsafe extern "C" fn make_empty_path(_user_data: *mut c_void) -> u64 {
+        PATH_HANDLE
+    }
+
+    unsafe extern "C" fn capture_append(
+        user_data: *mut c_void,
+        destination: u64,
+        source: u64,
+        transform: *const f32,
+    ) {
+        // SAFETY: the test owns both pointers for the duration of the callback.
+        let capture = unsafe { &mut *user_data.cast::<AppendCapture>() };
+        capture.destination = destination;
+        capture.source = source;
+        capture
+            .transform
+            .copy_from_slice(unsafe { std::slice::from_raw_parts(transform, 6) });
+    }
+
+    #[test]
+    fn self_append_forwards_same_handle_and_original_transform() {
+        let mut capture = AppendCapture::default();
+        let callbacks = NuxRenderCallbacks {
+            user_data: (&mut capture as *mut AppendCapture).cast::<c_void>(),
+            make_empty_render_path: Some(make_empty_path),
+            render_path_add_render_path: Some(capture_append),
+            ..NuxRenderCallbacks::default()
+        };
+        let mut factory = CallbackFactory::new(callbacks);
+        let mut path = factory.make_empty_render_path();
+        let transform = Mat2D([2.0, 0.5, -0.25, 3.0, 5.0, 6.0]);
+
+        path.add_render_path_self(transform);
+
+        assert_eq!(capture.destination, PATH_HANDLE);
+        assert_eq!(capture.source, PATH_HANDLE);
+        assert_eq!(capture.transform, transform.0);
     }
 }

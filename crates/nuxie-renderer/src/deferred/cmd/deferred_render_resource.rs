@@ -287,6 +287,8 @@ impl RenderPaint for DeferredRenderPaint {
 
 pub struct DeferredRenderPath {
     pub resource: VersionedDeferredResource,
+    #[cfg(feature = "with-rive-path-query")]
+    query: Option<Box<RawPath>>,
     scratch: RefCell<RawPath>,
     fill_rule: FillRule,
     have_fill_rule: bool,
@@ -295,11 +297,36 @@ impl DeferredRenderPath {
     pub fn new(base: DeferredResourceBase) -> Self {
         Self {
             resource: VersionedDeferredResource::new(base),
+            #[cfg(feature = "with-rive-path-query")]
+            query: None,
             scratch: RefCell::new(RawPath::new()),
             fill_rule: FillRule::NonZero,
             have_fill_rule: false,
         }
     }
+    pub fn current_fill_rule(&self) -> FillRule {
+        self.fill_rule
+    }
+    #[cfg(feature = "with-rive-path-query")]
+    pub fn retain_query_geometry(&mut self, seed: Option<&RawPath>) {
+        let query = self.query.get_or_insert_with(|| Box::new(RawPath::new()));
+        if let Some(seed) = seed {
+            query.rewind();
+            query.add_path(seed, Mat2D::IDENTITY);
+        }
+    }
+    #[cfg(feature = "with-rive-path-query")]
+    pub fn query_raw_path(&self) -> Option<&RawPath> {
+        self.query.as_deref()
+    }
+    #[cfg(feature = "with-rive-path-query")]
+    fn query_mirror(&mut self, action: impl FnOnce(&mut RawPath)) {
+        if let Some(query) = self.query.as_deref_mut() {
+            action(query);
+        }
+    }
+    #[cfg(not(feature = "with-rive-path-query"))]
+    fn query_mirror(&mut self, _action: impl FnOnce(&mut RawPath)) {}
     pub fn flush_scratch(&self) {
         let mut scratch = self.scratch.borrow_mut();
         if scratch.verbs().is_empty() {
@@ -337,6 +364,22 @@ impl DeferredRenderPath {
             },
         );
     }
+    fn record_add_render_path(&self, source: u32, transform: Mat2D) {
+        let [xx, xy, yx, yy, tx, ty] = transform.0;
+        self.resource.base.append(
+            RenderCmd::PathAddRenderPath,
+            &PathAddPathPod {
+                path: self.resource.base.id,
+                src: source,
+                xx,
+                xy,
+                yx,
+                yy,
+                tx,
+                ty,
+            },
+        );
+    }
 }
 pub fn raw_path_bytes(path: &RawPath) -> (Vec<u8>, Vec<u8>) {
     let verbs = path.verbs().iter().map(|&v| v as u8).collect();
@@ -351,9 +394,13 @@ impl RenderPath for DeferredRenderPath {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
     fn rewind(&mut self) {
         self.resource.bump();
         self.scratch.get_mut().rewind();
+        self.query_mirror(RawPath::rewind);
         self.resource.base.append(
             RenderCmd::PathRewind,
             &ResIdPod {
@@ -380,20 +427,27 @@ impl RenderPath for DeferredRenderPath {
         self.resource.bump();
         self.flush_scratch();
         Self::flush_scratch_of(path);
-        let [xx, xy, yx, yy, tx, ty] = transform.0;
-        self.resource.base.append(
-            RenderCmd::PathAddRenderPath,
-            &PathAddPathPod {
-                path: self.resource.base.id,
-                src: Self::id_of_path(path),
-                xx,
-                xy,
-                yx,
-                yy,
-                tx,
-                ty,
-            },
-        );
+        self.record_add_render_path(Self::id_of_path(path), transform);
+        #[cfg(feature = "with-rive-path-query")]
+        if self.query.is_some() {
+            if let Some(source) = path.as_any().downcast_ref::<Self>() {
+                if let Some(source_query) = source.query_raw_path() {
+                    self.query_mirror(|query| {
+                        query.add_path_with_transform(source_query, transform)
+                    });
+                }
+            }
+        }
+    }
+    fn add_render_path_self(&mut self, transform: Mat2D) {
+        self.resource.bump();
+        self.flush_scratch();
+        self.flush_scratch();
+        self.record_add_render_path(self.resource.base.id, transform);
+        #[cfg(feature = "with-rive-path-query")]
+        if let Some(source_query) = self.query_raw_path().cloned() {
+            self.query_mirror(|query| query.add_path_with_transform(&source_query, transform));
+        }
     }
     fn add_render_path_backwards(&mut self, _path: &dyn RenderPath, _transform: Mat2D) {
         // Inherits RenderPath's no-op on non-Rive renderers (renderer.hpp:191).
@@ -401,18 +455,23 @@ impl RenderPath for DeferredRenderPath {
     fn add_raw_path(&mut self, path: &RawPath) {
         self.flush_scratch();
         self.record_add_raw_path(path);
+        self.query_mirror(|query| query.add_path(path, Mat2D::IDENTITY));
     }
     fn move_to(&mut self, x: f32, y: f32) {
         self.scratch.get_mut().move_to(x, y);
+        self.query_mirror(|query| query.move_to(x, y));
     }
     fn line_to(&mut self, x: f32, y: f32) {
         self.scratch.get_mut().line_to(x, y);
+        self.query_mirror(|query| query.line_to(x, y));
     }
     fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
         self.scratch.get_mut().cubic_to(ox, oy, ix, iy, x, y);
+        self.query_mirror(|query| query.cubic_to(ox, oy, ix, iy, x, y));
     }
     fn close(&mut self) {
         self.scratch.get_mut().close();
+        self.query_mirror(RawPath::close);
     }
 }
 

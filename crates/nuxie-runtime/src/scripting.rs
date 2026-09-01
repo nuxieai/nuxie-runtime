@@ -1619,6 +1619,393 @@ pub fn script_view_models(source: &impl ScriptFileSource) -> BTreeMap<String, Sc
         .collect()
 }
 
+/// The file and data-context projection exposed through one scripted `Context`
+/// userdata.
+///
+/// Host-created contexts may retain an explicit snapshot. Runtime occurrences
+/// retain only their weak, generation-checked `CoreHandle` and resolve
+/// `ScriptedObject::scriptAsset()->file()` plus the effective virtual
+/// `dataContext()` on every call, exactly like pinned C++.
+#[derive(Clone)]
+pub struct ScriptedContextSource {
+    projection: ScriptedContextProjection,
+}
+
+#[derive(Clone)]
+enum ScriptedContextProjection {
+    Snapshot {
+        file: crate::mechanical_port::source::file::RuntimeFileWeakHandle,
+        data_context: Option<
+            crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
+        >,
+    },
+    Occurrence(crate::mechanical_port::source::core::CoreHandle),
+}
+
+/// The data-context state a scripting backend should expose for a Context
+/// method call.
+///
+/// Snapshot sources leave the backend's creation-time projection intact.
+/// Occurrence sources instead return the current DataContext occurrence (or
+/// its current absence) for every call.
+#[doc(hidden)]
+#[derive(Clone)]
+pub enum ScriptedContextDataProjection {
+    UseSnapshot,
+    Absent,
+    Current(ScriptedDataContextSource),
+}
+
+/// One retained DataContext occurrence exposed through a returned scripted
+/// DataContext userdata. This matches upstream's `rcp<DataContext>`: the
+/// occurrence is fixed when the userdata is created, while its main instance
+/// and parent link remain live on later method calls.
+#[doc(hidden)]
+#[derive(Clone)]
+pub struct ScriptedDataContextSource {
+    data_context: crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
+}
+
+impl ScriptedDataContextSource {
+    fn new(
+        data_context: crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
+    ) -> Self {
+        Self { data_context }
+    }
+
+    #[doc(hidden)]
+    pub fn view_model(&self) -> Option<ScriptViewModel> {
+        use crate::mechanical_port::source::data_bind::data_context::DataContext;
+
+        self.data_context
+            .with_context(DataContext::main_view_model_instance)
+            .and_then(script_view_model_from_context_instance)
+    }
+
+    #[doc(hidden)]
+    pub fn root_view_model(&self) -> Option<ScriptViewModel> {
+        use crate::mechanical_port::source::data_bind::data_context::DataContext;
+
+        self.data_context
+            .with_context(DataContext::root_view_model_instance)
+            .and_then(script_view_model_from_context_instance)
+    }
+
+    #[doc(hidden)]
+    pub fn parent(&self) -> Option<Self> {
+        use crate::mechanical_port::source::data_bind::data_context::DataContext;
+
+        self.data_context
+            .with_context(DataContext::parent)
+            .map(Self::new)
+    }
+}
+
+impl std::fmt::Debug for ScriptedContextSource {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut debug = formatter.debug_struct("ScriptedContextSource");
+        match &self.projection {
+            ScriptedContextProjection::Snapshot { file, data_context } => debug
+                .field("projection", &"snapshot")
+                .field("file_alive", &file.upgrade().is_some())
+                .field("data_context", &data_context.is_some()),
+            ScriptedContextProjection::Occurrence(owner) => debug
+                .field("projection", &"occurrence")
+                .field("owner", owner),
+        };
+        debug.finish()
+    }
+}
+
+impl ScriptedContextSource {
+    pub fn new(
+        file: crate::mechanical_port::source::file::RuntimeFileWeakHandle,
+        data_context: Option<
+            crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
+        >,
+    ) -> Self {
+        Self {
+            projection: ScriptedContextProjection::Snapshot { file, data_context },
+        }
+    }
+
+    /// Project the current context sources from one retained runtime
+    /// occurrence without owning its arena, asset, file, or DataContext.
+    #[doc(hidden)]
+    pub fn for_occurrence(owner: crate::mechanical_port::source::core::CoreHandle) -> Self {
+        Self {
+            projection: ScriptedContextProjection::Occurrence(owner),
+        }
+    }
+
+    fn current_file(&self) -> Option<crate::mechanical_port::source::file::RuntimeFileWeakHandle> {
+        match &self.projection {
+            ScriptedContextProjection::Snapshot { file, .. } => Some(file.clone()),
+            ScriptedContextProjection::Occurrence(owner) => {
+                owner.with(|owner| owner.scripted_object_file()).flatten()
+            }
+        }
+    }
+
+    fn current_data_context(
+        &self,
+    ) -> Option<crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle>
+    {
+        match &self.projection {
+            ScriptedContextProjection::Snapshot { data_context, .. } => data_context.clone(),
+            ScriptedContextProjection::Occurrence(owner) =>
+                crate::mechanical_port::source::scripted::scripted_object::ScriptedObject::effective_data_context(owner),
+        }
+    }
+
+    /// Resolve the occurrence's current virtual DataContext. Facades created
+    /// from it resolve their File through their ViewModel definition, so
+    /// replacing or detaching the occurrence's ScriptAsset does not invalidate
+    /// otherwise-live `viewModel`/`rootViewModel` values.
+    #[doc(hidden)]
+    pub fn data_context_projection(&self) -> ScriptedContextDataProjection {
+        if matches!(&self.projection, ScriptedContextProjection::Snapshot { .. }) {
+            return ScriptedContextDataProjection::UseSnapshot;
+        }
+        let Some(context) = self.current_data_context() else {
+            return ScriptedContextDataProjection::Absent;
+        };
+        ScriptedContextDataProjection::Current(ScriptedDataContextSource::new(context))
+    }
+
+    pub fn global_view_model(&self, name: &[u8]) -> Option<ScriptViewModel> {
+        let data_context = self.current_data_context()?;
+        let file = self.current_file()?.upgrade()?;
+        let instance = resolve_global_view_model_instance(&data_context, &file, name)?;
+        ScriptViewModel::from_native(instance, file)
+    }
+
+    pub fn global_view_model_names(&self) -> Vec<String> {
+        self.current_file()
+            .and_then(|file| {
+                file.with_file(crate::mechanical_port::source::file::File::global_view_model_names)
+            })
+            .unwrap_or_default()
+    }
+}
+
+fn script_view_model_from_context_instance(
+    instance: crate::mechanical_port::source::core::CoreHandle,
+) -> Option<ScriptViewModel> {
+    use crate::mechanical_port::source::viewmodel::{
+        viewmodel::ViewModel, viewmodel_instance::ViewModelInstance,
+    };
+
+    let model = instance
+        .with_downcast::<ViewModelInstance, _>(ViewModelInstance::get_view_model)
+        .flatten()?;
+    let file = model
+        .with_downcast::<ViewModel, _>(ViewModel::file_handle)?
+        .upgrade()?;
+    ScriptViewModel::from_native(instance, file)
+}
+
+#[cfg(test)]
+mod scripted_context_source_tests {
+    use super::ScriptedContextSource;
+    use crate::mechanical_port::source::{
+        animation::scripted_listener_action::ScriptedListenerAction,
+        artboard::Artboard,
+        core::{CoreArena, CoreHandle},
+        core_context::CoreContext,
+        data_bind::{
+            data_bind::DataBind,
+            data_context::{DataContext, RuntimeDataContextHandle},
+        },
+        scripted::{
+            scripted_data_converter::ScriptedDataConverter, scripted_drawable::ScriptedDrawable,
+            scripted_object::ScriptedObject, scripted_path_effect::ScriptedPathEffect,
+        },
+        status_code::StatusCode,
+        viewmodel::viewmodel_instance::ViewModelInstance,
+    };
+
+    struct TestCoreContext<'a> {
+        arena: &'a CoreArena,
+        artboard: CoreHandle,
+    }
+
+    impl CoreContext for TestCoreContext<'_> {
+        fn core_arena(&self) -> &CoreArena {
+            self.arena
+        }
+
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+            (id == 0).then(|| self.artboard.clone())
+        }
+    }
+
+    #[test]
+    fn occurrence_source_uses_the_effective_virtual_data_context() {
+        let arena = CoreArena::default();
+        let artboard = arena.insert(Artboard::default());
+        let drawable = arena.insert(ScriptedDrawable::default());
+        let path_effect = arena.insert(ScriptedPathEffect::default());
+        let mut context = TestCoreContext {
+            arena: &arena,
+            artboard: artboard.clone(),
+        };
+        for owner in [&drawable, &path_effect] {
+            assert_eq!(
+                owner.with_mut(|owner| owner.on_added_dirty(&mut context)),
+                Some(StatusCode::Ok)
+            );
+        }
+
+        let artboard_context = RuntimeDataContextHandle::new(DataContext::new(None));
+        Artboard::internal_data_context_handle(&artboard, artboard_context.clone());
+        let stale_base_context = RuntimeDataContextHandle::new(DataContext::new(None));
+        for owner in [&drawable, &path_effect] {
+            owner.with_mut(|owner| {
+                owner
+                    .as_scripted_object_mut()
+                    .expect("scripted artboard child")
+                    .set_data_context(Some(stale_base_context.clone()));
+            });
+            assert!(
+                ScriptedObject::effective_data_context(owner)
+                    .is_some_and(|context| context.ptr_eq(&artboard_context))
+            );
+        }
+
+        let converter = arena.insert(ScriptedDataConverter::default());
+        let data_bind = arena.insert(DataBind::default());
+        let converter_context = RuntimeDataContextHandle::new(DataContext::new(None));
+        ScriptedDataConverter::bind_from_context_occurrence(
+            &converter,
+            converter_context.clone(),
+            data_bind,
+        );
+        converter.with_mut(|converter| {
+            converter
+                .as_scripted_object_mut()
+                .expect("scripted converter")
+                .set_data_context(Some(stale_base_context));
+        });
+        assert!(
+            ScriptedObject::effective_data_context(&converter)
+                .is_some_and(|context| context.ptr_eq(&converter_context))
+        );
+
+        let drawable_source = ScriptedContextSource::for_occurrence(drawable.clone());
+        assert!(
+            drawable_source
+                .current_data_context()
+                .is_some_and(|context| context.ptr_eq(&artboard_context))
+        );
+        Artboard::clear_data_context_handle(&artboard);
+        assert!(drawable_source.current_data_context().is_none());
+        assert!(ScriptedObject::effective_data_context(&path_effect).is_none());
+    }
+
+    #[test]
+    fn occurrence_source_does_not_retain_the_owners_data_context() {
+        let arena = CoreArena::default();
+        let owner = arena.insert(ScriptedListenerAction::default());
+        let instance = arena.insert(ViewModelInstance::default());
+        let context = RuntimeDataContextHandle::new(DataContext::new(Some(instance.clone())));
+        context.with_context_mut(|context| context.add_dependent_container(owner.clone()));
+        owner.with_downcast_mut::<ScriptedListenerAction, _>(|owner| {
+            owner.scripted.set_data_context(Some(context.clone()));
+        });
+        let source = ScriptedContextSource::for_occurrence(owner.clone());
+        drop(context);
+
+        assert_eq!(
+            instance.with_downcast::<ViewModelInstance, _>(ViewModelInstance::dependents),
+            Some(vec![owner.clone()])
+        );
+        owner.with_downcast_mut::<ScriptedListenerAction, _>(|owner| {
+            owner.scripted.set_data_context(None);
+        });
+        assert_eq!(
+            instance.with_downcast::<ViewModelInstance, _>(ViewModelInstance::dependents),
+            Some(Vec::new())
+        );
+        assert!(source.current_data_context().is_none());
+    }
+}
+
+/// Resolve the exact global occurrence selected by upstream
+/// `resolveGlobalViewModel`.
+pub(crate) fn resolve_global_view_model_instance(
+    data_context: &crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
+    file: &crate::mechanical_port::source::file::RuntimeFileHandle,
+    name: &[u8],
+) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+    use crate::mechanical_port::source::{
+        data_bind::data_context::DataContext, view_model_type::ViewModelType,
+        viewmodel::viewmodel::ViewModel,
+    };
+
+    let (slot_key, view_model_count, global_view_model) = file.with_file(|file| {
+        // `luaL_checkstring` returns arbitrary VM string bytes. Match those
+        // directly against the imported names rather than introducing a UTF-8
+        // conversion that upstream's `const char*` lookup does not perform.
+        let view_model_count = file.view_model_count();
+        let slot_key = (0..view_model_count)
+            .find(|index| {
+                file.view_model(*index)
+                    .and_then(|model| {
+                        model.with_downcast::<ViewModel, _>(|model| {
+                            model.base.name().as_bytes() == name
+                        })
+                    })
+                    .unwrap_or(false)
+            })
+            .unwrap_or(view_model_count) as u32;
+        (
+            slot_key,
+            view_model_count,
+            file.view_model(slot_key as usize),
+        )
+    });
+    if slot_key as usize >= view_model_count {
+        return None;
+    }
+    let global_view_model = global_view_model?;
+    if global_view_model.with_downcast::<ViewModel, _>(|view_model| {
+        view_model.base.view_model_type() == ViewModelType::Global as u32
+    }) != Some(true)
+    {
+        return None;
+    }
+
+    let mut root = data_context.clone();
+    while let Some(parent) = root.with_context(DataContext::parent) {
+        root = parent;
+    }
+    if let Some(instance) = root.with_context(|root| root.instance_for_slot(slot_key)) {
+        return Some(instance);
+    }
+
+    let mut current = Some(data_context.clone());
+    while let Some(context) = current {
+        let (instances, parent) = context
+            .with_context(|context| (context.view_model_instances().to_vec(), context.parent()));
+        for instance in instances.into_iter().flatten() {
+            let matches = instance
+                .with(|instance| {
+                    instance
+                        .as_view_model_instance()
+                        .and_then(|instance| instance.get_view_model())
+                        .is_some_and(|view_model| view_model == global_view_model)
+                })
+                .unwrap_or(false);
+            if matches {
+                return Some(instance);
+            }
+        }
+        current = parent;
+    }
+    None
+}
+
 impl ScriptValue {
     pub fn as_number(&self) -> Option<f64> {
         match self {
@@ -1800,6 +2187,13 @@ pub trait ScriptInstance {
         _parents: Vec<Option<ScriptViewModel>>,
     ) -> Result<(), ScriptError> {
         self.set_context_view_model(view_model)
+    }
+
+    fn set_context_source(
+        &mut self,
+        _source: Option<ScriptedContextSource>,
+    ) -> Result<(), ScriptError> {
+        Ok(())
     }
 
     /// Clear a context before its first host bind without declaring the
@@ -2298,6 +2692,7 @@ pub trait ScriptProgramAdapter: std::fmt::Debug {
         &self,
         program: &RuntimeScriptProgram,
         context_present: bool,
+        context_source: Option<ScriptedContextSource>,
         view_model: Option<ScriptViewModel>,
         parent_view_models: Vec<Option<ScriptViewModel>>,
         host: &mut dyn ScriptHost,
@@ -2344,11 +2739,12 @@ impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
         &self,
         program: &RuntimeScriptProgram,
         present: bool,
+        source: Option<ScriptedContextSource>,
         model: Option<ScriptViewModel>,
         parents: Vec<Option<ScriptViewModel>>,
         host: &mut dyn ScriptHost,
     ) -> Result<Box<dyn ScriptInstance>, ScriptError> {
-        (**self).instantiate_program(program, present, model, parents, host)
+        (**self).instantiate_program(program, present, source, model, parents, host)
     }
     fn instantiate_script(
         &self,
@@ -2401,6 +2797,7 @@ pub trait ScriptingVm {
         &self,
         program: &RuntimeScriptProgram,
         context_present: bool,
+        context_source: Option<ScriptedContextSource>,
         view_model: Option<ScriptViewModel>,
         parent_view_models: Vec<Option<ScriptViewModel>>,
         host: &mut dyn ScriptHost,

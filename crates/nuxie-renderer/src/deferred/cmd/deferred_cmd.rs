@@ -450,10 +450,14 @@ pub fn replay_render_commands(
                 if let (Some(path), Some(source)) =
                     (table.paths.get(c.path), table.paths.get(c.src))
                 {
-                    path.borrow_mut().add_render_path(
-                        source.borrow().as_ref(),
-                        Mat2D([c.xx, c.xy, c.yx, c.yy, c.tx, c.ty]),
-                    );
+                    let transform = Mat2D([c.xx, c.xy, c.yx, c.yy, c.tx, c.ty]);
+                    if Rc::ptr_eq(&path, &source) {
+                        path.borrow_mut().add_render_path_self(transform);
+                    } else {
+                        let mut destination = path.borrow_mut();
+                        let source = source.borrow();
+                        destination.add_render_path(source.as_ref(), transform);
+                    }
                 }
             }
             RenderCmd::PaintStyle

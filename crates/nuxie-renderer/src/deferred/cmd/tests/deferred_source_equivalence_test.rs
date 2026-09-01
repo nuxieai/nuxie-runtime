@@ -146,3 +146,34 @@ fn replay_consumes_cpp_transform_fields_without_transposing_off_diagonals() {
     destination.add_render_path(source.as_ref(), matrix);
     assert_eq!(&*actual.bytes(), &*expected.bytes());
 }
+
+#[test]
+fn replay_self_append_matches_a_frozen_non_deferred_source_copy() {
+    let mut source_geometry = RawPath::new();
+    source_geometry.move_to(1.0, 2.0);
+    source_geometry.line_to(3.0, 4.0);
+    let matrix = Mat2D([2.0, 0.5, -0.25, 3.0, 5.0, 6.0]);
+
+    let mut recorded = DeferredFactory::new();
+    let mut path = recorded.make_render_path(source_geometry.clone(), FillRule::EvenOdd);
+    path.add_render_path_self(matrix);
+
+    let buffer = recorded.buffer.lock().unwrap();
+    let mut actual = SerializingFactory::new();
+    replay_render_commands(
+        &mut actual,
+        None,
+        buffer.command_bytes(),
+        buffer.blob_bytes(),
+        &mut ResourceTable::default(),
+        &mut ReplayHooks::default(),
+    );
+
+    let mut expected = SerializingFactory::new();
+    let mut expected_path = expected.make_render_path(source_geometry.clone(), FillRule::EvenOdd);
+    let mut transformed_copy = RawPath::new();
+    transformed_copy.add_path(&source_geometry, matrix);
+    expected_path.add_raw_path(&transformed_copy);
+
+    assert_eq!(&*actual.bytes(), &*expected.bytes());
+}

@@ -77,7 +77,7 @@ use nuxie_runtime::{
     ScriptDataConverterOptionalCall, ScriptError, ScriptHost, ScriptInstance,
     ScriptInterpolatorMethod, ScriptListenerActionMethod, ScriptListenerInvocation, ScriptMethod,
     ScriptOptionalMethodResult, ScriptOptionalNumberResult, ScriptValue, ScriptViewModel,
-    ScriptingVm as RuntimeScriptingVm,
+    ScriptedContextSource, ScriptingVm as RuntimeScriptingVm,
 };
 pub(crate) use renderer::RendererBindings;
 use view_model::{
@@ -317,142 +317,144 @@ const RIVE_LUA_ATOMS: &[(&[u8], i16)] = &[
     (b"markNeedsUpdate", 130),
     (b"viewModel", 131),
     (b"rootViewModel", 132),
-    (b"dataContext", 136),
-    (b"image", 133),
-    (b"blob", 134),
-    (b"size", 135),
+    (b"globalViewModel", 133),
+    (b"globalViewModelNames", 134),
+    (b"dataContext", 138),
+    (b"image", 135),
+    (b"blob", 136),
+    (b"size", 137),
     (b"name", 105),
-    (b"duration", 153),
-    (b"setTime", 154),
-    (b"setTimeFrames", 155),
-    (b"setTimePercentage", 156),
-    (b"isPointerEvent", 159),
-    (b"isKeyboardEvent", 160),
-    (b"isTextInput", 161),
-    (b"previousPosition", 157),
-    (b"timeStamp", 158),
-    (b"isFocus", 162),
-    (b"isReportedEvent", 163),
-    (b"isViewModelChange", 164),
-    (b"isNone", 165),
-    (b"isGamepadConnected", 166),
-    (b"isGamepadEvent", 167),
-    (b"isGamepadDisconnected", 168),
-    (b"asPointerEvent", 169),
-    (b"asKeyboardEvent", 170),
-    (b"asTextInput", 171),
-    (b"asFocus", 172),
-    (b"asReportedEvent", 173),
-    (b"asViewModelChange", 174),
-    (b"asGamepadConnected", 175),
-    (b"asGamepadEvent", 176),
-    (b"asGamepadDisconnected", 177),
-    (b"gamepadEvent", 178),
-    (b"gamepadConnected", 179),
-    (b"gamepadDisconnected", 180),
-    (b"asNone", 181),
-    (b"key", 182),
+    (b"duration", 155),
+    (b"setTime", 156),
+    (b"setTimeFrames", 157),
+    (b"setTimePercentage", 158),
+    (b"isPointerEvent", 161),
+    (b"isKeyboardEvent", 162),
+    (b"isTextInput", 163),
+    (b"previousPosition", 159),
+    (b"timeStamp", 160),
+    (b"isFocus", 164),
+    (b"isReportedEvent", 165),
+    (b"isViewModelChange", 166),
+    (b"isNone", 167),
+    (b"isGamepadConnected", 168),
+    (b"isGamepadEvent", 169),
+    (b"isGamepadDisconnected", 170),
+    (b"asPointerEvent", 171),
+    (b"asKeyboardEvent", 172),
+    (b"asTextInput", 173),
+    (b"asFocus", 174),
+    (b"asReportedEvent", 175),
+    (b"asViewModelChange", 176),
+    (b"asGamepadConnected", 177),
+    (b"asGamepadEvent", 178),
+    (b"asGamepadDisconnected", 179),
+    (b"gamepadEvent", 180),
+    (b"gamepadConnected", 181),
+    (b"gamepadDisconnected", 182),
+    (b"asNone", 183),
+    (b"key", 184),
     (b"shift", 88),
-    (b"alt", 183),
-    (b"control", 184),
-    (b"meta", 185),
-    (b"text", 186),
-    (b"phase", 187),
-    (b"delaySeconds", 188),
-    (b"deviceId", 189),
-    (b"buttonMask", 190),
-    (b"remove", 191),
-    (b"removeAt", 192),
-    (b"removeAllOf", 193),
-    (b"axes", 232),
-    (b"gamepadMapping", 233),
-    (b"mapping", 234),
-    (b"isStandardMapping", 235),
-    (b"buttons", 236),
-    (b"buttonPressed", 237),
-    (b"buttonValue", 238),
-    (b"axis", 239),
-    (b"west", 240),
-    (b"south", 241),
-    (b"north", 242),
-    (b"east", 243),
-    (b"leftShoulder", 244),
-    (b"rightShoulder", 245),
-    (b"back", 246),
-    (b"forward", 247),
-    (b"leftStickButton", 248),
-    (b"rightStickButton", 249),
-    (b"dpadUp", 250),
-    (b"dpadDown", 251),
-    (b"dpadLeft", 252),
-    (b"dpadRight", 253),
-    (b"start", 256),
-    (b"leftStick", 254),
-    (b"rightStick", 255),
-    (b"leftTrigger", 257),
-    (b"rightTrigger", 258),
-    (b"leftTriggerPressed", 259),
-    (b"rightTriggerPressed", 260),
-    (b"changeKind", 261),
-    (b"changeIndex", 262),
-    (b"changeValue", 263),
-    (b"hasStandardButtonIntent", 264),
-    (b"hasStandardAxisIntent", 265),
-    (b"intentButton", 266),
-    (b"intentAxis", 267),
-    (b"audio", 137),
-    (b"play", 138),
-    (b"playAtTime", 139),
-    (b"playInTime", 140),
-    (b"playAtFrame", 141),
-    (b"playInFrame", 142),
-    (b"stop", 143),
-    (b"pause", 144),
-    (b"resume", 145),
-    (b"seek", 146),
-    (b"seekFrame", 147),
-    (b"volume", 148),
-    (b"completed", 149),
-    (b"time", 150),
-    (b"timeFrame", 151),
-    (b"sampleRate", 152),
-    (b"write", 194),
-    (b"upload", 195),
-    (b"view", 196),
-    (b"setPipeline", 197),
-    (b"setVertexBuffer", 198),
-    (b"setIndexBuffer", 199),
-    (b"setBindGroup", 200),
-    (b"setViewport", 201),
-    (b"setScissorRect", 202),
-    (b"setStencilReference", 203),
-    (b"drawIndexed", 205),
-    (b"finish", 206),
-    (b"beginRenderPass", 207),
-    (b"beginFrame", 208),
-    (b"endFrame", 209),
-    (b"colorView", 210),
-    (b"depthView", 211),
-    (b"setBlendColor", 204),
-    (b"resize", 212),
-    (b"canvas", 213),
-    (b"gpuCanvas", 214),
-    (b"features", 215),
-    (b"shader", 216),
-    (b"format", 217),
-    (b"andThen", 218),
-    (b"catch", 219),
-    (b"finally", 220),
-    (b"cancel", 221),
-    (b"onCancel", 222),
-    (b"getStatus", 223),
-    (b"decodeImage", 224),
-    (b"transpose", 225),
-    (b"transformPoint", 226),
-    (b"transformVec4", 227),
-    (b"writeToBuffer", 228),
-    (b"invertAffine", 229),
-    (b"writeVec4", 230),
+    (b"alt", 185),
+    (b"control", 186),
+    (b"meta", 187),
+    (b"text", 188),
+    (b"phase", 189),
+    (b"delaySeconds", 190),
+    (b"deviceId", 191),
+    (b"buttonMask", 192),
+    (b"remove", 193),
+    (b"removeAt", 194),
+    (b"removeAllOf", 195),
+    (b"axes", 233),
+    (b"gamepadMapping", 234),
+    (b"mapping", 235),
+    (b"isStandardMapping", 236),
+    (b"buttons", 237),
+    (b"buttonPressed", 238),
+    (b"buttonValue", 239),
+    (b"axis", 240),
+    (b"west", 241),
+    (b"south", 242),
+    (b"north", 243),
+    (b"east", 244),
+    (b"leftShoulder", 245),
+    (b"rightShoulder", 246),
+    (b"back", 247),
+    (b"forward", 248),
+    (b"leftStickButton", 249),
+    (b"rightStickButton", 250),
+    (b"dpadUp", 251),
+    (b"dpadDown", 252),
+    (b"dpadLeft", 253),
+    (b"dpadRight", 254),
+    (b"start", 257),
+    (b"leftStick", 255),
+    (b"rightStick", 256),
+    (b"leftTrigger", 258),
+    (b"rightTrigger", 259),
+    (b"leftTriggerPressed", 260),
+    (b"rightTriggerPressed", 261),
+    (b"changeKind", 262),
+    (b"changeIndex", 263),
+    (b"changeValue", 264),
+    (b"hasStandardButtonIntent", 265),
+    (b"hasStandardAxisIntent", 266),
+    (b"intentButton", 267),
+    (b"intentAxis", 268),
+    (b"audio", 139),
+    (b"play", 140),
+    (b"playAtTime", 141),
+    (b"playInTime", 142),
+    (b"playAtFrame", 143),
+    (b"playInFrame", 144),
+    (b"stop", 145),
+    (b"pause", 146),
+    (b"resume", 147),
+    (b"seek", 148),
+    (b"seekFrame", 149),
+    (b"volume", 150),
+    (b"completed", 151),
+    (b"time", 152),
+    (b"timeFrame", 153),
+    (b"sampleRate", 154),
+    (b"write", 196),
+    (b"upload", 197),
+    (b"view", 198),
+    (b"setPipeline", 199),
+    (b"setVertexBuffer", 200),
+    (b"setIndexBuffer", 201),
+    (b"setBindGroup", 202),
+    (b"setViewport", 203),
+    (b"setScissorRect", 204),
+    (b"setStencilReference", 205),
+    (b"drawIndexed", 207),
+    (b"finish", 208),
+    (b"beginRenderPass", 209),
+    (b"beginFrame", 210),
+    (b"endFrame", 211),
+    (b"colorView", 212),
+    (b"depthView", 213),
+    (b"setBlendColor", 206),
+    (b"resize", 214),
+    (b"canvas", 215),
+    (b"gpuCanvas", 216),
+    (b"features", 217),
+    (b"shader", 218),
+    (b"format", 219),
+    (b"andThen", 220),
+    (b"catch", 221),
+    (b"finally", 222),
+    (b"cancel", 223),
+    (b"onCancel", 224),
+    (b"getStatus", 225),
+    (b"decodeImage", 226),
+    (b"transpose", 227),
+    (b"transformPoint", 228),
+    (b"transformVec4", 229),
+    (b"writeToBuffer", 230),
+    (b"invertAffine", 231),
+    (b"writeVec4", 232),
 ];
 
 const RIVE_LUA_ATOM_SLOT_COUNT: usize = 1024;
@@ -781,6 +783,7 @@ pub struct LuaScriptInstance {
     renderer_bindings: RendererBindings,
     context_view_model: Rc<RefCell<Option<ScriptViewModel>>>,
     context_present: Rc<Cell<bool>>,
+    context_source: Rc<RefCell<Option<ScriptedContextSource>>>,
     context: Option<AnyUserData>,
     context_alive: Option<Rc<Cell<bool>>>,
     context_missing_requested_data: Rc<Cell<bool>>,
@@ -808,6 +811,7 @@ impl LuaScriptInstance {
             renderer_bindings: RendererBindings::new(frame_context),
             context_view_model: Rc::new(RefCell::new(None)),
             context_present: Rc::new(Cell::new(false)),
+            context_source: Rc::new(RefCell::new(None)),
             context: None,
             context_alive: None,
             context_missing_requested_data: Rc::new(Cell::new(false)),
@@ -853,6 +857,11 @@ impl LuaScriptInstance {
             .and_then(|context| context.borrow::<ScriptedContext>().ok())
             .map(|context| context.listener_owner())
             .unwrap_or_default();
+        let context_source = context
+            .as_ref()
+            .and_then(|context| context.borrow::<ScriptedContext>().ok())
+            .map(|context| context.source())
+            .unwrap_or_else(|| Rc::new(RefCell::new(None)));
         Self {
             table: Some(table),
             execution_budget,
@@ -861,6 +870,7 @@ impl LuaScriptInstance {
             renderer_bindings,
             context_view_model,
             context_present,
+            context_source,
             context,
             context_alive,
             context_missing_requested_data,
@@ -1073,15 +1083,17 @@ impl LuaScriptInstance {
         let context_view_model = Rc::clone(&self.context_view_model);
         let context_present = Rc::clone(&self.context_present);
         let context_parent_view_models = self.context_parent_view_models.clone();
+        let context_source = Rc::clone(&self.context_source);
         let bindings = self.renderer_bindings.clone();
         let context_alive = Rc::new(Cell::new(true));
         let recreate = || {
             let missing_requested_data = Rc::new(Cell::new(false));
             let context = lua
-                .create_userdata(ScriptedContext::new_with_lifetime(
+                .create_userdata(ScriptedContext::new_with_lifetime_and_source(
                     context_view_model,
                     context_present,
                     context_parent_view_models,
+                    context_source,
                     Rc::clone(&missing_requested_data),
                     self.gpu_canvas_context.clone(),
                     Rc::clone(&context_alive),
@@ -1326,6 +1338,7 @@ impl ScriptVm {
             context_parent_view_models,
             None,
             None,
+            None,
         )
     }
 
@@ -1430,6 +1443,7 @@ impl ScriptVm {
             context_parent_view_models,
             None,
             None,
+            None,
         )
     }
 
@@ -1448,6 +1462,7 @@ impl ScriptVm {
             self.default_context_parent_view_models.clone(),
             None,
             None,
+            None,
         )
     }
 
@@ -1457,11 +1472,13 @@ impl ScriptVm {
         factory: Option<&mut dyn RenderFactory>,
         context_view_model_value: Option<ScriptViewModel>,
         context_parent_view_models: Vec<Option<ScriptViewModel>>,
+        context_source_value: Option<ScriptedContextSource>,
         explicit_context_present: Option<bool>,
         mut host: Option<&mut dyn ScriptHost>,
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         let bindings = self.renderer_bindings.clone();
         let context_alive = Rc::new(Cell::new(true));
+        let context_source = Rc::new(RefCell::new(context_source_value));
         let mut instantiate = || {
             // A retained parent slot proves that the DataContext exists even
             // when its own main ViewModel is null. Pinned C++ pushes the
@@ -1477,10 +1494,11 @@ impl ScriptVm {
             );
             let context = self
                 .lua
-                .create_userdata(ScriptedContext::new_with_lifetime(
+                .create_userdata(ScriptedContext::new_with_lifetime_and_source(
                     Rc::clone(&context_view_model),
                     Rc::clone(&context_present),
                     context_parent_view_models.clone(),
+                    Rc::clone(&context_source),
                     Rc::clone(&context_missing_requested_data),
                     Some(gpu_canvas_context.clone()),
                     Rc::clone(&context_alive),
@@ -2497,6 +2515,7 @@ impl RuntimeScriptingVm for ScriptVm {
         &self,
         program: &RuntimeScriptProgram,
         context_present: bool,
+        context_source: Option<ScriptedContextSource>,
         view_model: Option<ScriptViewModel>,
         parent_view_models: Vec<Option<ScriptViewModel>>,
         host: &mut dyn ScriptHost,
@@ -2514,6 +2533,7 @@ impl RuntimeScriptingVm for ScriptVm {
             None,
             view_model,
             parent_view_models,
+            context_source,
             Some(context_present),
             Some(host),
         )
@@ -2581,6 +2601,14 @@ impl ScriptInstance for LuaScriptInstance {
         // `scripted_object.cpp:289-303`).
         self.context_view_model_is_resolved = true;
         self.context_present.set(true);
+        Ok(())
+    }
+
+    fn set_context_source(
+        &mut self,
+        source: Option<ScriptedContextSource>,
+    ) -> std::result::Result<(), ScriptError> {
+        *self.context_source.borrow_mut() = source;
         Ok(())
     }
 
@@ -3364,6 +3392,9 @@ mod context_init_tests {
         }
         assert_eq!(find_rive_lua_atom(b"unknownRiveAtom"), -1);
         assert_eq!(find_rive_lua_atom(b"length\0suffix"), -1);
+        assert_eq!(find_rive_lua_atom(b"globalViewModel"), 133);
+        assert_eq!(find_rive_lua_atom(b"globalViewModelNames"), 134);
+        assert_eq!(find_rive_lua_atom(b"intentAxis"), 268);
         assert_eq!(
             find_rive_lua_atom(&vec![b'x'; RIVE_LUA_MAX_ATOM_NAME_LENGTH + 1]),
             -1
@@ -3381,8 +3412,9 @@ mod context_init_tests {
             assert!(!lua_tostringatom(state, -1, &mut atom).is_null());
             lua_pop(state, 1);
         }
-        // e949 removes drawCanvas from LuaAtoms before invertAffine.
-        assert_eq!(atom, 229);
+        // e949 removes drawCanvas before this atom; 309e adds both global
+        // view-model atoms ahead of it.
+        assert_eq!(atom, 231);
         assert_eq!(find_rive_lua_atom(b"drawCanvas"), -1);
     }
 

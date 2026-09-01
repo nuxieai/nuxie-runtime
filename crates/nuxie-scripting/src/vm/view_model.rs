@@ -12,7 +12,8 @@ use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_runtime::view_model_cell::RuntimeCellDirtSink;
 use nuxie_runtime::{
     RuntimeBlobAsset, RuntimeOwnedViewModelInstance, ScriptViewModel,
-    ScriptViewModelChangeRegistration, ScriptViewModelProperty,
+    ScriptViewModelChangeRegistration, ScriptViewModelProperty, ScriptedContextDataProjection,
+    ScriptedContextSource, ScriptedDataContextSource,
 };
 
 use super::lua_blob::{ScriptedBlob, ScriptedBlobAssets};
@@ -1730,6 +1731,7 @@ pub(super) struct ScriptedContext {
     model: Rc<RefCell<Option<ScriptViewModel>>>,
     context_present: Rc<Cell<bool>>,
     parents: Vec<Option<ScriptViewModel>>,
+    source: Rc<RefCell<Option<ScriptedContextSource>>>,
     missing_requested_data: Rc<Cell<bool>>,
     gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
     alive: Rc<Cell<bool>>,
@@ -1763,10 +1765,31 @@ impl ScriptedContext {
         gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
         alive: Rc<Cell<bool>>,
     ) -> Self {
+        Self::new_with_lifetime_and_source(
+            model,
+            context_present,
+            parents,
+            Rc::new(RefCell::new(None)),
+            missing_requested_data,
+            gpu_canvas,
+            alive,
+        )
+    }
+
+    pub(super) fn new_with_lifetime_and_source(
+        model: Rc<RefCell<Option<ScriptViewModel>>>,
+        context_present: Rc<Cell<bool>>,
+        parents: Vec<Option<ScriptViewModel>>,
+        source: Rc<RefCell<Option<ScriptedContextSource>>>,
+        missing_requested_data: Rc<Cell<bool>>,
+        gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
+        alive: Rc<Cell<bool>>,
+    ) -> Self {
         Self {
             model,
             context_present,
             parents,
+            source,
             missing_requested_data,
             gpu_canvas,
             alive,
@@ -1777,6 +1800,10 @@ impl ScriptedContext {
 
     pub(super) fn listener_owner(&self) -> ScriptedPropertyListenerOwner {
         self.listener_owner.clone()
+    }
+
+    pub(super) fn source(&self) -> Rc<RefCell<Option<ScriptedContextSource>>> {
+        Rc::clone(&self.source)
     }
 
     pub(super) fn mark_needs_update_requested(&self) -> Rc<Cell<bool>> {
@@ -1796,13 +1823,61 @@ impl ScriptedContext {
             )))
         }
     }
+
+    fn data_context_projection(&self) -> ScriptedContextDataProjection {
+        self.source
+            .borrow()
+            .as_ref()
+            .map(ScriptedContextSource::data_context_projection)
+            .unwrap_or(ScriptedContextDataProjection::UseSnapshot)
+    }
+}
+
+fn attribute_global_view_model_check_error(error: luaur_rt::Error) -> luaur_rt::Error {
+    match error {
+        luaur_rt::Error::RuntimeError(message) => luaur_rt::Error::RuntimeError(
+            message.replace("'luaur-rt-exec-raw'", "'globalViewModel'"),
+        ),
+        error => error,
+    }
+}
+
+fn lua_check_c_string(lua: &Lua, value: Option<Value>) -> luaur_rt::Result<Vec<u8>> {
+    // Run the VM's own `luaL_checkstring` equivalent under a protected call.
+    // A placeholder `self` keeps the checked value at upstream argument #2;
+    // omitting that value entirely also preserves missing-vs-explicit-nil.
+    // The nested raw trampoline has a fixed debug name, so rewrite only that
+    // adapter name in the VM-produced error and retain all other attribution.
+    let checked: luaur_rt::Result<luaur_rt::LuaString> = unsafe {
+        let check_argument_two = |state| {
+            let mut length = 0;
+            luaur_vm::functions::lua_l_checklstring::lua_l_checklstring(state, 2, &mut length);
+            luaur_vm::functions::lua_pushvalue::lua_pushvalue(state, 2);
+        };
+        match value {
+            Some(value) => lua.exec_raw((Value::Nil, value), check_argument_two),
+            None => lua.exec_raw(Value::Nil, check_argument_two),
+        }
+    };
+    let checked = checked.map_err(attribute_global_view_model_check_error)?;
+    let bytes = checked.as_bytes();
+    Ok(bytes
+        .split(|byte| *byte == 0)
+        .next()
+        .unwrap_or_default()
+        .to_vec())
 }
 
 impl UserData for ScriptedContext {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("viewModel", |lua, this, ()| {
             this.require_live("viewModel")?;
-            Ok(match this.model.borrow().clone() {
+            let model = match this.data_context_projection() {
+                ScriptedContextDataProjection::UseSnapshot => this.model.borrow().clone(),
+                ScriptedContextDataProjection::Absent => None,
+                ScriptedContextDataProjection::Current(data_context) => data_context.view_model(),
+            };
+            Ok(match model {
                 Some(model) => Value::Table(create_scripted_view_model_with_listener_owner(
                     lua,
                     model,
@@ -1816,11 +1891,17 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("rootViewModel", |lua, this, ()| {
             this.require_live("rootViewModel")?;
-            let root = this
-                .parents
-                .last()
-                .cloned()
-                .unwrap_or_else(|| this.model.borrow().clone());
+            let root = match this.data_context_projection() {
+                ScriptedContextDataProjection::UseSnapshot => this
+                    .parents
+                    .last()
+                    .cloned()
+                    .unwrap_or_else(|| this.model.borrow().clone()),
+                ScriptedContextDataProjection::Absent => None,
+                ScriptedContextDataProjection::Current(data_context) => {
+                    data_context.root_view_model()
+                }
+            };
             Ok(match root {
                 Some(model) => Value::Table(create_scripted_view_model_with_listener_owner(
                     lua,
@@ -1833,15 +1914,65 @@ impl UserData for ScriptedContext {
                 }
             })
         });
+        methods.add_method("globalViewModel", |lua, this, mut args: MultiValue| {
+            this.require_live("globalViewModel")?;
+            let name = lua_check_c_string(lua, args.pop_front())?;
+            let model = this
+                .source
+                .borrow()
+                .as_ref()
+                .and_then(|source| source.global_view_model(name.as_slice()));
+            match model {
+                Some(model) => create_scripted_view_model_with_listener_owner(
+                    lua,
+                    model,
+                    Some(this.listener_owner.clone()),
+                )
+                .map(|model| MultiValue::from_vec(vec![Value::Table(model)])),
+                None => Ok(MultiValue::new()),
+            }
+        });
+        methods.add_method("globalViewModelNames", |lua, this, ()| {
+            this.require_live("globalViewModelNames")?;
+            let names = this
+                .source
+                .borrow()
+                .as_ref()
+                .map(ScriptedContextSource::global_view_model_names)
+                .unwrap_or_default();
+            let table = lua.create_table();
+            for (index, name) in names.into_iter().enumerate() {
+                let bytes = name
+                    .as_bytes()
+                    .split(|byte| *byte == 0)
+                    .next()
+                    .unwrap_or_default();
+                table.raw_set(index + 1, lua.create_string(bytes))?;
+            }
+            Ok(table)
+        });
         methods.add_method("dataContext", |lua, this, ()| {
             this.require_live("dataContext")?;
-            if !this.context_present.get() {
+            let backing = match this.data_context_projection() {
+                ScriptedContextDataProjection::UseSnapshot => {
+                    this.context_present
+                        .get()
+                        .then(|| ScriptedDataContextBacking::Snapshot {
+                            model: this.model.borrow().clone(),
+                            parents: this.parents.clone(),
+                        })
+                }
+                ScriptedContextDataProjection::Absent => None,
+                ScriptedContextDataProjection::Current(data_context) => {
+                    Some(ScriptedDataContextBacking::Runtime(data_context))
+                }
+            };
+            let Some(backing) = backing else {
                 this.missing_requested_data.set(true);
                 return Ok(Value::Nil);
-            }
+            };
             lua.create_userdata(ScriptedDataContext {
-                model: this.model.borrow().clone(),
-                parents: this.parents.clone(),
+                backing,
                 listener_owner: Some(this.listener_owner.clone()),
             })
             .map(Value::UserData)
@@ -1931,30 +2062,54 @@ impl UserData for ScriptedContext {
     }
 }
 
+enum ScriptedDataContextBacking {
+    Snapshot {
+        model: Option<ScriptViewModel>,
+        parents: Vec<Option<ScriptViewModel>>,
+    },
+    Runtime(ScriptedDataContextSource),
+}
+
 struct ScriptedDataContext {
-    model: Option<ScriptViewModel>,
-    parents: Vec<Option<ScriptViewModel>>,
+    backing: ScriptedDataContextBacking,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
 }
 
 impl UserData for ScriptedDataContext {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("viewModel", |lua, this, ()| match this.model.clone() {
-            Some(model) => create_scripted_view_model_with_listener_owner(
-                lua,
-                model,
-                this.listener_owner.clone(),
-            )
-            .map(Value::Table),
-            None => Ok(Value::Nil),
+        methods.add_method("viewModel", |lua, this, ()| {
+            let model = match &this.backing {
+                ScriptedDataContextBacking::Snapshot { model, .. } => model.clone(),
+                ScriptedDataContextBacking::Runtime(data_context) => data_context.view_model(),
+            };
+            match model {
+                Some(model) => create_scripted_view_model_with_listener_owner(
+                    lua,
+                    model,
+                    this.listener_owner.clone(),
+                )
+                .map(Value::Table),
+                None => Ok(Value::Nil),
+            }
         });
         methods.add_method("parent", |lua, this, ()| {
-            let Some((parent, remaining)) = this.parents.split_first() else {
+            let parent =
+                match &this.backing {
+                    ScriptedDataContextBacking::Snapshot { parents, .. } => parents
+                        .split_first()
+                        .map(|(parent, remaining)| ScriptedDataContextBacking::Snapshot {
+                            model: parent.clone(),
+                            parents: remaining.to_vec(),
+                        }),
+                    ScriptedDataContextBacking::Runtime(data_context) => data_context
+                        .parent()
+                        .map(ScriptedDataContextBacking::Runtime),
+                };
+            let Some(backing) = parent else {
                 return Ok(Value::Nil);
             };
             lua.create_userdata(ScriptedDataContext {
-                model: parent.clone(),
-                parents: remaining.to_vec(),
+                backing,
                 listener_owner: this.listener_owner.clone(),
             })
             .map(Value::UserData)
@@ -4010,6 +4165,15 @@ mod tests {
     mod upstream_scripting_context_tests {
         use super::*;
         use nuxie_render_api::{Mat2D, RenderImage};
+        use nuxie_runtime::ScriptedContextSource;
+        use nuxie_runtime::source::{
+            animation::scripted_listener_action::ScriptedListenerAction,
+            assets::script_asset::ScriptAsset,
+            core::{CoreArena, CoreHandle},
+            data_bind::data_context::{DataContext, RuntimeDataContextHandle},
+            view_model_type::ViewModelType,
+            viewmodel::{viewmodel::ViewModel, viewmodel_instance::ViewModelInstance},
+        };
 
         #[derive(Clone, Default)]
         struct TestImage(Rc<()>);
@@ -4058,6 +4222,102 @@ mod tests {
                 Rc::new(Cell::new(false)),
             ))
             .expect("disposed scripted context")
+        }
+
+        fn global_view_model_fixture() -> nuxie_runtime::RuntimeFileHandle {
+            let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+                .join("tests/unit_tests/assets/global_variables_test.riv");
+            let bytes = std::fs::read(&fixture)
+                .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+            native_test_file(&bytes)
+        }
+
+        fn context_with_source(
+            lua: &Lua,
+            source: Option<ScriptedContextSource>,
+            context_present: bool,
+        ) -> (AnyUserData, Rc<Cell<bool>>) {
+            let missing_requested_data = Rc::new(Cell::new(false));
+            let context = lua
+                .create_userdata(ScriptedContext::new_with_lifetime_and_source(
+                    Rc::new(RefCell::new(None)),
+                    Rc::new(Cell::new(context_present)),
+                    Vec::new(),
+                    Rc::new(RefCell::new(source)),
+                    Rc::clone(&missing_requested_data),
+                    None,
+                    Rc::new(Cell::new(true)),
+                ))
+                .expect("scripted context with native source");
+            (context, missing_requested_data)
+        }
+
+        fn occurrence_context_source(
+            file: &nuxie_runtime::RuntimeFileHandle,
+            data_context: Option<RuntimeDataContextHandle>,
+        ) -> (CoreArena, CoreHandle, ScriptedContextSource) {
+            let arena = CoreArena::default();
+            let owner = arena.insert(ScriptedListenerAction::default());
+            let mut asset = ScriptAsset::default();
+            asset.set_file(Some(file.downgrade()));
+            let asset = arena.insert(asset);
+            owner
+                .with_downcast_mut::<ScriptedListenerAction, _>(|action| {
+                    action
+                        .scripted
+                        .set_asset(owner.clone(), Some(asset.clone()));
+                    action.scripted.set_data_context(data_context);
+                })
+                .expect("scripted listener occurrence");
+            let source = ScriptedContextSource::for_occurrence(owner.clone());
+            (arena, owner, source)
+        }
+
+        fn context_view_model_instances(lua: &Lua) -> (CoreHandle, CoreHandle) {
+            let models: Table = lua
+                .load("return { context:viewModel(), context:rootViewModel() }")
+                .eval()
+                .expect("current context view models");
+            let main: Table = models.get(1).expect("main view model");
+            let root: Table = models.get(2).expect("root view model");
+            (
+                model_from_table(&main)
+                    .expect("main facade")
+                    .native_instance()
+                    .expect("main instance"),
+                model_from_table(&root)
+                    .expect("root facade")
+                    .native_instance()
+                    .expect("root instance"),
+            )
+        }
+
+        fn data_context_view_model_instances(
+            lua: &Lua,
+            global_name: &str,
+        ) -> (CoreHandle, CoreHandle) {
+            let models: Table = lua
+                .load(&format!(
+                    "local dataContext = {global_name}; \
+                     local parent = dataContext:parent(); \
+                     return {{ dataContext:viewModel(), parent:viewModel() }}"
+                ))
+                .eval()
+                .expect("data-context view models");
+            let main: Table = models.get(1).expect("data-context main view model");
+            let root: Table = models.get(2).expect("data-context root view model");
+            (
+                model_from_table(&main)
+                    .expect("data-context main facade")
+                    .native_instance()
+                    .expect("data-context main instance"),
+                model_from_table(&root)
+                    .expect("data-context root facade")
+                    .native_instance()
+                    .expect("data-context root instance"),
+            )
         }
 
         fn run_nil_result_case(source: &str, function: &str) {
@@ -4282,6 +4542,79 @@ mod tests {
         }
 
         #[test]
+        fn context_global_view_model_checks_disposal_before_its_name_argument() {
+            let lua = Lua::new();
+            lua.globals()
+                .set("context", disposed_context(&lua))
+                .unwrap();
+            for source in [
+                "return context:globalViewModel()",
+                "return context:globalViewModel({})",
+            ] {
+                let error = lua
+                    .load(source)
+                    .eval::<MultiValue>()
+                    .expect_err("disposed context must error before argument conversion");
+                assert!(
+                    error
+                        .to_string()
+                        .contains("context:globalViewModel() called on a disposed context"),
+                    "unexpected error for {source}: {error}"
+                );
+            }
+        }
+
+        #[test]
+        fn context_global_view_model_uses_lua_checkstring_argument_two_errors() {
+            let lua = Lua::new();
+            lua.globals().set("context", context(&lua)).unwrap();
+            for (source, expected) in [
+                (
+                    "return context:globalViewModel()",
+                    "missing argument #2 to 'globalViewModel' (string expected)",
+                ),
+                (
+                    "return context:globalViewModel(nil)",
+                    "invalid argument #2 to 'globalViewModel' (string expected, got nil)",
+                ),
+                (
+                    "return context:globalViewModel({})",
+                    "invalid argument #2 to 'globalViewModel' (string expected, got table)",
+                ),
+            ] {
+                let error = lua
+                    .load(source)
+                    .eval::<MultiValue>()
+                    .expect_err("invalid live argument must raise the VM checkstring error");
+                let actual = error.to_string();
+                assert!(
+                    actual.ends_with(expected),
+                    "unexpected error for {source}: {actual}"
+                );
+                assert!(!actual.contains("error converting Lua"));
+            }
+        }
+
+        #[test]
+        fn context_global_view_model_coerces_numbers_with_lua_checkstring() {
+            let lua = Lua::new();
+            assert_eq!(
+                lua_check_c_string(&lua, Some(Value::Integer(42))).unwrap(),
+                b"42"
+            );
+            assert_eq!(
+                lua_check_c_string(&lua, Some(Value::Number(1.25))).unwrap(),
+                b"1.25"
+            );
+            lua.globals().set("context", context(&lua)).unwrap();
+            let count: usize = lua
+                .load("return select('#', context:globalViewModel(42))")
+                .eval()
+                .expect("numbers are accepted by luaL_checkstring");
+            assert_eq!(count, 0);
+        }
+
+        #[test]
         fn context_view_model_returns_nil_with_no_data_context() {
             run_nil_result_case(
                 r#"
@@ -4309,6 +4642,706 @@ mod tests {
                 "#,
                 "testRootViewModel",
             );
+        }
+
+        #[test]
+        fn context_global_view_model_returns_no_values_with_no_data_context() {
+            let lua = Lua::new();
+            let (context, missing_requested_data) = context_with_source(&lua, None, false);
+            lua.globals().set("context", context).unwrap();
+            let values: MultiValue = lua
+                .load("return context:globalViewModel('Anything')")
+                .eval()
+                .unwrap();
+            assert!(values.is_empty());
+            assert!(!missing_requested_data.get());
+        }
+
+        #[test]
+        fn context_global_view_model_names_returns_empty_table_with_no_file() {
+            let lua = Lua::new();
+            let (context, missing_requested_data) = context_with_source(&lua, None, false);
+            lua.globals().set("context", context).unwrap();
+            let names: Table = lua
+                .load("return context:globalViewModelNames()")
+                .eval()
+                .unwrap();
+            assert_eq!(names.raw_len(), 0);
+            assert!(!missing_requested_data.get());
+        }
+
+        #[test]
+        fn context_global_view_model_names_uses_the_file_without_a_data_context() {
+            let file = global_view_model_fixture();
+            let expected = file.with_file(|file| file.global_view_model_names());
+            let lua = Lua::new();
+            let source = ScriptedContextSource::new(file.downgrade(), None);
+            let (context, missing_requested_data) = context_with_source(&lua, Some(source), false);
+            lua.globals().set("context", context).unwrap();
+            let names: Table = lua
+                .load("return context:globalViewModelNames()")
+                .eval()
+                .unwrap();
+            assert_eq!(names.raw_len(), expected.len());
+            for (index, expected) in expected.iter().enumerate() {
+                let actual: luaur_rt::LuaString = names.raw_get(index + 1).unwrap();
+                assert_eq!(actual.as_bytes(), expected.as_bytes());
+            }
+            assert!(!missing_requested_data.get());
+        }
+
+        #[test]
+        fn context_global_view_model_names_truncates_authored_nul_like_lua_pushstring() {
+            let file = global_view_model_fixture();
+            let global = file
+                .with_file(|file| file.global_view_models().into_iter().next())
+                .expect("authored global");
+            assert!(
+                nuxie_runtime::source::generated::core_registry::CoreRegistry::set_string_handle(
+                    &global,
+                    557,
+                    "Visible\0Hidden".to_owned(),
+                )
+            );
+
+            let lua = Lua::new();
+            let source = ScriptedContextSource::new(file.downgrade(), None);
+            let (context, _) = context_with_source(&lua, Some(source), false);
+            lua.globals().set("context", context).unwrap();
+            let names: Table = lua
+                .load("return context:globalViewModelNames()")
+                .eval()
+                .unwrap();
+            let first: luaur_rt::LuaString = names.raw_get(1).unwrap();
+            assert_eq!(first.as_bytes(), b"Visible");
+        }
+
+        #[test]
+        fn scripted_context_source_does_not_retain_its_file() {
+            let source = {
+                let file = global_view_model_fixture();
+                let source = ScriptedContextSource::new(file.downgrade(), None);
+                assert!(!source.global_view_model_names().is_empty());
+                drop(file);
+                source
+            };
+            assert!(source.global_view_model_names().is_empty());
+
+            let lua = Lua::new();
+            let (context, _) = context_with_source(&lua, Some(source), false);
+            lua.globals().set("context", context).unwrap();
+            let result: Table = lua
+                .load(
+                    r##"
+                    local names = context:globalViewModelNames()
+                    return {
+                      #names,
+                      select("#", context:globalViewModel("Anything")),
+                    }
+                    "##,
+                )
+                .eval()
+                .unwrap();
+            assert_eq!(result.get::<usize>(1).unwrap(), 0);
+            assert_eq!(result.get::<usize>(2).unwrap(), 0);
+        }
+
+        #[test]
+        fn context_global_view_model_returns_a_bound_global_by_name() {
+            let file = global_view_model_fixture();
+            let global_names = file.with_file(|file| file.global_view_model_names());
+            let global_name = global_names.first().expect("authored global").clone();
+            let artboard = file
+                .with_file(|file| file.artboard_at_source(0))
+                .expect("default artboard source");
+            let main = file
+                .with_file(|file| file.create_default_view_model_instance_for_artboard(artboard));
+            let global = file
+                .with_file(|file| {
+                    file.view_model_named(&global_name)
+                        .and_then(|model| file.create_default_view_model_instance(model))
+                })
+                .expect("default global instance");
+            let data_context = RuntimeDataContextHandle::new(DataContext::new(main));
+            let slot = file.with_file(|file| file.view_model_id(&global_name));
+            data_context.with_context_mut(|context| {
+                context.set_view_model_instance_for_slot(slot, Some(global))
+            });
+
+            let lua = Lua::new();
+            let source = ScriptedContextSource::new(file.downgrade(), Some(data_context));
+            let (context, missing_requested_data) = context_with_source(&lua, Some(source), true);
+            lua.globals().set("context", context).unwrap();
+            lua.globals()
+                .set("globalName", global_name.clone())
+                .unwrap();
+            let mut returned: MultiValue = lua
+                .load("return context:globalViewModel(globalName)")
+                .eval()
+                .unwrap();
+            assert_eq!(returned.len(), 1);
+            assert!(matches!(returned.pop_front(), Some(Value::Table(_))));
+
+            lua.globals()
+                .set("nulGlobalName", format!("{global_name}\0ignored"))
+                .unwrap();
+            let mut returned_with_nul: MultiValue = lua
+                .load("return context:globalViewModel(nulGlobalName)")
+                .eval()
+                .unwrap();
+            assert_eq!(returned_with_nul.len(), 1);
+            assert!(matches!(
+                returned_with_nul.pop_front(),
+                Some(Value::Table(_))
+            ));
+
+            lua.globals()
+                .set("invalidUtf8Name", lua.create_string([0xff]))
+                .unwrap();
+            let invalid_utf8: MultiValue = lua
+                .load("return context:globalViewModel(invalidUtf8Name)")
+                .eval()
+                .expect("invalid UTF-8 is an ordinary byte lookup miss");
+            assert!(invalid_utf8.is_empty());
+
+            let result: Table = lua
+                .load(
+                    r#"
+                    local found = context:globalViewModel(globalName) ~= nil
+                    local names = context:globalViewModelNames()
+                    local matched = false
+                    for _, name in ipairs(names) do
+                      if name == globalName then matched = true end
+                    end
+                    return { found, #names, matched }
+                    "#,
+                )
+                .eval()
+                .unwrap();
+            assert!(result.get::<bool>(1).unwrap());
+            assert_eq!(result.get::<usize>(2).unwrap(), global_names.len());
+            assert!(result.get::<bool>(3).unwrap());
+            assert!(!missing_requested_data.get());
+        }
+
+        #[test]
+        fn context_global_view_model_observes_an_in_place_global_slot_replacement() {
+            let file = global_view_model_fixture();
+            let (global_name, global_model) = file.with_file(|file| {
+                let name = file
+                    .global_view_model_names()
+                    .into_iter()
+                    .next()
+                    .expect("authored global");
+                let model = file.view_model_named(&name).expect("global definition");
+                (name, model)
+            });
+            let first_instance = file
+                .with_file(|file| file.create_default_view_model_instance(global_model.clone()))
+                .expect("first global instance");
+            let second_instance = file
+                .with_file(|file| file.create_default_view_model_instance(global_model))
+                .expect("second global instance");
+            assert_ne!(first_instance, second_instance);
+
+            let slot = file.with_file(|file| file.view_model_id(&global_name));
+            let data_context = RuntimeDataContextHandle::new(DataContext::new(None));
+            data_context.with_context_mut(|context| {
+                context.set_view_model_instance_for_slot(slot, Some(first_instance.clone()))
+            });
+            let source = ScriptedContextSource::new(file.downgrade(), Some(data_context.clone()));
+            let first = source
+                .global_view_model(global_name.as_bytes())
+                .expect("first slot lookup");
+            assert_eq!(first.native_instance(), Some(first_instance));
+
+            data_context.with_context_mut(|context| {
+                context.set_view_model_instance_for_slot(slot, Some(second_instance.clone()))
+            });
+            let second = source
+                .global_view_model(global_name.as_bytes())
+                .expect("replacement slot lookup");
+            assert_eq!(second.native_instance(), Some(second_instance));
+            assert_ne!(first.identity_key(), second.identity_key());
+        }
+
+        #[test]
+        fn context_global_view_model_observes_a_live_context_source_replacement() {
+            let file = global_view_model_fixture();
+            let (global_name, global_model) = file.with_file(|file| {
+                let name = file
+                    .global_view_model_names()
+                    .into_iter()
+                    .next()
+                    .expect("authored global");
+                let model = file.view_model_named(&name).expect("global definition");
+                (name, model)
+            });
+            let first_instance = file
+                .with_file(|file| file.create_default_view_model_instance(global_model.clone()))
+                .expect("first global instance");
+            let second_instance = file
+                .with_file(|file| file.create_default_view_model_instance(global_model))
+                .expect("second global instance");
+            let slot = file.with_file(|file| file.view_model_id(&global_name));
+            let first_context = RuntimeDataContextHandle::new(DataContext::new(None));
+            first_context.with_context_mut(|context| {
+                context.set_view_model_instance_for_slot(slot, Some(first_instance.clone()))
+            });
+            let second_context = RuntimeDataContextHandle::new(DataContext::new(None));
+            second_context.with_context_mut(|context| {
+                context.set_view_model_instance_for_slot(slot, Some(second_instance.clone()))
+            });
+
+            let source = Rc::new(RefCell::new(Some(ScriptedContextSource::new(
+                file.downgrade(),
+                Some(first_context),
+            ))));
+            let lua = Lua::new();
+            let context = lua
+                .create_userdata(ScriptedContext::new_with_lifetime_and_source(
+                    Rc::new(RefCell::new(None)),
+                    Rc::new(Cell::new(true)),
+                    Vec::new(),
+                    Rc::clone(&source),
+                    Rc::new(Cell::new(false)),
+                    None,
+                    Rc::new(Cell::new(true)),
+                ))
+                .unwrap();
+            lua.globals().set("context", context).unwrap();
+            lua.globals().set("globalName", global_name).unwrap();
+
+            let first: Table = lua
+                .load("return context:globalViewModel(globalName)")
+                .eval()
+                .expect("first source lookup");
+            let first = model_from_table(&first).expect("first scripted view model");
+            assert_eq!(first.native_instance(), Some(first_instance));
+
+            *source.borrow_mut() = Some(ScriptedContextSource::new(
+                file.downgrade(),
+                Some(second_context),
+            ));
+            let second: Table = lua
+                .load("return context:globalViewModel(globalName)")
+                .eval()
+                .expect("replacement source lookup");
+            let second = model_from_table(&second).expect("second scripted view model");
+            assert_eq!(second.native_instance(), Some(second_instance));
+            assert_ne!(first.identity_key(), second.identity_key());
+        }
+
+        #[test]
+        fn context_global_view_model_reads_the_occurrences_current_context() {
+            let file = global_view_model_fixture();
+            let (global_name, global_model) = file.with_file(|file| {
+                let name = file
+                    .global_view_model_names()
+                    .into_iter()
+                    .next()
+                    .expect("authored global");
+                let model = file.view_model_named(&name).expect("global definition");
+                (name, model)
+            });
+            let first_instance = file
+                .with_file(|file| file.create_default_view_model_instance(global_model.clone()))
+                .expect("first global instance");
+            let second_instance = file
+                .with_file(|file| file.create_default_view_model_instance(global_model))
+                .expect("second global instance");
+            let slot = file.with_file(|file| file.view_model_id(&global_name));
+            let first_context = RuntimeDataContextHandle::new(DataContext::new(None));
+            first_context.with_context_mut(|context| {
+                context.set_view_model_instance_for_slot(slot, Some(first_instance.clone()))
+            });
+            let second_context = RuntimeDataContextHandle::new(DataContext::new(None));
+            second_context.with_context_mut(|context| {
+                context.set_view_model_instance_for_slot(slot, Some(second_instance.clone()))
+            });
+
+            let (_arena, owner, source) = occurrence_context_source(&file, Some(first_context));
+            let lua = Lua::new();
+            let (context, _) = context_with_source(&lua, Some(source), true);
+            lua.globals().set("context", context).unwrap();
+            lua.globals().set("globalName", global_name).unwrap();
+
+            let first: Table = lua
+                .load("return context:globalViewModel(globalName)")
+                .eval()
+                .expect("first occurrence context lookup");
+            assert_eq!(
+                model_from_table(&first)
+                    .expect("first occurrence global facade")
+                    .native_instance(),
+                Some(first_instance)
+            );
+
+            owner
+                .with_downcast_mut::<ScriptedListenerAction, _>(|action| {
+                    action
+                        .scripted
+                        .set_data_context(Some(second_context.clone()));
+                })
+                .expect("scripted listener occurrence");
+            let second: Table = lua
+                .load("return context:globalViewModel(globalName)")
+                .eval()
+                .expect("replacement occurrence context lookup");
+            assert_eq!(
+                model_from_table(&second)
+                    .expect("replacement occurrence global facade")
+                    .native_instance(),
+                Some(second_instance)
+            );
+
+            owner
+                .with_downcast_mut::<ScriptedListenerAction, _>(|action| {
+                    action.scripted.set_data_context(None);
+                })
+                .expect("scripted listener occurrence");
+            let cleared: MultiValue = lua
+                .load("return context:globalViewModel(globalName)")
+                .eval()
+                .expect("cleared occurrence context lookup");
+            assert!(cleared.is_empty());
+        }
+
+        #[test]
+        fn context_facades_follow_the_occurrences_current_data_context() {
+            let file = global_view_model_fixture();
+            let artboard = file
+                .with_file(|file| file.artboard_at_source(0))
+                .expect("default artboard source");
+            let instance = || {
+                file.with_file(|file| {
+                    file.create_default_view_model_instance_for_artboard(artboard.clone())
+                })
+                .expect("default view-model instance")
+            };
+            let first_main = instance();
+            let first_root = instance();
+            let updated_first_main = instance();
+            let updated_first_root = instance();
+            let second_main = instance();
+            let second_root = instance();
+            let first_root_context =
+                RuntimeDataContextHandle::new(DataContext::new(Some(first_root.clone())));
+            let first_context =
+                RuntimeDataContextHandle::new(DataContext::new(Some(first_main.clone())));
+            first_context.with_context_mut(|context| context.set_parent(Some(first_root_context)));
+            let second_root_context =
+                RuntimeDataContextHandle::new(DataContext::new(Some(second_root.clone())));
+            let second_context =
+                RuntimeDataContextHandle::new(DataContext::new(Some(second_main.clone())));
+            second_context
+                .with_context_mut(|context| context.set_parent(Some(second_root_context)));
+
+            let (_arena, owner, source) =
+                occurrence_context_source(&file, Some(first_context.clone()));
+            let lua = Lua::new();
+            let (context, missing_requested_data) = context_with_source(&lua, Some(source), false);
+            lua.globals().set("context", context).unwrap();
+
+            owner
+                .with_downcast_mut::<ScriptedListenerAction, _>(|action| {
+                    action.scripted.detach_asset(owner.clone());
+                })
+                .expect("scripted listener occurrence");
+            assert_eq!(
+                context_view_model_instances(&lua),
+                (first_main.clone(), first_root.clone())
+            );
+            let first_data_context: AnyUserData = lua
+                .load("return context:dataContext()")
+                .eval()
+                .expect("first data-context userdata");
+            lua.globals()
+                .set("firstDataContext", first_data_context)
+                .unwrap();
+            assert_eq!(
+                data_context_view_model_instances(&lua, "firstDataContext"),
+                (first_main.clone(), first_root.clone())
+            );
+
+            let updated_first_root_context =
+                RuntimeDataContextHandle::new(DataContext::new(Some(updated_first_root.clone())));
+            first_context.with_context_mut(|context| {
+                context.set_main_view_model_instance(Some(updated_first_main.clone()));
+                context.set_parent(Some(updated_first_root_context));
+            });
+            assert_eq!(
+                context_view_model_instances(&lua),
+                (updated_first_main.clone(), updated_first_root.clone())
+            );
+            assert_eq!(
+                data_context_view_model_instances(&lua, "firstDataContext"),
+                (updated_first_main.clone(), updated_first_root.clone()),
+                "a returned dataContext observes in-place mutations"
+            );
+
+            owner
+                .with_downcast_mut::<ScriptedListenerAction, _>(|action| {
+                    action
+                        .scripted
+                        .set_data_context(Some(second_context.clone()));
+                })
+                .expect("scripted listener occurrence");
+            assert_eq!(
+                context_view_model_instances(&lua),
+                (second_main.clone(), second_root.clone())
+            );
+            let second_data_context: AnyUserData = lua
+                .load("return context:dataContext()")
+                .eval()
+                .expect("replacement data-context userdata");
+            lua.globals()
+                .set("secondDataContext", second_data_context)
+                .unwrap();
+            assert_eq!(
+                data_context_view_model_instances(&lua, "secondDataContext"),
+                (second_main.clone(), second_root.clone())
+            );
+            assert_eq!(
+                data_context_view_model_instances(&lua, "firstDataContext"),
+                (updated_first_main.clone(), updated_first_root.clone()),
+                "a returned dataContext remains bound to its original occurrence"
+            );
+
+            owner
+                .with_downcast_mut::<ScriptedListenerAction, _>(|action| {
+                    action.scripted.set_data_context(None);
+                })
+                .expect("scripted listener occurrence");
+            let cleared: Table = lua
+                .load(
+                    "return { \
+                       context:viewModel() == nil, \
+                       context:rootViewModel() == nil, \
+                       context:dataContext() == nil \
+                     }",
+                )
+                .eval()
+                .expect("cleared occurrence context");
+            assert!(cleared.get::<bool>(1).unwrap());
+            assert!(cleared.get::<bool>(2).unwrap());
+            assert!(cleared.get::<bool>(3).unwrap());
+            assert!(missing_requested_data.get());
+            assert_eq!(
+                data_context_view_model_instances(&lua, "firstDataContext"),
+                (updated_first_main, updated_first_root),
+                "the first userdata remains bound after the occurrence clears"
+            );
+            assert_eq!(
+                data_context_view_model_instances(&lua, "secondDataContext"),
+                (second_main, second_root),
+                "the replacement userdata remains bound after the occurrence clears"
+            );
+        }
+
+        #[test]
+        fn snapshot_context_source_preserves_the_vms_projected_context() {
+            let file = global_view_model_fixture();
+            let artboard = file
+                .with_file(|file| file.artboard_at_source(0))
+                .expect("default artboard source");
+            let instance = || {
+                file.with_file(|file| {
+                    file.create_default_view_model_instance_for_artboard(artboard.clone())
+                })
+                .expect("default view-model instance")
+            };
+            let cached_main = instance();
+            let cached_root = instance();
+            let source_main = instance();
+            let source_context = RuntimeDataContextHandle::new(DataContext::new(Some(source_main)));
+            let source = ScriptedContextSource::new(file.downgrade(), Some(source_context));
+            let cached_main_facade =
+                ScriptViewModel::from_native(cached_main.clone(), file.clone())
+                    .expect("cached main facade");
+            let cached_root_facade =
+                ScriptViewModel::from_native(cached_root.clone(), file.clone())
+                    .expect("cached root facade");
+            let lua = Lua::new();
+            let context = lua
+                .create_userdata(ScriptedContext::new_with_lifetime_and_source(
+                    Rc::new(RefCell::new(Some(cached_main_facade))),
+                    Rc::new(Cell::new(true)),
+                    vec![Some(cached_root_facade)],
+                    Rc::new(RefCell::new(Some(source))),
+                    Rc::new(Cell::new(false)),
+                    None,
+                    Rc::new(Cell::new(true)),
+                ))
+                .expect("snapshot-backed context");
+            lua.globals().set("context", context).unwrap();
+
+            assert_eq!(
+                context_view_model_instances(&lua),
+                (cached_main.clone(), cached_root.clone())
+            );
+            let data_context: AnyUserData = lua
+                .load("return context:dataContext()")
+                .eval()
+                .expect("cached data-context projection");
+            lua.globals().set("dataContext", data_context).unwrap();
+            assert_eq!(
+                data_context_view_model_instances(&lua, "dataContext"),
+                (cached_main, cached_root)
+            );
+        }
+
+        #[test]
+        fn context_global_view_model_names_reads_the_occurrences_current_asset_file() {
+            let file = global_view_model_fixture();
+            let expected = file.with_file(|file| file.global_view_model_names());
+            assert!(!expected.is_empty());
+            let (arena, owner, source) = occurrence_context_source(&file, None);
+            let lua = Lua::new();
+            let (context, _) = context_with_source(&lua, Some(source), false);
+            lua.globals().set("context", context).unwrap();
+
+            let names: Table = lua
+                .load("return context:globalViewModelNames()")
+                .eval()
+                .expect("original asset file names");
+            assert_eq!(names.raw_len(), expected.len());
+
+            let replacement = arena.insert(ScriptAsset::default());
+            owner
+                .with_downcast_mut::<ScriptedListenerAction, _>(|action| {
+                    action
+                        .scripted
+                        .set_asset(owner.clone(), Some(replacement.clone()));
+                })
+                .expect("scripted listener occurrence");
+            let names_without_file: Table = lua
+                .load("return context:globalViewModelNames()")
+                .eval()
+                .expect("replacement asset without file");
+            assert_eq!(names_without_file.raw_len(), 0);
+
+            replacement
+                .with_downcast_mut::<ScriptAsset, _>(|asset| {
+                    asset.set_file(Some(file.downgrade()));
+                })
+                .expect("replacement script asset");
+            let replacement_names: Table = lua
+                .load("return context:globalViewModelNames()")
+                .eval()
+                .expect("replacement asset current file names");
+            assert_eq!(replacement_names.raw_len(), expected.len());
+
+            owner
+                .with_downcast_mut::<ScriptedListenerAction, _>(|action| {
+                    action.scripted.detach_asset(owner.clone());
+                })
+                .expect("scripted listener occurrence");
+            let detached_names: Table = lua
+                .load("return context:globalViewModelNames()")
+                .eval()
+                .expect("detached asset names");
+            assert_eq!(detached_names.raw_len(), 0);
+        }
+
+        #[test]
+        fn context_global_view_model_finds_a_global_in_a_fully_unslotted_chain() {
+            let file = global_view_model_fixture();
+            let global_name = file
+                .with_file(|file| file.global_view_model_names())
+                .into_iter()
+                .next()
+                .expect("authored global");
+            let artboard = file
+                .with_file(|file| file.artboard_at_source(0))
+                .expect("default artboard source");
+            let global = file
+                .with_file(|file| {
+                    file.view_model_named(&global_name)
+                        .and_then(|model| file.create_default_view_model_instance(model))
+                })
+                .expect("default global instance");
+            let root_main = file.with_file(|file| {
+                file.create_default_view_model_instance_for_artboard(artboard.clone())
+            });
+            let root = RuntimeDataContextHandle::new(DataContext::from_instances(vec![
+                root_main,
+                Some(global.clone()),
+            ]));
+            let nested_main = file
+                .with_file(|file| file.create_default_view_model_instance_for_artboard(artboard));
+            let nested = RuntimeDataContextHandle::new(DataContext::from_instances(vec![
+                nested_main,
+                Some(global),
+            ]));
+            nested.with_context_mut(|context| context.set_parent(Some(root.clone())));
+            let slot = file.with_file(|file| file.view_model_id(&global_name));
+            assert!(
+                nested
+                    .with_context(|context| context.instance_for_slot(slot))
+                    .is_none()
+            );
+            assert!(
+                root.with_context(|context| context.instance_for_slot(slot))
+                    .is_none()
+            );
+
+            let lua = Lua::new();
+            let source = ScriptedContextSource::new(file.downgrade(), Some(nested));
+            let (context, missing_requested_data) = context_with_source(&lua, Some(source), true);
+            lua.globals().set("context", context).unwrap();
+            lua.globals().set("globalName", global_name).unwrap();
+            let found: bool = lua
+                .load("return context:globalViewModel(globalName) ~= nil")
+                .eval()
+                .unwrap();
+            assert!(found);
+            assert!(!missing_requested_data.get());
+        }
+
+        #[test]
+        fn context_global_view_model_returns_nil_for_non_global_or_unknown_name() {
+            let file = global_view_model_fixture();
+            let artboard = file
+                .with_file(|file| file.artboard_at_source(0))
+                .expect("default artboard source");
+            let main = file
+                .with_file(|file| file.create_default_view_model_instance_for_artboard(artboard))
+                .expect("default main instance");
+            let main_view_model = main
+                .with_downcast::<ViewModelInstance, _>(ViewModelInstance::get_view_model)
+                .flatten()
+                .expect("main view-model definition");
+            let (main_name, main_type) = main_view_model
+                .with_downcast::<ViewModel, _>(|view_model| {
+                    (
+                        view_model.base.name().to_owned(),
+                        view_model.base.view_model_type(),
+                    )
+                })
+                .expect("view model");
+            assert_ne!(main_type, ViewModelType::Global as u32);
+            let data_context = RuntimeDataContextHandle::new(DataContext::new(Some(main)));
+
+            let lua = Lua::new();
+            let source = ScriptedContextSource::new(file.downgrade(), Some(data_context));
+            let (context, missing_requested_data) = context_with_source(&lua, Some(source), true);
+            lua.globals().set("context", context).unwrap();
+            lua.globals().set("mainName", main_name).unwrap();
+            let result: Table = lua
+                .load(
+                    r#"
+                    return {
+                      context:globalViewModel(mainName) == nil,
+                      context:globalViewModel("NoSuchViewModel") == nil,
+                    }
+                    "#,
+                )
+                .eval()
+                .unwrap();
+            assert!(result.get::<bool>(1).unwrap());
+            assert!(result.get::<bool>(2).unwrap());
+            assert!(!missing_requested_data.get());
         }
 
         #[test]

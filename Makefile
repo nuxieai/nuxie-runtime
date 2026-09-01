@@ -5,7 +5,7 @@
 .PHONY: renderer-native-metal-platform-matrix renderer-native-metal-v3
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
-RIVE_RUNTIME_REF ?= f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c
+RIVE_RUNTIME_REF ?= 309e901fca858a692d5ed928a87f9841b65848b3
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
 SILVER_CORPUS_MANIFEST ?= $(CURDIR)/silver-corpus.toml
@@ -93,7 +93,7 @@ WASM_PERF_RUNS ?= 5
 WASM_PERF_WARMUPS ?= 1
 WASM_PERF_OUTPUT ?= $(CURDIR)/target/wasm-perf.json
 WASM_PERF_MARKDOWN ?= $(CURDIR)/target/wasm-perf.md
-PERF_EXPECTED_RIVE_RUNTIME_REF ?= f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c
+PERF_EXPECTED_RIVE_RUNTIME_REF ?= 309e901fca858a692d5ed928a87f9841b65848b3
 RENDERER_PERF_TARGET_DIR ?= $(CURDIR)/target/renderer-perf
 RENDERER_PERF_CPP_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-cpp-runner
 RENDERER_PERF_RUST_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-rust-runner
@@ -304,6 +304,7 @@ feature-compile-gate-portable:
 		"nuxie-runtime --features threading" "cargo check -p nuxie-runtime --features threading --lib --test work_pool" \
 		"nuxie-runtime --features tools" "cargo check -p nuxie-runtime --features tools --lib --tests" \
 		"nuxie-ore-metal --features tools" "cargo test -p nuxie-ore-metal --features tools --lib" \
+		"nuxie-renderer --features with-rive-path-query tests" "cargo test -p nuxie-renderer --no-default-features --features with-rive-path-query --lib" \
 		"nuxie-renderer exact Vulkan" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-vulkan" \
 		"nuxie-renderer exact WebGPU" "cargo check --locked -p nuxie-renderer --no-default-features --features renderer-webgpu" \
 		"nux-capi Android authored WGSL" "cargo check --locked -p nux-capi --no-default-features --features android-vulkan,scripting,android-authored-wgsl" \

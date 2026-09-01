@@ -39,7 +39,12 @@ mod tests {
 #[cfg(all(test, feature = "native"))]
 mod native_tests {
     use super::FfiFactory;
-    use nuxie_render_api::{Factory, FillRule, RawPath, RenderPaintStyle, Renderer};
+    use nuxie_render_api::{Factory, FillRule, Mat2D, RawPath, RenderPaintStyle, Renderer};
+    use nuxie_renderer::deferred::cmd::{
+        deferred_cmd::replay_render_commands,
+        deferred_render_factory::DeferredFactory,
+        render_replay::{ReplayHooks, ResourceTable},
+    };
 
     #[test]
     fn null_context_counts_drawn_path() {
@@ -81,6 +86,41 @@ mod native_tests {
         let metrics = frame.end_with_metrics().expect("complete native frame");
         assert_eq!(metrics.logical_flushes, 1);
         assert_eq!(metrics.atomic_strategy_partitions, 1);
+    }
+
+    #[test]
+    fn transformed_self_append_replays_into_native_renderer() {
+        let mut raw_path = RawPath::new();
+        raw_path.move_to(4.0, 4.0);
+        raw_path.line_to(28.0, 4.0);
+        raw_path.line_to(28.0, 28.0);
+        raw_path.close();
+
+        let mut recorded = DeferredFactory::new();
+        let mut path = recorded.make_render_path(raw_path, FillRule::EvenOdd);
+        path.add_render_path_self(Mat2D([0.5, 0.25, -0.25, 0.5, 16.0, 8.0]));
+
+        let buffer = recorded.buffer.lock().expect("deferred command buffer");
+        let mut factory = FfiFactory::new_null(64, 64).expect("native context");
+        let mut table = ResourceTable::default();
+        replay_render_commands(
+            &mut factory,
+            None,
+            buffer.command_bytes(),
+            buffer.blob_bytes(),
+            &mut table,
+            &mut ReplayHooks::default(),
+        );
+        let replayed_path = table.paths.get(0).expect("replayed native path");
+        drop(buffer);
+
+        let mut paint = factory.make_render_paint();
+        paint.style(RenderPaintStyle::Fill);
+        let mut frame = factory.begin_frame(0x00000000).expect("native frame");
+        frame.draw_path(replayed_path.borrow().as_ref(), paint.as_ref());
+
+        let metrics = frame.end_with_metrics().expect("complete native frame");
+        assert_eq!(metrics.draw_calls, 1);
     }
 
     #[cfg(target_os = "macos")]

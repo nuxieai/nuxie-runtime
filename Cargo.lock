@@ -1186,6 +1186,7 @@ dependencies = [
  "nuxie-image-codec",
  "nuxie-render-api",
  "nuxie-render-stream",
+ "nuxie-renderer",
  "nuxie-runtime",
  "sha2",
 ]

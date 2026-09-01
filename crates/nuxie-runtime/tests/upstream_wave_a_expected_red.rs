@@ -411,11 +411,15 @@ impl render::RenderPath for ClipProbePath {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
     fn rewind(&mut self) {
         self.raw = render::RawPath::default();
     }
     fn fill_rule(&mut self, _: render::FillRule) {}
     fn add_render_path(&mut self, _: &dyn render::RenderPath, _: render::Mat2D) {}
+    fn add_render_path_self(&mut self, _: render::Mat2D) {}
     fn add_render_path_backwards(&mut self, _: &dyn render::RenderPath, _: render::Mat2D) {}
     fn add_raw_path(&mut self, path: &render::RawPath) {
         self.raw.add_path(path, render::Mat2D::IDENTITY);

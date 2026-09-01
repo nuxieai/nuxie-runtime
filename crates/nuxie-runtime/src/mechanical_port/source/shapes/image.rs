@@ -11,7 +11,8 @@ use crate::mechanical_port::source::{
         layout_participant::LayoutParticipant,
     },
     math::{aabb::Aabb, hit_test::HitTester, mat2d::Mat2D, vec2d::Vec2D},
-    renderer::{BlendMode, ImageSampler, Renderer},
+    renderer::Renderer,
+    shapes::paint::image_sampler::{ImageFilter, ImageSampler, ImageWrap},
     status_code::StatusCode,
 };
 
@@ -93,20 +94,22 @@ impl Default for Image {
 
 impl Image {
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
-        let Some((image, mesh, save, world, origin_x, origin_y, blend_mode, opacity)) = owner
-            .with_downcast::<Self, _>(|owner| {
-                Some((
-                    owner.render_image()?,
-                    owner.mesh.clone(),
-                    owner.base.needs_save_operation(),
-                    *owner.base.world_transform(),
-                    owner.base.origin_x(),
-                    owner.base.origin_y(),
-                    owner.base.blend_mode(),
-                    owner.base.render_opacity(),
-                ))
-            })
-            .flatten()
+        let Some((image, mesh, sampler, save, world, origin_x, origin_y, blend_mode, opacity)) =
+            owner
+                .with_downcast::<Self, _>(|owner| {
+                    Some((
+                        owner.render_image()?,
+                        owner.mesh.clone(),
+                        owner.image_sampler(),
+                        owner.base.needs_save_operation(),
+                        *owner.base.world_transform(),
+                        owner.base.origin_x(),
+                        owner.base.origin_y(),
+                        owner.base.blend_mode(),
+                        owner.base.render_opacity(),
+                    ))
+                })
+                .flatten()
         else {
             return;
         };
@@ -118,7 +121,7 @@ impl Image {
                 mesh.mesh_drawable_draw(
                     renderer,
                     image.as_ref(),
-                    ImageSampler::LINEAR_CLAMP,
+                    sampler.into(),
                     blend_mode.into(),
                     opacity,
                 )
@@ -131,7 +134,7 @@ impl Image {
             );
             renderer.draw_image(
                 Some(image.as_ref()),
-                ImageSampler::LINEAR_CLAMP,
+                sampler.into(),
                 blend_mode.into(),
                 opacity,
             );
@@ -178,6 +181,7 @@ impl Image {
         let Some(render_image) = self.render_image() else {
             return;
         };
+        let sampler = self.image_sampler();
         if self.base.needs_save_operation() {
             renderer.save();
         }
@@ -188,7 +192,7 @@ impl Image {
                 mesh.mesh_drawable_draw(
                     renderer,
                     render_image.as_ref(),
-                    ImageSampler::LINEAR_CLAMP,
+                    sampler.into(),
                     self.base.blend_mode().into(),
                     self.base.render_opacity(),
                 );
@@ -203,7 +207,7 @@ impl Image {
             );
             renderer.draw_image(
                 Some(render_image.as_ref()),
-                ImageSampler::LINEAR_CLAMP,
+                sampler.into(),
                 self.base.blend_mode().into(),
                 self.base.render_opacity(),
             );
@@ -545,6 +549,53 @@ impl Image {
         // paths validate ImageAsset before FileAssetReferencer retains it.
         self.file_asset_referencer.asset()
     }
+
+    pub fn image_sampler(&self) -> ImageSampler {
+        fn filter_value(value: u8) -> ImageFilter {
+            match value {
+                0 => ImageFilter::Bilinear,
+                1 => ImageFilter::Nearest,
+                _ => ImageFilter::Bilinear,
+            }
+        }
+
+        fn wrap_value(value: u8) -> ImageWrap {
+            match value {
+                0 => ImageWrap::Clamp,
+                1 => ImageWrap::Repeat,
+                2 => ImageWrap::Mirror,
+                _ => ImageWrap::Clamp,
+            }
+        }
+
+        let mut sampler = ImageSampler::linear_clamp();
+        if let Some(asset) = self.image_asset()
+            && let Some((filter, wrap_x, wrap_y)) = asset.with_downcast::<ImageAsset, _>(|asset| {
+                (
+                    asset.base.sampler_filter(),
+                    asset.base.sampler_wrap_x(),
+                    asset.base.sampler_wrap_y(),
+                )
+            })
+        {
+            sampler.filter = filter_value(filter);
+            sampler.wrap_x = wrap_value(wrap_x);
+            sampler.wrap_y = wrap_value(wrap_y);
+        }
+
+        // Node values are offset by one, zero means inherit from the asset.
+        if self.base.sampler_filter() != 0 {
+            sampler.filter = filter_value(self.base.sampler_filter() - 1);
+        }
+        if self.base.sampler_wrap_x() != 0 {
+            sampler.wrap_x = wrap_value(self.base.sampler_wrap_x() - 1);
+        }
+        if self.base.sampler_wrap_y() != 0 {
+            sampler.wrap_y = wrap_value(self.base.sampler_wrap_y() - 1);
+        }
+        sampler
+    }
+
     pub fn render_image(&self) -> Option<crate::mechanical_port::source::renderer::RenderImageRef> {
         self.image_asset()?
             .with_downcast::<ImageAsset, _>(|asset| asset.render_image().cloned())

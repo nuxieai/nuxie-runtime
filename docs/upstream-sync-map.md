@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `3fc5a3360608064ffec4ac739d45c2cc2d454bf9`
+- LAST_SYNCED_SHA: `7502fd3fe191a21dbab339c11b4cb796454aebae`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest applied change: rarely authored generated Core properties use lazy,
-  deeply cloned sidecars, preserving upstream defaults and wire behavior while
-  avoiding inline storage on untouched instances.
-  Upstream: `3fc5a3360608064ffec4ac739d45c2cc2d454bf9`.
-  Work: [UNIV-2904](https://universe.basis.dev/issue/UNIV-2904).
+  Latest applied change: image assets define default filter and wrap sampling,
+  image nodes can inherit or override each option, and both ordinary and mesh
+  draw paths propagate the resolved sampler to the renderer.
+  Upstream: `7502fd3fe191a21dbab339c11b4cb796454aebae`.
+  Work: [UNIV-1876](https://universe.basis.dev/issue/UNIV-1876).
 - Intervening `1de56230e9ea062a2da2e25eee00942eafe3bdb4` and
   `0a8499b87a7d722b982d9c444172cab94d8320f2` need no Rust translation: they
   change upstream coverage and GMS test-host infrastructure, not runtime,

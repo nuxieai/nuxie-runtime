@@ -616,14 +616,12 @@ impl ScriptAsset {
                 asset.optional_methods.implemented_methods() as u32,
             ))
         })??;
-        let context = owner
-            .with(|owner| {
-                owner
-                    .as_scripted_object()
-                    .and_then(|owner| owner.data_context())
-            })
-            .flatten();
+        let context = ScriptedObject::effective_data_context(owner);
         let context_present = context.is_some();
+        let context_source = Some(crate::scripting::ScriptedContextSource::for_occurrence(
+            owner.clone(),
+        ));
+        let strong_file = file.as_ref().and_then(|file| file.upgrade());
         let mut chain = Vec::new();
         let mut current = context;
         while let Some(context) = current {
@@ -632,7 +630,7 @@ impl ScriptAsset {
             let model = if let Some(instance) = instance {
                 Some(crate::scripting::ScriptViewModel::from_native(
                     instance,
-                    file.as_ref()?.upgrade()?,
+                    strong_file.clone()?,
                 )?)
             } else {
                 None
@@ -647,7 +645,14 @@ impl ScriptAsset {
         };
         let instance = vm
             .with_vm_mut(|vm| {
-                vm.instantiate_program(&generator, context_present, view_model, chain, host)
+                vm.instantiate_program(
+                    &generator,
+                    context_present,
+                    context_source,
+                    view_model,
+                    chain,
+                    host,
+                )
             })
             .ok()?;
         Some((instance, methods))

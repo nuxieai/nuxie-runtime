@@ -79,15 +79,24 @@ impl ScriptedContext {
             missing_requested_data: false,
         }
     }
+
+    fn current_data_context(&self) -> Option<RuntimeDataContextHandle> {
+        self.scripted_object
+            .as_ref()
+            .and_then(ScriptedObject::effective_data_context)
+    }
+
+    fn current_file(&self) -> Option<RuntimeFileWeakHandle> {
+        self.scripted_object.as_ref().and_then(|object| {
+            object
+                .with(|object| object.scripted_object_file())
+                .flatten()
+        })
+    }
+
     pub fn push_viewmodel(&mut self, state: &mut LuaState) -> i32 {
         if let Some(instance) = self
-            .scripted_object
-            .as_ref()
-            .and_then(|object| {
-                object
-                    .with(|object| object.as_scripted_object()?.data_context())
-                    .flatten()
-            })
+            .current_data_context()
             .and_then(|context| context.with_context(DataContext::main_view_model_instance))
         {
             let model = instance
@@ -101,13 +110,7 @@ impl ScriptedContext {
     }
     pub fn push_root_viewmodel(&mut self, state: &mut LuaState) -> i32 {
         if let Some(instance) = self
-            .scripted_object
-            .as_ref()
-            .and_then(|object| {
-                object
-                    .with(|object| object.as_scripted_object()?.data_context())
-                    .flatten()
-            })
+            .current_data_context()
             .and_then(|context| context.with_context(DataContext::root_view_model_instance))
         {
             let model = instance
@@ -119,12 +122,35 @@ impl ScriptedContext {
         self.missing_requested_data = true;
         0
     }
-    pub fn push_data_context(&mut self, state: &mut LuaState) -> i32 {
-        if let Some(context) = self.scripted_object.as_ref().and_then(|object| {
-            object
-                .with(|object| object.as_scripted_object()?.data_context())
-                .flatten()
+    pub fn push_global_viewmodel(&mut self, state: &mut LuaState, name: &[u8]) -> i32 {
+        let context = self.current_data_context();
+        let file = self.current_file().and_then(|file| file.upgrade());
+        if let Some(instance) = context.zip(file).and_then(|(context, file)| {
+            crate::scripting::resolve_global_view_model_instance(&context, &file, name)
         }) {
+            let model = instance
+                .with(|instance| instance.as_view_model_instance()?.get_view_model())
+                .flatten();
+            state.new_rive(ScriptedViewModel::new(state, model, Some(instance)));
+            return 1;
+        }
+        0
+    }
+    pub fn push_global_viewmodel_names(&mut self, state: &mut LuaState) -> i32 {
+        let names = self
+            .current_file()
+            .and_then(|file| file.with_file(|file| file.global_view_model_names()))
+            .unwrap_or_default();
+        state.create_table(names.len() as i32, 0);
+        for (index, name) in names.iter().enumerate() {
+            let name = name.split('\0').next().unwrap_or_default();
+            state.push_string(name);
+            state.raw_set_i(-2, index as i32 + 1);
+        }
+        1
+    }
+    pub fn push_data_context(&mut self, state: &mut LuaState) -> i32 {
+        if let Some(context) = self.current_data_context() {
             state.new_rive(ScriptedDataContext::new(
                 ScriptedDataContextHandle::Runtime(context),
             ));
@@ -162,10 +188,11 @@ fn context_namecall(s: &mut LuaState) -> i32 {
     let Some(object) = context.scripted_object.clone() else {
         return s.error(format!("context:{name}() called on a disposed context — the context passed to init() must not be used after init() returns"));
     };
-    let file = object
-        .with(|object| object.scripted_object_file())
-        .flatten()
-        .flatten();
+    let scripted_object_file = || {
+        object
+            .with(|object| object.scripted_object_file())
+            .flatten()
+    };
     match atom {
         LuaAtoms::MarkNeedsUpdate => {
             object.with_mut(|object| {
@@ -177,9 +204,15 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         }
         LuaAtoms::ViewModel => context.push_viewmodel(s),
         LuaAtoms::RootViewModel => context.push_root_viewmodel(s),
+        LuaAtoms::GlobalViewModel => {
+            let wanted = s.check_string(2);
+            context.push_global_viewmodel(s, wanted.as_bytes())
+        }
+        LuaAtoms::GlobalViewModelNames => context.push_global_viewmodel_names(s),
         LuaAtoms::DataContext => context.push_data_context(s),
         LuaAtoms::Image => {
             let wanted = s.check_string(2);
+            let file = scripted_object_file().and_then(|file| file.upgrade());
             if let Some(image) = file.as_ref().and_then(|file| {
                 file.with_file(|file| {
                     file.assets().iter().find_map(|asset| {
@@ -202,6 +235,7 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         LuaAtoms::Blob => {
             let wanted = s.check_string(2);
             let reference = ScopedAssetReference::new(s, &wanted);
+            let file = scripted_object_file().and_then(|file| file.upgrade());
             if let Some(blob) = file.as_ref().and_then(|file| {
                 file.with_file(|file| {
                     file.assets()
@@ -231,6 +265,7 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         }
         LuaAtoms::Audio => {
             let wanted = s.check_string(2);
+            let file = scripted_object_file().and_then(|file| file.upgrade());
             if let Some(source) = file.as_ref().and_then(|file| {
                 file.with_file(|file| {
                     file.assets().iter().find_map(|asset| {
@@ -317,7 +352,7 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         LuaAtoms::Shader => {
             let wanted = s.check_string(2);
             let reference = ScopedAssetReference::new(s, &wanted);
-            let file_asset = lua_gpu_find_shader_asset(file.clone(), &reference);
+            let file_asset = lua_gpu_find_shader_asset(scripted_object_file(), &reference);
             let mut scripted = ScriptedShader::default();
             if lua_gpu_load_shader_by_name(
                 &mut scripted,

@@ -648,6 +648,11 @@ fn next_raw_path_mutation_id() -> u64 {
 pub struct RawPath {
     verbs: Vec<PathVerb>,
     points: Vec<Vec2D>,
+    // Pinned `RawPath` keeps contour construction state separately from its
+    // verb and point arrays. Bulk operations intentionally do not infer or
+    // update either field.
+    last_move_idx: usize,
+    contour_open: bool,
     mutation_id: u64,
 }
 
@@ -662,39 +667,29 @@ pub struct RawPathBuilder<'a> {
 impl RawPathBuilder<'_> {
     #[inline]
     pub fn move_to(&mut self, x: f32, y: f32) {
-        self.raw_path.verbs.push(PathVerb::Move);
-        self.raw_path.points.push(Vec2D::new(x, y));
+        self.raw_path.move_untracked(Vec2D::new(x, y));
     }
 
     #[inline]
     pub fn line_to(&mut self, x: f32, y: f32) {
-        self.raw_path.inject_implicit_move_if_needed();
-        self.raw_path.verbs.push(PathVerb::Line);
-        self.raw_path.points.push(Vec2D::new(x, y));
+        self.raw_path.line_untracked(Vec2D::new(x, y));
     }
 
     #[inline]
     pub fn quad_to(&mut self, ox: f32, oy: f32, x: f32, y: f32) {
-        self.raw_path.inject_implicit_move_if_needed();
-        self.raw_path.verbs.push(PathVerb::Quad);
-        self.raw_path.points.push(Vec2D::new(ox, oy));
-        self.raw_path.points.push(Vec2D::new(x, y));
+        self.raw_path
+            .quad_untracked(Vec2D::new(ox, oy), Vec2D::new(x, y));
     }
 
     #[inline]
     pub fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
-        self.raw_path.inject_implicit_move_if_needed();
-        self.raw_path.verbs.push(PathVerb::Cubic);
-        self.raw_path.points.push(Vec2D::new(ox, oy));
-        self.raw_path.points.push(Vec2D::new(ix, iy));
-        self.raw_path.points.push(Vec2D::new(x, y));
+        self.raw_path
+            .cubic_untracked(Vec2D::new(ox, oy), Vec2D::new(ix, iy), Vec2D::new(x, y));
     }
 
     #[inline]
     pub fn close(&mut self) {
-        if !self.raw_path.verbs.is_empty() && self.raw_path.verbs.last() != Some(&PathVerb::Close) {
-            self.raw_path.verbs.push(PathVerb::Close);
-        }
+        self.raw_path.close_untracked();
     }
 }
 
@@ -745,6 +740,8 @@ impl RawPath {
         Self {
             verbs,
             points,
+            last_move_idx: 0,
+            contour_open: false,
             mutation_id: next_raw_path_mutation_id(),
         }
     }
@@ -753,6 +750,8 @@ impl RawPath {
         Self {
             verbs: Vec::new(),
             points: Vec::new(),
+            last_move_idx: 0,
+            contour_open: false,
             mutation_id: next_raw_path_mutation_id(),
         }
     }
@@ -864,6 +863,7 @@ impl RawPath {
         self.mark_mutated();
         self.verbs.clear();
         self.points.clear();
+        self.contour_open = false;
         self.verbs.reserve(verbs);
         self.points.reserve(points);
         build(&mut RawPathBuilder { raw_path: self });
@@ -873,6 +873,29 @@ impl RawPath {
         self.mark_mutated();
         self.verbs.clear();
         self.points.clear();
+        self.contour_open = false;
+    }
+
+    /// Pinned `RawPath::reset`: clear geometry and release its allocations.
+    /// Like the source, this closes the contour without rewriting the saved
+    /// move index.
+    pub fn reset(&mut self) {
+        self.mark_mutated();
+        self.verbs.clear();
+        self.verbs.shrink_to_fit();
+        self.points.clear();
+        self.points.shrink_to_fit();
+        self.contour_open = false;
+    }
+
+    /// Pinned `RawPath::swap` swaps only the geometry vectors. Contour
+    /// bookkeeping belongs to each destination object and is deliberately not
+    /// exchanged.
+    pub fn swap(&mut self, other: &mut Self) {
+        std::mem::swap(&mut self.verbs, &mut other.verbs);
+        std::mem::swap(&mut self.points, &mut other.points);
+        self.mark_mutated();
+        other.mark_mutated();
     }
 
     pub fn reserve(&mut self, verbs: usize, points: usize) {
@@ -882,38 +905,28 @@ impl RawPath {
 
     pub fn move_to(&mut self, x: f32, y: f32) {
         self.mark_mutated();
-        self.verbs.push(PathVerb::Move);
-        self.points.push(Vec2D::new(x, y));
+        self.move_untracked(Vec2D::new(x, y));
     }
 
     pub fn line_to(&mut self, x: f32, y: f32) {
-        self.inject_implicit_move_if_needed();
         self.mark_mutated();
-        self.verbs.push(PathVerb::Line);
-        self.points.push(Vec2D::new(x, y));
+        self.line_untracked(Vec2D::new(x, y));
     }
 
     pub fn quad_to(&mut self, ox: f32, oy: f32, x: f32, y: f32) {
-        self.inject_implicit_move_if_needed();
         self.mark_mutated();
-        self.verbs.push(PathVerb::Quad);
-        self.points.push(Vec2D::new(ox, oy));
-        self.points.push(Vec2D::new(x, y));
+        self.quad_untracked(Vec2D::new(ox, oy), Vec2D::new(x, y));
     }
 
     pub fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
-        self.inject_implicit_move_if_needed();
         self.mark_mutated();
-        self.verbs.push(PathVerb::Cubic);
-        self.points.push(Vec2D::new(ox, oy));
-        self.points.push(Vec2D::new(ix, iy));
-        self.points.push(Vec2D::new(x, y));
+        self.cubic_untracked(Vec2D::new(ox, oy), Vec2D::new(ix, iy), Vec2D::new(x, y));
     }
 
     pub fn close(&mut self) {
-        if !self.verbs.is_empty() && self.verbs.last() != Some(&PathVerb::Close) {
+        if self.contour_open {
             self.mark_mutated();
-            self.verbs.push(PathVerb::Close);
+            self.close_untracked();
         }
     }
 
@@ -1010,29 +1023,53 @@ impl RawPath {
         }
     }
 
+    /// Append as pinned `RawPath::addPath(src, nullptr)` when `transform` is
+    /// identity, preserving source point bits. Non-identity transforms use the
+    /// exact pinned `Mat2D::mapPoints` evaluation.
     pub fn add_path(&mut self, path: &RawPath, transform: Mat2D) {
+        let transform = (transform != Mat2D::IDENTITY).then_some(transform);
+        self.add_path_impl(path, transform);
+    }
+
+    /// Append as pinned `RawPath::addPath(src, &transform)` with a guaranteed
+    /// non-null matrix pointer. This intentionally evaluates `mapPoints` even
+    /// when the matrix compares equal to identity.
+    pub fn add_path_with_transform(&mut self, path: &RawPath, transform: Mat2D) {
+        self.add_path_impl(path, Some(transform));
+    }
+
+    fn add_path_impl(&mut self, path: &RawPath, transform: Option<Mat2D>) {
         if path.verbs.is_empty() {
             return;
         }
         self.mark_mutated();
         self.verbs.extend_from_slice(&path.verbs);
-        if transform == Mat2D::IDENTITY {
-            // C++ passes a null matrix when RenderPath::addRawPath appends an
-            // untransformed path, which copies the points verbatim. Besides
-            // avoiding needless affine work, this preserves signed zero.
-            self.points.extend_from_slice(&path.points);
-        } else {
+        if let Some(transform) = transform {
             let initial_point_count = self.points.len();
             self.points.resize(
                 initial_point_count + path.points.len(),
                 Vec2D::new(0.0, 0.0),
             );
             transform.map_points(&mut self.points[initial_point_count..], &path.points);
+        } else {
+            self.points.extend_from_slice(&path.points);
         }
     }
 
     pub fn add_path_backwards(&mut self, path: &RawPath, transform: Mat2D) {
-        if path.verbs.is_empty() {
+        let transform = (transform != Mat2D::IDENTITY).then_some(transform);
+        self.add_path_backwards_impl(path, transform);
+    }
+
+    /// Append backwards as pinned `RawPath::addPathBackwards(src,
+    /// &transform)` with a guaranteed non-null matrix pointer. Mapping and
+    /// transformed-segment pruning therefore run even for identity.
+    pub fn add_path_backwards_with_transform(&mut self, path: &RawPath, transform: Mat2D) {
+        self.add_path_backwards_impl(path, Some(transform));
+    }
+
+    fn add_path_backwards_impl(&mut self, path: &RawPath, transform: Option<Mat2D>) {
+        if path.points.is_empty() {
             return;
         }
         self.mark_mutated();
@@ -1041,7 +1078,7 @@ impl RawPath {
         let initial_point_count = self.points.len();
         self.points.reserve(path.points.len());
         self.points.extend(path.points.iter().rev().copied());
-        if transform != Mat2D::IDENTITY {
+        if let Some(transform) = transform {
             transform.map_points_in_place(&mut self.points[initial_point_count..]);
         }
 
@@ -1071,7 +1108,9 @@ impl RawPath {
         }
         debug_assert!(!closed, "every close verb must have a preceding move verb");
 
-        self.prune_empty_segments_from(initial_verb_count, initial_point_count);
+        if transform.is_some() {
+            self.prune_empty_segments_from(initial_verb_count, initial_point_count);
+        }
     }
 
     /// Source `RawPath::pruneEmptySegments()` entry point used by the
@@ -1131,26 +1170,15 @@ impl RawPath {
 
     #[inline]
     fn inject_implicit_move_if_needed(&mut self) {
-        if !self.verbs.is_empty() && self.verbs.last() != Some(&PathVerb::Close) {
+        if self.contour_open {
             return;
         }
-
-        let mut point_index = 0;
-        let mut last_move = Vec2D::new(0.0, 0.0);
-        for verb in &self.verbs {
-            match verb {
-                PathVerb::Move => {
-                    last_move = self.points[point_index];
-                    point_index += 1;
-                }
-                PathVerb::Line => point_index += 1,
-                PathVerb::Quad => point_index += 2,
-                PathVerb::Cubic => point_index += 3,
-                PathVerb::Close => {}
-            }
-        }
-        self.verbs.push(PathVerb::Move);
-        self.points.push(last_move);
+        let point = if self.points.is_empty() {
+            Vec2D::new(0.0, 0.0)
+        } else {
+            self.points[self.last_move_idx]
+        };
+        self.move_untracked(point);
     }
 
     /// Source-owner spelling used by the mechanical renderer path, which must
@@ -1160,13 +1188,49 @@ impl RawPath {
     }
 
     pub fn line(&mut self, point: Vec2D) {
-        self.verbs.push(PathVerb::Line);
-        self.points.push(point);
+        self.line_untracked(point);
     }
 
     pub fn cubic(&mut self, control0: Vec2D, control1: Vec2D, end: Vec2D) {
-        self.verbs.push(PathVerb::Cubic);
+        self.cubic_untracked(control0, control1, end);
+    }
+
+    #[inline]
+    fn move_untracked(&mut self, point: Vec2D) {
+        self.contour_open = true;
+        self.last_move_idx = self.points.len();
+        self.points.push(point);
+        self.verbs.push(PathVerb::Move);
+    }
+
+    #[inline]
+    fn line_untracked(&mut self, point: Vec2D) {
+        self.inject_implicit_move_if_needed();
+        self.points.push(point);
+        self.verbs.push(PathVerb::Line);
+    }
+
+    #[inline]
+    fn quad_untracked(&mut self, control: Vec2D, end: Vec2D) {
+        self.inject_implicit_move_if_needed();
+        self.points.push(control);
+        self.points.push(end);
+        self.verbs.push(PathVerb::Quad);
+    }
+
+    #[inline]
+    fn cubic_untracked(&mut self, control0: Vec2D, control1: Vec2D, end: Vec2D) {
+        self.inject_implicit_move_if_needed();
         self.points.extend([control0, control1, end]);
+        self.verbs.push(PathVerb::Cubic);
+    }
+
+    #[inline]
+    fn close_untracked(&mut self) {
+        if self.contour_open {
+            self.verbs.push(PathVerb::Close);
+            self.contour_open = false;
+        }
     }
 
     fn mark_mutated(&mut self) {
@@ -2395,10 +2459,19 @@ pub trait RenderPaint: Any {
 
 pub trait RenderPath: Any {
     fn as_any(&self) -> &dyn Any;
+    /// Mutable counterpart to source `lite_rtti_cast<RenderPath*>`, used by
+    /// concrete renderer extensions that are intentionally not virtual API.
+    fn as_any_mut(&mut self) -> &mut dyn Any;
     fn rewind(&mut self);
     fn reserve(&mut self, _verbs: usize, _points: usize) {}
     fn fill_rule(&mut self, value: FillRule);
     fn add_render_path(&mut self, path: &dyn RenderPath, transform: Mat2D);
+    /// Alias-safe spelling of upstream `addRenderPath(this, transform)`.
+    ///
+    /// Rust cannot soundly pass an immutable reference to a path while that
+    /// same path is mutably borrowed as the destination, so implementations
+    /// snapshot their own source geometry before appending it.
+    fn add_render_path_self(&mut self, transform: Mat2D);
     // Upstream RenderPath's default is empty; RiveRenderPath overrides it.
     fn add_render_path_backwards(&mut self, _path: &dyn RenderPath, _transform: Mat2D) {}
     fn add_raw_path(&mut self, path: &RawPath);
@@ -3931,6 +4004,10 @@ impl RenderPath for NullRenderPath {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn rewind(&mut self) {
         self.raw_path.rewind();
     }
@@ -3948,9 +4025,15 @@ impl RenderPath for NullRenderPath {
         self.raw_path.add_path(&path.raw_path, transform);
     }
 
+    fn add_render_path_self(&mut self, transform: Mat2D) {
+        let source = self.raw_path.clone();
+        self.raw_path.add_path(&source, transform);
+    }
+
     fn add_render_path_backwards(&mut self, path: &dyn RenderPath, transform: Mat2D) {
         let path = null_path(path);
-        self.raw_path.add_path_backwards(&path.raw_path, transform);
+        self.raw_path
+            .add_path_backwards_with_transform(&path.raw_path, transform);
     }
 
     fn add_raw_path(&mut self, path: &RawPath) {
@@ -4243,6 +4326,10 @@ impl RenderPath for RecordingRenderPath {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn rewind(&mut self) {
         self.raw_path.rewind();
     }
@@ -4260,9 +4347,15 @@ impl RenderPath for RecordingRenderPath {
         self.raw_path.add_path(&path.raw_path, transform);
     }
 
+    fn add_render_path_self(&mut self, transform: Mat2D) {
+        let source = self.raw_path.clone();
+        self.raw_path.add_path(&source, transform);
+    }
+
     fn add_render_path_backwards(&mut self, path: &dyn RenderPath, transform: Mat2D) {
         let path = recording_path(path);
-        self.raw_path.add_path_backwards(&path.raw_path, transform);
+        self.raw_path
+            .add_path_backwards_with_transform(&path.raw_path, transform);
     }
 
     fn add_raw_path(&mut self, path: &RawPath) {
@@ -5561,6 +5654,137 @@ mod tests {
     }
 
     #[test]
+    fn non_null_identity_path_appends_run_cpp_map_points() {
+        let mut source = RawPath::new();
+        source.move_to(-0.0, -0.0);
+        source.line_to(1.0, -0.0);
+
+        let mut forward = RawPath::new();
+        forward.add_path_with_transform(&source, Mat2D::IDENTITY);
+        assert_eq!(forward.points()[0].x.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(forward.points()[0].y.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(forward.points()[1].y.to_bits(), 0.0_f32.to_bits());
+
+        let mut backwards = RawPath::new();
+        backwards.add_path_backwards_with_transform(&source, Mat2D::IDENTITY);
+        assert_eq!(backwards.points()[0].y.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(backwards.points()[1].x.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(backwards.points()[1].y.to_bits(), 0.0_f32.to_bits());
+
+        let mut signed_zero_segment = RawPath::new();
+        signed_zero_segment.move_to(-0.0, -0.0);
+        signed_zero_segment.line_to(0.0, 0.0);
+        let mut null_matrix_backwards = RawPath::new();
+        null_matrix_backwards.add_path_backwards(&signed_zero_segment, Mat2D::IDENTITY);
+        assert_eq!(
+            null_matrix_backwards.verbs(),
+            &[PathVerb::Move, PathVerb::Line]
+        );
+        let mut non_null_matrix_backwards = RawPath::new();
+        non_null_matrix_backwards
+            .add_path_backwards_with_transform(&signed_zero_segment, Mat2D::IDENTITY);
+        assert_eq!(non_null_matrix_backwards.verbs(), &[PathVerb::Move]);
+    }
+
+    #[test]
+    fn raw_path_bulk_operations_leave_contour_bookkeeping_untouched() {
+        let source = RawPath::from_verbs_and_points(
+            vec![PathVerb::Move, PathVerb::Line],
+            vec![Vec2D::new(4.0, 5.0), Vec2D::new(6.0, 7.0)],
+        );
+
+        let mut constructed = source.clone();
+        constructed.close();
+        constructed.line_to(8.0, 9.0);
+        constructed.close();
+
+        let mut appended = RawPath::new();
+        appended.add_path(&source, Mat2D::IDENTITY);
+        appended.close();
+        appended.line_to(8.0, 9.0);
+        appended.close();
+
+        let expected_verbs = [
+            PathVerb::Move,
+            PathVerb::Line,
+            PathVerb::Move,
+            PathVerb::Line,
+            PathVerb::Close,
+        ];
+        let expected_points = [
+            Vec2D::new(4.0, 5.0),
+            Vec2D::new(6.0, 7.0),
+            Vec2D::new(4.0, 5.0),
+            Vec2D::new(8.0, 9.0),
+        ];
+        assert_eq!(constructed.verbs(), &expected_verbs);
+        assert_eq!(constructed.points(), &expected_points);
+        assert_eq!(appended.verbs(), &expected_verbs);
+        assert_eq!(appended.points(), &expected_points);
+
+        let mut closed_source = RawPath::new();
+        closed_source.move_to(20.0, 21.0);
+        closed_source.line_to(22.0, 23.0);
+        closed_source.close();
+        let mut open_destination = RawPath::new();
+        open_destination.move_to(30.0, 31.0);
+        open_destination.add_path(&closed_source, Mat2D::IDENTITY);
+        open_destination.close();
+        assert_eq!(
+            &open_destination.verbs()[open_destination.verbs().len() - 2..],
+            &[PathVerb::Close, PathVerb::Close]
+        );
+    }
+
+    #[test]
+    fn raw_path_swap_and_clear_operations_preserve_source_bookkeeping_rules() {
+        let mut open = RawPath::new();
+        open.move_to(1.0, 1.0);
+        open.move_to(2.0, 2.0); // open, last move index 1
+        let mut bulk = RawPath::from_verbs_and_points(
+            vec![PathVerb::Move, PathVerb::Line],
+            vec![Vec2D::new(10.0, 10.0), Vec2D::new(11.0, 11.0)],
+        ); // closed, default last move index 0
+
+        open.swap(&mut bulk);
+        open.line_to(12.0, 12.0);
+        bulk.line_to(3.0, 3.0);
+
+        assert_eq!(
+            open.verbs(),
+            &[PathVerb::Move, PathVerb::Line, PathVerb::Line]
+        );
+        assert_eq!(
+            bulk.verbs(),
+            &[
+                PathVerb::Move,
+                PathVerb::Move,
+                PathVerb::Move,
+                PathVerb::Line,
+            ]
+        );
+        assert_eq!(bulk.points()[2], Vec2D::new(1.0, 1.0));
+
+        // Source rewind/reset close the contour but leave the saved move index.
+        let refill = RawPath::from_verbs_and_points(
+            vec![PathVerb::Move, PathVerb::Line],
+            vec![Vec2D::new(20.0, 20.0), Vec2D::new(21.0, 21.0)],
+        );
+        open.rewind();
+        open.add_path(&refill, Mat2D::IDENTITY);
+        open.line_to(22.0, 22.0);
+        assert_eq!(open.points()[2], Vec2D::new(21.0, 21.0));
+
+        let mut reset_path = RawPath::new();
+        reset_path.move_to(30.0, 30.0);
+        reset_path.move_to(31.0, 31.0); // saved move index 1
+        reset_path.reset();
+        reset_path.add_path(&refill, Mat2D::IDENTITY);
+        reset_path.line_to(23.0, 23.0);
+        assert_eq!(reset_path.points()[2], Vec2D::new(21.0, 21.0));
+    }
+
+    #[test]
     fn transformed_path_appends_match_cpp_simd_evaluation_order() {
         let mut source = RawPath::new();
         source.move_to(85.5, -61.0);
@@ -5885,6 +6109,22 @@ mod tests {
                 "frame\n",
             )
         );
+    }
+
+    #[test]
+    fn recording_path_self_append_uses_a_frozen_source_snapshot() {
+        let mut source = RawPath::new();
+        source.move_to(1.0, 2.0);
+        source.line_to(3.0, 4.0);
+        let transform = Mat2D([2.0, 0.5, -0.25, 3.0, 5.0, 6.0]);
+
+        let mut factory = RecordingFactory::new();
+        let mut path = factory.make_render_path(source.clone(), FillRule::NonZero);
+        path.add_render_path_self(transform);
+
+        let mut expected = source.clone();
+        expected.add_path(&source, transform);
+        assert_eq!(recording_path(path.as_ref()).raw_path, expected);
     }
 
     #[test]

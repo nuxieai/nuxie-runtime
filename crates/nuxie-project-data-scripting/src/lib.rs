@@ -11,7 +11,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use nuxie::{
     RuntimeScriptProgram, ScriptAssetRegistration, ScriptAssetRegistrationResult,
     ScriptDataConverterMethod, ScriptError, ScriptHost, ScriptInstance, ScriptMethod,
-    ScriptProgramAdapter, ScriptValue, ScriptViewModel,
+    ScriptProgramAdapter, ScriptValue, ScriptViewModel, ScriptedContextSource,
 };
 use nuxie_project_data::{
     ProjectDataConverterContext, ProjectDataConverterProgram, ProjectDataConverterState,
@@ -56,6 +56,7 @@ impl ScriptProgramAdapter for ProjectDataScriptProgramAdapter {
         &self,
         program: &RuntimeScriptProgram,
         _context_present: bool,
+        _context_source: Option<ScriptedContextSource>,
         _view_model: Option<ScriptViewModel>,
         _parent_view_models: Vec<Option<ScriptViewModel>>,
         _host: &mut dyn ScriptHost,
@@ -285,6 +286,7 @@ mod tests {
             .instantiate_program(
                 registered.program.as_ref().expect("program"),
                 false,
+                None,
                 None,
                 Vec::new(),
                 &mut host,

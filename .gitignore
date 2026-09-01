@@ -6,6 +6,7 @@
 /fixtures/fonts/
 !/fixtures/sync/data_bind_blob_test.riv
 !/fixtures/sync/color_passthrough_test.riv
+!/fixtures/sync/global_view_models_scripting_test.riv
 !/fixtures/editor/
 !/fixtures/editor/editor_scripted_vector_v7.riv
 !/fixtures/p2d/

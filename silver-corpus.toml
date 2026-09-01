@@ -3,13 +3,13 @@
 
 [corpus]
 version = 1
-upstream_ref = "f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c"
-expected_entries = 255
-expected_runtime = 210
+upstream_ref = "309e901fca858a692d5ed928a87f9841b65848b3"
+expected_entries = 256
+expected_runtime = 211
 expected_scripted = 42
 max_provenance_unknown = 3
-min_cpp_rust_exact = 181
-cpp_rust_exact_ids = ["advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_width_test", "bankcard", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_converter_to_number", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "deterministic_mode", "drag_event", "draw_index_list", "event_trigger_event", "fill_trim_path", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_test", "global_variables_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_hug_artboard", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "list_focus_order", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multi_listeners", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "reset_phase_multi_main", "saturation", "scripted_animated_oval", "scripted_oval", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_keyed_trigger", "stateful_multi_property", "stateful_nested", "superbowl", "target_event", "text_feather_falloff", "text_follow_path_shape_length", "text_input", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
+min_cpp_rust_exact = 182
+cpp_rust_exact_ids = ["advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_width_test", "bankcard", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_converter_to_number", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "deterministic_mode", "drag_event", "draw_index_list", "event_trigger_event", "fill_trim_path", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_test", "global_variables_test", "global_view_models_scripting_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_hug_artboard", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "list_focus_order", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multi_listeners", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "reset_phase_multi_main", "saturation", "scripted_animated_oval", "scripted_oval", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_keyed_trigger", "stateful_multi_property", "stateful_nested", "superbowl", "target_event", "text_feather_falloff", "text_follow_path_shape_length", "text_input", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
 
 [[case]]
 id = "advance_blend_mode-inputs"
@@ -1747,6 +1747,28 @@ producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Global view models and overrides"
 producer_line = 56
+note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
+
+[[case]]
+id = "global_view_models_scripting_test"
+expected = "tests/unit_tests/silvers/global_view_models_scripting_test.sriv"
+source = "global_view_models_scripting_test.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0, 0.1]
+actions = [{ kind = "bind-authored-view-model-instance", instance_index = 0 }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "exact"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
+provenance_test = "Global view models access through scripting"
+producer_line = 172
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4106,7 +4128,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to user created view models via Data"
-producer_line = 237
+producer_line = 241
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4348,7 +4370,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "expose data context to scripts through context"
-producer_line = 556
+producer_line = 560
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4546,7 +4568,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to the data root view model"
-producer_line = 324
+producer_line = 328
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -5448,7 +5470,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to the data bound view model"
-producer_line = 301
+producer_line = 305
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -5514,7 +5536,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "Provide data context and view model instance to artboard"
-producer_line = 586
+producer_line = 590
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]

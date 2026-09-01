@@ -95,3 +95,11 @@ fn wave_b4_global_viewmodels_set_instance() {
         "tests/unit_tests/runtime/global_viewmodels_test.cpp",
     );
 }
+
+#[test]
+fn wave_b4_global_view_models_scripting() {
+    replay(
+        "global_view_models_scripting_test",
+        "tests/unit_tests/runtime/global_viewmodels_test.cpp",
+    );
+}

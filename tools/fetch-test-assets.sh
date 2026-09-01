@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-f41cd8f3b1bd6b14442630859d3a7bbba9d16b9c}
+ref=${RIVE_RUNTIME_REF:-309e901fca858a692d5ed928a87f9841b65848b3}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -43,6 +43,7 @@ assets=(
   "sync/scripted_path_effect_clip.riv|6bc76d33f6b3761cfd689a8de7f3dfc9dbc5ae34ae75921c63bde4ab9e7c9583|ddd1a2aacf62ee6e550b65b445d0ccdafe284e6a"
   "sync/ik_anim_test.riv|064492b51c369ebf843f16abd4e9915c89b8086d5f3e6bdc60c04e85e4fbce02|d25e6a4b6c1b8382b588f08371231373780fbcd5"
   "sync/color_passthrough_test.riv|83abb360ef1ee85e6c135b1f9975583e44c324b6e24537d12b1dc9ccb0b8aa5f|74c0d601c516f86db4847521198dba42080db06a"
+  "sync/global_view_models_scripting_test.riv|4eba1794ba6c9d693d28ce902dda38b0eb38153c7dec18f73c4c2fbcab4838b1|309e901fca858a692d5ed928a87f9841b65848b3"
   "sync/bidirectional_stateful_property.riv|c2813f0ad0f5aedff70ec666f21118b41e611ab87951b5192960599c9be82583|e85a11604edd9a2a50bbe2f04da4a91b0293ccd6"
   "sync/paused_nested_artboard_opacity.riv|642c9f7fd909b9955a875e0bb745d0998d3ac4b64a11b863b09e3b0ee5682944"
   "sync/solo_index_test.riv|e857c0d1f76cec0be8d8b9d8308ea9a0f581de29ed752b952940d90b5f6a16f2|38c924123ffb8ad9541ad724ef4de860e5705482"
@@ -200,6 +201,24 @@ fi
 color_silver_actual=$(sha256 "$color_silver_destination")
 if [[ "$color_silver_actual" != "$color_silver_expected" ]]; then
   echo "fixture checksum mismatch: sync/color_passthrough_test.sriv (expected $color_silver_expected, got $color_silver_actual)" >&2
+  exit 1
+fi
+
+global_view_models_silver_destination="$repo_root/fixtures/sync/global_view_models_scripting_test.sriv"
+global_view_models_silver_expected="7b3cf99eed9e2d9af8476b761b744e379945220b79ee95f7d59f638121de950e"
+if [[ -n "$runtime_dir" ]]; then
+  git -C "$runtime_dir" show \
+    "309e901fca858a692d5ed928a87f9841b65848b3:tests/unit_tests/silvers/global_view_models_scripting_test.sriv" \
+    > "$global_view_models_silver_destination"
+elif [[ ! -f "$global_view_models_silver_destination" \
+  || "$(sha256 "$global_view_models_silver_destination")" != "$global_view_models_silver_expected" ]]; then
+  curl --fail --location --silent --show-error \
+    "$base_url/309e901fca858a692d5ed928a87f9841b65848b3/tests/unit_tests/silvers/global_view_models_scripting_test.sriv" \
+    --output "$global_view_models_silver_destination"
+fi
+global_view_models_silver_actual=$(sha256 "$global_view_models_silver_destination")
+if [[ "$global_view_models_silver_actual" != "$global_view_models_silver_expected" ]]; then
+  echo "fixture checksum mismatch: sync/global_view_models_scripting_test.sriv (expected $global_view_models_silver_expected, got $global_view_models_silver_actual)" >&2
   exit 1
 fi
 

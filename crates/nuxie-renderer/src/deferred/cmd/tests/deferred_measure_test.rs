@@ -1,8 +1,12 @@
 //! tests/unit_tests/renderer/deferred_measure_test.cpp at e949498e.
 //! Upstream hidden measurement cases; no thresholds are added.
 use super::super::{
-    command_stream::CommandReader, deferred_replayer::*, deferred_session::DeferredSession,
-    render_command_buffer::RenderCommandBuffer, render_commands::*, render_replay::ResourceTable,
+    command_stream::CommandReader,
+    deferred_replayer::*,
+    deferred_session::DeferredSession,
+    render_command_buffer::RenderCommandBuffer,
+    render_commands::*,
+    render_replay::{replay_render_commands, ReplayHooks, ResourceTable},
 };
 use super::*;
 use std::{path::PathBuf, time::Instant};
@@ -60,14 +64,23 @@ fn corpus() -> Vec<String> {
             .collect()
     }
 }
-struct MPath;
+#[derive(Default)]
+struct MPath {
+    self_adds: u32,
+}
 impl RenderPath for MPath {
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
     fn rewind(&mut self) {}
     fn fill_rule(&mut self, _: FillRule) {}
     fn add_render_path(&mut self, _: &dyn RenderPath, _: Mat2D) {}
+    fn add_render_path_self(&mut self, _: Mat2D) {
+        self.self_adds += 1;
+    }
     fn add_render_path_backwards(&mut self, _: &dyn RenderPath, _: Mat2D) {}
     fn add_raw_path(&mut self, _: &RawPath) {}
     fn move_to(&mut self, _: f32, _: f32) {}
@@ -129,11 +142,11 @@ struct MFactory {
 impl Factory for MFactory {
     fn make_render_path(&mut self, _: RawPath, _: FillRule) -> Box<dyn RenderPath> {
         self.counts[0] += 1;
-        Box::new(MPath)
+        Box::new(MPath::default())
     }
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
         self.counts[0] += 1;
-        Box::new(MPath)
+        Box::new(MPath::default())
     }
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
         self.counts[1] += 1;
@@ -175,6 +188,52 @@ impl Factory for MFactory {
         self.counts[4] += 1;
         Ok(Box::new(MImage(Rc::new(()))))
     }
+}
+
+#[test]
+fn same_id_path_append_reaches_the_headless_measure_sink_without_aliasing() {
+    let mut buffer = RenderCommandBuffer::default();
+    buffer.append(
+        RenderCmd::MakeEmptyPath,
+        &MakeIdPod {
+            id: 0,
+            generation: 0,
+        },
+    );
+    buffer.append(
+        RenderCmd::PathAddRenderPath,
+        &PathAddPathPod {
+            path: 0,
+            src: 0,
+            xx: 2.0,
+            xy: 0.0,
+            yx: 0.0,
+            yy: 3.0,
+            tx: 4.0,
+            ty: 5.0,
+        },
+    );
+
+    let mut factory = MFactory::default();
+    let mut table = ResourceTable::default();
+    replay_render_commands(
+        &mut factory,
+        None,
+        buffer.command_bytes(),
+        buffer.blob_bytes(),
+        &mut table,
+        &mut ReplayHooks::default(),
+    );
+
+    let path = table.paths.get(0).expect("resident replay path");
+    assert_eq!(
+        path.borrow()
+            .as_any()
+            .downcast_ref::<MPath>()
+            .expect("measure path")
+            .self_adds,
+        1
+    );
 }
 struct MSink {
     factory: PersistentFactory<MFactory>,

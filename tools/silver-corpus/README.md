@@ -10,7 +10,7 @@ helper cases are explicit generator data. `interpolator.sriv`,
 `multitouch_debug.sriv`, and the upstream-disabled `stateful_list_props.sriv`
 remain explicit `provenance-unknown` entries.
 
-The runner validates all 255 streams structurally. For the 210 runtime cases,
+The runner validates all 256 streams structurally. For the 211 runtime cases,
 the generator translates the replayable portion of each pinned C++ test body
 into a shared action stream. Validation imports the recorded `.riv`, selects
 the requested artboard/state machine/animation, applies those actions to the

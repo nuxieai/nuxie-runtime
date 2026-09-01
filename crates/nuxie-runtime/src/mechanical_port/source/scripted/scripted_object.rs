@@ -886,14 +886,54 @@ impl ScriptedObject {
     pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
         self.data_context.clone()
     }
+
+    /// Resolve the concrete occurrence's virtual `dataContext()` override.
+    ///
+    /// `ScriptedDrawable` (including `ScriptedLayout`) and
+    /// `ScriptedPathEffect` read their Artboard's current context, while
+    /// `ScriptedDataConverter` owns a converter-local context. Every other
+    /// ScriptedObject uses the base field.
+    pub fn effective_data_context(owner: &CoreHandle) -> Option<RuntimeDataContextHandle> {
+        owner
+            .with(|object| {
+                if object.as_scripted_drawable().is_some() {
+                    return object
+                        .as_component()
+                        .and_then(|component| component.artboard_handle())
+                        .and_then(|artboard| {
+                            artboard
+                                .with(|artboard| {
+                                    artboard.as_artboard().and_then(|artboard| artboard.data_context())
+                                })
+                                .flatten()
+                        });
+                }
+                if let Some(path_effect) = object.as_any().downcast_ref::<
+                    crate::mechanical_port::source::scripted::scripted_path_effect::ScriptedPathEffect,
+                >() {
+                    return path_effect.data_context();
+                }
+                if let Some(converter) = object.as_any().downcast_ref::<
+                    crate::mechanical_port::source::scripted::scripted_data_converter::ScriptedDataConverter,
+                >() {
+                    return converter.data_context();
+                }
+                object
+                    .as_scripted_object()
+                    .and_then(ScriptedObject::data_context)
+            })
+            .flatten()
+    }
+
     pub fn set_data_context(&mut self, v: Option<RuntimeDataContextHandle>) {
         self.data_context = v.clone();
 
         // C++ ScriptedContext retains its ScriptedObject and resolves the
-        // object's current DataContext on every viewModel/rootViewModel call.
-        // A Rust script instance retains the ownership-safe projected chain
-        // instead, so an already-live table must receive the same synchronous
-        // context change before `internalDataContext` rehydrates it.
+        // object's current sources on every global lookup. Keep the
+        // occurrence-backed ScriptedContextSource intact; the Rust VM's
+        // separately projected viewModel/rootViewModel chain still needs the
+        // same synchronous propagation before `internalDataContext` rehydrates
+        // the occurrence.
         let Some(instance) = self.runtime_instance.clone() else {
             return;
         };

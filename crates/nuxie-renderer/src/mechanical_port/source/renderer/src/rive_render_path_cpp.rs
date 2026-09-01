@@ -523,7 +523,8 @@ impl RiveRenderPath {
         assert_eq!(self.m_rawPathMutationLockCount.get(), 0);
         let verb_start = self.m_rawPath.verbs().len();
         let point_start = self.m_rawPath.points().len();
-        self.m_rawPath.add_path_backwards(&path.m_rawPath, matrix);
+        self.m_rawPath
+            .add_path_backwards_with_transform(&path.m_rawPath, matrix);
         if matrix != Mat2D::IDENTITY {
             self.m_rawPath
                 .prune_empty_segments_from_offsets(verb_start, point_start);

@@ -96,6 +96,7 @@ impl ScriptingVm for RecordingVm {
         &self,
         program: &RuntimeScriptProgram,
         context_present: bool,
+        _context_source: Option<ScriptedContextSource>,
         view_model: Option<ScriptViewModel>,
         parents: Vec<Option<ScriptViewModel>>,
         _host: &mut dyn ScriptHost,

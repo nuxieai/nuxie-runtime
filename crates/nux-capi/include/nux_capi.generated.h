@@ -597,6 +597,10 @@ typedef struct NuxRenderCallbacks {
   void (*render_path_cubic_to)(void*, uint64_t, float, float, float, float, float, float);
   void (*render_path_close)(void*, uint64_t);
   void (*render_path_add_raw_path)(void*, uint64_t, const struct NuxRawPathView*);
+  /**
+   * When destination and source are the same handle, the callback must
+   * snapshot the source geometry before mutating the destination.
+   */
   void (*render_path_add_render_path)(void*, uint64_t, uint64_t, const float*);
   void (*render_path_add_render_path_backwards)(void*, uint64_t, uint64_t, const float*);
   void (*render_paint_style)(void*, uint64_t, uint8_t);

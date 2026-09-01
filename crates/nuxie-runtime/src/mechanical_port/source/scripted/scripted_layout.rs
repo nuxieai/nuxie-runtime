@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::{
     core::CoreHandle,
     generated::scripted::scripted_layout_base::ScriptedLayoutBase,
-    scripted::scripted_object::{ScriptProtocol, ScriptUpdateRequestHost},
+    scripted::scripted_object::{ScriptProtocol, ScriptUpdateRequestHost, ScriptedObject},
 };
 pub use crate::mechanical_port::source::{
     layout::{
@@ -17,6 +17,13 @@ pub struct ScriptedLayout {
     pub base: ScriptedLayoutBase,
     size: Vec2,
 }
+
+impl Drop for ScriptedLayout {
+    fn drop(&mut self) {
+        ScriptedObject::dispose_owned_script_inputs(&mut self.base.base.properties);
+    }
+}
+
 impl ScriptedLayout {
     pub fn did_hydrate_script_inputs(&mut self) {
         self.base.base.did_hydrate_script_inputs();

@@ -140,6 +140,13 @@ pub(super) fn register(
             )?;
         }
         for index in sorted {
+            if !matches!(vm.registered_module(scripts[index].name)?, Value::Nil) {
+                continue;
+            }
+            let deps: Table = dependencies.raw_get(scripts[index].name)?;
+            if deps.pairs::<String, bool>().next().is_some() {
+                continue;
+            }
             attempt(
                 vm,
                 scripts,

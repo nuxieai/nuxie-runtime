@@ -14,6 +14,12 @@ pub struct ScriptedInterpolator {
     pub properties: Vec<CoreHandle>,
 }
 
+impl Drop for ScriptedInterpolator {
+    fn drop(&mut self) {
+        ScriptedObject::dispose_owned_script_inputs(&mut self.properties);
+    }
+}
+
 impl ScriptedInterpolator {
     pub fn asset_id(&self) -> u32 {
         self.base.script_asset_id()

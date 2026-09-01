@@ -48,6 +48,11 @@ impl Default for ScriptedPathEffect {
         }
     }
 }
+impl Drop for ScriptedPathEffect {
+    fn drop(&mut self) {
+        ScriptedObject::dispose_owned_script_inputs(&mut self.properties);
+    }
+}
 impl ScriptedPathEffect {
     pub fn asset_id(&self) -> u32 {
         self.base.script_asset_id()

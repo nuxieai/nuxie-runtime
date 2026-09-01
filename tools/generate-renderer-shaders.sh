@@ -11,7 +11,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # Python sets. Fix the hash seed so its compiler-input headers are byte-stable.
 export PYTHONHASHSEED=0
 
-expected_runtime_revision="3ed35ee0ded0d58fb8d380930a156041a4624a2f"
+expected_runtime_revision="2cfa84e8103aeeeff4c2bfee92839ab580521660"
 expected_naga_version="30.0.0"
 expected_glslang_version="Glslang Version: 11:16.2.0"
 expected_spirv_tools_version="SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00"
@@ -56,10 +56,10 @@ if [[ -n "$untracked_local_sources" ]]; then
 fi
 
 # 395defdb (alpha-zero dither suppression) was carried here as an overlay while
-# the pin predated it. The pin now sits at 3ed35ee0, which already contains that
-# commit, so the inputs are taken from the pinned tree unmodified. Work from an
-# isolated copy anyway: generation writes into the tree and must not dirty the
-# reference checkout.
+# the pin predated it. The current checkpoint descends from 3ed35ee0, which
+# already contains that commit, so the inputs are taken from the pinned tree
+# unmodified. Work from an isolated copy anyway: generation writes into the
+# tree and must not dirty the reference checkout.
 shader_work="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-renderer-shader-inputs.XXXXXX")"
 trap 'rm -rf "$shader_work"' EXIT
 mkdir -p "$shader_work/renderer/src"

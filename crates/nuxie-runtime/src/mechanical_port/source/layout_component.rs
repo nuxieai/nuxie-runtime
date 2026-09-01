@@ -184,6 +184,7 @@ pub struct LayoutComponent {
     position_left_changed: bool,
     position_top_changed: bool,
     has_foreground_drawable: bool,
+    has_component_origin: bool,
     // Files exported before 7.3 never composed a layout's own rotation/scale,
     // so any stored value was ignored. Import clears this for those files; it
     // defaults to the current behavior so a layout built outside of import
@@ -230,6 +231,7 @@ impl Default for LayoutComponent {
             position_left_changed: true,
             position_top_changed: true,
             has_foreground_drawable: false,
+            has_component_origin: false,
             compose_transform: true,
         }
     }
@@ -783,6 +785,9 @@ impl LayoutComponent {
         None
     }
     fn origin(&self) -> Option<(f32, f32)> {
+        if !self.has_component_origin {
+            return None;
+        }
         self.base
             .base
             .base
@@ -803,6 +808,143 @@ impl LayoutComponent {
     pub fn pivot_origin_y(&self) -> f32 {
         self.origin().map_or(0.0, |origin| origin.1)
     }
+    pub fn mark_has_component_origin(&mut self) {
+        self.has_component_origin = true;
+    }
+    pub fn origin_offset(&self) -> Vec2D {
+        self.origin_offset_with(self.pivot_origin_x(), self.pivot_origin_y())
+    }
+    fn origin_offset_with(&self, origin_x: f32, origin_y: f32) -> Vec2D {
+        Vec2D::new(
+            origin_x * self.layout.width(),
+            origin_y * self.layout.height(),
+        )
+    }
+    pub fn local_anchor(&self) -> Vec2D {
+        if !self.has_component_origin || self.is_artboard() {
+            Vec2D::default()
+        } else {
+            self.origin_offset()
+        }
+    }
+    pub fn layout_translation(&self) -> Vec2D {
+        // Our own origin deliberately does not enter here: contents sit within
+        // our box whatever it is, so nothing inside has to compensate. An
+        // artboard's origin does define where its local zero sits, so step back
+        // by it to align to its box.
+        let mut location = Vec2D::new(self.layout.left(), self.layout.top());
+        if let Some(parent) = self.base.base.base.base.base.parent_handle() {
+            if let Some(origin) = parent
+                .with(|parent| {
+                    parent.as_artboard().map(|artboard| {
+                        Vec2D::new(
+                            artboard.layout_width() * artboard.origin_x(),
+                            artboard.layout_height() * artboard.origin_y(),
+                        )
+                    })
+                })
+                .flatten()
+            {
+                location -= origin;
+            }
+        }
+        location
+    }
+    pub fn composes_layout_offset(&self) -> bool {
+        self.compose_transform && !self.is_artboard()
+    }
+    pub fn composed_translation(&self) -> Vec2D {
+        if self.composes_layout_offset() {
+            Vec2D::new(
+                self.base.base.base.base.base.x(),
+                self.base.base.base.base.base.y(),
+            )
+        } else {
+            self.layout_translation()
+        }
+    }
+    pub fn build_own_transform(&self) -> Mat2D {
+        self.build_own_transform_with(
+            self.composes_layout_offset(),
+            self.pivot_origin_x(),
+            self.pivot_origin_y(),
+        )
+    }
+    fn build_own_transform_with(
+        &self,
+        composes_layout_offset: bool,
+        origin_x: f32,
+        origin_y: f32,
+    ) -> Mat2D {
+        // Outermost, matching TransformComponent's T * R * S, so the offset is
+        // not rotated or scaled by our own transform.
+        let mut own = if composes_layout_offset {
+            Mat2D::from_translation(Vec2D::new(
+                self.base.base.base.base.base.x(),
+                self.base.base.base.base.base.y(),
+            ))
+        } else {
+            Mat2D::identity()
+        };
+
+        // Pivot about the origin. The box stays put, so wrap rather than fold
+        // into the frame.
+        if self.compose_transform
+            && (self.rotation() != 0.0 || self.scale_x() != 1.0 || self.scale_y() != 1.0)
+        {
+            let mut local = if self.rotation() != 0.0 {
+                Mat2D::from_rotation(self.rotation())
+            } else {
+                Mat2D::identity()
+            };
+            local.scale_by_values(self.scale_x(), self.scale_y());
+            let pivot = self.origin_offset_with(origin_x, origin_y);
+            if pivot.x != 0.0 || pivot.y != 0.0 {
+                local = Mat2D::from_translate(pivot.x, pivot.y)
+                    * local
+                    * Mat2D::from_translate(-pivot.x, -pivot.y);
+            }
+            own *= local;
+        }
+        own
+    }
+    pub fn update_transform(&mut self) {
+        *self.base.base.base.base.base.base.mutable_transform() = self.build_own_transform();
+    }
+    pub(crate) fn update_transform_for_artboard(&mut self, origin_x: f32, origin_y: f32) {
+        *self.base.base.base.base.base.base.mutable_transform() =
+            self.build_own_transform_with(false, origin_x, origin_y);
+    }
+    pub fn compose_world_transform(&mut self) {
+        let parent_world = self
+            .base
+            .base
+            .base
+            .base
+            .base
+            .parent_handle()
+            .and_then(|parent| {
+                parent
+                    .with(|parent| {
+                        parent
+                            .as_world_transform_component()
+                            .map(|parent| *parent.world_transform())
+                    })
+                    .flatten()
+            })
+            .unwrap_or_else(Mat2D::identity);
+        let base = Mat2D::from_translation(self.layout_translation());
+        let own = *self.base.base.base.base.base.base.transform();
+        self.base
+            .base
+            .base
+            .base
+            .set_world_transform(parent_world * base * own);
+    }
+    fn computed_origin_local(&self) -> Vec2D {
+        self.layout_translation()
+            + *self.base.base.base.base.base.base.transform() * self.local_anchor()
+    }
     pub fn shape_world_transform(&self) -> Mat2D {
         *self.base.base.base.base.world_transform()
     }
@@ -810,10 +952,30 @@ impl LayoutComponent {
         self.base.base.base.base.base.artboard_handle()
     }
     pub fn computed_local_x(&self) -> f32 {
-        self.layout.left()
+        self.computed_origin_local().x
     }
     pub fn computed_local_y(&self) -> f32 {
-        self.layout.top()
+        self.computed_origin_local().y
+    }
+    pub fn computed_world_x(&self) -> f32 {
+        (*self.base.base.base.base.world_transform() * self.local_anchor()).x
+    }
+    pub fn computed_world_y(&self) -> f32 {
+        (*self.base.base.base.base.world_transform() * self.local_anchor()).y
+    }
+    pub fn computed_root_x(&self) -> f32 {
+        let point = *self.base.base.base.base.world_transform() * self.local_anchor();
+        self.artboard_handle()
+            .expect("computedRootX requires an artboard")
+            .with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point).x)
+            .expect("computedRootX requires a live artboard")
+    }
+    pub fn computed_root_y(&self) -> f32 {
+        let point = *self.base.base.base.base.world_transform() * self.local_anchor();
+        self.artboard_handle()
+            .expect("computedRootY requires an artboard")
+            .with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point).y)
+            .expect("computedRootY requires a live artboard")
     }
     pub fn computed_width(&self) -> f32 {
         self.layout.width()
@@ -856,10 +1018,10 @@ impl LayoutComponent {
         self.layout = Layout::new(left, top, width, height);
     }
     pub fn x(&self) -> f32 {
-        self.layout.left()
+        self.base.base.base.base.base.x()
     }
     pub fn y(&self) -> f32 {
-        self.layout.top()
+        self.base.base.base.base.base.y()
     }
     pub fn layout_x(&self) -> f32 {
         self.layout.left()
@@ -924,6 +1086,9 @@ impl LayoutComponent {
         self.forced_height
     }
     pub fn can_have_overrides(&self) -> bool {
+        self.is_artboard()
+    }
+    fn is_artboard(&self) -> bool {
         self.base.handle().and_then(|handle| handle.core_type())
             == Some(
                 crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
@@ -1012,54 +1177,10 @@ impl LayoutComponent {
         let needs_layout_constraints = self.base.base.base.base.base.parent_handle().is_some()
             && value.contains(ComponentDirt::WORLD_TRANSFORM);
         if needs_layout_constraints {
-            let parent = self
-                .base
-                .base
-                .base
-                .base
-                .base
-                .parent_handle()
-                .expect("checked parent");
-            let (parent_world, artboard_origin) = parent
-                .with(|parent| {
-                    let world = parent
-                        .as_world_transform_component()
-                        .map_or(Mat2D::identity(), |value| *value.world_transform());
-                    let origin = parent.as_artboard().map(|artboard| {
-                        Vec2D::new(
-                            artboard.layout_width() * artboard.origin_x(),
-                            artboard.layout_height() * artboard.origin_y(),
-                        )
-                    });
-                    (world, origin)
-                })
-                .unwrap_or((Mat2D::identity(), None));
-            let mut location = Vec2D::new(self.layout.left(), self.layout.top());
-            if let Some(origin) = artboard_origin {
-                location -= origin;
-            }
-            let mut slot = Mat2D::from_translation(location);
-            if self.compose_transform
-                && (self.rotation() != 0.0 || self.scale_x() != 1.0 || self.scale_y() != 1.0)
-            {
-                let mut local = if self.rotation() != 0.0 {
-                    Mat2D::from_rotation(self.rotation())
-                } else {
-                    Mat2D::identity()
-                };
-                local.scale_by_values(self.scale_x(), self.scale_y());
-                let (ox, oy) = (self.pivot_origin_x(), self.pivot_origin_y());
-                if ox != 0.0 || oy != 0.0 {
-                    let (px, py) = (ox * self.layout_width(), oy * self.layout_height());
-                    local = Mat2D::from_translate(px, py) * local * Mat2D::from_translate(-px, -py);
-                }
-                slot *= local;
-            }
-            self.base
-                .base
-                .base
-                .base
-                .set_world_transform(parent_world * slot);
+            // Not left to Super's Transform-dirt pass: the pivot scales by the
+            // solved size, so a re-solve alone can stale it.
+            self.update_transform();
+            self.compose_world_transform();
         }
         needs_layout_constraints
     }

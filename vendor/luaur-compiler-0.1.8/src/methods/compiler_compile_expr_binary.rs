@@ -125,7 +125,11 @@ impl Compiler {
                     self.unroll_concats(&mut args);
                     let regs = self.alloc_reg(expr as *mut _, args.len() as u32);
                     for (i, &arg) in args.iter().enumerate() {
-                        self.compile_expr_temp(arg, regs + i as u8);
+                        if luaur_common::FFlag::LuauCompileConcatTargetTop.get() {
+                            self.compile_expr_temp_top(arg, regs + i as u8);
+                        } else {
+                            self.compile_expr_temp(arg, regs + i as u8);
+                        }
                     }
                     (*self.bytecode).emit_abc(
                         LuauOpcode::LOP_CONCAT,

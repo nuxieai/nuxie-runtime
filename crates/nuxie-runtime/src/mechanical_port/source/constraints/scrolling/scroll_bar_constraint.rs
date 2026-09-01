@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
     constraints::{
+        constraint::Constraint,
         draggable_constraint::{DraggableConstraint, DraggableProxy},
         scrolling::{
             scroll_bar_constraint_proxy::{ThumbDraggableProxy, TrackDraggableProxy},
@@ -136,7 +137,7 @@ impl ScrollBarConstraint {
         items
     }
 
-    pub fn constrain(&mut self, component: &mut TransformComponent) {
+    pub fn constrain(&mut self, component: &CoreHandle) {
         let Some((max_offset_x, clamped_offset_x, max_offset_y, clamped_offset_y)) = self
             .with_scroll(|scroll| {
                 (
@@ -208,18 +209,26 @@ impl ScrollBarConstraint {
                     .expect("validated ScrollBarConstraint thumb");
             }
         }
-        let target_transform = Mat2D::multiply(
-            *component.world_transform(),
-            Mat2D::from_translate(thumb_offset_x, thumb_offset_y),
-        );
-        TransformConstraint::constrain_world(
-            component,
-            *component.world_transform(),
-            self.components_a,
-            target_transform,
-            self.components_b,
-            self.base.strength(),
-        );
+        // The thumb offset is in track units, so apply it in the track's frame
+        // rather than the thumb's own - see Constraint::offset_in_parent_frame.
+        let _ = component.with_mut(|component| {
+            let Some(component) = component.as_transform_component_mut() else {
+                return false;
+            };
+            let target_transform = Constraint::offset_in_parent_frame(
+                component,
+                &Mat2D::from_translate(thumb_offset_x, thumb_offset_y),
+            );
+            TransformConstraint::constrain_world(
+                component,
+                *component.world_transform(),
+                self.components_a,
+                target_transform,
+                self.components_b,
+                self.base.strength(),
+            );
+            true
+        });
     }
 
     pub fn set_scroll_constraint(&mut self, constraint: CoreHandle) {

@@ -7,7 +7,7 @@ use crate::mechanical_port::source::{
         TransformComponentBase, TransformComponentBaseCallbacks,
     },
     intrinsically_sizeable::IntrinsicallySizeable,
-    math::{aabb::Aabb, mat2d::Mat2D},
+    math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     status_code::StatusCode,
 };
 
@@ -214,6 +214,19 @@ impl TransformComponent {
 
     pub fn mutable_transform(&mut self) -> &mut Mat2D {
         &mut self.transform
+    }
+
+    /// Our translation in the parent's frame — what a constraint's offset
+    /// preserves. x/y, plus where the layout engine placed anything laid out.
+    pub fn composed_translation(&self, x: f32, y: f32) -> Vec2D {
+        Vec2D::new(x, y)
+    }
+
+    /// Where our anchor sits in our own local space. Zero for anything drawn
+    /// about its origin; a layout's box starts at local zero, so its origin is
+    /// this far in.
+    pub fn local_anchor(&self) -> Vec2D {
+        Vec2D::default()
     }
 
     pub fn rotation_changed(&mut self) {

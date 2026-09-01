@@ -6,6 +6,7 @@ use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     advance_flags::AdvanceFlags,
     artboard_component_list::ArtboardComponentList,
+    constraints::scrolling::scroll_constraint::ScrollConstraint,
     core::CoreType,
     generated::{core_registry::CoreRegistry, node_base::NodeBase},
     layout::layout_node_provider,
@@ -477,4 +478,45 @@ fn a_participant_with_an_empty_path_keeps_a_sane_world_transform() {
         assert!(world[4].abs() < 1.0e6);
         assert!(world[5].abs() < 1.0e6);
     }
+}
+
+#[test]
+fn a_scroll_constraint_moves_a_participating_child() {
+    let fixture = fixture("layout/scroll_participant.riv", None, true);
+    let shape = only_shape(&fixture);
+    assert!(layout_node_provider::from_component(&shape).is_some());
+
+    let scrolls = fixture.find::<ScrollConstraint>();
+    assert_eq!(scrolls.len(), 1);
+    let scroll = &scrolls[0];
+    assert!(
+        scroll
+            .with_downcast::<ScrollConstraint, _>(ScrollConstraint::max_offset_y)
+            .expect("ScrollConstraint")
+            <= -50.0
+    );
+
+    let before = shape
+        .with(|shape| {
+            shape
+                .as_world_transform_component()
+                .expect("Shape world transform")
+                .world_transform()[5]
+        })
+        .expect("live Shape");
+    scroll
+        .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+            scroll.set_authored_scroll_offset_y(-50.0)
+        })
+        .expect("ScrollConstraint");
+    fixture.advance(0.0);
+    let after = shape
+        .with(|shape| {
+            shape
+                .as_world_transform_component()
+                .expect("Shape world transform")
+                .world_transform()[5]
+        })
+        .expect("live Shape");
+    approx(after - before, -50.0);
 }

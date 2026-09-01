@@ -47,7 +47,6 @@ fn apply_all_flags(value: bool, mut apply: impl FnMut(&'static FValue<bool>, boo
     apply(&FFlag::LuauAddRecursionCounterToNonStrictTypeChecker, value);
     apply(&FFlag::LuauAllowGlobalDeclarationToBeCalledClass, value);
     apply(&FFlag::LuauAlsoInstantiateInferredArguments, value);
-    apply(&FFlag::LuauAutoStack, false);
     apply(&FFlag::LuauAutocompleteConst, value);
     apply(&FFlag::LuauAutocompleteExport, value);
     apply(&FFlag::LuauAutocompleteStringSingletonIntersection, value);
@@ -58,7 +57,6 @@ fn apply_all_flags(value: bool, mut apply: impl FnMut(&'static FValue<bool>, boo
     apply(&FFlag::LuauBytecodeFold, false);
     apply(&FFlag::LuauCIProto, false);
     apply(&FFlag::LuauCheckFunctionStatementTypes, value);
-    apply(&FFlag::LuauCloneTableFix, false);
     apply(&FFlag::LuauCodeGenCallWrapperEmitInst, value);
     apply(&FFlag::LuauCodegenBufferInteger, value);
     apply(&FFlag::LuauCodegenDsePtrStoreTagCheck, value);
@@ -79,6 +77,7 @@ fn apply_all_flags(value: bool, mut apply: impl FnMut(&'static FValue<bool>, boo
     apply(&FFlag::LuauCodegenSuggestArgumentRegisterX64, value);
     apply(&FFlag::LuauCodegenVmExitSync, value);
     apply(&FFlag::LuauCodegenVmExitSyncFix, value);
+    apply(&FFlag::LuauCompileConcatTargetTop, false);
     apply(&FFlag::LuauCompileStringInterpTargetTop, value);
     apply(&FFlag::LuauCompileIifeInline, false);
     apply(&FFlag::LuauConcatDoesntAlwaysReturnString, value);
@@ -105,6 +104,7 @@ fn apply_all_flags(value: bool, mut apply: impl FnMut(&'static FValue<bool>, boo
     apply(&FFlag::LuauInstantiateInSubtyping, value);
     apply(&FFlag::LuauInstantiationUsesPolarity, value);
     apply(&FFlag::LuauIntegerBufferFastcalls, false);
+    apply(&FFlag::LuauPrettyPrintVisualizeIndexerAccess, false);
     apply(&FFlag::LuauIntegerFastcalls, false);
     apply(&FFlag::LuauIntegerLibrary, value);
     apply(&FFlag::LuauIntegerType2, value);
@@ -265,8 +265,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauAllowGlobalDeclarationToBeCalledClass);
     // Analysis/src/ConstraintSolver.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauAlsoInstantiateInferredArguments);
-    // VM/src/lapi.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauAutoStack);
     // Analysis/src/AutocompleteCore.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauAutocompleteConst);
     // Analysis/src/AutocompleteCore.cpp
@@ -289,8 +287,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCIProto);
     // Analysis/src/TypeChecker2.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCheckFunctionStatementTypes);
-    // VM/src/lapi.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauCloneTableFix);
     // CodeGen/src/EmitInstructionX64.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCodeGenCallWrapperEmitInst);
     // CodeGen/src/IrTranslateBuiltins.cpp
@@ -335,6 +331,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileEmitVectorDouble);
     crate::LUAU_FLAGVERSION!(LuauCompileEmitVectorDouble, 2);
     // Compiler/src/Compiler.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauCompileConcatTargetTop);
+    // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileStringInterpTargetTop);
     // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauCompileIifeInline);
@@ -353,6 +351,8 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauDisallowRedefiningBuiltinTypes);
     // Compiler/src/Compiler.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauEmitCallFeedback);
+    // Ast/src/PrettyPrinter.cpp
+    crate::LUAU_FASTFLAGVARIABLE!(LuauPrettyPrintVisualizeIndexerAccess);
     // Analysis/src/TypeInfer.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauExplicitTypeInstantiationSupport);
     // Ast/src/Parser.cpp
@@ -581,6 +581,8 @@ pub mod DFFlag {
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcMarkUdataAccess, false);
     // VM/src/lgc.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcTableStepFix, false);
+    // VM/src/ltablib.cpp
+    crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauTableMoveTimeoutFix, false);
     // Require/src/RequireNavigator.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauRequireAliasOverrideOrderFix, false);
     // Require/src/RequireNavigator.cpp
@@ -630,6 +632,8 @@ mod fastflag_timetrace_tests {
     #[test]
     fn scoped_all_flags_do_not_change_parallel_runtime_threads() {
         crate::set_all_flags(true);
+        assert!(!crate::FFlag::LuauCompileConcatTargetTop.get());
+        assert!(!crate::FFlag::LuauPrettyPrintVisualizeIndexerAccess.get());
         let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
         let compiler_barrier = barrier.clone();
         let compiler = std::thread::spawn(move || {

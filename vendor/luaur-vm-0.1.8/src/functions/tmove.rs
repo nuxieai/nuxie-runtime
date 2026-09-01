@@ -41,11 +41,18 @@ pub unsafe fn tmove(L: *mut lua_State) -> core::ffi::c_int {
             lua_g_readonlyerror(L);
         }
 
+        let sparsemove = luaur_common::DFFlag::LuauTableMoveTimeoutFix.get()
+            && super::moveelements::should_sparse_move(
+                hvalue!((*L).base.offset((1 - 1) as isize)),
+                dst,
+                n,
+            );
+
         if t > 0 && (t - 1) <= (*dst).sizearray && (t - 1 + n) > (*dst).sizearray {
             lua_h_resizearray(L, dst, t - 1 + n);
         }
 
-        moveelements(L, 1, tt, f, e, t);
+        moveelements(L, 1, tt, f, e, t, sparsemove);
     }
 
     lua_pushvalue(L, tt);

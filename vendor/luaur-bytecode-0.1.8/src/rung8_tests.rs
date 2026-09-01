@@ -1,9 +1,29 @@
 use crate::records::bytecode_builder::BytecodeBuilder;
 use crate::records::class_shape::ClassShape;
+use crate::records::string_ref::StringRef;
 use luaur_common::enums::luau_opcode::LuauOpcode;
 use std::sync::Mutex;
 
 static FFLAG_LOCK: Mutex<()> = Mutex::new(());
+
+#[test]
+fn namecalludata_validation_accepts_call_feedback() {
+    let mut builder = BytecodeBuilder::new(None);
+    let function_id = builder.begin_function(0, false);
+    let method = b"method";
+    assert_eq!(
+        builder.add_constant_string(StringRef::new(method.as_ptr().cast(), method.len())),
+        0
+    );
+    builder.emit_abc(LuauOpcode::LOP_NAMECALLUDATA, 0, 1, 0);
+    builder.emit_aux(0);
+    builder.emit_abc(LuauOpcode::LOP_CALLFB, 0, 1, 1);
+    builder.emit_aux(0);
+    builder.emit_abc(LuauOpcode::LOP_RETURN, 0, 1, 0);
+    builder.functions[function_id as usize].maxstacksize = 2;
+
+    builder.validate_instructions();
+}
 
 #[test]
 fn bytecode_version_ladder_preserves_tip_precedence_and_default_target() {

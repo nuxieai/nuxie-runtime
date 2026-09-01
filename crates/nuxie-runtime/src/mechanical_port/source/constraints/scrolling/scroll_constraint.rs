@@ -9,6 +9,7 @@ use crate::mechanical_port::source::{
     artboard_component_list::ArtboardComponentList,
     component_dirt::ComponentDirt,
     constraints::{
+        constraint::Constraint,
         draggable_constraint::{DraggableConstraintDirection, DraggableProxy},
         layout_constraint::LayoutConstraint,
         scrolling::{
@@ -499,7 +500,7 @@ impl ScrollConstraint {
             .with_mut(|owner| {
                 let component = owner.as_transform_component_mut()?;
                 let current = *component.world_transform();
-                let target = Mat2D::multiply(current, scroll_transform);
+                let target = Constraint::offset_in_parent_frame(component, &scroll_transform);
                 TransformConstraint::constrain_world(
                     component,
                     current,

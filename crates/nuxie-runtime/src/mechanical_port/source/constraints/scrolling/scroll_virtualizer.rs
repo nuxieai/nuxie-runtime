@@ -10,8 +10,8 @@ use crate::mechanical_port::source::{
 };
 
 pub struct ScrollVirtualizer {
-    visible_index_start: i32,
-    visible_index_end: i32,
+    realized_index_start: i32,
+    realized_index_end: i32,
     offset: f32,
     infinite: bool,
     viewport_size: f32,
@@ -21,8 +21,8 @@ pub struct ScrollVirtualizer {
 impl Default for ScrollVirtualizer {
     fn default() -> Self {
         Self {
-            visible_index_start: 0,
-            visible_index_end: 0,
+            realized_index_start: 0,
+            realized_index_end: 0,
             offset: 0.0,
             infinite: false,
             viewport_size: 0.0,
@@ -53,8 +53,8 @@ impl ScrollVirtualizer {
     }
 
     pub fn reset(&mut self) {
-        self.visible_index_end = 0;
-        self.visible_index_start = self.visible_index_end;
+        self.realized_index_end = 0;
+        self.realized_index_start = self.realized_index_end;
     }
 
     fn with_provider<R>(
@@ -125,18 +125,18 @@ impl ScrollVirtualizer {
             .iter()
             .map(|child| Self::with_provider(child, |child| child.num_layout_nodes() as i32))
             .sum();
-        let last_start = if self.infinite && total_item_count > 0 {
-            self.visible_index_start % total_item_count
+        let last_realized_index_start = if self.infinite && total_item_count > 0 {
+            self.realized_index_start % total_item_count
         } else {
-            self.visible_index_start
+            self.realized_index_start
         };
-        let last_end = if self.infinite && total_item_count > 0 {
-            self.visible_index_end % total_item_count
+        let last_realized_index_end = if self.infinite && total_item_count > 0 {
+            self.realized_index_end % total_item_count
         } else {
-            self.visible_index_end
+            self.realized_index_end
         };
-        self.visible_index_start = 0;
-        self.visible_index_end = total_item_count - 1;
+        self.realized_index_start = 0;
+        self.realized_index_end = total_item_count - 1;
         let mut running_size = 0.0;
         let mut running_offset = 0.0;
         let mut running_index = 0;
@@ -153,6 +153,7 @@ impl ScrollVirtualizer {
         for child in children {
             Self::with_virtualizer_mut(child, |virtualizer| {
                 virtualizer.set_visible_indices(-1, -1);
+                virtualizer.set_realized_indices(-1, -1);
             });
         }
 
@@ -162,7 +163,7 @@ impl ScrollVirtualizer {
                 let size = self.get_item_size(child, item_index, horizontal);
                 if running_size + size > self.offset {
                     running_offset = running_size - self.offset;
-                    self.visible_index_start = running_index;
+                    self.realized_index_start = running_index;
                     if current_child_index == children.len() - 1 {
                         child_index += 1;
                         current_child_index = 0;
@@ -186,7 +187,7 @@ impl ScrollVirtualizer {
                     }
                     running_size += gap;
                     running_offset = running_size - self.offset;
-                    self.visible_index_start = running_index;
+                    self.realized_index_start = running_index;
                     break 'find_start;
                 }
                 running_size += gap;
@@ -195,7 +196,7 @@ impl ScrollVirtualizer {
         }
 
         child_index %= children.len();
-        let mut item = self.visible_index_start;
+        let mut item = self.realized_index_start;
         let mut wrapped = false;
         let mut cycle_count = 0;
         'find_end: while item < total_item_count && cycle_count < 2 {
@@ -204,7 +205,7 @@ impl ScrollVirtualizer {
             for local in current_child_index..count {
                 let size = self.get_item_size(child, local, horizontal);
                 if running_size + size + gap >= self.offset + self.viewport_size {
-                    self.visible_index_end = if self.infinite && wrapped {
+                    self.realized_index_end = if self.infinite && wrapped {
                         item + total_item_count
                     } else {
                         item
@@ -223,15 +224,59 @@ impl ScrollVirtualizer {
             current_child_index = 0;
         }
 
+        // Keep `virtualizeBuffer` lines realized on each side of the visible range
+        // so items are mounted and advancing before they scroll in. Buffered items
+        // are drawn (clipped away by a normal viewport), but stay out of the
+        // visible range, which is what reports measured sizes back to us.
+        let mut visible_index_start = self.realized_index_start;
+        let mut visible_index_end = self.realized_index_end;
+        let buffer = Self::with_scroll(scroll, |scroll| i32::from(scroll.virtualize_buffer()))
+            .min(total_item_count);
+        if buffer > 0 && total_item_count > 0 {
+            let visible_span = self.realized_index_end - self.realized_index_start + 1;
+            let max_extra = (total_item_count - visible_span).max(0);
+            let before = buffer.min(if self.infinite {
+                max_extra
+            } else {
+                self.realized_index_start
+            });
+            let after = buffer.min(if self.infinite {
+                max_extra - before
+            } else {
+                total_item_count - 1 - self.realized_index_end
+            });
+            let before = before.max(0);
+            let after = after.max(0);
+            for k in 1..=before {
+                running_offset -= self.get_item_size_at(
+                    self.realized_index_start - k,
+                    children,
+                    total_item_count,
+                    horizontal,
+                ) + gap;
+            }
+            self.realized_index_start -= before;
+            self.realized_index_end += after;
+            if self.infinite {
+                // Indices are modular when infinite, so bias the widened
+                // range into positive space and keep visible bounds in the
+                // same frame.
+                self.realized_index_start += total_item_count;
+                self.realized_index_end += total_item_count;
+                visible_index_start += total_item_count;
+                visible_index_end += total_item_count;
+            }
+        }
+
         let actual_start = if self.infinite && total_item_count > 0 {
-            self.visible_index_start % total_item_count
+            self.realized_index_start % total_item_count
         } else {
-            self.visible_index_start
+            self.realized_index_start
         };
         let actual_end = if self.infinite && total_item_count > 0 {
-            self.visible_index_end % total_item_count
+            self.realized_index_end % total_item_count
         } else {
-            self.visible_index_end
+            self.realized_index_end
         };
         let mut used = HashSet::new();
         if actual_start <= actual_end {
@@ -247,19 +292,19 @@ impl ScrollVirtualizer {
             }
         }
         let mut recycle = Vec::new();
-        if last_start <= last_end {
-            for index in last_start..=last_end {
+        if last_realized_index_start <= last_realized_index_end {
+            for index in last_realized_index_start..=last_realized_index_end {
                 if !used.contains(&index) {
                     recycle.push(index);
                 }
             }
         } else {
-            for index in last_start..total_item_count {
+            for index in last_realized_index_start..total_item_count {
                 if !used.contains(&index) {
                     recycle.push(index);
                 }
             }
-            for index in 0..=last_end {
+            for index in 0..=last_realized_index_end {
                 if !used.contains(&index) {
                     recycle.push(index);
                 }
@@ -268,12 +313,17 @@ impl ScrollVirtualizer {
         self.recycle_items(recycle, children, total_item_count);
 
         let mut visible_indices = vec![Vec2D::new(-1.0, -1.0); children.len()];
-        for global_index in self.visible_index_start..=self.visible_index_end {
+        let mut realized_indices = vec![Vec2D::new(-1.0, -1.0); children.len()];
+        for global_index in self.realized_index_start..=self.realized_index_end {
             let actual_index = if self.infinite {
                 global_index % total_item_count
             } else {
                 global_index
             };
+            // Buffered items are realized and drawn, but only on screen items
+            // report their measured size back.
+            let is_visible =
+                global_index >= visible_index_start && global_index <= visible_index_end;
             let mut running_total = 0;
             'providers: for (provider_index, child) in children.iter().enumerate() {
                 let count =
@@ -282,10 +332,16 @@ impl ScrollVirtualizer {
                 let end = start + count;
                 if start < end && actual_index < end && actual_index >= start {
                     let local = (actual_index - start) as usize;
-                    if visible_indices[provider_index].x == -1.0 {
-                        visible_indices[provider_index].x = local as f32;
+                    if realized_indices[provider_index].x == -1.0 {
+                        realized_indices[provider_index].x = local as f32;
                     }
-                    visible_indices[provider_index].y = local as f32;
+                    realized_indices[provider_index].y = local as f32;
+                    if is_visible {
+                        if visible_indices[provider_index].x == -1.0 {
+                            visible_indices[provider_index].x = local as f32;
+                        }
+                        visible_indices[provider_index].y = local as f32;
+                    }
                     let Some(changed) = Self::with_virtualizer_mut(child, |virtualizer| {
                         virtualizer.item(local as i32).is_none()
                     }) else {
@@ -345,6 +401,8 @@ impl ScrollVirtualizer {
             let visible = visible_indices[index];
             Self::with_virtualizer_mut(child, |virtualizer| {
                 virtualizer.set_visible_indices(visible.x as i32, visible.y as i32);
+                let realized = realized_indices[index];
+                virtualizer.set_realized_indices(realized.x as i32, realized.y as i32);
             });
         }
         for child in changed_components {
@@ -400,5 +458,31 @@ impl ScrollVirtualizer {
                 bounds.height()
             }
         })
+    }
+
+    fn get_item_size_at(
+        &self,
+        global_index: i32,
+        children: &[CoreHandle],
+        total_item_count: i32,
+        horizontal: bool,
+    ) -> f32 {
+        if total_item_count <= 0 {
+            return 0.0;
+        }
+        let mut index = global_index % total_item_count;
+        if index < 0 {
+            index += total_item_count;
+        }
+        let mut running_total = 0;
+        for child in children {
+            let end = running_total
+                + Self::with_provider(child, |provider| provider.num_layout_nodes()) as i32;
+            if index < end {
+                return self.get_item_size(child, (index - running_total) as usize, horizontal);
+            }
+            running_total = end;
+        }
+        0.0
     }
 }

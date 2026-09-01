@@ -863,6 +863,7 @@ dependencies = [
 name = "luaur-rt-test-harness"
 version = "0.1.0"
 dependencies = [
+ "luaur-common",
  "luaur-rt",
 ]
 

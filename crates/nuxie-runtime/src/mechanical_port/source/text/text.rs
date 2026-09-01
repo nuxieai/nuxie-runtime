@@ -1656,18 +1656,21 @@ impl Text {
             }
         }
     }
+    pub fn layout_base_translation(&self, participant: &LayoutParticipant) -> Vec2D {
+        Vec2D::new(
+            participant.resolved_left() + self.base.origin_x() * participant.resolved_width(),
+            participant.resolved_top() + self.base.origin_y() * participant.resolved_height(),
+        )
+    }
+
     pub(crate) fn try_compose_world_transform_override(&mut self) -> bool {
         let participant = self.base.children().iter().find_map(|child| {
             child
                 .with(|child| {
-                    child.as_any().downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>().map(|participant| {
-                        (
-                            participant.resolved_left(),
-                            participant.resolved_top(),
-                            participant.resolved_width(),
-                            participant.resolved_height(),
-                        )
-                    })
+                    child
+                        .as_any()
+                        .downcast_ref::<LayoutParticipant>()
+                        .map(|participant| self.layout_base_translation(participant))
                 })
                 .flatten()
         });
@@ -1680,12 +1683,8 @@ impl Text {
                 })
                 .flatten()
         });
-        if let (Some((left, top, width, height)), Some(parent_world)) = (participant, parent_world)
-        {
-            let base = Mat2D::from_translation(Vec2D::new(
-                left + self.base.origin_x() * width,
-                top + self.base.origin_y() * height,
-            ));
+        if let (Some(translation), Some(parent_world)) = (participant, parent_world) {
+            let base = Mat2D::from_translation(translation);
             let transform = *self.base.transform();
             self.base
                 .set_world_transform(parent_world * base * transform);

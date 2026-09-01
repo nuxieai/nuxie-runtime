@@ -81,7 +81,7 @@ impl<'a> CallInliner<'a> {
                     if !self.replace_return(next_block, caller_block_op, op) {
                         return false;
                     }
-                } else {
+                } else if inst_op_code != LuauOpcode::LOP_PREPVARARGS {
                     let caller_inst_op = self.map_inst_op(op);
                     self.caller.blocks[caller_block_idx].append_instruction(caller_inst_op);
                     self.caller.inst_op(caller_inst_op).block = caller_block_op;

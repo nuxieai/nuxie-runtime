@@ -14,6 +14,7 @@ pub trait ScrollConstraintBaseCallbacks: crate::mechanical_port::source::generat
     fn physics_type_value_changed(&mut self) {}
     fn physics_id_changed(&mut self) {}
     fn virtualize_changed(&mut self) {}
+    fn virtualize_buffer_changed(&mut self) {}
     fn infinite_changed(&mut self) {}
     fn interactive_changed(&mut self) {}
     fn threshold_changed(&mut self) {}
@@ -49,6 +50,7 @@ pub struct ScrollConstraintBase {
     physics_type_value: u32,
     physics_id: u32,
     virtualize: bool,
+    virtualize_buffer: u8,
     infinite: bool,
     interactive: bool,
     threshold: f32,
@@ -65,6 +67,7 @@ impl Default for ScrollConstraintBase {
             physics_type_value: 0,
             physics_id: u32::MAX,
             virtualize: false,
+            virtualize_buffer: 0,
             infinite: false,
             interactive: true,
             threshold: 0.0,
@@ -84,6 +87,7 @@ impl ScrollConstraintBase {
     pub const PHYSICS_TYPE_VALUE_PROPERTY_KEY: u16 = 727;
     pub const PHYSICS_ID_PROPERTY_KEY: u16 = 726;
     pub const VIRTUALIZE_PROPERTY_KEY: u16 = 850;
+    pub const VIRTUALIZE_BUFFER_PROPERTY_KEY: u16 = 221;
     pub const INFINITE_PROPERTY_KEY: u16 = 851;
     pub const INTERACTIVE_PROPERTY_KEY: u16 = 891;
     pub const THRESHOLD_PROPERTY_KEY: u16 = 894;
@@ -243,6 +247,34 @@ impl ScrollConstraintBase {
         self.virtualize = value;
         true
     }
+
+    pub fn virtualize_buffer(&self) -> u8 {
+        self.virtualize_buffer
+    }
+
+    pub fn set_virtualize_buffer(
+        &mut self,
+        value: u8,
+        callbacks: &mut impl ScrollConstraintBaseCallbacks,
+    ) {
+        if !self.set_virtualize_buffer_value(value) {
+            return;
+        }
+        callbacks.virtualize_buffer_changed();
+        ScrollConstraintBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::VIRTUALIZE_BUFFER_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_virtualize_buffer_value(&mut self, value: u8) -> bool {
+        if self.virtualize_buffer == value {
+            return false;
+        }
+        self.virtualize_buffer = value;
+        true
+    }
+
     pub fn infinite(&self) -> bool {
         self.infinite
     }
@@ -358,6 +390,7 @@ impl ScrollConstraintBase {
         self.physics_type_value = object.physics_type_value;
         self.physics_id = object.physics_id;
         self.virtualize = object.virtualize;
+        self.virtualize_buffer = object.virtualize_buffer;
         self.infinite = object.infinite;
         self.interactive = object.interactive;
         self.threshold = object.threshold;
@@ -393,6 +426,10 @@ impl ScrollConstraintBase {
             }
             Self::VIRTUALIZE_PROPERTY_KEY => {
                 self.virtualize = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                true
+            }
+            Self::VIRTUALIZE_BUFFER_PROPERTY_KEY => {
+                self.virtualize_buffer = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::INFINITE_PROPERTY_KEY => {

@@ -8,10 +8,15 @@ use nuxie_runtime::source::{
     },
     artboard::{Artboard as NativeArtboard, RuntimeArtboardInstanceHandle},
     component_dirt::ComponentDirt,
+    constraints::{
+        follow_path_constraint::FollowPathConstraint,
+        scrolling::scroll_bar_constraint::ScrollBarConstraint,
+    },
     core::CoreHandle,
     factory::RuntimeFactoryHandle,
     file::{File as NativeFile, RuntimeFileHandle},
     generated::{component_base::ComponentBase, core_registry::CoreRegistry as NativeCoreRegistry},
+    math::mat2d::Mat2D as NativeMat2D,
 };
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -718,6 +723,139 @@ fn follow_path_constraint_retains_measure_and_applies_like_cpp_probe() {
             .map(|matrix| (matrix[4], matrix[5])),
         Some((5.0, 0.0))
     );
+}
+
+#[test]
+fn follow_path_offset_reads_the_constrained_occurrence_without_reborrowing_it() {
+    let label = "synthetic/runtime_follow_path_offset_borrow.riv";
+    let bytes = synthetic_runtime_file(8237, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "PointsPath", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 2);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 2);
+            push_f32_property(bytes, "StraightVertex", "x", 10.0);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 7.0);
+        });
+        push_object_with_properties(bytes, "FollowPathConstraint", |bytes| {
+            push_uint_property(bytes, "FollowPathConstraint", "parentId", 5);
+            push_uint_property(bytes, "FollowPathConstraint", "targetId", 1);
+            push_f32_property(bytes, "FollowPathConstraint", "distance", 0.5);
+            push_bool_property(bytes, "FollowPathConstraint", "offset", true);
+        });
+    });
+
+    let (_file, rust) = read_native_instance_from_bytes(&bytes, label);
+    NativeArtboard::update_components_handle(&rust.core_handle());
+    let world = native_world_transform(&native_object(&rust, 5));
+    assert_eq!((world.0[4], world.0[5]), (12.0, 0.0));
+}
+
+#[test]
+fn translation_constraint_can_target_its_own_parent_occurrence() {
+    let label = "synthetic/runtime_translation_constraint_self_target.riv";
+    let bytes = synthetic_runtime_file(8238, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+            push_f32_property(bytes, "Node", "x", 11.0);
+            push_f32_property(bytes, "Node", "y", 13.0);
+        });
+        push_object_with_properties(bytes, "TranslationConstraint", |bytes| {
+            push_uint_property(bytes, "TranslationConstraint", "parentId", 1);
+            push_uint_property(bytes, "TranslationConstraint", "targetId", 1);
+        });
+    });
+
+    let (_file, rust) = read_native_instance_from_bytes(&bytes, label);
+    let node = native_object(&rust, 1);
+    let applied = native_object(&rust, 2)
+        .with_mut(|constraint| constraint.constraint_apply(node.clone()))
+        .expect("live TranslationConstraint");
+    assert!(applied);
+    let world = native_world_transform(&native_object(&rust, 1));
+    assert!(world.0.iter().all(|value| value.is_finite()));
+}
+
+#[test]
+fn follow_path_local_spaces_keep_target_and_component_parents_distinct() {
+    let label = "synthetic/runtime_follow_path_local_parent_frames.riv";
+    let bytes = synthetic_runtime_file(8239, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_object_with_properties(bytes, "Shape", |bytes| {
+            push_uint_property(bytes, "Shape", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "PointsPath", |bytes| {
+            push_uint_property(bytes, "PointsPath", "parentId", 1);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 2);
+        });
+        push_object_with_properties(bytes, "StraightVertex", |bytes| {
+            push_uint_property(bytes, "StraightVertex", "parentId", 2);
+            push_f32_property(bytes, "StraightVertex", "x", 10.0);
+        });
+        push_object_with_properties(bytes, "Node", |bytes| {
+            push_uint_property(bytes, "Node", "parentId", 0);
+        });
+        push_object_with_properties(bytes, "FollowPathConstraint", |bytes| {
+            push_uint_property(bytes, "FollowPathConstraint", "parentId", 5);
+            push_uint_property(bytes, "FollowPathConstraint", "targetId", 1);
+            push_uint_property(bytes, "FollowPathConstraint", "sourceSpaceValue", 1);
+            push_uint_property(bytes, "FollowPathConstraint", "destSpaceValue", 1);
+        });
+    });
+    let (_file, rust) = read_native_instance_from_bytes(&bytes, label);
+    let components = native_object(&rust, 6)
+        .with_downcast_mut::<FollowPathConstraint, _>(|constraint| {
+            let component_world = NativeMat2D::from_translate(0.0, 0.0);
+            let mut target_world = NativeMat2D::from_translate(110.0, 0.0);
+            let component_parent_world = NativeMat2D::from_translate(20.0, 0.0);
+            let target_parent_world = NativeMat2D::from_translate(100.0, 0.0);
+            constraint.constrain_helper(
+                &component_world,
+                &mut target_world,
+                &component_parent_world,
+                &target_parent_world,
+            )
+        })
+        .expect("FollowPathConstraint");
+    assert_eq!((components.x(), components.y()), (30.0, 0.0));
+}
+
+#[test]
+fn scroll_bar_constraint_applies_to_its_thumb_without_reborrowing_it() {
+    let fixture = "layout/scroll_velocity.riv";
+    let bytes = std::fs::read(cpp_runtime_fixture(fixture))
+        .unwrap_or_else(|error| panic!("read {fixture}: {error}"));
+    let (_file, rust) = read_native_instance_from_bytes(&bytes, fixture);
+    NativeArtboard::update_components_handle(&rust.core_handle());
+    let constraints =
+        rust.with_artboard(|artboard| artboard.find_all_handles::<ScrollBarConstraint>());
+    assert!(!constraints.is_empty());
+    for constraint in constraints {
+        let thumb = constraint
+            .with(|constraint| constraint.component_parent_handle())
+            .flatten()
+            .expect("ScrollBarConstraint thumb");
+        let applied = constraint
+            .with_mut(|constraint| constraint.constraint_apply(thumb))
+            .expect("live ScrollBarConstraint");
+        assert!(applied);
+    }
 }
 
 #[test]

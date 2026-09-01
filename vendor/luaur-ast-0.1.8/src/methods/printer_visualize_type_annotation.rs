@@ -234,14 +234,18 @@ impl<'a> Printer<'a> {
                             }
                     );
                     unsafe {
-                        if let Some(loc) = (*a.indexer).access_location {
-                            self.advance(&loc.begin);
-                            self.writer
-                                .keyword(if (*a.indexer).access == AstTableAccess::Read {
-                                    "read"
-                                } else {
-                                    "write"
-                                });
+                        let access = (*a.indexer).access;
+                        if luaur_common::FFlag::LuauPrettyPrintVisualizeIndexerAccess.get()
+                            && access != AstTableAccess::ReadWrite
+                        {
+                            if let Some(loc) = (*a.indexer).access_location {
+                                self.advance(&loc.begin);
+                            }
+                            self.writer.keyword(if access == AstTableAccess::Read {
+                                "read"
+                            } else {
+                                "write"
+                            });
                         }
                         self.visualize_type_annotation(&mut *(*a.indexer).result_type);
                     }
@@ -255,15 +259,19 @@ impl<'a> Printer<'a> {
                         {
                             LUAU_ASSERT!(!a.indexer.is_null());
                             unsafe {
-                                if let Some(loc) = (*a.indexer).access_location {
-                                    self.advance(&loc.begin);
-                                    self.writer.keyword(
-                                        if (*a.indexer).access == AstTableAccess::Read {
+                                if luaur_common::FFlag::LuauPrettyPrintVisualizeIndexerAccess.get() {
+                                    let access = (*a.indexer).access;
+                                    if access != AstTableAccess::ReadWrite {
+                                        if let Some(loc) = (*a.indexer).access_location {
+                                            self.advance(&loc.begin);
+                                        }
+                                        self.writer.keyword(if access == AstTableAccess::Read {
                                             "read"
                                         } else {
                                             "write"
-                                        },
-                                    );
+                                        });
+                                    }
+                                    self.advance(&(*a.indexer).location.begin);
                                 }
                                 self.advance(&item.indexer_open_position);
                                 self.writer.symbol("[");

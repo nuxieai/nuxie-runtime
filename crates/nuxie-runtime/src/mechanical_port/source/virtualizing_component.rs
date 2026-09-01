@@ -25,7 +25,13 @@ pub trait VirtualizingComponent {
     fn set_item_size(&mut self, size: Vec2D, index: i32);
     fn virtualizable_changed(&mut self);
     fn remove_virtualizable(&mut self, index: i32);
+    /// Items on screen. Only these report their measured size back, otherwise
+    /// realizing an off screen item would change the sizes the virtualizer
+    /// sums to pick this very range.
     fn set_visible_indices(&mut self, start: i32, end: i32);
+    /// Items that exist: the visible range plus the buffer on either side.
+    /// These are the ones that get drawn.
+    fn set_realized_indices(&mut self, start: i32, end: i32);
     fn set_virtualizable_position(&mut self, index: i32, position: Vec2D);
 }
 

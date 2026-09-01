@@ -137,8 +137,6 @@ impl<'a> CallInliner<'a> {
             }
         }
 
-        self.drop_prep_var_args_in_inlined_path();
-
         LUAU_ASSERT!(self.validate());
 
         true

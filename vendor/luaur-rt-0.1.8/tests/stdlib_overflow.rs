@@ -14,9 +14,8 @@
 //!
 //! Under `cfg(test)` overflow checks are ARMED, so a reverted fix either aborts
 //! the process (uncaught panic / SIGTRAP) or surfaces an "overflow" message — the
-//! assertions below catch both. The `table.move` huge-range hang found alongside
-//! these is intentionally NOT covered: C++ Luau loops the same way, so matching it
-//! is correct behavior, not a bug.
+//! assertions below catch both. Luau 0.733 added a flag-gated sparse path for
+//! `table.move` huge ranges; the final test below exercises that exact path.
 
 use luaur_rt::Lua;
 
@@ -146,4 +145,36 @@ fn ordinary_stdlib_calls_still_work() {
         .eval()
         .expect("table.unpack ordinary path");
     assert_eq!(n, 3);
+}
+
+#[test]
+fn table_move_sparse_range_uses_bounded_iteration_when_enabled() {
+    // Luau 0.733's timeout guard is dynamic in the upstream VM.  Force it on
+    // for this regression so the test exercises the newly translated path;
+    // production keeps the upstream default (off) until the host enables it.
+    luaur_common::DFFlag::LuauTableMoveTimeoutFix.push_test_override(true);
+
+    let lua = Lua::new();
+    let completed: bool = lua
+        .load(
+            r#"
+            local a = {1, 2, 3}
+            table.move({[1] = "first", [10000000] = "last"}, 1, 10000000, 2, a)
+            assert(a[1] == 1)
+            assert(a[2] == "first")
+            assert(a[3] == nil)
+            assert(a[10000001] == "last")
+
+            a = {}
+            table.move({[1] = "first", [10000000] = "last"}, 1, 10000000, 1, a)
+            assert(a[1] == "first")
+            assert(a[10000000] == "last")
+            return true
+            "#,
+        )
+        .eval()
+        .expect("large sparse table.move cases should complete");
+
+    luaur_common::DFFlag::LuauTableMoveTimeoutFix.pop_test_override();
+    assert!(completed);
 }

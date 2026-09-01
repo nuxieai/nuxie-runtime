@@ -2,14 +2,14 @@ use std::ops::{Deref, DerefMut};
 
 use crate::mechanical_port::source::{
     component::ComponentDirt,
-    core::{Core, CoreHandle},
+    core::{Core, CoreHandle, CoreObject},
     core_context::{CoreContext, StatusCode},
     generated::{
         component_base::ComponentBaseCallbacks,
         constraints::constraint_base::{ConstraintBase, ConstraintBaseCallbacks},
         core_registry::CoreCapabilities,
     },
-    math::mat2d::Mat2D,
+    math::{mat2d::Mat2D, transform_components::TransformComponents},
     transform_component::TransformComponent,
 };
 
@@ -178,6 +178,58 @@ impl Constraint {
 
     pub fn handle(&self) -> Option<CoreHandle> {
         self.base.base.base.base.handle()
+    }
+
+    pub fn compose_keeping_anchor(component: &mut dyn CoreObject, composed: &TransformComponents) {
+        let anchor = component.transform_component_local_anchor();
+        let component = component
+            .as_transform_component_mut()
+            .expect("constraint TransformComponent");
+        let world = component.mutable_world_transform();
+        if anchor.x == 0.0 && anchor.y == 0.0 {
+            *world = Mat2D::compose(composed);
+            return;
+        }
+        let before = *world * anchor;
+        let mut result = Mat2D::compose(composed);
+        let after = result * anchor;
+        result[4] += before.x - after.x;
+        result[5] += before.y - after.y;
+        *world = result;
+    }
+
+    pub fn land_anchor(component: &mut dyn CoreObject, strength: f32) {
+        let anchor = component.transform_component_local_anchor();
+        if anchor.x == 0.0 && anchor.y == 0.0 {
+            return;
+        }
+        let world = component
+            .as_transform_component_mut()
+            .expect("constraint TransformComponent")
+            .mutable_world_transform();
+        world[4] -= (world[0] * anchor.x + world[2] * anchor.y) * strength;
+        world[5] -= (world[1] * anchor.x + world[3] * anchor.y) * strength;
+    }
+
+    pub fn compose_landing_anchor(
+        component: &mut dyn CoreObject,
+        composed: &TransformComponents,
+        strength: f32,
+    ) {
+        *component
+            .as_transform_component_mut()
+            .expect("constraint TransformComponent")
+            .mutable_world_transform() = Mat2D::compose(composed);
+        Self::land_anchor(component, strength);
+    }
+
+    pub fn offset_in_parent_frame(component: &TransformComponent, offset: &Mat2D) -> Mat2D {
+        let parent_world = get_parent_world(component);
+        let delta = (parent_world * *offset).translation() - parent_world.translation();
+        let mut result = *component.world_transform();
+        result[4] += delta.x;
+        result[5] += delta.y;
+        result
     }
 }
 

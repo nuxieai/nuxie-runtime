@@ -7,10 +7,15 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `11217a528b34966eca3765dc88c4ec0c8417d09c`
+- LAST_SYNCED_SHA: `2bbd8820878f38398b6ea6e722cb88310588c8e8`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest accounted change: upstream's deferred host/player refactor is a
+  Latest accounted change: upstream's Rive 7.3 layout translation, anchor,
+  constraint, scroll virtualization-buffer, and Luau 0.733 update was ported
+  mechanically and reviewed as one source commit. Upstream:
+  `2bbd8820878f38398b6ea6e722cb88310588c8e8`. Work:
+  [UNIV-1880](https://universe.basis.dev/issue/UNIV-1880).
+- The preceding upstream deferred host/player refactor is a
   source-based **SKIP** for this Rust runtime. Its complete diff only adds or
   changes C++ test/player harness and deferred-host files; it changes no
   runtime/core implementation, schema, fixture, or supported product behavior.

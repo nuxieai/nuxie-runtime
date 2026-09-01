@@ -52,3 +52,9 @@ introduces a caller ("crash vs silently-unfolded" becomes observable then).
 - Ported rive_0_732 fork patch set (decb2d05..86eb0096).
 - Touched areas: default version-selection coverage for the pinned bytecode-v7
   compatibility target.
+
+## Luau fork rung 10
+
+- Ported the reachable `rive_0_733` delta (upstream 86eb0096..f4a8c732).
+- Preserved userdata cache slots through graph parsing/serialization and kept
+  `PREPVARARGS` out of migrated inlined instructions.

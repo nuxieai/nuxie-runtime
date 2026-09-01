@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    constraints::constraint::get_parent_world,
+    constraints::constraint::{Constraint, get_parent_world},
     core::CoreObject,
     generated::{
         constraints::translation_constraint_base::TranslationConstraintBase,
@@ -21,18 +21,23 @@ impl TranslationConstraint {
 
     pub fn constrain(&mut self, component: &mut dyn CoreObject) {
         let target_state = self.base.target().map(|target| {
-            target
-                .with(|target| {
-                    let target = target
-                        .as_transform_component()
-                        .expect("validated targeted constraint target");
-                    (
-                        target.is_collapsed(),
-                        *target.world_transform(),
-                        get_parent_world(target),
-                    )
-                })
-                .expect("TargetedConstraint retains a live target")
+            let read_target = |target: &dyn CoreObject| {
+                let target = target
+                    .as_transform_component()
+                    .expect("validated targeted constraint target");
+                (
+                    target.is_collapsed(),
+                    *target.world_transform(),
+                    get_parent_world(target),
+                )
+            };
+            if component.core().handle().as_ref() == Some(&target) {
+                read_target(component)
+            } else {
+                target
+                    .with(|target| read_target(target))
+                    .expect("TargetedConstraint retains a live target")
+            }
         });
         if target_state.is_some_and(|target| target.0) {
             return;
@@ -46,6 +51,12 @@ impl TranslationConstraint {
         if target_state.is_none() {
             translation_b = translation_a;
         } else {
+            let local_a =
+                if self.base.offset() && (self.base.does_copy() || self.base.does_copy_y()) {
+                    component.transform_component_composed_translation()
+                } else {
+                    Vec2D::default()
+                };
             let (_, mut transform_b, target_parent_world) = target_state.unwrap();
             if self.base.source_space() == TransformSpace::Local {
                 let mut inverse = Mat2D::default();
@@ -64,7 +75,7 @@ impl TranslationConstraint {
             } else {
                 translation_b.x *= self.base.copy_factor();
                 if self.base.offset() {
-                    translation_b.x += component.transform_component_translation().x;
+                    translation_b.x += local_a.x;
                 }
             }
             if !self.base.does_copy_y() {
@@ -76,7 +87,7 @@ impl TranslationConstraint {
             } else {
                 translation_b.y *= self.base.copy_factor_y();
                 if self.base.offset() {
-                    translation_b.y += component.transform_component_translation().y;
+                    translation_b.y += local_a.y;
                 }
             }
             if self.base.dest_space() == TransformSpace::Local {
@@ -128,5 +139,6 @@ impl TranslationConstraint {
             .mutable_world_transform();
         transform_a[4] = translation_a.x * ti + translation_b.x * t;
         transform_a[5] = translation_a.y * ti + translation_b.y * t;
+        Constraint::land_anchor(component, t);
     }
 }

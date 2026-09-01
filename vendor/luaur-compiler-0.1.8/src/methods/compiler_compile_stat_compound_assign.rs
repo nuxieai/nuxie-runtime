@@ -70,7 +70,11 @@ impl Compiler {
                     let regs = self.alloc_reg(stat as *mut _, (1 + args.len()) as u32);
                     self.compile_l_value_use(&var, regs, false, stat_ref.var);
                     for (i, &arg) in args.iter().enumerate() {
-                        self.compile_expr_temp(arg, regs + 1 + i as u8);
+                        if luaur_common::FFlag::LuauCompileConcatTargetTop.get() {
+                            self.compile_expr_temp_top(arg, regs + 1 + i as u8);
+                        } else {
+                            self.compile_expr_temp(arg, regs + 1 + i as u8);
+                        }
                     }
                     (*self.bytecode).emit_abc(
                         LuauOpcode::LOP_CONCAT,

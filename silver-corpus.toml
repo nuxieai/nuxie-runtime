@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "11217a528b34966eca3765dc88c4ec0c8417d09c"
+upstream_ref = "2bbd8820878f38398b6ea6e722cb88310588c8e8"
 expected_entries = 256
 expected_runtime = 211
 expected_scripted = 42
@@ -140,7 +140,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list map rules"
-producer_line = 980
+producer_line = 1087
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -162,7 +162,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with horizontal distribution"
-producer_line = 569
+producer_line = 676
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -184,7 +184,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with vertical distribution"
-producer_line = 603
+producer_line = 710
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -624,7 +624,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard lists with child artboard origin offset"
-producer_line = 1037
+producer_line = 1144
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -646,7 +646,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list with follow path constraint"
-producer_line = 817
+producer_line = 924
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -668,7 +668,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list with follow path constraint distance"
-producer_line = 852
+producer_line = 959
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -690,7 +690,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Non Layout List Artboard Position"
-producer_line = 768
+producer_line = 875
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -712,7 +712,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Component List Hit order"
-producer_line = 903
+producer_line = 1010
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -734,7 +734,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Component List Virtualized Scroll manual"
-producer_line = 535
+producer_line = 642
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -756,7 +756,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Stateful Component"
-producer_line = 1003
+producer_line = 1110
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1350,7 +1350,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Draw index overrides draw order"
-producer_line = 1187
+producer_line = 1294
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3314,7 +3314,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_origin_test.cpp"
 provenance_test = "Animated origin and click events"
-producer_line = 139
+producer_line = 143
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3798,7 +3798,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Number to Lists reset triggers correctly"
-producer_line = 637
+producer_line = 744
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5602,7 +5602,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Virtualized list with nested data bound artboards"
-producer_line = 957
+producer_line = 1064
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

@@ -47,3 +47,8 @@
 - Ported rive_0_732 fork patch set (decb2d05..86eb0096).
 - Touched areas: unconditional parser lexeme accumulation and successful/fatal
   parse-result ownership.
+
+## Luau fork rung 10
+
+- Ported the reachable `rive_0_733` delta (upstream 86eb0096..f4a8c732).
+- Gated table-indexer access visualization behind the new upstream flag.

@@ -367,12 +367,14 @@ mod tests {
         let _third = coordinator.prepare_to_flush();
 
         let poison_target = coordinator.clone();
-        assert!(thread::spawn(move || {
-            let _state = poison_target.shared.state.lock().unwrap();
-            panic!("poison the coordinator after reservations are recorded");
-        })
-        .join()
-        .is_err());
+        assert!(
+            thread::spawn(move || {
+                let _state = poison_target.shared.state.lock().unwrap();
+                panic!("poison the coordinator after reservations are recorded");
+            })
+            .join()
+            .is_err()
+        );
 
         let (started_tx, started_rx) = mpsc::channel();
         let (reserved_tx, reserved_rx) = mpsc::channel();

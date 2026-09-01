@@ -85,7 +85,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
 use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 #[cfg(test)]
-use capabilities::{select_capabilities, ApplePlatform, MetalDeviceCapabilities};
+use capabilities::{ApplePlatform, MetalDeviceCapabilities, select_capabilities};
 #[cfg(any())]
 use context::NativeMetalContext;
 use nuxie_render_api::{
@@ -863,10 +863,12 @@ impl Factory for NativeMetalFactory {
         let mechanical = self
             .mechanical_context()
             .unwrap_or_else(|error| panic!("mechanical paint factory failed: {error}"));
+        let domain = mechanical.borrow().resource_domain();
         let source = mechanical
             .borrow_mut()
             .make_render_paint_handle()
-            .unwrap_or_else(|| panic!("mechanical paint owner was not valid"));
+            .unwrap_or_else(|| panic!("mechanical paint owner was not valid"))
+            .with_execution_domain(domain, Rc::clone(&mechanical) as Rc<dyn Any>);
         Box::new(source)
     }
 
@@ -1180,11 +1182,14 @@ impl Renderer for NativeMetalFrame {
         let Some(paint) = paint.as_any().downcast_ref::<RiveRenderPaintHandle>() else {
             return;
         };
+        let Some(paint) = paint.source_base_for(&self.resource_domain) else {
+            return;
+        };
         unsafe {
             <RiveRenderer as RendererContract>::drawPath(
                 &mut self.renderer,
                 path.source_base() as *const _ as *mut _,
-                paint.source_base() as *const _ as *mut _,
+                paint as *const _ as *mut _,
             );
         }
     }
@@ -3365,18 +3370,22 @@ mod tests {
                 factory.resize(3, 1).expect("replace target generation");
                 assert!(command_buffer.load().is_some());
                 assert!(texture_owners.iter().all(|owner| owner.load().is_some()));
-                assert!(atomic_buffer_owners
-                    .iter()
-                    .all(|owner| owner.load().is_some()));
+                assert!(
+                    atomic_buffer_owners
+                        .iter()
+                        .all(|owner| owner.load().is_some())
+                );
 
                 drop(frame);
                 (command_buffer, texture_owners, atomic_buffer_owners)
             });
         assert!(command_buffer.load().is_none());
         assert!(texture_owners.iter().all(|owner| owner.load().is_none()));
-        assert!(atomic_buffer_owners
-            .iter()
-            .all(|owner| owner.load().is_none()));
+        assert!(
+            atomic_buffer_owners
+                .iter()
+                .all(|owner| owner.load().is_none())
+        );
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]

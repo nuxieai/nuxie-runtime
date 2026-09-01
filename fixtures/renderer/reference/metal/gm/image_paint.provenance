@@ -1,0 +1,25 @@
+provenance_schema=1
+renderer_implementation=cpp-native-metal
+capture_tool=upstream-gms
+capture_command=MTL_DEBUG_LAYER=1 tests/out/release/gms --backend metal --headless --match image_paint --output <capture-dir> -p1 --verbose
+backend=metal
+adapter_vendor=apple
+adapter_architecture=metal-4
+adapter_device=Apple M5 Max
+adapter_description=Metal driver on macOS 26.5.2 (Build 25F84)
+adapter_vendor_id=0x106b
+case_id=image_paint
+gm_source=tests/gm/image_paint.cpp
+gm_source_sha256=edbe08ad08526c837228df7756c3471f4a01de511035ebafa461e38984e001ec
+runtime_revision=3ed35ee0ded0d58fb8d380930a156041a4624a2f
+metal_compiler=Apple metal 32023.883 (metalfe-32023.883)
+xcode_version=26.6
+xcode_build=17F113
+capture_binary_sha256=fa7b3b33186a9f3bf23b7d9898ba64d48d71efe9fb48edf52f8a5de9be77e2d7
+png_sha256=2aedbac0604c362b218e7bbda181cebc283544549b1d46d9932bfe77680de2cd
+frame=0
+frame_width=512
+frame_height=512
+mode=raster-ordering
+shader_compilation_mode=always-synchronous
+sample_count=1

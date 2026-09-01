@@ -43,14 +43,14 @@ use crate::mechanical_metal_implementation::source_execution::{
 
 fn source_static_function_name(name: &str) -> Option<&'static NSString> {
     Some(match name {
-        "FF" => objc2_foundation::ns_string!("FF"),
         "GF" => objc2_foundation::ns_string!("GF"),
-        "XF" => objc2_foundation::ns_string!("XF"),
+        "HF" => objc2_foundation::ns_string!("HF"),
         "YF" => objc2_foundation::ns_string!("YF"),
-        "SF" => objc2_foundation::ns_string!("SF"),
-        "VE" => objc2_foundation::ns_string!("VE"),
+        "ZF" => objc2_foundation::ns_string!("ZF"),
+        "TF" => objc2_foundation::ns_string!("TF"),
         "WE" => objc2_foundation::ns_string!("WE"),
-        "GC" => objc2_foundation::ns_string!("GC"),
+        "XE" => objc2_foundation::ns_string!("XE"),
+        "HC" => objc2_foundation::ns_string!("HC"),
         "JB" => objc2_foundation::ns_string!("JB"),
         _ => return None,
     })
@@ -2892,7 +2892,7 @@ mod ownership_transfer_tests {
         let mut execution = execution_without_real_device();
         let handle = objc2::rc::autoreleasepool(|_| {
             let handle = execution
-                .make_precompiled_function_name(b'p', "0000000000", "GC")
+                .make_precompiled_function_name(b'p', "00000000000", "HC")
                 .expect("source stringWithFormat bridge must produce a name");
             assert_eq!(handle.kind, MetalObjectKind::NSString);
             let native = execution
@@ -2902,7 +2902,7 @@ mod ownership_transfer_tests {
             assert!(!utf8.is_null());
             assert_eq!(
                 unsafe { std::ffi::CStr::from_ptr(utf8) }.to_bytes(),
-                b"p0000000000::GC"
+                b"p00000000000::HC"
             );
             // The producer returns an autoreleased +0 object. The selector
             // alias ends before the pool drains; it is never turned into a
@@ -2924,12 +2924,12 @@ mod ownership_transfer_tests {
         let slots_before_failure = execution.objects.len();
         assert!(
             execution
-                .make_precompiled_function_name(b'p', "bad\0namespace", "GC")
+                .make_precompiled_function_name(b'p', "bad\0namespace", "HC")
                 .is_none()
         );
         assert!(
             execution
-                .make_precompiled_function_name(b'p', "0000000000", "bad\0base")
+                .make_precompiled_function_name(b'p', "00000000000", "bad\0base")
                 .is_none()
         );
         assert_eq!(execution.objects.len(), slots_before_failure);

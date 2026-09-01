@@ -1428,7 +1428,8 @@ unsafe fn push_clip_reset(
 fn base_draw(
     draw_type: DrawObjectType,
     pixel_bounds: IAABB,
-    matrix: Mat2D,
+    paint_matrix: Mat2D,
+    image_matrix: Option<Mat2D>,
     blend_mode: BlendMode,
     image_texture: *mut gpu::Texture,
     image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
@@ -1443,7 +1444,8 @@ fn base_draw(
     draw.draw_type = draw_type;
     draw.pixel_bounds = pixel_bounds;
     draw.clipped_pixel_bounds = pixel_bounds;
-    draw.matrix = matrix;
+    draw.paint_matrix = paint_matrix;
+    draw.image_matrix = image_matrix.unwrap_or(paint_matrix);
     draw.blend_mode = blend_mode;
     draw.image_texture = image_texture;
     draw.image_sampler = image_sampler;
@@ -1529,7 +1531,8 @@ fn apply_fill_directions(fill: &mut FillTessellation, directions: gpu::ContourDi
 /// opacity modulation, fill flags, coverage selection, or geometry admission.
 pub unsafe fn make_path_draw_from_source(
     context: &RenderContext,
-    matrix: Mat2D,
+    paint_matrix: Mat2D,
+    image_matrix: Option<Mat2D>,
     path_ref: rcp<RiveRenderPath>,
     initial_fill_rule: FillRule,
     paint: &dyn RiveRenderPaintContract,
@@ -1540,13 +1543,13 @@ pub unsafe fn make_path_draw_from_source(
     debug_assert!(!path.verbs().is_empty());
     let coverage_type = select_path_coverage_type(
         paint.getFeather(),
-        matrix,
+        paint_matrix,
         context.platformFeatures(),
         context.frameInterlockMode(),
     );
     let pixel_bounds = resolve_path_pixel_bounds(
         path,
-        matrix,
+        paint_matrix,
         precomputed_pixel_bounds,
         paint.getFeather(),
         paint
@@ -1561,7 +1564,7 @@ pub unsafe fn make_path_draw_from_source(
     let frame = context.frameDescriptor();
     let directions = contour_directions_for_path(
         path,
-        matrix,
+        paint_matrix,
         initial_fill_rule,
         paint.getIsStroked(),
         coverage_type,
@@ -1570,11 +1573,11 @@ pub unsafe fn make_path_draw_from_source(
     let do_interior = !paint.getIsStroked()
         && paint.getFeather() == 0.0
         && context.frameInterlockMode() != gpu::InterlockMode::msaa
-        && should_use_interior_tessellation(path, matrix);
+        && should_use_interior_tessellation(path, paint_matrix);
     let mut geometry = if do_interior {
         PreparedPathGeometry::Interior(crate::draw::build_interior_tessellation(
             path,
-            matrix,
+            paint_matrix,
             initial_fill_rule,
             frame.clockwiseFillOverride,
         )?)
@@ -1592,7 +1595,7 @@ pub unsafe fn make_path_draw_from_source(
         PreparedPathGeometry::Stroke(
             crate::draw::build_prepared_feather_tessellation_with_direction(
                 path,
-                matrix,
+                paint_matrix,
                 paint.getFeather(),
                 paint.getIsStroked().then_some((
                     paint.getThickness(),
@@ -1605,13 +1608,13 @@ pub unsafe fn make_path_draw_from_source(
     } else if paint.getIsStroked() {
         PreparedPathGeometry::Stroke(crate::draw::build_stroke_tessellation_with_layout(
             path,
-            matrix,
+            paint_matrix,
             paint.getThickness(),
             paint.getJoin(),
             paint.getCap(),
         )?)
     } else {
-        let mut fill = build_source_fill_tessellation(path, matrix)?;
+        let mut fill = build_source_fill_tessellation(path, paint_matrix)?;
         apply_fill_directions(&mut fill, directions);
         PreparedPathGeometry::MidpointFan(fill)
     };
@@ -1670,10 +1673,6 @@ pub unsafe fn make_path_draw_from_source(
                 simple_paint_value.color =
                     color_modulate_opacity(unsafe { simple_paint_value.color }, modulated_opacity)
             }
-            gpu::PaintType::image => {
-                simple_paint_value.imageOpacity =
-                    unsafe { simple_paint_value.imageOpacity } * modulated_opacity
-            }
             gpu::PaintType::linearGradient
             | gpu::PaintType::radialGradient
             | gpu::PaintType::clipUpdate => {}
@@ -1685,7 +1684,8 @@ pub unsafe fn make_path_draw_from_source(
         make_path_draw(
             pixel_bounds,
             path_ref,
-            matrix,
+            paint_matrix,
+            image_matrix,
             paint.getBlendMode(),
             image_texture,
             paint.getImageSampler(),
@@ -1695,7 +1695,7 @@ pub unsafe fn make_path_draw_from_source(
             geometry,
             coverage_type,
             directions,
-            crate::draw::feather_atlas_scale(paint.getFeather(), matrix),
+            crate::draw::feather_atlas_scale(paint.getFeather(), paint_matrix),
             gradient,
             paint_type,
             simple_paint_value,
@@ -1717,7 +1717,7 @@ pub unsafe fn make_path_draw_from_source(
     } else {
         FillRule::NonZero
     };
-    owner.triangulator_reverse_triangles = crate::draw::mat2d_determinant(matrix) < 0.0;
+    owner.triangulator_reverse_triangles = crate::draw::mat2d_determinant(paint_matrix) < 0.0;
     owner.triangulator_negate_winding = owner.triangulator_reverse_triangles
         != (directions == gpu::ContourDirections::forwardThenReverse);
     Some(owner)
@@ -1824,7 +1824,8 @@ mod transformed_area_consumer_tests {
 pub unsafe fn make_path_draw(
     pixel_bounds: IAABB,
     path_ref: rcp<RiveRenderPath>,
-    matrix: Mat2D,
+    paint_matrix: Mat2D,
+    image_matrix: Option<Mat2D>,
     blend_mode: BlendMode,
     image_texture: rcp<gpu::Texture>,
     image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
@@ -1866,7 +1867,8 @@ pub unsafe fn make_path_draw(
     let mut base = base_draw(
         DrawObjectType::path,
         pixel_bounds,
-        matrix,
+        paint_matrix,
+        image_matrix,
         blend_mode,
         image_texture_ptr,
         image_sampler,
@@ -1944,6 +1946,7 @@ pub unsafe fn make_image_rect_draw(
         DrawObjectType::imageRect,
         pixel_bounds,
         matrix,
+        None,
         blend_mode,
         image_texture_ptr,
         image_sampler,
@@ -2013,6 +2016,7 @@ pub unsafe fn make_image_mesh_draw(
         DrawObjectType::imageMesh,
         pixel_bounds,
         matrix,
+        None,
         blend_mode,
         image_texture_ptr,
         image_sampler,
@@ -2092,6 +2096,7 @@ pub fn make_clip_reset(
         DrawObjectType::stencilClipReset,
         pixel_bounds,
         Mat2D::IDENTITY,
+        None,
         BlendMode::SrcOver,
         core::ptr::null_mut(),
         crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler::LinearClamp(),

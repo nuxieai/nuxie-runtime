@@ -18,8 +18,8 @@ pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_gl_gl_u
 use std::{
     collections::HashMap,
     sync::{
-        Mutex, OnceLock,
         atomic::{AtomicU32, Ordering},
+        Mutex, OnceLock,
     },
 };
 static ABANDONED_COUNT: AtomicU32 = AtomicU32::new(0);
@@ -71,12 +71,12 @@ pub(crate) fn ReclaimedNameCount() -> u32 {
     RECLAIMED_COUNT.load(Ordering::Relaxed)
 }
 
-const GLSL_GLSL_VERSION: &str = "MC";
+const GLSL_GLSL_VERSION: &str = "NC";
 const GLSL_VERTEX: &str = "DB";
 const GLSL_FRAGMENT: &str = "GB";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "AE";
-const GLSL_TESS_TEXTURE_FLOATING_POINT: &str = "HF";
-const GLSL_GL_RENDERER_MALI: &str = "IF";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "BE";
+const GLSL_TESS_TEXTURE_FLOATING_POINT: &str = "IF";
+const GLSL_GL_RENDERER_MALI: &str = "JF";
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 
 fn generatedObject(kind: GLObjectKind) -> GLObject {
@@ -530,7 +530,28 @@ mod tests {
             289
         );
         assert_eq!(PINNED_SOURCE.lines().count(), 501);
-        assert_eq!(GLSL_GLSL.as_bytes().len(), 10326);
+        assert_eq!(GLSL_GLSL.as_bytes().len(), 10325);
+    }
+
+    #[test]
+    fn host_shader_tokens_match_the_current_generated_exports() {
+        let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
+        for (source_name, generated_name) in [
+            ("GLSL_VERSION", GLSL_GLSL_VERSION),
+            ("VERTEX", GLSL_VERTEX),
+            ("FRAGMENT", GLSL_FRAGMENT),
+            (
+                "BASE_INSTANCE_UNIFORM_NAME",
+                GLSL_BASE_INSTANCE_UNIFORM_NAME,
+            ),
+            (
+                "TESS_TEXTURE_FLOATING_POINT",
+                GLSL_TESS_TEXTURE_FLOATING_POINT,
+            ),
+            ("GL_RENDERER_MALI", GLSL_GL_RENDERER_MALI),
+        ] {
+            assert!(exports.contains(&format!("#define GLSL_{source_name} \"{generated_name}\"")));
+        }
     }
 
     #[test]
@@ -556,12 +577,12 @@ mod tests {
         };
         let expectedPrefix = concat!(
             "#version 300 es\n",
-            "#define MC 300\n",
+            "#define NC 300\n",
             "#define GB\n",
             "#define CUSTOM true\n",
-            "#define AE _baseInstance\n",
-            "#define HF\n",
+            "#define BE _baseInstance\n",
             "#define IF\n",
+            "#define JF\n",
         );
         assert!(source.starts_with(expectedPrefix));
         assert!(source.ends_with("void main() {}\n"));

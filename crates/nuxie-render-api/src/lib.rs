@@ -2455,6 +2455,13 @@ pub trait RenderPaint: Any {
     fn blend_mode(&mut self, value: BlendMode);
     fn shader(&mut self, shader: Option<&dyn RenderShader>);
     fn invalidate_stroke(&mut self);
+    fn modulated_image(
+        &mut self,
+        _image: Option<&dyn RenderImage>,
+        _sampler: ImageSampler,
+        _transform: Mat2D,
+    ) {
+    }
 }
 
 pub trait RenderPath: Any {
@@ -3992,6 +3999,14 @@ impl RenderPaint for NullRenderPaint {
     fn shader(&mut self, _shader: Option<&dyn RenderShader>) {}
 
     fn invalidate_stroke(&mut self) {}
+
+    fn modulated_image(
+        &mut self,
+        _image: Option<&dyn RenderImage>,
+        _sampler: ImageSampler,
+        _transform: Mat2D,
+    ) {
+    }
 }
 
 struct NullRenderPath {

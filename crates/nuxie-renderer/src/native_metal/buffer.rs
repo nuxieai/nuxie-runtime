@@ -322,7 +322,7 @@ mod tests {
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     #[test]
     fn live_map_unmap_protocol_rejects_invalid_sequences() {
-        use std::panic::{catch_unwind, AssertUnwindSafe};
+        use std::panic::{AssertUnwindSafe, catch_unwind};
 
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
             crate::live_metal_test_unavailable("system Metal device");
@@ -348,18 +348,22 @@ mod tests {
 
         let mut nested_map = make_mutable();
         let _ = nested_map.map_mut();
-        assert!(catch_unwind(AssertUnwindSafe(|| {
-            let _ = nested_map.map_mut();
-        }))
-        .is_err());
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = nested_map.map_mut();
+            }))
+            .is_err()
+        );
         nested_map.unmap();
 
         let mut submit_while_mapped = make_mutable();
         let _ = submit_while_mapped.map_mut();
-        assert!(catch_unwind(AssertUnwindSafe(|| {
-            let _ = submit_while_mapped.submitted_buffer();
-        }))
-        .is_err());
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = submit_while_mapped.submitted_buffer();
+            }))
+            .is_err()
+        );
         submit_while_mapped.unmap();
 
         let mut once = NativeMetalBuffer::new(
@@ -372,10 +376,12 @@ mod tests {
         let _ = once.map_mut();
         once.unmap();
         let _ = once.submitted_buffer();
-        assert!(catch_unwind(AssertUnwindSafe(|| {
-            let _ = once.map_mut();
-        }))
-        .is_err());
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = once.map_mut();
+            }))
+            .is_err()
+        );
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]

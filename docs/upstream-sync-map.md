@@ -7,20 +7,20 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `7502fd3fe191a21dbab339c11b4cb796454aebae`
+- LAST_SYNCED_SHA: `3ed35ee0ded0d58fb8d380930a156041a4624a2f`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest applied change: image assets define default filter and wrap sampling,
-  image nodes can inherit or override each option, and both ordinary and mesh
-  draw paths propagate the resolved sampler to the renderer.
-  Upstream: `7502fd3fe191a21dbab339c11b4cb796454aebae`.
-  Work: [UNIV-1876](https://universe.basis.dev/issue/UNIV-1876).
+  Latest applied change: paints can modulate images through color or gradient
+  content, with the same image transform, sampler, draw flags, shader paths,
+  and supported-backend bindings as upstream.
+  Upstream: `3ed35ee0ded0d58fb8d380930a156041a4624a2f`.
+  Work: [UNIV-1877](https://universe.basis.dev/issue/UNIV-1877).
 - Intervening `1de56230e9ea062a2da2e25eee00942eafe3bdb4` and
   `0a8499b87a7d722b982d9c444172cab94d8320f2` need no Rust translation: they
   change upstream coverage and GMS test-host infrastructure, not runtime,
   renderer, format, fixture, or supported product behavior.
-- Generated shader provenance remains
-  `2b2203f45a67f813cb662272962192ecfdfd923e`: renderer shader inputs are unchanged.
+- Generated shader provenance advances to
+  `3ed35ee0ded0d58fb8d380930a156041a4624a2f` with image-paint shader inputs.
 - Intervening `8efe18ec7b52a02139844ffe71438c00de13037e` needs no Rust
   translation: Apple products and verification links already explicitly set
   macOS 12. The current upstream oracle source retains its Premake macOS 11

@@ -7,28 +7,28 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct CC {
-    ec: f32,
-    od: f32,
-    ff: f32,
-    gf: f32,
-    m6_: u32,
-    Gg: u32,
-    Re: u32,
-    Se: u32,
-    R7_: vec4<i32>,
-    Cg: vec2<f32>,
-    pd: vec2<f32>,
-    a2_: u32,
-    Hg: f32,
-    Z5_: u32,
-    P2_: f32,
+struct DC {
+    gc: f32,
     qd: f32,
-    Me: u32,
-    z3_: f32,
-    A3_: f32,
-    rd: f32,
-    zg: u32,
+    jf: f32,
+    kf: f32,
+    o6_: u32,
+    Lg: u32,
+    Ue: u32,
+    Ve: u32,
+    T7_: vec4<i32>,
+    Hg: vec2<f32>,
+    rd: vec2<f32>,
+    a2_: u32,
+    Mg: f32,
+    c6_: u32,
+    R2_: f32,
+    sd: f32,
+    Pe: u32,
+    B3_: f32,
+    C3_: f32,
+    td: f32,
+    Eg: u32,
 }
 
 struct VertexOutput {
@@ -38,154 +38,174 @@ struct VertexOutput {
     @location(4) @interpolate(flat, either) member_1: f32,
     @location(6) @interpolate(flat, either) member_2: f32,
     @location(0) member_3: vec4<f32>,
+    @location(9) member_4: vec3<f32>,
 }
 
-@id(0) override Zg: bool = true;
-@id(2) override bh: bool = true;
-@id(1) override ah: bool = true;
+@id(0) override eh: bool = true;
+@id(2) override gh: bool = true;
+@id(1) override fh: bool = true;
+@id(8) override mh: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 @group(0) @binding(2)
-var PB: texture_2d<u32>;
+var QB: texture_2d<u32>;
 @group(0) @binding(0)
-var<uniform> n: CC;
+var<uniform> m: DC;
 var<private> gl_VertexIndex_1: i32;
-var<private> KB_1: vec3<f32>;
-var<private> C2_: vec2<f32>;
+var<private> LB_1: vec3<f32>;
+var<private> D2_: vec2<f32>;
 @group(0) @binding(3)
-var AD: texture_2d<u32>;
-var<private> I3_: f32;
+var BD: texture_2d<u32>;
+var<private> K3_: f32;
 var<private> e2_: f32;
 @group(0) @binding(4)
 var RB: texture_2d<f32>;
-var<private> X0_: vec4<f32>;
+var<private> f1_: vec4<f32>;
+var<private> A2_: vec3<f32>;
 @group(0) @binding(7)
-var LC: texture_2d<u32>;
+var MC: texture_2d<u32>;
 @group(0) @binding(9)
-var XC: texture_2d<f32>;
+var YC: texture_2d<f32>;
 @group(0) @binding(5)
-var ED: texture_2d<u32>;
+var FD: texture_2d<u32>;
 @group(3) @binding(9)
 var aa: sampler;
 
 fn main_1() {
-    var phi_722_: u32;
-    var phi_723_: f32;
-    var phi_724_: f32;
-    var phi_725_: vec4<f32>;
+    var phi_780_: u32;
+    var phi_781_: f32;
+    var phi_782_: f32;
+    var phi_783_: vec4<f32>;
+    var phi_480_: bool;
 
-    let _e44 = KB_1;
-    let _e46 = bitcast<u32>(_e44.z);
-    let _e47 = (_e46 & 65535u);
-    let _e48 = (_e47 * 4u);
-    let _e49 = (_e48 + 2u);
-    let _e55 = vec2<i32>(bitcast<i32>((_e49 & 127u)), bitcast<i32>((_e49 >> bitcast<u32>(7i))));
-    let _e56 = textureLoad(PB, _e55, 0i);
-    let _e58 = _e44.xy;
-    let _e60 = bitcast<vec3<f32>>(_e56.yzw);
-    let _e66 = n.Cg;
-    C2_ = (((_e58 * _e60.x) + _e60.yz) * _e66);
-    let _e74 = textureLoad(AD, vec2<i32>(bitcast<i32>((_e46 & 127u)), bitcast<i32>((_e47 >> bitcast<u32>(7i)))), 0i);
-    let _e76 = (_e74.x & 15u);
-    if Zg {
-        let _e77 = (_e76 == 0u);
-        if _e77 {
-            phi_722_ = _e74.y;
+    let _e49 = LB_1;
+    let _e51 = bitcast<u32>(_e49.z);
+    let _e52 = (_e51 & 65535u);
+    let _e54 = ((_e52 * 4u) + 2u);
+    let _e61 = textureLoad(QB, vec2<i32>(bitcast<i32>((_e54 & 255u)), bitcast<i32>((_e54 >> bitcast<u32>(8i)))), 0i);
+    let _e63 = _e49.xy;
+    let _e65 = bitcast<vec3<f32>>(_e61.yzw);
+    let _e71 = m.Hg;
+    D2_ = (((_e63 * _e65.x) + _e65.yz) * _e71);
+    let _e79 = textureLoad(BD, vec2<i32>(bitcast<i32>((_e51 & 255u)), bitcast<i32>((_e52 >> bitcast<u32>(8i)))), 0i);
+    let _e81 = (_e79.x & 15u);
+    if eh {
+        let _e82 = (_e81 == 0u);
+        if _e82 {
+            phi_780_ = _e79.y;
         } else {
-            phi_722_ = _e74.x;
+            phi_780_ = _e79.x;
         }
-        let _e80 = phi_722_;
-        let _e82 = (_e80 >> bitcast<u32>(16i));
-        let _e84 = n.Z5_;
-        if (_e82 == 0u) {
-            phi_723_ = 0f;
+        let _e85 = phi_780_;
+        let _e87 = (_e85 >> bitcast<u32>(16i));
+        let _e89 = m.c6_;
+        if (_e87 == 0u) {
+            phi_781_ = 0f;
         } else {
-            phi_723_ = unpack2x16float(((_e82 + 1023u) * _e84)).x;
+            phi_781_ = unpack2x16float(((_e87 + 1023u) * _e89)).x;
         }
-        let _e91 = phi_723_;
-        phi_724_ = _e91;
-        if _e77 {
-            phi_724_ = -(_e91);
+        let _e96 = phi_781_;
+        phi_782_ = _e96;
+        if _e82 {
+            phi_782_ = -(_e96);
         }
-        let _e94 = phi_724_;
-        I3_ = _e94;
+        let _e99 = phi_782_;
+        K3_ = _e99;
     }
-    if bh {
-        e2_ = f32(((_e74.x >> bitcast<u32>(4i)) & 15u));
+    if gh {
+        e2_ = f32(((_e79.x >> bitcast<u32>(4i)) & 15u));
     }
-    if ah {
-        let _e99 = textureLoad(RB, _e55, 0i);
-        let _e107 = (_e48 + 3u);
-        let _e114 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e107 & 127u)), bitcast<i32>((_e107 >> bitcast<u32>(7i)))), 0i);
-        if any((_e99 != vec4<f32>(0f, 0f, 0f, 0f))) {
-            let _e129 = ((mat2x2<f32>(vec2<f32>(_e99.x, _e99.y), vec2<f32>(_e99.z, _e99.w)) * _e58) + _e114.xy);
-            unnamed.gl_ClipDistance[0i] = (_e129.x + 1f);
-            unnamed.gl_ClipDistance[1i] = (_e129.y + 1f);
-            unnamed.gl_ClipDistance[2i] = (1f - _e129.x);
-            unnamed.gl_ClipDistance[3i] = (1f - _e129.y);
+    if fh {
+        let _e104 = (_e52 * 8u);
+        let _e105 = (_e104 + 2u);
+        let _e112 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e105 & 255u)), bitcast<i32>((_e105 >> bitcast<u32>(8i)))), 0i);
+        let _e120 = (_e104 + 3u);
+        let _e127 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e120 & 255u)), bitcast<i32>((_e120 >> bitcast<u32>(8i)))), 0i);
+        if any((_e112 != vec4<f32>(0f, 0f, 0f, 0f))) {
+            let _e142 = ((mat2x2<f32>(vec2<f32>(_e112.x, _e112.y), vec2<f32>(_e112.z, _e112.w)) * _e63) + _e127.xy);
+            unnamed.gl_ClipDistance[0i] = (_e142.x + 1f);
+            unnamed.gl_ClipDistance[1i] = (_e142.y + 1f);
+            unnamed.gl_ClipDistance[2i] = (1f - _e142.x);
+            unnamed.gl_ClipDistance[3i] = (1f - _e142.y);
         } else {
-            let _e119 = (_e114.x - 0.5f);
-            unnamed.gl_ClipDistance[3i] = _e119;
-            unnamed.gl_ClipDistance[2i] = _e119;
-            unnamed.gl_ClipDistance[1i] = _e119;
-            unnamed.gl_ClipDistance[0i] = _e119;
+            let _e132 = (_e127.x - 0.5f);
+            unnamed.gl_ClipDistance[3i] = _e132;
+            unnamed.gl_ClipDistance[2i] = _e132;
+            unnamed.gl_ClipDistance[1i] = _e132;
+            unnamed.gl_ClipDistance[0i] = _e132;
         }
     }
-    if (_e76 == 1u) {
-        let _e200 = unpack4x8unorm(_e74.y);
-        if bh {
-            phi_725_ = _e200;
+    if (_e81 == 1u) {
+        let _e207 = unpack4x8unorm(_e79.y);
+        if gh {
+            phi_783_ = _e207;
         } else {
-            let _e203 = (_e200.xyz * _e200.w);
-            let _e209 = vec4<f32>(_e203.x, _e200.y, _e200.z, _e200.w);
-            let _e215 = vec4<f32>(_e209.x, _e203.y, _e209.z, _e209.w);
-            phi_725_ = vec4<f32>(_e215.x, _e215.y, _e203.z, _e215.w);
+            let _e210 = (_e207.xyz * _e207.w);
+            let _e216 = vec4<f32>(_e210.x, _e207.y, _e207.z, _e207.w);
+            let _e222 = vec4<f32>(_e216.x, _e210.y, _e216.z, _e216.w);
+            phi_783_ = vec4<f32>(_e222.x, _e222.y, _e210.z, _e222.w);
         }
-        let _e223 = phi_725_;
-        X0_ = _e223;
+        let _e230 = phi_783_;
+        f1_ = _e230;
     } else {
-        let _e151 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e48 & 127u)), bitcast<i32>((_e48 >> bitcast<u32>(7i)))), 0i);
-        let _e159 = (_e48 + 1u);
-        let _e166 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e159 & 127u)), bitcast<i32>((_e159 >> bitcast<u32>(7i)))), 0i);
-        let _e169 = ((mat2x2<f32>(vec2<f32>(_e151.x, _e151.y), vec2<f32>(_e151.z, _e151.w)) * _e58) + _e166.xy);
-        let _e170 = (_e76 == 2u);
-        if (_e170 || (_e76 == 3u)) {
-            X0_[3u] = -(bitcast<f32>(_e74.y));
-            if (_e166.z > 0.9f) {
-                X0_[2u] = 2f;
+        let _e158 = (_e52 * 8u);
+        let _e165 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e158 & 255u)), bitcast<i32>((_e158 >> bitcast<u32>(8i)))), 0i);
+        let _e173 = (_e158 + 1u);
+        let _e180 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e173 & 255u)), bitcast<i32>((_e173 >> bitcast<u32>(8i)))), 0i);
+        let _e183 = ((mat2x2<f32>(vec2<f32>(_e165.x, _e165.y), vec2<f32>(_e165.z, _e165.w)) * _e63) + _e180.xy);
+        let _e184 = (_e81 == 2u);
+        if (_e184 || (_e81 == 3u)) {
+            f1_[3u] = -(bitcast<f32>(_e79.y));
+            if (_e180.z > 0.9f) {
+                f1_[2u] = 2f;
             } else {
-                X0_[2u] = _e166.w;
+                f1_[2u] = _e180.w;
             }
-            if _e170 {
-                X0_[1u] = 0f;
-                X0_[0u] = _e169.x;
+            if _e184 {
+                f1_[1u] = 0f;
+                f1_[0u] = _e183.x;
             } else {
-                let _e190 = X0_[2u];
-                X0_[2u] = -(_e190);
-                X0_[0u] = _e169.x;
-                X0_[1u] = _e169.y;
+                let _e197 = f1_[2u];
+                f1_[2u] = -(_e197);
+                f1_[0u] = _e183.x;
+                f1_[1u] = _e183.y;
             }
-        } else {
-            X0_ = vec4<f32>(_e169.x, _e169.y, bitcast<f32>(_e74.y), (-2f - _e166.z));
         }
     }
-    let _e225 = n.ff;
-    let _e227 = n.gf;
-    let _e235 = vec4<f32>(((_e44.x * _e225) - 1f), ((_e44.y * _e227) - sign(_e227)), 0f, 1f);
-    unnamed.gl_Position = vec4<f32>(_e235.x, _e235.y, (1f - (f32(_e56.x) * 0.000061035156f)), _e235.w);
+    phi_480_ = mh;
+    if mh {
+        phi_480_ = ((_e79.x & 2048u) != 0u);
+    }
+    let _e234 = phi_480_;
+    if _e234 {
+        let _e235 = (_e52 * 8u);
+        let _e236 = (_e235 + 4u);
+        let _e243 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e236 & 255u)), bitcast<i32>((_e236 >> bitcast<u32>(8i)))), 0i);
+        let _e251 = (_e235 + 5u);
+        let _e258 = textureLoad(RB, vec2<i32>(bitcast<i32>((_e251 & 255u)), bitcast<i32>((_e251 >> bitcast<u32>(8i)))), 0i);
+        let _e261 = ((mat2x2<f32>(vec2<f32>(_e243.x, _e243.y), vec2<f32>(_e243.z, _e243.w)) * _e63) + _e258.xy);
+        A2_ = vec3<f32>(_e261.x, _e261.y, (1f + _e258.z));
+    } else {
+        A2_ = vec3<f32>(0f, 0f, 0f);
+    }
+    let _e268 = m.jf;
+    let _e270 = m.kf;
+    let _e278 = vec4<f32>(((_e49.x * _e268) - 1f), ((_e49.y * _e270) - sign(_e270)), 0f, 1f);
+    unnamed.gl_Position = vec4<f32>(_e278.x, _e278.y, (1f - (f32(_e61.x) * 0.000061035156f)), _e278.w);
     return;
 }
 
 @vertex
-fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) KB: vec3<f32>) -> VertexOutput {
+fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) LB: vec3<f32>) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
-    KB_1 = KB;
+    LB_1 = LB;
     main_1();
-    let _e12 = unnamed.gl_Position;
-    let _e13 = unnamed.gl_ClipDistance;
-    let _e14 = C2_;
-    let _e15 = I3_;
-    let _e16 = e2_;
-    let _e17 = X0_;
-    return VertexOutput(_e12, _e13, _e14, _e15, _e16, _e17);
+    let _e13 = unnamed.gl_Position;
+    let _e14 = unnamed.gl_ClipDistance;
+    let _e15 = D2_;
+    let _e16 = K3_;
+    let _e17 = e2_;
+    let _e18 = f1_;
+    let _e19 = A2_;
+    return VertexOutput(_e13, _e14, _e15, _e16, _e17, _e18, _e19);
 }

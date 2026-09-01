@@ -14,7 +14,7 @@ use smallvec::SmallVec;
 
 use super::context::{NativeMetalContext, PreparedResourceLease};
 use super::render_target::RenderTargetMetal;
-use super::shader_compile_plan::{InterlockMode, ShaderMiscFlags, FIXED_FUNCTION_COLOR_OUTPUT};
+use super::shader_compile_plan::{FIXED_FUNCTION_COLOR_OUTPUT, InterlockMode, ShaderMiscFlags};
 use crate::RendererError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

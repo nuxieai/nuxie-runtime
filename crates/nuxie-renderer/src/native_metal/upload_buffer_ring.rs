@@ -202,7 +202,7 @@ impl UploadBufferRing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
 
     fn make_ring() -> Option<UploadBufferRing> {
         let Some(device) = objc2_metal::MTLCreateSystemDefaultDevice() else {
@@ -341,9 +341,11 @@ mod tests {
         let Some(mut ring) = make_ring() else {
             return;
         };
-        assert!(catch_unwind(AssertUnwindSafe(|| {
-            let _ = ring.unmap_submit();
-        }))
-        .is_ok());
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = ring.unmap_submit();
+            }))
+            .is_ok()
+        );
     }
 }

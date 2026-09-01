@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 157394] = [(); PINNED_SOURCE.len()];
+const _: [(); 157494] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -78,48 +78,48 @@ const IMAGE_PACKED_ATTRIBS_IDX: GLuint = 5;
 const IMAGE_LAST_ATTRIB_IDX: GLuint = 5;
 
 // Exact export substitutions emitted by the frozen shader minifier.
-const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
-const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "WD";
-const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "UD";
+const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
+const GLSL_ATLAS_FEATHERED_STROKE: &str = "UC";
+const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "XD";
+const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "VD";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
-const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "VD";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "UE";
-const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
-const GLSL_CLEAR_COVERAGE: &str = "CE";
-const GLSL_CLOCKWISE_FILL: &str = "DE";
-const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "ZC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "KF";
-const GLSL_DRAW_IMAGE: &str = "JE";
-const GLSL_DRAW_IMAGE_MESH: &str = "OB";
-const GLSL_DRAW_IMAGE_RECT: &str = "KD";
+const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "WD";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "VE";
+const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
+const GLSL_CLEAR_COVERAGE: &str = "DE";
+const GLSL_CLOCKWISE_FILL: &str = "EE";
+const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "AD";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "LF";
+const GLSL_DRAW_IMAGE: &str = "KE";
+const GLSL_DRAW_IMAGE_MESH: &str = "PB";
+const GLSL_DRAW_IMAGE_RECT: &str = "LD";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
-const GLSL_DRAW_PATH: &str = "JD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "BF";
+const GLSL_DRAW_PATH: &str = "KD";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "CF";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "OE";
-const GLSL_ENABLE_KHR_BLEND: &str = "IE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "PE";
+const GLSL_ENABLE_KHR_BLEND: &str = "JE";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
-const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "AG";
-const GLSL_OPTIONALLY_FLAT: &str = "MB";
+const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "BG";
+const GLSL_OPTIONALLY_FLAT: &str = "NB";
 const GLSL_RENDER_MODE_MSAA: &str = "CB";
-const GLSL_RESOLVE_PLS: &str = "QC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "LF";
-const GLSL_FlushUniforms: &str = "CC";
-const GLSL_atlasRenderTexture: &str = "XE";
-const GLSL_contourBuffer: &str = "ED";
-const GLSL_dstColorTexture: &str = "TD";
-const GLSL_featherAtlasTexture: &str = "BD";
-const GLSL_gaussianIntegralTexture: &str = "XC";
-const GLSL_gradTexture: &str = "LD";
-const GLSL_imageTexture: &str = "IC";
+const GLSL_RESOLVE_PLS: &str = "RC";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "MF";
+const GLSL_FlushUniforms: &str = "DC";
+const GLSL_atlasRenderTexture: &str = "YE";
+const GLSL_contourBuffer: &str = "FD";
+const GLSL_dstColorTexture: &str = "UD";
+const GLSL_featherAtlasTexture: &str = "CD";
+const GLSL_gaussianIntegralTexture: &str = "YC";
+const GLSL_gradTexture: &str = "MD";
+const GLSL_imageTexture: &str = "JC";
 const GLSL_paintAuxBuffer: &str = "RB";
-const GLSL_paintBuffer: &str = "AD";
-const GLSL_pathBuffer: &str = "PB";
-const GLSL_sourceTexture: &str = "JC";
-const GLSL_tessVertexTexture: &str = "LC";
+const GLSL_paintBuffer: &str = "BD";
+const GLSL_pathBuffer: &str = "QB";
+const GLSL_sourceTexture: &str = "KC";
+const GLSL_tessVertexTexture: &str = "MC";
 
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 const GLSL_CONSTANTS: &str = include_str!("source/generated_glsl_embedded/constants.minified.glsl");
@@ -2015,10 +2015,11 @@ fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
         gpu::ShaderFeatures::ENABLE_CLIP_RECT => "BB",
         gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "AB",
         gpu::ShaderFeatures::ENABLE_FEATHER => "HB",
-        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "WC",
-        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "YC",
-        gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "FC",
-        gpu::ShaderFeatures::ENABLE_DITHER => "LB",
+        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "XC",
+        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "ZC",
+        gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "GC",
+        gpu::ShaderFeatures::ENABLE_DITHER => "MB",
+        gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "KB",
         _ => panic!("combined or empty shader feature"),
     }
 }
@@ -2127,9 +2128,9 @@ fn newDrawShader(
 
     let mut sources = vec![
         if context.platformFeatures().avoidFlatVaryings {
-            "#define MB\n"
+            "#define NB\n"
         } else {
-            "#define MB flat\n"
+            "#define NB flat\n"
         },
         GLSL_CONSTANTS,
         GLSL_FLUSH_UNIFORMS,
@@ -2460,7 +2461,10 @@ fn advanceDrawProgram(
             FEATHER_ATLAS_TEXTURE_IDX as GLint,
         );
     }
-    if isImageDraw || paintDraw && interlockMode != gpu::InterlockMode::atomics {
+    if isImageDraw
+        || hasShaderFeature(shaderFeatures, gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE)
+            && interlockMode != gpu::InterlockMode::atomics
+    {
         glutils::Uniform1iByName(program.m_id, GLSL_imageTexture, IMAGE_TEXTURE_IDX as GLint);
     }
     if !context.m_capabilities.ARB_shader_storage_buffer_object() {
@@ -4607,12 +4611,11 @@ mod tests {
             &mut self,
             ingress: GLFinalReleaseIngress,
         ) -> std::sync::Arc<dyn nuxie_ore_metal::gpu_resource::ResourceFinalReleaseWake> {
-            assert!(
-                self.finalReleaseIngress
-                    .borrow_mut()
-                    .replace(ingress)
-                    .is_none()
-            );
+            assert!(self
+                .finalReleaseIngress
+                .borrow_mut()
+                .replace(ingress)
+                .is_none());
             self.finalReleaseWake.clone()
         }
 
@@ -4689,8 +4692,133 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4088);
-        assert_eq!(PINNED_SOURCE.len(), 157394);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4090);
+        assert_eq!(PINNED_SOURCE.len(), 157494);
+    }
+
+    #[test]
+    fn host_shader_tokens_match_the_current_generated_exports() {
+        let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
+        for (source_name, generated_name) in [
+            ("ATLAS_FEATHERED_FILL", GLSL_ATLAS_FEATHERED_FILL),
+            ("ATLAS_FEATHERED_STROKE", GLSL_ATLAS_FEATHERED_STROKE),
+            (
+                "ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE",
+                GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE,
+            ),
+            (
+                "ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH",
+                GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH,
+            ),
+            (
+                "ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE",
+                GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE,
+            ),
+            (
+                "ATLAS_RENDER_TARGET_R8_PLS_EXT",
+                GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT,
+            ),
+            (
+                "ATLAS_RENDER_TARGET_RGBA8_UNORM",
+                GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM,
+            ),
+            ("BORROWED_COVERAGE_PASS", GLSL_BORROWED_COVERAGE_PASS),
+            ("CLEAR_COVERAGE", GLSL_CLEAR_COVERAGE),
+            ("CLOCKWISE_FILL", GLSL_CLOCKWISE_FILL),
+            (
+                "COALESCED_PLS_RESOLVE_AND_TRANSFER",
+                GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER,
+            ),
+            (
+                "DISABLE_SHADER_STORAGE_BUFFERS",
+                GLSL_DISABLE_SHADER_STORAGE_BUFFERS,
+            ),
+            ("DRAW_IMAGE", GLSL_DRAW_IMAGE),
+            ("DRAW_IMAGE_MESH", GLSL_DRAW_IMAGE_MESH),
+            ("DRAW_IMAGE_RECT", GLSL_DRAW_IMAGE_RECT),
+            ("DRAW_INTERIOR_TRIANGLES", GLSL_DRAW_INTERIOR_TRIANGLES),
+            ("DRAW_PATH", GLSL_DRAW_PATH),
+            (
+                "DRAW_RENDER_TARGET_UPDATE_BOUNDS",
+                GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS,
+            ),
+            ("ENABLE_FEATHER", GLSL_ENABLE_FEATHER),
+            ("ENABLE_INSTANCE_INDEX", GLSL_ENABLE_INSTANCE_INDEX),
+            ("ENABLE_KHR_BLEND", GLSL_ENABLE_KHR_BLEND),
+            ("FEATHER_ATLAS_BLIT", GLSL_FEATHER_ATLAS_BLIT),
+            (
+                "FIXED_FUNCTION_COLOR_OUTPUT",
+                GLSL_FIXED_FUNCTION_COLOR_OUTPUT,
+            ),
+            ("FRAMEBUFFER_BOTTOM_UP", GLSL_FRAMEBUFFER_BOTTOM_UP),
+            ("OPTIONALLY_FLAT", GLSL_OPTIONALLY_FLAT),
+            ("RENDER_MODE_MSAA", GLSL_RENDER_MODE_MSAA),
+            ("RESOLVE_PLS", GLSL_RESOLVE_PLS),
+            (
+                "USING_PLS_STORAGE_TEXTURES",
+                GLSL_USING_PLS_STORAGE_TEXTURES,
+            ),
+            ("FlushUniforms", GLSL_FlushUniforms),
+            ("atlasRenderTexture", GLSL_atlasRenderTexture),
+            ("contourBuffer", GLSL_contourBuffer),
+            ("dstColorTexture", GLSL_dstColorTexture),
+            ("featherAtlasTexture", GLSL_featherAtlasTexture),
+            ("gaussianIntegralTexture", GLSL_gaussianIntegralTexture),
+            ("gradTexture", GLSL_gradTexture),
+            ("imageTexture", GLSL_imageTexture),
+            ("paintAuxBuffer", GLSL_paintAuxBuffer),
+            ("paintBuffer", GLSL_paintBuffer),
+            ("pathBuffer", GLSL_pathBuffer),
+            ("sourceTexture", GLSL_sourceTexture),
+            ("tessVertexTexture", GLSL_tessVertexTexture),
+        ] {
+            assert!(exports.contains(&format!("#define GLSL_{source_name} \"{generated_name}\"")));
+        }
+    }
+
+    #[test]
+    fn shader_feature_dispatch_matches_the_current_nine_feature_map() {
+        let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
+        let features = [
+            ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "I"),
+            (
+                "ENABLE_CLIP_RECT",
+                gpu::ShaderFeatures::ENABLE_CLIP_RECT,
+                "BB",
+            ),
+            (
+                "ENABLE_ADVANCED_BLEND",
+                gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND,
+                "AB",
+            ),
+            ("ENABLE_FEATHER", gpu::ShaderFeatures::ENABLE_FEATHER, "HB"),
+            (
+                "ENABLE_EVEN_ODD",
+                gpu::ShaderFeatures::ENABLE_EVEN_ODD,
+                "XC",
+            ),
+            (
+                "ENABLE_NESTED_CLIPPING",
+                gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING,
+                "ZC",
+            ),
+            (
+                "ENABLE_HSL_BLEND_MODES",
+                gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES,
+                "GC",
+            ),
+            ("ENABLE_DITHER", gpu::ShaderFeatures::ENABLE_DITHER, "MB"),
+            (
+                "ENABLE_MODULATED_IMAGE",
+                gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE,
+                "KB",
+            ),
+        ];
+        assert_eq!(features.len(), gpu::kShaderFeatureCount);
+        for (source_name, feature, expected_name) in features {
+            assert_eq!(shaderFeatureDefine(feature), expected_name);
+            assert!(exports.contains(&format!("#define GLSL_{source_name} \"{expected_name}\"")));
+        }
     }
 
     #[test]

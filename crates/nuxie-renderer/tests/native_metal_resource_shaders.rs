@@ -130,7 +130,7 @@ fn source_matches_digest(name: &str, bytes: &[u8], expected: &str) -> bool {
 fn pinned_resource_sources_match_generated_batch() {
     assert_eq!(
         fixture_value("upstream_commit"),
-        Some("2b2203f45a67f813cb662272962192ecfdfd923e")
+        Some("3ed35ee0ded0d58fb8d380930a156041a4624a2f")
     );
     let expected = fixture_entries("source:");
     assert_eq!(expected.len(), SOURCES.len());
@@ -159,6 +159,7 @@ fn provenance_records_reproducible_generator_and_five_target_matrix() {
         "generator_premake_blob",
         "generator_premake_sha256",
         "generator_input_set_sha256",
+        "metal_exports_sha256",
         "generation_command",
         "verified_generator_runtime",
         "verified_generation_date",

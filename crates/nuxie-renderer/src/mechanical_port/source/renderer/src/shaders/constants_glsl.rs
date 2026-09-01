@@ -1,13 +1,8 @@
 /*
- * Mechanical source-shaped translation of the complete pinned
+ * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * This Phase-1 owner retains the shader bytes exactly and exposes the
- * authority-ledger branches, exports, functions, and dependencies as literal
- * source-shaped data. It does not compile, evaluate, simplify, or generate
- * shader artifacts.
- *
- * Upstream source revision: 2b2203f45a67f813cb662272962192ecfdfd923e
+ * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
  */
 
 #![allow(dead_code)]
@@ -15,14 +10,14 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2b2203f45a67f813cb662272962192ecfdfd923e";
+pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "ca428e5e270f1e538a03105fe9eed8944f83d3d5eefd48ac27c6914320de21e2";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 323;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 13482;
+    "95547ec1bae64c8ab3604a3d0b4f302a9bdfd193adf1f3d8bdb4f496583cda3f";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 329;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 13715;
 
-/// Exact pinned GLSL source, retained for provenance and line-for-line audit.
+/// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
  * Copyright 2022 Rive
  */
@@ -64,12 +59,13 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 // Width to use for a texture that emulates a storage buffer.
 //
 // Minimize width since the texture needs to be updated in entire rows from the
-// resource buffer. Since these only serve paths and contours, both of those are
-// limited to 16-bit indices, 2048 is the min specified texture size in ES3, and
-// no path buffer uses more than 4 texels, we can safely use a width of 128.
-#define STORAGE_TEXTURE_WIDTH 128
-#define STORAGE_TEXTURE_SHIFT_Y 7
-#define STORAGE_TEXTURE_MASK_X 0x7fu
+// resource buffer. The paintAuxBuffer is the bottleneck here, it is large
+// enough that we need a width of 256 for all of the values to sit within the
+// minimum-required texture height of 2048. If not for that, a width of 128
+// would be sufficient (as paths and contours just store 16-bit indices).
+#define STORAGE_TEXTURE_WIDTH 256
+#define STORAGE_TEXTURE_SHIFT_Y 8
+#define STORAGE_TEXTURE_MASK_X 0xffu
 
 // Flags that state whether/how we need to render solid-color borders to the
 // left and/or right side of a GradientSpan. (Borders of complex gradients
@@ -146,12 +142,12 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define SOLID_COLOR_PAINT_TYPE 1u
 #define LINEAR_GRADIENT_PAINT_TYPE 2u
 #define RADIAL_GRADIENT_PAINT_TYPE 3u
-#define IMAGE_PAINT_TYPE 4u
 
 // Paint flags, found in the x-component value of @paintBuffer.
 #define PAINT_FLAG_NON_ZERO_FILL 0x100u
 #define PAINT_FLAG_EVEN_ODD_FILL 0x200u
 #define PAINT_FLAG_HAS_CLIP_RECT 0x400u
+#define PAINT_FLAG_HAS_IMAGE 0x800u
 
 // PLS draw resources are either updated per flush or per draw. They go into set
 // 0 or set 1, depending on how often they are updated.
@@ -317,14 +313,15 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define NESTED_CLIPPING_SPECIALIZATION_IDX 5
 #define HSL_BLEND_MODES_SPECIALIZATION_IDX 6
 #define DITHER_SPECIALIZATION_IDX 7
-#define CLOCKWISE_FILL_SPECIALIZATION_IDX 8
-#define NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX 9
-#define BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX 10
-#define EMULATE_DYNAMIC_COLOR_WRITE_DISABLE_SPECIALIZATION_IDX 11
-#define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 12
-#define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 13
-#define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 14
-#define SPECIALIZATION_COUNT 15
+#define MODULATED_IMAGE_SPECIALIZATION_IDX 8
+#define CLOCKWISE_FILL_SPECIALIZATION_IDX 9
+#define NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX 10
+#define BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX 11
+#define EMULATE_DYNAMIC_COLOR_WRITE_DISABLE_SPECIALIZATION_IDX 12
+#define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 13
+#define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 14
+#define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 15
+#define SPECIALIZATION_COUNT 16
 
 // When rendering to an r32i feather atlas, use 16:16 fixed point.
 #define ATLAS_R32I_FIXED_POINT_FACTOR 65536.
@@ -341,6 +338,10 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 // both width and height.
 #define BUFFER_IMAGE_TILE_SIZE 32u
 #define BUFFER_IMAGE_TILE_SIZE_LOG2 5u
+
+// The paint aux data has a specific number of float32x4 elements in it
+#define PAINT_AUX_ENTRY_ELEMENT_COUNT 8u
+
 #ifdef __cplusplus
 #if __cplusplus >= 201703
 static_assert(BUFFER_IMAGE_TILE_SIZE == 1u << BUFFER_IMAGE_TILE_SIZE_LOG2);
@@ -348,7 +349,7 @@ static_assert(BUFFER_IMAGE_TILE_SIZE == 1u << BUFFER_IMAGE_TILE_SIZE_LOG2);
 #endif
 "###;
 
-/// Stable aliases used by later source-audit queues.
+/// Stable source aliases.
 pub const PINNED_CONSTANTS_SOURCE: &str = PINNED_CONSTANTS_GLSL_SOURCE;
 pub const CONSTANTS_GLSL_SOURCE: &str = PINNED_CONSTANTS_GLSL_SOURCE;
 
@@ -359,226 +360,3 @@ pub const SOURCE_BYTE_COUNT: usize = PINNED_SOURCE_BYTE_COUNT;
 pub const fn pinned_source() -> &'static str {
     PINNED_CONSTANTS_GLSL_SOURCE
 }
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SourceMetadata {
-    pub upstream_commit: &'static str,
-    pub upstream_path: &'static str,
-    pub source_sha256: &'static str,
-    pub source_line_count: usize,
-    pub source_byte_count: usize,
-    pub target_path: &'static str,
-    pub translation_disposition: &'static str,
-}
-
-pub const SOURCE_METADATA: SourceMetadata = SourceMetadata {
-    upstream_commit: PINNED_UPSTREAM_COMMIT,
-    upstream_path: PINNED_SOURCE_PATH,
-    source_sha256: PINNED_SOURCE_SHA256,
-    source_line_count: PINNED_SOURCE_LINE_COUNT,
-    source_byte_count: PINNED_SOURCE_BYTE_COUNT,
-    target_path:
-        "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/constants_glsl.rs",
-    translation_disposition: "full-translation-source / source-shaped provenance",
-};
-
-/// Every semantic preprocessor block in the pinned source remains literal,
-/// including the nested C++ compatibility assertion.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ConditionalBlock {
-    pub block_id: &'static str,
-    pub block_start: u16,
-    pub block_end: u16,
-    pub block_depth: u8,
-    pub branch_count: u8,
-}
-
-pub const CONDITIONAL_BLOCKS: &[ConditionalBlock] = &[
-    ConditionalBlock {
-        block_id: "pp-0255",
-        block_start: 319,
-        block_end: 323,
-        block_depth: 0,
-        branch_count: 1,
-    },
-    ConditionalBlock {
-        block_id: "pp-0256",
-        block_start: 320,
-        block_end: 322,
-        block_depth: 1,
-        branch_count: 1,
-    },
-];
-
-/// Every branch entry remains literal, in authority/source order. The active
-/// paths describe source branches; they are not evaluated as Rust cfg expressions.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ConditionalBranch {
-    pub block_id: &'static str,
-    pub branch_ordinal: u8,
-    pub branch_line: u16,
-    pub directive: &'static str,
-    pub active_branch_path: &'static str,
-}
-
-pub const CONDITIONAL_BRANCHES: &[ConditionalBranch] = &[
-    ConditionalBranch {
-        block_id: "pp-0255",
-        branch_ordinal: 1,
-        branch_line: 319,
-        directive: "#ifdef __cplusplus",
-        active_branch_path: "(defined(__cplusplus))",
-    },
-    ConditionalBranch {
-        block_id: "pp-0256",
-        branch_ordinal: 1,
-        branch_line: 320,
-        directive: "#if __cplusplus >= 201703",
-        active_branch_path: "(defined(__cplusplus)) && (__cplusplus >= 201703)",
-    },
-];
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ExportedSymbol {
-    pub source_line: u16,
-    pub source_name: &'static str,
-    pub generated_name: &'static str,
-    pub generated_header_name: &'static str,
-}
-
-/// This constants source has no @-prefixed minifier exports.
-pub const EXPORTED_SYMBOLS: &[ExportedSymbol] = &[];
-pub const EXPORTED_SWITCHES: &[ExportedSymbol] = EXPORTED_SYMBOLS;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ShaderFunction {
-    pub source_line: u16,
-    pub end_line: u16,
-    pub name: &'static str,
-    pub signature: &'static str,
-    pub guard_path: &'static str,
-    pub inline_qualifier: &'static str,
-}
-
-/// This constants source has no function declarations.
-pub const EXPORTED_FUNCTIONS: &[ShaderFunction] = &[];
-pub const FUNCTION_DECLARATIONS: &[ShaderFunction] = EXPORTED_FUNCTIONS;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct IncludeDependency {
-    pub including_source: &'static str,
-    pub include_line: u16,
-    pub include_token: &'static str,
-    pub include_syntax: &'static str,
-    pub active_branch_path: &'static str,
-    pub resolution_kind: &'static str,
-    pub resolved_source: &'static str,
-    pub source_unit: &'static str,
-    pub dependency_unit: &'static str,
-    pub translation_disposition: &'static str,
-}
-
-/// The constants owner has no direct #include/#import directive. These incoming
-/// source and generated-source edges are retained from the include/source
-/// dependency authorities because they determine its artifact consumers.
-pub const INCLUDE_DEPENDENCIES: &[IncludeDependency] = &[
-    IncludeDependency {
-        including_source: "renderer/src/gpu.cpp",
-        include_line: 5,
-        include_token: "shaders/constants.glsl",
-        include_syntax: "quote",
-        active_branch_path: "all",
-        resolution_kind: "campaign-source",
-        resolved_source: "renderer/src/shaders/constants.glsl",
-        source_unit: "generic-gpu-implementation",
-        dependency_unit: "metal-shader-source-batch",
-        translation_disposition: "preserve-source-dependency",
-    },
-    IncludeDependency {
-        including_source: "renderer/src/metal/background_shader_compiler.mm",
-        include_line: 8,
-        include_token: "generated/shaders/constants.glsl.hpp",
-        include_syntax: "quote",
-        active_branch_path: "all",
-        resolution_kind: "generated-shader-source",
-        resolved_source: "renderer/src/shaders/constants.glsl",
-        source_unit: "metal-background-shader-compiler",
-        dependency_unit: "metal-shader-source-batch",
-        translation_disposition: "preserve-source-dependency",
-    },
-    IncludeDependency {
-        including_source: "renderer/src/metal/render_context_metal_impl.mm",
-        include_line: 17,
-        include_token: "shaders/constants.glsl",
-        include_syntax: "quote",
-        active_branch_path: "all",
-        resolution_kind: "campaign-source",
-        resolved_source: "renderer/src/shaders/constants.glsl",
-        source_unit: "metal-render-context-implementation",
-        dependency_unit: "metal-shader-source-batch",
-        translation_disposition: "preserve-source-dependency",
-    },
-    IncludeDependency {
-        including_source: "renderer/src/render_context.cpp",
-        include_line: 21,
-        include_token: "shaders/constants.glsl",
-        include_syntax: "quote",
-        active_branch_path: "all",
-        resolution_kind: "campaign-source",
-        resolved_source: "renderer/src/shaders/constants.glsl",
-        source_unit: "generic-render-context-implementation",
-        dependency_unit: "metal-shader-source-batch",
-        translation_disposition: "preserve-source-dependency",
-    },
-    IncludeDependency {
-        including_source: "renderer/src/render_context_helper_impl.cpp",
-        include_line: 8,
-        include_token: "shaders/constants.glsl",
-        include_syntax: "quote",
-        active_branch_path: "all",
-        resolution_kind: "campaign-source",
-        resolved_source: "renderer/src/shaders/constants.glsl",
-        source_unit: "generic-render-context-helper",
-        dependency_unit: "metal-shader-source-batch",
-        translation_disposition: "preserve-source-dependency",
-    },
-    IncludeDependency {
-        including_source: "renderer/src/shaders/metal/color_ramp.metal",
-        include_line: 7,
-        include_token: "constants.minified.glsl",
-        include_syntax: "quote",
-        active_branch_path: "all",
-        resolution_kind: "generated-shader-source",
-        resolved_source: "renderer/src/shaders/constants.glsl",
-        source_unit: "metal-shader-source-batch",
-        dependency_unit: "metal-shader-source-batch",
-        translation_disposition: "preserve-source-dependency",
-    },
-    IncludeDependency {
-        including_source: "renderer/src/shaders/metal/draw.metal",
-        include_line: 10,
-        include_token: "constants.minified.glsl",
-        include_syntax: "quote",
-        active_branch_path: "all",
-        resolution_kind: "generated-shader-source",
-        resolved_source: "renderer/src/shaders/constants.glsl",
-        source_unit: "metal-shader-source-batch",
-        dependency_unit: "metal-shader-source-batch",
-        translation_disposition: "preserve-source-dependency",
-    },
-    IncludeDependency {
-        including_source: "renderer/src/shaders/metal/tessellate.metal",
-        include_line: 7,
-        include_token: "constants.minified.glsl",
-        include_syntax: "quote",
-        active_branch_path: "all",
-        resolution_kind: "generated-shader-source",
-        resolved_source: "renderer/src/shaders/constants.glsl",
-        source_unit: "metal-shader-source-batch",
-        dependency_unit: "metal-shader-source-batch",
-        translation_disposition: "preserve-source-dependency",
-    },
-];
-
-pub const DIRECT_SOURCE_INCLUDES: &[&str] = &[];
-pub const SOURCE_DEPENDENCY_EDGES: &[IncludeDependency] = INCLUDE_DEPENDENCIES;

@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/draw_pipeline_vulkan.cpp`.
-//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
+//! Updated through upstream `3ed35ee0ded0d58fb8d380930a156041a4624a2f`.
 
 #![allow(non_snake_case)]
 
@@ -28,7 +28,32 @@ use std::sync::Arc;
 const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const PLS_PLANE_COUNT: usize = 4;
-const SPECIALIZATION_COUNT: usize = 15;
+const SPECIALIZATION_COUNT: usize = 16;
+
+fn shaderPermutationFlags(
+    shaderFeatures: ShaderFeatures,
+    shaderMiscFlags: ShaderMiscFlags,
+    vendorID: u32,
+) -> [u32; SPECIALIZATION_COUNT] {
+    [
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_CLIPPING.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_CLIP_RECT.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_ADVANCED_BLEND.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_FEATHER.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_EVEN_ODD.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_NESTED_CLIPPING.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_HSL_BLEND_MODES.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_DITHER.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_MODULATED_IMAGE.0 != 0),
+        u32::from(shaderMiscFlags.has(ShaderMiscFlags::clockwiseFill)),
+        u32::from(shaderMiscFlags.has(ShaderMiscFlags::nestedClipUpdateOnly)),
+        u32::from(shaderMiscFlags.has(ShaderMiscFlags::borrowedCoveragePass)),
+        u32::from(shaderMiscFlags.has(ShaderMiscFlags::emulateDynamicColorWriteDisable)),
+        u32::from(shaderMiscFlags.has(ShaderMiscFlags::storeColorClear)),
+        u32::from(shaderMiscFlags.has(ShaderMiscFlags::loadColorFromDstTexture)),
+        u32::from(vendorID == vkutil_decl::ARM),
+    ]
+}
 
 #[cold]
 #[track_caller]
@@ -219,35 +244,8 @@ impl DrawPipelineVulkan {
             props.shaderMiscFlags,
         );
 
-        let shaderPermutationFlags: [u32; SPECIALIZATION_COUNT] = [
-            u32::from(props.shaderFeatures.0 & ShaderFeatures::ENABLE_CLIPPING.0 != 0),
-            u32::from(props.shaderFeatures.0 & ShaderFeatures::ENABLE_CLIP_RECT.0 != 0),
-            u32::from(props.shaderFeatures.0 & ShaderFeatures::ENABLE_ADVANCED_BLEND.0 != 0),
-            u32::from(props.shaderFeatures.0 & ShaderFeatures::ENABLE_FEATHER.0 != 0),
-            u32::from(props.shaderFeatures.0 & ShaderFeatures::ENABLE_EVEN_ODD.0 != 0),
-            u32::from(props.shaderFeatures.0 & ShaderFeatures::ENABLE_NESTED_CLIPPING.0 != 0),
-            u32::from(props.shaderFeatures.0 & ShaderFeatures::ENABLE_HSL_BLEND_MODES.0 != 0),
-            u32::from(props.shaderFeatures.0 & ShaderFeatures::ENABLE_DITHER.0 != 0),
-            u32::from(props.shaderMiscFlags.has(ShaderMiscFlags::clockwiseFill)),
-            u32::from(
-                props
-                    .shaderMiscFlags
-                    .has(ShaderMiscFlags::nestedClipUpdateOnly),
-            ),
-            u32::from(
-                props
-                    .shaderMiscFlags
-                    .has(ShaderMiscFlags::borrowedCoveragePass),
-            ),
-            u32::from(props.shaderMiscFlags.has(ShaderMiscFlags::emulateDynamicColorWriteDisable)),
-            u32::from(props.shaderMiscFlags.has(ShaderMiscFlags::storeColorClear)),
-            u32::from(
-                props
-                    .shaderMiscFlags
-                    .has(ShaderMiscFlags::loadColorFromDstTexture),
-            ),
-            u32::from(vendorID == vkutil_decl::ARM),
-        ];
+        let shaderPermutationFlags =
+            shaderPermutationFlags(props.shaderFeatures, props.shaderMiscFlags, vendorID);
         let permutationMapEntries: [vk::SpecializationMapEntry; SPECIALIZATION_COUNT] =
             std::array::from_fn(|i| vk::SpecializationMapEntry {
                 constant_id: i as u32,
@@ -514,6 +512,44 @@ mod tests {
             #[cfg(feature = "with-rive-tools")]
             synthesizedFailureType: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::SynthesizedFailureType::none,
         }
+    }
+
+    #[test]
+    fn specialization_values_keep_the_upstream_semantic_slots() {
+        for (feature, expectedIndex) in [
+            (ShaderFeatures::ENABLE_CLIPPING, 0),
+            (ShaderFeatures::ENABLE_CLIP_RECT, 1),
+            (ShaderFeatures::ENABLE_ADVANCED_BLEND, 2),
+            (ShaderFeatures::ENABLE_FEATHER, 3),
+            (ShaderFeatures::ENABLE_EVEN_ODD, 4),
+            (ShaderFeatures::ENABLE_NESTED_CLIPPING, 5),
+            (ShaderFeatures::ENABLE_HSL_BLEND_MODES, 6),
+            (ShaderFeatures::ENABLE_DITHER, 7),
+            (ShaderFeatures::ENABLE_MODULATED_IMAGE, 8),
+        ] {
+            let values = shaderPermutationFlags(feature, ShaderMiscFlags::none, 0);
+            assert_eq!(values[expectedIndex], 1);
+            assert_eq!(values.iter().sum::<u32>(), 1);
+        }
+        for (flag, expectedIndex) in [
+            (ShaderMiscFlags::clockwiseFill, 9),
+            (ShaderMiscFlags::nestedClipUpdateOnly, 10),
+            (ShaderMiscFlags::borrowedCoveragePass, 11),
+            (ShaderMiscFlags::emulateDynamicColorWriteDisable, 12),
+            (ShaderMiscFlags::storeColorClear, 13),
+            (ShaderMiscFlags::loadColorFromDstTexture, 14),
+        ] {
+            let values = shaderPermutationFlags(ShaderFeatures::NONE, flag, 0);
+            assert_eq!(values[expectedIndex], 1);
+            assert_eq!(values.iter().sum::<u32>(), 1);
+        }
+        let values = shaderPermutationFlags(
+            ShaderFeatures::NONE,
+            ShaderMiscFlags::none,
+            vkutil_decl::ARM,
+        );
+        assert_eq!(values[15], 1);
+        assert_eq!(values.iter().sum::<u32>(), 1);
     }
 
     #[test]

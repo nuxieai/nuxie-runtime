@@ -420,7 +420,6 @@
 //     solidColor,
 //     linearGradient,
 //     radialGradient,
-//     image,
 // };
 //
 // // Specifies the location of a simple or complex horizontal color ramp within
@@ -441,9 +440,8 @@
 // union SimplePaintValue
 // {
 //     ColorInt color = 0xff000000;         // PaintType::solidColor
-//     ColorRampLocation colorRampLocation; // Paintype::linear/radialGradient
-//     float imageOpacity;                  // PaintType::image
-//     uint32_t outerClipID;                // Paintype::clipUpdate
+//     ColorRampLocation colorRampLocation; // PainTtype::linear/radialGradient
+//     uint32_t outerClipID;                // PainTtype::clipUpdate
 // };
 // static_assert(sizeof(SimplePaintValue) == 4);
 //
@@ -790,14 +788,16 @@
 //     ENABLE_NESTED_CLIPPING = 1 << 5,
 //     ENABLE_HSL_BLEND_MODES = 1 << 6,
 //     ENABLE_DITHER = 1 << 7,
+//     ENABLE_MODULATED_IMAGE = 1 << 8,
 // };
 //
-// constexpr static size_t kShaderFeatureCount = 8;
+// constexpr static size_t kShaderFeatureCount = 9;
 // constexpr static ShaderFeatures kAllShaderFeatures =
 //     static_cast<gpu::ShaderFeatures>((1 << kShaderFeatureCount) - 1);
 // constexpr static ShaderFeatures kVertexShaderFeaturesMask =
 //     ShaderFeatures::ENABLE_CLIPPING | ShaderFeatures::ENABLE_CLIP_RECT |
-//     ShaderFeatures::ENABLE_ADVANCED_BLEND | ShaderFeatures::ENABLE_FEATHER;
+//     ShaderFeatures::ENABLE_ADVANCED_BLEND | ShaderFeatures::ENABLE_FEATHER |
+//     ShaderFeatures::ENABLE_MODULATED_IMAGE;
 //
 // // These shader features change the way atomic pipelines are set up (or cause
 // //  validation failures when enabled but not used)
@@ -812,7 +812,9 @@
 //         case InterlockMode::rasterOrdering:
 //             return kAllShaderFeatures;
 //         case InterlockMode::atomics:
-//             return kAllShaderFeatures & ~ShaderFeatures::ENABLE_NESTED_CLIPPING;
+//             return kAllShaderFeatures &
+//                    ~(ShaderFeatures::ENABLE_NESTED_CLIPPING |
+//                      ShaderFeatures::ENABLE_MODULATED_IMAGE);
 //         case InterlockMode::clockwise:
 //             return kAllShaderFeatures & ~ShaderFeatures::ENABLE_EVEN_ODD;
 //         case InterlockMode::clockwiseAtomic:
@@ -827,7 +829,8 @@
 //             return ShaderFeatures::ENABLE_CLIP_RECT |
 //                    ShaderFeatures::ENABLE_ADVANCED_BLEND |
 //                    ShaderFeatures::ENABLE_HSL_BLEND_MODES |
-//                    ShaderFeatures::ENABLE_DITHER;
+//                    ShaderFeatures::ENABLE_DITHER |
+//                    ShaderFeatures::ENABLE_MODULATED_IMAGE;
 //     }
 //     RIVE_UNREACHABLE();
 // }
@@ -915,6 +918,10 @@
 //                        ShaderFeatures::ENABLE_ADVANCED_BLEND |
 //                        ShaderFeatures::ENABLE_HSL_BLEND_MODES |
 //                        ShaderFeatures::ENABLE_DITHER;
+//                 if (drawType == DrawType::featherAtlasBlit)
+//                 {
+//                     mask |= ShaderFeatures::ENABLE_MODULATED_IMAGE;
+//                 }
 //                 break;
 //             }
 //             // Since atomic mode has to resolve previous draws, images need to
@@ -1180,7 +1187,7 @@
 //
 //     // DrawType::imageRect and DrawType::imageMesh.
 //     Texture* imageTexture = nullptr;
-//     const ImageSampler imageSampler = ImageSampler::LinearClamp();
+//     ImageSampler imageSampler = ImageSampler::LinearClamp();
 //
 //     // DrawType::imageMesh.
 //     RenderBuffer* vertexBuffer;
@@ -1560,6 +1567,7 @@
 //              GradTextureLayout,
 //              uint32_t clipID,
 //              bool hasClipRect,
+//              bool hasImage,
 //              BlendMode);
 //
 // private:
@@ -1569,7 +1577,6 @@
 //         WRITEONLY uint32_t m_color;     // PaintType::solidColor
 //         WRITEONLY float m_gradTextureY; // Paintype::linearGradient,
 //                                         // Paintype::radialGradient
-//         WRITEONLY float m_opacity;      // PaintType::image
 //         WRITEONLY uint32_t m_shiftedClipReplacementID; // PaintType::clipUpdate
 //     };
 // };
@@ -1588,6 +1595,7 @@
 //         StorageBufferStructure::float32x4;
 //
 //     void set(const Mat2D& viewMatrix,
+//              const Mat2D& imageMatrix,
 //              PaintType,
 //              SimplePaintValue,
 //              const Gradient*,
@@ -1597,23 +1605,21 @@
 //              const gpu::PlatformFeatures&);
 //
 // private:
-//     WRITEONLY float m_matrix[6]; // Maps _fragCoord to paint coordinates.
-//     union
-//     {
-//         WRITEONLY float
-//             m_gradTextureHorizontalSpan[2]; // Paintype::linearGradient,
-//                                             // Paintype::radialGradient
-//         WRITEONLY float m_imageTextureLOD;  // PaintType::image
-//     };
-//
+//     WRITEONLY float m_paintMatrix[6]; // Maps _fragCoord to paint coordinates.
+//     WRITEONLY float m_gradTextureHorizontalSpan[2]; // Paintype::linearGradient,
+//                                                     // Paintype::radialGradient
 //     WRITEONLY float m_clipRectInverseMatrix[6]; // Maps _fragCoord to normalized
 //                                                 // clipRect coords.
-//     WRITEONLY Vec2D m_inverseFwidth; // -1 / fwidth(matrix * _fragCoord) -- for
+//     WRITEONLY Vec2D m_inverseFwidth;  // -1 / fwidth(matrix * _fragCoord) -- for
 //                                      // antialiasing.
+//     WRITEONLY float m_imageMatrix[6]; // Maps _fragCoord to image coordinates.
+//     WRITEONLY float m_imageTextureLOD;
+//     WRITEONLY float
+//         m_padding[9]; // Padding out to 128 bytes (to have 256 byte alignment)
 // };
 // static_assert(sizeof(PaintAuxData) ==
 //               StorageBufferElementSizeInBytes(PaintAuxData::kBufferStructure) *
-//                   4);
+//                   8);
 // static_assert(256 % sizeof(PaintAuxData) == 0);
 // constexpr static size_t kPaintAuxBufferAlignmentInElements =
 //     256 / sizeof(PaintAuxData);
@@ -2382,7 +2388,6 @@ pub enum PaintType {
     solidColor = 1,
     linearGradient = 2,
     radialGradient = 3,
-    image = 4,
 }
 
 #[repr(C)]
@@ -2404,7 +2409,6 @@ impl ColorRampLocation {
 pub union SimplePaintValue {
     pub color: ColorInt,
     pub colorRampLocation: ColorRampLocation,
-    pub imageOpacity: f32,
     pub outerClipID: u32,
 }
 
@@ -2668,15 +2672,17 @@ define_flag_type!(
     ENABLE_NESTED_CLIPPING = 1 << 5,
     ENABLE_HSL_BLEND_MODES = 1 << 6,
     ENABLE_DITHER = 1 << 7,
+    ENABLE_MODULATED_IMAGE = 1 << 8,
 );
 
-pub const kShaderFeatureCount: usize = 8;
+pub const kShaderFeatureCount: usize = 9;
 pub const kAllShaderFeatures: ShaderFeatures = ShaderFeatures((1 << kShaderFeatureCount) - 1);
 pub const kVertexShaderFeaturesMask: ShaderFeatures = ShaderFeatures(
     ShaderFeatures::ENABLE_CLIPPING.0
         | ShaderFeatures::ENABLE_CLIP_RECT.0
         | ShaderFeatures::ENABLE_ADVANCED_BLEND.0
-        | ShaderFeatures::ENABLE_FEATHER.0,
+        | ShaderFeatures::ENABLE_FEATHER.0
+        | ShaderFeatures::ENABLE_MODULATED_IMAGE.0,
 );
 pub const kExclusiveAtomicUbershaderFeaturesMask: ShaderFeatures =
     ShaderFeatures(ShaderFeatures::ENABLE_ADVANCED_BLEND.0);
@@ -2684,9 +2690,11 @@ pub const kExclusiveAtomicUbershaderFeaturesMask: ShaderFeatures =
 pub const fn ShaderFeaturesMaskFor(interlockMode: InterlockMode) -> ShaderFeatures {
     match interlockMode {
         InterlockMode::rasterOrdering => kAllShaderFeatures,
-        InterlockMode::atomics => {
-            ShaderFeatures(kAllShaderFeatures.0 & !ShaderFeatures::ENABLE_NESTED_CLIPPING.0)
-        }
+        InterlockMode::atomics => ShaderFeatures(
+            kAllShaderFeatures.0
+                & !ShaderFeatures::ENABLE_NESTED_CLIPPING.0
+                & !ShaderFeatures::ENABLE_MODULATED_IMAGE.0,
+        ),
         InterlockMode::clockwise => {
             ShaderFeatures(kAllShaderFeatures.0 & !ShaderFeatures::ENABLE_EVEN_ODD.0)
         }
@@ -2699,7 +2707,8 @@ pub const fn ShaderFeaturesMaskFor(interlockMode: InterlockMode) -> ShaderFeatur
             ShaderFeatures::ENABLE_CLIP_RECT.0
                 | ShaderFeatures::ENABLE_ADVANCED_BLEND.0
                 | ShaderFeatures::ENABLE_HSL_BLEND_MODES.0
-                | ShaderFeatures::ENABLE_DITHER.0,
+                | ShaderFeatures::ENABLE_DITHER.0
+                | ShaderFeatures::ENABLE_MODULATED_IMAGE.0,
         ),
     }
 }
@@ -2746,13 +2755,16 @@ pub const fn ShaderFeaturesMaskForDraw(
         DrawType::imageRect | DrawType::imageMesh | DrawType::featherAtlasBlit
             if interlockMode as i32 != InterlockMode::atomics as i32 =>
         {
-            ShaderFeatures(
+            let mut mask =
                 ShaderFeatures::ENABLE_CLIPPING.0
                     | ShaderFeatures::ENABLE_CLIP_RECT.0
                     | ShaderFeatures::ENABLE_ADVANCED_BLEND.0
                     | ShaderFeatures::ENABLE_HSL_BLEND_MODES.0
-                    | ShaderFeatures::ENABLE_DITHER.0,
-            )
+                    | ShaderFeatures::ENABLE_DITHER.0;
+            if drawType as i32 == DrawType::featherAtlasBlit as i32 {
+                mask |= ShaderFeatures::ENABLE_MODULATED_IMAGE.0;
+            }
+            ShaderFeatures(mask)
         }
         DrawType::midpointFanPatches
         | DrawType::midpointFanCenterAAPatches
@@ -3171,7 +3183,6 @@ pub const kPathBufferAlignmentInElements: usize = 256 / core::mem::size_of::<Pat
 pub union PaintDataValue {
     pub m_color: u32,
     pub m_gradTextureY: f32,
-    pub m_opacity: f32,
     pub m_shiftedClipReplacementID: u32,
 }
 
@@ -3185,29 +3196,25 @@ pub struct PaintData {
 impl PaintData {
     pub const kBufferStructure: StorageBufferStructure = StorageBufferStructure::uint32x2;
     // void set(DrawContents, PaintType, SimplePaintValue, GradTextureLayout,
-    //          uint32_t clipID, bool hasClipRect, BlendMode);
+    //          uint32_t clipID, bool hasClipRect, bool hasImage, BlendMode);
 }
 pub const kPaintBufferAlignmentInElements: usize = 256 / core::mem::size_of::<PaintData>();
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub union PaintAuxDataValue {
-    pub m_gradTextureHorizontalSpan: [f32; 2],
-    pub m_imageTextureLOD: f32,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
 pub struct PaintAuxData {
-    pub m_matrix: [f32; 6],
-    pub value: PaintAuxDataValue,
+    pub m_paintMatrix: [f32; 6],
+    pub m_gradTextureHorizontalSpan: [f32; 2],
     pub m_clipRectInverseMatrix: [f32; 6],
     pub m_inverseFwidth: Vec2D,
+    pub m_imageMatrix: [f32; 6],
+    pub m_imageTextureLOD: f32,
+    pub m_padding: [f32; 9],
 }
 
 impl PaintAuxData {
     pub const kBufferStructure: StorageBufferStructure = StorageBufferStructure::float32x4;
-    // void set(const Mat2D&, PaintType, SimplePaintValue, const Gradient*,
+    // void set(const Mat2D&, const Mat2D&, PaintType, SimplePaintValue, const Gradient*,
     //          const Texture*, const ClipRectInverseMatrix*, const RenderTarget*,
     //          const gpu::PlatformFeatures&);
 }

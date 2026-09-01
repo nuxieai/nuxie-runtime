@@ -21,14 +21,14 @@ use super::image_texture::NativeMetalImageTexture;
 use super::mechanical_render_context::MechanicalRenderContext;
 #[cfg(test)]
 use super::render_target::RenderTargetMetal;
+#[cfg(test)]
+use crate::RendererError;
 use crate::exact_source_adapter::ExactSourceRendererAdapter;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::FrameDescriptor;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
-#[cfg(test)]
-use crate::RendererError;
 #[cfg(feature = "native-ore-metal-experimental")]
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 #[cfg(feature = "native-ore-metal-experimental")]

@@ -39,6 +39,10 @@
 //     void feather(float feather) override { m_feather = fabsf(feather); }
 //     void blendMode(BlendMode mode) override { m_blendMode = mode; }
 //     void shader(rcp<RenderShader> shader) override;
+//
+//     void modulatedImage(const RenderImage*,
+//                         ImageSampler,
+//                         const Mat2D&) override;
 //     void image(rcp<gpu::Texture>, float opacity);
 //     void imageSampler(ImageSampler imageSampler)
 //     {
@@ -54,9 +58,9 @@
 //     rcp<gpu::Gradient> getGradientWithOpacity(float opacity) const;
 //     gpu::Texture* getImageTexture() const { return m_imageTexture.get(); }
 //     ImageSampler getImageSampler() const { return m_imageSampler; }
-//     float getImageOpacity() const { return m_simpleValue.imageOpacity; }
 //     float getOuterClipID() const { return m_simpleValue.outerClipID; }
 //     float getThickness() const { return m_thickness; }
+//     const Mat2D& getImageTransform() const { return m_imageTransform; }
 //     StrokeJoin getJoin() const
 //     {
 //         // Feathers ignore the join and always use round.
@@ -84,6 +88,7 @@
 //     float m_feather = 0;
 //     BlendMode m_blendMode = BlendMode::srcOver;
 //     bool m_stroked = false;
+//     Mat2D m_imageTransform;
 // };
 // } // namespace rive
 //
@@ -92,23 +97,31 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{
-    rcp, static_rcp_cast, RefCntTarget,
+    RefCntTarget, rcp, static_rcp_cast,
 };
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
-    RenderPaint as SourceRenderPaint, RenderPaintContract, RenderShader as SourceRenderShader,
+    RenderImage as SourceRenderImage, RenderPaint as SourceRenderPaint, RenderPaintContract,
+    RenderShader as SourceRenderShader,
 };
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
+    CONST_ID, LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, lite_rtti_cast,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::{
+    RiveRenderImage, RiveRenderImageHandle,
+};
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
 use crate::mechanical_port::source::renderer::src::gradient_hpp::{Gradient, GradientShader};
 use nuxie_render_api::{
-    BlendMode, ColorInt, RenderPaint, RenderPaintStyle, RenderShader, StrokeCap, StrokeJoin,
+    BlendMode, ColorInt, ImageFilter as ApiImageFilter, ImageSampler as ApiImageSampler,
+    ImageWrap as ApiImageWrap, Mat2D, RenderImage as ApiRenderImage, RenderPaint, RenderPaintStyle,
+    RenderShader, StrokeCap, StrokeJoin,
 };
 use std::any::Any;
 use std::mem::ManuallyDrop;
+use std::rc::Rc;
 
 #[repr(C)]
 pub struct RiveRenderPaint {
@@ -124,6 +137,7 @@ pub struct RiveRenderPaint {
     pub m_feather: f32,
     pub m_blendMode: BlendMode,
     pub m_stroked: bool,
+    pub m_imageTransform: Mat2D,
 }
 impl Default for RiveRenderPaint {
     fn default() -> Self {
@@ -140,6 +154,7 @@ impl Default for RiveRenderPaint {
             m_feather: 0.0,
             m_blendMode: BlendMode::SrcOver,
             m_stroked: false,
+            m_imageTransform: Mat2D::IDENTITY,
         }
     }
 }
@@ -168,7 +183,6 @@ impl RiveRenderPaint {
         self.m_paintType = gpu::PaintType::solidColor;
         self.m_simpleValue = gpu::SimplePaintValue { color };
         *self.m_gradient = rcp::new();
-        *self.m_imageTexture = rcp::new();
     }
     pub fn thickness(&mut self, v: f32) {
         self.m_thickness = v.abs();
@@ -189,9 +203,9 @@ impl RiveRenderPaint {
         self.m_imageSampler = v;
     }
     pub fn image(&mut self, texture: rcp<Texture>, opacity: f32) {
-        self.m_paintType = gpu::PaintType::image;
+        self.m_paintType = gpu::PaintType::solidColor;
         self.m_simpleValue = gpu::SimplePaintValue {
-            imageOpacity: opacity,
+            color: color_modulate_opacity(0xffff_ffff, opacity),
         };
         *self.m_gradient = rcp::new();
         *self.m_imageTexture = texture;
@@ -223,7 +237,6 @@ impl RiveRenderPaint {
             unsafe { (&*self.m_gradient.get()).paintType() }
         };
         self.m_simpleValue.color = 0xff000000;
-        *self.m_imageTexture = rcp::new();
     }
     pub fn shader_api(&mut self, shader: Option<&dyn RenderShader>) {
         let Some(shader) = shader else {
@@ -257,14 +270,14 @@ impl RiveRenderPaint {
     pub fn getImageSampler(&self) -> ImageSampler {
         self.m_imageSampler
     }
-    pub fn getImageOpacity(&self) -> f32 {
-        unsafe { self.m_simpleValue.imageOpacity }
-    }
     pub fn getOuterClipID(&self) -> f32 {
         unsafe { self.m_simpleValue.outerClipID as f32 }
     }
     pub fn getThickness(&self) -> f32 {
         self.m_thickness
+    }
+    pub fn getImageTransform(&self) -> &Mat2D {
+        &self.m_imageTransform
     }
     pub fn getJoin(&self) -> StrokeJoin {
         if self.m_feather != 0.0 {
@@ -293,13 +306,85 @@ impl RiveRenderPaint {
         if self.m_feather != 0.0 || self.m_blendMode != BlendMode::SrcOver {
             return false;
         }
+        if !self.m_imageTexture.get().is_null() {
+            return false;
+        }
         match self.m_paintType {
             gpu::PaintType::solidColor => (unsafe { self.m_simpleValue.color } >> 24) == 0xff,
             gpu::PaintType::linearGradient | gpu::PaintType::radialGradient => {
                 !self.m_gradient.get().is_null() && unsafe { (&*self.m_gradient.get()).isOpaque() }
             }
-            gpu::PaintType::image | gpu::PaintType::clipUpdate => false,
+            gpu::PaintType::clipUpdate => false,
         }
+    }
+
+    pub unsafe fn modulatedImage(
+        &mut self,
+        render_image: *const SourceRenderImage,
+        sampler: ImageSampler,
+        matrix: &Mat2D,
+    ) {
+        if render_image.is_null() {
+            *self.m_imageTexture = rcp::new();
+            return;
+        }
+        self.m_imageSampler = sampler;
+        self.m_imageTransform = *matrix;
+        let rive_image = unsafe { lite_rtti_cast::<RiveRenderImage, _>(render_image.cast_mut()) };
+        if rive_image.is_null() {
+            return;
+        }
+        *self.m_imageTexture = unsafe { (&*rive_image).refTexture() };
+    }
+
+    fn modulated_image_api(
+        &mut self,
+        image: Option<&dyn ApiRenderImage>,
+        sampler: ApiImageSampler,
+        transform: Mat2D,
+    ) {
+        let sampler = source_image_sampler(sampler);
+        let Some(image) = image else {
+            unsafe { self.modulatedImage(core::ptr::null(), sampler, &transform) };
+            return;
+        };
+        let Some(image) = image.as_any().downcast_ref::<RiveRenderImageHandle>() else {
+            self.m_imageSampler = sampler;
+            self.m_imageTransform = transform;
+            return;
+        };
+        let source = &image.source().base as *const SourceRenderImage;
+        unsafe { self.modulatedImage(source, sampler, &transform) };
+    }
+}
+
+fn color_modulate_opacity(value: ColorInt, opacity: f32) -> ColorInt {
+    let source_opacity = ((value >> 24) & 0xff) as f32 / 255.0;
+    let product = source_opacity * opacity;
+    let clamped = product.min(1.0).max(0.0);
+    let alpha = (255.0 * clamped).round() as u32;
+    (value & 0x00ff_ffff) | (alpha << 24)
+}
+
+fn source_image_sampler(value: ApiImageSampler) -> ImageSampler {
+    use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::{
+        ImageFilter, ImageWrap,
+    };
+    ImageSampler {
+        wrapX: match value.wrap_x {
+            ApiImageWrap::Clamp => ImageWrap::clamp,
+            ApiImageWrap::Repeat => ImageWrap::repeat,
+            ApiImageWrap::Mirror => ImageWrap::mirror,
+        },
+        wrapY: match value.wrap_y {
+            ApiImageWrap::Clamp => ImageWrap::clamp,
+            ApiImageWrap::Repeat => ImageWrap::repeat,
+            ApiImageWrap::Mirror => ImageWrap::mirror,
+        },
+        filter: match value.filter {
+            ApiImageFilter::Bilinear => ImageFilter::bilinear,
+            ApiImageFilter::Nearest => ImageFilter::nearest,
+        },
     }
 }
 impl LiteRttiBase for RiveRenderPaint {
@@ -360,6 +445,14 @@ impl RenderPaintContract for RiveRenderPaint {
         unsafe { self.shader_source(shader) };
     }
     fn invalidateStroke(&mut self) {}
+    fn modulatedImage(
+        &mut self,
+        image: *const SourceRenderImage,
+        sampler: ImageSampler,
+        transform: &Mat2D,
+    ) {
+        unsafe { self.modulatedImage(image, sampler, transform) }
+    }
 }
 impl RenderPaint for RiveRenderPaint {
     fn as_any(&self) -> &dyn Any {
@@ -390,13 +483,30 @@ impl RenderPaint for RiveRenderPaint {
         self.shader_api(shader)
     }
     fn invalidate_stroke(&mut self) {}
+    fn modulated_image(
+        &mut self,
+        image: Option<&dyn ApiRenderImage>,
+        sampler: ApiImageSampler,
+        transform: Mat2D,
+    ) {
+        self.modulated_image_api(image, sampler, transform)
+    }
 }
 
 /// Product-facing owner for the exact intrusive paint allocation produced by
 /// RiveRenderFactory. The wrapper supplies the `nuxie_render_api` trait object;
 /// the complete source paint stays in its original `rcp` allocation.
+struct AttachedPaintExecutionDomain {
+    resource_domain: RenderResourceDomain,
+    // Retains the actual backend execution owner until after source teardown.
+    _domain_guard: Rc<dyn Any>,
+}
+
 pub struct RiveRenderPaintHandle {
     source: rcp<RiveRenderPaint>,
+    // Declared after source so paint/texture release completes before the
+    // backend owner drops. Identity and lifetime are one indivisible edge.
+    execution_domain: Option<AttachedPaintExecutionDomain>,
 }
 
 impl RiveRenderPaintHandle {
@@ -410,7 +520,36 @@ impl RiveRenderPaintHandle {
         // SAFETY: the backend-agnostic source factory always allocates
         // RiveRenderPaint with its RenderPaint base at offset zero.
         let source = unsafe { static_rcp_cast(source) };
-        Some(Self { source })
+        Some(Self {
+            source,
+            execution_domain: None,
+        })
+    }
+
+    /// Attach the opaque identity and owner of this paint's execution domain
+    /// together. The consuming builder permits this attachment exactly once.
+    pub(crate) fn with_execution_domain(
+        mut self,
+        resource_domain: RenderResourceDomain,
+        domain_guard: Rc<dyn Any>,
+    ) -> Self {
+        assert!(
+            self.execution_domain.is_none(),
+            "paint execution domain already attached"
+        );
+        self.execution_domain = Some(AttachedPaintExecutionDomain {
+            resource_domain,
+            _domain_guard: domain_guard,
+        });
+        self
+    }
+
+    /// Returns whether this resource was created by the queried execution
+    /// domain. An unattached source handle belongs to no product domain.
+    pub(crate) fn belongs_to(&self, resource_domain: &RenderResourceDomain) -> bool {
+        self.execution_domain
+            .as_ref()
+            .is_some_and(|attached| attached.resource_domain.same_domain(resource_domain))
     }
 
     pub fn source(&self) -> &RiveRenderPaint {
@@ -428,14 +567,18 @@ impl RiveRenderPaintHandle {
         &self.source().base
     }
 
-    pub fn source_base_mut(&mut self) -> &mut SourceRenderPaint {
-        &mut self.source_mut().base
+    /// Borrows the exact source base only after validating the execution
+    /// domain. The borrow cannot outlive this handle and therefore cannot
+    /// outlive the bundled lifetime guard.
+    pub(crate) fn source_base_for(
+        &self,
+        resource_domain: &RenderResourceDomain,
+    ) -> Option<&SourceRenderPaint> {
+        self.belongs_to(resource_domain).then(|| self.source_base())
     }
 
-    pub fn into_source(self) -> rcp<SourceRenderPaint> {
-        let mut source = self.source;
-        // SAFETY: move the exact derived owner into its offset-zero base type.
-        unsafe { rcp::converting_move_ctor(&mut source) }
+    pub fn source_base_mut(&mut self) -> &mut SourceRenderPaint {
+        &mut self.source_mut().base
     }
 }
 
@@ -468,4 +611,183 @@ impl RenderPaint for RiveRenderPaintHandle {
         self.source_mut().shader_api(shader);
     }
     fn invalidate_stroke(&mut self) {}
+    fn modulated_image(
+        &mut self,
+        image: Option<&dyn ApiRenderImage>,
+        sampler: ApiImageSampler,
+        transform: Mat2D,
+    ) {
+        let sampler = source_image_sampler(sampler);
+        let Some(image) = image else {
+            unsafe {
+                self.source_mut()
+                    .modulatedImage(core::ptr::null(), sampler, &transform)
+            };
+            return;
+        };
+        let Some(resource_domain) = self
+            .execution_domain
+            .as_ref()
+            .map(|attached| attached.resource_domain.clone())
+        else {
+            return;
+        };
+        let Some(image) = image.as_any().downcast_ref::<RiveRenderImageHandle>() else {
+            let source = self.source_mut();
+            source.m_imageSampler = sampler;
+            source.m_imageTransform = transform;
+            return;
+        };
+        let Some(image) = image.source_base_for(&resource_domain) else {
+            return;
+        };
+        unsafe {
+            self.source_mut()
+                .modulatedImage(image as *const _, sampler, &transform)
+        };
+    }
+}
+
+#[cfg(test)]
+mod handle_tests {
+    use super::*;
+    use crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp;
+
+    struct ForeignImage;
+
+    impl ApiRenderImage for ForeignImage {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn retain_image(&self) -> Rc<dyn ApiRenderImage> {
+            Rc::new(Self)
+        }
+
+        fn image_identity(&self) -> usize {
+            0
+        }
+
+        fn width(&self) -> u32 {
+            1
+        }
+
+        fn height(&self) -> u32 {
+            1
+        }
+    }
+
+    fn paint_handle() -> RiveRenderPaintHandle {
+        RiveRenderPaintHandle {
+            source: make_rcp(RiveRenderPaint::new),
+            execution_domain: None,
+        }
+    }
+
+    fn image_handle(texture: rcp<Texture>) -> RiveRenderImageHandle {
+        RiveRenderImageHandle::from_exact(make_rcp(|| unsafe { RiveRenderImage::new(texture) }))
+            .expect("source image")
+    }
+
+    #[test]
+    fn matching_image_domain_installs_the_exact_source_texture() {
+        let resource_domain = RenderResourceDomain::new();
+        let guard: Rc<dyn Any> = Rc::new(());
+        let texture = make_rcp(|| Texture::new(9, 7));
+        let expected = texture.get();
+        let image =
+            image_handle(texture).with_execution_domain(resource_domain.clone(), Rc::clone(&guard));
+        let mut paint = paint_handle().with_execution_domain(resource_domain, guard);
+
+        RenderPaint::modulated_image(
+            &mut paint,
+            Some(&image),
+            ApiImageSampler::default(),
+            Mat2D::IDENTITY,
+        );
+
+        assert_eq!(paint.source().getImageTexture(), expected);
+
+        RenderPaint::modulated_image(
+            &mut paint,
+            None,
+            ApiImageSampler::default(),
+            Mat2D::IDENTITY,
+        );
+        assert!(paint.source().getImageTexture().is_null());
+    }
+
+    #[test]
+    fn foreign_and_unattached_images_leave_the_paint_unchanged() {
+        let resource_domain = RenderResourceDomain::new();
+        let guard: Rc<dyn Any> = Rc::new(());
+        let seeded_texture = make_rcp(|| Texture::new(3, 5));
+        let seeded_texture_ptr = seeded_texture.get();
+        let mut paint = paint_handle().with_execution_domain(resource_domain, guard);
+        paint.source_mut().image(seeded_texture, 1.0);
+        let seeded_sampler = paint.source().getImageSampler();
+        let seeded_transform = *paint.source().getImageTransform();
+
+        let unattached = image_handle(make_rcp(|| Texture::new(7, 11)));
+        let foreign_guard: Rc<dyn Any> = Rc::new(());
+        let foreign = image_handle(make_rcp(|| Texture::new(13, 17)))
+            .with_execution_domain(RenderResourceDomain::new(), foreign_guard);
+        for image in [&unattached, &foreign] {
+            RenderPaint::modulated_image(
+                &mut paint,
+                Some(image),
+                ApiImageSampler {
+                    wrap_x: ApiImageWrap::Repeat,
+                    wrap_y: ApiImageWrap::Mirror,
+                    filter: ApiImageFilter::Nearest,
+                },
+                Mat2D([2.0, 0.0, 0.0, 3.0, 4.0, 5.0]),
+            );
+            assert_eq!(paint.source().getImageTexture(), seeded_texture_ptr);
+            assert_eq!(paint.source().getImageSampler(), seeded_sampler);
+            assert_eq!(*paint.source().getImageTransform(), seeded_transform);
+        }
+    }
+
+    #[test]
+    fn wrong_source_image_type_preserves_texture_but_updates_sampler_and_transform() {
+        let resource_domain = RenderResourceDomain::new();
+        let guard: Rc<dyn Any> = Rc::new(());
+        let seeded_texture = make_rcp(|| Texture::new(3, 5));
+        let seeded_texture_ptr = seeded_texture.get();
+        let mut paint = paint_handle().with_execution_domain(resource_domain, guard);
+        paint.source_mut().image(seeded_texture, 1.0);
+        let sampler = ApiImageSampler {
+            wrap_x: ApiImageWrap::Repeat,
+            wrap_y: ApiImageWrap::Mirror,
+            filter: ApiImageFilter::Nearest,
+        };
+        let transform = Mat2D([2.0, 0.0, 0.0, 3.0, 4.0, 5.0]);
+
+        RenderPaint::modulated_image(
+            &mut paint,
+            Some(&ForeignImage),
+            sampler,
+            transform,
+        );
+
+        assert_eq!(paint.source().getImageTexture(), seeded_texture_ptr);
+        assert_eq!(paint.source().getImageSampler(), source_image_sampler(sampler));
+        assert_eq!(*paint.source().getImageTransform(), transform);
+    }
+
+    #[test]
+    fn paint_domain_gate_and_guard_lifetime_are_bundled() {
+        let matching_domain = RenderResourceDomain::new();
+        let foreign_domain = RenderResourceDomain::new();
+        let guard: Rc<dyn Any> = Rc::new(());
+        let paint =
+            paint_handle().with_execution_domain(matching_domain.clone(), Rc::clone(&guard));
+
+        assert!(paint.source_base_for(&matching_domain).is_some());
+        assert!(paint.source_base_for(&foreign_domain).is_none());
+        assert_eq!(Rc::strong_count(&guard), 2);
+        drop(paint);
+        assert_eq!(Rc::strong_count(&guard), 1);
+    }
 }

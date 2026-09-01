@@ -12,6 +12,9 @@ pub trait ImageBaseCallbacks:
     fn fit_changed(&mut self) {}
     fn alignment_x_changed(&mut self) {}
     fn alignment_y_changed(&mut self) {}
+    fn sampler_filter_changed(&mut self) {}
+    fn sampler_wrap_x_changed(&mut self) {}
+    fn sampler_wrap_y_changed(&mut self) {}
 }
 
 pub struct ImageBase {
@@ -22,6 +25,9 @@ pub struct ImageBase {
     fit: u32,
     alignment_x: f32,
     alignment_y: f32,
+    sampler_filter: u8,
+    sampler_wrap_x: u8,
+    sampler_wrap_y: u8,
 }
 
 impl Default for ImageBase {
@@ -34,6 +40,9 @@ impl Default for ImageBase {
             fit: 0,
             alignment_x: 0.0,
             alignment_y: 0.0,
+            sampler_filter: 0,
+            sampler_wrap_x: 0,
+            sampler_wrap_y: 0,
         }
     }
 }
@@ -46,6 +55,9 @@ impl ImageBase {
     pub const FIT_PROPERTY_KEY: u16 = 974;
     pub const ALIGNMENT_X_PROPERTY_KEY: u16 = 975;
     pub const ALIGNMENT_Y_PROPERTY_KEY: u16 = 976;
+    pub const SAMPLER_FILTER_PROPERTY_KEY: u16 = 1076;
+    pub const SAMPLER_WRAP_X_PROPERTY_KEY: u16 = 1077;
+    pub const SAMPLER_WRAP_Y_PROPERTY_KEY: u16 = 1078;
 
     pub fn is_type_of(type_key: u16) -> bool {
         matches!(type_key, Self::TYPE_KEY | 13 | 2 | 38 | 91 | 11 | 10)
@@ -161,6 +173,60 @@ impl ImageBase {
         self.alignment_y = value;
         true
     }
+    pub fn sampler_filter(&self) -> u8 {
+        self.sampler_filter
+    }
+    pub fn set_sampler_filter(&mut self, value: u8, callbacks: &mut impl ImageBaseCallbacks) {
+        if !self.set_sampler_filter_value(value) {
+            return;
+        }
+        callbacks.sampler_filter_changed();
+        ImageBaseCallbacks::notify_property_changed(callbacks, Self::SAMPLER_FILTER_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_sampler_filter_value(&mut self, value: u8) -> bool {
+        if self.sampler_filter == value {
+            return false;
+        }
+        self.sampler_filter = value;
+        true
+    }
+    pub fn sampler_wrap_x(&self) -> u8 {
+        self.sampler_wrap_x
+    }
+    pub fn set_sampler_wrap_x(&mut self, value: u8, callbacks: &mut impl ImageBaseCallbacks) {
+        if !self.set_sampler_wrap_x_value(value) {
+            return;
+        }
+        callbacks.sampler_wrap_x_changed();
+        ImageBaseCallbacks::notify_property_changed(callbacks, Self::SAMPLER_WRAP_X_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_sampler_wrap_x_value(&mut self, value: u8) -> bool {
+        if self.sampler_wrap_x == value {
+            return false;
+        }
+        self.sampler_wrap_x = value;
+        true
+    }
+    pub fn sampler_wrap_y(&self) -> u8 {
+        self.sampler_wrap_y
+    }
+    pub fn set_sampler_wrap_y(&mut self, value: u8, callbacks: &mut impl ImageBaseCallbacks) {
+        if !self.set_sampler_wrap_y_value(value) {
+            return;
+        }
+        callbacks.sampler_wrap_y_changed();
+        ImageBaseCallbacks::notify_property_changed(callbacks, Self::SAMPLER_WRAP_Y_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_sampler_wrap_y_value(&mut self, value: u8) -> bool {
+        if self.sampler_wrap_y == value {
+            return false;
+        }
+        self.sampler_wrap_y = value;
+        true
+    }
     pub fn clone_into(&self, callbacks: &mut impl ImageBaseCallbacks) -> Image {
         let mut cloned = Image::default();
         cloned.base.copy(self, callbacks);
@@ -173,6 +239,9 @@ impl ImageBase {
         self.fit = object.fit;
         self.alignment_x = object.alignment_x;
         self.alignment_y = object.alignment_y;
+        self.sampler_filter = object.sampler_filter;
+        self.sampler_wrap_x = object.sampler_wrap_x;
+        self.sampler_wrap_y = object.sampler_wrap_y;
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -204,6 +273,18 @@ impl ImageBase {
             }
             Self::ALIGNMENT_Y_PROPERTY_KEY => {
                 self.alignment_y = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                true
+            }
+            Self::SAMPLER_FILTER_PROPERTY_KEY => {
+                self.sampler_filter = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                true
+            }
+            Self::SAMPLER_WRAP_X_PROPERTY_KEY => {
+                self.sampler_wrap_x = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                true
+            }
+            Self::SAMPLER_WRAP_Y_PROPERTY_KEY => {
+                self.sampler_wrap_y = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

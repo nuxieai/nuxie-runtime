@@ -2816,9 +2816,15 @@ pub enum CoreField {
     ImageAlignmentX,
     ImageAlignmentY,
     ImageAssetId,
+    ImageAssetSamplerFilter,
+    ImageAssetSamplerWrapX,
+    ImageAssetSamplerWrapY,
     ImageFit,
     ImageOriginX,
     ImageOriginY,
+    ImageSamplerFilter,
+    ImageSamplerWrapX,
+    ImageSamplerWrapY,
     InterpolatingKeyFrameInterpolationType,
     InterpolatingKeyFrameInterpolatorId,
     JoystickHandleSourceId,
@@ -6953,6 +6959,9 @@ impl CoreRegistry {
             125 => CoreField::PolygonPoints,
             206 => CoreField::ImageAssetId,
             974 => CoreField::ImageFit,
+            1076 => CoreField::ImageSamplerFilter,
+            1077 => CoreField::ImageSamplerWrapX,
+            1078 => CoreField::ImageSamplerWrapY,
             1033 => CoreField::FocusDataFocusFlags,
             956 => CoreField::FocusDataEdgeBehaviorValue,
             121 => CoreField::DrawRulesDrawTargetId,
@@ -7029,6 +7038,9 @@ impl CoreRegistry {
             204 => CoreField::FileAssetAssetId,
             893 => CoreField::ScriptAssetGeneratorFunctionRef,
             1022 => CoreField::ScriptAssetSerializedImplementedMethods,
+            1073 => CoreField::ImageAssetSamplerFilter,
+            1074 => CoreField::ImageAssetSamplerWrapX,
+            1075 => CoreField::ImageAssetSamplerWrapY,
             408 => CoreField::AudioEventAssetId,
             1021 => CoreField::GamepadInputKind,
             1018 => CoreField::GamepadInputMapping,
@@ -7614,6 +7626,9 @@ impl CoreRegistry {
             125 => CoreField::PolygonPoints,
             206 => CoreField::ImageAssetId,
             974 => CoreField::ImageFit,
+            1076 => CoreField::ImageSamplerFilter,
+            1077 => CoreField::ImageSamplerWrapX,
+            1078 => CoreField::ImageSamplerWrapY,
             1033 => CoreField::FocusDataFocusFlags,
             956 => CoreField::FocusDataEdgeBehaviorValue,
             121 => CoreField::DrawRulesDrawTargetId,
@@ -7690,6 +7705,9 @@ impl CoreRegistry {
             204 => CoreField::FileAssetAssetId,
             893 => CoreField::ScriptAssetGeneratorFunctionRef,
             1022 => CoreField::ScriptAssetSerializedImplementedMethods,
+            1073 => CoreField::ImageAssetSamplerFilter,
+            1074 => CoreField::ImageAssetSamplerWrapX,
+            1075 => CoreField::ImageAssetSamplerWrapY,
             408 => CoreField::AudioEventAssetId,
             1021 => CoreField::GamepadInputKind,
             1018 => CoreField::GamepadInputMapping,
@@ -8350,6 +8368,9 @@ impl CoreRegistry {
             125 => 0,
             206 => 0,
             974 => 0,
+            1076 => 0,
+            1077 => 0,
+            1078 => 0,
             1033 => 0,
             956 => 0,
             121 => 0,
@@ -8426,6 +8447,9 @@ impl CoreRegistry {
             204 => 0,
             893 => 0,
             1022 => 0,
+            1073 => 0,
+            1074 => 0,
+            1075 => 0,
             408 => 0,
             1021 => 0,
             1018 => 0,
@@ -8962,6 +8986,9 @@ impl CoreRegistry {
             125 => 51,
             206 => 100,
             974 => 100,
+            1076 => 100,
+            1077 => 100,
+            1078 => 100,
             1033 => 653,
             956 => 653,
             121 => 49,
@@ -9038,6 +9065,9 @@ impl CoreRegistry {
             204 => 103,
             893 => 529,
             1022 => 529,
+            1073 => 105,
+            1074 => 105,
+            1075 => 105,
             408 => 407,
             1021 => 974,
             1018 => 974,
@@ -37888,6 +37918,24 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::shapes::image_base::ImageBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::image_base::ImageBase::FIT_PROPERTY_KEY);
                 }
             }
+            CoreField::ImageSamplerFilter => {
+                if self.base.set_sampler_filter_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::shapes::image_base::ImageBaseCallbacks>::sampler_filter_changed(self);
+                    <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::shapes::image_base::ImageBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::image_base::ImageBase::SAMPLER_FILTER_PROPERTY_KEY);
+                }
+            }
+            CoreField::ImageSamplerWrapX => {
+                if self.base.set_sampler_wrap_x_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::shapes::image_base::ImageBaseCallbacks>::sampler_wrap_x_changed(self);
+                    <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::shapes::image_base::ImageBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::image_base::ImageBase::SAMPLER_WRAP_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::ImageSamplerWrapY => {
+                if self.base.set_sampler_wrap_y_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::shapes::image_base::ImageBaseCallbacks>::sampler_wrap_y_changed(self);
+                    <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::shapes::image_base::ImageBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::image_base::ImageBase::SAMPLER_WRAP_Y_PROPERTY_KEY);
+                }
+            }
             _ => {}
         }
     }
@@ -38109,6 +38157,9 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
             CoreField::ImageAssetId => self.base.asset_id(),
             CoreField::ImageFit => self.base.fit(),
+            CoreField::ImageSamplerFilter => self.base.sampler_filter() as u32,
+            CoreField::ImageSamplerWrapX => self.base.sampler_wrap_x() as u32,
+            CoreField::ImageSamplerWrapY => self.base.sampler_wrap_y() as u32,
             _ => 0,
         }
     }
@@ -51050,6 +51101,24 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::image_asset:
                     <crate::mechanical_port::source::assets::image_asset::ImageAsset as crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::ASSET_ID_PROPERTY_KEY);
                 }
             }
+            CoreField::ImageAssetSamplerFilter => {
+                if self.base.set_sampler_filter_value(value as u8) {
+                    <crate::mechanical_port::source::assets::image_asset::ImageAsset as crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBaseCallbacks>::sampler_filter_changed(self);
+                    <crate::mechanical_port::source::assets::image_asset::ImageAsset as crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::SAMPLER_FILTER_PROPERTY_KEY);
+                }
+            }
+            CoreField::ImageAssetSamplerWrapX => {
+                if self.base.set_sampler_wrap_x_value(value as u8) {
+                    <crate::mechanical_port::source::assets::image_asset::ImageAsset as crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBaseCallbacks>::sampler_wrap_x_changed(self);
+                    <crate::mechanical_port::source::assets::image_asset::ImageAsset as crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::SAMPLER_WRAP_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::ImageAssetSamplerWrapY => {
+                if self.base.set_sampler_wrap_y_value(value as u8) {
+                    <crate::mechanical_port::source::assets::image_asset::ImageAsset as crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBaseCallbacks>::sampler_wrap_y_changed(self);
+                    <crate::mechanical_port::source::assets::image_asset::ImageAsset as crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::SAMPLER_WRAP_Y_PROPERTY_KEY);
+                }
+            }
             _ => {}
         }
     }
@@ -51111,6 +51180,9 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::image_asset:
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
             CoreField::FileAssetAssetId => self.base.base.base.base.base.asset_id(),
+            CoreField::ImageAssetSamplerFilter => self.base.sampler_filter() as u32,
+            CoreField::ImageAssetSamplerWrapX => self.base.sampler_wrap_x() as u32,
+            CoreField::ImageAssetSamplerWrapY => self.base.sampler_wrap_y() as u32,
             _ => 0,
         }
     }
@@ -51178,7 +51250,7 @@ impl crate::mechanical_port::source::core::CoreObject
             return true;
         }
         let mut base = std::mem::take(&mut self.base);
-        let result = base.base.base.deserialize(property_key, reader, self);
+        let result = base.deserialize(property_key, reader, self);
         self.base = base;
         result
     }
@@ -75505,6 +75577,10 @@ impl crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCal
             property_key,
         )
     }
+}
+impl crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBaseCallbacks
+    for crate::mechanical_port::source::assets::image_asset::ImageAsset
+{
 }
 impl crate::mechanical_port::source::generated::assets::drawable_asset_base::DrawableAssetBaseCallbacks for crate::mechanical_port::source::assets::image_asset::ImageAsset {
 }

@@ -109,6 +109,7 @@ pub mod scripted;
 pub mod semantic;
 pub mod shape_paint_type;
 pub mod shapes;
+pub mod sidecar;
 pub mod signed_content_header;
 pub mod simple_array;
 pub mod solo;

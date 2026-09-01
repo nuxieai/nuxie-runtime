@@ -123,8 +123,8 @@ impl Default for ScriptedObject {
     }
 }
 impl ScriptedObject {
-    /// The non-component scripted owners delete only ScriptInput-derived
-    /// properties. Clear every input's backlink before removing any owner.
+    /// Clear every ScriptInput backlink before releasing the custom-property
+    /// occurrences owned by a flattened scripted owner.
     pub fn dispose_owned_script_inputs(properties: &mut Vec<CoreHandle>) {
         let inputs: Vec<_> = properties
             .iter()

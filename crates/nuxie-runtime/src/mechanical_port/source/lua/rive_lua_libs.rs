@@ -2348,6 +2348,21 @@ pub trait ScriptingContext {
                 self.sort_next_module(module, &mut pending, &mut sorted, &mut visited);
             }
             for module in sorted {
+                let Some((cache_key, has_missing_dependencies)) = module.with_module(|module| {
+                    (
+                        module.module_name(),
+                        !module.missing_dependencies().is_empty(),
+                    )
+                }) else {
+                    continue;
+                };
+                if check_registered_modules(state, &cache_key) {
+                    state.pop(1);
+                    continue;
+                }
+                if has_missing_dependencies {
+                    continue;
+                }
                 self.try_register_module(state, &module);
             }
         }

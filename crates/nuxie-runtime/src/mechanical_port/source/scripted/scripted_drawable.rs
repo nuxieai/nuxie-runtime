@@ -47,6 +47,11 @@ impl Default for ScriptedDrawable {
         }
     }
 }
+impl Drop for ScriptedDrawable {
+    fn drop(&mut self) {
+        ScriptedObject::dispose_owned_script_inputs(&mut self.properties);
+    }
+}
 impl ScriptedDrawable {
     pub fn asset_id(&self) -> u32 {
         self.base.script_asset_id()

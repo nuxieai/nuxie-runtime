@@ -1,4 +1,6 @@
-use crate::mechanical_port::source::{core::Core, core::binary_reader::BinaryReader};
+use crate::mechanical_port::source::{
+    core::Core, core::binary_reader::BinaryReader, sidecar::Sidecar,
+};
 
 pub trait ComponentBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
@@ -6,18 +8,23 @@ pub trait ComponentBaseCallbacks {
     fn parent_id_changed(&mut self) {}
 }
 
+#[derive(Clone, Default)]
+pub struct ComponentNameSidecar {
+    pub name: String,
+}
+
 pub struct ComponentBase {
     pub base: Core,
-    name: String,
     parent_id: u32,
+    name: Sidecar<ComponentNameSidecar>,
 }
 
 impl Default for ComponentBase {
     fn default() -> Self {
         Self {
             base: Core::default(),
-            name: "".to_owned(),
             parent_id: 0,
+            name: Sidecar::default(),
         }
     }
 }
@@ -34,7 +41,7 @@ impl ComponentBase {
         Self::TYPE_KEY
     }
     pub fn name(&self) -> &str {
-        &self.name
+        self.name.get().map_or("", |sidecar| sidecar.name.as_str())
     }
     pub fn set_name(&mut self, value: String, callbacks: &mut impl ComponentBaseCallbacks) {
         if !self.set_name_value(value) {
@@ -45,10 +52,10 @@ impl ComponentBase {
     }
 
     pub(crate) fn set_name_value(&mut self, value: String) -> bool {
-        if self.name == value {
+        if self.name() == value {
             return false;
         }
-        self.name = value;
+        self.name.ensure().name = value;
         true
     }
     pub fn parent_id(&self) -> u32 {
@@ -70,8 +77,8 @@ impl ComponentBase {
         true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl ComponentBaseCallbacks) {
-        self.name.clone_from(&object.name);
         self.parent_id = object.parent_id;
+        self.name.clone_from(&object.name);
     }
     pub fn deserialize(
         &mut self,
@@ -81,7 +88,7 @@ impl ComponentBase {
     ) -> bool {
         match property_key {
             Self::NAME_PROPERTY_KEY => {
-                self.name = crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::deserialize(reader);
+                self.name.ensure().name = crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::deserialize(reader);
                 true
             }
             Self::PARENT_ID_PROPERTY_KEY => {

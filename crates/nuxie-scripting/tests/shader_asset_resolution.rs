@@ -3,8 +3,7 @@
 use std::any::Any;
 use std::sync::{Arc, Weak};
 
-#[path = "support/recording_gpu.rs"]
-mod recording_gpu;
+use runtime_test_support::recording_gpu;
 
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie_render_api::{

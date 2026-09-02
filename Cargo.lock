@@ -1028,6 +1028,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-metal",
  "objc2-quartz-core",
+ "runtime-test-support",
  "serde_json",
  "sha2",
 ]
@@ -1052,6 +1053,7 @@ dependencies = [
  "nuxie-scripting",
  "objc2",
  "objc2-metal",
+ "runtime-test-support",
  "serde_json",
  "sha2",
  "silver-corpus",
@@ -1258,6 +1260,7 @@ dependencies = [
  "nuxie-runtime",
  "nuxie-schema",
  "nuxie-sriv",
+ "runtime-test-support",
  "sha2",
 ]
 
@@ -1577,6 +1580,19 @@ dependencies = [
  "perf-compare",
  "pixel-compare",
  "serde_json",
+]
+
+[[package]]
+name = "runtime-test-support"
+version = "0.1.0"
+dependencies = [
+ "luaur-common",
+ "luaur-compiler",
+ "nuxie-ore-metal",
+ "nuxie-render-api",
+ "nuxie-renderer",
+ "nuxie-schema",
+ "sha2",
 ]
 
 [[package]]

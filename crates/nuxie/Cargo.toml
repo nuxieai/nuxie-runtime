@@ -62,6 +62,7 @@ nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-schema = { path = "../nuxie-schema" }
 serde_json = "1"
 silver-corpus = { path = "../../tools/silver-corpus" }
+runtime-test-support = { path = "../../tools/runtime-test-support" }
 
 # This crate is fully CLEAN on the workspace panic-freedom clippy lints (see
 # [workspace.lints.clippy] in the root Cargo.toml), so it pins them at DENY

@@ -446,34 +446,48 @@ mod tests {
     // 230–233, 260–265 at 3ed35ee0). The older assembled .metal captures remain
     // historical fixtures; they must not substitute for the current batch.
     fn current_source_oracle(atomic_path: bool) -> String {
-        macro_rules! fragment {
-            ($name:literal) => {
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/tests/fixtures/native_metal/background_shader_sources/",
-                    $name
-                ))
-            };
-        }
-        let mut source = fragment!("metal.glsl").to_owned();
-        for fragment in [
-            fragment!("constants.glsl"),
-            fragment!("flush_uniforms.glsl"),
-            fragment!("common.glsl"),
-        ] {
+        const METAL: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/native_metal/background_shader_sources/metal.glsl"
+        ));
+        const CONSTANTS: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/native_metal/background_shader_sources/constants.glsl"
+        ));
+        const FLUSH_UNIFORMS: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/native_metal/background_shader_sources/flush_uniforms.glsl"
+        ));
+        const COMMON: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/native_metal/background_shader_sources/common.glsl"
+        ));
+        const DRAW_PATH_COMMON: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/native_metal/background_shader_sources/draw_path_common.glsl"
+        ));
+        const ATOMIC_DRAW: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/native_metal/background_shader_sources/atomic_draw.glsl"
+        ));
+        const DRAW_IMAGE_MESH_VERTEX: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/native_metal/background_shader_sources/draw_image_mesh.vert"
+        ));
+        const DRAW_MESH_FRAGMENT: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/native_metal/background_shader_sources/draw_mesh.frag"
+        ));
+
+        let mut source = METAL.to_owned();
+        for fragment in [CONSTANTS, FLUSH_UNIFORMS, COMMON] {
             source.push_str(fragment);
             source.push('\n');
         }
         let tail = if atomic_path {
-            [
-                fragment!("draw_path_common.glsl"),
-                fragment!("atomic_draw.glsl"),
-            ]
+            [DRAW_PATH_COMMON, ATOMIC_DRAW]
         } else {
-            [
-                fragment!("draw_image_mesh.vert"),
-                fragment!("draw_mesh.frag"),
-            ]
+            [DRAW_IMAGE_MESH_VERTEX, DRAW_MESH_FRAGMENT]
         };
         for fragment in tail {
             source.push_str(fragment);

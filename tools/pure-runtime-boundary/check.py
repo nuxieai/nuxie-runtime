@@ -255,6 +255,27 @@ PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
             "OreMetalGpuCanvas",
             "OreMetalGpuCanvasImage",
         },
+        "render_api": {
+            "BlendMode",
+            "DeferredCanvasHostHandle",
+            "ImageSampler",
+            "OreContextHandle",
+            "OreFrameDescriptor",
+            "PersistentFactoryContext",
+            "RenderCanvas",
+            "RenderCanvasError",
+            "RenderCanvasFrame",
+            "RenderCanvasHandle",
+        },
+    },
+    "crates/nux-capi/src/asset_hooks.rs": {
+        "render_api": {
+            "DeferredCanvasHostHandle",
+            "OreContextHandle",
+            "PersistentFactoryContext",
+            "RenderCanvas",
+            "RenderCanvasError",
+        },
     },
 }
 PORTABLE_ABI_FACADE_FILE_SYMBOLS = {
@@ -317,6 +338,7 @@ APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES = {
     "crates/nux-capi/src/apple_metal.rs",
     "crates/nux-capi/src/lib.rs",
     "crates/nux-capi/tests/apple_metal.rs",
+    "crates/nux-capi/tests/support/apple_metal_authored_gpu_canvas.rs",
 }
 APPLE_PLATFORM_EXTENSION_VOCABULARY = re.compile(
     r"(?i:(?:[A-Za-z0-9_-]*apple[A-Za-z0-9_-]*)|CAMetal(?:Layer|Drawable)?)"
@@ -442,6 +464,7 @@ INTERNAL_DEBT_MARKERS = {
 APPROVED_NEUTRAL_MECHANICS_FILES = {
     "apple-presentation": {
         "crates/nux-capi/tests/apple_metal.rs",
+        "crates/nux-capi/tests/support/apple_metal_authored_gpu_canvas.rs",
         "crates/nux-capi/src/apple_metal.rs",
         "crates/nuxie-renderer/src/native_apple_surface.rs",
         "crates/nuxie-renderer/src/apple_surface.rs",
@@ -1284,6 +1307,12 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     def inside_test_module(match: re.Match[str]) -> bool:
         return any(start <= match.start() < end for start, end in test_module_ranges)
 
+    def allowed_module_symbols(module: str) -> set[str] | None:
+        symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(module, set()) | (
+            file_module_symbols.get(module, set())
+        )
+        return symbols or None
+
     # The caller passes comment/string-stripped Rust. Rejecting the token itself
     # also closes attributes synthesized by macro expansion, not just literal
     # `#[macro_export]` and `cfg_attr(..., macro_export)` spellings.
@@ -1355,9 +1384,7 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
         elif nested_grouped is not None:
             module = nested_grouped.group(1)
             items = [item.strip() for item in nested_grouped.group(2).split(",")]
-            module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(
-                module
-            ) or file_module_symbols.get(module)
+            module_symbols = allowed_module_symbols(module)
             if module_symbols is not None and all(
                 re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", item)
                 for item in items
@@ -1367,9 +1394,7 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
                 allowed_symbols = module_symbols
         elif nested_direct is not None:
             module = nested_direct.group(1)
-            module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(
-                module
-            ) or file_module_symbols.get(module)
+            module_symbols = allowed_module_symbols(module)
             if module_symbols is not None:
                 imported_symbols = [nested_direct.group(2)]
                 allowed_symbols = module_symbols
@@ -1405,9 +1430,7 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     for match in DIRECT_NUXIE_PATH.finditer(source):
         symbol = match.group("symbol")
         nested_symbol = match.group("nested_symbol")
-        module_symbols = PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS.get(
-            symbol
-        ) or file_module_symbols.get(symbol)
+        module_symbols = allowed_module_symbols(symbol)
         if module_symbols is not None:
             if nested_symbol is None:
                 continue

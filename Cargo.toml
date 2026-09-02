@@ -27,6 +27,7 @@ members = [
     "tools/webgl2-renderer-replay",
     "tools/nuxie-codegen",
     "tools/rust-golden-runner",
+    "tools/runtime-test-support",
     "tools/silver-corpus",
 ]
 exclude = [

@@ -12,9 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-#[path = "../../../nuxie/tests/support/authored_msl_gpu_canvas.rs"]
-mod fixture;
-use fixture::{EXPECTED_PIXEL, HEIGHT, WIDTH, imported_file};
+use runtime_test_support::authored_msl_gpu_canvas::{EXPECTED_PIXEL, HEIGHT, WIDTH, imported_file};
 
 fn imported_player(renderer: *mut NuxRenderer, native_authority: bool) -> *mut NuxPlayer {
     let bytes = imported_file();

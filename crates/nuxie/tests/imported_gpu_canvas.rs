@@ -16,8 +16,7 @@ use nuxie::{
 use nuxie_render_api::RawPath;
 use nuxie_schema::definition_by_name;
 
-#[path = "../../nuxie-scripting/tests/support/recording_gpu.rs"]
-mod recording_gpu;
+use runtime_test_support::recording_gpu;
 
 const SCRIPT: &[u8] = br#"
 return function(context)

@@ -58,6 +58,7 @@ libhydrogen = "=0.4.6"
 luaur-compiler = "=0.1.8"
 image-webp = "0.2.4"
 sha2 = "0.10"
+runtime-test-support = { path = "../../tools/runtime-test-support" }
 
 [build-dependencies]
 luaur-common = "=0.1.8"

@@ -33,9 +33,9 @@ use objc2_metal::{
     MTLRegion, MTLStorageMode, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
 };
 
-#[path = "support/authored_msl_gpu_canvas.rs"]
-mod fixture;
-use fixture::{BINDING_MAP, EXPECTED_PIXEL, HEIGHT, PROBE_MSL, WIDTH, imported_file};
+use runtime_test_support::authored_msl_gpu_canvas::{
+    BINDING_MAP, EXPECTED_PIXEL, HEIGHT, PROBE_MSL, WIDTH, imported_file,
+};
 
 struct OreProbeFactory {
     inner: RecordingFactory,

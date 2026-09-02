@@ -2370,6 +2370,22 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/asset_hooks.rs").write_text(
             "use nuxie::{RenderCanvas, RenderCanvasError};\n"
+            "use nuxie::render_api::{Mat2D, OreContextHandle};\n"
+            "fn context(_: nuxie::render_api::PersistentFactoryContext) {}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_allows_exact_apple_deferred_renderer_symbols(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/apple_metal.rs").write_text(
+            "use nuxie::render_api::{\n"
+            "    BlendMode, DeferredCanvasHostHandle, ImageSampler, Mat2D,\n"
+            "    OreContextHandle, OreFrameDescriptor, PersistentFactoryContext, RawPath,\n"
+            "    RenderCanvas, RenderCanvasError, RenderCanvasFrame, RenderCanvasHandle,\n"
+            "};\n"
         )
 
         result = self.run_check()
@@ -2380,6 +2396,7 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/not_asset_hooks.rs").write_text(
             "use nuxie::{RenderCanvas, RenderCanvasError};\n"
+            "use nuxie::render_api::OreContextHandle;\n"
         )
 
         result = self.run_check()
@@ -2387,6 +2404,10 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("portable ABI facade symbol 'RenderCanvas'", result.stderr)
         self.assertIn("portable ABI facade symbol 'RenderCanvasError'", result.stderr)
+        self.assertIn(
+            "portable ABI facade symbol 'render_api::OreContextHandle'",
+            result.stderr,
+        )
 
     def test_rejects_authored_msl_extension_symbols_outside_exact_files(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
@@ -2991,6 +3012,11 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         capi = self.create_package("crates/nux-capi", "nux-capi", "")
         (capi / "tests").mkdir()
         (capi / "tests/apple_metal.rs").write_text(
+            "fn configure(layer: CAMetalLayer) { layer.nextDrawable(); }\n"
+        )
+        (capi / "tests/support").mkdir()
+        (capi / "tests/support/apple_metal_authored_gpu_canvas.rs").write_text(
+            "//! Apple renderer test support.\n"
             "fn configure(layer: CAMetalLayer) { layer.nextDrawable(); }\n"
         )
         replay = self.create_package(

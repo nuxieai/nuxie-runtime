@@ -5,7 +5,7 @@ script_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -P "${script_dir}/.." && pwd -P)"
 rust_toolchain="1.94.1"
 cargo_ndk_version="4.1.2"
-ndk_version="26.1.10909125"
+ndk_version="29.0.14206865"
 android_api="23"
 features="android-vulkan,scripting,android-authored-wgsl"
 targets=(aarch64-linux-android x86_64-linux-android)
@@ -18,13 +18,13 @@ if [[ "${1:-}" == "--plan" ]]; then
         'root-package: nux-capi' \
         'rust-toolchain: 1.94.1' \
         'cargo-ndk: 4.1.2' \
-        'android-ndk: 26.1.10909125' \
+        'android-ndk: 29.0.14206865' \
         'android-api: 23' \
         'targets: aarch64-linux-android x86_64-linux-android' \
         'abis: arm64-v8a x86_64' \
         'features: android-vulkan,scripting,android-authored-wgsl' \
         'archive-tree: include/nux_capi.generated.h plus libnux_capi.so and libc++_shared.so for each ABI' \
-        'qualification: ABI4 layout/header/exports, ELF architecture/DT_NEEDED, provenance, checksums, size budget'
+        'qualification: ABI4 layout/header/exports, ELF architecture/DT_NEEDED/16-KiB LOAD alignment, provenance, checksums, size budget'
     exit 0
 fi
 if [[ $# -gt 1 ]]; then

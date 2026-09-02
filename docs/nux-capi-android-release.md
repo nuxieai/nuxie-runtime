@@ -15,7 +15,7 @@ jniLibs/x86_64/libnux_capi.so
 ```
 
 The release cut is fixed at Rust 1.94.1, cargo-ndk 4.1.2, Android NDK
-26.1.10909125, API 23, `arm64-v8a` plus `x86_64`, and the feature union
+29.0.14206865, API 23, `arm64-v8a` plus `x86_64`, and the feature union
 `android-vulkan,scripting,android-authored-wgsl`. `libc++_shared.so` is copied
 byte-for-byte from that NDK for each ABI because the Vulkan runtime has a
 dynamic C++ runtime dependency.
@@ -26,8 +26,9 @@ the audited source and toolchain inputs, the ABI-v4 contract fingerprint, the
 archive SHA-256, and each of the five file SHA-256 values. The verifier checks
 the committed ABI-v4 layout oracle, the full header inventory, the selected
 Android header inventory, both shared libraries' exact `nux_*` export union,
-ELF64 architecture, exact `DT_NEEDED` sets, embedded schema-6 provenance, NDK
-`libc++_shared.so` identity, and the committed aggregate and per-file size
+ELF64 architecture, exact `DT_NEEDED` sets, at least 16 KiB alignment for every
+`LOAD` segment in every shipped shared library, embedded schema-6 provenance,
+NDK `libc++_shared.so` identity, and the committed aggregate and per-file size
 budget.
 
 ## Candidate qualification
@@ -38,7 +39,7 @@ Install the exact toolchain and both Rust Android targets:
 rustup toolchain install 1.94.1
 rustup target add --toolchain 1.94.1 aarch64-linux-android x86_64-linux-android
 cargo install --locked cargo-ndk --version 4.1.2
-export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/26.1.10909125"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
 ```
 
 From a clean checkout of the intended source commit:

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 import zipfile
 
+import tools.android_runtime_contract as android_runtime_contract
 from tools.android_runtime_contract import ABIS
 from tools.android_runtime_contract import ANDROID_API_LEVEL
 from tools.android_runtime_contract import ANDROID_NDK_VERSION
@@ -108,6 +109,23 @@ def fake_elf(machine: int) -> bytes:
     value = bytearray(64)
     value[:7] = b"\x7fELF\x02\x01\x01"
     struct.pack_into("<HH", value, 16, 3, machine)
+    return bytes(value)
+
+
+def fake_elf_with_load_segments(
+    machine: int, segments: list[tuple[int, int, int]]
+) -> bytes:
+    program_header_size = 56
+    value = bytearray(64 + program_header_size * len(segments))
+    value[:64] = fake_elf(machine)
+    struct.pack_into("<Q", value, 32, 64)
+    struct.pack_into("<HH", value, 54, program_header_size, len(segments))
+    for index, (offset, virtual_address, alignment) in enumerate(segments):
+        entry = 64 + index * program_header_size
+        struct.pack_into("<I", value, entry, 1)
+        struct.pack_into("<Q", value, entry + 8, offset)
+        struct.pack_into("<Q", value, entry + 16, virtual_address)
+        struct.pack_into("<Q", value, entry + 48, alignment)
     return bytes(value)
 
 
@@ -228,6 +246,92 @@ class AbiAndElfContractTests(unittest.TestCase):
         validate_elf_header(fake_elf(62), 62, "x86_64")
         with self.assertRaises(ContractError):
             validate_elf_header(fake_elf(62), 183, "wrong")
+
+    def test_android_load_segments_require_16_kib_alignment(self) -> None:
+        aligned = (
+            "Elf file type is DYN (Shared object file)\n"
+            "  LOAD 0x000000 0x0000000000000000 0x0000000000000000 "
+            "0x001000 0x001000 R E 0x4000\n"
+            "  LOAD 0x001000 0x0000000000005000 0x0000000000005000 "
+            "0x000800 0x000800 RW  0x10000\n"
+        )
+        android_runtime_contract.validate_load_segment_alignment(aligned, "aligned.so")
+
+        too_small = aligned.replace("0x4000", "0x1000", 1)
+        with self.assertRaisesRegex(ContractError, "0x1000.*0x4000"):
+            android_runtime_contract.validate_load_segment_alignment(
+                too_small, "four-kib.so"
+            )
+
+    def test_android_load_segment_output_fails_closed(self) -> None:
+        with self.assertRaisesRegex(ContractError, "no LOAD"):
+            android_runtime_contract.validate_load_segment_alignment(
+                "There are no program headers in this file.\n", "empty.so"
+            )
+        with self.assertRaisesRegex(ContractError, "malformed LOAD"):
+            android_runtime_contract.validate_load_segment_alignment(
+                "  LOAD definitely-not-a-program-header\n", "malformed.so"
+            )
+
+    def test_android_load_segments_reject_invalid_alignment_contracts(self) -> None:
+        non_power_of_two = (
+            "  LOAD 0x000000 0x0000000000000000 0x0000000000000000 "
+            "0x001000 0x001000 R E 0x5000\n"
+        )
+        with self.assertRaisesRegex(ContractError, "0x5000.*power of two"):
+            android_runtime_contract.validate_load_segment_alignment(
+                non_power_of_two, "non-power.so"
+            )
+
+        incongruent = (
+            "  LOAD 0x001000 0x0000000000000000 0x0000000000000000 "
+            "0x001000 0x001000 R E 0x4000\n"
+        )
+        with self.assertRaisesRegex(ContractError, "not congruent modulo 0x4000"):
+            android_runtime_contract.validate_load_segment_alignment(
+                incongruent, "incongruent.so"
+            )
+
+    def test_real_elf_program_headers_are_qualified(self) -> None:
+        aligned = fake_elf_with_load_segments(
+            183, [(0x0000, 0x0000, 0x4000), (0x1000, 0x5000, 0x10000)]
+        )
+        android_runtime_contract.validate_elf_load_segments(aligned, "aligned.so")
+
+        too_small = fake_elf_with_load_segments(183, [(0, 0, 0x1000)])
+        with self.assertRaisesRegex(ContractError, "0x1000.*0x4000"):
+            android_runtime_contract.validate_elf_load_segments(
+                too_small, "four-kib.so"
+            )
+
+        truncated = aligned[:-1]
+        with self.assertRaisesRegex(ContractError, "truncated ELF program-header"):
+            android_runtime_contract.validate_elf_load_segments(truncated, "truncated.so")
+
+    def test_every_packaged_shared_library_is_alignment_qualified(self) -> None:
+        aligned = (
+            "  LOAD 0x000000 0x0000000000000000 0x0000000000000000 "
+            "0x001000 0x001000 R E 0x4000\n"
+        )
+        outputs = {
+            path: aligned for path in EXPECTED_FILES if path.endswith(".so")
+        }
+        android_runtime_contract.validate_packaged_load_segment_alignments(outputs)
+
+        bad_libcxx = dict(outputs)
+        bad_path = "jniLibs/x86_64/libc++_shared.so"
+        bad_libcxx[bad_path] = aligned.replace("0x4000", "0x1000")
+        with self.assertRaisesRegex(
+            ContractError, r"x86_64/libc\+\+_shared\.so.*0x1000.*0x4000"
+        ):
+            android_runtime_contract.validate_packaged_load_segment_alignments(
+                bad_libcxx
+            )
+
+        missing = dict(outputs)
+        del missing[bad_path]
+        with self.assertRaisesRegex(ContractError, "missing=.*libc\\+\\+_shared"):
+            android_runtime_contract.validate_packaged_load_segment_alignments(missing)
 
     def test_dynamic_dependencies_and_exports_parse_exactly(self) -> None:
         needed = parse_needed(
@@ -432,6 +536,7 @@ class PipelineContractTests(unittest.TestCase):
         self.assertEqual(list(budget["maximums"]["fileBytes"]), list(EXPECTED_FILES))
 
     def test_builder_plan_exposes_every_pinned_dimension(self) -> None:
+        self.assertEqual(ANDROID_NDK_VERSION, "29.0.14206865")
         plan = subprocess.run(
             [str(REPO_ROOT / "tools/build-nux-capi-android.sh"), "--plan"],
             check=True,
@@ -444,7 +549,7 @@ class PipelineContractTests(unittest.TestCase):
             "Rust".lower(),
             "1.94.1",
             "4.1.2",
-            "26.1.10909125",
+            "29.0.14206865",
             "android-api: 23",
             "arm64-v8a x86_64",
             "android-vulkan,scripting,android-authored-wgsl",

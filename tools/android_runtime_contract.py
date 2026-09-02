@@ -28,8 +28,9 @@ ARTIFACT_VERSION = "0.3.8"
 RELEASE_TAG = f"android-runtime-v{ARTIFACT_VERSION}"
 RUST_TOOLCHAIN = "1.94.1"
 CARGO_NDK_VERSION = "4.1.2"
-ANDROID_NDK_VERSION = "26.1.10909125"
+ANDROID_NDK_VERSION = "29.0.14206865"
 ANDROID_API_LEVEL = 23
+ANDROID_LOAD_ALIGNMENT = 0x4000
 ROOT_PACKAGE = "nux-capi"
 FEATURES = ["android-authored-wgsl", "android-vulkan", "scripting"]
 EMBEDDED_FEATURES = "android-vulkan,android-authored-wgsl,scripting"
@@ -893,6 +894,86 @@ def validate_elf_header(data: bytes, expected_machine: int, label: str) -> None:
         )
 
 
+def validate_load_segment(
+    *, offset: int, virtual_address: int, alignment: int, label: str
+) -> None:
+    if alignment < ANDROID_LOAD_ALIGNMENT:
+        raise ContractError(
+            f"{label} LOAD alignment {alignment:#x} is below "
+            f"the required {ANDROID_LOAD_ALIGNMENT:#x}"
+        )
+    if alignment & (alignment - 1):
+        raise ContractError(f"{label} LOAD alignment {alignment:#x} is not a power of two")
+    if offset % ANDROID_LOAD_ALIGNMENT != virtual_address % ANDROID_LOAD_ALIGNMENT:
+        raise ContractError(
+            f"{label} LOAD offset {offset:#x} and virtual address {virtual_address:#x} "
+            f"are not congruent modulo {ANDROID_LOAD_ALIGNMENT:#x}"
+        )
+
+
+def validate_load_segment_alignment(output: str, label: str) -> None:
+    load_count = 0
+    for line in output.splitlines():
+        fields = line.split()
+        if not fields or fields[0] != "LOAD":
+            continue
+        if (
+            len(fields) < 8
+            or re.fullmatch(r"0x[0-9A-Fa-f]+", fields[1]) is None
+            or re.fullmatch(r"0x[0-9A-Fa-f]+", fields[2]) is None
+            or re.fullmatch(r"0x[0-9A-Fa-f]+", fields[-1]) is None
+        ):
+            raise ContractError(f"{label} has a malformed LOAD program header: {line.strip()}")
+        load_count += 1
+        validate_load_segment(
+            offset=int(fields[1], 16),
+            virtual_address=int(fields[2], 16),
+            alignment=int(fields[-1], 16),
+            label=label,
+        )
+    if load_count == 0:
+        raise ContractError(f"{label} has no LOAD program headers")
+
+
+def validate_elf_load_segments(data: bytes, label: str) -> None:
+    if len(data) < 64:
+        raise ContractError(f"{label} has a truncated ELF header")
+    program_header_offset = struct.unpack_from("<Q", data, 32)[0]
+    program_header_size, program_header_count = struct.unpack_from("<HH", data, 54)
+    if program_header_size < 56 or program_header_count == 0:
+        raise ContractError(f"{label} has a malformed ELF program-header table")
+    table_end = program_header_offset + program_header_size * program_header_count
+    if program_header_offset < 64 or table_end > len(data):
+        raise ContractError(f"{label} has a truncated ELF program-header table")
+
+    load_count = 0
+    for index in range(program_header_count):
+        entry = program_header_offset + index * program_header_size
+        if struct.unpack_from("<I", data, entry)[0] != 1:
+            continue
+        load_count += 1
+        validate_load_segment(
+            offset=struct.unpack_from("<Q", data, entry + 8)[0],
+            virtual_address=struct.unpack_from("<Q", data, entry + 16)[0],
+            alignment=struct.unpack_from("<Q", data, entry + 48)[0],
+            label=label,
+        )
+    if load_count == 0:
+        raise ContractError(f"{label} has no ELF LOAD program headers")
+
+
+def validate_packaged_load_segment_alignments(outputs: dict[str, str]) -> None:
+    expected = {path for path in EXPECTED_FILES if path.endswith(".so")}
+    actual = set(outputs)
+    if actual != expected:
+        raise ContractError(
+            "Android LOAD alignment evidence differs from the packaged shared libraries: "
+            f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
+        )
+    for path in sorted(expected):
+        validate_load_segment_alignment(outputs[path], path)
+
+
 def validate_provenance(
     strings_output: str,
     *,
@@ -1137,11 +1218,17 @@ def verify_artifact(
             "ABI-v4 Android LP64 layout verification",
         )
 
+        load_segment_outputs: dict[str, str] = {}
         for abi, (target, machine) in ABI_TARGETS.items():
             for library_name in ("libc++_shared.so", "libnux_capi.so"):
                 relative = f"jniLibs/{abi}/{library_name}"
                 library = extracted / relative
                 validate_elf_header(contents[relative], machine, relative)
+                validate_elf_load_segments(contents[relative], relative)
+                load_segment_outputs[relative] = run_checked(
+                    [str(bin_root / "llvm-readelf"), "-lW", str(library)],
+                    f"LOAD segment inspection for {relative}",
+                )
                 dynamic = run_checked(
                     [str(bin_root / "llvm-readelf"), "--dynamic", str(library)],
                     f"DT_NEEDED inspection for {relative}",
@@ -1182,6 +1269,7 @@ def verify_artifact(
             expected_libcxx_hash = build_inputs["ndkRuntimeLibraries"][abi]
             if sha256_file(libcxx) != expected_libcxx_hash:
                 raise ContractError(f"{abi} libc++_shared.so is not the pinned NDK input")
+        validate_packaged_load_segment_alignments(load_segment_outputs)
 
 
 def package_artifact(

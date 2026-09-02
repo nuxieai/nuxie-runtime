@@ -532,7 +532,7 @@ class PipelineContractTests(unittest.TestCase):
         budget = validate_budget(
             json.loads((REPO_ROOT / "tools/android-runtime-size-budget-v4.json").read_text())
         )
-        self.assertEqual(budget["releaseTag"], "android-runtime-v0.3.8")
+        self.assertEqual(budget["releaseTag"], "android-runtime-v0.3.9")
         self.assertEqual(list(budget["maximums"]["fileBytes"]), list(EXPECTED_FILES))
 
     def test_builder_plan_exposes_every_pinned_dimension(self) -> None:
@@ -545,7 +545,7 @@ class PipelineContractTests(unittest.TestCase):
         ).stdout
         for expected in (
             "NuxieRuntimeAndroid.zip",
-            "android-runtime-v0.3.8",
+            "android-runtime-v0.3.9",
             "Rust".lower(),
             "1.94.1",
             "4.1.2",
@@ -566,7 +566,7 @@ class PipelineContractTests(unittest.TestCase):
 
     def test_publisher_orders_draft_download_verify_before_publish(self) -> None:
         publisher = (REPO_ROOT / "tools/publish-nux-capi-android-release.sh").read_text()
-        self.assertIn('expected_tag="android-runtime-v0.3.8"', publisher)
+        self.assertIn('expected_tag="android-runtime-v0.3.9"', publisher)
         self.assertIn("rev-parse refs/remotes/origin/main", publisher)
         self.assertIn("ls-remote --exit-code origin", publisher)
         self.assertIn("gh release create", publisher)

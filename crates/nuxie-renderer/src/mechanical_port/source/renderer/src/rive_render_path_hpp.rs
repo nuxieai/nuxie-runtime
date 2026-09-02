@@ -237,11 +237,11 @@ impl RiveRenderPath {
         self.m_dirt.set(u32::MAX);
     }
     #[cfg(debug_assertions)]
-    fn assertRawPathMutationsUnlocked(&self) {
+    pub(crate) fn assertRawPathMutationsUnlocked(&self) {
         assert_eq!(self.m_rawPathMutationLockCount.get(), 0);
     }
     #[cfg(not(debug_assertions))]
-    fn assertRawPathMutationsUnlocked(&self) {}
+    pub(crate) fn assertRawPathMutationsUnlocked(&self) {}
     #[cfg(debug_assertions)]
     pub fn lockRawPathMutations(&self) {
         self.m_rawPathMutationLockCount
@@ -333,7 +333,7 @@ unsafe impl RenderPathContract for RiveRenderPath {
         self.m_dirt.set(u32::MAX);
     }
     unsafe fn addRenderPathBackwards(&mut self, path: *const RenderPath, matrix: &Mat2D) {
-        assert_eq!(self.m_rawPathMutationLockCount.get(), 0);
+        self.assertRawPathMutationsUnlocked();
         let other = unsafe { &*(path.cast::<RiveRenderPath>()) };
         let verb_start = self.m_rawPath.verbs().len();
         let point_start = self.m_rawPath.points().len();
@@ -346,7 +346,7 @@ unsafe impl RenderPathContract for RiveRenderPath {
         self.m_dirt.set(u32::MAX);
     }
     fn addRawPath(&mut self, path: &RawPath) {
-        assert_eq!(self.m_rawPathMutationLockCount.get(), 0);
+        self.assertRawPathMutationsUnlocked();
         self.m_rawPath.add_path(path, Mat2D::IDENTITY);
         self.m_dirt.set(u32::MAX);
     }

@@ -26,6 +26,9 @@ Provenance:
   `luau_f_select.rs`, `luau_f_tostring.rs`, `str_pack.rs`, and `sizeclass.rs`
   use `c_char`-typed zeroes, comparisons, and sentinels instead of assuming
   `c_char` is `i8`. On aarch64 Android, `c_char` is unsigned.
+- `sizeclass.rs` returns the allocator's no-class sentinel as an explicit
+  signed integer. A `c_char` return turned `-1` into `255` on Android and made
+  zero-size reallocations pass a null block to the small-block free path.
 
 ## Luau fork rung 1
 

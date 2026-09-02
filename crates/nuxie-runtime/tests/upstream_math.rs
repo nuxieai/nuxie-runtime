@@ -7,6 +7,22 @@ use math_types::{
 use nuxie_runtime::source::math::{bitwise, math_types};
 
 #[test]
+fn translated_constants_preserve_upstream_f32_bits() {
+    assert_eq!(math_types::PI.to_bits(), 0x4049_0fdb);
+    assert_eq!(math_types::SQRT_2.to_bits(), 0x3fb5_04f3);
+}
+
+#[test]
+fn same_type_lossless_float_casts_reject_nan() {
+    assert!(
+        std::panic::catch_unwind(|| math_types::lossless_numeric_cast::<f32, _>(f32::NAN)).is_err()
+    );
+    assert!(
+        std::panic::catch_unwind(|| math_types::lossless_numeric_cast::<f64, _>(f64::NAN)).is_err()
+    );
+}
+
+#[test]
 fn ieee_float_divide() {
     let infinity = f32::INFINITY;
     let nan = f32::NAN;

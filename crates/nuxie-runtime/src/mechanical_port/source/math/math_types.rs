@@ -1,8 +1,8 @@
 use core::mem::{MaybeUninit, size_of};
 use core::ops::{Add, BitAnd, BitOr, Mul, Not, Sub};
 
-pub const PI: f32 = 3.141_592_7;
-pub const SQRT_2: f32 = 1.414_213_5;
+pub const PI: f32 = core::f32::consts::PI;
+pub const SQRT_2: f32 = core::f32::consts::SQRT_2;
 pub const EPSILON: f32 = 1.0 / 4096.0;
 
 pub fn nearly_zero(value: f32, tolerance: f32) -> bool {
@@ -162,7 +162,7 @@ impl LosslessNumeric for f32 {
                 result
             }
             LosslessNumericValue::F32(value) => {
-                assert!(value == value);
+                assert!(!value.is_nan());
                 value
             }
             LosslessNumericValue::F64(value) => {
@@ -196,7 +196,7 @@ impl LosslessNumeric for f64 {
                 result
             }
             LosslessNumericValue::F64(value) => {
-                assert!(value == value);
+                assert!(!value.is_nan());
                 value
             }
         }

@@ -153,16 +153,25 @@ impl RuntimeOwnedViewModelHandle {
         if path.is_empty() {
             return Err(RuntimeViewModelLinkError::PropertyNotFound);
         }
-        if path.contains('/') {
-            return Err(RuntimeViewModelLinkError::NestedPathUnsupported);
-        }
-        let property = {
+        let property_path = {
             let instance = self.borrow();
-            let path = instance
-                .path_named(path)
-                .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
             instance
-                .property_by_path(&path)
+                .path_named(path)
+                .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?
+        };
+        let (property_index, owner_path) = property_path
+            .split_last()
+            .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?;
+        let owner = if owner_path.is_empty() {
+            self.clone()
+        } else {
+            self.linked_view_model_by_property_path(owner_path)
+                .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?
+        };
+        let property = {
+            let instance = owner.borrow();
+            instance
+                .property_by_path(&[*property_index])
                 .ok_or(RuntimeViewModelLinkError::PropertyNotFound)?
         };
         let definition = property
@@ -177,12 +186,12 @@ impl RuntimeOwnedViewModelHandle {
         if expected != child.borrow().view_model_index() {
             return Err(RuntimeViewModelLinkError::SchemaMismatch);
         }
-        if !self.accepts_child(child) {
+        if !owner.accepts_child(child) {
             return Err(RuntimeViewModelLinkError::Cycle);
         }
         Ok(mutate(|| {
             ViewModelInstance::replace_view_model_property_occurrence(
-                &self.native_handle(),
+                &owner.native_handle(),
                 &property,
                 Some(child.native_handle()),
             )

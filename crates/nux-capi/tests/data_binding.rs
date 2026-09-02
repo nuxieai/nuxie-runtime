@@ -245,6 +245,122 @@ fn shared_nested_list_fixture() -> Vec<u8> {
     bytes
 }
 
+fn nested_replacement_fixture() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 0x554e_4955, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    object(&mut bytes, "Backboard", |_| {});
+
+    object(&mut bytes, "ViewModel", |bytes| {
+        string(bytes, "ViewModel", "name", "Root")
+    });
+    object(&mut bytes, "ViewModelInstance", |bytes| {
+        string(bytes, "ViewModelInstance", "name", "root");
+        uint(bytes, "ViewModelInstance", "viewModelId", 0);
+    });
+    object(&mut bytes, "ViewModelInstanceViewModel", |bytes| {
+        uint(
+            bytes,
+            "ViewModelInstanceViewModel",
+            "viewModelPropertyId",
+            0,
+        );
+        uint(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+    });
+    object(&mut bytes, "ViewModelInstanceList", |bytes| {
+        uint(bytes, "ViewModelInstanceList", "viewModelPropertyId", 1)
+    });
+    object(&mut bytes, "ViewModelInstanceListItem", |bytes| {
+        uint(bytes, "ViewModelInstanceListItem", "viewModelId", 2);
+        uint(bytes, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+    });
+    object(&mut bytes, "ViewModelPropertyViewModel", |bytes| {
+        string(bytes, "ViewModelPropertyViewModel", "name", "container");
+        uint(
+            bytes,
+            "ViewModelPropertyViewModel",
+            "viewModelReferenceId",
+            1,
+        );
+    });
+    object(&mut bytes, "ViewModelPropertyList", |bytes| {
+        string(bytes, "ViewModelPropertyList", "name", "items")
+    });
+
+    object(&mut bytes, "ViewModel", |bytes| {
+        string(bytes, "ViewModel", "name", "Container")
+    });
+    object(&mut bytes, "ViewModelInstance", |bytes| {
+        string(bytes, "ViewModelInstance", "name", "container");
+        uint(bytes, "ViewModelInstance", "viewModelId", 1);
+    });
+    object(&mut bytes, "ViewModelInstanceViewModel", |bytes| {
+        uint(
+            bytes,
+            "ViewModelInstanceViewModel",
+            "viewModelPropertyId",
+            0,
+        );
+        uint(bytes, "ViewModelInstanceViewModel", "propertyValue", 0);
+    });
+    object(&mut bytes, "ViewModelInstanceViewModel", |bytes| {
+        uint(
+            bytes,
+            "ViewModelInstanceViewModel",
+            "viewModelPropertyId",
+            1,
+        );
+        uint(bytes, "ViewModelInstanceViewModel", "propertyValue", 999);
+    });
+    object(&mut bytes, "ViewModelPropertyViewModel", |bytes| {
+        string(bytes, "ViewModelPropertyViewModel", "name", "selected");
+        uint(
+            bytes,
+            "ViewModelPropertyViewModel",
+            "viewModelReferenceId",
+            2,
+        );
+    });
+    object(&mut bytes, "ViewModelPropertyViewModel", |bytes| {
+        string(bytes, "ViewModelPropertyViewModel", "name", "peer");
+        uint(
+            bytes,
+            "ViewModelPropertyViewModel",
+            "viewModelReferenceId",
+            1,
+        );
+    });
+
+    object(&mut bytes, "ViewModel", |bytes| {
+        string(bytes, "ViewModel", "name", "Product")
+    });
+    object(&mut bytes, "ViewModelInstance", |bytes| {
+        string(bytes, "ViewModelInstance", "name", "product");
+        uint(bytes, "ViewModelInstance", "viewModelId", 2);
+    });
+    object(&mut bytes, "ViewModelInstanceString", |bytes| {
+        uint(bytes, "ViewModelInstanceString", "viewModelPropertyId", 0);
+        string(
+            bytes,
+            "ViewModelInstanceString",
+            "propertyValue",
+            "authored",
+        );
+    });
+    object(&mut bytes, "ViewModelPropertyString", |bytes| {
+        string(bytes, "ViewModelPropertyString", "name", "sku")
+    });
+
+    object(&mut bytes, "Artboard", |bytes| {
+        uint(bytes, "Artboard", "viewModelId", 0)
+    });
+    object(&mut bytes, "Artboard", |bytes| {
+        uint(bytes, "Artboard", "viewModelId", 2)
+    });
+    bytes
+}
+
 fn import_bytes(bytes: &[u8]) -> *mut NuxFile {
     let callbacks = NuxRenderCallbacks::default();
     let mut file = std::ptr::null_mut();
@@ -342,6 +458,44 @@ fn nested_and_list_ids(snapshot: *const NuxViewModelSnapshot) -> (u64, Vec<u64>)
         }
     }
     (nested, list)
+}
+
+fn snapshot_edges(snapshot: *const NuxViewModelSnapshot) -> Vec<(u64, String, u64, Vec<u64>)> {
+    let mut info = NuxViewModelSnapshotInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_snapshot_info(snapshot, &mut info) },
+        NuxStatus::Ok
+    );
+    let mut edges = Vec::new();
+    for index in 0..info.value_count {
+        let mut value = NuxViewModelSnapshotValueView::default();
+        assert_eq!(
+            unsafe { nux_view_model_snapshot_value(snapshot, index, &mut value) },
+            NuxStatus::Ok
+        );
+        if value.kind != NUX_VIEW_MODEL_VALUE_KIND_VIEW_MODEL
+            && value.kind != NUX_VIEW_MODEL_VALUE_KIND_LIST
+        {
+            continue;
+        }
+        let mut items = Vec::new();
+        for list_index in value.first_list_item..value.first_list_item + value.list_item_count {
+            let mut id = 0;
+            assert_eq!(
+                unsafe { nux_view_model_snapshot_list_item(snapshot, list_index, &mut id) },
+                NuxStatus::Ok
+            );
+            items.push(id);
+        }
+        edges.push((
+            value.owner_instance_id,
+            owned_string(value.name),
+            value.referenced_instance_id,
+            items,
+        ));
+    }
+    edges.sort();
+    edges
 }
 
 #[test]
@@ -1297,6 +1451,296 @@ fn structural_mutations_preserve_identity_and_failed_batches_preserve_topology()
     unsafe {
         nux_view_model_snapshot_free(after_failure);
         nux_view_model_snapshot_free(after_success);
+        nux_view_model_instance_free(third);
+        nux_view_model_instance_free(replacement);
+        nux_view_model_instance_free(root);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn nested_view_model_replacement_is_atomic_cycle_safe_and_preserves_shared_identity() {
+    let bytes = nested_replacement_fixture();
+    let file = import_bytes(&bytes);
+    let mut root = std::ptr::null_mut();
+    let mut replacement = std::ptr::null_mut();
+    let mut third = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut root) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 2, 0, &mut replacement) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_schema_default(file, 2, &mut third) },
+        NuxStatus::Ok
+    );
+
+    let mut root_id = 0;
+    let mut replacement_id = 0;
+    assert_eq!(
+        unsafe { nux_view_model_instance_identity(root, &mut root_id) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_identity(replacement, &mut replacement_id) },
+        NuxStatus::Ok
+    );
+    let selected = b"container/selected";
+    let items = b"items";
+    let success = [
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: root,
+            related_instance: replacement,
+            path: NuxStringView {
+                data: selected.as_ptr().cast(),
+                len: selected.len(),
+            },
+            ..NuxViewModelMutation::default()
+        },
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET,
+            instance: root,
+            related_instance: replacement,
+            path: NuxStringView {
+                data: items.as_ptr().cast(),
+                len: items.len(),
+            },
+            index: 0,
+            ..NuxViewModelMutation::default()
+        },
+    ];
+    let mut result = std::ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_view_model_mutate(
+                &NuxViewModelMutationBatch {
+                    mutations: success.as_ptr(),
+                    mutation_count: success.len(),
+                    ..NuxViewModelMutationBatch::default()
+                },
+                &mut result,
+            )
+        },
+        NuxStatus::Ok
+    );
+    let mut result_info = NuxViewModelMutationResultInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_info(result, &mut result_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(result_info.change_count, success.len());
+    let mut replacement_change = None;
+    let mut list_change = None;
+    for change_index in 0..result_info.change_count {
+        let mut change = NuxViewModelChangeView::default();
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_change(result, change_index, &mut change) },
+            NuxStatus::Ok
+        );
+        match change.kind {
+            NUX_VIEW_MODEL_VALUE_KIND_VIEW_MODEL => replacement_change = Some(change),
+            NUX_VIEW_MODEL_VALUE_KIND_LIST => list_change = Some(change),
+            kind => panic!("unexpected structural change kind {kind}"),
+        }
+    }
+    let replacement_change = replacement_change.expect("nested replacement change");
+    assert_ne!(replacement_change.owner_instance_id, root_id);
+    assert_eq!(replacement_change.property_index, 0);
+    assert_eq!(replacement_change.referenced_instance_id, replacement_id);
+    let list_change = list_change.expect("root list change");
+    assert_eq!(list_change.owner_instance_id, root_id);
+    assert_eq!(list_change.property_index, 1);
+    unsafe { nux_view_model_mutation_result_free(result) };
+
+    let after_success = snapshot(root);
+    let success_edges = snapshot_edges(after_success);
+    let container_id = success_edges
+        .iter()
+        .find(|(owner, name, _, _)| *owner == root_id && name == "container")
+        .map(|(_, _, child, _)| *child)
+        .expect("root retains its immediate container");
+    let selected_id = success_edges
+        .iter()
+        .find(|(owner, name, _, _)| *owner == container_id && name == "selected")
+        .map(|(_, _, child, _)| *child)
+        .expect("container retains its selected product");
+    let list_ids = success_edges
+        .iter()
+        .find(|(owner, name, _, _)| *owner == root_id && name == "items")
+        .map(|(_, _, _, list)| list.as_slice())
+        .expect("root retains its product list");
+    assert_ne!(selected_id, 0);
+    assert_eq!(list_ids, [selected_id]);
+
+    let invalid = [
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: root,
+            related_instance: third,
+            path: NuxStringView {
+                data: selected.as_ptr().cast(),
+                len: selected.len(),
+            },
+            ..NuxViewModelMutation::default()
+        },
+        NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE,
+            instance: root,
+            path: NuxStringView {
+                data: items.as_ptr().cast(),
+                len: items.len(),
+            },
+            index: 99,
+            ..NuxViewModelMutation::default()
+        },
+    ];
+    result = std::ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_view_model_mutate(
+                &NuxViewModelMutationBatch {
+                    mutations: invalid.as_ptr(),
+                    mutation_count: invalid.len(),
+                    ..NuxViewModelMutationBatch::default()
+                },
+                &mut result,
+            )
+        },
+        NuxStatus::InvalidArgument
+    );
+    result_info = NuxViewModelMutationResultInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_info(result, &mut result_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(result_info.change_count, 0);
+    unsafe { nux_view_model_mutation_result_free(result) };
+    let after_failure = snapshot(root);
+    assert_eq!(snapshot_edges(after_failure), success_edges);
+
+    let wrong_schema = NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+        instance: root,
+        related_instance: root,
+        path: NuxStringView {
+            data: selected.as_ptr().cast(),
+            len: selected.len(),
+        },
+        ..NuxViewModelMutation::default()
+    };
+    result = std::ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_view_model_mutate(
+                &NuxViewModelMutationBatch {
+                    mutations: &wrong_schema,
+                    mutation_count: 1,
+                    ..NuxViewModelMutationBatch::default()
+                },
+                &mut result,
+            )
+        },
+        NuxStatus::InvalidArgument
+    );
+    result_info = NuxViewModelMutationResultInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_info(result, &mut result_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(result_info.change_count, 0);
+    unsafe { nux_view_model_mutation_result_free(result) };
+    let after_wrong_schema = snapshot(root);
+    assert_eq!(snapshot_edges(after_wrong_schema), success_edges);
+
+    let mut first_container = std::ptr::null_mut();
+    let mut second_container = std::ptr::null_mut();
+    for out in [&mut first_container, &mut second_container] {
+        assert_eq!(
+            unsafe { nux_view_model_instance_new_authored(file, 1, 0, out) },
+            NuxStatus::Ok
+        );
+    }
+    let root_container = b"container";
+    let peer = b"peer";
+    for (owner, path, child) in [
+        (root, root_container.as_slice(), first_container),
+        (second_container, peer.as_slice(), first_container),
+    ] {
+        let mutation = NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: owner,
+            related_instance: child,
+            path: NuxStringView {
+                data: path.as_ptr().cast(),
+                len: path.len(),
+            },
+            ..NuxViewModelMutation::default()
+        };
+        result = std::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_view_model_mutate(
+                    &NuxViewModelMutationBatch {
+                        mutations: &mutation,
+                        mutation_count: 1,
+                        ..NuxViewModelMutationBatch::default()
+                    },
+                    &mut result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        unsafe { nux_view_model_mutation_result_free(result) };
+    }
+    let before_cycle = snapshot(root);
+    let before_cycle_edges = snapshot_edges(before_cycle);
+    let nested_peer = b"container/peer";
+    let cycle = NuxViewModelMutation {
+        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+        instance: root,
+        related_instance: second_container,
+        path: NuxStringView {
+            data: nested_peer.as_ptr().cast(),
+            len: nested_peer.len(),
+        },
+        ..NuxViewModelMutation::default()
+    };
+    result = std::ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_view_model_mutate(
+                &NuxViewModelMutationBatch {
+                    mutations: &cycle,
+                    mutation_count: 1,
+                    ..NuxViewModelMutationBatch::default()
+                },
+                &mut result,
+            )
+        },
+        NuxStatus::InvalidArgument
+    );
+    result_info = NuxViewModelMutationResultInfo::default();
+    assert_eq!(
+        unsafe { nux_view_model_mutation_result_info(result, &mut result_info) },
+        NuxStatus::Ok
+    );
+    assert_eq!(result_info.change_count, 0);
+    unsafe { nux_view_model_mutation_result_free(result) };
+    let after_cycle = snapshot(root);
+    assert_eq!(snapshot_edges(after_cycle), before_cycle_edges);
+
+    unsafe {
+        nux_view_model_snapshot_free(after_cycle);
+        nux_view_model_snapshot_free(before_cycle);
+        nux_view_model_snapshot_free(after_wrong_schema);
+        nux_view_model_snapshot_free(after_failure);
+        nux_view_model_snapshot_free(after_success);
+        nux_view_model_instance_free(second_container);
+        nux_view_model_instance_free(first_container);
         nux_view_model_instance_free(third);
         nux_view_model_instance_free(replacement);
         nux_view_model_instance_free(root);

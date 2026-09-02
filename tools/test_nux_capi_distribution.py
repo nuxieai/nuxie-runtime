@@ -291,7 +291,7 @@ class DistributionToolTests(unittest.TestCase):
         c_abi_lane = self.pipeline.split(':linux: C ABI smoke"', 1)[1].split(
             ':mac: Apple distribution compile"', 1
         )[0]
-        self.assertIn("make nux-capi-pr-gate", c_abi_lane)
+        self.assertIn('RIVE_RUNTIME_DIR="" make nux-capi-pr-gate', c_abi_lane)
         for required_input in (
             "build-nux-capi-xcframeworks.sh",
             "publish-nux-capi-release.sh",

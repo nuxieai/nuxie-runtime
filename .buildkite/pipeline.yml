@@ -77,7 +77,7 @@ steps:
       - tools/{apple_runtime_contract.py,apple_runtime_input_digest.py,build-nux-capi-xcframeworks.sh,check-nux-capi-exports.sh,check-nux-capi-layout.py,check-nux-capi-surface.py,publish-nux-capi-release.sh,report-all.sh,test_apple_runtime_contract.py,test_apple_runtime_input_digest.py,test_nux_capi_distribution.py,test_slim_runtime_distribution.py,verify-nux-capi-xcframeworks.sh}
     command: |
       set -euo pipefail
-      make nux-capi-pr-gate
+      RIVE_RUNTIME_DIR="" make nux-capi-pr-gate
     agents:
       queue: nuxie-pr
       nuxie-platform: linux

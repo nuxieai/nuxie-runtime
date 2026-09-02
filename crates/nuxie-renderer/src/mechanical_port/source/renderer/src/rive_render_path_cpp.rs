@@ -520,7 +520,7 @@ impl RiveRenderPath {
         self.m_dirt.set(u32::MAX);
     }
     pub fn addRenderPathBackwardsSource(&mut self, path: &RiveRenderPath, matrix: Mat2D) {
-        assert_eq!(self.m_rawPathMutationLockCount.get(), 0);
+        self.assertRawPathMutationsUnlocked();
         let verb_start = self.m_rawPath.verbs().len();
         let point_start = self.m_rawPath.points().len();
         self.m_rawPath

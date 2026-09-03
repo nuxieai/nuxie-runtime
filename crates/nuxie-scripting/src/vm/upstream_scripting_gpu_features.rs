@@ -187,9 +187,9 @@ fn recording_script_reads_replay_device_capabilities() {
         ..Features::default()
     })));
     let script = "local f = gpuFeatures()\nassert(f.colorBufferHalfFloat == true, 'half float denied')\nassert(f.maxSamples == 8, 'maxSamples ' .. f.maxSamples)\n";
-    let recorder = DeferredOreContext::new(Some(device.clone()));
+    let recorder = DeferredOreContext::fromReal(Some(device.clone()));
     assert!(run_with_ore_context(Rc::new(RefCell::new(recorder)), script).is_empty());
-    let mut recorder = DeferredOreContext::new(None);
+    let mut recorder = DeferredOreContext::fromReal(None);
     recorder.bindReal(Some(device.clone()));
     assert!(run_with_ore_context(Rc::new(RefCell::new(recorder)), script).is_empty());
     assert!(
@@ -203,7 +203,7 @@ fn recording_script_reads_replay_device_capabilities() {
 
 #[test]
 fn unbound_recording_context_refuses_capability_readout() {
-    let recorder = DeferredOreContext::new(None);
+    let recorder = DeferredOreContext::fromReal(None);
     let error = run_with_ore_context(Rc::new(RefCell::new(recorder)), "local f = gpuFeatures()");
     assert!(error.contains("context.features"));
 }
@@ -212,7 +212,7 @@ fn unbound_recording_context_refuses_capability_readout() {
 fn texture_view_answers_indexed_reads() {
     let device: OreContextHandle =
         Rc::new(RefCell::new(FakeDeviceContext::new(Features::default())));
-    let recorder = DeferredOreContext::new(Some(device));
+    let recorder = DeferredOreContext::fromReal(Some(device));
     let error = run_with_ore_context(
         Rc::new(RefCell::new(recorder)),
         "local t = GPUTexture.new({ width = 4, height = 4, format = 'rgba8unorm' })\n\
@@ -225,7 +225,7 @@ fn texture_view_answers_indexed_reads() {
 #[test]
 fn undecidable_capability_gate_does_not_invent_refusal() {
     let script = "local t = GPUTexture.new({ width = 4, height = 4, format = 'rgba16float', renderTarget = true })";
-    let recorder = DeferredOreContext::new(None);
+    let recorder = DeferredOreContext::fromReal(None);
     assert!(
         !run_with_ore_context(Rc::new(RefCell::new(recorder)), script)
             .contains("colorBufferHalfFloat")
@@ -234,14 +234,14 @@ fn undecidable_capability_gate_does_not_invent_refusal() {
         colorBufferHalfFloat: true,
         ..Features::default()
     })));
-    let recorder = DeferredOreContext::new(Some(capable.clone()));
+    let recorder = DeferredOreContext::fromReal(Some(capable.clone()));
     assert!(
         !run_with_ore_context(Rc::new(RefCell::new(recorder)), script)
             .contains("colorBufferHalfFloat")
     );
     let incapable: OreContextHandle =
         Rc::new(RefCell::new(FakeDeviceContext::new(Features::default())));
-    let recorder = DeferredOreContext::new(Some(incapable.clone()));
+    let recorder = DeferredOreContext::fromReal(Some(incapable.clone()));
     assert!(
         run_with_ore_context(Rc::new(RefCell::new(recorder)), script)
             .contains("colorBufferHalfFloat")

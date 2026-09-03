@@ -2,7 +2,7 @@
 # build-artifact capture. Angle-bracket paths below are caller-selected output
 # locations; all other command arguments are literal.
 upstream_repository=rive-app/rive-runtime
-upstream_commit=966499fffe2aadcbcd1fe4388160e4e7d5c0d967
+upstream_commit=e3c5dec2873840d09ee1ea54f78e64e805ca22f7
 wrapper:color_ramp.metal=renderer/src/shaders/metal/color_ramp.metal:1-11
 wrapper:tessellate.metal=renderer/src/shaders/metal/tessellate.metal:1-13
 generator=renderer/src/shaders/minify.py

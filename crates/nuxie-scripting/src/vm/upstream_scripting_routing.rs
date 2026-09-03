@@ -88,7 +88,7 @@ fn import_session(
 ) {
     let host: DeferredCanvasHostHandle = Rc::new(RefCell::new(StubCanvasHost));
     let ore: OreContextHandle = Rc::new(RefCell::new(
-        nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+        nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
     ));
     let mut factory = PersistentFactory::new(SessionFactory {
         inner: RecordingFactory::default(),
@@ -131,7 +131,7 @@ fn caller_supplied_vm_routes_through_import_factory() {
 
     let host: DeferredCanvasHostHandle = Rc::new(RefCell::new(StubCanvasHost));
     let ore: OreContextHandle = Rc::new(RefCell::new(
-        nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+        nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
     ));
     let mut import_factory = PersistentFactory::new(SessionFactory {
         inner: RecordingFactory::new(),

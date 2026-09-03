@@ -506,7 +506,8 @@ fn shader_lookup_uses_selected_ore_target_and_recorder_not_prepared_factory() {
 
     // An unbound recorder selects GLSL upstream. This WGSL-only asset must not
     // silently use the construction factory's target/prepared module instead.
-    factory.borrow_mut().routed_ore = Some(Rc::new(RefCell::new(DeferredOreContext::new(None))));
+    factory.borrow_mut().routed_ore =
+        Some(Rc::new(RefCell::new(DeferredOreContext::fromReal(None))));
     assert_eq!(
         instance
             .call_method(
@@ -521,7 +522,7 @@ fn shader_lookup_uses_selected_ore_target_and_recorder_not_prepared_factory() {
     // Two distinct recording contexts with the same target must each own the
     // modules their pipelines will consume. A profile-only cache is not enough.
     for _ in 0..2 {
-        let recorder = Rc::new(RefCell::new(DeferredOreContext::new(Some(
+        let recorder = Rc::new(RefCell::new(DeferredOreContext::fromReal(Some(
             factory.borrow().gpu.context.clone(),
         ))));
         factory.borrow_mut().routed_ore = Some(recorder.clone());
@@ -574,7 +575,7 @@ fn changing_selected_ore_during_async_preparation_discards_old_device_module() {
             &mut factory,
         )
         .unwrap();
-    let recorder = Rc::new(RefCell::new(DeferredOreContext::new(Some(
+    let recorder = Rc::new(RefCell::new(DeferredOreContext::fromReal(Some(
         factory.borrow().gpu.context.clone(),
     ))));
     let mut routing_factory = factory.clone();

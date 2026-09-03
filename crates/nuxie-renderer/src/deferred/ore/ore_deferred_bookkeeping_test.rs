@@ -4,7 +4,7 @@ use nuxie_ore_metal::{context::ContextApi, types::*};
 
 #[test]
 fn a_deferred_layout_answers_for_its_entries() {
-    let mut ctx = DeferredOreContext::new(None);
+    let mut ctx = DeferredOreContext::fromReal(None);
     let entries = [
         BindGroupLayoutEntry {
             binding: 0,
@@ -36,7 +36,7 @@ fn a_deferred_layout_answers_for_its_entries() {
 
 #[test]
 fn a_deferred_bind_group_counts_its_dynamic_offsets() {
-    let mut ctx = DeferredOreContext::new(None);
+    let mut ctx = DeferredOreContext::fromReal(None);
     let entries = [
         BindGroupLayoutEntry {
             binding: 0,
@@ -87,7 +87,7 @@ fn a_deferred_bind_group_counts_its_dynamic_offsets() {
 
 #[test]
 fn an_empty_deferred_layout_keeps_no_entries() {
-    let mut ctx = DeferredOreContext::new(None);
+    let mut ctx = DeferredOreContext::fromReal(None);
     let layout = ctx
         .makeBindGroupLayout(&BindGroupLayoutDesc {
             groupIndex: 1,

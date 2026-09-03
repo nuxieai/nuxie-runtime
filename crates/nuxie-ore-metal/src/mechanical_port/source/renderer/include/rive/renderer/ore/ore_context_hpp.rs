@@ -30,7 +30,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_context.hpp.
-// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
+// Upstream source revision: e3c5dec2873840d09ee1ea54f78e64e805ca22f7
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -492,6 +492,48 @@ impl Context {
             pendingFrame: Rc::new(RefCell::new(
                 crate::ore_cmd::ore_command_buffer::OreCommandBuffer::default(),
             )),
+        }
+    }
+}
+
+// The replay device's capabilities carried as data, so a recording thread can
+// answer scripts truthfully without holding the device. A host with the real
+// context in hand captures it with from(); a host whose device lives on
+// another thread or process ships these values across once instead.
+#[derive(Clone, Copy)]
+pub struct ReplayCaps {
+    pub features: Features,
+    pub featuresKnown: bool,
+    pub shaderTarget: ShaderTarget,
+    pub canvasTargetFormat: TextureFormat,
+}
+
+impl ReplayCaps {
+    pub fn from(real: &dyn ContextApi) -> Self {
+        Self {
+            features: real.features(),
+            featuresKnown: real.featuresKnown(),
+            shaderTarget: real.shaderTarget(),
+            canvasTargetFormat: real.canvasTargetFormat(),
+        }
+    }
+
+    // Whether the device about to replay is the one this recording was
+    // declared for. A stream recorded against other caps replays the wrong
+    // shader variant and canvas format, wrong in ways replay cannot detect.
+    pub fn matchesReplayDevice(&self, real: &dyn ContextApi) -> bool {
+        self.shaderTarget == real.shaderTarget()
+            && self.canvasTargetFormat == real.canvasTargetFormat()
+    }
+}
+
+impl Default for ReplayCaps {
+    fn default() -> Self {
+        Self {
+            features: Features::default(),
+            featuresKnown: false,
+            shaderTarget: ShaderTarget::glsl,
+            canvasTargetFormat: TextureFormat::rgba8unorm,
         }
     }
 }

@@ -580,7 +580,7 @@ mod tests {
         vm.install_render_factory(&mut factory).unwrap();
         vm.install_rive_globals().unwrap();
         factory.borrow_mut().ore = Some(Rc::new(RefCell::new(
-            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
         )));
         let canvas = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 4, 3).unwrap();
         vm.lua().globals().set("canvas", canvas).unwrap();
@@ -673,7 +673,7 @@ mod tests {
         );
 
         factory.borrow_mut().ore = Some(Rc::new(RefCell::new(
-            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
         )));
 
         {

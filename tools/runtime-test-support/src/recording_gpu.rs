@@ -30,7 +30,7 @@ impl RecordingGpu {
         let pipeline_entries = Rc::new(RefCell::new(Vec::new()));
         let draw_vertices = Rc::new(RefCell::new(Vec::new()));
         let canvas_sizes = Rc::new(RefCell::new(Vec::new()));
-        let mut inner = DeferredOreContext::new(None);
+        let mut inner = DeferredOreContext::fromReal(None);
         let mut canvases: Vec<nuxie_render_api::RenderCanvasHandle> = Vec::new();
         inner.setCanvasIdProvider(Some(Box::new(move |canvas| {
             if let Some(index) = canvases

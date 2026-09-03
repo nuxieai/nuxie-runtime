@@ -1,7 +1,7 @@
-//! Upstream tests/unit_tests/renderer/ore_deferred_device_state_test.cpp at e949498e.
+//! Upstream tests/unit_tests/renderer/ore_deferred_device_state_test.cpp at e3c5dec2.
 use super::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::{
-    context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget},
+    context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ReplayCaps, ShaderTarget},
     gpu_resource::AnyResourceHandle,
     render_pass::RenderPassApi,
     types::*,
@@ -108,23 +108,37 @@ fn recording_context_reports_replay_device_capabilities() {
     real.maxTextureSize2D = 16384;
     nuxie_ore_metal::context_backend_set_features(&device.borrow().base, real);
     {
-        let recorder = DeferredOreContext::new(Some(device.clone()));
+        let recorder = DeferredOreContext::fromReal(Some(device.clone()));
         assert!(recorder.featuresKnown());
         assert!(recorder.features().colorBufferHalfFloat);
         assert_eq!(recorder.features().maxSamples, 8);
         assert_eq!(recorder.features().maxTextureSize2D, 16384);
     }
     {
-        let mut recorder = DeferredOreContext::new(None);
+        let mut recorder = DeferredOreContext::fromReal(None);
         recorder.bindReal(Some(device.clone()));
         assert!(recorder.featuresKnown());
         assert!(recorder.features().colorBufferHalfFloat);
         assert_eq!(recorder.features().maxSamples, 8);
     }
     {
-        let recorder = DeferredOreContext::new(None);
+        let recorder = DeferredOreContext::fromReal(None);
         assert!(!recorder.featuresKnown());
         assert!(!recorder.features().colorBufferHalfFloat);
+    }
+    {
+        let recorder = DeferredOreContext::new(ReplayCaps::from(&*device.borrow()));
+        assert!(recorder.featuresKnown());
+        assert!(recorder.features().colorBufferHalfFloat);
+        assert_eq!(recorder.features().maxSamples, 8);
+        assert_eq!(recorder.shaderTarget(), device.borrow().shaderTarget());
+    }
+    {
+        let mut recorder = DeferredOreContext::fromReal(None);
+        assert!(!recorder.featuresKnown());
+        recorder.bindCaps(ReplayCaps::from(&*device.borrow()));
+        assert!(recorder.featuresKnown());
+        assert_eq!(recorder.features().maxSamples, 8);
     }
 }
 #[test]

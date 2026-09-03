@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/gpu.cpp.
-// Upstream source revision: 966499fffe2aadcbcd1fe4388160e4e7d5c0d967
+// Upstream source revision: e3c5dec2873840d09ee1ea54f78e64e805ca22f7
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]

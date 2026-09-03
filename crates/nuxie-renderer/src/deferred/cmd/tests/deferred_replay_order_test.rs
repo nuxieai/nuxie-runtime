@@ -106,7 +106,7 @@ fn deferred_ore_replay_scrubs_the_concrete_factory_before_2d_resumes() {
     let mut sink = CountingSink::default();
     let scrub_count = sink.factory.borrow().scrub_count.clone();
     sink.ore = Some(Rc::new(RefCell::new(
-        crate::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+        crate::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
     )));
 
     DeferredReplayer::default().replay_frame(&frame, &mut sink);

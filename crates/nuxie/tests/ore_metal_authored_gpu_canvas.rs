@@ -58,7 +58,9 @@ impl OreProbeFactory {
             *ContextMetal::MakeChecked(Some(device.clone()), Some(queue.clone()))
                 .expect("paired Metal device and queue"),
         ));
-        let recorder = Rc::new(RefCell::new(DeferredOreContext::new(Some(real.clone()))));
+        let recorder = Rc::new(RefCell::new(DeferredOreContext::fromReal(Some(
+            real.clone(),
+        ))));
         Ok(Self {
             inner: RecordingFactory::new(),
             recorder,

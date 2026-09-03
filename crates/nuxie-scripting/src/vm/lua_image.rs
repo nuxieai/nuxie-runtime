@@ -271,7 +271,7 @@ mod tests {
     fn image_members_include_a_cached_renderer_backed_gpu_view() {
         let vm = ScriptVm::new();
         let mut recorder =
-            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None);
+            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None);
         recorder.setCanvasRegistry(Some(Rc::new(RefCell::new(
             nuxie_renderer::deferred::cmd::foreign_image_registry::ForeignImageRegistry::default(),
         ))));

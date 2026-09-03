@@ -1,7 +1,7 @@
 # Pinned offline draw-shader capture.
 #
 # upstream_repository=rive-app/rive-runtime
-# upstream_commit=b36aa3d0085d7e30e7d43f422db89146d95a5c18
+# upstream_commit=675703b9fd71e982eaf97c034b313eba9bde63f4
 # draw_source=renderer/src/shaders/metal/draw.metal:1-42
 # draw_source_blob=c1cadeb559d179211ff744bbf1c745bccfe72998
 # draw_source_sha256=1111713584059e5d2b6469d45200b5c11949de17d7dcb7ffe62529c96c6269bd

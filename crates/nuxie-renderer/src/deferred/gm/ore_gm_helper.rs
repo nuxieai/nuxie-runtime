@@ -315,7 +315,7 @@ pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
     let header = fixture("gm/ore_gm_shaders.rstb.hpp");
     assert_eq!(
         format!("{:x}", Sha256::digest(&header)),
-        "dda092b3d96973c4d924064e774bcb3428dcf31bfb96d5238aad19c771e7d9da"
+        "1f47ed8572e119758e6791a9a4cc5b1a9cde38d94593c97a509727b50043a3e1"
     );
     let header = String::from_utf8(header).unwrap();
     let data = header
@@ -335,7 +335,7 @@ pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
         .map(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).unwrap())
         .collect();
     const OFFSETS: [usize; 14] = [
-        0, 5034, 10027, 17395, 29294, 37099, 43680, 49294, 55222, 60791, 68716, 77034, 82520, 90955,
+        0, 5038, 10035, 17407, 29306, 37119, 43700, 49316, 55246, 60817, 68744, 77064, 82552, 90987,
     ];
     let mut envelope = vec![0];
     envelope.extend_from_slice(&bytes[OFFSETS[id as usize]..OFFSETS[id as usize + 1]]);

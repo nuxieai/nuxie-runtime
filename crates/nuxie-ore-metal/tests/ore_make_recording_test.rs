@@ -1,12 +1,17 @@
 //! Upstream tests/unit_tests/renderer/ore_make_recording_test.cpp at 966499ff.
 use nuxie_ore_metal::{
     cmd::command_stream::WirePod,
+    context::{Context, ContextApi, FrameDescriptor, ShaderTarget},
+    gpu_resource::AnyResourceHandle,
+    new_context_backend_base,
     ore_cmd::{
-        ore_command_buffer::*, ore_commands::*, ore_make_recording::*, ore_make_replay::decodePods,
+        ore_command_buffer::*, ore_commands::*, ore_make_recording::*, ore_make_replay::*,
         ore_resource_commands::*,
     },
+    render_pass::RenderPassApi,
     types::*,
 };
+use std::ffi::c_void;
 fn blob<'a>(r: &OreCommandReader<'a>, b: BlobRef) -> &'a [u8] {
     if b.absent() {
         &[]
@@ -129,12 +134,252 @@ fn buffer_without_initial_data_is_absent_not_empty() {
     assert!(b.data.absent());
     assert_eq!(blob(&r, b.data).len(), 0);
 }
+
+// Every ShaderModuleDesc field has to reach the wire, and the three places
+// that carry it are hand written mirrors of this struct. Destructuring all
+// members here fails to compile when one is added, which is the reminder to
+// carry it through ShaderModuleDescPOD, recordMakeShaderModule, and replay.
+#[test]
+fn shader_module_desc_fields_are_all_accounted_for() {
+    let ShaderModuleDesc {
+        code,
+        codeSize,
+        language,
+        stage,
+        label,
+        hlslSource,
+        hlslSourceSize,
+        hlslEntryPoint,
+        bindingMapBytes,
+        bindingMapSize,
+        texSamplerPairBytes,
+        texSamplerPairSize,
+        glFixupBytes,
+        glFixupSize,
+        shaderAssetId,
+    } = ShaderModuleDesc::default();
+    let _ = (
+        code,
+        codeSize,
+        language,
+        stage,
+        label,
+        hlslSource,
+        hlslSourceSize,
+        hlslEntryPoint,
+        bindingMapBytes,
+        bindingMapSize,
+        texSamplerPairBytes,
+        texSamplerPairSize,
+        glFixupBytes,
+        glFixupSize,
+        shaderAssetId,
+    );
+}
+
+#[derive(Debug, PartialEq)]
+struct CapturedShaderModuleDesc {
+    code: Option<Vec<u8>>,
+    codeSize: u32,
+    language: ShaderLanguage,
+    stage: ShaderStage,
+    label: Option<String>,
+    hlslSource: Option<String>,
+    hlslSourceSize: u32,
+    hlslEntryPoint: Option<String>,
+    bindingMapBytes: Option<Vec<u8>>,
+    bindingMapSize: u32,
+    texSamplerPairBytes: Option<Vec<u8>>,
+    texSamplerPairSize: u32,
+    glFixupBytes: Option<Vec<u8>>,
+    glFixupSize: u32,
+    shaderAssetId: u32,
+}
+
+struct CapturingContext {
+    base: Context,
+    captured: Option<CapturedShaderModuleDesc>,
+}
+
+impl CapturingContext {
+    fn new() -> Self {
+        Self {
+            base: new_context_backend_base(Features::default(), None),
+            captured: None,
+        }
+    }
+}
+
+impl ContextApi for CapturingContext {
+    fn contextBase(&self) -> &Context {
+        &self.base
+    }
+    fn features(&self) -> Features {
+        self.base.features()
+    }
+    fn lastError(&self) -> String {
+        self.base.lastError()
+    }
+    fn activeRenderPass(
+        &self,
+    ) -> Option<std::rc::Weak<dyn nuxie_ore_metal::context::ActiveRenderPass>> {
+        self.base.activeRenderPass()
+    }
+    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
+        self.base.setActiveRenderPass(pass);
+    }
+    fn finishActiveRenderPass(&self) {
+        self.base.finishActiveRenderPass();
+    }
+    fn clearLastError(&self) {
+        self.base.clearLastError();
+    }
+    fn setLastError(&self, message: &str) {
+        self.base.setLastError(message);
+    }
+    fn makeBuffer(&mut self, _: &BufferDesc<'_>) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn makeTexture(&mut self, _: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn makeTextureView(&mut self, _: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn makeSampler(&mut self, _: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn makeShaderModule(&mut self, desc: &ShaderModuleDesc<'_>) -> Option<AnyResourceHandle> {
+        self.captured = Some(CapturedShaderModuleDesc {
+            code: desc.code.map(<[u8]>::to_vec),
+            codeSize: desc.codeSize,
+            language: desc.language,
+            stage: desc.stage,
+            label: desc.label.map(str::to_owned),
+            hlslSource: desc.hlslSource.map(str::to_owned),
+            hlslSourceSize: desc.hlslSourceSize,
+            hlslEntryPoint: desc.hlslEntryPoint.map(str::to_owned),
+            bindingMapBytes: desc.bindingMapBytes.map(<[u8]>::to_vec),
+            bindingMapSize: desc.bindingMapSize,
+            texSamplerPairBytes: desc.texSamplerPairBytes.map(<[u8]>::to_vec),
+            texSamplerPairSize: desc.texSamplerPairSize,
+            glFixupBytes: desc.glFixupBytes.map(<[u8]>::to_vec),
+            glFixupSize: desc.glFixupSize,
+            shaderAssetId: desc.shaderAssetId,
+        });
+        None
+    }
+    fn makeBindGroupLayout(&mut self, _: &BindGroupLayoutDesc<'_>) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn makePipeline(
+        &mut self,
+        _: &PipelineDesc<'_>,
+        _: Option<&mut String>,
+    ) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn makeBindGroup(&mut self, _: &BindGroupDesc<'_>) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn beginRenderPass(
+        &mut self,
+        _: &RenderPassDesc<'_>,
+        _: Option<&mut String>,
+    ) -> Option<Box<dyn RenderPassApi>> {
+        None
+    }
+    fn beginFrame(&mut self, _: &FrameDescriptor) {}
+    fn endFrame(&mut self) {}
+    fn waitForGPU(&mut self) {}
+    unsafe fn wrapCanvasTexture(&mut self, _: *mut c_void) -> Option<AnyResourceHandle> {
+        None
+    }
+    unsafe fn wrapRiveTexture(
+        &mut self,
+        _: *mut c_void,
+        _: u32,
+        _: u32,
+    ) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn shaderTarget(&self) -> ShaderTarget {
+        ShaderTarget::glsl
+    }
+}
+
+#[test]
+fn every_shader_module_desc_field_survives_record_and_replay() {
+    let code = [0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4];
+    let bmap = [9, 8, 7];
+    let pairs = [1, 1, 0, 0, 1, 2, 0, 0];
+    let fixup = [4, 5];
+    let hlsl_source = "float4 main() : SV_Target { return 0; }";
+    let sent = ShaderModuleDesc {
+        code: Some(&code),
+        codeSize: code.len() as u32,
+        language: ShaderLanguage::wgsl,
+        stage: ShaderStage::fragment,
+        label: Some("every_field"),
+        hlslSource: Some(hlsl_source),
+        hlslSourceSize: hlsl_source.len() as u32,
+        hlslEntryPoint: Some("main"),
+        bindingMapBytes: Some(&bmap),
+        bindingMapSize: bmap.len() as u32,
+        texSamplerPairBytes: Some(&pairs),
+        texSamplerPairSize: pairs.len() as u32,
+        glFixupBytes: Some(&fixup),
+        glFixupSize: fixup.len() as u32,
+        shaderAssetId: 4242,
+    };
+
+    let mut cb = OreCommandBuffer::default();
+    recordMakeShaderModule(&mut cb, 0, 3, &sent);
+
+    let mut ctx = CapturingContext::new();
+    let mut table = OreResident::default();
+    let mut r = OreCommandReader::new(cb.command_bytes(), cb.blob_bytes());
+    let command = r.next().expect("recorded shader-module command");
+    assert_eq!(command, CommandType::makeShaderModule);
+    assert!(replayOreLifecycle(
+        &mut ctx,
+        &mut table,
+        command,
+        &mut r,
+        &mut |_| None,
+        &mut |_| None,
+        &mut |_| None,
+    ));
+
+    assert_eq!(
+        ctx.captured,
+        Some(CapturedShaderModuleDesc {
+            code: Some(code.to_vec()),
+            codeSize: sent.codeSize,
+            language: sent.language,
+            stage: sent.stage,
+            label: Some("every_field".to_owned()),
+            hlslSource: Some(hlsl_source.to_owned()),
+            hlslSourceSize: sent.hlslSourceSize,
+            hlslEntryPoint: Some("main".to_owned()),
+            bindingMapBytes: Some(bmap.to_vec()),
+            bindingMapSize: sent.bindingMapSize,
+            texSamplerPairBytes: Some(pairs.to_vec()),
+            texSamplerPairSize: sent.texSamplerPairSize,
+            glFixupBytes: Some(fixup.to_vec()),
+            glFixupSize: sent.glFixupSize,
+            shaderAssetId: sent.shaderAssetId,
+        })
+    );
+}
+
 #[test]
 fn make_stream_records_shader_module_layout_view() {
     let mut cb = OreCommandBuffer::default();
     let code = [0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4];
     let map = [9, 8, 7];
-    let pairs = [0, 1, 2, 3, 4, 5, 6, 7];
+    let pairs = [1, 1, 0, 0, 1, 2, 0, 0];
+    let fixup = [4, 5];
     recordMakeShaderModule(
         &mut cb,
         0,
@@ -148,6 +393,8 @@ fn make_stream_records_shader_module_layout_view() {
             bindingMapSize: 3,
             texSamplerPairBytes: Some(&pairs),
             texSamplerPairSize: pairs.len() as u32,
+            glFixupBytes: Some(&fixup),
+            glFixupSize: fixup.len() as u32,
             shaderAssetId: 42,
             ..Default::default()
         },
@@ -209,7 +456,10 @@ fn make_stream_records_shader_module_layout_view() {
     assert_eq!(blob(&r, s.code).len(), code.len());
     assert_eq!(blob(&r, s.code), code);
     assert_eq!(blob(&r, s.bindingMapBytes).len(), map.len());
+    assert_eq!(blob(&r, s.bindingMapBytes), map);
     assert_eq!(blob(&r, s.texSamplerPairBytes), pairs);
+    assert_eq!(blob(&r, s.glFixupBytes).len(), fixup.len());
+    assert_eq!(blob(&r, s.glFixupBytes), fixup);
     assert!(s.hlslSource.absent());
     assert!(s.label.absent());
     assert_eq!(r.next(), Some(CommandType::makeBindGroupLayout));

@@ -6,7 +6,7 @@
  * as audit provenance. Executable owners and the native renderer connection
  * precede that source text.
  *
- * Upstream source revision: b36aa3d0085d7e30e7d43f422db89146d95a5c18
+ * Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
  */
 
 #![allow(dead_code)]
@@ -14,7 +14,7 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "b36aa3d0085d7e30e7d43f422db89146d95a5c18";
+pub const PINNED_UPSTREAM_COMMIT: &str = "675703b9fd71e982eaf97c034b313eba9bde63f4";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/metal/render_context_metal_impl.mm";
 pub const PINNED_SOURCE_SHA256: &str =
     "a024baed032f3943ee41c7117b8cd5ed9fad6b687c9118150c237fb228599e9d";

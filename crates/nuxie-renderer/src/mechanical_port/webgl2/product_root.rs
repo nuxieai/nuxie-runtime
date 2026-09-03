@@ -247,6 +247,10 @@ impl ExactSourceBackend for WebGl2ProductBackend {
         }
     }
 
+    fn after_deferred_ore_frame(&mut self) {
+        self.implementation_mut().invalidateGLState();
+    }
+
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
         GpuCanvasShaderProfile::WebGl2
     }

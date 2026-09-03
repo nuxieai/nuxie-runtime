@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/metal.glsl.
  *
- * Upstream source revision: e3c5dec2873840d09ee1ea54f78e64e805ca22f7
+ * Upstream source revision: 6d6ab6f8102ffdd200f0c8147d339688a91fe867
  */
 
 #![allow(dead_code)]
@@ -10,7 +10,7 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "e3c5dec2873840d09ee1ea54f78e64e805ca22f7";
+pub const PINNED_UPSTREAM_COMMIT: &str = "6d6ab6f8102ffdd200f0c8147d339688a91fe867";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
     "c95bc053c61db72e1709209dda94b609a5837bf9e7b61b7a171434c97d04bc3d";

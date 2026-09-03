@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-e3c5dec2873840d09ee1ea54f78e64e805ca22f7}
+ref=${RIVE_RUNTIME_REF:-6d6ab6f8102ffdd200f0c8147d339688a91fe867}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -39,7 +39,7 @@ assets=(
   "semantic/simpsons.riv|3e28691c3d3d5f09ba4ca3393f7e8f82dc3fbd72d398a7d239688c2756191c94||semantic/simpsons.riv"
   "semantic/semantic_list_scroll_focus_fixed.riv|38b2bcd006c44ecbe78ce0957d7382c36ea7e07f753aa7755116b654d0691240||semantic/semantic_list_scroll_focus_fixed.riv"
   "sync/scope_probe.riv|fe8c68d337616c0e0f6747012b592298a48a60655d88b28ca7a8fd91e1c02347|b73bc6755421c41281f9d5c8c04d8444fc43f585"
-  "sync/text_style_background.riv|3209af9b117313f36521dbc3beffd40256168b516e0fc9b5ca6a0c4d10bdc360|1f04919af881fe51c929924dc773c835ca9071f0"
+  "sync/text_style_background.riv|1ffdb33251da4ccd7713555d7fb1f1216326cd52fb7fd1d6206b72471ea9080c|6d6ab6f8102ffdd200f0c8147d339688a91fe867"
   "sync/scripted_path_effect_clip.riv|6bc76d33f6b3761cfd689a8de7f3dfc9dbc5ae34ae75921c63bde4ab9e7c9583|ddd1a2aacf62ee6e550b65b445d0ccdafe284e6a"
   "sync/ik_anim_test.riv|064492b51c369ebf843f16abd4e9915c89b8086d5f3e6bdc60c04e85e4fbce02|d25e6a4b6c1b8382b588f08371231373780fbcd5"
   "sync/color_passthrough_test.riv|83abb360ef1ee85e6c135b1f9975583e44c324b6e24537d12b1dc9ccb0b8aa5f|74c0d601c516f86db4847521198dba42080db06a"

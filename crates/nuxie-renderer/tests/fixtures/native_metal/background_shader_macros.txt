@@ -1,5 +1,5 @@
 # Minimal exported-token artifact for the native Metal background compiler.
-# upstream_sha=e3c5dec2873840d09ee1ea54f78e64e805ca22f7
+# upstream_sha=6d6ab6f8102ffdd200f0c8147d339688a91fe867
 # generator=renderer/src/shaders/minify.py
 # generator_sha256=bc6f3cb877ff8af9c73177d06704ac067a5f6d9a1321fc5edd5ac429d33791b1
 # makefile=renderer/src/shaders/Makefile

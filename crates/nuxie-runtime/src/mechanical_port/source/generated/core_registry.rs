@@ -8879,6 +8879,9 @@ impl CoreRegistry {
             _ => -1,
         }
     }
+    pub fn is_interpolatable_uint(property_key: u32) -> bool {
+        matches!(property_key, 118 | 136 | 210 | 218)
+    }
     pub fn is_callback(property_key: u32) -> bool {
         matches!(property_key, 1016 | 869 | 401 | 395)
     }

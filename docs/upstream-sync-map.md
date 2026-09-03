@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6d6ab6f8102ffdd200f0c8147d339688a91fe867`
+- LAST_SYNCED_SHA: `b36aa3d0085d7e30e7d43f422db89146d95a5c18`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
   The preceding accounted change, upstream's Rive 7.3 layout translation,
@@ -18,6 +18,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `b36aa3d0085d7e30e7d43f422db89146d95a5c18` | Live root-space focus bounds for `FocusData`, live-first bounds and position lookup in `FocusManager`, the directly corresponding focus tests, and the moving-host fixture. Editor overlay and host-wrapper changes referenced through `.rive_head` are outside this runtime repository. | [UNIV-2413](https://universe.basis.dev/issue/UNIV-2413) |
 | `6d6ab6f8102ffdd200f0c8147d339688a91fe867` | Interpolatable uint property metadata for color channels, uint-keyframe rounding/clamping/mix behavior, and the directly corresponding interpolation tests. All eight changed upstream fixtures bump only the generated file header from 7.2 to 7.3; the vendored `text_style_background.riv` fixture and its fuzz mirrors carry the exact new bytes because the runtime observes the file minor version, while the other seven fixtures are not vendored here. The commit message's bitmask-notification behavior is not present in the checked-in runtime sources at this SHA and is not invented downstream. Editor-only inspector/timeline UI is outside this runtime repository. | [UNIV-2412](https://universe.basis.dev/issue/UNIV-2412) |
 | `bb949ddf5ca66d9c999eb9547c977940af5d27ec` | **SKIP:** only `.rive_head` and the C++ `build_rive.sh` Emscripten default changed; Nuxie does not use that build script and its browser renderers target `wasm32-unknown-unknown`. | — |
 | `e3c5dec2873840d09ee1ea54f78e64e805ca22f7` | Deferred replay capabilities carried as plain data, recording detached from device ownership, per-frame replay-capability verification, and the directly corresponding device-state test. | [UNIV-2411](https://universe.basis.dev/issue/UNIV-2411) |

@@ -23,7 +23,10 @@ use crate::mechanical_port::source::{
     layout_component::LayoutComponent,
     math::{aabb::Aabb, vec2d::Vec2D},
     parent_traversal::ParentTraversal,
-    semantic::{semantic_data::SemanticData, semantic_snapshot::Bounds},
+    semantic::{
+        semantic_data::SemanticData, semantic_provider::root_transform_aabb,
+        semantic_snapshot::Bounds,
+    },
 };
 
 #[derive(Clone)]
@@ -225,6 +228,32 @@ impl FocusData {
         true
     }
 
+    /// Root-space bounds computed at call time; the FocusNode's cached bounds
+    /// go stale when an ancestor host moves this artboard instance.
+    pub fn world_bounds(&self) -> Option<Bounds> {
+        let bounds = self.component().parent_handle().and_then(|parent| {
+            parent
+                .with(|parent| {
+                    parent
+                        .as_layout_component()
+                        .map(LayoutComponent::world_bounds)
+                })
+                .flatten()
+        })?;
+        let bounds = Bounds {
+            min_x: bounds.left(),
+            min_y: bounds.top(),
+            max_x: bounds.right(),
+            max_y: bounds.bottom(),
+        };
+        Some(
+            self.component()
+                .artboard_handle()
+                .as_ref()
+                .map_or(bounds, |artboard| root_transform_aabb(artboard, bounds)),
+        )
+    }
+
     pub fn accepts_keyboard_input(&self) -> bool {
         self.keyboard_listeners
             .iter()
@@ -266,30 +295,8 @@ impl FocusData {
         let Some(node) = self.focus_node.clone() else {
             return;
         };
-        let layout = self.component().parent_handle().and_then(|parent| {
-            parent
-                .with(|parent| {
-                    parent
-                        .as_layout_component()
-                        .map(LayoutComponent::world_bounds)
-                })
-                .flatten()
-        });
-        if let Some(mut bounds) = layout {
-            if let Some((minimum, maximum)) = self.component().with_artboard_mut(|artboard| {
-                (
-                    artboard.root_transform(Vec2D::new(bounds.left(), bounds.top())),
-                    artboard.root_transform(Vec2D::new(bounds.right(), bounds.bottom())),
-                )
-            }) {
-                bounds = Aabb::new(minimum.x, minimum.y, maximum.x, maximum.y);
-            }
-            node.borrow_mut().world_bounds = Bounds {
-                min_x: bounds.left(),
-                min_y: bounds.top(),
-                max_x: bounds.right(),
-                max_y: bounds.bottom(),
-            };
+        if let Some(bounds) = self.world_bounds() {
+            node.borrow_mut().world_bounds = bounds;
         } else {
             node.borrow_mut().clear_world_bounds();
         }
@@ -390,6 +397,14 @@ impl Focusable for FocusDataFocusable {
             })
             .unwrap_or(false)
             .then_some((position.x, position.y))
+    }
+
+    fn world_bounds(&self) -> Option<Bounds> {
+        self.owner.as_ref().and_then(|owner| {
+            owner
+                .with_downcast::<FocusData, _>(FocusData::world_bounds)
+                .flatten()
+        })
     }
 
     fn is_eligible_for_focus_traversal(&self) -> bool {

@@ -11,7 +11,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 # Python sets. Fix the hash seed so its compiler-input headers are byte-stable.
 export PYTHONHASHSEED=0
 
-expected_runtime_revision="e3c5dec2873840d09ee1ea54f78e64e805ca22f7"
+expected_runtime_revision="6d6ab6f8102ffdd200f0c8147d339688a91fe867"
 expected_naga_version="30.0.0"
 expected_glslang_version="Glslang Version: 11:16.2.0"
 expected_spirv_tools_version="SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00"

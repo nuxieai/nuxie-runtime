@@ -5,7 +5,7 @@
 .PHONY: renderer-native-metal-platform-matrix renderer-native-metal-v3
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
-RIVE_RUNTIME_REF ?= e3c5dec2873840d09ee1ea54f78e64e805ca22f7
+RIVE_RUNTIME_REF ?= 6d6ab6f8102ffdd200f0c8147d339688a91fe867
 MICROBENCH_TOOL ?= $(CURDIR)/tools/microbench/microbench.py
 DEFS_DIR ?= $(RIVE_RUNTIME_DIR)/dev/defs
 SILVER_CORPUS_MANIFEST ?= $(CURDIR)/silver-corpus.toml
@@ -93,7 +93,7 @@ WASM_PERF_RUNS ?= 5
 WASM_PERF_WARMUPS ?= 1
 WASM_PERF_OUTPUT ?= $(CURDIR)/target/wasm-perf.json
 WASM_PERF_MARKDOWN ?= $(CURDIR)/target/wasm-perf.md
-PERF_EXPECTED_RIVE_RUNTIME_REF ?= e3c5dec2873840d09ee1ea54f78e64e805ca22f7
+PERF_EXPECTED_RIVE_RUNTIME_REF ?= 6d6ab6f8102ffdd200f0c8147d339688a91fe867
 RENDERER_PERF_TARGET_DIR ?= $(CURDIR)/target/renderer-perf
 RENDERER_PERF_CPP_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-cpp-runner
 RENDERER_PERF_RUST_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-rust-runner

@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/render_context.cpp.
-// Upstream source revision: b36aa3d0085d7e30e7d43f422db89146d95a5c18
+// Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]

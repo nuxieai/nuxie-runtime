@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `b36aa3d0085d7e30e7d43f422db89146d95a5c18`
+- LAST_SYNCED_SHA: `675703b9fd71e982eaf97c034b313eba9bde63f4`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
   The preceding accounted change, upstream's Rive 7.3 layout translation,
@@ -18,6 +18,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `675703b9fd71e982eaf97c034b313eba9bde63f4` | ORE test-only hardening that exhaustively accounts for every `ShaderModuleDesc` field and verifies exact record/replay propagation, plus the exact regenerated `ore_gm_shaders.rstb.hpp` fixture and consumer offsets. The sibling `.rstb` bytes are unchanged. The `.rive_head` update (Naga 30, shader-bake diagnostics/problem reporting, parser readback, wasm-nightly, emsdk, and compiler changes) is editor/tooling-only and intentionally excluded; the runtime remains Naga-free. No checked-in production runtime or renderer source changed. | [UNIV-2414](https://universe.basis.dev/issue/UNIV-2414) |
 | `b36aa3d0085d7e30e7d43f422db89146d95a5c18` | Live root-space focus bounds for `FocusData`, live-first bounds and position lookup in `FocusManager`, the directly corresponding focus tests, and the moving-host fixture. Editor overlay and host-wrapper changes referenced through `.rive_head` are outside this runtime repository. | [UNIV-2413](https://universe.basis.dev/issue/UNIV-2413) |
 | `6d6ab6f8102ffdd200f0c8147d339688a91fe867` | Interpolatable uint property metadata for color channels, uint-keyframe rounding/clamping/mix behavior, and the directly corresponding interpolation tests. All eight changed upstream fixtures bump only the generated file header from 7.2 to 7.3; the vendored `text_style_background.riv` fixture and its fuzz mirrors carry the exact new bytes because the runtime observes the file minor version, while the other seven fixtures are not vendored here. The commit message's bitmask-notification behavior is not present in the checked-in runtime sources at this SHA and is not invented downstream. Editor-only inspector/timeline UI is outside this runtime repository. | [UNIV-2412](https://universe.basis.dev/issue/UNIV-2412) |
 | `bb949ddf5ca66d9c999eb9547c977940af5d27ec` | **SKIP:** only `.rive_head` and the C++ `build_rive.sh` Emscripten default changed; Nuxie does not use that build script and its browser renderers target `wasm32-unknown-unknown`. | — |

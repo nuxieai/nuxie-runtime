@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-b36aa3d0085d7e30e7d43f422db89146d95a5c18}
+ref=${RIVE_RUNTIME_REF:-675703b9fd71e982eaf97c034b313eba9bde63f4}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -142,7 +142,7 @@ done
 # The GM code consumes the v4 header. The separately added .rstb is an older
 # v2 fixture and is retained byte-for-byte, never substituted for that header.
 gm_assets=(
-  "ore_gm_shaders.rstb.hpp|dda092b3d96973c4d924064e774bcb3428dcf31bfb96d5238aad19c771e7d9da"
+  "ore_gm_shaders.rstb.hpp|1f47ed8572e119758e6791a9a4cc5b1a9cde38d94593c97a509727b50043a3e1"
   "ore_gm_shaders.rstb|864847b09add07eb906922b696ce397c9b8d158560e67855e61d6676faf26c8f"
 )
 for entry in "${gm_assets[@]}"; do
@@ -150,10 +150,10 @@ for entry in "${gm_assets[@]}"; do
   destination="$repo_root/fixtures/gm/$name"
   mkdir -p "$(dirname "$destination")"
   if [[ -n "$runtime_dir" ]]; then
-    git -C "$runtime_dir" show "e949498e05483a852c10fbbdad2cd1941c15aebc:tests/gm/$name" > "$destination"
+    git -C "$runtime_dir" show "675703b9fd71e982eaf97c034b313eba9bde63f4:tests/gm/$name" > "$destination"
   elif [[ ! -f "$destination" || "$(sha256 "$destination")" != "$expected" ]]; then
     curl --fail --location --silent --show-error \
-      "$base_url/e949498e05483a852c10fbbdad2cd1941c15aebc/tests/gm/$name" --output "$destination"
+      "$base_url/675703b9fd71e982eaf97c034b313eba9bde63f4/tests/gm/$name" --output "$destination"
   fi
   [[ "$(sha256 "$destination")" == "$expected" ]] || { echo "fixture checksum mismatch: gm/$name" >&2; exit 1; }
 done

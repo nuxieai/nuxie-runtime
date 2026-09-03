@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "b36aa3d0085d7e30e7d43f422db89146d95a5c18";
+pub const PINNED_UPSTREAM_COMMIT: &str = "675703b9fd71e982eaf97c034b313eba9bde63f4";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal.glsl";
 pub const PINNED_SOURCE_SHA256: &str = "c95bc053c61db72e1709209dda94b609a5837bf9e7b61b7a171434c97d04bc3d";
 pub const OWNERSHIP_UNIT: &str = "shader:source:metal";

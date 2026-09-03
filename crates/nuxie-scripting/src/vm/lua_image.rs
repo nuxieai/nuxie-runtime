@@ -94,7 +94,7 @@ pub(crate) struct ScriptedImageSampler(pub(crate) ImageSampler);
 
 impl UserData for ScriptedImageSampler {}
 
-pub(super) fn install_image_globals(lua: &Lua) -> Result<()> {
+pub(crate) fn install_image_globals(lua: &Lua) -> Result<()> {
     ScriptedImageAssetOwners::install(lua);
     if lua.app_data_ref::<ScriptedImageAssets>().is_none() {
         lua.set_app_data(ScriptedImageAssets::default());

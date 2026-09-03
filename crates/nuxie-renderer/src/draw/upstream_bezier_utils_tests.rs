@@ -134,9 +134,8 @@ impl PinnedMt19937_64 {
     fn next_u64(&mut self) -> u64 {
         if self.index == self.state.len() {
             for index in 0..self.state.len() {
-                let joined =
-                    (self.state[index] & 0xffff_ffff_8000_0000)
-                        | (self.state[(index + 1) % self.state.len()] & 0x7fff_ffff);
+                let joined = (self.state[index] & 0xffff_ffff_8000_0000)
+                    | (self.state[(index + 1) % self.state.len()] & 0x7fff_ffff);
                 let mut value = self.state[(index + 156) % self.state.len()] ^ (joined >> 1);
                 if joined & 1 != 0 {
                     value ^= 0xb502_6f5a_a966_19e9;
@@ -427,11 +426,7 @@ fn find_cubic_inflections(points: [Vec2D; 4]) -> Vec<f32> {
     let by = points[2].y - 2.0 * points[1].y + points[0].y;
     let cx = points[3].x + 3.0 * (points[1].x - points[2].x) - points[0].x;
     let cy = points[3].y + 3.0 * (points[1].y - points[2].y) - points[0].y;
-    find_unit_quad_roots(
-        bx * cy - by * cx,
-        ax * cy - ay * cx,
-        ax * by - ay * bx,
-    )
+    find_unit_quad_roots(bx * cy - by * cx, ax * cy - ay * cx, ax * by - ay * bx)
 }
 
 fn is_linear_three(p0: Vec2D, p1: Vec2D, p2: Vec2D) -> bool {
@@ -522,11 +517,20 @@ fn find_cubic_convex_180_chops_direct_port() {
     }
 
     let hex = [
-        0x3ee0_ac74, 0x3f1e_061a, 0x3e0f_c408, 0x3f45_7230, 0x3f42_ac7c, 0x3f70_d76c,
-        0x3f4e_6520, 0x3f6a_cafa,
+        0x3ee0_ac74,
+        0x3f1e_061a,
+        0x3e0f_c408,
+        0x3f45_7230,
+        0x3f42_ac7c,
+        0x3f70_d76c,
+        0x3f4e_6520,
+        0x3f6a_cafa,
     ];
     check_cubic_convex_180(std::array::from_fn(|index| {
-        v(f32::from_bits(hex[index * 2]), f32::from_bits(hex[index * 2 + 1]))
+        v(
+            f32::from_bits(hex[index * 2]),
+            f32::from_bits(hex[index * 2 + 1]),
+        )
     }));
 
     let (roots, _) =
@@ -693,7 +697,11 @@ fn clamped_divide(a: f32, b: f32) -> f32 {
     let a = if b < 0.0 { -a } else { a };
     let b = b.abs();
     if a > 0.0 {
-        if a < b { a / b } else { 1.0 }
+        if a < b {
+            a / b
+        } else {
+            1.0
+        }
     } else {
         0.0
     }
@@ -812,10 +820,7 @@ fn find_cubic_convex_90_chops_test_owner(
             roots[1]
         };
         (
-            add(
-                mul(add(mul(a_coeff, t), mul(b_coeff, 2.0)), t),
-                c_coeff,
-            ),
+            add(mul(add(mul(a_coeff, t), mul(b_coeff, 2.0)), t), c_coeff),
             false,
         )
     } else {
@@ -873,8 +878,7 @@ fn find_cubic_convex_90_chops_test_owner(
 }
 
 fn check_cubic_convex_90_chops(points: [Vec2D; 4]) {
-    let (roots, are_cusps) =
-        find_cubic_convex_90_chops_test_owner(points, FEATHERING_CUSP_PADDING);
+    let (roots, are_cusps) = find_cubic_convex_90_chops_test_owner(points, FEATHERING_CUSP_PADDING);
     assert!(roots.len() <= 4);
     let chops = flatten(&chop_cubic_at_values(points, &roots));
     for index in 0..=roots.len() {

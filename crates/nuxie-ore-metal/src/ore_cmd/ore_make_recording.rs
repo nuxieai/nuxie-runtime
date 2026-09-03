@@ -106,6 +106,11 @@ pub fn recordMakeShaderModule(
             desc.bindingMapSize,
             desc.bindingMapBytes.is_none(),
         ),
+        texSamplerPairBytes: cb.appendBlobRef(
+            desc.texSamplerPairBytes,
+            desc.texSamplerPairSize,
+            desc.texSamplerPairBytes.is_none(),
+        ),
         glFixupBytes: cb.appendBlobRef(
             desc.glFixupBytes,
             desc.glFixupSize,

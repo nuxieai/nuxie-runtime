@@ -386,9 +386,49 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 use super::rive_render_path_hpp::RiveRenderPath;
+use crate::gr_triangulator::InnerFanTriangulator;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use crate::mechanical_port::source::include::rive::rive_types_hpp::RIVE_UNREACHABLE;
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::TrivialBlockAllocator;
 use nuxie_render_api::{FillRule, Mat2D, PathVerb, RawPath, RenderPath, Vec2D};
+use std::rc::Rc;
+
+pub(crate) fn cached_triangulator(path: &RiveRenderPath) -> Option<Rc<InnerFanTriangulator>> {
+    if path.m_cachedTriangulatorMutationID.get() == path.getRawPathMutationID() {
+        return path.m_cachedTriangulator.borrow().clone();
+    }
+    if path.m_cachedTriangulator.borrow().is_some() {
+        // Mutation IDs only increase, so this triangulation can never become
+        // current again.
+        path.m_cachedTriangulator.borrow_mut().take();
+        #[cfg(debug_assertions)]
+        assert_eq!(path.m_rawPathMutationLockCount.get(), 0);
+    }
+    None
+}
+
+pub(crate) fn create_triangulator(
+    path: &RiveRenderPath,
+    _per_frame_allocator: &mut TrivialBlockAllocator,
+) -> Rc<InnerFanTriangulator> {
+    // cachedTriangulator() is called first and clears any stale persistent
+    // triangulation before this point.
+    assert!(path.m_cachedTriangulator.borrow().is_none());
+    let mutation_id = path.getRawPathMutationID();
+    let triangulator = Rc::new(InnerFanTriangulator::new(
+        path.getRawPath(),
+        path.getBounds(),
+    ));
+    if path.m_triangulatorFirstSightingMutationID.get() != mutation_id {
+        // First sighting is frame-owned in source and is not retained here.
+        path.m_triangulatorFirstSightingMutationID.set(mutation_id);
+    } else {
+        // The second sighting earns persistent path-owned storage.
+        *path.m_cachedTriangulator.borrow_mut() = Some(triangulator.clone());
+        path.m_cachedTriangulatorMutationID.set(mutation_id);
+    }
+    triangulator
+}
 
 fn rotate(v: Vec2D, angle: f32) -> Vec2D {
     let (sin, cos) = angle.sin_cos();

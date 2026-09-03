@@ -8,7 +8,6 @@ use crate::{
 use nuxie_ore_metal::{
     context::{ContextApi, ShaderTarget},
     gpu_resource::AnyResourceHandle,
-    shader_module::TextureSamplerPair,
     types::{ShaderLanguage, ShaderModuleDesc, ShaderStage},
 };
 use std::{any::Any, rc::Rc};
@@ -223,7 +222,22 @@ fn make_shader_module(
         u32::try_from(binding_map.len()).map_err(|_| rejected("binding map exceeds u32"))?;
     let gl_fixup_size = u32::try_from(gl_fixup.map_or(0, <[u8]>::len))
         .map_err(|_| rejected("GL fixup exceeds u32"))?;
-    let mut module = context
+    // Texture-sampler pairs travel in the descriptor so a recording context
+    // captures them before deferred replay rebuilds the module.
+    let pair_bytes: Vec<u8> = texture_sampler_pairs
+        .iter()
+        .flat_map(|pair| {
+            [
+                pair.texture_group,
+                pair.texture_binding,
+                pair.sampler_group,
+                pair.sampler_binding,
+            ]
+        })
+        .collect();
+    let pair_size =
+        u32::try_from(pair_bytes.len()).map_err(|_| rejected("shader pairs exceed u32"))?;
+    context
         .makeShaderModule(&ShaderModuleDesc {
             code: Some(source),
             codeSize: code_size,
@@ -231,32 +245,13 @@ fn make_shader_module(
             stage,
             bindingMapBytes: Some(binding_map),
             bindingMapSize: binding_map_size,
+            texSamplerPairBytes: (!pair_bytes.is_empty()).then_some(pair_bytes.as_slice()),
+            texSamplerPairSize: pair_size,
             glFixupBytes: gl_fixup,
             glFixupSize: gl_fixup_size,
             shaderAssetId: shader_asset_id,
             label: Some(label),
             ..ShaderModuleDesc::default()
         })
-        .ok_or_else(|| rejected(context_error(context, "compile trusted shader module")))?;
-    if !texture_sampler_pairs.is_empty() {
-        let pairs = texture_sampler_pairs
-            .iter()
-            .map(|pair| TextureSamplerPair {
-                textureGroup: pair.texture_group,
-                textureBinding: pair.texture_binding,
-                samplerGroup: pair.sampler_group,
-                samplerBinding: pair.sampler_binding,
-            })
-            .collect();
-        // SAFETY: this is the freshly returned, unaliased local module. It has
-        // not been cloned or published and no payload reference has escaped;
-        // pair assignment occurs before the handle enters any shader entry,
-        // exactly matching pinned lua_gpu.cpp.
-        if !unsafe { module.replaceShaderTextureSamplerPairs(pairs) } {
-            return Err(rejected(
-                "shader module rejected its exact texture/sampler pairs",
-            ));
-        }
-    }
-    Ok(module)
+        .ok_or_else(|| rejected(context_error(context, "compile trusted shader module")))
 }

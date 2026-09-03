@@ -76,9 +76,6 @@ unsafe impl GpuResourcePayload for ShaderModuleWGPU {
         self.base.gpu_resource_mut()
     }
 
-    fn shader_module_base_mut(&mut self) -> Option<&mut ShaderModule> {
-        Some(&mut self.base)
-    }
 }
 
 pub(crate) const SOURCE_CLASS_COUNT: usize = 2;
@@ -90,8 +87,6 @@ const _: [(); 479] = [(); PINNED_SOURCE.len()];
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_ore_metal::gpu_resource::ResourceHandle;
-    use nuxie_ore_metal::shader_module::TextureSamplerPair;
     use std::mem::{offset_of, size_of};
 
     #[test]
@@ -112,25 +107,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn erased_shader_pair_replacement_projects_through_shader_module_wgpu_base() {
-        let pair = TextureSamplerPair {
-            textureGroup: 1,
-            textureBinding: 2,
-            samplerGroup: 3,
-            samplerBinding: 4,
-        };
-        let mut module = ResourceHandle::new(None, ShaderModuleWGPU::new()).erase();
-
-        // SAFETY: this is the sole fresh local module handle, and no payload
-        // reference is obtained before the construction-only replacement.
-        assert!(unsafe { module.replaceShaderTextureSamplerPairs(vec![pair]) });
-        assert_eq!(
-            module
-                .downcast_ref::<ShaderModuleWGPU>()
-                .expect("WebGPU shader-module payload")
-                .m_textureSamplerPairs,
-            [pair]
-        );
-    }
 }

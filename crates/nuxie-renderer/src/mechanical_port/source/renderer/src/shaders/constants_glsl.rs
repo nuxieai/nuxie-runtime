@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1db281b3e82baf850635fd7aa2092920a80b6a2c";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "95547ec1bae64c8ab3604a3d0b4f302a9bdfd193adf1f3d8bdb4f496583cda3f";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 329;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 13715;
+    "b0b59911b49c1105c635569ce476418ea62dc1d42c9ff55ce8bfb5df700ada5a";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 335;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 13960;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -24,6 +24,12 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 
 #define TESS_TEXTURE_WIDTH float(2048)
 #define TESS_TEXTURE_WIDTH_LOG2 11
+
+// # of tessellation segments spanned by each patch type. Kept in sync with
+// gpu::kMidpointFanPatchSegmentSpan and gpu::OuterCubicPatchSegmentSpan (see
+// the static_asserts in gpu.cpp).
+#define MIDPOINT_FAN_PATCH_SEGMENT_SPAN 8u
+#define OUTER_CUBIC_PATCH_SEGMENT_SPAN 16u
 
 #define GRAD_TEXTURE_WIDTH float(512)
 #define GRAD_TEXTURE_INVERSE_WIDTH float(0.001953125)
@@ -79,11 +85,11 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
     (GRAD_SPAN_FLAG_LEFT_BORDER | GRAD_SPAN_FLAG_RIGHT_BORDER |                \
      GRAD_SPAN_FLAG_COMPLEX_BORDER)
 
-// Tells shaders that a cubic should actually be drawn as the single, non-AA
-// triangle: [p0, p1, p3]. This is used to squeeze in more rare triangles, like
-// "grout" triangles from self intersections on interior triangulation, where it
-// wouldn't be worth it to put them in their own dedicated draw call.
-#define RETROFITTED_TRIANGLE_CONTOUR_FLAG (1u << 31u)
+// Tells shaders that a cubic should actually be drawn as a non-AA triangle
+// strip of up to 5 points: [p0, p1, p3, p2, joinTangent]. This is used to
+// reduce draws and pipeline transitions by squeezing in triangles that don't
+// otherwise need special state or shading logic.
+#define RETROFIT_TRI_STRIP_CONTOUR_FLAG (1u << 31u)
 
 // Skip bit 30 in the contour flags so that it's always 0. This ensures we never
 // generate special NaN/Inf floating point values in contourIDWithFlags, which

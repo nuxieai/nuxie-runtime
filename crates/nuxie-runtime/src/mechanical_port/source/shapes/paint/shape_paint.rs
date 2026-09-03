@@ -408,7 +408,14 @@ impl ShapePaint {
 
     pub(crate) fn invalidate_effect_feather(&mut self) {
         if let Some(feather) = self.feather.as_ref() {
-            feather.with_downcast_mut::<Feather, _>(Feather::mark_effect_path_dirty);
+            feather.with_downcast_mut::<Feather, _>(|feather| {
+                feather.mark_effect_path_dirty();
+                // The path we paint changed; an inner feather derives its
+                // geometry from that path so it has to rebuild.
+                if feather.is_inner() {
+                    feather.base.add_dirt(ComponentDirt::PATH, false);
+                }
+            });
         }
     }
 
@@ -499,6 +506,121 @@ impl ShapePaint {
                 .flatten();
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod upstream_1db281b3_tests {
+    use std::path::PathBuf;
+
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+
+    use super::*;
+    use crate::mechanical_port::source::{
+        advance_flags::AdvanceFlags,
+        artboard::Artboard,
+        file::{File, ImportResult},
+        generated::{
+            core_registry::CoreRegistry, shapes::paint::feather_base::FeatherBase,
+            text::text_modifier_group_base::TextModifierGroupBase,
+        },
+        text::{text::Text, text_modifier_group::TextModifierGroup},
+    };
+
+    fn fixture_path() -> PathBuf {
+        PathBuf::from(
+            std::env::var_os("RIVE_RUNTIME_DIR")
+                .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+        )
+        .join("tests/unit_tests/assets/text_feather_falloff.riv")
+    }
+
+    #[test]
+    fn inner_feather_on_text_rebuilds_as_modifiers_change_the_glyphs() {
+        let path = fixture_path();
+        let bytes = std::fs::read(&path)
+            .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()));
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let factory = crate::mechanical_port::source::factory::RuntimeFactoryHandle::from_factory(
+            &mut factory,
+        )
+        .expect("retained factory");
+        let mut result = ImportResult::Malformed;
+        let file = File::import(&bytes, factory, Some(&mut result), None, None)
+            .unwrap_or_else(|| panic!("fixture imports: {result:?}"));
+        assert_eq!(result, ImportResult::Success);
+        let artboard = file
+            .with_file(File::artboard_default)
+            .expect("default artboard");
+
+        let feathers = artboard.with_artboard(|artboard| artboard.find_all_handles::<Feather>());
+        let (feather, text) = feathers
+            .into_iter()
+            .find_map(|feather| {
+                let text = feather
+                    .with(|feather| feather.component_parent_handle())
+                    .flatten()?
+                    .with(|paint| paint.component_parent_handle())
+                    .flatten()?
+                    .with(|style| style.component_parent_handle())
+                    .flatten()?;
+                text.with_downcast::<Text, _>(Text::have_modifiers)
+                    .filter(|has_modifiers| *has_modifiers)
+                    .map(|_| (feather, text))
+            })
+            .expect("feathered fill on text with modifiers");
+        let modifier_group = artboard
+            .with_artboard(|artboard| artboard.find_all_handles::<TextModifierGroup>())
+            .into_iter()
+            .find(|group| {
+                group
+                    .with(|group| group.component_parent_handle().as_ref() == Some(&text))
+                    .unwrap_or(false)
+            })
+            .expect("modifier group on feathered text");
+
+        assert!(CoreRegistry::set_bool_handle(
+            &feather,
+            FeatherBase::INNER_PROPERTY_KEY.into(),
+            true,
+        ));
+        assert!(
+            feather
+                .with_downcast::<Feather, _>(Feather::is_inner)
+                .expect("Feather")
+        );
+
+        let advance = || {
+            Artboard::advance_handle(
+                &artboard.core_handle(),
+                0.0,
+                AdvanceFlags::ADVANCE_NESTED | AdvanceFlags::ANIMATE | AdvanceFlags::NEW_FRAME,
+            );
+        };
+        advance();
+        let baseline = feather
+            .with_downcast::<Feather, _>(|feather| feather.render_count)
+            .expect("Feather");
+        assert!(baseline > 0);
+
+        let x = CoreRegistry::get_double_handle(
+            &modifier_group,
+            TextModifierGroupBase::X_PROPERTY_KEY.into(),
+        )
+        .expect("modifier x");
+        assert!(CoreRegistry::set_double_handle(
+            &modifier_group,
+            TextModifierGroupBase::X_PROPERTY_KEY.into(),
+            x + 10.0,
+        ));
+        advance();
+
+        assert!(
+            feather
+                .with_downcast::<Feather, _>(|feather| feather.render_count)
+                .expect("Feather")
+                > baseline
+        );
     }
 }
 

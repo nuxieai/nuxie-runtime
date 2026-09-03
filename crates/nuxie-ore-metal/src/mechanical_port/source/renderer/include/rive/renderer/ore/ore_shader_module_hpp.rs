@@ -16,7 +16,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_shader_module.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -139,10 +139,6 @@ unsafe impl GpuResourcePayload for ShaderModule {
     fn gpu_resource_mut(&mut self) -> &mut GPUResource {
         &mut self.base
     }
-
-    fn shader_module_base_mut(&mut self) -> Option<&mut ShaderModule> {
-        Some(self)
-    }
 }
 
 // The following records are declared inside ShaderModule in the C++ source.
@@ -234,6 +230,22 @@ impl ShaderModule {
         debug_assert!(ok, "binding-map sidecar failed to parse");
         let _ = ok;
         self.applyGLFixupFromDesc(desc);
+        self.m_textureSamplerPairs.clear();
+        if let Ok(pair_size) = desc.texSamplerPairSize() {
+            if let Some(bytes) = desc
+                .texSamplerPairBytes
+                .and_then(|bytes| bytes.get(..pair_size as usize))
+            {
+                for pair in bytes.chunks_exact(4) {
+                    self.m_textureSamplerPairs.push(TextureSamplerPair {
+                        textureGroup: pair[0],
+                        textureBinding: pair[1],
+                        samplerGroup: pair[2],
+                        samplerBinding: pair[3],
+                    });
+                }
+            }
+        }
         // #ifdef TRACK_RIVE_SHADER_ID
         #[cfg(feature = "track-rive-shader-id")]
         {
@@ -345,11 +357,14 @@ mod tests {
     fn shader_module_applies_binding_map_and_gl_fixup() {
         let binding_map = valid_binding_map();
         let fixup = fixup_blob(&[(0, 3, b"Globals"), (1, 5, b"tex")]);
+        let pairs = [0, 2, 1, 3, 4, 5, 6, 7, 8];
         let desc = ShaderModuleDesc {
             bindingMapBytes: Some(&binding_map),
             bindingMapSize: binding_map.len() as u32,
             glFixupBytes: Some(&fixup),
             glFixupSize: fixup.len() as u32,
+            texSamplerPairBytes: Some(&pairs),
+            texSamplerPairSize: pairs.len() as u32,
             ..ShaderModuleDesc::default()
         };
         let mut module = ShaderModule::new();
@@ -360,6 +375,23 @@ mod tests {
         assert_eq!(module.m_glFixup[0].slot, 3);
         assert_eq!(module.m_glFixup[0].name, b"Globals");
         assert_eq!(module.m_glFixup[1].kind, GLFixupKind::SamplerUniform);
+        assert_eq!(
+            module.m_textureSamplerPairs,
+            vec![
+                TextureSamplerPair {
+                    textureGroup: 0,
+                    textureBinding: 2,
+                    samplerGroup: 1,
+                    samplerBinding: 3,
+                },
+                TextureSamplerPair {
+                    textureGroup: 4,
+                    textureBinding: 5,
+                    samplerGroup: 6,
+                    samplerBinding: 7,
+                },
+            ]
+        );
     }
 
     #[test]

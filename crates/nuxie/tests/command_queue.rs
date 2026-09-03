@@ -2385,6 +2385,7 @@ fn font() {
 fn view_models() {
     let mut queue = CommandQueue::new();
     let (listener, log) = event_log();
+    queue.set_global_file_listener(Some(&listener.file));
     queue.set_global_view_model_instance_listener(Some(&listener.view_model));
     let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0, None);
     let blank =
@@ -2404,10 +2405,10 @@ fn view_models() {
         0,
     );
     let nested =
-        queue.reference_nested_view_model_instance(blank, "Test Nested".to_string(), None, 0);
+        queue.reference_nested_view_model_instance(blank, "Test Nested".to_string(), None, 31);
     queue.insert_view_model_instance_list_view_model(blank, "Test List".to_owned(), nested, 0, 0);
     let listed =
-        queue.reference_list_view_model_instance(blank, "Test List".to_string(), 0, None, 0);
+        queue.reference_list_view_model_instance(blank, "Test List".to_string(), 0, None, 32);
     let mut server = server(&queue);
     assert!(server.process_commands());
     for handle in [blank, default, named, nested, listed] {
@@ -2420,6 +2421,18 @@ fn view_models() {
         .get_view_model_instance(listed)
         .expect("listed view model");
     assert_eq!(nested_instance.instance(), listed_instance.instance());
+    queue.process_messages();
+    let captured = events(&log);
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        ObservedEvent::ViewModelInstantiated { file, handle, request_id: 31 }
+            if *file == FileHandle::NULL && *handle == nested
+    )));
+    assert!(captured.iter().any(|event| matches!(
+        event,
+        ObservedEvent::ViewModelInstantiated { file, handle, request_id: 32 }
+            if *file == FileHandle::NULL && *handle == listed
+    )));
 
     queue.remove_view_model_instance_list_value(blank, "Test List".to_owned(), nested, 0);
     queue.request_view_model_instance_list_size(blank, "Test List".to_string(), 2);
@@ -4646,6 +4659,168 @@ fn set_bind_get_global_view_model_instance() {
     queue.process_messages();
     assert!(events(&ok_log).iter().any(|event| matches!(event, ObservedEvent::ViewModelName { handle, request_id: 2, name } if *handle == fetched && name == &global_name)));
     assert!(events(&error_log).iter().any(|event| matches!(event, ObservedEvent::ViewModelError { handle, request_id: 3, .. } if *handle == missing)));
+}
+
+#[test]
+fn clear_main_view_model_instance_leaves_empty_until_bind() {
+    let mut queue = CommandQueue::new();
+    let file = queue.load_file(GLOBAL_VARIABLES_FIXTURE.to_vec(), None, 0, None);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    let original = Arc::new(Mutex::new(None));
+
+    queue.bind(machine, 0);
+    let captured = Arc::clone(&original);
+    queue.run_once(Box::new(move |server| {
+        server.with_state_machine_instance_mut(machine, |instance| {
+            let identity = instance
+                .data_context()
+                .unwrap()
+                .with_context(|context| context.main_view_model_instance().unwrap().identity_key());
+            *captured.lock().unwrap() = Some(identity);
+        });
+    }));
+    queue.clear_view_model_instance(machine, 2);
+    queue.run_once(Box::new(move |server| {
+        server.with_state_machine_instance_mut(machine, |instance| {
+            assert!(
+                instance
+                    .data_context()
+                    .unwrap()
+                    .with_context(|context| context.main_view_model_instance())
+                    .is_none()
+            );
+        });
+    }));
+    queue.bind(machine, 0);
+    let captured = Arc::clone(&original);
+    queue.run_once(Box::new(move |server| {
+        server.with_state_machine_instance_mut(machine, |instance| {
+            let rebound = instance
+                .data_context()
+                .unwrap()
+                .with_context(|context| context.main_view_model_instance().unwrap().identity_key());
+            assert_ne!(Some(rebound), *captured.lock().unwrap());
+        });
+    }));
+
+    assert!(server(&queue).process_commands());
+}
+
+#[test]
+fn clear_global_view_model_instance_isolated_and_recreated_by_bind() {
+    let mut queue = CommandQueue::new();
+    let (file_listener, file_log) = event_log();
+    let file = queue.load_file(
+        GLOBAL_VARIABLES_FIXTURE.to_vec(),
+        Some(&file_listener.file),
+        0,
+        None,
+    );
+    queue.request_global_view_model_names(file, 1);
+    let mut command_server = server(&queue);
+    assert!(command_server.process_commands());
+    queue.process_messages();
+    let names = events(&file_log)
+        .into_iter()
+        .find_map(|event| match event {
+            ObservedEvent::GlobalViewModelsListed { names, .. } => Some(names),
+            _ => None,
+        })
+        .expect("global names");
+    assert!(names.len() >= 2);
+    let cleared = names[0].clone();
+    let untouched = names[1].clone();
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    let identities = Arc::new(Mutex::new(None));
+
+    queue.bind(machine, 0);
+    let captured = Arc::clone(&identities);
+    let cleared_for_capture = cleared.clone();
+    let untouched_for_capture = untouched.clone();
+    queue.run_once(Box::new(move |server| {
+        server.with_state_machine_instance_mut(machine, |instance| {
+            *captured.lock().unwrap() = Some((
+                instance
+                    .global_view_model_instance(&cleared_for_capture)
+                    .unwrap()
+                    .identity_key(),
+                instance
+                    .global_view_model_instance(&untouched_for_capture)
+                    .unwrap()
+                    .identity_key(),
+            ));
+        });
+    }));
+    queue.clear_global_view_model_instance(machine, cleared.clone(), 3);
+    let captured = Arc::clone(&identities);
+    let cleared_after_clear = cleared.clone();
+    let untouched_after_clear = untouched.clone();
+    queue.run_once(Box::new(move |server| {
+        server.with_state_machine_instance_mut(machine, |instance| {
+            assert!(
+                instance
+                    .global_view_model_instance(&cleared_after_clear)
+                    .is_none()
+            );
+            let original_untouched = captured.lock().unwrap().unwrap().1;
+            assert_eq!(
+                instance
+                    .global_view_model_instance(&untouched_after_clear)
+                    .unwrap()
+                    .identity_key(),
+                original_untouched
+            );
+        });
+    }));
+    queue.bind(machine, 0);
+    let captured = Arc::clone(&identities);
+    queue.run_once(Box::new(move |server| {
+        server.with_state_machine_instance_mut(machine, |instance| {
+            let (original_cleared, original_untouched) = captured.lock().unwrap().unwrap();
+            assert_ne!(
+                instance
+                    .global_view_model_instance(&cleared)
+                    .unwrap()
+                    .identity_key(),
+                original_cleared
+            );
+            assert_eq!(
+                instance
+                    .global_view_model_instance(&untouched)
+                    .unwrap()
+                    .identity_key(),
+                original_untouched
+            );
+        });
+    }));
+
+    assert!(command_server.process_commands());
+}
+
+#[test]
+fn clear_view_model_instances_report_errors() {
+    let mut queue = CommandQueue::new();
+    let (listener, log) = event_log();
+    queue.set_global_state_machine_listener(Some(&listener.state_machine));
+    let file = queue.load_file(GLOBAL_VARIABLES_FIXTURE.to_vec(), None, 0, None);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    queue.clear_global_view_model_instance(machine, "not-a-global".to_string(), 1);
+    queue.delete_state_machine(machine, 0);
+    queue.clear_view_model_instance(machine, 2);
+    queue.clear_global_view_model_instance(machine, "Global".to_string(), 3);
+    assert!(server(&queue).process_commands());
+    queue.process_messages();
+    let captured = events(&log);
+    for request_id in [1, 2, 3] {
+        assert!(captured.iter().any(|event| matches!(
+            event,
+            ObservedEvent::StateMachineError { handle, request_id: actual, .. }
+                if *handle == machine && *actual == request_id
+        )));
+    }
 }
 
 #[test]

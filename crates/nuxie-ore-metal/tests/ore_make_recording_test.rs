@@ -134,6 +134,7 @@ fn make_stream_records_shader_module_layout_view() {
     let mut cb = OreCommandBuffer::default();
     let code = [0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4];
     let map = [9, 8, 7];
+    let pairs = [0, 1, 2, 3, 4, 5, 6, 7];
     recordMakeShaderModule(
         &mut cb,
         0,
@@ -145,6 +146,8 @@ fn make_stream_records_shader_module_layout_view() {
             stage: ShaderStage::vertex,
             bindingMapBytes: Some(&map),
             bindingMapSize: 3,
+            texSamplerPairBytes: Some(&pairs),
+            texSamplerPairSize: pairs.len() as u32,
             shaderAssetId: 42,
             ..Default::default()
         },
@@ -206,6 +209,7 @@ fn make_stream_records_shader_module_layout_view() {
     assert_eq!(blob(&r, s.code).len(), code.len());
     assert_eq!(blob(&r, s.code), code);
     assert_eq!(blob(&r, s.bindingMapBytes).len(), map.len());
+    assert_eq!(blob(&r, s.texSamplerPairBytes), pairs);
     assert!(s.hlslSource.absent());
     assert!(s.label.absent());
     assert_eq!(r.next(), Some(CommandType::makeBindGroupLayout));

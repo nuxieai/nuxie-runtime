@@ -345,6 +345,9 @@ pub trait RenderContextHelperBackendContract:
     fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
         self.makeRenderCanvas(width, height)
     }
+    unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
+        let _ = canvas;
+    }
     #[cfg(any(
         feature = "native-ore-metal-experimental",
         feature = "native-ore-vulkan-experimental",
@@ -388,6 +391,7 @@ pub trait RenderContextHelperBackendContract:
     unsafe fn postFlush(&mut self, resources: &FlushResources) {
         let _ = resources;
     }
+    fn scrubStateAfterOre(&mut self) {}
     fn makeCommandBuffer(&mut self) -> *mut c_void {
         core::ptr::null_mut()
     }
@@ -436,6 +440,9 @@ where
     }
     fn makeDeferredRenderCanvas(&mut self, w: u32, h: u32) -> rcp<RenderCanvas> {
         RenderContextHelperBackendContract::makeDeferredRenderCanvas(self, w, h)
+    }
+    unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
+        unsafe { RenderContextHelperBackendContract::ensureCanvasBacking(self, canvas) }
     }
     #[cfg(any(
         feature = "native-ore-metal-experimental",
@@ -569,6 +576,9 @@ where
     }
     unsafe fn postFlush(&mut self, r: &FlushResources) {
         unsafe { RenderContextHelperBackendContract::postFlush(self, r) }
+    }
+    fn scrubStateAfterOre(&mut self) {
+        RenderContextHelperBackendContract::scrubStateAfterOre(self)
     }
     fn makeCommandBuffer(&mut self) -> *mut c_void {
         RenderContextHelperBackendContract::makeCommandBuffer(self)

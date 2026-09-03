@@ -100,6 +100,7 @@ fn assert_pose(
     expected_target: (f32, f32),
     expected_bone_a: [f32; 6],
     expected_bone_b: [f32; 6],
+    cycle: usize,
 ) {
     owners
         .animation
@@ -114,14 +115,16 @@ fn assert_pose(
             .with_downcast::<Node, _>(|target| (target.base.x(), target.base.y())),
         Some(expected_target)
     );
-    assert!(about_equal(
-        world_transform(&owners.bone_a),
-        expected_bone_a,
-    ));
-    assert!(about_equal(
-        world_transform(&owners.bone_b),
-        expected_bone_b,
-    ));
+    let actual_bone_a = world_transform(&owners.bone_a);
+    assert!(
+        about_equal(actual_bone_a, expected_bone_a),
+        "cycle {cycle} bone a mismatch: actual={actual_bone_a:?}, expected={expected_bone_a:?}"
+    );
+    let actual_bone_b = world_transform(&owners.bone_b);
+    assert!(
+        about_equal(actual_bone_b, expected_bone_b),
+        "cycle {cycle} bone b mismatch: actual={actual_bone_b:?}, expected={expected_bone_b:?}"
+    );
 }
 
 const BONE_A_AT_ZERO: [f32; 6] = [
@@ -157,7 +160,7 @@ const BONE_B_AT_ONE: [f32; 6] = [
     225.07647705078125,
 ];
 
-fn assert_both_poses(artboard: &RuntimeArtboardInstanceHandle, owners: &IkOwners) {
+fn assert_both_poses(artboard: &RuntimeArtboardInstanceHandle, owners: &IkOwners, cycle: usize) {
     assert_pose(
         artboard,
         owners,
@@ -165,6 +168,7 @@ fn assert_both_poses(artboard: &RuntimeArtboardInstanceHandle, owners: &IkOwners
         (296.0, 202.0),
         BONE_A_AT_ZERO,
         BONE_B_AT_ZERO,
+        cycle,
     );
     assert_pose(
         artboard,
@@ -173,6 +177,7 @@ fn assert_both_poses(artboard: &RuntimeArtboardInstanceHandle, owners: &IkOwners
         (450.0, 337.0),
         BONE_A_AT_ONE,
         BONE_B_AT_ONE,
+        cycle,
     );
 }
 
@@ -199,14 +204,14 @@ fn fixture() -> (
 fn two_bone_ik_places_bones_correctly() {
     let (_factory, artboard) = fixture();
     let owners = setup(&artboard);
-    assert_both_poses(&artboard, &owners);
+    assert_both_poses(&artboard, &owners, 0);
 }
 
 #[test]
 fn ik_keeps_working_after_a_lot_of_iterations() {
     let (_factory, artboard) = fixture();
     let owners = setup(&artboard);
-    for _ in 0..1000 {
-        assert_both_poses(&artboard, &owners);
+    for cycle in 0..1000 {
+        assert_both_poses(&artboard, &owners, cycle);
     }
 }

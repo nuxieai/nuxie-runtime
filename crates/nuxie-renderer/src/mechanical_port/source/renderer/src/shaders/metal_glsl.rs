@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/metal.glsl.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1db281b3e82baf850635fd7aa2092920a80b6a2c";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "4a2cc45e01b2fa4d9a5e6428cae8f721f3ce2fe0dc143a326d84f12a9cd38794";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 531;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 26890;
+    "c95bc053c61db72e1709209dda94b609a5837bf9e7b61b7a171434c97d04bc3d";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 534;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 27098;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_METAL_GLSL_SOURCE: &str = r###"/*
@@ -232,6 +232,9 @@ pub const PINNED_METAL_GLSL_SOURCE: &str = r###"/*
         Varyings _varyings;
 #endif
 
+// imageDrawAttrs is $device, not $constant: the host binds it at a per-draw
+// offset of baseElement * sizeof(ImageDrawInstance), and macOS requires
+// constant-address-space offsets to be 256-byte aligned.
 #define IMAGE_RECT_VERTEX_MAIN(NAME,                                           \
                                Attrs,                                          \
                                attrs,                                          \
@@ -245,7 +248,7 @@ pub const PINNED_METAL_GLSL_SOURCE: &str = r###"/*
         $constant @FlushUniforms& uniforms                                     \
         [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         $constant Attrs* attrs [[$buffer(0)]],                                 \
-        $constant ImageDrawAttrs* imageDrawAttrs [[$buffer(2)]],               \
+        const $device ImageDrawAttrs* imageDrawAttrs [[$buffer(2)]],           \
         VertexTextures _textures,                                              \
         VertexStorageBuffers _buffers)                                         \
     {                                                                          \
@@ -266,7 +269,7 @@ pub const PINNED_METAL_GLSL_SOURCE: &str = r###"/*
         [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         $constant PositionAttr* position [[$buffer(0)]],                       \
         $constant UVAttr* uv [[$buffer(1)]],                                   \
-        $constant ImageDrawAttrs* imageDrawAttrs [[$buffer(2)]])               \
+        const $device ImageDrawAttrs* imageDrawAttrs [[$buffer(2)]])           \
     {                                                                          \
         Varyings _varyings;
 

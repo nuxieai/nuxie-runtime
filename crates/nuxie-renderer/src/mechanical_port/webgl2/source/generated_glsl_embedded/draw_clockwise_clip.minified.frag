@@ -1,33 +1,33 @@
 #ifdef GB
 I1
 #ifndef Q
-w0(S2,j0);
+x0(S2,j0);
 #endif
 j1(T2,h0);
 #ifndef Q
-Sa(f6,k4);
+Ta(g6,k4);
 #endif
-j1(I6,P0);J1 L1(JB){r(U1,E);c k1=-U1.x;
+j1(J6,P0);J1 L1(JB){r(V1,E);c k1=-V1.x;
 #ifdef EB
-r(i1,c);c r0=i1;
+r(i1,c);c v0=i1;
 #else
-r(O,z2);c r0=O.x;
+r(O,z2);c v0=O.x;
 #endif
-w2;E N0;c K5,v3;
+x2;E N0;c L5,v3;
 #if defined(EB)&&defined(FC)
-if(FC){v3=r0;}else
+if(FC){v3=v0;}else
 #endif
-{N0=unpackHalf2x16(Y0(h0));K5=N0.y;c Q4=K5==k1?N0.x:G0(.0);v3=Q4+r0;}
+{N0=unpackHalf2x16(Y0(h0));L5=N0.y;c R4=L5==k1?N0.x:G0(.0);v3=R4+v0;}
 #ifdef ZC
-c H5=U1.y;if(ZC&&H5!=.0){c o4=.0;
+c I5=V1.y;if(ZC&&I5!=.0){c o4=.0;
 #if defined(EB)&&defined(FC)
-if(FC){N0=unpackHalf2x16(Y0(h0));K5=N0.y;}
+if(FC){N0=unpackHalf2x16(Y0(h0));L5=N0.y;}
 #endif
-if(K5!=k1){o4=K5==H5?N0.x:.0;c1(P0,packHalf2x16(B2(o4,Gf)));}else{o4=unpackHalf2x16(Y0(P0)).x;d2(P0);}v3=min(v3,o4);}else
+if(L5!=k1){o4=L5==I5?N0.x:.0;c1(P0,packHalf2x16(B2(o4,Hf)));}else{o4=unpackHalf2x16(Y0(P0)).x;e2(P0);}v3=min(v3,o4);}else
 #endif
-{d2(P0);}c1(h0,packHalf2x16(B2(v3,k1)));
+{e2(P0);}c1(h0,packHalf2x16(B2(v3,k1)));
 #ifndef Q
-v2(j0);
+w2(j0);
 #endif
-x2;Y1;}
+y2;Z1;}
 #endif

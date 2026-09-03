@@ -52,6 +52,8 @@ pub(crate) const GL_ONE: GLenum = 1;
 pub(crate) const GL_FRONT: GLenum = 0x0404;
 pub(crate) const GL_BACK: GLenum = 0x0405;
 pub(crate) const GL_FRONT_AND_BACK: GLenum = 0x0408;
+pub(crate) const GL_LINE_ANGLE: GLenum = 0x1B01;
+pub(crate) const GL_FILL_ANGLE: GLenum = 0x1B02;
 pub(crate) const GL_CW: GLenum = 0x0900;
 pub(crate) const GL_CCW: GLenum = 0x0901;
 pub(crate) const GL_NEVER: GLenum = 0x0200;
@@ -208,6 +210,8 @@ pub(crate) const GL_STENCIL: GLenum = 0x1802;
 pub(crate) const GL_TEXTURE_WRAP_R: GLenum = 0x8072;
 pub(crate) const GL_TEXTURE_MIN_LOD: GLenum = 0x813A;
 pub(crate) const GL_TEXTURE_MAX_LOD: GLenum = 0x813B;
+pub(crate) const GL_TEXTURE_MAX_ANISOTROPY_EXT: GLenum = 0x84FE;
+pub(crate) const GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT: GLenum = 0x84FF;
 pub(crate) const GL_TEXTURE_COMPARE_MODE: GLenum = 0x884C;
 pub(crate) const GL_TEXTURE_COMPARE_FUNC: GLenum = 0x884D;
 pub(crate) const GL_COMPARE_REF_TO_TEXTURE: GLenum = 0x884E;
@@ -230,6 +234,7 @@ pub(crate) const GL_INVALID_INDEX: GLuint = 0xFFFF_FFFF;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum GLCommand {
+    Finish,
     Clear(GLbitfield),
     ClearColor(f32, f32, f32, f32),
     FrontFace(GLenum),
@@ -382,6 +387,10 @@ pub(crate) enum GLCommand {
     InvalidateFramebuffer {
         target: GLenum,
         attachments: Vec<GLenum>,
+    },
+    PolygonModeANGLE {
+        face: GLenum,
+        mode: GLenum,
     },
     LineWidth(f32),
     /// Provider forwards through retained `gl.pls` and resolves the numeric
@@ -582,6 +591,7 @@ pub(crate) trait GLExecutionProvider {
     fn createShader(&mut self, shaderType: GLenum) -> GLuint;
 
     fn getInteger(&mut self, parameter: GLenum) -> GLint;
+    fn getFloat(&mut self, parameter: GLenum) -> GLfloat;
     fn getString(&mut self, parameter: GLenum) -> Option<Vec<u8>>;
     fn getExtension(&mut self, index: GLuint) -> Option<Vec<u8>>;
     fn enableWebGLExtension(&mut self, name: &str) -> bool;
@@ -1108,6 +1118,10 @@ impl GLExecutionDomain {
 
     pub(crate) fn getInteger(&self, parameter: GLenum) -> GLint {
         self.withProvider(|provider| provider.getInteger(parameter))
+    }
+
+    pub(crate) fn getFloat(&self, parameter: GLenum) -> GLfloat {
+        self.withProvider(|provider| provider.getFloat(parameter))
     }
 
     pub(crate) fn getString(&self, parameter: GLenum) -> Option<Vec<u8>> {
@@ -2027,6 +2041,10 @@ mod tests {
                 .borrow_mut()
                 .push(ProviderEvent::GetInteger(parameter, value));
             value
+        }
+
+        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat {
+            0.0
         }
 
         fn getString(&mut self, _parameter: GLenum) -> Option<Vec<u8>> {

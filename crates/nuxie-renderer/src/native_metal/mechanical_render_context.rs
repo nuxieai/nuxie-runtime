@@ -962,6 +962,8 @@ pub(super) struct MechanicalRenderContext {
     frame_number: u64,
     frame_queue: Option<Retained<ProtocolObject<dyn MTLCommandQueue>>>,
     resource_domain: RenderResourceDomain,
+    #[cfg(test)]
+    deterministic_validation_thresholds: bool,
     in_flight: Vec<(
         Retained<ProtocolObject<dyn MTLCommandBuffer>>,
         MechanicalCompletionToken,
@@ -1041,8 +1043,20 @@ impl MechanicalRenderContext {
             frame_number: 0,
             frame_queue: None,
             resource_domain: RenderResourceDomain::new(),
+            #[cfg(test)]
+            deterministic_validation_thresholds: false,
             in_flight: Vec::new(),
         })
+    }
+
+    #[cfg(test)]
+    pub(super) fn use_deterministic_validation_thresholds(&mut self) {
+        self.deterministic_validation_thresholds = true;
+    }
+
+    #[cfg(test)]
+    pub(super) fn uses_deterministic_validation_thresholds(&self) -> bool {
+        self.deterministic_validation_thresholds
     }
 
     pub(super) fn install_queue_and_target(
@@ -1248,6 +1262,10 @@ impl MechanicalRenderContext {
             loadAction: load_action,
             ..FrameDescriptor::default()
         };
+        #[cfg(test)]
+        if self.deterministic_validation_thresholds {
+            descriptor.triangulationThresholds.frameBudgetMs = f32::INFINITY;
+        }
         match self.mode {
             RenderMode::RasterOrdering => {}
             RenderMode::Msaa => descriptor.msaaSampleCount = 4,

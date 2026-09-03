@@ -20,16 +20,16 @@
 #undef PLS_DECL4F
 #undef PLS_LOAD4F
 #undef PLS_STORE4F
-#undef w0
-#undef I0
 #undef x0
+#undef I0
+#undef y0
 #define PLS_DECL4F(IDX, NAME)                                                  \
     layout(set = PLS_TEXTURE_BINDINGS_SET, binding = IDX) uniform texture2D NAME
 #define PLS_LOAD4F(PLANE) texelFetch(PLANE, ivec2(floor(Z)), 0)
 #define PLS_STORE4F(PLANE, VALUE)
-#define w0(IDX, NAME) layout(set = H3, binding = IDX) uniform texture2D NAME
+#define x0(IDX, NAME) layout(set = H3, binding = IDX) uniform texture2D NAME
 #define I0(PLANE) texelFetch(PLANE, ivec2(floor(Z)), 0)
-#define x0(PLANE, VALUE)
+#define y0(PLANE, VALUE)
 
 #include "constants.minified.glsl"
 #include "specialization.minified.glsl"

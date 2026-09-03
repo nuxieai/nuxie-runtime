@@ -30,6 +30,7 @@ pub(crate) struct GLUBOBinding {
 pub(crate) struct GLTexBinding {
     pub(crate) texture: u32,
     pub(crate) target: u32,
+    pub(crate) binding: u32,
     pub(crate) slot: u32,
 }
 
@@ -37,6 +38,7 @@ pub(crate) struct GLTexBinding {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct GLSamplerBinding {
     pub(crate) sampler: u32,
+    pub(crate) binding: u32,
     pub(crate) slot: u32,
 }
 
@@ -165,12 +167,12 @@ mod tests {
 
     #[test]
     fn complete_bind_group_field_denominator_and_base_layout_are_frozen() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 45);
+        assert_eq!(PINNED_SOURCE.lines().count(), 47);
         assert_eq!(offset_of!(BindGroupGL, base), 0);
         assert_eq!(offset_of!(GLUBOBinding, buffer), 0);
         assert!(offset_of!(GLUBOBinding, hasDynamicOffset) > offset_of!(GLUBOBinding, slot));
-        assert_eq!(std::mem::size_of::<GLTexBinding>(), 12);
-        assert_eq!(std::mem::size_of::<GLSamplerBinding>(), 8);
+        assert_eq!(std::mem::size_of::<GLTexBinding>(), 16);
+        assert_eq!(std::mem::size_of::<GLSamplerBinding>(), 12);
         assert!(offset_of!(BindGroupGL, rust_execution) > offset_of!(BindGroupGL, m_glSamplers));
         assert!(std::mem::size_of::<BindGroupGL>() > std::mem::size_of::<BindGroup>());
         assert_eq!(offset_of!(BindGroupLayoutGL, base), 0);

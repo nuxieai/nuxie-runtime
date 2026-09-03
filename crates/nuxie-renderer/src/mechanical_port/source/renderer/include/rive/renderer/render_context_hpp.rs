@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/render_context.hpp.
-// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
+// Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -36,7 +36,7 @@
 // #include <array>
 // #include <unordered_map>
 //
-// class PushRetrofittedTrianglesGMDraw;
+// class PushRetrofitTriStripsGMDraw;
 // class RenderContextTest;
 //
 // namespace rive
@@ -340,8 +340,8 @@
 //     friend class ImageRectDraw;
 //     friend class ImageMeshDraw;
 //     friend class ClipReset;
-//     friend class ::PushRetrofittedTrianglesGMDraw; // For testing.
-//     friend class ::RenderContextTest;              // For testing.
+//     friend class ::PushRetrofitTriStripsGMDraw; // For testing.
+//     friend class ::RenderContextTest;           // For testing.
 //
 //     // Resets the CPU-side STL containers so they don't have unbounded growth.
 //     void resetContainers();
@@ -1009,6 +1009,11 @@
 //                        uint32_t joinSegmentCount,
 //                        uint32_t contourIDWithFlags);
 //
+//         void pushRetrofitCubicTriStrip(const Vec2D[],
+//                                        size_t numPts,
+//                                        gpu::ContourDirections,
+//                                        uint32_t contourIDWithFlags);
+//
 //         // pushCubic() impl for forward tessellations.
 //         RIVE_ALWAYS_INLINE void pushTessellationSpans(
 //             const Vec2D pts[4],
@@ -1085,6 +1090,9 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::{
     rive_render_factory_hpp::{
         RiveRenderFactory, RiveRenderFactoryAccess, RiveRenderFactoryContract,
     },
+};
+pub use crate::mechanical_port::source::renderer::include::rive::renderer::triangulation_controller_hpp::{
+    TriangulationController, TriangulationThresholds,
 };
 
 pub type ColorInt = u32;
@@ -1662,6 +1670,10 @@ impl TrivialBlockAllocator {
             }
         }
     }
+
+    pub fn empty(&self) -> bool {
+        self.allocations.is_empty()
+    }
 }
 
 impl Drop for TrivialBlockAllocator {
@@ -1956,6 +1968,8 @@ pub struct RenderContextFrameDescriptor {
     pub disableRasterOrdering: bool,
     // DitherMode ditherMode = DitherMode::interleavedGradientNoise;
     pub ditherMode: DitherMode,
+    // TriangulationThresholds triangulationThresholds;
+    pub triangulationThresholds: TriangulationThresholds,
     // uint32_t virtualTileWidth = 0;
     pub virtualTileWidth: u32,
     // uint32_t virtualTileHeight = 0;
@@ -1984,6 +1998,7 @@ impl Default for RenderContextFrameDescriptor {
             msaaSampleCount: 0,
             disableRasterOrdering: false,
             ditherMode: DitherMode::interleavedGradientNoise,
+            triangulationThresholds: TriangulationThresholds::default(),
             virtualTileWidth: 0,
             virtualTileHeight: 0,
             wireframe: false,
@@ -2157,6 +2172,7 @@ pub struct RenderContextMembers {
     pub(crate) m_current_resource_allocations: ResourceAllocationCounts,
     pub(crate) m_max_recent_resource_requirements: ResourceAllocationCounts,
     pub(crate) m_last_resource_trim_time_in_seconds: f64,
+    pub(crate) m_triangulation_controller: TriangulationController,
     pub(crate) m_frame_descriptor: FrameDescriptor,
     pub(crate) m_frame_interlock_mode: gpu::InterlockMode,
     pub(crate) m_frame_shader_features_mask: gpu::ShaderFeatures,
@@ -2246,6 +2262,7 @@ mod render_context_layout_tests {
             offset_of!(RenderContextMembers, m_current_resource_allocations),
             offset_of!(RenderContextMembers, m_max_recent_resource_requirements),
             offset_of!(RenderContextMembers, m_last_resource_trim_time_in_seconds),
+            offset_of!(RenderContextMembers, m_triangulation_controller),
             offset_of!(RenderContextMembers, m_frame_descriptor),
             offset_of!(RenderContextMembers, m_frame_interlock_mode),
             offset_of!(RenderContextMembers, m_frame_shader_features_mask),
@@ -2305,6 +2322,7 @@ impl RenderContext {
                 m_current_resource_allocations: ResourceAllocationCounts::default(),
                 m_max_recent_resource_requirements: ResourceAllocationCounts::default(),
                 m_last_resource_trim_time_in_seconds: 0.0,
+                m_triangulation_controller: TriangulationController::default(),
                 m_frame_descriptor: FrameDescriptor::default(),
                 m_frame_interlock_mode: gpu::InterlockMode::msaa,
                 m_frame_shader_features_mask: gpu::ShaderFeatures::NONE,
@@ -2352,6 +2370,10 @@ impl RenderContext {
         #[cfg(debug_assertions)]
         assert!(self.m_did_begin_frame);
         &self.m_frame_descriptor
+    }
+
+    pub fn triangulationController(&mut self) -> &mut TriangulationController {
+        &mut self.m_triangulation_controller
     }
 
     // const gpu::InterlockMode frameInterlockMode() const;
@@ -2788,6 +2810,12 @@ pub trait TessellationWriterContract<'a> {
         parametric_segment_count: u32,
         polar_segment_count: u32,
         join_segment_count: u32,
+        contour_id_with_flags: u32,
+    );
+    fn pushRetrofitCubicTriStrip(
+        &mut self,
+        pts: &[Vec2D],
+        contour_directions: gpu::ContourDirections,
         contour_id_with_flags: u32,
     );
     fn pushTessellationSpans(

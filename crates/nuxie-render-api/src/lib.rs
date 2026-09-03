@@ -2559,6 +2559,9 @@ pub trait RenderCanvas {
     fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
         self.render_image().ore_texture_info()
     }
+    /// Back a canvas whose allocation was deferred, immediately before its
+    /// first content frame. Backends without deferred allocation no-op.
+    fn ensure_backing(&mut self) {}
     fn begin_frame(
         &mut self,
         clear_color: ColorInt,
@@ -2693,6 +2696,10 @@ pub trait Factory {
     fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
         None
     }
+
+    /// Called after replayed ORE passes, before the renderer draws again.
+    /// Backends without shared mutable graphics state no-op.
+    fn scrub_state_after_ore(&mut self) {}
 
     fn make_render_buffer(
         &mut self,

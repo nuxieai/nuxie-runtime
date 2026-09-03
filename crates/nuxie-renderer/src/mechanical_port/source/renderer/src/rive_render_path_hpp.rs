@@ -104,7 +104,8 @@ use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
 };
 use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath, RenderPath as ApiRenderPath, Vec2D};
 use std::any::Any;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[repr(C)]
@@ -115,6 +116,10 @@ pub struct RiveRenderPath {
     pub m_bounds: Cell<Aabb>,
     pub m_coarseArea: Cell<f32>,
     pub m_rawPathMutationID: Cell<u64>,
+    pub(crate) m_cachedTriangulator:
+        RefCell<Option<Rc<crate::gr_triangulator::InnerFanTriangulator>>>,
+    pub(crate) m_cachedTriangulatorMutationID: Cell<u64>,
+    pub(crate) m_triangulatorFirstSightingMutationID: Cell<u64>,
     pub m_dirt: Cell<u32>,
     #[cfg(debug_assertions)]
     pub m_rawPathMutationLockCount: Cell<i32>,
@@ -128,6 +133,9 @@ impl Default for RiveRenderPath {
             m_bounds: Cell::new(Aabb::new(0.0, 0.0, 0.0, 0.0)),
             m_coarseArea: Cell::new(0.0),
             m_rawPathMutationID: Cell::new(0),
+            m_cachedTriangulator: RefCell::new(None),
+            m_cachedTriangulatorMutationID: Cell::new(0),
+            m_triangulatorFirstSightingMutationID: Cell::new(0),
             m_dirt: Cell::new(u32::MAX),
             #[cfg(debug_assertions)]
             m_rawPathMutationLockCount: Cell::new(0),
@@ -190,6 +198,22 @@ impl RiveRenderPath {
                 .set(self.m_dirt.get() & !Self::K_RAW_PATH_MUTATION_ID_DIRT);
         }
         self.m_rawPathMutationID.get()
+    }
+    pub(crate) fn cachedTriangulator(
+        &self,
+    ) -> Option<Rc<crate::gr_triangulator::InnerFanTriangulator>> {
+        crate::mechanical_port::source::renderer::src::rive_render_path_cpp::cached_triangulator(
+            self,
+        )
+    }
+    pub(crate) fn createTriangulator(
+        &self,
+        per_frame_allocator: &mut crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::TrivialBlockAllocator,
+    ) -> Rc<crate::gr_triangulator::InnerFanTriangulator> {
+        crate::mechanical_port::source::renderer::src::rive_render_path_cpp::create_triangulator(
+            self,
+            per_frame_allocator,
+        )
     }
     pub fn makeSoftenedCopyForFeathering(&self, feather: f32, matrix_max_scale: f32) -> rcp<Self> {
         crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| {
@@ -395,6 +419,122 @@ impl ApiRenderPath for RiveRenderPath {
     }
     fn close(&mut self) {
         self.close();
+    }
+}
+
+#[cfg(test)]
+mod upstream_1db281b3_triangulation_cache_tests {
+    use super::RiveRenderPath;
+    use crate::mechanical_port::source::include::rive::renderer_hpp::RenderPathContract;
+    use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::TrivialBlockAllocator;
+    use nuxie_render_api::FillRule;
+    use std::rc::Rc;
+
+    fn triangle(path: &mut RiveRenderPath, x: f32) {
+        path.move_to(x, 0.0);
+        path.line_to(x + 100.0, 0.0);
+        path.line_to(x, 100.0);
+        path.close();
+    }
+
+    fn obtain(
+        path: &RiveRenderPath,
+        allocator: &mut TrivialBlockAllocator,
+    ) -> Rc<crate::gr_triangulator::InnerFanTriangulator> {
+        path.cachedTriangulator()
+            .unwrap_or_else(|| path.createTriangulator(allocator))
+    }
+
+    #[test]
+    fn triangulation_cache_reuses_an_unmutated_path() {
+        let mut allocator = TrivialBlockAllocator::default();
+        let mut path = RiveRenderPath::default();
+        triangle(&mut path, 0.0);
+
+        let first = obtain(&path, &mut allocator);
+        assert!(first.max_vertex_count(FillRule::NonZero) > 0);
+        assert!(path.cachedTriangulator().is_none());
+
+        let second = obtain(&path, &mut allocator);
+        assert!(!Rc::ptr_eq(&first, &second));
+        let cached = path.cachedTriangulator().unwrap();
+        assert!(Rc::ptr_eq(&second, &cached));
+        assert!(Rc::ptr_eq(&cached, &path.cachedTriangulator().unwrap()));
+    }
+
+    #[test]
+    fn triangulation_cache_does_not_retain_single_use_geometry() {
+        let mut allocator = TrivialBlockAllocator::default();
+        let mut path = RiveRenderPath::default();
+        for x in [0.0, 200.0, 400.0, 600.0] {
+            triangle(&mut path, x);
+            let triangulator = obtain(&path, &mut allocator);
+            assert!(triangulator.max_vertex_count(FillRule::NonZero) > 0);
+            assert!(path.cachedTriangulator().is_none());
+        }
+    }
+
+    #[test]
+    fn triangulation_cache_repromotes_after_mutation() {
+        let mut allocator = TrivialBlockAllocator::default();
+        let mut path = RiveRenderPath::default();
+        triangle(&mut path, 0.0);
+        let first_id = path.getRawPathMutationID();
+        obtain(&path, &mut allocator);
+        let cached = obtain(&path, &mut allocator);
+        assert!(Rc::ptr_eq(&cached, &path.cachedTriangulator().unwrap()));
+
+        triangle(&mut path, 200.0);
+        assert_ne!(path.getRawPathMutationID(), first_id);
+        let first_after_mutation = obtain(&path, &mut allocator);
+        assert!(path.cachedTriangulator().is_none());
+        let repromoted = obtain(&path, &mut allocator);
+        assert!(!Rc::ptr_eq(&first_after_mutation, &repromoted));
+        assert!(Rc::ptr_eq(&repromoted, &path.cachedTriangulator().unwrap()));
+    }
+
+    #[test]
+    fn triangulation_cache_invalidates_on_every_mutation_kind() {
+        let mut allocator = TrivialBlockAllocator::default();
+        let mut path = RiveRenderPath::default();
+        triangle(&mut path, 0.0);
+        obtain(&path, &mut allocator);
+        obtain(&path, &mut allocator);
+        let mut last_mutation_id = path.getRawPathMutationID();
+
+        let repromote = |path: &RiveRenderPath,
+                         allocator: &mut TrivialBlockAllocator,
+                         last_mutation_id: &mut u64| {
+            let mutation_id = path.getRawPathMutationID();
+            assert_ne!(mutation_id, *last_mutation_id);
+            *last_mutation_id = mutation_id;
+            let first = obtain(path, allocator);
+            assert!(path.cachedTriangulator().is_none());
+            let second = obtain(path, allocator);
+            assert!(!Rc::ptr_eq(&first, &second));
+            assert!(Rc::ptr_eq(&second, &path.cachedTriangulator().unwrap()));
+        };
+
+        path.line_to(120.0, 120.0);
+        repromote(&path, &mut allocator, &mut last_mutation_id);
+
+        path.cubic_to(150.0, 50.0, 250.0, 150.0, 300.0, 300.0);
+        repromote(&path, &mut allocator, &mut last_mutation_id);
+
+        let mut extra = nuxie_render_api::RawPath::new();
+        extra.move_to(400.0, 0.0);
+        extra.line_to(500.0, 0.0);
+        extra.line_to(400.0, 100.0);
+        extra.close();
+        path.addRawPath(&extra);
+        repromote(&path, &mut allocator, &mut last_mutation_id);
+
+        path.rewind();
+        assert_ne!(path.getRawPathMutationID(), last_mutation_id);
+        assert_eq!(
+            obtain(&path, &mut allocator).max_vertex_count(FillRule::NonZero),
+            0
+        );
     }
 }
 

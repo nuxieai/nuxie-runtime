@@ -1,5 +1,6 @@
 //! Literal test-body ports from tests/unit_tests/renderer at e949498e.
 mod canvas_schedule_test;
+mod deferred_canvas_import_test;
 #[cfg(all(
     feature = "rive-decoders",
     any(

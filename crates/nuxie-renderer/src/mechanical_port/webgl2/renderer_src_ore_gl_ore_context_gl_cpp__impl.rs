@@ -225,6 +225,9 @@ fn queriedFeatures(executionDomain: &GLExecutionDomain) -> Features {
     if executionDomain.enableWebGLExtension("EXT_color_buffer_half_float") {
         features.colorBufferHalfFloat = true;
     }
+    if executionDomain.enableWebGLExtension("EXT_texture_filter_anisotropic") {
+        features.anisotropicFiltering = true;
+    }
 
     features
 }
@@ -599,6 +602,20 @@ fn makeSamplerCurrent(
             value: desc.maxLod,
         },
     );
+    if context.base.features().anisotropicFiltering && desc.maxAnisotropy > 1 {
+        let maxSupported = context
+            .executionStamp()
+            .domain()
+            .getFloat(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+        submit(
+            context,
+            GLCommand::SamplerParameterFloat {
+                sampler: name,
+                parameter: GL_TEXTURE_MAX_ANISOTROPY_EXT,
+                value: (desc.maxAnisotropy as f32).min(maxSupported),
+            },
+        );
+    }
     if desc.compare != CompareFunction::none {
         submit(
             context,
@@ -617,7 +634,6 @@ fn makeSamplerCurrent(
             },
         );
     }
-
     let domain = nuxie_ore_metal::context_backend_domain(&context.base);
     Some(ResourceHandle::new_in_domain(None, domain, sampler).erase())
 }
@@ -1223,6 +1239,7 @@ fn makeBindGroupCurrent(
                 texture.m_glTexture
             },
             target: texture.m_glTarget,
+            binding: entry.slot,
             slot,
         });
         retainedViews.push(viewOwner.clone());
@@ -1257,6 +1274,7 @@ fn makeBindGroupCurrent(
         };
         group.m_glSamplers.push(GLSamplerBinding {
             sampler: sampler.m_glSampler,
+            binding: entry.slot,
             slot,
         });
         retainedSamplers.push(samplerOwner.clone());
@@ -1647,7 +1665,7 @@ unsafe fn wrapCanvasTextureCurrent(
     debug_assert!(!canvas.is_null());
     if !context.m_renderContextImpl.is_null() {
         unsafe {
-            super::render_context_gl_impl::ensureDeferredCanvasBacking(
+            super::render_context_gl_impl::ensureCanvasBacking(
                 &mut *context.m_renderContextImpl.cast(),
                 canvas.cast(),
             )
@@ -1879,7 +1897,7 @@ pub(crate) unsafe fn wrapCanvasSampleView(
         debug_assert!(!canvas.is_null());
         let canvas = canvas.cast::<RenderCanvas>().as_mut()?;
         if !context.m_renderContextImpl.is_null() {
-            super::render_context_gl_impl::ensureDeferredCanvasBacking(
+            super::render_context_gl_impl::ensureCanvasBacking(
                 &mut *context.m_renderContextImpl.cast(),
                 canvas,
             );
@@ -2055,8 +2073,8 @@ impl ContextApi for ContextGL {
 
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 16;
-pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 14;
-const _: [(); 46479] = [(); PINNED_SOURCE.len()];
+pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
+const _: [(); 47374] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2068,7 +2086,6 @@ mod tests {
     use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
     use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
     use crate::mechanical_port::webgl2::render_context_gl_decl::TextureGLImpl;
-    use nuxie_ore_metal::shader_module::TextureSamplerPair;
     use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
     use std::rc::Rc;
@@ -2080,6 +2097,8 @@ mod tests {
         queries: Vec<(GLenum, GLint)>,
         names: VecDeque<GLuint>,
         integers: HashMap<GLenum, GLint>,
+        floats: HashMap<GLenum, GLfloat>,
+        enabledExtensions: Vec<String>,
         lifecycleIngress: Option<GLContextLifecycleIngress>,
         finalReleaseIngress: Option<GLFinalReleaseIngress>,
     }
@@ -2139,6 +2158,15 @@ mod tests {
             value
         }
 
+        fn getFloat(&mut self, parameter: GLenum) -> GLfloat {
+            self.0
+                .borrow()
+                .floats
+                .get(&parameter)
+                .copied()
+                .unwrap_or_default()
+        }
+
         fn getString(&mut self, _parameter: GLenum) -> Option<Vec<u8>> {
             None
         }
@@ -2147,8 +2175,12 @@ mod tests {
             None
         }
 
-        fn enableWebGLExtension(&mut self, _name: &str) -> bool {
-            false
+        fn enableWebGLExtension(&mut self, name: &str) -> bool {
+            self.0
+                .borrow()
+                .enabledExtensions
+                .iter()
+                .any(|extension| extension == name)
         }
 
         fn isObject(&mut self, _kind: GLObjectKind, name: GLuint) -> bool {
@@ -2211,6 +2243,42 @@ mod tests {
         state.commands.clear();
         state.generated.clear();
         state.queries.clear();
+    }
+
+    #[test]
+    fn sampler_anisotropy_is_clamped_to_the_queried_gl_limit() {
+        let (domain, state) = execution([71]);
+        {
+            let mut state = state.borrow_mut();
+            state
+                .enabledExtensions
+                .push("EXT_texture_filter_anisotropic".to_owned());
+            state
+                .floats
+                .insert(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, 8.0);
+        }
+        let mut context = context(&domain);
+        clearTrace(&state);
+        let sampler = domain.withCurrent(|| {
+            makeSampler(
+                &mut context,
+                &SamplerDesc {
+                    maxAnisotropy: 16,
+                    ..SamplerDesc::default()
+                },
+            )
+            .expect("sampler")
+        });
+        assert!(state.borrow().commands.contains(
+            &GLCommand::SamplerParameterFloat {
+                sampler: 71,
+                parameter: GL_TEXTURE_MAX_ANISOTROPY_EXT,
+                value: 8.0,
+            }
+        ));
+        drop(sampler);
+        drop(context);
+        domain.shutdown();
     }
 
     #[test]
@@ -2406,38 +2474,89 @@ mod tests {
     }
 
     #[test]
-    fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1275);
-        assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
-        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 16);
-        assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 14);
+    fn deferred_replay_reaches_the_webgl2_state_scrub() {
+        use crate::deferred::cmd::{
+            deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},
+            deferred_session::DeferredSession,
+            render_replay::RendererOwner,
+        };
+        use crate::exact_source_adapter::{ExactSourceBackend, ExactSourceFactoryCore};
+        use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::RenderContext;
+        use nuxie_render_api::{Factory, PersistentFactory, PersistentFactoryContext};
+        use std::pin::Pin;
+
+        struct Backend(Pin<Box<RenderContext>>);
+        impl ExactSourceBackend for Backend {
+            fn context_mut(&mut self) -> Pin<&mut RenderContext> {
+                self.0.as_mut()
+            }
+            fn begin_frame(
+                &mut self,
+                _: u32,
+                _: crate::RenderMode,
+            ) -> Result<u64, crate::RendererError> {
+                unreachable!("this witness only exercises deferred ORE replay")
+            }
+            fn finish_frame(&mut self, _: u64) -> Result<Vec<u8>, crate::RendererError> {
+                unreachable!("this witness only exercises deferred ORE replay")
+            }
+            fn abort_frame(&mut self) {}
+        }
+
+        struct Sink {
+            factory: PersistentFactory<ExactSourceFactoryCore<Backend>>,
+        }
+        impl DeferredFrameSink for Sink {
+            fn factory(&mut self) -> PersistentFactoryContext {
+                self.factory.persistent_context().unwrap()
+            }
+            fn begin_screen_frame(&mut self, _: u64) -> Option<RendererOwner> {
+                None
+            }
+        }
+
+        let (domain, state) = execution(1..=2048);
+        let implementation = domain.withCurrent(|| {
+            super::super::render_context_gl_impl::newComponent097TestContextOwner(
+                GLCapabilities::default(),
+                domain.clone(),
+            )
+        });
+        let mut sink = Sink {
+            factory: PersistentFactory::new(ExactSourceFactoryCore::new(Backend(
+                RenderContext::from_impl(implementation),
+            ))),
+        };
+        let mut session = DeferredSession::new(None);
+        assert!(session
+            .ore_context
+            .borrow_mut()
+            .makeBuffer(&BufferDesc {
+                usage: BufferUsage::uniform,
+                size: 16,
+                data: None,
+                immutable: false,
+                label: Some("WebGL2 scrub probe"),
+            })
+            .is_some());
+        let frame = snapshot_frame(&mut session);
+        clearTrace(&state);
+
+        DeferredReplayer::default().replay_frame(&frame, &mut sink);
+
+        let commands = state.borrow().commands.clone();
+        assert!(commands.contains(&GLCommand::Finish));
+        assert!(commands.contains(&GLCommand::BindSampler(0, 0)));
+        drop(sink);
+        domain.shutdown();
     }
 
     #[test]
-    fn erased_shader_pair_replacement_projects_through_shader_module_gl_base() {
-        let (domain, _) = execution([]);
-        let pair = TextureSamplerPair {
-            textureGroup: 1,
-            textureBinding: 2,
-            samplerGroup: 3,
-            samplerBinding: 4,
-        };
-        let module = ShaderModuleGL::new(domain.stamp());
-        let mut module = ResourceHandle::new(None, module).erase();
-
-        // SAFETY: this is the sole fresh local module handle, and no payload
-        // reference is obtained before the construction-only replacement.
-        assert!(unsafe { module.replaceShaderTextureSamplerPairs(vec![pair]) });
-        assert_eq!(
-            module
-                .downcast_ref::<ShaderModuleGL>()
-                .expect("GL shader-module payload")
-                .m_textureSamplerPairs,
-            [pair]
-        );
-
-        drop(module);
-        domain.shutdown();
+    fn complete_source_denominator_is_locked() {
+        assert_eq!(PINNED_SOURCE.lines().count(), 1297);
+        assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
+        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 16);
+        assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);
     }
 
     #[test]

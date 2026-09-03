@@ -1473,7 +1473,7 @@ impl RiveRenderer {
             }
             let owner = unsafe {
                 make_path_draw_from_source(
-                    &*self.m_context,
+                    &mut *self.m_context,
                     clip.matrix,
                     None,
                     clip_path.clone(),
@@ -1585,7 +1585,7 @@ impl RendererContract for RiveRenderer {
                 let softened = p.makeSoftenedCopyForFeathering(q.getFeather(), matrix_max_scale);
                 let owner = unsafe {
                     make_path_draw_from_source(
-                        &*self.m_context,
+                        &mut *self.m_context,
                         self.current_state().matrix,
                         image_matrix,
                         softened,
@@ -1604,7 +1604,7 @@ impl RendererContract for RiveRenderer {
         let path_owner = unsafe { ref_rcp(path.cast::<RiveRenderPath>()) };
         let owner = unsafe {
             make_path_draw_from_source(
-                &*self.m_context,
+                &mut *self.m_context,
                 self.current_state().matrix,
                 image_matrix,
                 path_owner,
@@ -1674,7 +1674,7 @@ impl RendererContract for RiveRenderer {
                 .current_state()
                 .matrix
                 .map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0))
-            .round_out();
+                .round_out();
             self.clipAndPushDrawSource(own_image_rect(unsafe {
                 make_image_rect_draw(
                     b,

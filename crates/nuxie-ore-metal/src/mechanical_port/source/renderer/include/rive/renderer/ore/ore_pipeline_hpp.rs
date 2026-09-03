@@ -11,7 +11,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_pipeline.hpp.
-// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
+// Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
 // Both upstream Pipeline constructors now call ownVertexLayout(). The Rust
 // PipelineSnapshot below owns the copied buffers and their attribute vectors;
 // absent source layouts normalize to zero entries before snapshot construction.
@@ -26,6 +26,7 @@ use std::ops::{Deref, DerefMut};
 
 use super::super::gpu_resource_hpp::{AnyResourceHandle, GPUResource, GpuResourcePayload};
 use super::ore_binding_map_hpp::BindingMap;
+use super::ore_shader_module_hpp::TextureSamplerPair;
 use super::ore_types_hpp::{
     ColorTargetState, CullMode, DepthStencilState, FaceWinding, IndexFormat, PipelineDesc,
     PrimitiveTopology, StencilFaceState, VertexAttribute, VertexStepMode, kMaxBindGroups,
@@ -118,6 +119,7 @@ impl PipelineSnapshot {
 #[repr(C)]
 pub struct PipelineMembers {
     pub m_bindingMap: ManuallyDrop<BindingMap>,
+    pub m_textureSamplerPairs: ManuallyDrop<Vec<TextureSamplerPair>>,
     pub(crate) m_layouts: ManuallyDrop<[Option<AnyResourceHandle>; kMaxBindGroups as usize]>,
     pub(crate) m_desc: ManuallyDrop<PipelineSnapshot>,
 }
@@ -154,6 +156,11 @@ impl Drop for Pipeline {
             super::super::gpu_resource_hpp::record_resource_drop_stage("Pipeline.layouts");
             ManuallyDrop::drop(&mut self.m_layouts);
             #[cfg(test)]
+            super::super::gpu_resource_hpp::record_resource_drop_stage(
+                "Pipeline.textureSamplerPairs",
+            );
+            ManuallyDrop::drop(&mut self.m_textureSamplerPairs);
+            #[cfg(test)]
             super::super::gpu_resource_hpp::record_resource_drop_stage("Pipeline.bindingMap");
             ManuallyDrop::drop(&mut self.m_bindingMap);
             #[cfg(test)]
@@ -180,6 +187,14 @@ impl Pipeline {
         if let Some(module) = module.and_then(AnyResourceHandle::shaderModuleBase) {
             m_bindingMap = module.m_bindingMap.clone();
         }
+        let mut m_textureSamplerPairs = Vec::new();
+        for module in [desc.vertexModule, desc.fragmentModule]
+            .into_iter()
+            .flatten()
+            .filter_map(AnyResourceHandle::shaderModuleBase)
+        {
+            m_textureSamplerPairs.extend_from_slice(&module.m_textureSamplerPairs);
+        }
         let m_desc = PipelineSnapshot::from_desc(desc)?;
         let mut m_layouts = std::array::from_fn(|_| None);
         let layouts = desc.bindGroupLayouts.unwrap_or(&[]);
@@ -193,6 +208,7 @@ impl Pipeline {
             base: ManuallyDrop::new(GPUResource::new(None)),
             members: ManuallyDrop::new(PipelineMembers {
                 m_bindingMap: ManuallyDrop::new(m_bindingMap),
+                m_textureSamplerPairs: ManuallyDrop::new(m_textureSamplerPairs),
                 m_layouts: ManuallyDrop::new(m_layouts),
                 m_desc: ManuallyDrop::new(m_desc),
             }),
@@ -286,6 +302,14 @@ mod tests {
             Some(&mut vertex_module.m_bindingMap),
         ));
         let expected_vertex = vertex_module.m_bindingMap.clone();
+        vertex_module
+            .m_textureSamplerPairs
+            .push(TextureSamplerPair {
+                textureGroup: 0,
+                textureBinding: 1,
+                samplerGroup: 2,
+                samplerBinding: 3,
+            });
         let vertex = ResourceHandle::new(None, vertex_module).erase();
 
         let mut fragment_module = ShaderModule::new();
@@ -296,6 +320,14 @@ mod tests {
             Some(&mut fragment_module.m_bindingMap),
         ));
         let expected_fragment = fragment_module.m_bindingMap.clone();
+        fragment_module
+            .m_textureSamplerPairs
+            .push(TextureSamplerPair {
+                textureGroup: 4,
+                textureBinding: 5,
+                samplerGroup: 6,
+                samplerBinding: 7,
+            });
         let fragment = ResourceHandle::new(None, fragment_module).erase();
         let desc = PipelineDesc {
             vertexModule: Some(&vertex),
@@ -304,6 +336,9 @@ mod tests {
         };
         let pipeline = Pipeline::new(&desc).expect("vertex pipeline");
         assert_eq!(&*pipeline.m_bindingMap, &expected_vertex);
+        assert_eq!(pipeline.m_textureSamplerPairs.len(), 2);
+        assert_eq!(pipeline.m_textureSamplerPairs[0].textureGroup, 0);
+        assert_eq!(pipeline.m_textureSamplerPairs[1].textureGroup, 4);
 
         let fragment_only = PipelineDesc {
             fragmentModule: Some(&fragment),
@@ -311,6 +346,8 @@ mod tests {
         };
         let pipeline = Pipeline::new(&fragment_only).expect("fragment pipeline");
         assert_eq!(&*pipeline.m_bindingMap, &expected_fragment);
+        assert_eq!(pipeline.m_textureSamplerPairs.len(), 1);
+        assert_eq!(pipeline.m_textureSamplerPairs[0].textureGroup, 4);
     }
 
     #[test]

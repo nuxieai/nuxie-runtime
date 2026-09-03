@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "2bbd8820878f38398b6ea6e722cb88310588c8e8"
+upstream_ref = "1db281b3e82baf850635fd7aa2092920a80b6a2c"
 expected_entries = 256
 expected_runtime = 211
 expected_scripted = 42
@@ -5052,7 +5052,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_modifier_test.cpp"
 provenance_test = "text opacity falloff with feathered and plain fills"
-producer_line = 99
+producer_line = 101
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

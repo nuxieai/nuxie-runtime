@@ -24,7 +24,10 @@ pub trait DeferredFrameSink {
     }
     fn begin_ore_frame(&mut self) {}
     fn end_ore_frame(&mut self) {}
-    fn after_ore_frame(&mut self) {}
+    fn after_ore_frame(&mut self) {
+        self.factory()
+            .with_factory(|factory| factory.scrub_state_after_ore());
+    }
     fn begin_canvas_content(
         &mut self,
         _canvas: RenderCanvasHandle,
@@ -155,8 +158,13 @@ impl DeferredReplayer {
                 if id == open.0 {
                     return open.1.clone();
                 }
-                open.1 = content_canvas.borrow_mut()(id)
-                    .and_then(|canvas| sink.borrow_mut().begin_canvas_content(canvas, clear_color));
+                open.1 = content_canvas.borrow_mut()(id).and_then(|canvas| {
+                    // A deferred canvas has no backing until the replaying
+                    // context gives it one, and this is the first operation
+                    // that renders into it.
+                    canvas.borrow_mut().ensure_backing();
+                    sink.borrow_mut().begin_canvas_content(canvas, clear_color)
+                });
                 open.0 = id;
                 open.1.clone()
             })),

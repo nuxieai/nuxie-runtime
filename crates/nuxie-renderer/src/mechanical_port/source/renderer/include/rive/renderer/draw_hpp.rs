@@ -25,8 +25,8 @@ pub(crate) use crate::draw::{
     build_interior_tessellation, build_stroke_tessellation_with_layout,
     clockwise_atomic_negate_coverage, feather_atlas_fill_direction, feather_atlas_scale,
     feather_pixel_bounds, feather_requires_atlas, path_coarse_area, path_pixel_bounds,
-    should_use_interior_tessellation, FeatherFillDirection, FillTessellation, InteriorTessellation,
-    StrokePreparationScratch, StrokeTessellation,
+    FeatherFillDirection, FillTessellation, InteriorTessellation, StrokePreparationScratch,
+    StrokeTessellation,
 };
 
 #[repr(i32)]
@@ -55,21 +55,6 @@ pub const FULLSCREEN_PIXEL_BOUNDS:
         right: 1 << 24,
         bottom: 1 << 24,
     };
-
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TriangulatorAxis {
-    horizontal,
-    vertical,
-    dontCare,
-}
-
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InteriorTriangulationOp {
-    countDataAndTriangulate = 0,
-    pushOuterCubicTessellationData = 1,
-}
 
 /// Executable getter surface consumed by the pinned `PathDraw::Make` and
 /// `PathDraw` constructor. Backends may keep their authored paint owner; this

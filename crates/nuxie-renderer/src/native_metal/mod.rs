@@ -417,6 +417,13 @@ impl NativeMetalFactory {
         self.capabilities
     }
 
+    #[cfg(test)]
+    pub(crate) fn use_deterministic_validation_thresholds(&mut self) {
+        self.mechanical
+            .borrow_mut()
+            .use_deterministic_validation_thresholds();
+    }
+
     /// Replaces the dimensions used by subsequently created frames. Resize is
     /// rejected while the persistent mechanical context has an active frame;
     /// completed generations are retired only after their source submission.

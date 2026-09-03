@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  RIVE_RUNTIME_REF: 2bbd8820878f38398b6ea6e722cb88310588c8e8
+  RIVE_RUNTIME_REF: 1db281b3e82baf850635fd7aa2092920a80b6a2c
   RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime
   RIVE_PREMAKE_TAG: v5.0.0-beta7
 

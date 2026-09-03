@@ -131,20 +131,22 @@ impl GmHost {
         Self::with_screen(clear, true)
     }
     pub fn with_screen(clear: u32, open: bool) -> Self {
-        let mut factory = PersistentFactory::new(
-            NativeMetalFactory::new_with_mode_and_context_options(
-                SIZE,
-                SIZE,
-                RenderMode::RasterOrdering,
-                NativeMetalContextOptions {
-                    // gmmain.cpp and goldens.cpp choose this before the Metal
-                    // window is created, so paired captures use the same shaders.
-                    shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
-                    ..NativeMetalContextOptions::default()
-                },
-            )
-            .expect("live Metal GM factory"),
-        );
+        let mut native_factory = NativeMetalFactory::new_with_mode_and_context_options(
+            SIZE,
+            SIZE,
+            RenderMode::RasterOrdering,
+            NativeMetalContextOptions {
+                // gmmain.cpp and goldens.cpp choose this before the Metal
+                // window is created, so paired captures use the same shaders.
+                shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+                ..NativeMetalContextOptions::default()
+            },
+        )
+        .expect("live Metal GM factory");
+        // Upstream gmmain.cpp and goldens.cpp disable time-budgeted
+        // triangulation for every comparison frame.
+        native_factory.use_deterministic_validation_thresholds();
+        let mut factory = PersistentFactory::new(native_factory);
         let ore = factory.ore().expect("live Metal ORE context");
         let frame = open.then(|| {
             Frame::Screen(
@@ -358,32 +360,29 @@ pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
             Some(&mut size)
         )
     );
-    let mut module = ctx
-        .makeShaderModule(&ShaderModuleDesc {
-            code,
-            codeSize: size,
-            bindingMapBytes: Some(binding_map),
-            bindingMapSize: binding_map.len() as u32,
-            shaderAssetId: 0x80000000 + id,
-            ..Default::default()
-        })
-        .unwrap_or_else(|| panic!("GM shader: {}", ctx.lastError()));
-    let pairs = asset
+    let pair_bytes = asset
         .texture_sampler_pairs()
         .iter()
-        .map(|p| nuxie_ore_metal::shader_module::TextureSamplerPair {
-            textureGroup: p.tex_group,
-            textureBinding: p.tex_binding,
-            samplerGroup: p.samp_group,
-            samplerBinding: p.samp_binding,
+        .flat_map(|pair| {
+            [
+                pair.tex_group,
+                pair.tex_binding,
+                pair.samp_group,
+                pair.samp_binding,
+            ]
         })
-        .collect();
-    // Module has not been cloned or published; this is the source helper's
-    // initialization-time m_textureSamplerPairs assignment.
-    unsafe {
-        module.replaceShaderTextureSamplerPairs(pairs);
-    }
-    module
+        .collect::<Vec<_>>();
+    ctx.makeShaderModule(&ShaderModuleDesc {
+        code,
+        codeSize: size,
+        bindingMapBytes: Some(binding_map),
+        bindingMapSize: binding_map.len() as u32,
+        texSamplerPairBytes: (!pair_bytes.is_empty()).then_some(pair_bytes.as_slice()),
+        texSamplerPairSize: pair_bytes.len() as u32,
+        shaderAssetId: 0x80000000 + id,
+        ..Default::default()
+    })
+    .unwrap_or_else(|| panic!("GM shader: {}", ctx.lastError()))
 }
 pub(super) fn triangle_pipeline(
     ctx: &mut dyn ContextApi,

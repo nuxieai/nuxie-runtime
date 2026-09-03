@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/render_context_impl.hpp.
-// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
+// Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
 
 // /*
 //  * Copyright 2023 Rive
@@ -243,20 +243,6 @@
 //     PlatformFeatures m_platformFeatures;
 // };
 // } // namespace rive::gpu
-//
-// #if defined(ORE_BACKEND_GL) && defined(RIVE_CANVAS)
-// namespace rive
-// {
-// class RiveRenderImage;
-// // Returns a Y-flipped companion of a GL canvas texture, or nullptr on
-// // non-GL backends. Hides the RenderContextGLImpl downcast so callers
-// // don't need GL headers.
-// rcp<RiveRenderImage> getCanvasImportMirrorGL(gpu::RenderContext*,
-//                                              gpu::Texture* sourceTex,
-//                                              uint32_t width,
-//                                              uint32_t height);
-// } // namespace rive
-// #endif
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -434,6 +420,10 @@ pub trait RenderContextImplContract {
 
     fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
         self.makeRenderCanvas(width, height)
+    }
+
+    unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
+        let _ = canvas;
     }
 
     #[cfg(any(
@@ -623,6 +613,8 @@ pub trait RenderContextImplContract {
         let _ = flushResources;
     }
 
+    fn scrubStateAfterOre(&mut self) {}
+
     // virtual void* makeCommandBuffer() { return nullptr; }
     fn makeCommandBuffer(&mut self) -> *mut c_void {
         core::ptr::null_mut()
@@ -635,35 +627,4 @@ pub trait RenderContextImplContract {
 
     // virtual double secondsNow() const = 0;
     fn secondsNow(&self) -> f64;
-}
-
-// #if defined(ORE_BACKEND_GL) && defined(RIVE_CANVAS)
-// namespace rive
-// {
-// class RiveRenderImage;
-// // Returns a Y-flipped companion of a GL canvas texture, or nullptr on
-// // non-GL backends. Hides the RenderContextGLImpl downcast so callers
-// // don't need GL headers.
-// rcp<RiveRenderImage> getCanvasImportMirrorGL(gpu::RenderContext*,
-//                                              gpu::Texture* sourceTex,
-//                                              uint32_t width,
-//                                              uint32_t height);
-// } // namespace rive
-// #endif
-//
-// The declaration-only free function intentionally remains source-commented;
-// its implementation belongs to the GL backend owner. ORE_BACKEND_GL maps
-// to the source-equivalent Cargo feature ore-gl.
-#[cfg(feature = "ore-gl")]
-pub trait CanvasImportMirrorGL {
-    // rcp<RiveRenderImage> getCanvasImportMirrorGL(gpu::RenderContext*,
-    //                                              gpu::Texture* sourceTex,
-    //                                              uint32_t width,
-    //                                              uint32_t height);
-    unsafe fn getCanvasImportMirrorGL(
-        renderContext: *mut RenderContext,
-        sourceTex: *mut Texture,
-        width: u32,
-        height: u32,
-    ) -> rcp<RiveRenderImage>;
 }

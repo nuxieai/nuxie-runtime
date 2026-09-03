@@ -7,7 +7,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_types.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -594,6 +594,9 @@ pub struct ShaderModuleDesc<'a> {
     pub bindingMapBytes: Option<&'a [u8]>,
     pub bindingMapSize: u32,
 
+    pub texSamplerPairBytes: Option<&'a [u8]>,
+    pub texSamplerPairSize: u32,
+
     // GL program-link fixup blob from the RSTB (target IDs 14/15, one per
     // GLSL stage). Consumed by `oreGLFixupProgramBindings` at
     // `glLinkProgram` time to call `glUniformBlockBinding` / `glUniform1i`
@@ -621,6 +624,11 @@ impl ShaderModuleDesc<'_> {
         checked_prefix(self.bindingMapBytes, self.bindingMapSize).map(|_| self.bindingMapSize)
     }
 
+    pub fn texSamplerPairSize(&self) -> Result<u32, DescriptorSizeError> {
+        checked_prefix(self.texSamplerPairBytes, self.texSamplerPairSize)
+            .map(|_| self.texSamplerPairSize)
+    }
+
     pub fn glFixupSize(&self) -> Result<u32, DescriptorSizeError> {
         checked_prefix(self.glFixupBytes, self.glFixupSize).map(|_| self.glFixupSize)
     }
@@ -639,6 +647,8 @@ impl Default for ShaderModuleDesc<'_> {
             hlslEntryPoint: None,
             bindingMapBytes: None,
             bindingMapSize: 0,
+            texSamplerPairBytes: None,
+            texSamplerPairSize: 0,
             glFixupBytes: None,
             glFixupSize: 0,
             shaderAssetId: 0,
@@ -1481,6 +1491,8 @@ pub mod raw_abi {
         pub hlslEntryPoint: *const c_char,
         pub bindingMapBytes: *const u8,
         pub bindingMapSize: u32,
+        pub texSamplerPairBytes: *const u8,
+        pub texSamplerPairSize: u32,
         pub glFixupBytes: *const u8,
         pub glFixupSize: u32,
         pub shaderAssetId: u32,
@@ -1501,6 +1513,10 @@ pub mod raw_abi {
                     optional_slice(self.bindingMapBytes, self.bindingMapSize)?
                 },
                 bindingMapSize: self.bindingMapSize,
+                texSamplerPairBytes: unsafe {
+                    optional_slice(self.texSamplerPairBytes, self.texSamplerPairSize)?
+                },
+                texSamplerPairSize: self.texSamplerPairSize,
                 glFixupBytes: unsafe { optional_slice(self.glFixupBytes, self.glFixupSize)? },
                 glFixupSize: self.glFixupSize,
                 shaderAssetId: self.shaderAssetId,

@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use luaur_rt::{AnyUserData, Error, Lua, Result, UserData, UserDataFields};
-use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap, RenderImage};
+use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap, RenderCanvasHandle, RenderImage};
 use nuxie_runtime::{RuntimeImageAssetOwners, ScriptImage, ScriptImageAssets};
 
 #[derive(Clone, Default)]
@@ -36,6 +36,9 @@ impl ScriptedImageAssetOwners {
 ///
 pub(crate) struct ScriptedImage {
     image: Rc<dyn RenderImage>,
+    // Set when this image is a canvas's backing, so Image:view() imports
+    // through the backend's canvas sampling wrap rather than the raw texture.
+    source_canvas: Option<RenderCanvasHandle>,
     cached_gpu_view: RefCell<Option<nuxie_ore_metal::gpu_resource::AnyResourceHandle>>,
 }
 
@@ -45,6 +48,7 @@ impl ScriptedImage {
         let image = asset_owners.get(identity.asset_global_id())?;
         Some(Self {
             image,
+            source_canvas: None,
             cached_gpu_view: RefCell::new(None),
         })
     }
@@ -58,6 +62,16 @@ impl ScriptedImage {
     pub(crate) fn from_render_image_rc(image: Rc<dyn RenderImage>) -> Self {
         Self {
             image,
+            source_canvas: None,
+            cached_gpu_view: RefCell::new(None),
+        }
+    }
+
+    pub(crate) fn from_render_canvas(canvas: RenderCanvasHandle) -> Self {
+        let image = canvas.borrow().render_image();
+        Self {
+            image,
+            source_canvas: Some(canvas),
             cached_gpu_view: RefCell::new(None),
         }
     }
@@ -84,7 +98,12 @@ impl UserData for ScriptedImage {
             this.with_render_image(RenderImage::height)
         });
         fields.add_field_method_get("view", |lua, this| {
-            crate::gpu_canvas::ore::image_view(lua, this.render_image()?, &this.cached_gpu_view)
+            crate::gpu_canvas::ore::image_view(
+                lua,
+                this.render_image()?,
+                this.source_canvas.as_ref(),
+                &this.cached_gpu_view,
+            )
         });
     }
 }
@@ -157,7 +176,7 @@ mod tests {
         RenderPath, RenderShader,
     };
 
-    use crate::vm::ScriptVm;
+    use crate::vm::{RoutedTestFactory, ScriptVm};
 
     #[derive(Clone, Default)]
     struct TestImage(Rc<()>);
@@ -251,15 +270,18 @@ mod tests {
     #[test]
     fn image_members_include_a_cached_renderer_backed_gpu_view() {
         let vm = ScriptVm::new();
-        let mut factory = PersistentFactory::new(ImageViewFactory(RecordingFactory::new()));
-        vm.install_render_factory(&mut factory).unwrap();
-        vm.install_rive_globals().unwrap();
         let mut recorder =
             nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None);
         recorder.setCanvasRegistry(Some(Rc::new(RefCell::new(
             nuxie_renderer::deferred::cmd::foreign_image_registry::ForeignImageRegistry::default(),
         ))));
-        vm.set_ore_context(Some(Rc::new(RefCell::new(recorder))));
+        let mut factory = PersistentFactory::new(RoutedTestFactory {
+            inner: ImageViewFactory(RecordingFactory::new()),
+            ore: Some(Rc::new(RefCell::new(recorder))),
+            canvas_host: None,
+        });
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
         let lua = vm.lua();
         let image = lua
             .create_userdata(ScriptedImage::from_render_image(Box::new(

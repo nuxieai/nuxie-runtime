@@ -7,14 +7,19 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `2bbd8820878f38398b6ea6e722cb88310588c8e8`
+- LAST_SYNCED_SHA: `1db281b3e82baf850635fd7aa2092920a80b6a2c`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
-  Latest accounted change: upstream's Rive 7.3 layout translation, anchor,
-  constraint, scroll virtualization-buffer, and Luau 0.733 update was ported
+  The preceding accounted change, upstream's Rive 7.3 layout translation,
+  anchor, constraint, scroll virtualization-buffer, and Luau 0.733 update, was ported
   mechanically and reviewed as one source commit. Upstream:
   `2bbd8820878f38398b6ea6e722cb88310588c8e8`. Work:
   [UNIV-1880](https://universe.basis.dev/issue/UNIV-1880).
+
+| Upstream SHA | Applicable translated slices | Work |
+| --- | --- | --- |
+| `1db281b3e82baf850635fd7aa2092920a80b6a2c` | Command-queue view-model clearing and reference confirmations; scripting import-factory routing; IK-over-distance constraint behavior and fixture; shape-paint clipping; triangulation caching and interior-budget control; ORE sampler/anisotropy, deferred shader replay, canvas import, backend shader, and directly corresponding runtime/renderer tests. Android test-host and deployment-harness changes are outside this repository. | [UNIV-2402](https://universe.basis.dev/issue/UNIV-2402), [UNIV-2403](https://universe.basis.dev/issue/UNIV-2403), [UNIV-2404](https://universe.basis.dev/issue/UNIV-2404), [UNIV-2406](https://universe.basis.dev/issue/UNIV-2406), [UNIV-2407](https://universe.basis.dev/issue/UNIV-2407), [UNIV-2907](https://universe.basis.dev/issue/UNIV-2907), [UNIV-2908](https://universe.basis.dev/issue/UNIV-2908) |
+
 - The preceding upstream deferred host/player refactor is a
   source-based **SKIP** for this Rust runtime. Its complete diff only adds or
   changes C++ test/player harness and deferred-host files; it changes no

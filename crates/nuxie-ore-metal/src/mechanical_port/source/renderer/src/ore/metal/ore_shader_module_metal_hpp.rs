@@ -71,9 +71,6 @@ unsafe impl GpuResourcePayload for ShaderModuleMetal {
     fn shader_module_base(&self) -> Option<&ShaderModule> {
         Some(&self.base)
     }
-    fn shader_module_base_mut(&mut self) -> Option<&mut ShaderModule> {
-        Some(&mut self.base)
-    }
     fn gpu_resource(&self) -> &GPUResource {
         &self.base.base
     }

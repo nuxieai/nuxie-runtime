@@ -95,6 +95,91 @@ pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub use luaur_rt::{Error, Result};
 pub use resource_limits::{ScriptResourceGuard, ScriptResourceLimit};
 
+#[cfg(test)]
+pub(crate) struct RoutedTestFactory<F> {
+    pub inner: F,
+    pub ore: Option<nuxie_render_api::OreContextHandle>,
+    pub canvas_host: Option<nuxie_render_api::DeferredCanvasHostHandle>,
+}
+
+#[cfg(test)]
+impl<F: RenderFactory> RenderFactory for RoutedTestFactory<F> {
+    fn is_render_context(&self) -> bool {
+        self.inner.is_render_context()
+    }
+    fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+        self.ore.clone().or_else(|| self.inner.ore())
+    }
+    fn deferred_canvas_host(&mut self) -> Option<nuxie_render_api::DeferredCanvasHostHandle> {
+        self.canvas_host
+            .clone()
+            .or_else(|| self.inner.deferred_canvas_host())
+    }
+    fn make_render_buffer(
+        &mut self,
+        kind: nuxie_render_api::RenderBufferType,
+        flags: nuxie_render_api::RenderBufferFlags,
+        size: usize,
+    ) -> Box<dyn nuxie_render_api::RenderBuffer> {
+        self.inner.make_render_buffer(kind, flags, size)
+    }
+    fn make_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[nuxie_render_api::ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn nuxie_render_api::RenderShader> {
+        self.inner
+            .make_linear_gradient(sx, sy, ex, ey, colors, stops)
+    }
+    fn make_radial_gradient(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: &[nuxie_render_api::ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn nuxie_render_api::RenderShader> {
+        self.inner
+            .make_radial_gradient(cx, cy, radius, colors, stops)
+    }
+    fn make_render_path(
+        &mut self,
+        path: nuxie_render_api::RawPath,
+        rule: nuxie_render_api::FillRule,
+    ) -> Box<dyn nuxie_render_api::RenderPath> {
+        self.inner.make_render_path(path, rule)
+    }
+    fn make_empty_render_path(&mut self) -> Box<dyn nuxie_render_api::RenderPath> {
+        self.inner.make_empty_render_path()
+    }
+    fn make_render_paint(&mut self) -> Box<dyn nuxie_render_api::RenderPaint> {
+        self.inner.make_render_paint()
+    }
+    fn decode_image(
+        &mut self,
+        bytes: &[u8],
+    ) -> std::result::Result<
+        Box<dyn nuxie_render_api::RenderImage>,
+        nuxie_render_api::ImageDecodeError,
+    > {
+        self.inner.decode_image(bytes)
+    }
+    fn make_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> std::result::Result<
+        Box<dyn nuxie_render_api::RenderCanvas>,
+        nuxie_render_api::RenderCanvasError,
+    > {
+        self.inner.make_render_canvas(width, height)
+    }
+}
+
 /// Registry key for the require cache (C++: `registeredCacheTableKey` in
 /// `src/lua/rive_lua_libs.cpp`).
 const MODULE_CACHE_KEY: &str = "_MODULES";
@@ -1245,20 +1330,8 @@ impl ScriptVm {
     pub fn render_context_is_late_bound(&self) -> bool {
         self.renderer_bindings.render_context_is_late_bound()
     }
-    pub fn set_ore_context(&self, context: Option<nuxie_render_api::OreContextHandle>) {
-        self.renderer_bindings.set_ore_context(context);
-    }
     pub fn ore_context(&self) -> Option<nuxie_render_api::OreContextHandle> {
         self.renderer_bindings.ore_context()
-    }
-    pub fn ore_context_override(&self) -> Option<nuxie_render_api::OreContextHandle> {
-        self.renderer_bindings.ore_context_override()
-    }
-    pub fn set_deferred_canvas_host(
-        &self,
-        host: Option<nuxie_render_api::DeferredCanvasHostHandle>,
-    ) {
-        self.renderer_bindings.set_deferred_canvas_host(host);
     }
     pub fn deferred_canvas_host(&self) -> Option<nuxie_render_api::DeferredCanvasHostHandle> {
         self.renderer_bindings.deferred_canvas_host()

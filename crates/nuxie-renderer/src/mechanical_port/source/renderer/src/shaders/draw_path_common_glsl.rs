@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path_common.glsl.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1db281b3e82baf850635fd7aa2092920a80b6a2c";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "3a6e72e80eec81b2eb467134f62188e2a86f7debfb0798a8c4ed5873beb7e86e";
+    "63553caaec313a5f03fc284835c15e02506ff1380a4750ae7414a3c9d46a562e";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 914;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 39516;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 39511;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -783,9 +783,9 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
         if (vertexType == FAN_MIDPOINT_VERTEX)
             origin = midpoint;
 
-        // If we're actually just drawing a triangle, throw away the entire
-        // patch except a single fan triangle.
-        if ((contourIDWithFlags & RETROFITTED_TRIANGLE_CONTOUR_FLAG) != 0u &&
+        // If we're actually drawing a triangle strip, throw away the entire
+        // patch except the fan triangles.
+        if ((contourIDWithFlags & RETROFIT_TRI_STRIP_CONTOUR_FLAG) != 0u &&
             vertexType != FAN_VERTEX)
         {
             return false;

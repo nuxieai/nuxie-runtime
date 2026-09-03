@@ -3176,7 +3176,7 @@ mod tests {
     };
     #[cfg(feature = "compiler")]
     use super::{Rc, RefCell, RendererBindings, ore};
-    use crate::vm::ScriptVm;
+    use crate::vm::{RoutedTestFactory, ScriptVm};
 
     fn compile_source(source: &str) -> Vec<u8> {
         use luaur_compiler::functions::luau_compile::luau_compile;
@@ -3206,12 +3206,17 @@ mod tests {
     #[cfg(feature = "compiler")]
     fn begin_render_pass_requires_a_recording_context() {
         let vm = ScriptVm::new();
+        let mut factory = nuxie_render_api::PersistentFactory::new(RoutedTestFactory {
+            inner: nuxie_render_api::RecordingFactory::new(),
+            ore: Some(Rc::new(RefCell::new(
+                crate::vm::upstream_scripting_gpu_features::FakeDeviceContext::new(
+                    nuxie_ore_metal::types::Features::default(),
+                ),
+            ))),
+            canvas_host: None,
+        });
+        vm.install_render_factory(&mut factory).unwrap();
         vm.install_rive_globals().unwrap();
-        vm.set_ore_context(Some(Rc::new(RefCell::new(
-            crate::vm::upstream_scripting_gpu_features::FakeDeviceContext::new(
-                nuxie_ore_metal::types::Features::default(),
-            ),
-        ))));
         let canvas =
             ore::Canvas::create(vm.lua(), RendererBindings::for_lua(vm.lua()).unwrap(), 0, 0)
                 .unwrap();

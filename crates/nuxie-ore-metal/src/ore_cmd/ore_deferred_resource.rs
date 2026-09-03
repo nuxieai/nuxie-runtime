@@ -180,9 +180,6 @@ unsafe impl GpuResourcePayload for DeferredShaderModule {
     fn shader_module_base(&self) -> Option<&ShaderModule> {
         Some(&self.base)
     }
-    fn shader_module_base_mut(&mut self) -> Option<&mut ShaderModule> {
-        Some(&mut self.base)
-    }
 }
 impl DeferredBuffer {
     pub fn new(

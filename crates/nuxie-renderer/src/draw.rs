@@ -1,18 +1,23 @@
 //! CPU path preparation translated from `renderer/src/draw.cpp`.
 
 use crate::gpu::{
-    AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan, TriangleVertex,
+    AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan,
     BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
     EMULATED_STROKE_CAP_CONTOUR_FLAG, FEATHER_JOIN_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS,
     MIDPOINT_FAN_PATCH_SEGMENT_SPAN, MITER_CLIP_JOIN_CONTOUR_FLAG, MITER_REVERT_JOIN_CONTOUR_FLAG,
-    NEGATE_PATH_FILL_COVERAGE_FLAG, OUTER_CURVE_PATCH_SEGMENT_SPAN, PARAMETRIC_PRECISION,
-    POLAR_PRECISION, RETROFITTED_TRIANGLE_CONTOUR_FLAG, ROUND_JOIN_CONTOUR_FLAG,
+    NEGATE_PATH_FILL_COVERAGE_FLAG, OUTER_CUBIC_PATCH_JOIN_SEGMENT_COUNT,
+    OUTER_CUBIC_PATCH_SEGMENT_SPAN, OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN,
+    PARAMETRIC_PRECISION, POLAR_PRECISION, RETROFIT_TRI_STRIP_CONTOUR_FLAG,
+    ROUND_JOIN_CONTOUR_FLAG,
     TESS_TEXTURE_WIDTH,
 };
-use crate::gr_triangulator::{InnerFanTriangulator, SweepDirection, WindingFaces};
+use crate::gr_triangulator::InnerFanTriangulator;
+#[cfg(test)]
+use crate::{gpu::TriangleVertex, gr_triangulator::WindingFaces};
 use bytemuck::Zeroable;
 use nuxie_render_api::{Aabb, FillRule, Mat2D, PathVerb, RawPath, StrokeCap, StrokeJoin, Vec2D};
 use smallvec::SmallVec;
+use std::rc::Rc;
 
 #[cfg(test)]
 #[derive(Debug, Clone, PartialEq)]
@@ -53,7 +58,10 @@ pub(crate) struct InteriorTessellation {
     pub spans: Vec<TessVertexSpan>,
     pub path: PathData,
     pub contours: Vec<ContourData>,
-    pub triangles: Vec<TriangleVertex>,
+    pub triangulator: Rc<InnerFanTriangulator>,
+    pub triangulator_fill_rule: FillRule,
+    pub triangulator_reverse_triangles: bool,
+    pub triangulator_negate_winding: bool,
     pub max_triangle_vertex_count: usize,
     pub base_instance: u32,
     pub instance_count: u32,
@@ -67,7 +75,10 @@ impl Clone for InteriorTessellation {
             spans: self.spans.clone(),
             path: self.path,
             contours: self.contours.clone(),
-            triangles: self.triangles.clone(),
+            triangulator: self.triangulator.clone(),
+            triangulator_fill_rule: self.triangulator_fill_rule,
+            triangulator_reverse_triangles: self.triangulator_reverse_triangles,
+            triangulator_negate_winding: self.triangulator_negate_winding,
             max_triangle_vertex_count: self.max_triangle_vertex_count,
             base_instance: self.base_instance,
             instance_count: self.instance_count,
@@ -85,7 +96,14 @@ impl InteriorTessellation {
     ) {
         #[cfg(test)]
         INTERIOR_TRIANGLE_VISIT_COUNT.with(|count| count.set(count.get() + 1));
-        for triangle in self.triangles.chunks_exact(3) {
+        let triangles = self.triangulator.triangles(
+            path_id,
+            self.triangulator_fill_rule,
+            self.triangulator_reverse_triangles,
+            self.triangulator_negate_winding,
+            faces,
+        );
+        for triangle in triangles.chunks_exact(3) {
             let weight = i16::try_from(triangle[0].weight_path_id >> 16)
                 .expect("interior triangle winding fits i16");
             debug_assert!(triangle
@@ -122,10 +140,7 @@ pub(crate) fn feather_atlas_fill_direction(
     fill_rule: FillRule,
     is_stroke: bool,
 ) -> FeatherFillDirection {
-    if !is_stroke
-        && fill_rule == FillRule::Clockwise
-        && mat2d_determinant(transform) < 0.0
-    {
+    if !is_stroke && fill_rule == FillRule::Clockwise && mat2d_determinant(transform) < 0.0 {
         FeatherFillDirection::Reverse
     } else {
         FeatherFillDirection::Forward
@@ -1244,9 +1259,8 @@ pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool
     // `(uint32_t)(root - epsilon) < one_minus_2_epsilon`, which includes the
     // lower endpoint. The final quadratic-root check below is deliberately
     // strict at both endpoints.
-    let inside_bit_range = |root: f32| {
-        (root - TESS_EPSILON).to_bits() < (1.0 - 2.0 * TESS_EPSILON).to_bits()
-    };
+    let inside_bit_range =
+        |root: f32| (root - TESS_EPSILON).to_bits() < (1.0 - 2.0 * TESS_EPSILON).to_bits();
     if discriminant_over_4 < -cusp_threshold {
         let root = c / b_over_minus_2;
         return (
@@ -1278,8 +1292,7 @@ pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool
         a = dot(tangent0, a_vector);
         b_over_minus_2 = -dot(tangent0, b_vector);
         c = dot(tangent0, c_vector);
-        discriminant_over_4 =
-            source_multiply_add(b_over_minus_2, b_over_minus_2, -a * c).max(0.0);
+        discriminant_over_4 = source_multiply_add(b_over_minus_2, b_over_minus_2, -a * c).max(0.0);
     }
     let q = discriminant_over_4.sqrt().copysign(b_over_minus_2) + b_over_minus_2;
     let inside = |root: f32| root > TESS_EPSILON && root < 1.0 - TESS_EPSILON;
@@ -1414,11 +1427,7 @@ fn max_matrix_scale(transform: Mat2D) -> f32 {
         a.max(c)
     } else {
         let a_minus_c = a - c;
-        (a + c) * 0.5
-            + a_minus_c
-                .mul_add(a_minus_c, 4.0 * b_squared)
-                .sqrt()
-                * 0.5
+        (a + c) * 0.5 + a_minus_c.mul_add(a_minus_c, 4.0 * b_squared).sqrt() * 0.5
     };
     if result.is_finite() {
         result.max(0.0).sqrt()
@@ -1479,7 +1488,12 @@ mod fast_acos_tests {
         const MAX_ERROR: f32 = 0.016_755_2;
         const MATH_EPSILON: f32 = 1.0 / 4096.0;
 
-        let boundaries = [fast_acos(-1.0), fast_acos(0.0), fast_acos(1.0), fast_acos(0.0)];
+        let boundaries = [
+            fast_acos(-1.0),
+            fast_acos(0.0),
+            fast_acos(1.0),
+            fast_acos(0.0),
+        ];
         assert!(((-1.0_f32).acos() - boundaries[0]).abs() <= MAX_ERROR);
         assert!((0.0_f32.acos() - boundaries[1]).abs() <= MAX_ERROR);
         assert!((1.0_f32.acos() - boundaries[2]).abs() <= MAX_ERROR);
@@ -1501,8 +1515,7 @@ mod fast_acos_tests {
                 let g_prime = (4.0 * d * xx + 2.0 * c) * x[lane];
                 let gg = g * g;
                 let q = (1.0 - xx).sqrt();
-                derivative[lane] =
-                    (f_prime * g - f * g_prime) / gg + 1.0 / q;
+                derivative[lane] = (f_prime * g - f * g_prime) / gg + 1.0 / q;
                 let f_second = 6.0 * b * x[lane];
                 let g_second = 12.0 * d * xx + 2.0 * c;
                 second_derivative[lane] = ((f_second * g - f * g_second) * g
@@ -1513,8 +1526,7 @@ mod fast_acos_tests {
                 assert!((x[lane].acos() - fast_acos_x[lane]).abs() <= MAX_ERROR);
             }
             for lane in 0..8 {
-                x[lane] =
-                    (x[lane] - derivative[lane] / second_derivative[lane]).clamp(-0.99, 0.99);
+                x[lane] = (x[lane] - derivative[lane] / second_derivative[lane]).clamp(-0.99, 0.99);
             }
         }
 
@@ -1567,23 +1579,6 @@ fn dot(a: Vec2D, b: Vec2D) -> f32 {
 
 fn vector_cross(a: Vec2D, b: Vec2D) -> f32 {
     a.x.mul_add(b.y, -(a.y * b.x))
-}
-
-pub(crate) fn should_use_interior_tessellation(path: &RawPath, transform: Mat2D) -> bool {
-    if path.verbs().len() >= 1000 || path.points().is_empty() {
-        return false;
-    }
-    let mut min = path.points()[0];
-    let mut max = min;
-    for point in &path.points()[1..] {
-        min.x = min.x.min(point.x);
-        min.y = min.y.min(point.y);
-        max.x = max.x.max(point.x);
-        max.y = max.y.max(point.y);
-    }
-    let transformed_area =
-        mat2d_determinant(transform).abs() * (max.x - min.x) * (max.y - min.y);
-    transformed_area > 512.0 * 512.0
 }
 
 pub(crate) fn path_coarse_area(path: &RawPath) -> f32 {
@@ -1700,6 +1695,20 @@ fn coarse_area_cross(a: Vec2D, b: Vec2D) -> f32 {
     a.x.mul_add(b.y, -(a.y * b.x))
 }
 
+fn retrofit_cubic_tri_strip(points: &[Vec2D], point_count: usize) -> ([Vec2D; 4], Vec2D) {
+    assert!((3..=5).contains(&point_count));
+    assert!(points.len() >= point_count);
+    (
+        [
+            points[0],
+            points[1],
+            points[3.min(point_count - 1)],
+            points[2],
+        ],
+        points[4.min(point_count - 1)],
+    )
+}
+
 fn coarse_cubic_segment_count(points: [Vec2D; 4]) -> u32 {
     let second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
         let x = (-2.0f32).mul_add(b.x, a.x) + c.x;
@@ -1726,32 +1735,51 @@ pub(crate) fn build_interior_tessellation(
     transform: Mat2D,
     fill_rule: FillRule,
     clockwise_override: bool,
+    triangulator: Rc<InnerFanTriangulator>,
 ) -> Option<InteriorTessellation> {
     #[cfg(test)]
     INTERIOR_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
     #[derive(Clone, Copy)]
     enum OuterPatch {
         Cubic([Vec2D; 4]),
-        Glue([Vec2D; 3]),
+        TriStrip {
+            points: [Vec2D; 5],
+            point_count: usize,
+        },
     }
 
-    fn append_middle_out_glue(
+    fn subdivision_endpoint(subdivisions: &[[Vec2D; 4]], index: usize) -> Vec2D {
+        if index == subdivisions.len() {
+            subdivisions.last().unwrap()[3]
+        } else {
+            subdivisions[index][0]
+        }
+    }
+
+    fn append_glue_triangle_strips(
         subdivisions: &[[Vec2D; 4]],
-        first: usize,
-        last: usize,
         patches: &mut Vec<OuterPatch>,
     ) {
-        if last - first < 2 {
-            return;
+        let num_subdivisions = subdivisions.len();
+        for a in (1..num_subdivisions).step_by(3) {
+            let segments_remaining = num_subdivisions - a;
+            let b = if segments_remaining == 1 { a } else { a + 1 };
+            let mut points = [Vec2D::new(0.0, 0.0); 5];
+            let mut point_count = 0;
+            for endpoint_index in [Some(b), Some(b + 1),
+                (segments_remaining > 1).then_some(b - 1),
+                (segments_remaining > 2).then_some(b + 2), Some(0)]
+                .into_iter()
+                .flatten()
+            {
+                points[point_count] = subdivision_endpoint(subdivisions, endpoint_index);
+                point_count += 1;
+            }
+            patches.push(OuterPatch::TriStrip {
+                points,
+                point_count,
+            });
         }
-        let middle = (first + last) / 2;
-        patches.push(OuterPatch::Glue([
-            subdivisions[first][0],
-            subdivisions[middle][0],
-            subdivisions[last - 1][3],
-        ]));
-        append_middle_out_glue(subdivisions, first, middle, patches);
-        append_middle_out_glue(subdivisions, middle, last, patches);
     }
 
     let cubic_contours = interior_cubic_contours(path);
@@ -1765,23 +1793,10 @@ pub(crate) fn build_interior_tessellation(
             let subdivision_count = outer_cubic_subdivision_count(curve, transform);
             let subdivisions = subdivide_cubic(curve, subdivision_count);
             patches.extend(subdivisions.iter().copied().map(OuterPatch::Cubic));
-            append_middle_out_glue(&subdivisions, 0, subdivisions.len(), &mut patches);
+            append_glue_triangle_strips(&subdivisions, &mut patches);
         }
         outer_patch_contours.push(patches);
     }
-    let mut min = path.points()[0];
-    let mut max = min;
-    for point in &path.points()[1..] {
-        min.x = min.x.min(point.x);
-        min.y = min.y.min(point.y);
-        max.x = max.x.max(point.x);
-        max.y = max.y.max(point.y);
-    }
-    let direction = if max.x - min.x > max.y - min.y {
-        SweepDirection::Horizontal
-    } else {
-        SweepDirection::Vertical
-    };
     let determinant = mat2d_determinant(transform);
     let coarse_area = path_coarse_area(path);
     let negate_coverage = clockwise_atomic_negate_coverage_from_area(
@@ -1795,22 +1810,19 @@ pub(crate) fn build_interior_tessellation(
     } else {
         fill_rule
     };
-    // The inner fan consumes the authored RawPath. Outer-curve subdivision
-    // points are only for the outer patches; feeding them to the triangulator
-    // changes the polygon and drops move-only contours.
-    let mut triangulator =
-        InnerFanTriangulator::new(path, transform, direction, effective_fill_rule);
-    if (determinant < 0.0) != negate_coverage {
-        triangulator.negate_winding();
-    }
-    let triangles = triangulator.triangles(1, WindingFaces::All);
-    // Source sizes the triangle mapping for the authored effective fill rule.
-    let max_triangle_vertex_count = triangulator.max_vertex_count();
+    let triangulator_fill_rule = if effective_fill_rule == FillRule::EvenOdd {
+        FillRule::EvenOdd
+    } else {
+        FillRule::NonZero
+    };
+    let triangulator_reverse_triangles = determinant < 0.0;
+    let triangulator_negate_winding = triangulator_reverse_triangles != negate_coverage;
+    let max_triangle_vertex_count = triangulator.max_vertex_count(triangulator_fill_rule);
     let grout = triangulator.grout_triangles().to_vec();
-    let base = OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
+    let base = OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32;
     let outer_patch_count = outer_patch_contours.iter().map(Vec::len).sum::<usize>();
     let patch_count = outer_patch_count + grout.len();
-    let half_vertex_count = (patch_count * OUTER_CURVE_PATCH_SEGMENT_SPAN) as i32;
+    let half_vertex_count = (patch_count * OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN) as i32;
     let mut spans = Vec::with_capacity(patch_count + 1);
     push_padding_span(&mut spans, 0, base);
     let mut contours = Vec::with_capacity(cubic_contours.len());
@@ -1827,26 +1839,29 @@ pub(crate) fn build_interior_tessellation(
             (forward_base + curve_offset) as u32,
         ));
         for patch in patches {
-            let (points, flags) = match patch {
+            let (points, join_tangent, flags) = match patch {
                 OuterPatch::Cubic(curve) => (
-                    (*curve).map(|point| [point.x, point.y]),
+                    *curve,
+                    Vec2D::new(0.0, 0.0),
                     CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
                 ),
-                OuterPatch::Glue(triangle) => (
-                    [triangle[0], triangle[1], Vec2D::new(0.0, 0.0), triangle[2]]
-                        .map(|point| [point.x, point.y]),
-                    RETROFITTED_TRIANGLE_CONTOUR_FLAG,
-                ),
+                OuterPatch::TriStrip {
+                    points,
+                    point_count,
+                } => {
+                    let (cubic, join_tangent) = retrofit_cubic_tri_strip(points, *point_count);
+                    (cubic, join_tangent, RETROFIT_TRI_STRIP_CONTOUR_FLAG)
+                }
             };
             let span = TessVertexSpan::without_reflection(
-                points,
-                [0.0, 0.0],
+                points.map(|point| [point.x, point.y]),
+                [join_tangent.x, join_tangent.y],
                 0.0,
                 0,
-                OUTER_CURVE_PATCH_SEGMENT_SPAN as i32,
-                16,
+                OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32,
+                OUTER_CUBIC_PATCH_SEGMENT_SPAN as u32,
                 1,
-                1,
+                OUTER_CUBIC_PATCH_JOIN_SEGMENT_COUNT as u32,
                 ((contour_index as u32 + 1) & CONTOUR_ID_MASK)
                     | flags
                     | u32::from(negate_coverage) * NEGATE_PATH_FILL_COVERAGE_FLAG,
@@ -1855,40 +1870,40 @@ pub(crate) fn build_interior_tessellation(
                 &mut spans,
                 span,
                 base + curve_offset,
-                base + curve_offset + OUTER_CURVE_PATCH_SEGMENT_SPAN as i32,
+                base + curve_offset + OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32,
                 base,
                 half_vertex_count,
                 negate_coverage,
             );
-            curve_offset += OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
+            curve_offset += OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32;
         }
     }
     let grout_contour_id = (cubic_contours.len() as u32) & CONTOUR_ID_MASK;
     for triangle in &grout {
-        let cubic = [triangle[0], triangle[1], Vec2D::new(0.0, 0.0), triangle[2]];
+        let (cubic, join_tangent) = retrofit_cubic_tri_strip(triangle, 3);
         let span = TessVertexSpan::without_reflection(
             cubic.map(|point| [point.x, point.y]),
-            [0.0, 0.0],
+            [join_tangent.x, join_tangent.y],
             0.0,
             0,
-            OUTER_CURVE_PATCH_SEGMENT_SPAN as i32,
-            16,
+            OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32,
+            OUTER_CUBIC_PATCH_SEGMENT_SPAN as u32,
             1,
-            1,
+            OUTER_CUBIC_PATCH_JOIN_SEGMENT_COUNT as u32,
             grout_contour_id
-                | RETROFITTED_TRIANGLE_CONTOUR_FLAG
+                | RETROFIT_TRI_STRIP_CONTOUR_FLAG
                 | u32::from(negate_coverage) * NEGATE_PATH_FILL_COVERAGE_FLAG,
         );
         push_double_sided_tessellation_spans(
             &mut spans,
             span,
             base + curve_offset,
-            base + curve_offset + OUTER_CURVE_PATCH_SEGMENT_SPAN as i32,
+            base + curve_offset + OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32,
             base,
             half_vertex_count,
             negate_coverage,
         );
-        curve_offset += OUTER_CURVE_PATCH_SEGMENT_SPAN as i32;
+        curve_offset += OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32;
     }
     push_final_padding(&mut spans, base + half_vertex_count * 2);
     Some(InteriorTessellation {
@@ -1902,7 +1917,10 @@ pub(crate) fn build_interior_tessellation(
             CoverageBufferRange::zeroed(),
         ),
         contours,
-        triangles,
+        triangulator,
+        triangulator_fill_rule,
+        triangulator_reverse_triangles,
+        triangulator_negate_winding,
         max_triangle_vertex_count,
         base_instance: 1,
         instance_count: (patch_count * 2) as u32,
@@ -2553,7 +2571,10 @@ fn push_final_padding(spans: &mut Vec<TessVertexSpan>, location: i32) {
 }
 
 fn push_midpoint_tail_padding(spans: &mut Vec<TessVertexSpan>, location: i32) {
-    let outer_curve_start = align_up(location, OUTER_CURVE_PATCH_SEGMENT_SPAN as i32);
+    let outer_curve_start = align_up(
+        location,
+        OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32,
+    );
     if outer_curve_start != location {
         push_forward_tessellation_spans(
             spans,
@@ -2770,7 +2791,11 @@ fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D)
     };
     let first = transformed_second_difference(points[0], points[1], points[2]);
     let second = transformed_second_difference(points[1], points[2], points[3]);
-    if first < second { second } else { first }
+    if first < second {
+        second
+    } else {
+        first
+    }
 }
 
 #[cfg(test)]
@@ -2867,6 +2892,16 @@ fn lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn build_test_interior(
+        path: &RawPath,
+        transform: Mat2D,
+        fill_rule: FillRule,
+        clockwise_override: bool,
+    ) -> Option<InteriorTessellation> {
+        let triangulator = Rc::new(InnerFanTriangulator::new(path, path.bounds()?));
+        build_interior_tessellation(path, transform, fill_rule, clockwise_override, triangulator)
+    }
 
     fn determinant_cancellation_matrix() -> Mat2D {
         Mat2D([
@@ -3212,8 +3247,7 @@ mod tests {
         ]);
 
         let max_length_squared = max_transformed_cubic_second_difference(points, transform);
-        let length_term_squared =
-            (9.0 / 16.0) * (PARAMETRIC_PRECISION as f32).powi(2);
+        let length_term_squared = (9.0 / 16.0) * (PARAMETRIC_PRECISION as f32).powi(2);
         let wang = (max_length_squared * length_term_squared).sqrt().sqrt();
         assert_eq!(wang.to_bits(), 0x4110_0000);
         assert_eq!(
@@ -3265,7 +3299,10 @@ mod tests {
 
         let cubic = [Vec2D::new(0.0, 0.0), Vec2D::new(0.0, 0.0), a, b];
         let turn = vector_cross(subtract(cubic[2], cubic[0]), subtract(cubic[3], cubic[1]));
-        assert!(turn < 0.0, "the live cubic turn must not take the zero fallback");
+        assert!(
+            turn < 0.0,
+            "the live cubic turn must not take the zero fallback"
+        );
     }
 
     #[test]
@@ -3428,7 +3465,10 @@ mod tests {
     fn assert_post_contour_padding(tessellation: &FillTessellation) {
         let logical_end = (tessellation.base_instance + tessellation.instance_count)
             * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
-        let location = align_up(logical_end as i32, OUTER_CURVE_PATCH_SEGMENT_SPAN as i32) as u32;
+        let location = align_up(
+            logical_end as i32,
+            OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32,
+        ) as u32;
         let expected_range = (
             location as i32 % TESS_TEXTURE_WIDTH,
             location as i32 % TESS_TEXTURE_WIDTH + 1,
@@ -3582,6 +3622,29 @@ mod tests {
     }
 
     #[test]
+    fn retrofit_cubic_tri_strip_matches_source_point_order() {
+        let points = [
+            Vec2D::new(0.0, 10.0),
+            Vec2D::new(1.0, 11.0),
+            Vec2D::new(2.0, 12.0),
+            Vec2D::new(3.0, 13.0),
+            Vec2D::new(4.0, 14.0),
+        ];
+
+        let (triangle, triangle_tangent) = retrofit_cubic_tri_strip(&points, 3);
+        assert_eq!(triangle, [points[0], points[1], points[2], points[2]]);
+        assert_eq!(triangle_tangent, points[2]);
+
+        let (quad, quad_tangent) = retrofit_cubic_tri_strip(&points, 4);
+        assert_eq!(quad, [points[0], points[1], points[3], points[2]]);
+        assert_eq!(quad_tangent, points[3]);
+
+        let (pentagon, pentagon_tangent) = retrofit_cubic_tri_strip(&points, 5);
+        assert_eq!(pentagon, [points[0], points[1], points[3], points[2]]);
+        assert_eq!(pentagon_tangent, points[4]);
+    }
+
+    #[test]
     fn interior_layout_emits_outer_patches_and_weighted_triangles() {
         let mut path = RawPath::new();
         path.move_to(0.0, 0.0);
@@ -3590,13 +3653,20 @@ mod tests {
         path.line_to(0.0, 100.0);
         path.close();
         let tessellation =
-            build_interior_tessellation(&path, Mat2D::IDENTITY, FillRule::NonZero, false).unwrap();
+            build_test_interior(&path, Mat2D::IDENTITY, FillRule::NonZero, false).unwrap();
         assert_eq!(tessellation.spans.len(), 6);
         assert_eq!(tessellation.base_instance, 1);
         assert_eq!(tessellation.instance_count, 8);
-        assert_eq!(tessellation.triangles.len(), 6);
-        assert_eq!(tessellation.triangles[0].weight_path_id >> 16, 1);
-        assert_eq!(tessellation.triangles[0].weight_path_id as u16, 1);
+        let triangles = tessellation.triangulator.triangles(
+            1,
+            tessellation.triangulator_fill_rule,
+            tessellation.triangulator_reverse_triangles,
+            tessellation.triangulator_negate_winding,
+            WindingFaces::All,
+        );
+        assert_eq!(triangles.len(), 6);
+        assert_eq!(triangles[0].weight_path_id >> 16, 1);
+        assert_eq!(triangles[0].weight_path_id as u16, 1);
         assert_eq!(tessellation.contours[0].vertex_index0, 85);
         assert_eq!(
             tessellation.spans[1].contour_id_with_flags,
@@ -3635,14 +3705,14 @@ mod tests {
             path.cubic_to(x + 750.0, 1600.0, x + 50.0, 1600.0, x + 50.0, 640.0);
         }
 
-        let positive = build_interior_tessellation(
+        let positive = build_test_interior(
             &path,
             Mat2D([1.0, 0.0, 0.0, 1.0, 29.0, -100.0]),
             FillRule::Clockwise,
             false,
         )
         .unwrap();
-        let mirrored = build_interior_tessellation(
+        let mirrored = build_test_interior(
             &path,
             Mat2D([-1.0, 0.0, 0.0, 1.0, 1593.0, 207.0]),
             FillRule::Clockwise,
@@ -3650,7 +3720,7 @@ mod tests {
         )
         .unwrap();
 
-        // The source middle-out glue patches are part of the forward half of
+        // The source retrofit triangle-strip glue patches are part of the forward half of
         // the double-sided allocation, so the positive contour begins after
         // the complete reflected half rather than after only authored cubics.
         assert_eq!(positive.contours[0].vertex_index0, 799);
@@ -3669,23 +3739,8 @@ mod tests {
         path.line_to(20.0, 20.0);
         path.line_to(0.0, 20.0);
         path.close();
-        let mut tessellation =
-            build_interior_tessellation(&path, Mat2D::IDENTITY, FillRule::NonZero, false).unwrap();
-        let triangle = |weight, source_path_id, x| {
-            [
-                TriangleVertex::new([x, 0.0], weight, source_path_id),
-                TriangleVertex::new([x + 1.0, 0.0], weight, source_path_id),
-                TriangleVertex::new([x, 1.0], weight, source_path_id),
-            ]
-        };
-        tessellation.triangles = [
-            triangle(-2, 1, 0.0),
-            triangle(0, 2, 2.0),
-            triangle(3, 3, 4.0),
-            triangle(-1, 4, 6.0),
-            triangle(1, 5, 8.0),
-        ]
-        .concat();
+        let tessellation =
+            build_test_interior(&path, Mat2D::IDENTITY, FillRule::NonZero, false).unwrap();
 
         for faces in [
             WindingFaces::Negative,
@@ -3695,17 +3750,13 @@ mod tests {
             let mut actual = Vec::new();
             tessellation
                 .visit_triangles(23, faces, |_, triangle| actual.extend_from_slice(&triangle));
-            let expected = tessellation
-                .triangles
-                .chunks_exact(3)
-                .filter(|triangle| faces.includes((triangle[0].weight_path_id >> 16) as i16))
-                .flat_map(|triangle| {
-                    triangle.iter().copied().map(|mut vertex| {
-                        vertex.weight_path_id = (vertex.weight_path_id & !0xffff) | 23;
-                        vertex
-                    })
-                })
-                .collect::<Vec<_>>();
+            let expected = tessellation.triangulator.triangles(
+                23,
+                tessellation.triangulator_fill_rule,
+                tessellation.triangulator_reverse_triangles,
+                tessellation.triangulator_negate_winding,
+                faces,
+            );
             assert_eq!(
                 bytemuck::cast_slice::<_, u8>(&actual),
                 bytemuck::cast_slice::<_, u8>(&expected),
@@ -3715,26 +3766,12 @@ mod tests {
     }
 
     #[test]
-    fn interior_selection_matches_upstream_area_threshold() {
-        let mut path = RawPath::new();
-        path.move_to(0.0, 0.0);
-        path.line_to(512.0, 0.0);
-        path.line_to(512.0, 512.0);
-        path.close();
-        assert!(!should_use_interior_tessellation(&path, Mat2D::IDENTITY));
-        assert!(should_use_interior_tessellation(
-            &path,
-            Mat2D([1.01, 0.0, 0.0, 1.0, 0.0, 0.0])
-        ));
-    }
-
-    #[test]
     fn interior_layout_chops_large_cubics_into_outer_patches() {
         let mut path = RawPath::new();
         path.move_to(0.0, 0.0);
         path.cubic_to(0.0, 100.0, 100.0, 100.0, 100.0, 0.0);
         path.close();
-        let tessellation = build_interior_tessellation(
+        let tessellation = build_test_interior(
             &path,
             Mat2D([100.0, 0.0, 0.0, 100.0, 0.0, 0.0]),
             FillRule::NonZero,
@@ -4120,10 +4157,7 @@ mod tests {
         path.move_to(0.0, 0.0);
         path.line_to(1.0, 1.0);
 
-        path_pixel_bounds(
-            &path,
-            Mat2D([1.0, 0.0, 0.0, 1.0, f32::INFINITY, 0.0]),
-        );
+        path_pixel_bounds(&path, Mat2D([1.0, 0.0, 0.0, 1.0, f32::INFINITY, 0.0]));
     }
 
     #[test]

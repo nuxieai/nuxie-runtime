@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_deferred_resource.hpp at e949498e.
+//! renderer/ore/cmd/ore_deferred_resource.hpp at 707c4f60.
 #![allow(non_snake_case)]
 use super::{
     ore_command_buffer::{
@@ -275,8 +275,44 @@ macro_rules! default_base {
     };
 }
 default_base!(DeferredSampler, Sampler);
-default_base!(DeferredBindGroupLayout, BindGroupLayout);
-default_base!(DeferredBindGroup, BindGroup);
+impl DeferredBindGroupLayout {
+    pub fn new(
+        h: u32,
+        g: u32,
+        s: Option<&SharedOreCommandBuffer>,
+        a: Option<&SharedIdAllocator>,
+        desc: &BindGroupLayoutDesc<'_>,
+    ) -> Self {
+        let mut base = BindGroupLayout::new();
+        base.m_groupIndex = desc.groupIndex;
+        base.m_entries
+            .extend_from_slice(&desc.entries.unwrap_or(&[])[..desc.entryCount as usize]);
+        Self::fromBase(base, h, g, s, a)
+    }
+}
+impl DeferredBindGroup {
+    pub fn new(
+        h: u32,
+        g: u32,
+        s: Option<&SharedOreCommandBuffer>,
+        a: Option<&SharedIdAllocator>,
+        desc: &BindGroupDesc<'_>,
+    ) -> Self {
+        let mut base = BindGroup::new();
+        base.m_layoutRef = desc.layout.cloned();
+        for ubo in &desc.ubos[..desc.uboCount as usize] {
+            if base
+                .m_layoutRef
+                .as_ref()
+                .and_then(AnyResourceHandle::bindGroupLayoutBase)
+                .is_some_and(|layout| layout.hasDynamicOffset(ubo.slot))
+            {
+                base.m_dynamicOffsetCount += 1;
+            }
+        }
+        Self::fromBase(base, h, g, s, a)
+    }
+}
 impl DeferredPipeline {
     pub fn new(
         h: u32,

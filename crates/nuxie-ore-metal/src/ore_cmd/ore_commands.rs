@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_commands.hpp at e949498e.
+//! renderer/ore/cmd/ore_commands.hpp at 707c4f60.
 #![allow(non_snake_case, non_camel_case_types)]
 use super::ore_handle::ResourceHandle;
 use super::ore_resource_commands::*;
@@ -240,15 +240,19 @@ crate::impl_wire_pod!(SetVertexBufferCmd {
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
+// `pad` trails the real fields so struct initialization can leave it zeroed.
 pub struct SetIndexBufferCmd {
     pub buffer: ResourceHandle,
-    pub format: IndexFormat,
     pub offset: u32,
+    pub format: IndexFormat,
+    pub pad: [u8; 3],
 }
+const _: [(); 3 * std::mem::size_of::<u32>()] = [(); std::mem::size_of::<SetIndexBufferCmd>()];
 crate::impl_wire_pod!(SetIndexBufferCmd {
     buffer: ResourceHandle,
+    offset: u32,
     format: IndexFormat,
-    offset: u32
+    pad: [u8; 3]
 });
 
 #[repr(C)]

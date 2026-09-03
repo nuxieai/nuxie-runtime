@@ -209,6 +209,20 @@ fn unbound_recording_context_refuses_capability_readout() {
 }
 
 #[test]
+fn texture_view_answers_indexed_reads() {
+    let device: OreContextHandle =
+        Rc::new(RefCell::new(FakeDeviceContext::new(Features::default())));
+    let recorder = DeferredOreContext::new(Some(device));
+    let error = run_with_ore_context(
+        Rc::new(RefCell::new(recorder)),
+        "local t = GPUTexture.new({ width = 4, height = 4, format = 'rgba8unorm' })\n\
+         local v = t:view()\n\
+         assert(v.format == 'rgba8unorm', 'format ' .. tostring(v.format))\n",
+    );
+    assert!(error.is_empty(), "{error}");
+}
+
+#[test]
 fn undecidable_capability_gate_does_not_invent_refusal() {
     let script = "local t = GPUTexture.new({ width = 4, height = 4, format = 'rgba16float', renderTarget = true })";
     let recorder = DeferredOreContext::new(None);

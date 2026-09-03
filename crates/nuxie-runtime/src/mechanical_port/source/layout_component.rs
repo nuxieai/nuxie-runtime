@@ -176,6 +176,7 @@ pub struct LayoutComponent {
     height_override: f32,
     height_unit_value_override: i32,
     parent_is_row: bool,
+    parent_is_stack: bool,
     width_intrinsically_size_override: bool,
     height_intrinsically_size_override: bool,
     forced_width: f32,
@@ -223,6 +224,7 @@ impl Default for LayoutComponent {
             height_override: f32::NAN,
             height_unit_value_override: -1,
             parent_is_row: true,
+            parent_is_stack: false,
             width_intrinsically_size_override: false,
             height_intrinsically_size_override: false,
             forced_width: f32::NAN,
@@ -462,6 +464,26 @@ impl LayoutComponent {
                 .parent_is_row = row;
         });
         Self::mark_layout_node_dirty_with_host_occurrence(owner, false, Some(host));
+    }
+
+    pub(crate) fn set_parent_is_stack_with_host_occurrence(
+        owner: &CoreHandle,
+        is_stack: bool,
+        host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
+    ) {
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                if layout.parent_is_stack == is_stack {
+                    return false;
+                }
+                layout.parent_is_stack = is_stack;
+                true
+            })
+            .expect("live Layout owner");
+        if changed {
+            Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        }
     }
 
     pub(crate) fn set_clip_occurrence(owner: &CoreHandle, value: bool) {
@@ -1265,6 +1287,13 @@ impl LayoutComponent {
         self.parent_is_row = row;
         self.mark_layout_node_dirty(false);
     }
+    pub fn set_parent_is_stack(&mut self, is_stack: bool) {
+        if self.parent_is_stack == is_stack {
+            return;
+        }
+        self.parent_is_stack = is_stack;
+        self.mark_layout_node_dirty(false);
+    }
     pub fn set_width_intrinsically_size_override(&mut self, intrinsic: bool) {
         self.width_intrinsically_size_override = intrinsic;
         self.width_unit_value_override = if intrinsic { 3 } else { 1 };
@@ -1532,6 +1561,10 @@ impl LayoutComponent {
         })
         .unwrap_or(false)
     }
+    pub fn is_stack_container(&self) -> bool {
+        self.with_style(LayoutComponentStyle::is_stack)
+            .unwrap_or(false)
+    }
     pub fn layout_node_key(&self, index: usize) -> Option<LayoutNodeKey> {
         let provider = self.base.base.base.base.base.handle()?;
         (index == 0).then(|| self.provider.node_key(provider, index))
@@ -1576,8 +1609,8 @@ impl LayoutComponent {
                 })
             })
             .unwrap_or((
-                false,
-                false,
+                self.can_have_overrides() && self.parent_is_stack,
+                self.can_have_overrides() && self.parent_is_stack,
                 crate::mechanical_port::source::layout::layout_style_applier::YGJustify::Stretch
                     as u8,
             ));

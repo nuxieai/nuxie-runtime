@@ -17,7 +17,10 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     file::RuntimeFileHandle,
     generated::{component_base::ComponentBase, core_registry::CoreRegistry},
-    input::focus_manager::FocusManager,
+    input::{
+        focus_manager::FocusManager,
+        focusable::{Key, KeyModifiers},
+    },
     math::vec2d::Vec2D,
     open_url_event::OpenUrlEvent,
 };
@@ -882,6 +885,20 @@ impl StateMachineInstance {
     pub fn clear_focus(&mut self) {
         self.native
             .with_instance_mut(|machine| machine.clear_focus());
+    }
+    pub fn key_input(
+        &mut self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        self.native
+            .with_instance_mut(|machine| machine.key_input(key, modifiers, is_pressed, is_repeat))
+    }
+    pub fn text_input(&mut self, text: &str) -> bool {
+        self.native
+            .with_instance_mut(|machine| machine.text_input(text))
     }
     pub fn reset_state(&mut self) {
         self.native

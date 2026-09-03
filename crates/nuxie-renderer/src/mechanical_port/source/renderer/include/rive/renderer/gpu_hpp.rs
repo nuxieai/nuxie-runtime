@@ -2040,7 +2040,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/gpu.hpp.
-// Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
+// Upstream source revision: 707c4f60f2433b32d34597045b2f43460e6cd8fb
 // Ownership unit: generic-gpu-contract.
 // Include/dependency authority: the pinned header and source-shaped modules.
 

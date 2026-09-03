@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_deferred_context.hpp at e949498e.
+//! renderer/ore/cmd/ore_deferred_context.hpp at 707c4f60.
 #![allow(non_snake_case)]
 use crate::deferred::cmd::{
     foreign_image_registry::ForeignImageRegistry, render_handle::CANVAS_HANDLE_MASK,
@@ -390,6 +390,7 @@ impl ContextApi for DeferredOreContext {
                     a.generation,
                     Some(&self.render),
                     Some(&self.ids),
+                    desc,
                 ),
             )
             .erase(),
@@ -459,7 +460,13 @@ impl ContextApi for DeferredOreContext {
         Some(
             ResourceHandle::new(
                 None,
-                DeferredBindGroup::new(a.id, a.generation, Some(&self.render), Some(&self.ids)),
+                DeferredBindGroup::new(
+                    a.id,
+                    a.generation,
+                    Some(&self.render),
+                    Some(&self.ids),
+                    desc,
+                ),
             )
             .erase(),
         )

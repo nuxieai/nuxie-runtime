@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "1db281b3e82baf850635fd7aa2092920a80b6a2c"
+upstream_ref = "707c4f60f2433b32d34597045b2f43460e6cd8fb"
 expected_entries = 256
 expected_runtime = 211
 expected_scripted = 42
@@ -1460,7 +1460,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "FocusManager skips collapsed nodes and fully transparent nodes"
-producer_line = 1755
+producer_line = 1848
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1482,7 +1482,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus based transitions work"
-producer_line = 2317
+producer_line = 2410
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1504,7 +1504,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal listener actions"
-producer_line = 2081
+producer_line = 2174
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1526,7 +1526,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal clears focus when it reaches edge of root scope"
-producer_line = 2132
+producer_line = 2225
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2406,7 +2406,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focused elements receive keyboard inputs"
-producer_line = 1835
+producer_line = 1928
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2428,7 +2428,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Keyboard inputs with different key combinations"
-producer_line = 1951
+producer_line = 2044
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2962,7 +2962,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus is correctly built and updated for lists"
-producer_line = 2283
+producer_line = 2376
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

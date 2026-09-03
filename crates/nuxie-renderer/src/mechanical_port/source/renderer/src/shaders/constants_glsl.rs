@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
+ * Upstream source revision: 707c4f60f2433b32d34597045b2f43460e6cd8fb
  */
 
 #![allow(dead_code)]
@@ -10,7 +10,7 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "1db281b3e82baf850635fd7aa2092920a80b6a2c";
+pub const PINNED_UPSTREAM_COMMIT: &str = "707c4f60f2433b32d34597045b2f43460e6cd8fb";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
     "b0b59911b49c1105c635569ce476418ea62dc1d42c9ff55ce8bfb5df700ada5a";

@@ -77,6 +77,7 @@ use crate::mechanical_port::source::{
     input::{
         focus_manager::{FocusManager, RuntimeFocusManagerHandle},
         focus_node::FocusNodeRef,
+        focusable::{Key, KeyModifiers},
         gamepad_batch::{GamepadBatchState, GamepadDispatcher, GamepadInvocation},
     },
     listener_group::{ListenerGroup, ListenerGroupProvider, RuntimeListenerGroupHandle},
@@ -4141,6 +4142,23 @@ impl StateMachineInstance {
     pub fn clear_focus(&mut self) {
         self.focus_manager()
             .with_focus_manager_mut(FocusManager::clear_focus);
+    }
+
+    pub fn key_input(
+        &mut self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        self.focus_manager().with_focus_manager_mut(|manager| {
+            manager.key_input(key, modifiers, is_pressed, is_repeat)
+        })
+    }
+
+    pub fn text_input(&mut self, text: &str) -> bool {
+        self.focus_manager()
+            .with_focus_manager_mut(|manager| manager.text_input(text))
     }
 
     pub fn duration_seconds(&self) -> f32 {

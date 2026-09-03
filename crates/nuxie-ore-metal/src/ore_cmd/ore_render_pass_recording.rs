@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_render_pass_recording.hpp at e949498e.
+//! renderer/ore/cmd/ore_render_pass_recording.hpp at 707c4f60.
 #![allow(non_snake_case)]
 use super::{
     ore_command_buffer::SharedOreCommandBuffer,
@@ -160,8 +160,9 @@ impl RenderPassApi for RenderPassRecording {
             CommandType::setIndexBuffer,
             &SetIndexBufferCmd {
                 buffer,
-                format,
                 offset,
+                format,
+                pad: [0; 3],
             },
         );
     }

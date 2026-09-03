@@ -9,9 +9,12 @@ use nuxie_runtime::source::{
     generated::{core_registry::CoreRegistry, layout_component_base::LayoutComponentBase},
     layout::{layout_component_style::LayoutComponentStyle, layout_style_applier::YGDisplay},
     layout_component::{Layout, LayoutComponent},
+    nested_artboard_layout::NestedArtboardLayout,
+    shapes::shape::Shape,
 };
 use nuxie_runtime::{
-    Artboard, CoreHandle, File, ImportResult, RuntimeFactoryHandle, RuntimeFileHandle,
+    Artboard, CoreHandle, File, ImportResult, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle,
+    RuntimeFileHandle,
 };
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
@@ -27,6 +30,7 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 struct Fixture {
     // The pinned layout tests use File::artboard(), not an ArtboardInstance.
     artboard: CoreHandle,
+    _artboard_instance: Option<RuntimeArtboardInstanceHandle>,
     _file: RuntimeFileHandle,
 }
 
@@ -146,14 +150,22 @@ fn fixture(name: &str, artboard_name: Option<&str>) -> Fixture {
     )
     .unwrap_or_else(|| panic!("{name} imports: {result:?}"));
     assert_eq!(result, ImportResult::Success);
-    let artboard = file
-        .with_file(|file| match artboard_name {
-            Some(name) => file.artboard_named_source(name),
-            None => file.artboard(),
-        })
-        .expect("native source artboard");
+    let (artboard, artboard_instance) = match artboard_name {
+        Some(name) => {
+            let artboard_instance = file
+                .with_file(|file| file.artboard_named(name))
+                .expect("named ArtboardInstance");
+            (artboard_instance.core_handle(), Some(artboard_instance))
+        }
+        None => (
+            file.with_file(File::artboard)
+                .expect("native source artboard"),
+            None,
+        ),
+    };
     Fixture {
         artboard,
+        _artboard_instance: artboard_instance,
         _file: file,
     }
 }
@@ -297,6 +309,61 @@ fn wave_c2_layout_stack_003_engine_display_folds_visibility_and_type() {
             "display={visible} layoutType={kind}"
         );
     }
+}
+
+#[test]
+fn nested_artboards_share_the_stacked_cell() {
+    let mut fixture = fixture("layout/nested_artboard_stack.riv", Some("TwoNested"));
+    fixture.advance();
+    let nested = fixture
+        .artboard
+        .with_downcast::<Artboard, _>(|artboard| {
+            artboard.find_all_handles::<NestedArtboardLayout>()
+        })
+        .expect("TwoNested artboard");
+    assert_eq!(nested.len(), 2);
+    for item in nested {
+        let bounds = item
+            .with_downcast::<NestedArtboardLayout, _>(NestedArtboardLayout::layout_bounds)
+            .expect("NestedArtboardLayout");
+        assert_eq!(
+            (bounds.left(), bounds.top(), bounds.width(), bounds.height()),
+            (0.0, 0.0, 40.0, 40.0)
+        );
+    }
+}
+
+#[test]
+fn a_nested_artboard_overlaps_a_participant_in_a_stack() {
+    let mut fixture = fixture("layout/nested_artboard_stack.riv", Some("MixedStack"));
+    fixture.advance();
+    let shapes = fixture
+        .artboard
+        .with_downcast::<Artboard, _>(|artboard| artboard.find_all_handles::<Shape>())
+        .expect("MixedStack artboard");
+    assert_eq!(shapes.len(), 1);
+    let provider = nuxie_runtime::source::layout::layout_node_provider::from_component(&shapes[0])
+        .expect("Shape layout provider");
+    let fill = provider
+        .with(|provider| provider.layout_provider_bounds(0))
+        .flatten()
+        .expect("Shape layout bounds");
+    assert_eq!((fill.width(), fill.height()), (200.0, 200.0));
+
+    let nested = fixture
+        .artboard
+        .with_downcast::<Artboard, _>(|artboard| {
+            artboard.find_all_handles::<NestedArtboardLayout>()
+        })
+        .expect("MixedStack artboard");
+    assert_eq!(nested.len(), 1);
+    let bounds = nested[0]
+        .with_downcast::<NestedArtboardLayout, _>(NestedArtboardLayout::layout_bounds)
+        .expect("NestedArtboardLayout");
+    assert_eq!(
+        (bounds.left(), bounds.top(), bounds.width(), bounds.height()),
+        (0.0, 0.0, 40.0, 40.0)
+    );
 }
 
 fn assert_named_world_positions(name: &str, expected: &[(&str, f32, f32)]) {

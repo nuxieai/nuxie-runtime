@@ -55,6 +55,14 @@ impl ArtboardComponentListOverride {
             })
             .unwrap_or(true)
     }
+    pub fn is_stack(&self) -> bool {
+        self.base
+            .parent_handle()
+            .and_then(|parent| {
+                parent.with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::is_stack)
+            })
+            .unwrap_or(false)
+    }
     fn update_width_override(&mut self) {
         for artboard in self.artboards.clone() {
             if let Some(artboard) = artboard.upgrade() {
@@ -114,6 +122,9 @@ impl Default for ArtboardComponentListOverride {
 impl StyleOverrideProvider for ArtboardComponentListOverride {
     fn is_row(&self) -> bool {
         ArtboardComponentListOverride::is_row(self)
+    }
+    fn is_stack(&self) -> bool {
+        ArtboardComponentListOverride::is_stack(self)
     }
     fn instance_height_scale_type(&self) -> u32 {
         self.base.instance_height_scale_type()

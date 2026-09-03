@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1db281b3e82baf850635fd7aa2092920a80b6a2c`
+- LAST_SYNCED_SHA: `707c4f60f2433b32d34597045b2f43460e6cd8fb`
 - Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
   The preceding accounted change, upstream's Rive 7.3 layout translation,
@@ -18,6 +18,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `707c4f60f2433b32d34597045b2f43460e6cd8fb` | Layout-stack parent propagation for components and artboard component lists; state-machine key/text input ownership; disposed Lua property reconstruction and view-model-list correction; ORE deferred-session bookkeeping and directly corresponding runtime/renderer tests. | [UNIV-2408](https://universe.basis.dev/issue/UNIV-2408), [UNIV-2409](https://universe.basis.dev/issue/UNIV-2409), [UNIV-2410](https://universe.basis.dev/issue/UNIV-2410), [UNIV-2411](https://universe.basis.dev/issue/UNIV-2411) |
 | `1db281b3e82baf850635fd7aa2092920a80b6a2c` | Command-queue view-model clearing and reference confirmations; scripting import-factory routing; IK-over-distance constraint behavior and fixture; shape-paint clipping; triangulation caching and interior-budget control; ORE sampler/anisotropy, deferred shader replay, canvas import, backend shader, and directly corresponding runtime/renderer tests. Android test-host and deployment-harness changes are outside this repository. | [UNIV-2402](https://universe.basis.dev/issue/UNIV-2402), [UNIV-2403](https://universe.basis.dev/issue/UNIV-2403), [UNIV-2404](https://universe.basis.dev/issue/UNIV-2404), [UNIV-2406](https://universe.basis.dev/issue/UNIV-2406), [UNIV-2407](https://universe.basis.dev/issue/UNIV-2407), [UNIV-2907](https://universe.basis.dev/issue/UNIV-2907), [UNIV-2908](https://universe.basis.dev/issue/UNIV-2908) |
 
 - The preceding upstream deferred host/player refactor is a

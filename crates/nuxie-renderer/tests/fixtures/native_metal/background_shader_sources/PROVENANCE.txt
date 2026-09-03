@@ -1,4 +1,4 @@
-upstream_sha=1db281b3e82baf850635fd7aa2092920a80b6a2c
+upstream_sha=707c4f60f2433b32d34597045b2f43460e6cd8fb
 source_directory=<RENDERER_SHADER_UPSTREAM_OUT>
 metal_exports_sha256=9eec935c09e02af59a331f34757015f387b8896f13d9a10ca31ebd1c2e0ba672
 assembly=metal + each subsequent selected fragment followed by LF

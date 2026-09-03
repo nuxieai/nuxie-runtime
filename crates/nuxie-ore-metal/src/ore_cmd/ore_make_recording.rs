@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_make_recording.hpp at e949498e.
+//! renderer/ore/cmd/ore_make_recording.hpp at 707c4f60.
 #![allow(non_snake_case)]
 use super::{
     ore_command_buffer::OreCommandBuffer, ore_commands::*, ore_handle::*, ore_resource_commands::*,
@@ -200,7 +200,14 @@ pub fn recordMakePipeline(
         winding: desc.winding,
         colorTargets: desc.colorTargets,
         colorCount: desc.colorCount,
-        depthStencil: desc.depthStencil,
+        depthStencil: DepthStencilState {
+            format: desc.depthStencil.format,
+            depthCompare: desc.depthStencil.depthCompare,
+            depthWriteEnabled: desc.depthStencil.depthWriteEnabled,
+            depthBias: desc.depthStencil.depthBias,
+            depthBiasSlopeScale: desc.depthStencil.depthBiasSlopeScale,
+            depthBiasClamp: desc.depthStencil.depthBiasClamp,
+        },
         stencilFront: desc.stencilFront,
         stencilBack: desc.stencilBack,
         stencilReadMask: desc.stencilReadMask,

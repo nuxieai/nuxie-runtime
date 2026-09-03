@@ -43,6 +43,7 @@ pub(crate) struct RenderPassGLState {
     pub(crate) m_viewportWidth: u32,
     pub(crate) m_viewportHeight: u32,
     pub(crate) m_maxSamplerSlot: u32,
+    pub(crate) m_samplerBindingsDirty: bool,
     pub(crate) m_maxAttribSlot: u32,
     pub(crate) m_usedSamplers: bool,
     pub(crate) m_usedAttribs: bool,
@@ -70,6 +71,7 @@ impl RenderPassGLState {
             m_viewportWidth: 0,
             m_viewportHeight: 0,
             m_maxSamplerSlot: 0,
+            m_samplerBindingsDirty: false,
             m_maxAttribSlot: 0,
             m_usedSamplers: false,
             m_usedAttribs: false,
@@ -330,7 +332,7 @@ impl RenderPassApi for RenderPassGL {
 }
 
 pub(crate) const SOURCE_PUBLIC_CALLABLE_COUNT: usize = 17;
-pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 17;
+pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 18;
 pub(crate) const SOURCE_RESOLVE_FIELD_COUNT: usize = 5;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 1;
-const _: [(); 3006] = [(); PINNED_SOURCE.len()];
+const _: [(); 3195] = [(); PINNED_SOURCE.len()];

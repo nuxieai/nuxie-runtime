@@ -28,7 +28,7 @@ use super::ore::ore_bind_group_hpp::BindGroup;
 use super::ore::ore_bind_group_layout_hpp::BindGroupLayout;
 use super::ore::ore_buffer_hpp::{BufferApi, BufferUpdateError};
 use super::ore::ore_pipeline_hpp::Pipeline;
-use super::ore::ore_shader_module_hpp::{ShaderModule, TextureSamplerPair};
+use super::ore::ore_shader_module_hpp::ShaderModule;
 use super::ore::ore_texture_hpp::{TextureApi, TextureUploadError, TextureView};
 use super::ore::ore_types_hpp::{BufferUsage, TextureDataDesc, TextureFormat, TextureType};
 
@@ -620,13 +620,6 @@ pub unsafe trait GpuResourcePayload: Any {
     fn bind_group_layout_base(&self) -> Option<&BindGroupLayout> {
         None
     }
-
-    /// Optional mutable projection to the source's offset-zero
-    /// `ore::ShaderModule` base. `lua_gpu.cpp` assigns reflection pairs on the
-    /// base immediately after a concrete backend creates the module.
-    fn shader_module_base_mut(&mut self) -> Option<&mut ShaderModule> {
-        None
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -660,9 +653,6 @@ type ShaderModuleBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNul
 type BindGroupBaseDispatch = unsafe fn(NonNull<GPUResource>) -> Option<NonNull<BindGroup>>;
 type BindGroupLayoutBaseDispatch =
     unsafe fn(NonNull<GPUResource>) -> Option<NonNull<BindGroupLayout>>;
-type ReplaceShaderTextureSamplerPairsDispatch =
-    unsafe fn(NonNull<GPUResource>, Vec<TextureSamplerPair>) -> bool;
-
 #[derive(Clone, Copy)]
 pub(crate) struct ResourceVTable {
     type_id: fn() -> TypeId,
@@ -676,7 +666,6 @@ pub(crate) struct ResourceVTable {
     shader_module_base: ShaderModuleBaseDispatch,
     bind_group_base: BindGroupBaseDispatch,
     bind_group_layout_base: BindGroupLayoutBaseDispatch,
-    replace_shader_texture_sampler_pairs: ReplaceShaderTextureSamplerPairsDispatch,
 }
 
 unsafe fn destroy_resource<T: GpuResourcePayload>(base: NonNull<GPUResource>) {
@@ -722,18 +711,6 @@ unsafe fn bind_group_layout_base<T: GpuResourcePayload>(
 ) -> Option<NonNull<BindGroupLayout>> {
     let payload = unsafe { base.cast::<T>().as_ref() };
     payload.bind_group_layout_base().map(NonNull::from)
-}
-
-unsafe fn replace_shader_texture_sampler_pairs<T: GpuResourcePayload>(
-    base: NonNull<GPUResource>,
-    pairs: Vec<TextureSamplerPair>,
-) -> bool {
-    let payload = unsafe { base.cast::<T>().as_mut() };
-    let Some(shader_module) = payload.shader_module_base_mut() else {
-        return false;
-    };
-    shader_module.m_textureSamplerPairs = pairs;
-    true
 }
 
 unsafe fn buffer_info<T: GpuResourcePayload + BufferApi>(base: NonNull<GPUResource>) -> BufferInfo {
@@ -793,7 +770,6 @@ fn plain_vtable<T: GpuResourcePayload>() -> ResourceVTable {
         shader_module_base: shader_module_base::<T>,
         bind_group_base: bind_group_base::<T>,
         bind_group_layout_base: bind_group_layout_base::<T>,
-        replace_shader_texture_sampler_pairs: replace_shader_texture_sampler_pairs::<T>,
     }
 }
 
@@ -1159,33 +1135,6 @@ impl AnyResourceHandle {
             return None;
         }
         unsafe { (pointer.vtable.bind_group_layout_base)(pointer.base).map(|base| base.as_ref()) }
-    }
-
-    /// Construction-only mirror of `mod->m_textureSamplerPairs = pairVec` in
-    /// `lua_gpu.cpp`. The erased resource must project to the exact source
-    /// `ShaderModule` base, and payload mutation remains confined to the
-    /// resource's recording thread.
-    ///
-    /// # Safety
-    ///
-    /// `self` must be a fresh, unaliased local resource handle: it must not
-    /// have been cloned or otherwise published, and no reference derived from
-    /// its payload may be live. The production caller must invoke this on the
-    /// local handle returned by `ContextApi::makeShaderModule`, before moving
-    /// that handle into a `ScriptedShaderEntry` or sharing it between entries.
-    /// This is exactly the ordering in the pinned `lua_gpu.cpp` per-entry path
-    /// (lines 614-624) and whole-module path (lines 646-658). These requirements
-    /// give the dispatch exclusive access when it materializes `&mut T` from
-    /// the erased allocation.
-    pub unsafe fn replaceShaderTextureSamplerPairs(
-        &mut self,
-        pairs: Vec<TextureSamplerPair>,
-    ) -> bool {
-        let pointer = self.pointer();
-        if !pointer.is_recording_thread() {
-            return false;
-        }
-        unsafe { (pointer.vtable.replace_shader_texture_sampler_pairs)(pointer.base, pairs) }
     }
 
     pub fn size(&self) -> Option<u32> {
@@ -1749,48 +1698,6 @@ mod tests {
         owner.shutdown();
     }
 
-    #[test]
-    fn erased_shader_pair_replacement_is_type_checked_and_recording_thread_confined() {
-        use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_sampler_hpp::Sampler;
-        use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_shader_module_hpp::{
-            ShaderModule, TextureSamplerPair,
-        };
-
-        let module = ResourceHandle::new(None, ShaderModule::new()).erase();
-        let pair = TextureSamplerPair {
-            textureGroup: 1,
-            textureBinding: 2,
-            samplerGroup: 3,
-            samplerBinding: 4,
-        };
-        let (module, replaced_off_thread) = std::thread::spawn(move || {
-            let mut module = module;
-            // SAFETY: this is still the fresh, sole unpublished module handle;
-            // the wrong-thread guard rejects it before payload mutation.
-            let replaced = unsafe { module.replaceShaderTextureSamplerPairs(vec![pair]) };
-            (module, replaced)
-        })
-        .join()
-        .expect("pair-replacement worker");
-        assert!(!replaced_off_thread);
-        let mut module = module;
-        // SAFETY: the module remains the sole unpublished handle and no payload
-        // reference has been obtained from it.
-        assert!(unsafe { module.replaceShaderTextureSamplerPairs(vec![pair]) });
-        assert_eq!(
-            module
-                .downcast_ref::<ShaderModule>()
-                .expect("exact shader-module resource")
-                .m_textureSamplerPairs,
-            [pair]
-        );
-
-        let mut sampler = ResourceHandle::new(None, Sampler::new()).erase();
-        // SAFETY: the sampler is likewise a fresh, sole unpublished handle;
-        // its non-shader projection is rejected without mutation.
-        assert!(!unsafe { sampler.replaceShaderTextureSamplerPairs(vec![pair]) });
-    }
-
     #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
     fn ore_classes_execute_exact_reverse_member_then_base_destruction() {
@@ -1844,6 +1751,7 @@ mod tests {
             &[
                 "Pipeline.desc",
                 "Pipeline.layouts",
+                "Pipeline.textureSamplerPairs",
                 "Pipeline.bindingMap",
                 "Pipeline.base",
                 "GPUResource",

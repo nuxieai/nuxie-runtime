@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1db281b3e82baf850635fd7aa2092920a80b6a2c";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "4a2cc45e01b2fa4d9a5e6428cae8f721f3ce2fe0dc143a326d84f12a9cd38794";
+pub const PINNED_SOURCE_SHA256: &str = "c95bc053c61db72e1709209dda94b609a5837bf9e7b61b7a171434c97d04bc3d";
 pub const OWNERSHIP_UNIT: &str = "shader:source:metal";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 531;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 26890;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 534;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 27098;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_metal_glsl__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

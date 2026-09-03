@@ -189,19 +189,26 @@ impl PatchVertex {
 
 pub(crate) const MIDPOINT_FAN_PATCH_SEGMENT_SPAN: usize = 8;
 pub(crate) const GRAD_SPAN_TRI_STRIP_VERTEX_COUNT: usize = 8;
-pub(crate) const OUTER_CURVE_PATCH_SEGMENT_SPAN: usize = 17;
+pub(crate) const OUTER_CUBIC_PATCH_SEGMENT_SPAN: usize = 16;
+pub(crate) const OUTER_CUBIC_PATCH_JOIN_SEGMENT_COUNT: usize = 1;
+pub(crate) const OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN: usize =
+    OUTER_CUBIC_PATCH_SEGMENT_SPAN + OUTER_CUBIC_PATCH_JOIN_SEGMENT_COUNT;
 pub(crate) const MIDPOINT_FAN_PATCH_VERTEX_COUNT: usize = 42;
 pub(crate) const MIDPOINT_FAN_PATCH_BORDER_INDEX_COUNT: usize = 48;
 pub(crate) const MIDPOINT_FAN_PATCH_INDEX_COUNT: usize = 72;
 pub(crate) const MIDPOINT_FAN_CENTER_AA_PATCH_VERTEX_COUNT: usize = 74;
 pub(crate) const MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT: usize = 120;
-pub(crate) const OUTER_CURVE_PATCH_VERTEX_COUNT: usize = 153;
-pub(crate) const OUTER_CURVE_PATCH_INDEX_COUNT: usize = 249;
+pub(crate) const OUTER_CURVE_PATCH_VERTEX_COUNT: usize =
+    OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN * 9;
+pub(crate) const OUTER_CURVE_PATCH_BORDER_INDEX_COUNT: usize =
+    OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN * 12;
+pub(crate) const OUTER_CURVE_PATCH_INDEX_COUNT: usize =
+    OUTER_CURVE_PATCH_BORDER_INDEX_COUNT + (OUTER_CUBIC_PATCH_SEGMENT_SPAN - 1) * 3;
 pub(crate) const PATCH_VERTEX_BUFFER_COUNT: usize = 269;
 pub(crate) const PATCH_INDEX_BUFFER_COUNT: usize = 441;
 pub(crate) const CONTOUR_ID_MASK: u32 = 0xffff;
 pub(crate) const CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG: u32 = 1 << 29;
-pub(crate) const RETROFITTED_TRIANGLE_CONTOUR_FLAG: u32 = 1 << 31;
+pub(crate) const RETROFIT_TRI_STRIP_CONTOUR_FLAG: u32 = 1 << 31;
 pub(crate) const NEGATE_PATH_FILL_COVERAGE_FLAG: u32 = 1 << 24;
 pub(crate) const PAINT_FLAG_HAS_CLIP_RECT: u32 = 0x400;
 pub(crate) const MITER_REVERT_JOIN_CONTOUR_FLAG: u32 = 4 << 26;
@@ -243,7 +250,7 @@ fn generate_patch(patch_type: PatchType, vertices: &mut Vec<PatchVertex>, indice
     let base_vertex = vertices.len() as u16;
     let base_index = indices.len();
     let segment_span = if patch_type == PatchType::OuterCurves {
-        OUTER_CURVE_PATCH_SEGMENT_SPAN
+        OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN
     } else {
         MIDPOINT_FAN_PATCH_SEGMENT_SPAN
     };

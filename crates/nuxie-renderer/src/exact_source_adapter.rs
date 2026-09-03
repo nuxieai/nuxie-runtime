@@ -493,6 +493,9 @@ impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
         )))]
         None
     }
+    fn scrub_state_after_ore(&mut self) {
+        self.with_context(RenderContext::scrubStateAfterOreExecutable);
+    }
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
         self.backend.borrow().gpu_canvas_shader_profile()
     }
@@ -718,6 +721,15 @@ impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceRenderCanvas<B> 
                 Rc::clone(&self.backend) as Rc<dyn Any>,
             );
         Rc::new(image)
+    }
+
+    fn ensure_backing(&mut self) {
+        let mut backend = self.backend.borrow_mut();
+        let context = unsafe { Pin::get_unchecked_mut(backend.context_mut()) };
+        // SAFETY: `self.source` is retained for this canvas's full lifetime and
+        // the backend/context borrow is exclusive for the complete call.
+        let canvas = unsafe { &mut *self.source.get() };
+        context.ensureCanvasBackingExecutable(canvas);
     }
 
     fn begin_frame(

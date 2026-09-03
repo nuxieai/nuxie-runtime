@@ -377,6 +377,7 @@ pub(crate) mod source {
                     pub(crate) mod rive_render_image_hpp;
                     pub(crate) mod rive_renderer_hpp;
                     pub(crate) mod texture_hpp;
+                    pub(crate) mod triangulation_controller_hpp;
 
                     #[cfg(all(
                         feature = "native-metal-experimental",
@@ -408,6 +409,7 @@ pub(crate) mod source {
             pub(crate) mod rive_render_path_cpp;
             pub(crate) mod rive_render_path_hpp;
             pub(crate) mod rive_renderer_cpp;
+            pub(crate) mod triangulation_controller_cpp;
 
             #[cfg(all(
                 feature = "native-metal-experimental",

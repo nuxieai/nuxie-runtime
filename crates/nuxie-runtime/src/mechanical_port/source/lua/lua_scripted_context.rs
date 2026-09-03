@@ -306,6 +306,8 @@ fn context_namecall(s: &mut LuaState) -> i32 {
                 };
                 let image = ScriptedImage {
                     image: Some(canvas.render_image().clone()),
+                    source_canvas: Some(canvas.clone()),
+                    ..Default::default()
                 };
                 let image_ref = s.new_rive_ref(image);
                 handle.canvas = Some(canvas);
@@ -341,6 +343,8 @@ fn context_namecall(s: &mut LuaState) -> i32 {
                 };
                 handle.image_ref = s.new_rive_ref(ScriptedImage {
                     image: Some(canvas.render_image().clone()),
+                    source_canvas: Some(canvas.clone()),
+                    ..Default::default()
                 });
                 handle.canvas = Some(canvas);
                 handle.ore_color_view = Some(view);

@@ -130,7 +130,7 @@ fn source_matches_digest(name: &str, bytes: &[u8], expected: &str) -> bool {
 fn pinned_resource_sources_match_generated_batch() {
     assert_eq!(
         fixture_value("upstream_commit"),
-        Some("3ed35ee0ded0d58fb8d380930a156041a4624a2f")
+        Some("1db281b3e82baf850635fd7aa2092920a80b6a2c")
     );
     let expected = fixture_entries("source:");
     assert_eq!(expected.len(), SOURCES.len());

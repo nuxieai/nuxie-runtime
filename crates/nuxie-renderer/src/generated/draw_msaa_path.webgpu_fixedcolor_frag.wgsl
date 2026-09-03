@@ -1,51 +1,51 @@
 struct DC {
-    gc: f32,
-    qd: f32,
-    jf: f32,
+    hc: f32,
+    rd: f32,
     kf: f32,
-    o6_: u32,
-    Lg: u32,
-    Ue: u32,
+    lf: f32,
+    p6_: u32,
+    Mg: u32,
     Ve: u32,
-    T7_: vec4<i32>,
-    Hg: vec2<f32>,
-    rd: vec2<f32>,
-    a2_: u32,
-    Mg: f32,
-    c6_: u32,
+    We: u32,
+    U7_: vec4<i32>,
+    Ig: vec2<f32>,
+    sd: vec2<f32>,
+    c2_: u32,
+    Ng: f32,
+    d6_: u32,
     R2_: f32,
-    sd: f32,
-    Pe: u32,
+    td: f32,
+    Qe: u32,
     B3_: f32,
     C3_: f32,
-    td: f32,
-    Eg: u32,
+    ud: f32,
+    Fg: u32,
 }
 
-@id(7) override lh: bool = true;
-@id(2) override gh: bool = true;
-@id(8) override mh: bool = true;
+@id(7) override mh: bool = true;
+@id(2) override hh: bool = true;
+@id(8) override nh: bool = true;
 
 @group(0) @binding(8)
 var MD: texture_2d<f32>;
 @group(3) @binding(8)
-var Ob: sampler;
+var Pb: sampler;
 @group(1) @binding(11)
 var JC: texture_2d<f32>;
 @group(1) @binding(13)
-var U5_: sampler;
+var V5_: sampler;
 var<private> f1_1: vec4<f32>;
 var<private> A2_1: vec3<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> m: DC;
-var<private> Pg: vec4<f32>;
+var<private> Qg: vec4<f32>;
 @group(3) @binding(9)
 var aa: sampler;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
-var<private> U1_1: vec2<f32>;
-var<private> e2_1: f32;
+var<private> V1_1: vec2<f32>;
+var<private> f2_1: f32;
 
 fn main_1() {
     var phi_589_: vec4<f32>;
@@ -62,7 +62,7 @@ fn main_1() {
     let _e26 = f1_1;
     let _e27 = A2_1;
     if (_e26.w >= 0f) {
-        if gh {
+        if hh {
             phi_589_ = vec4<f32>(_e26.x, _e26.y, _e26.z, _e26.w);
         } else {
             phi_589_ = (_e26 * 1f);
@@ -84,9 +84,9 @@ fn main_1() {
             phi_574_ = ((0.001953125f * _e46) + _e47);
         }
         let _e54 = phi_574_;
-        let _e57 = textureSampleLevel(MD, Ob, vec2<f32>(_e54, -(_e26.w)), 0f);
+        let _e57 = textureSampleLevel(MD, Pb, vec2<f32>(_e54, -(_e26.w)), 0f);
         let _e63 = vec4<f32>(_e57.x, _e57.y, _e57.z, _e57.w);
-        if gh {
+        if hh {
             phi_590_ = _e63;
         } else {
             let _e65 = (_e63.xyz * _e57.w);
@@ -96,16 +96,16 @@ fn main_1() {
         phi_588_ = _e71;
     }
     let _e73 = phi_588_;
-    phi_434_ = mh;
-    if mh {
+    phi_434_ = nh;
+    if nh {
         phi_434_ = (_e27.z > 0f);
     }
     let _e77 = phi_434_;
     phi_592_ = _e73;
     if _e77 {
-        let _e81 = textureSampleLevel(JC, U5_, _e27.xy, (_e27.z - 1f));
+        let _e81 = textureSampleLevel(JC, V5_, _e27.xy, (_e27.z - 1f));
         phi_585_ = _e81;
-        if gh {
+        if hh {
             if (_e81.w != 0f) {
                 phi_575_ = (1f / _e81.w);
             } else {
@@ -123,7 +123,7 @@ fn main_1() {
     let _e100 = gl_FragCoord_1;
     let _e102 = m.B3_;
     let _e104 = m.C3_;
-    if (lh && (_e97.w != 0f)) {
+    if (mh && (_e97.w != 0f)) {
         phi_593_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e100.x) + (0.00583715f * _e100.y))))) * _e102) + _e104)) + _e98);
     } else {
         phi_593_ = _e98;
@@ -131,18 +131,18 @@ fn main_1() {
     let _e120 = phi_593_;
     let _e126 = vec4<f32>(_e120.x, _e97.y, _e97.z, _e97.w);
     let _e132 = vec4<f32>(_e126.x, _e120.y, _e126.z, _e126.w);
-    Pg = vec4<f32>(_e132.x, _e132.y, _e120.z, _e132.w);
+    Qg = vec4<f32>(_e132.x, _e132.y, _e120.z, _e132.w);
     return;
 }
 
 @fragment
-fn main(@location(0) f1_: vec4<f32>, @location(9) A2_: vec3<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(4) @interpolate(flat, either) U1_: vec2<f32>, @location(6) @interpolate(flat, either) e2_: f32) -> @location(0) vec4<f32> {
+fn main(@location(0) f1_: vec4<f32>, @location(9) A2_: vec3<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(4) @interpolate(flat, either) V1_: vec2<f32>, @location(6) @interpolate(flat, either) f2_: f32) -> @location(0) vec4<f32> {
     f1_1 = f1_;
     A2_1 = A2_;
     gl_FragCoord_1 = gl_FragCoord;
-    U1_1 = U1_;
-    e2_1 = e2_;
+    V1_1 = V1_;
+    f2_1 = f2_;
     main_1();
-    let _e11 = Pg;
+    let _e11 = Qg;
     return _e11;
 }

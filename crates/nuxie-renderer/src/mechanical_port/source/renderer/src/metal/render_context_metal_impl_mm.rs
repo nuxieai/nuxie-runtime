@@ -6,7 +6,7 @@
  * as audit provenance. Executable owners and the native renderer connection
  * precede that source text.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
  */
 
 #![allow(dead_code)]
@@ -14,12 +14,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1db281b3e82baf850635fd7aa2092920a80b6a2c";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/metal/render_context_metal_impl.mm";
 pub const PINNED_SOURCE_SHA256: &str =
-    "d637edb35f3d87aa7ef9de73545e8e5c779cdec6b665bce854c0a9f7a203afde";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 2037;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 84918;
+    "a024baed032f3943ee41c7117b8cd5ed9fad6b687c9118150c237fb228599e9d";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 2044;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 85339;
 pub const TRANSLATION_UNIT: &str = "metal-render-context-implementation";
 pub const TRANSLATION_TARGET: &str = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs";
 
@@ -1411,6 +1411,7 @@ pub mod source_execution {
     const MTL_INDEX_TYPE_UINT16: u64 = 0;
     const MTL_CULL_MODE_NONE: u64 = 0;
     const MTL_CULL_MODE_BACK: u64 = 2;
+    const MTL_TRIANGLE_FILL_MODE_FILL: u64 = 0;
     const MTL_TRIANGLE_FILL_MODE_LINES: u64 = 1;
     const MTL_BARRIER_SCOPE_BUFFERS_AND_RENDER_TARGETS: u64 = 1 | 4;
     const MTL_RENDER_STAGE_FRAGMENT: u64 = 2;
@@ -5166,14 +5167,6 @@ pub mod source_execution {
                     ],
                 );
             }
-            if desc.wireframe {
-                set(
-                    metal,
-                    "encoder",
-                    "setTriangleFillMode:",
-                    vec![h(encoder), u(MTL_TRIANGLE_FILL_MODE_LINES)],
-                );
-            }
             metal.owner_event("RC-ENC-HELPER", OwnerEventPhase::Transfer, encoder);
             encoder
         }
@@ -6400,6 +6393,22 @@ pub mod source_execution {
                             encoder = replacement;
                         }
                     }
+                }
+
+                if desc.wireframe {
+                    let fill_mode = if batch.drawType != DrawType::RenderPassInitialize
+                        && batch.drawType != DrawType::RenderPassResolve
+                    {
+                        MTL_TRIANGLE_FILL_MODE_LINES
+                    } else {
+                        MTL_TRIANGLE_FILL_MODE_FILL
+                    };
+                    set(
+                        metal,
+                        "encoder",
+                        "setTriangleFillMode:",
+                        vec![h(encoder), u(fill_mode)],
+                    );
                 }
 
                 match batch.drawType {
@@ -14460,10 +14469,6 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //                            atIndex:METAL_BUFFER_IDX(COVERAGE_PLANE_IDX +
 //                                                     DEFAULT_BINDINGS_SET_SIZE)];
 //     }
-//     if (flushDesc.wireframe)
-//     {
-//         [encoder setTriangleFillMode:MTLTriangleFillModeLines];
-//     }
 //     return encoder;
 // }
 //
@@ -14972,6 +14977,17 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //         }
 //
 //         DrawType drawType = batch.drawType;
+//         if (desc.wireframe)
+//         {
+//             // Wireframe is a debugging aid. The initialize/resolve are
+//             // fullscreen operations, so leave them solid even in wireframe
+//             // mode.
+//             [encoder setTriangleFillMode:
+//                          drawType != gpu::DrawType::renderPassInitialize &&
+//                                  drawType != gpu::DrawType::renderPassResolve
+//                              ? MTLTriangleFillModeLines
+//                              : MTLTriangleFillModeFill];
+//         }
 //         switch (drawType)
 //         {
 //             case DrawType::midpointFanPatches:

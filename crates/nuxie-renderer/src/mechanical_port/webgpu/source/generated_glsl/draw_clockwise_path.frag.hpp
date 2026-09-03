@@ -8,15 +8,15 @@ namespace glsl {
 const char draw_clockwise_path_frag[] = R"===(#ifdef GB
 I1
 #ifndef Q
-w0(S2,j0);
+x0(S2,j0);
 #endif
 j1(T2,h0);
 #ifndef Q
-Sa(f6,C6);
+Ta(g6,D6);
 #endif
-j1(I6,P0);J1
+j1(J6,P0);J1
 #ifdef Q
-o2(JB)
+p2(JB)
 #else
 L1(JB)
 #endif
@@ -31,88 +31,88 @@ r(O,z2);
 #endif
 r(B0,c);
 #ifdef I
-r(U1,E);
+r(V1,E);
 #endif
 #ifdef BB
 r(M0,g);
 #endif
 #ifdef AB
-r(e2,c);
+r(f2,c);
 #endif
-c r0=
+c v0=
 #ifdef EB
 i1;
 #else
-pb(O);
+qb(O);
 #endif
-i v0;c F1;
+i w0;c F1;
 #if defined(EB)&&defined(FC)
 if(!FC)
 #endif
-{v0=L7(f1,
+{w0=M7(f1,
 #ifdef KB
 A2,
 #endif
 1. U2);F1=1.;
 #ifdef BB
-if(BB){c ub=h3(Z4(M0));F1=min(ub,F1);}
+if(BB){c vb=h3(a5(M0));F1=min(vb,F1);}
 #endif
-}w2;
+}x2;
 #if defined(EB)&&defined(FC)
-if(FC){c1(P0,packHalf2x16(B2(r0,B0)));
+if(FC){c1(P0,packHalf2x16(B2(v0,B0)));
 #ifndef Q
-v2(j0);
+w2(j0);
 #endif
 }else
 #endif
-{E P4=unpackHalf2x16(Y0(P0));c i9=P4.y;c Q4=i9==B0?P4.x:G0(.0);c pe=
+{E Q4=unpackHalf2x16(Y0(P0));c i9=Q4.y;c R4=i9==B0?Q4.x:G0(.0);c qe=
 #ifndef EB
-T5(O)?max(Q4,r0):
+U5(O)?max(R4,v0):
 #endif
-Q4+r0;
+R4+v0;
 #ifdef I
-if(I&&U1.x!=.0){E N0=unpackHalf2x16(Y0(h0));c K5=N0.y;c vb=K5==U1.x?N0.x:G0(.0);F1=min(vb,F1);}
+if(I&&V1.x!=.0){E N0=unpackHalf2x16(Y0(h0));c L5=N0.y;c wb=L5==V1.x?N0.x:G0(.0);F1=min(wb,F1);}
 #endif
-F1=max(F1,.0);c Z1=da(Q4,.0,F1);c E1=da(pe,.0,F1);
+F1=max(F1,.0);c a2=da(R4,.0,F1);c E1=da(qe,.0,F1);
 #ifdef MB
-c J5;if(MB){J5=ga(Z.xy,m.B3,m.C3);}
+c K5;if(MB){K5=ga(Z.xy,m.B3,m.C3);}
 #endif
 #ifndef Q
 i K1=I0(j0);
 #ifdef AB
-if(AB){if(e2!=Y5(P5)&&E1!=.0){if(Z1==.0){v0.xyz=S4(v0.xyz,K1,Z5(e2));
+if(AB){if(f2!=Z5(Q5)&&E1!=.0){if(a2==.0){w0.xyz=T4(w0.xyz,K1,a6(f2));
 #ifndef EB
-if(E1<F1){A O7=v0.xyz;
+if(E1<F1){A P7=w0.xyz;
 #ifdef MB
-if(MB){O7+=J5*m.td;}
+if(MB){P7+=K5*m.ud;}
 #endif
-x0(C6,C0(O7,0.0));}
+y0(D6,C0(P7,0.0));}
 #endif
-}else{v0.xyz=I0(C6).xyz;v2(C6);}}v0.xyz*=v0.w;}
+}else{w0.xyz=I0(D6).xyz;w2(D6);}}w0.xyz*=w0.w;}
 #endif
 #endif
-v0*=J8(Z1,E1,v0.w);
+w0*=K8(a2,E1,w0.w);
 #ifdef MB
-v0.xyz=F2(v0.xyz,v0.w,J5);
+w0.xyz=F2(w0.xyz,w0.w,K5);
 #endif
 #ifndef EB
 #ifdef AB
-#define qe (!AB||e2==Y5(P5))&&v0.w>=1.
+#define re (!AB||f2==Z5(Q5))&&w0.w>=1.
 #else
-#define qe v0.w>=1.
+#define re w0.w>=1.
 #endif
-Gd(qe,P0,packHalf2x16(B2(pe,B0)));
+Hd(re,P0,packHalf2x16(B2(qe,B0)));
 #else
-d2(P0);
+e2(P0);
 #endif
 #ifndef Q
-Fd(v0.w==.0,j0,K1*(1.-v0.w)+v0);
+Gd(w0.w==.0,j0,K1*(1.-w0.w)+w0);
 #endif
-}d2(h0);x2;
+}e2(h0);y2;
 #ifdef Q
-C1=v0;n3
+C1=w0;n3
 #else
-Y1;
+Z1;
 #endif
 }
 #endif

@@ -590,10 +590,19 @@
 // // # of tessellation segments spanned by the midpoint fan patch.
 // constexpr static uint32_t kMidpointFanPatchSegmentSpan = 8;
 //
-// // # of tessellation segments spanned by the outer curve patch. (In this
-// // particular instance, the final segment is a bowtie join with zero length and
-// // no fan triangle.)
-// constexpr static uint32_t kOuterCurvePatchSegmentSpan = 17;
+// // # of tessellation segments spanned by the outer cubic patch, NOT counting the
+// // additional bowtie-join segment (zero length, no fan triangle) that is just
+// // part of the AA border. Use OuterCubicPatchSegmentSpanPlusJoin where the join
+// // segment is included.
+// constexpr static uint32_t OuterCubicPatchSegmentSpan = 16;
+//
+// // The final segment in an outer cubic patch is a zero-length bowtie join.
+// constexpr static uint32_t OuterCubicPatchJoinSegmentCount = 1;
+//
+// // Full tessellation stride of an outer cubic patch: the curve segments plus the
+// // trailing bowtie-join segment.
+// constexpr static uint32_t OuterCubicPatchSegmentSpanPlusJoin =
+//     OuterCubicPatchSegmentSpan + OuterCubicPatchJoinSegmentCount;
 //
 // // Define vertex and index buffers that contain all the triangles in every
 // // PatchType.
@@ -625,13 +634,13 @@
 // static_assert((kMidpointFanCenterAAPatchBaseIndex * sizeof(uint16_t)) % 4 == 0);
 //
 // constexpr static uint32_t kOuterCurvePatchVertexCount =
-//     kOuterCurvePatchSegmentSpan * 8 /*AA center ramp with bowtie*/ +
-//     kOuterCurvePatchSegmentSpan /*Curve fan*/;
+//     OuterCubicPatchSegmentSpanPlusJoin * 8 /*AA center ramp with bowtie*/ +
+//     OuterCubicPatchSegmentSpanPlusJoin /*Curve fan*/;
 // constexpr static uint32_t kOuterCurvePatchBorderIndexCount =
-//     kOuterCurvePatchSegmentSpan * 12 /*AA center ramp with bowtie*/;
+//     OuterCubicPatchSegmentSpanPlusJoin * 12 /*AA center ramp with bowtie*/;
 // constexpr static uint32_t kOuterCurvePatchIndexCount =
 //     kOuterCurvePatchBorderIndexCount /*AA center ramp with bowtie*/ +
-//     (kOuterCurvePatchSegmentSpan - 2) * 3 /*Curve fan*/;
+//     (OuterCubicPatchSegmentSpan - 1) * 3 /*Curve fan*/;
 // constexpr static uint32_t kOuterCurvePatchBaseIndex =
 //     kMidpointFanCenterAAPatchBaseIndex + kMidpointFanCenterAAPatchIndexCount;
 // static_assert((kOuterCurvePatchBaseIndex * sizeof(uint16_t)) % 4 == 0);
@@ -682,7 +691,7 @@
 //     msaaMidpointFanPathsCover,
 //
 //     // MSAA interior triangulation is not currently supported, but this one draw
-//     // type is included in order to support the "retrofittedcubictriangles" GM.
+//     // type is included in order to support the "retrofitcubictristrips" GM.
 //     msaaOuterCubics,
 //
 //     // Clear or intersect (based on DrawContents) the clip value.
@@ -2031,7 +2040,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/gpu.hpp.
-// Upstream source revision: 2b2203f45a67f813cb662272962192ecfdfd923e
+// Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
 // Ownership unit: generic-gpu-contract.
 // Include/dependency authority: the pinned header and source-shaped modules.
 
@@ -2516,7 +2525,10 @@ impl PatchVertex {
 }
 
 pub const kMidpointFanPatchSegmentSpan: u32 = 8;
-pub const kOuterCurvePatchSegmentSpan: u32 = 17;
+pub const OuterCubicPatchSegmentSpan: u32 = 16;
+pub const OuterCubicPatchJoinSegmentCount: u32 = 1;
+pub const OuterCubicPatchSegmentSpanPlusJoin: u32 =
+    OuterCubicPatchSegmentSpan + OuterCubicPatchJoinSegmentCount;
 pub const kMidpointFanPatchVertexCount: u32 =
     kMidpointFanPatchSegmentSpan * 4 + (kMidpointFanPatchSegmentSpan + 1) + 1;
 pub const kMidpointFanPatchBorderIndexCount: u32 = kMidpointFanPatchSegmentSpan * 6;
@@ -2531,10 +2543,10 @@ pub const kMidpointFanCenterAAPatchIndexCount: u32 =
 pub const kMidpointFanCenterAAPatchBaseIndex: u32 =
     kMidpointFanPatchBaseIndex + kMidpointFanPatchIndexCount;
 pub const kOuterCurvePatchVertexCount: u32 =
-    kOuterCurvePatchSegmentSpan * 8 + kOuterCurvePatchSegmentSpan;
-pub const kOuterCurvePatchBorderIndexCount: u32 = kOuterCurvePatchSegmentSpan * 12;
+    OuterCubicPatchSegmentSpanPlusJoin * 8 + OuterCubicPatchSegmentSpanPlusJoin;
+pub const kOuterCurvePatchBorderIndexCount: u32 = OuterCubicPatchSegmentSpanPlusJoin * 12;
 pub const kOuterCurvePatchIndexCount: u32 =
-    kOuterCurvePatchBorderIndexCount + (kOuterCurvePatchSegmentSpan - 2) * 3;
+    kOuterCurvePatchBorderIndexCount + (OuterCubicPatchSegmentSpan - 1) * 3;
 pub const kOuterCurvePatchBaseIndex: u32 =
     kMidpointFanCenterAAPatchBaseIndex + kMidpointFanCenterAAPatchIndexCount;
 pub const kPatchVertexBufferCount: u32 = kMidpointFanPatchVertexCount

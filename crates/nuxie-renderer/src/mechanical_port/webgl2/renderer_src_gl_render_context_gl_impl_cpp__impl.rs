@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 157494] = [(); PINNED_SOURCE.len()];
+const _: [(); 153957] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -337,67 +337,6 @@ impl Drop for CanvasSourceTextureGLImpl {
                 }
                 if entry.drawFBO != 0 {
                     recordGLCommand(GLCommand::DeleteFramebuffer(entry.drawFBO));
-                }
-            });
-        }
-        unsafe { ManuallyDrop::drop(&mut self.base) };
-    }
-}
-
-impl CanvasMirrorTextureGLImpl {
-    fn new(
-        width: u32,
-        height: u32,
-        textureID: GLuint,
-        execution: GLExecutionStamp,
-        owner: *mut RenderContextGLImpl,
-        sourceTexID: GLuint,
-        canvasRegistry: WeakCanvasMirrorRegistry,
-    ) -> Self {
-        let mut base = TextureGLImpl::new(width, height, textureID, execution);
-        base.base.destroy_complete =
-            |base| unsafe { drop(Box::from_raw(base.cast::<CanvasMirrorTextureGLImpl>())) };
-        Self {
-            base: ManuallyDrop::new(base),
-            m_owner: owner,
-            m_sourceTexID: sourceTexID,
-            rust_canvas_registry: canvasRegistry,
-        }
-    }
-}
-
-unsafe impl RefCntTarget for CanvasMirrorTextureGLImpl {
-    fn r#ref(&self) {
-        self.base.base.r#ref();
-    }
-    unsafe fn unref(&self) {
-        unsafe { self.base.base.unref() }
-    }
-    unsafe fn onRefCntReachedZero(ptr: *const Self) {
-        unsafe { drop(Box::from_raw(ptr.cast_mut())) }
-    }
-}
-
-impl Drop for CanvasMirrorTextureGLImpl {
-    fn drop(&mut self) {
-        let framebuffers = self.rust_canvas_registry.upgrade().and_then(|registry| {
-            let mut registry = registry.borrow_mut();
-            let entry = registry.get_mut(&self.m_sourceTexID)?;
-            let framebuffers = (entry.readFBO, entry.drawFBO);
-            entry.readFBO = 0;
-            entry.drawFBO = 0;
-            entry.mirrorTex = 0;
-            entry.hasMirror = false;
-            Some(framebuffers)
-        });
-        if let Some((readFBO, drawFBO)) = framebuffers {
-            let execution = (&*self.base.rust_execution).clone();
-            let _ = execution.withDeleteCurrent(|| {
-                if readFBO != 0 {
-                    recordGLCommand(GLCommand::DeleteFramebuffer(readFBO));
-                }
-                if drawFBO != 0 {
-                    recordGLCommand(GLCommand::DeleteFramebuffer(drawFBO));
                 }
             });
         }
@@ -1079,6 +1018,21 @@ pub(crate) fn invalidateGLState(context: &mut RenderContextGLImpl) {
     });
 }
 
+pub(crate) fn scrubStateAfterOre(context: &mut RenderContextGLImpl) {
+    let execution = (&*context.rust_execution).clone();
+    execution.withCurrent(|| {
+        recordGLCommand(GLCommand::Finish);
+        for unit in 0..=DEFAULT_BINDINGS_SET_SIZE {
+            recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0 + unit));
+            recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));
+            recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_CUBE_MAP, 0));
+            recordGLCommand(GLCommand::BindSampler(unit, 0));
+        }
+        recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
+        invalidateGLState(context);
+    });
+}
+
 pub(crate) fn unbindGLInternalResources(context: &mut RenderContextGLImpl) {
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
@@ -1278,7 +1232,7 @@ pub(crate) fn makeDeferredRenderCanvas(
     wrapCanvasBacking(context, width, height, 0)
 }
 
-pub(crate) unsafe fn ensureDeferredCanvasBacking(
+pub(crate) unsafe fn ensureCanvasBacking(
     context: &mut RenderContextGLImpl,
     canvas: *mut RenderCanvas,
 ) {
@@ -1354,6 +1308,7 @@ pub(crate) fn makeOreContext(
 }
 
 pub(crate) fn registerCanvasTarget(context: &mut RenderContextGLImpl, sourceTex: GLuint) {
+    unregisterCanvasTarget(context, sourceTex);
     context
         .m_canvasMirrors
         .borrow_mut()
@@ -1407,14 +1362,13 @@ pub(crate) fn getOrCreateCanvasMirror(
     let execution = (&*context.rust_execution).clone();
     let canvasRegistry = (&*context.m_canvasMirrors).clone();
     execution.withCurrent(|| {
-        let canCreateMirror = canvasRegistry
-            .borrow()
-            .get(&sourceTex)
-            .is_some_and(|entry| !entry.hasMirror);
-        // Preserve the authored defect: a second request while the mirror is
-        // live returns null and lets the caller sample the bottom-up source
-        // directly. This lookup intentionally happens after the ingress drain.
-        if !canCreateMirror {
+        let existing = canvasRegistry.borrow().get(&sourceTex).and_then(|entry| {
+            (!entry.mirrorImage.get().is_null()).then(|| entry.mirrorImage.clone())
+        });
+        if let Some(existing) = existing {
+            return existing;
+        }
+        if !canvasRegistry.borrow().contains_key(&sourceTex) {
             return rcp::new();
         }
 
@@ -1451,15 +1405,11 @@ pub(crate) fn getOrCreateCanvasMirror(
         let registered = {
             let mut registry = canvasRegistry.borrow_mut();
             match registry.get_mut(&sourceTex) {
-                Some(entry) if !entry.hasMirror => {
-                    *entry = CanvasMirrorEntry {
-                        mirrorTex,
-                        width,
-                        height,
-                        readFBO,
-                        drawFBO,
-                        hasMirror: true,
-                    };
+                Some(entry) if entry.mirrorImage.get().is_null() => {
+                    entry.width = width;
+                    entry.height = height;
+                    entry.readFBO = readFBO;
+                    entry.drawFBO = drawFBO;
                     true
                 }
                 _ => false,
@@ -1475,20 +1425,16 @@ pub(crate) fn getOrCreateCanvasMirror(
             context.m_state.borrow_mut().invalidate();
             return rcp::new();
         }
-        let texture = make_rcp(|| {
-            CanvasMirrorTextureGLImpl::new(
-                width,
-                height,
-                mirrorTex,
-                execution.clone(),
-                context,
-                sourceTex,
-                Rc::downgrade(&canvasRegistry),
-            )
-        });
+        let texture = make_rcp(|| TextureGLImpl::new(width, height, mirrorTex, execution.clone()));
         let texture: rcp<RiveTexture> = unsafe { static_rcp_cast(texture) };
         let image = make_rcp(|| unsafe { RiveRenderImage::new(texture) });
+        canvasRegistry
+            .borrow_mut()
+            .get_mut(&sourceTex)
+            .expect("registered canvas mirror")
+            .mirrorImage = image.clone();
         context.m_state.borrow_mut().invalidate();
+        blitMirrorIfRegistered(context, sourceTex);
         image
     })
 }
@@ -1497,8 +1443,8 @@ pub(crate) fn blitMirrorIfRegistered(context: &mut RenderContextGLImpl, targetTe
     let execution = (&*context.rust_execution).clone();
     let canvasRegistry = (&*context.m_canvasMirrors).clone();
     execution.withCurrent(|| {
-        let entry = canvasRegistry.borrow().get(&targetTex).copied();
-        let Some(entry) = entry.filter(|entry| entry.hasMirror) else {
+        let entry = canvasRegistry.borrow().get(&targetTex).cloned();
+        let Some(entry) = entry.filter(|entry| !entry.mirrorImage.get().is_null()) else {
             return;
         };
         recordGLCommand(GLCommand::BindFramebuffer(
@@ -3548,6 +3494,12 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             targetWidth as i32,
             targetHeight as i32,
         ));
+        if context.m_capabilities.ANGLE_polygon_mode() && desc.wireframe {
+            recordGLCommand(GLCommand::PolygonModeANGLE {
+                face: GL_FRONT_AND_BACK,
+                mode: GL_LINE_ANGLE,
+            });
+        }
         let mut msaaResolveAction = MSAAResolveAction::automatic;
         let mut msaaDepthStencilColor = [GL_NONE; 3];
         let mut clipPlanesEnabled = false;
@@ -3957,6 +3909,12 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         .as_deref()
                         .expect("atomic resolve requires final PLS implementation")
                         .rasterOrderingKnownDisabled());
+                    if context.m_capabilities.ANGLE_polygon_mode() && desc.wireframe {
+                        recordGLCommand(GLCommand::PolygonModeANGLE {
+                            face: GL_FRONT_AND_BACK,
+                            mode: GL_FILL_ANGLE,
+                        });
+                    }
                     context.m_state.borrow_mut().bindVAO(context.m_emptyVAO.id());
                     recordGLCommand(GLCommand::DrawArrays {
                         mode: GL_TRIANGLE_STRIP,
@@ -4357,6 +4315,10 @@ impl RenderContextHelperBackendContract for RenderContextGLImpl {
         makeDeferredRenderCanvas(self, width, height)
     }
 
+    unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
+        unsafe { ensureCanvasBacking(self, canvas) }
+    }
+
     #[cfg(any(
         feature = "native-ore-metal-experimental",
         feature = "native-ore-vulkan-experimental",
@@ -4394,6 +4356,10 @@ impl RenderContextHelperBackendContract for RenderContextGLImpl {
 
     unsafe fn flush(&mut self, descriptor: &gpu::FlushDescriptor) {
         unsafe { flush(self, descriptor) }
+    }
+
+    fn scrubStateAfterOre(&mut self) {
+        scrubStateAfterOre(self)
     }
 }
 
@@ -4561,36 +4527,6 @@ impl Drop for RenderContextGLImpl {
     }
 }
 
-/// Exact `ORE_BACKEND_GL && RIVE_CANVAS` namespace-level source callable.
-pub(crate) unsafe fn getCanvasImportMirrorGL(
-    renderContext: *mut RenderContext,
-    sourceTex: *mut RiveTexture,
-    width: u32,
-    height: u32,
-) -> rcp<RiveRenderImage> {
-    if renderContext.is_null()
-        || !unsafe { (&*renderContext).platformFeatures().framebufferBottomUp }
-    {
-        return rcp::new();
-    }
-    let implementation = unsafe { (&*renderContext).static_impl_cast::<RenderContextGLImpl>() };
-    unsafe { (&mut *implementation).getCanvasImportMirror(sourceTex, width, height) }
-}
-
-#[cfg(feature = "ore-gl")]
-impl crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::CanvasImportMirrorGL
-    for RenderContextGLImpl
-{
-    unsafe fn getCanvasImportMirrorGL(
-        renderContext: *mut RenderContext,
-        sourceTex: *mut RiveTexture,
-        width: u32,
-        height: u32,
-    ) -> rcp<RiveRenderImage> {
-        unsafe { getCanvasImportMirrorGL(renderContext, sourceTex, width, height) }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4638,6 +4574,8 @@ mod tests {
         fn getInteger(&mut self, _parameter: GLenum) -> GLint {
             0
         }
+
+        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat { 0.0 }
 
         fn getString(&mut self, _parameter: GLenum) -> Option<Vec<u8>> {
             None
@@ -4692,8 +4630,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4090);
-        assert_eq!(PINNED_SOURCE.len(), 157494);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4010);
+        assert_eq!(PINNED_SOURCE.len(), 153957);
     }
 
     #[test]
@@ -4833,43 +4771,19 @@ mod tests {
             finalReleaseWake: std::sync::Arc::clone(&finalReleaseWake),
         }));
         let execution = domain.stamp();
+        let mirror = make_rcp(|| TextureGLImpl::new(32, 24, 17, execution.clone()));
+        let mirror: rcp<RiveTexture> = unsafe { static_rcp_cast(mirror) };
+        let mirrorImage = make_rcp(|| unsafe { RiveRenderImage::new(mirror) });
         let canvasRegistry: CanvasMirrorRegistry = Rc::new(RefCell::new(BTreeMap::from([(
             11,
             CanvasMirrorEntry {
-                mirrorTex: 17,
+                mirrorImage,
                 width: 32,
                 height: 24,
                 readFBO: 41,
                 drawFBO: 43,
-                hasMirror: true,
             },
         )])));
-
-        let mirror = make_rcp(|| {
-            CanvasMirrorTextureGLImpl::new(
-                32,
-                24,
-                17,
-                execution.clone(),
-                std::ptr::null_mut(),
-                11,
-                Rc::downgrade(&canvasRegistry),
-            )
-        });
-        let mirror: rcp<RiveTexture> = unsafe { static_rcp_cast(mirror) };
-        std::thread::spawn(move || drop(mirror)).join().unwrap();
-
-        assert_eq!(finalReleaseWake.takePosts(), 1);
-        assert!(canvasRegistry.borrow().get(&11).unwrap().hasMirror);
-        let mirrorEntry = execution.withCurrent(|| {
-            // The worker finalizer is drained at this method-style ingress,
-            // before the logical registry is borrowed by the body.
-            *canvasRegistry.borrow().get(&11).unwrap()
-        });
-        assert_eq!(mirrorEntry.mirrorTex, 0);
-        assert_eq!(mirrorEntry.readFBO, 0);
-        assert_eq!(mirrorEntry.drawFBO, 0);
-        assert!(!mirrorEntry.hasMirror);
 
         let source = make_rcp(|| {
             CanvasSourceTextureGLImpl::new(

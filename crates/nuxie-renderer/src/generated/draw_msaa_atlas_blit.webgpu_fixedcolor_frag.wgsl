@@ -1,39 +1,39 @@
 struct DC {
-    gc: f32,
-    qd: f32,
-    jf: f32,
+    hc: f32,
+    rd: f32,
     kf: f32,
-    o6_: u32,
-    Lg: u32,
-    Ue: u32,
+    lf: f32,
+    p6_: u32,
+    Mg: u32,
     Ve: u32,
-    T7_: vec4<i32>,
-    Hg: vec2<f32>,
-    rd: vec2<f32>,
-    a2_: u32,
-    Mg: f32,
-    c6_: u32,
+    We: u32,
+    U7_: vec4<i32>,
+    Ig: vec2<f32>,
+    sd: vec2<f32>,
+    c2_: u32,
+    Ng: f32,
+    d6_: u32,
     R2_: f32,
-    sd: f32,
-    Pe: u32,
+    td: f32,
+    Qe: u32,
     B3_: f32,
     C3_: f32,
-    td: f32,
-    Eg: u32,
+    ud: f32,
+    Fg: u32,
 }
 
-@id(7) override lh: bool = true;
-@id(2) override gh: bool = true;
-@id(8) override mh: bool = true;
+@id(7) override mh: bool = true;
+@id(2) override hh: bool = true;
+@id(8) override nh: bool = true;
 
 @group(0) @binding(8)
 var MD: texture_2d<f32>;
 @group(3) @binding(8)
-var Ob: sampler;
+var Pb: sampler;
 @group(1) @binding(11)
 var JC: texture_2d<f32>;
 @group(1) @binding(13)
-var U5_: sampler;
+var V5_: sampler;
 @group(0) @binding(10)
 var CD: texture_2d<f32>;
 @group(3) @binding(10)
@@ -44,13 +44,13 @@ var<private> A2_1: vec3<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> m: DC;
-var<private> Pg: vec4<f32>;
+var<private> Qg: vec4<f32>;
 @group(3) @binding(9)
 var aa: sampler;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 var<private> K3_1: f32;
-var<private> e2_1: f32;
+var<private> f2_1: f32;
 
 fn main_1() {
     var phi_616_: vec4<f32>;
@@ -70,7 +70,7 @@ fn main_1() {
     let _e33 = f1_1;
     let _e34 = A2_1;
     if (_e33.w >= 0f) {
-        if gh {
+        if hh {
             phi_616_ = vec4<f32>(_e33.x, _e33.y, _e33.z, (_e33.w * _e32));
         } else {
             phi_616_ = (_e33 * _e32);
@@ -92,10 +92,10 @@ fn main_1() {
             phi_601_ = ((0.001953125f * _e54) + _e55);
         }
         let _e62 = phi_601_;
-        let _e65 = textureSampleLevel(MD, Ob, vec2<f32>(_e62, -(_e33.w)), 0f);
+        let _e65 = textureSampleLevel(MD, Pb, vec2<f32>(_e62, -(_e33.w)), 0f);
         let _e67 = (_e65.w * _e32);
         let _e72 = vec4<f32>(_e65.x, _e65.y, _e65.z, _e67);
-        if gh {
+        if hh {
             phi_617_ = _e72;
         } else {
             let _e74 = (_e72.xyz * _e67);
@@ -105,16 +105,16 @@ fn main_1() {
         phi_615_ = _e80;
     }
     let _e82 = phi_615_;
-    phi_461_ = mh;
-    if mh {
+    phi_461_ = nh;
+    if nh {
         phi_461_ = (_e34.z > 0f);
     }
     let _e86 = phi_461_;
     phi_619_ = _e82;
     if _e86 {
-        let _e90 = textureSampleLevel(JC, U5_, _e34.xy, (_e34.z - 1f));
+        let _e90 = textureSampleLevel(JC, V5_, _e34.xy, (_e34.z - 1f));
         phi_612_ = _e90;
-        if gh {
+        if hh {
             if (_e90.w != 0f) {
                 phi_602_ = (1f / _e90.w);
             } else {
@@ -132,7 +132,7 @@ fn main_1() {
     let _e109 = gl_FragCoord_1;
     let _e111 = m.B3_;
     let _e113 = m.C3_;
-    if (lh && (_e106.w != 0f)) {
+    if (mh && (_e106.w != 0f)) {
         phi_620_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e109.x) + (0.00583715f * _e109.y))))) * _e111) + _e113)) + _e107);
     } else {
         phi_620_ = _e107;
@@ -140,19 +140,19 @@ fn main_1() {
     let _e129 = phi_620_;
     let _e135 = vec4<f32>(_e129.x, _e106.y, _e106.z, _e106.w);
     let _e141 = vec4<f32>(_e135.x, _e129.y, _e135.z, _e135.w);
-    Pg = vec4<f32>(_e141.x, _e141.y, _e129.z, _e141.w);
+    Qg = vec4<f32>(_e141.x, _e141.y, _e129.z, _e141.w);
     return;
 }
 
 @fragment
-fn main(@location(1) D2_: vec2<f32>, @location(0) f1_: vec4<f32>, @location(9) A2_: vec3<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(4) @interpolate(flat, either) K3_: f32, @location(6) @interpolate(flat, either) e2_: f32) -> @location(0) vec4<f32> {
+fn main(@location(1) D2_: vec2<f32>, @location(0) f1_: vec4<f32>, @location(9) A2_: vec3<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(4) @interpolate(flat, either) K3_: f32, @location(6) @interpolate(flat, either) f2_: f32) -> @location(0) vec4<f32> {
     D2_1 = D2_;
     f1_1 = f1_;
     A2_1 = A2_;
     gl_FragCoord_1 = gl_FragCoord;
     K3_1 = K3_;
-    e2_1 = e2_;
+    f2_1 = f2_;
     main_1();
-    let _e13 = Pg;
+    let _e13 = Qg;
     return _e13;
 }

@@ -640,7 +640,9 @@ pub(crate) enum Command {
     ClearSemanticFocus,
     BindViewModelInstance,
     SetViewModelInstance,
+    ClearViewModelInstance,
     SetGlobalViewModelInstance,
+    ClearGlobalViewModelInstance,
     GetGlobalViewModelInstance,
     Bind,
     RunOnce,
@@ -1764,6 +1766,11 @@ impl CommandQueue {
             request_id,
         );
     }
+    /// Removes the main (non-global) view model instance without rebinding.
+    /// Call [`Self::bind`] to create and apply its default main instance.
+    pub fn clear_view_model_instance(&mut self, handle: StateMachineHandle, request_id: u64) {
+        self.record_handle(Command::ClearViewModelInstance, handle, request_id);
+    }
     pub fn set_global_view_model_instance(
         &mut self,
         handle: StateMachineHandle,
@@ -1776,6 +1783,22 @@ impl CommandQueue {
             .write(Command::SetGlobalViewModelInstance)
             .write(handle)
             .write(view_model)
+            .write(request_id);
+        self.names.write(name);
+        self.notify_command();
+    }
+    /// Removes the instance occupying a named global slot without rebinding.
+    /// Call [`Self::bind`] to create and apply that slot's default instance.
+    pub fn clear_global_view_model_instance(
+        &mut self,
+        handle: StateMachineHandle,
+        name: String,
+        request_id: u64,
+    ) {
+        let _lock = self.command_gate.acquire();
+        self.command_stream
+            .write(Command::ClearGlobalViewModelInstance)
+            .write(handle)
             .write(request_id);
         self.names.write(name);
         self.notify_command();

@@ -8,7 +8,7 @@
 #![allow(dead_code)]
 
 use crate::gpu::TriangleVertex;
-use nuxie_render_api::{FillRule, Mat2D, PathVerb, RawPath, Vec2D};
+use nuxie_render_api::{Aabb, FillRule, PathVerb, RawPath, Vec2D};
 
 type VertexId = usize;
 type EdgeId = usize;
@@ -270,23 +270,16 @@ struct Mesh {
 pub(crate) struct InnerFanTriangulator {
     mesh: Mesh,
     poly_head: Option<PolyId>,
-    fill_rule: FillRule,
-    reverse_triangles: bool,
-    negate_winding: bool,
 }
 
 impl InnerFanTriangulator {
-    pub(crate) fn new(
-        path: &RawPath,
-        view: Mat2D,
-        direction: SweepDirection,
-        fill_rule: FillRule,
-    ) -> Self {
-        let determinant = crate::draw::mat2d_determinant(view);
-        let fill_rule = if fill_rule == FillRule::EvenOdd {
-            FillRule::EvenOdd
+    pub(crate) fn new(path: &RawPath, path_bounds: Aabb) -> Self {
+        // Sweep along the longer dimension so the sweep line crosses fewer
+        // edges.
+        let direction = if path_bounds.width() > path_bounds.height() {
+            SweepDirection::Horizontal
         } else {
-            FillRule::NonZero
+            SweepDirection::Vertical
         };
         let mut mesh = Mesh::from_path(path, direction);
         let poly_head = mesh
@@ -294,31 +287,28 @@ impl InnerFanTriangulator {
             .and_then(|_| mesh.tessellate())
             .ok()
             .flatten();
-        Self {
-            mesh,
-            poly_head,
-            fill_rule,
-            reverse_triangles: determinant < 0.0,
-            negate_winding: false,
-        }
+        Self { mesh, poly_head }
     }
 
-    pub(crate) fn negate_winding(&mut self) {
-        self.negate_winding = !self.negate_winding;
-    }
-
-    pub(crate) fn max_vertex_count(&self) -> usize {
+    pub(crate) fn max_vertex_count(&self, fill_rule: FillRule) -> usize {
         self.mesh
-            .max_triangle_vertex_count(self.poly_head, self.fill_rule)
+            .max_triangle_vertex_count(self.poly_head, fill_rule)
     }
 
-    pub(crate) fn triangles(&self, path_id: u16, faces: WindingFaces) -> Vec<TriangleVertex> {
+    pub(crate) fn triangles(
+        &self,
+        path_id: u16,
+        fill_rule: FillRule,
+        reverse_triangles: bool,
+        negate_winding: bool,
+        faces: WindingFaces,
+    ) -> Vec<TriangleVertex> {
         self.mesh.emit_triangles(
             self.poly_head,
-            self.fill_rule,
+            fill_rule,
             path_id,
-            self.reverse_triangles,
-            self.negate_winding,
+            reverse_triangles,
+            negate_winding,
             faces,
         )
     }
@@ -2080,17 +2070,10 @@ mod tests {
         path.line_to(1.0, 0.0);
         path.line_to(0.0, 1.0);
         path.close();
-        let view = Mat2D([
-            f32::from_bits(0x26cd_29b3),
-            f32::from_bits(0x2533_fdc2),
-            f32::from_bits(0xd01a_d4bb),
-            f32::from_bits(0xce87_d5a9),
-            0.0,
-            0.0,
-        ]);
-        let triangulator =
-            InnerFanTriangulator::new(&path, view, SweepDirection::Horizontal, FillRule::NonZero);
-        assert!(triangulator.reverse_triangles);
+        let triangulator = InnerFanTriangulator::new(&path, path.bounds().unwrap());
+        let forward = triangulator.triangles(1, FillRule::NonZero, false, false, WindingFaces::All);
+        let reversed = triangulator.triangles(1, FillRule::NonZero, true, false, WindingFaces::All);
+        assert_eq!(forward[0].point, reversed[2].point);
     }
 
     fn direct_grid_path() -> RawPath {
@@ -2335,37 +2318,32 @@ mod tests {
 
         let paths = [concave, bowtie, doubled.clone(), direct_grid_path()];
         for (path_index, path) in paths.iter().enumerate() {
-            for direction in [SweepDirection::Horizontal, SweepDirection::Vertical] {
-                for fill_rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::Clockwise] {
-                    let triangulator =
-                        InnerFanTriangulator::new(path, Mat2D::IDENTITY, direction, fill_rule);
-                    let actual = triangulator.triangles(1, WindingFaces::All).len();
-                    let maximum = triangulator.non_zero_max_triangle_vertex_count();
-                    assert!(
-                        maximum >= actual,
-                        "path {path_index}, {direction:?}, {fill_rule:?}: {maximum} < {actual}"
-                    );
-                }
+            for fill_rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::Clockwise] {
+                let triangulator = InnerFanTriangulator::new(path, path.bounds().unwrap());
+                let actual = triangulator
+                    .triangles(1, fill_rule, false, false, WindingFaces::All)
+                    .len();
+                let maximum = triangulator.non_zero_max_triangle_vertex_count();
+                assert!(
+                    maximum >= actual,
+                    "path {path_index}, {fill_rule:?}: {maximum} < {actual}"
+                );
             }
         }
 
-        let even_odd = InnerFanTriangulator::new(
-            &doubled,
-            Mat2D::IDENTITY,
-            SweepDirection::Vertical,
-            FillRule::EvenOdd,
-        );
-        let even_odd_count = even_odd.triangles(1, WindingFaces::All).len();
+        let even_odd = InnerFanTriangulator::new(&doubled, doubled.bounds().unwrap());
+        let even_odd_count = even_odd
+            .triangles(1, FillRule::EvenOdd, false, false, WindingFaces::All)
+            .len();
         let non_zero_maximum = even_odd.non_zero_max_triangle_vertex_count();
         assert!(non_zero_maximum > even_odd_count);
 
-        let non_zero = InnerFanTriangulator::new(
-            &doubled,
-            Mat2D::IDENTITY,
-            SweepDirection::Vertical,
-            FillRule::NonZero,
+        assert!(
+            non_zero_maximum
+                >= even_odd
+                    .triangles(1, FillRule::NonZero, false, false, WindingFaces::All)
+                    .len()
         );
-        assert!(non_zero_maximum >= non_zero.triangles(1, WindingFaces::All).len());
     }
 
     #[test]
@@ -2460,5 +2438,4 @@ mod tests {
         );
         assert_eq!(mesh.breadcrumbs.len(), 2);
     }
-
 }

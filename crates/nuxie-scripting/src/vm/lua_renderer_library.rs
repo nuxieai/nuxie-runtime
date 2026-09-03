@@ -19,8 +19,6 @@ pub(crate) struct RendererBindings {
 #[derive(Default)]
 struct ScriptingRouting {
     render_context: Option<PersistentFactoryContext>,
-    ore_override: Option<OreContextHandle>,
-    canvas_host: Option<DeferredCanvasHostHandle>,
 }
 
 impl RendererBindings {
@@ -92,16 +90,7 @@ impl RendererBindings {
             .ok()
             .flatten()
     }
-    pub(crate) fn set_ore_context(&self, context: Option<OreContextHandle>) {
-        self.routing.borrow_mut().ore_override = context;
-    }
-    pub(crate) fn ore_context_override(&self) -> Option<OreContextHandle> {
-        self.routing.borrow().ore_override.clone()
-    }
     pub(crate) fn ore_context(&self) -> Option<OreContextHandle> {
-        if let Some(context) = self.ore_context_override() {
-            return Some(context);
-        }
         if let Some(context) = self
             .with_factory(|factory| Ok(factory.ore()))
             .ok()
@@ -116,22 +105,16 @@ impl RendererBindings {
             .clone()
             .and_then(|mut context| context.ore())
     }
-    pub(crate) fn set_deferred_canvas_host(&self, host: Option<DeferredCanvasHostHandle>) {
-        self.routing.borrow_mut().canvas_host = host;
-    }
     pub(crate) fn deferred_canvas_host(&self) -> Option<DeferredCanvasHostHandle> {
-        self.routing.borrow().canvas_host.clone()
+        self.with_factory(|factory| Ok(factory.deferred_canvas_host()))
+            .ok()
+            .flatten()
     }
     pub(crate) fn route_to_import_factory(&self, factory: &mut dyn RenderFactory) {
+        self.render_context.adopt(factory);
         if self.render_context_is_late_bound() {
             if let Some(context) = factory.render_context() {
                 self.set_render_context(Some(context));
-            }
-        }
-        if self.deferred_canvas_host().is_none() {
-            if let Some(host) = factory.deferred_canvas_host() {
-                self.set_deferred_canvas_host(Some(host));
-                self.set_ore_context(factory.ore());
             }
         }
     }

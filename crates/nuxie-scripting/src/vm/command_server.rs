@@ -41,6 +41,14 @@ impl PersistentRenderContext {
         }
     }
 
+    /// Re-point a caller-supplied VM at the factory the file imported through.
+    pub(crate) fn adopt(&self, factory: &mut dyn RenderFactory) {
+        let candidate = factory
+            .persistent_context()
+            .expect("import factory must provide a persistent context");
+        *self.context.borrow_mut() = Some(candidate);
+    }
+
     /// Verify a callback adapter still carries the factory installed before
     /// import. Callback entry points must never establish ownership.
     pub(crate) fn verify(&self, factory: &mut dyn RenderFactory) -> Result<()> {

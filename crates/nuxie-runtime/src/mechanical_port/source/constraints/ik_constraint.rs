@@ -207,9 +207,7 @@ impl IKConstraint {
         self.constrain_rotation(first, r1);
         self.constrain_rotation(first_child_index, r2);
         if first_child_index != second {
-            Self::with_bone_mut(&b2, |bone| {
-                *bone.mutable_world_transform() = get_parent_world(bone) * *bone.transform();
-            });
+            Self::with_bone_mut(&b2, |bone| bone.compose_world_transform());
         }
         self.fk_chain[first].angle = r1;
         self.fk_chain[first_child_index].angle = r2;
@@ -223,7 +221,6 @@ impl IKConstraint {
         let bone = self.fk_chain[index].bone.clone();
         let components = self.fk_chain[index].transform_components;
         Self::with_bone_mut(&bone, |bone| {
-            let parent_world = get_parent_world(bone);
             let transform = bone.mutable_transform();
             *transform = Mat2D::from_rotation(rotation);
             transform[4] = components.x();
@@ -239,7 +236,7 @@ impl IKConstraint {
                 transform[2] = transform[0] * skew + transform[2];
                 transform[3] = transform[1] * skew + transform[3];
             }
-            *bone.mutable_world_transform() = parent_world * *transform;
+            bone.compose_world_transform();
         });
     }
 
@@ -260,24 +257,46 @@ impl IKConstraint {
         if target_collapsed {
             return;
         }
+        // Decompose the chain where it currently stands, before rebuilding any
+        // of it, so no bone is measured against a parent we already rebuilt. A
+        // constraint that ran before us left its work here and nowhere else.
         for link in &mut self.fk_chain {
-            let (parent_world_inverse, transform_components) = link
-                .bone
+            let (parent_world_inverse, transform_components) =
+                Self::with_bone(&link.bone, |bone| {
+                    let parent_world_inverse = get_parent_world(bone).invert_or_identity();
+                    (
+                        parent_world_inverse,
+                        (parent_world_inverse * *bone.world_transform()).decompose(),
+                    )
+                });
+            link.parent_world_inverse = parent_world_inverse;
+            link.transform_components = transform_components;
+        }
+
+        // Take the angle back from the FK base. Rotation is the only component
+        // we write, so reading ours back would blend from the pose we solved
+        // last pass; translation, scale and skew we merely carry, so they stay
+        // as whatever constrained the bone left them.
+        for index in 0..self.fk_chain.len() {
+            let bone = self.fk_chain[index].bone.clone();
+            let (rotation, parent_world_inverse) = bone
                 .with_mut(|owner| {
-                    let parent_world =
-                        get_parent_world(owner.as_bone().expect("IK chain remains Bone-derived"));
-                    let parent_world_inverse = parent_world.invert_or_identity();
                     // Preserve virtual x/y dispatch, including RootBone's
                     // authored translation, when rebuilding the FK transform.
                     let translation = owner.transform_component_translation();
                     let bone = owner.as_bone_mut().expect("IK chain remains Bone-derived");
                     bone.update_transform_state(translation.x, translation.y);
-                    *bone.mutable_world_transform() = parent_world * *bone.transform();
-                    (parent_world_inverse, bone.transform().decompose())
+                    (
+                        bone.transform().decompose().rotation(),
+                        get_parent_world(bone).invert_or_identity(),
+                    )
                 })
                 .expect("IKConstraint chain retains live Bones");
-            link.parent_world_inverse = parent_world_inverse;
-            link.transform_components = transform_components;
+            self.fk_chain[index]
+                .transform_components
+                .set_rotation(rotation);
+            self.fk_chain[index].parent_world_inverse = parent_world_inverse;
+            self.constrain_rotation(index, rotation);
         }
         let count = self.fk_chain.len();
         assert!(

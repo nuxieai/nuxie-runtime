@@ -1,25 +1,25 @@
 struct DC {
-    gc: f32,
-    qd: f32,
-    jf: f32,
+    hc: f32,
+    rd: f32,
     kf: f32,
-    o6_: u32,
-    Lg: u32,
-    Ue: u32,
+    lf: f32,
+    p6_: u32,
+    Mg: u32,
     Ve: u32,
-    T7_: vec4<i32>,
-    Hg: vec2<f32>,
-    rd: vec2<f32>,
-    a2_: u32,
-    Mg: f32,
-    c6_: u32,
+    We: u32,
+    U7_: vec4<i32>,
+    Ig: vec2<f32>,
+    sd: vec2<f32>,
+    c2_: u32,
+    Ng: f32,
+    d6_: u32,
     R2_: f32,
-    sd: f32,
-    Pe: u32,
+    td: f32,
+    Qe: u32,
     B3_: f32,
     C3_: f32,
-    td: f32,
-    Eg: u32,
+    ud: f32,
+    Fg: u32,
 }
 
 struct gl_PerVertex {
@@ -53,11 +53,11 @@ var QB: texture_2d<u32>;
 var YC: texture_2d<f32>;
 @group(3) @binding(9)
 var aa: sampler;
-var<private> z6_: vec4<f32>;
 var<private> A6_: vec4<f32>;
+var<private> B6_: vec4<f32>;
 var<private> N4_: vec4<f32>;
-var<private> D5_: vec3<f32>;
-var<private> H7_: u32;
+var<private> O4_: vec3<f32>;
+var<private> I7_: u32;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
@@ -150,7 +150,7 @@ fn main_1() {
     }
     let _e103 = phi_1794_;
     let _e104 = vec2<f32>(select(_e95, _e92, ((_e61 & 1i) == 0i)), _e103);
-    let _e107 = m.qd;
+    let _e107 = m.rd;
     phi_1991_ = _e104;
     if (((_e95 - _e92) * _e107) < 0f) {
         phi_1991_ = vec2<f32>(_e104.x, (((2f * _e74) + 1f) - _e103));
@@ -416,42 +416,42 @@ fn main_1() {
         phi_2015_ = -(_e466);
     }
     let _e478 = phi_2015_;
-    z6_ = vec4<f32>(_e62.x, _e62.y, _e393.x, _e393.y);
-    A6_ = vec4<f32>(_e391.x, _e391.y, _e65.z, _e65.w);
+    A6_ = vec4<f32>(_e62.x, _e62.y, _e393.x, _e393.y);
+    B6_ = vec4<f32>(_e391.x, _e391.y, _e65.z, _e65.w);
     let _e489 = f32((((_e431 + _e121) + _e123) - 1u));
     N4_ = vec4<f32>((_e489 - abs((_e95 - _e117.x))), _e489, f32(((_e123 << bitcast<u32>(10i)) | _e431)), _e478);
+    let _e499 = VC_1;
+    O4_[0u] = _e499.x;
+    O4_[1u] = _e499.y;
     if (_e123 > 1u) {
-        let _e500 = VC_1;
-        let _e503 = vec2<f32>(_e500.x, _e500.y);
-        let _e507 = (_e456 * dot(_e503, _e503));
-        if (_e507 == 0f) {
+        let _e505 = vec2<f32>(_e499.x, _e499.y);
+        let _e509 = (_e456 * dot(_e505, _e505));
+        if (_e509 == 0f) {
             phi_2016_ = 1f;
         } else {
-            phi_2016_ = clamp((dot(_e452, _e503) * inverseSqrt(_e507)), -1f, 1f);
+            phi_2016_ = clamp((dot(_e452, _e505) * inverseSqrt(_e509)), -1f, 1f);
         }
-        let _e513 = phi_2016_;
-        let _e515 = f32(_e123);
-        phi_2024_ = _e515;
+        let _e515 = phi_2016_;
+        let _e517 = f32(_e123);
+        phi_2024_ = _e517;
         if ((_e125 & 503316480u) == 167772160u) {
-            phi_2024_ = (_e515 - 2f);
+            phi_2024_ = (_e517 - 2f);
         }
-        let _e520 = phi_2024_;
-        let _e521 = (acos(_e513) / _e520);
-        phi_2025_ = _e521;
-        if (determinant(mat2x2<f32>(_e452, _e503)) < 0f) {
-            phi_2025_ = -(_e521);
+        let _e522 = phi_2024_;
+        let _e523 = (acos(_e515) / _e522);
+        phi_2025_ = _e523;
+        if (determinant(mat2x2<f32>(_e452, _e505)) < 0f) {
+            phi_2025_ = -(_e523);
         }
-        let _e526 = phi_2025_;
-        D5_[0u] = _e500.x;
-        D5_[1u] = _e500.y;
-        D5_[2u] = _e526;
+        let _e528 = phi_2025_;
+        O4_[2u] = _e528;
     }
     phi_2029_ = _e125;
     if (_e95 < _e92) {
         phi_2029_ = (_e125 | 8388608u);
     }
     let _e533 = phi_2029_;
-    H7_ = _e533;
+    I7_ = _e533;
     unnamed.gl_Position = vec4<f32>(((_e117.x * 0.0009765625f) - 1f), ((_e117.y * _e107) - sign(_e107)), 0f, 1f);
     return;
 }
@@ -464,11 +464,11 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) ID: vec4<f32>, 
     VC_1 = VC;
     UB_1 = UB;
     main_1();
-    let _e18 = z6_;
-    let _e19 = A6_;
+    let _e18 = A6_;
+    let _e19 = B6_;
     let _e20 = N4_;
-    let _e21 = D5_;
-    let _e22 = H7_;
+    let _e21 = O4_;
+    let _e22 = I7_;
     let _e23 = unnamed.gl_Position;
     return VertexOutput(_e18, _e19, _e20, _e21, _e22, _e23);
 }

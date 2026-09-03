@@ -69,10 +69,10 @@ impl ScriptedCanvas {
             .map_err(|_| {
                 luaur_rt::Error::runtime(format!("{caller} failed to create RenderCanvas"))
             })?;
-        let image =
-            lua.create_userdata(ScriptedImage::from_render_image_rc(canvas.render_image()))?;
+        let canvas: RenderCanvasHandle = Rc::new(RefCell::new(canvas));
+        let image = lua.create_userdata(ScriptedImage::from_render_canvas(Rc::clone(&canvas)))?;
         self.image = Some(image);
-        self.canvas = Some(Rc::new(RefCell::new(canvas)));
+        self.canvas = Some(canvas);
         self.pending_width = 0;
         self.pending_height = 0;
         Ok(())
@@ -353,9 +353,9 @@ mod tests {
 
     use nuxie_render_api::{
         BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D,
-        PersistentFactory, RawPath, RecordingFactory, RenderBuffer, RenderBufferFlags,
-        RenderBufferType, RenderCanvasError, RenderImage, RenderPaint, RenderPath, RenderShader,
-        Renderer,
+        OreContextHandle, PersistentFactory, RawPath, RecordingFactory, RenderBuffer,
+        RenderBufferFlags, RenderBufferType, RenderCanvasError, RenderImage, RenderPaint,
+        RenderPath, RenderShader, Renderer,
     };
 
     use crate::vm::ScriptVm;
@@ -474,6 +474,7 @@ mod tests {
     struct TestCanvasFactory {
         inner: RecordingFactory,
         events: Rc<RefCell<Vec<String>>>,
+        ore: Option<OreContextHandle>,
     }
 
     impl TestCanvasFactory {
@@ -481,6 +482,7 @@ mod tests {
             Self {
                 inner: RecordingFactory::new(),
                 events,
+                ore: None,
             }
         }
     }
@@ -488,6 +490,9 @@ mod tests {
     impl Factory for TestCanvasFactory {
         fn is_render_context(&self) -> bool {
             true
+        }
+        fn ore(&mut self) -> Option<OreContextHandle> {
+            self.ore.clone()
         }
         fn make_render_buffer(
             &mut self,
@@ -574,9 +579,9 @@ mod tests {
         let mut factory = PersistentFactory::new(TestCanvasFactory::new(events.clone()));
         vm.install_render_factory(&mut factory).unwrap();
         vm.install_rive_globals().unwrap();
-        vm.set_ore_context(Some(Rc::new(RefCell::new(
+        factory.borrow_mut().ore = Some(Rc::new(RefCell::new(
             nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
-        ))));
+        )));
         let canvas = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 4, 3).unwrap();
         vm.lua().globals().set("canvas", canvas).unwrap();
         let (_gpu_instance, gpu_context) = crate::gpu_canvas::ImportedGpuCanvasInstance::new(
@@ -667,9 +672,9 @@ mod tests {
                 .contains("requires the deferred recorder")
         );
 
-        vm.set_ore_context(Some(Rc::new(RefCell::new(
+        factory.borrow_mut().ore = Some(Rc::new(RefCell::new(
             nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
-        ))));
+        )));
 
         {
             vm.lua()

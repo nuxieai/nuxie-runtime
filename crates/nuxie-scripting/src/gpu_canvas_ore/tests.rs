@@ -1,6 +1,6 @@
 //! Narrow regressions for the Lua C API descriptor/coercion rules at e949498e.
 use super::*;
-use crate::vm::ScriptVm;
+use crate::vm::{RoutedTestFactory, ScriptVm};
 use nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext;
 
 fn recording_vm() -> ScriptVm {
@@ -14,7 +14,12 @@ fn recording_vm() -> ScriptVm {
             ..ShaderModuleDesc::default()
         })
         .unwrap();
-    vm.set_ore_context(Some(ore));
+    let mut factory = nuxie_render_api::PersistentFactory::new(RoutedTestFactory {
+        inner: nuxie_render_api::RecordingFactory::new(),
+        ore: Some(ore),
+        canvas_host: None,
+    });
+    vm.install_render_factory(&mut factory).unwrap();
     vm.install_rive_globals().unwrap();
     vm.lua()
         .globals()

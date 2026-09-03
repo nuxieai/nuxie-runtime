@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/draw_pipeline_vulkan.cpp`.
-//! Updated through upstream `3ed35ee0ded0d58fb8d380930a156041a4624a2f`.
+//! Updated through upstream `1db281b3e82baf850635fd7aa2092920a80b6a2c`.
 
 #![allow(non_snake_case)]
 
@@ -277,6 +277,8 @@ impl DrawPipelineVulkan {
                     if props
                         .drawPipelineOptions
                         .has(super::draw_pipeline_vulkan_decl::DrawPipelineOptions::wireframe)
+                        && props.drawType != DrawType::renderPassInitialize
+                        && props.drawType != DrawType::renderPassResolve
                     {
                         vk::PolygonMode::LINE
                     } else {

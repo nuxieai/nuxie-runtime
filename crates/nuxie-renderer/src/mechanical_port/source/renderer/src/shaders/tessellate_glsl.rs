@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/tessellate.glsl.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1db281b3e82baf850635fd7aa2092920a80b6a2c";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/tessellate.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "ecf7b979552b7bf7af6ff17a3fc8a0f5666942f7f7febda96fb4255640deee2f";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 560;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 24329;
+    "393b17b7c9370463b614a710a70f8681b7c4bcb2c9e848db3aa43f9949ff1f62";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 568;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 24851;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_TESSELLATE_GLSL_SOURCE: &str = r###"/*
@@ -257,6 +257,10 @@ VERTEX_MAIN(@tessellateVertexMain, Attrs, attrs, _vertexID, _instanceID)
                     float(totalVertexCount), // totalVertexCount
                     (joinSegmentCount << 10) | parametricSegmentCount,
                     radsPerPolarSegment);
+    // Always forward the joinTangent slot. A real join (joinSegmentCount > 1)
+    // also needs to take the branch below and get radsPerJoinSegment in .z, but
+    // retrofitted triangle strips reuse .xy, and do not take the branch.
+    v_joinArgs.xy = @a_joinTan_and_ys.xy;
     if (joinSegmentCount > 1u)
     {
         float2x2 joinTangents = float2x2(tangents[1], @a_joinTan_and_ys.xy);
@@ -277,7 +281,6 @@ VERTEX_MAIN(@tessellateVertexMain, Attrs, attrs, _vertexID, _instanceID)
         float radsPerJoinSegment = joinTheta / joinSpan;
         if (determinant(joinTangents) < .0)
             radsPerJoinSegment = -radsPerJoinSegment;
-        v_joinArgs.xy = @a_joinTan_and_ys.xy;
         v_joinArgs.z = radsPerJoinSegment;
     }
 
@@ -396,14 +399,19 @@ FRAG_DATA_MAIN(TESSDATA4, @tessellateFragmentMain)
         tessCoord = isTan0 ? p0 : p3;
         theta = atan2(isTan0 ? tangents[0] : tangents[1]);
     }
-    else if ((contourIDWithFlags & RETROFITTED_TRIANGLE_CONTOUR_FLAG) != 0u)
+    else if ((contourIDWithFlags & RETROFIT_TRI_STRIP_CONTOUR_FLAG) != 0u)
     {
-        // This cubic should actually be drawn as the single, non-AA triangle:
-        // [p0, p1, p3]. This is used to squeeze in more rare triangles, like
-        // "grout" triangles from self intersections on interior triangulation,
-        // where it wouldn't be worth it to put them in their own dedicated draw
-        // call.
-        tessCoord = p1;
+        // This cubic should actually be drawn as a (non-AA) 5-point triangle
+        // strip: [p0, p1, p3, p2, joinTangent]. This is used to reduce draws
+        // and pipeline transitions by squeezing in triangles that don't
+        // otherwise need special state or shading logic.
+        tessCoord = p0;
+        if (mergedVertexID >= float(OUTER_CUBIC_PATCH_SEGMENT_SPAN / 2u))
+            tessCoord = p1;
+        if (mergedVertexID >= float(OUTER_CUBIC_PATCH_SEGMENT_SPAN * 3u / 4u))
+            tessCoord = p2;
+        if (mergedVertexID >= float(OUTER_CUBIC_PATCH_SEGMENT_SPAN * 7u / 8u))
+            tessCoord = v_joinArgs.xy; // joinTangent
     }
     else
     {

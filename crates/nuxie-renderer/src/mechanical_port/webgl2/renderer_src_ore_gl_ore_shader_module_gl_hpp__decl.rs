@@ -59,9 +59,6 @@ unsafe impl GpuResourcePayload for ShaderModuleGL {
         self.base.gpu_resource_mut()
     }
 
-    fn shader_module_base_mut(&mut self) -> Option<&mut ShaderModule> {
-        Some(&mut self.base)
-    }
 }
 
 #[cfg(test)]

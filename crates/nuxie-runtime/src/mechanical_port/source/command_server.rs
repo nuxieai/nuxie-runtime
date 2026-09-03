@@ -1339,6 +1339,11 @@ impl CommandServer {
                     if let Some(root_view) = self.get_view_model_instance(root) {
                         if let Some(value) = root_view.property_view_model(&path) {
                             self.view_models.insert(nested, value);
+                            let mut messages = self.command_queue.message_lock();
+                            messages.write(Message::ViewModelInstanceInstantiated);
+                            messages.write(FileHandle::NULL);
+                            messages.write(nested);
+                            messages.write(request_id);
                         } else {
                             self.error(nested, request_id, Message::ViewModelError, format!("Nested view not found at path{path} when refing nested view model"));
                         }
@@ -1357,6 +1362,11 @@ impl CommandServer {
                         if let Some(list) = root_view.property_list(&path) {
                             if let Some(value) = list.instance_at(index) {
                                 self.view_models.insert(list_handle, value);
+                                let mut messages = self.command_queue.message_lock();
+                                messages.write(Message::ViewModelInstanceInstantiated);
+                                messages.write(FileHandle::NULL);
+                                messages.write(list_handle);
+                                messages.write(request_id);
                             } else {
                                 self.error(
                                     root,
@@ -1441,6 +1451,27 @@ impl CommandServer {
                         );
                     }
                 }
+                Command::ClearViewModelInstance => {
+                    let handle = self.command_queue.read();
+                    let request_id: u64 = self.command_queue.read();
+                    lock.unlock();
+                    if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
+                        if let Some(context) = wrapper.lock().data_context() {
+                            context.with_context_mut(|context| {
+                                context.set_main_view_model_instance(None)
+                            });
+                        }
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::StateMachineError,
+                            format!(
+                                "State machine {handle} not found for clearing view model instance."
+                            ),
+                        );
+                    }
+                }
                 Command::SetGlobalViewModelInstance => {
                     let handle = self.command_queue.read();
                     let view_handle = self.command_queue.read();
@@ -1460,6 +1491,33 @@ impl CommandServer {
                         }
                     } else {
                         self.error(handle, request_id, Message::StateMachineError, format!("State machine {handle} not found for setting global view model instance."));
+                    }
+                }
+                Command::ClearGlobalViewModelInstance => {
+                    let handle = self.command_queue.read();
+                    let request_id: u64 = self.command_queue.read();
+                    let name = self.command_queue.pop_name();
+                    lock.unlock();
+                    if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
+                        if !wrapper.lock().set_global_view_model_instance(&name, None) {
+                            self.error(
+                                handle,
+                                request_id,
+                                Message::StateMachineError,
+                                format!(
+                                    "Could not clear global view model instance under name {name} on a state machine"
+                                ),
+                            );
+                        }
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::StateMachineError,
+                            format!(
+                                "State machine {handle} not found for clearing global view model instance."
+                            ),
+                        );
                     }
                 }
                 Command::GetGlobalViewModelInstance => {

@@ -349,6 +349,7 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
 
     fn submit(&mut self, command: GLCommand) {
         match command {
+            GLCommand::Finish => { self.call("finish", &[]); }
             GLCommand::Clear(mask) => { self.call("clear", &[number(mask)]); }
             GLCommand::ClearColor(r, g, b, a) => { self.call("clearColor", &[number(r), number(g), number(b), number(a)]); }
             GLCommand::FrontFace(mode) => { self.call("frontFace", &[number(mode)]); }
@@ -440,6 +441,11 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
             GLCommand::Flush => { self.call("flush", &[]); }
             GLCommand::GenerateMipmap(target) => { self.call("generateMipmap", &[number(target)]); }
             GLCommand::InvalidateFramebuffer { target, attachments } => { self.call("invalidateFramebuffer", &[number(target), Uint32Array::from(attachments.as_slice()).into()]); }
+            GLCommand::PolygonModeANGLE { face, mode } => {
+                if let Some(extension) = self.extensions.get("ANGLE_polygon_mode") {
+                    Self::call_extension(extension, "polygonModeANGLE", &[number(face), number(mode)]);
+                }
+            }
             GLCommand::LineWidth(width) => { self.call("lineWidth", &[number(width)]); }
             GLCommand::FramebufferTexturePixelLocalStorageANGLE { plane, backing_texture, level, layer, usage } => {
                 if let Some(extension) = self.pixel_local_storage.as_ref() {
@@ -556,6 +562,12 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
         }
         let value = self.call("getParameter", &[number(parameter)]);
         self.queried_name(parameter, &value)
+    }
+
+    fn getFloat(&mut self, parameter: GLenum) -> GLfloat {
+        self.call("getParameter", &[number(parameter)])
+            .as_f64()
+            .unwrap_or_default() as GLfloat
     }
 
     fn getString(&mut self, parameter: GLenum) -> Option<Vec<u8>> {

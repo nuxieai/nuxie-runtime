@@ -348,14 +348,16 @@ fn build_shader_entries(
     let binding_map_blob = asset.find_shader(binding_map_target(target));
     let vs_fixup = (target == ShaderTarget::Glsl).then(|| asset.find_shader(14));
     let fs_fixup = (target == ShaderTarget::Glsl).then(|| asset.find_shader(15));
-    let pairs = asset
+    let pair_bytes = asset
         .texture_sampler_pairs()
         .iter()
-        .map(|pair| TextureSamplerPair {
-            texture_group: pair.tex_group,
-            texture_binding: pair.tex_binding,
-            sampler_group: pair.samp_group,
-            sampler_binding: pair.samp_binding,
+        .flat_map(|pair| {
+            [
+                pair.tex_group,
+                pair.tex_binding,
+                pair.samp_group,
+                pair.samp_binding,
+            ]
         })
         .collect::<Vec<_>>();
 
@@ -371,6 +373,7 @@ fn build_shader_entries(
                     ShaderStage::Fragment
                 },
                 binding_map_bytes: binding_map_blob,
+                tex_sampler_pair_bytes: &pair_bytes,
                 shader_asset_id: asset.asset_id(),
                 ..Default::default()
             };
@@ -385,12 +388,9 @@ fn build_shader_entries(
                     fs_fixup.as_deref()
                 };
             }
-            let Some(mut module) = context.make_shader_module(desc) else {
+            let Some(module) = context.make_shader_module(desc) else {
                 return false;
             };
-            if !pairs.is_empty() {
-                module.texture_sampler_pairs = pairs.clone();
-            }
             output.entries.push(ScriptedShaderEntry {
                 stage: view.stage,
                 logical: view.logical,
@@ -404,17 +404,15 @@ fn build_shader_entries(
     let Some((views, source)) = parse_whole_module_container(blob) else {
         return false;
     };
-    let Some(mut module) = context.make_shader_module(ShaderModuleDesc {
+    let Some(module) = context.make_shader_module(ShaderModuleDesc {
         code: source,
         binding_map_bytes: binding_map_blob,
+        tex_sampler_pair_bytes: &pair_bytes,
         shader_asset_id: asset.asset_id(),
         ..Default::default()
     }) else {
         return false;
     };
-    if !pairs.is_empty() {
-        module.texture_sampler_pairs = pairs;
-    }
     for view in views {
         output.entries.push(ScriptedShaderEntry {
             stage: view.stage,
@@ -1991,6 +1989,7 @@ fn gpu_canvas_resize(state: &mut LuaState) -> i32 {
     canvas.color_view = Some(new_view);
     let image = ScriptedImage {
         image: Some(canvas.canvas.as_ref().unwrap().render_image().clone()),
+        source_canvas: canvas.canvas.clone(),
         ..Default::default()
     };
     state.new_rive(image);
@@ -2087,6 +2086,7 @@ fn canvas_resize(state: &mut LuaState) -> i32 {
     canvas.canvas = Some(new_canvas);
     state.new_rive(ScriptedImage {
         image: Some(canvas.canvas.as_ref().unwrap().render_image().clone()),
+        source_canvas: canvas.canvas.clone(),
         ..Default::default()
     });
     canvas.image_ref = Some(state.create_ref(-1));
@@ -2297,41 +2297,31 @@ pub fn rive_image_view_impl(state: &mut LuaState) -> i32 {
         state.error::<()>("Image has no backing texture");
         unreachable!()
     };
-    let Some(rive_image) = render_image.downcast_ref::<RiveRenderImage>() else {
-        state.error::<()>("Image is not a GPU-backed RiveRenderImage");
-        unreachable!()
-    };
-    let Some(source_texture) = rive_image.texture() else {
-        state.error::<()>("Image GPU texture not available");
-        unreachable!()
-    };
     let scripting_context = state.thread_data::<dyn ScriptingContext>();
     if scripting_context.ore_context().is_none() {
         state.error::<()>("GPU context not available for Image:view()");
     }
     if image.cached_ore_view.is_none() {
-        let mut texture_to_wrap = source_texture.clone();
-        {
-            image.cached_mirror_image = get_canvas_import_mirror_gl(
-                scripting_context.render_context(),
+        image.cached_ore_view = if let Some(source_canvas) = image.source_canvas.as_ref() {
+            scripting_context
+                .ore_context()
+                .unwrap()
+                .wrap_canvas_sample_view(source_canvas)
+        } else {
+            let Some(rive_image) = render_image.downcast_ref::<RiveRenderImage>() else {
+                state.error::<()>("Image is not a GPU-backed RiveRenderImage");
+                unreachable!()
+            };
+            let Some(source_texture) = rive_image.texture() else {
+                state.error::<()>("Image GPU texture not available");
+                unreachable!()
+            };
+            scripting_context.ore_context().unwrap().wrap_rive_texture(
                 source_texture,
                 render_image.width(),
                 render_image.height(),
-            );
-            if let Some(mirror) = image
-                .cached_mirror_image
-                .as_ref()
-                .and_then(|image| image.downcast_ref::<RiveRenderImage>())
-                .and_then(RiveRenderImage::texture)
-            {
-                texture_to_wrap = mirror.clone();
-            }
-        }
-        image.cached_ore_view = scripting_context.ore_context().unwrap().wrap_rive_texture(
-            &texture_to_wrap,
-            render_image.width(),
-            render_image.height(),
-        );
+            )
+        };
         if image.cached_ore_view.is_none() {
             state.error::<()>("Image:view() not supported on this backend");
         }

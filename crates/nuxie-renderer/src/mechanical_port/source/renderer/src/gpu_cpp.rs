@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/gpu.cpp.
-// Upstream source revision: 2b2203f45a67f813cb662272962192ecfdfd923e
+// Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -36,6 +36,8 @@
 // static_assert(kGradTextureWidth == GRAD_TEXTURE_WIDTH);
 // static_assert(kTessTextureWidth == TESS_TEXTURE_WIDTH);
 // static_assert(kTessTextureWidthLog2 == TESS_TEXTURE_WIDTH_LOG2);
+// static_assert(kMidpointFanPatchSegmentSpan == MIDPOINT_FAN_PATCH_SEGMENT_SPAN);
+// static_assert(OuterCubicPatchSegmentSpan == OUTER_CUBIC_PATCH_SEGMENT_SPAN);
 //
 // static_assert(sizeof(PaintAuxData) / StorageBufferElementSizeInBytes(
 //                                          PaintAuxData::kBufferStructure) ==
@@ -445,7 +447,7 @@
 //     // without a fan triangle whose purpose is to be a bowtie join.
 //     size_t vertexCount = 0;
 //     int32_t patchSegmentSpan = patchType == PatchType::outerCurves
-//                                    ? kOuterCurvePatchSegmentSpan
+//                                    ? OuterCubicPatchSegmentSpanPlusJoin
 //                                    : kMidpointFanPatchSegmentSpan;
 //     for (int i = 0; i < patchSegmentSpan; ++i)
 //     {
@@ -2235,6 +2237,11 @@ use nuxie_render_api::{Aabb as AABB, BlendMode, ColorInt, Mat2D, Vec2D};
 // upstream spelling and width; the owner is wired later by the compiler queue.
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::*;
 
+const _: [(); kMidpointFanPatchSegmentSpan as usize] =
+    [(); crate::gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN];
+const _: [(); OuterCubicPatchSegmentSpan as usize] =
+    [(); crate::gpu::OUTER_CUBIC_PATCH_SEGMENT_SPAN];
+
 // Exact source-owned value from renderer/src/shaders/constants.glsl, which
 // gpu.cpp includes directly and the generated shaders pair with shift 7/mask 0x7f.
 const STORAGE_TEXTURE_WIDTH: u32 = 128;
@@ -2530,7 +2537,7 @@ fn generate_buffer_data_for_patch_type(
     baseVertex: u16,
 ) {
     let patch_span = if patchType == PatchType::outerCurves {
-        kOuterCurvePatchSegmentSpan as i32
+        OuterCubicPatchSegmentSpanPlusJoin as i32
     } else {
         kMidpointFanPatchSegmentSpan as i32
     };

@@ -8,8 +8,12 @@ use super::*;
 struct CountingFactory {
     inner: SerializingFactory,
     paint_count: u32,
+    scrub_count: Rc<Cell<u32>>,
 }
 impl Factory for CountingFactory {
+    fn scrub_state_after_ore(&mut self) {
+        self.scrub_count.set(self.scrub_count.get() + 1);
+    }
     fn make_render_buffer(
         &mut self,
         t: RenderBufferType,
@@ -55,11 +59,13 @@ impl Factory for CountingFactory {
 }
 struct CountingSink {
     factory: PersistentFactory<CountingFactory>,
+    ore: Option<OreContextHandle>,
 }
 impl Default for CountingSink {
     fn default() -> Self {
         Self {
             factory: PersistentFactory::new(CountingFactory::default()),
+            ore: None,
         }
     }
 }
@@ -68,7 +74,7 @@ impl DeferredFrameSink for CountingSink {
         self.factory.persistent_context().unwrap()
     }
     fn ore_context(&mut self) -> Option<OreContextHandle> {
-        None
+        self.ore.clone()
     }
     fn begin_screen_frame(&mut self, _: u64) -> Option<RendererOwner> {
         let mut factory = self.factory.borrow_mut();
@@ -78,6 +84,33 @@ impl DeferredFrameSink for CountingSink {
             factory.inner.make_renderer(),
         ))))
     }
+}
+
+#[test]
+fn deferred_ore_replay_scrubs_the_concrete_factory_before_2d_resumes() {
+    use nuxie_ore_metal::{context::ContextApi, types::*};
+
+    let mut session = DeferredSession::new(None);
+    assert!(session
+        .ore_context
+        .borrow_mut()
+        .makeBuffer(&BufferDesc {
+            usage: BufferUsage::vertex,
+            size: 16,
+            data: None,
+            immutable: false,
+            label: Some("scrub probe"),
+        })
+        .is_some());
+    let frame = snapshot_frame(&mut session);
+    let mut sink = CountingSink::default();
+    let scrub_count = sink.factory.borrow().scrub_count.clone();
+    sink.ore = Some(Rc::new(RefCell::new(
+        crate::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+    )));
+
+    DeferredReplayer::default().replay_frame(&frame, &mut sink);
+    assert_eq!(scrub_count.get(), 1);
 }
 fn frame(factory: &DeferredFactory, begin: u32, end: u32, canvas: u64) -> DeferredFrame {
     let b = factory.buffer.lock().unwrap();

@@ -353,6 +353,8 @@ mod tests {
             if parameter == GL_MAX_TEXTURE_SIZE { 4096 } else { 0 }
         }
 
+        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat { 0.0 }
+
         fn getString(&mut self, parameter: GLenum) -> Option<Vec<u8>> {
             match parameter {
                 GL_VERSION => Some(b"OpenGL ES 3.0 component097\0".to_vec()),

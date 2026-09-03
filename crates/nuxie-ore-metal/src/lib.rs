@@ -335,6 +335,15 @@ pub fn render_pass_retain_bound_group(
     pass.m_boundGroups[group_index as usize] = Some(group);
 }
 
+pub fn render_pass_bound_group(
+    pass: &render_pass::RenderPass,
+    group_index: u32,
+) -> Option<&gpu_resource::AnyResourceHandle> {
+    pass.m_boundGroups
+        .get(group_index as usize)
+        .and_then(Option::as_ref)
+}
+
 #[doc(hidden)]
 pub fn render_pass_install_attachment_metadata(
     pass: &mut render_pass::RenderPass,

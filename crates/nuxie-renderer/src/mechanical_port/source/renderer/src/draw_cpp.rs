@@ -105,7 +105,7 @@ impl PreparedPathGeometry {
                 stroke.tessellation.instance_count * gpu::kMidpointFanPatchSegmentSpan as u32
             }
             Self::Interior(interior) => {
-                interior.instance_count * gpu::kOuterCurvePatchSegmentSpan as u32
+                interior.instance_count * gpu::OuterCubicPatchSegmentSpanPlusJoin
             }
         }
     }
@@ -128,7 +128,7 @@ impl PreparedPathGeometry {
                 &mut interior.spans,
                 &mut interior.base_instance,
                 &mut interior.contours,
-                gpu::kOuterCurvePatchSegmentSpan as u32,
+                gpu::OuterCubicPatchSegmentSpanPlusJoin,
             ),
         };
         debug_assert_eq!(tess_location % segment_span, 0);
@@ -197,7 +197,7 @@ impl PreparedPathGeometry {
                 &mut interior.spans,
                 &mut interior.base_instance,
                 &mut interior.contours,
-                gpu::kOuterCurvePatchSegmentSpan as u32,
+                gpu::OuterCubicPatchSegmentSpanPlusJoin,
             ),
         }
     }
@@ -610,7 +610,7 @@ fn build_source_fill_tessellation(path: &RawPath, matrix: Mat2D) -> Option<FillT
     }
     let geometry_spans = spans.split_off(1);
     let outer_aligned_location =
-        location.next_multiple_of(crate::gpu::OUTER_CURVE_PATCH_SEGMENT_SPAN as u32);
+        location.next_multiple_of(crate::gpu::OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as u32);
     if outer_aligned_location != location {
         push_forward_span_fragments(
             &mut spans,
@@ -702,7 +702,7 @@ fn make_fill_single_sided_reverse(fill: &mut FillTessellation, negate_coverage: 
         1,
         0,
     ));
-    let outer_aligned_end = end.next_multiple_of(gpu::kOuterCurvePatchSegmentSpan as u32);
+    let outer_aligned_end = end.next_multiple_of(gpu::OuterCubicPatchSegmentSpanPlusJoin);
     if outer_aligned_end != end {
         push_forward_span_fragments(
             &mut reversed,
@@ -798,9 +798,9 @@ impl PathDrawAllocation {
     pub fn triangulatorNegateWinding(&self) -> bool {
         self.triangulator_negate_winding
     }
-    pub fn triangulator(&self) -> Option<&InteriorTessellation> {
+    pub fn triangulator(&self) -> Option<&crate::gr_triangulator::InnerFanTriangulator> {
         match &self.geometry {
-            PreparedPathGeometry::Interior(interior) => Some(interior),
+            PreparedPathGeometry::Interior(interior) => Some(&interior.triangulator),
             PreparedPathGeometry::MidpointFan(_) | PreparedPathGeometry::Stroke(_) => None,
         }
     }
@@ -834,7 +834,7 @@ impl PathDraw {
     pub fn needsBorrowedCoveragePrepass(&self) -> bool {
         self.allocation().needsBorrowedCoveragePrepass()
     }
-    pub fn triangulator(&self) -> Option<&InteriorTessellation> {
+    pub fn triangulator(&self) -> Option<&crate::gr_triangulator::InnerFanTriangulator> {
         self.allocation().triangulator()
     }
     pub fn triangulatorFillRule(&self) -> FillRule {
@@ -1113,25 +1113,29 @@ unsafe fn push_interior_triangles(
     let PreparedPathGeometry::Interior(interior) = &owner.geometry else {
         return 0;
     };
-    let mut written = 0;
-    for triangle in interior.triangles.chunks_exact(3) {
-        let weight = (triangle[0].weight_path_id >> 16) as i16;
-        let included = (weight < 0 && (winding.0 & gpu::WindingFaces::negative.0) != 0)
-            || (weight >= 0 && (winding.0 & gpu::WindingFaces::positive.0) != 0);
-        if !included {
-            continue;
-        }
-        for vertex in triangle {
-            unsafe {
-                (&mut *writer).emplace_back(gpu::TriangleVertex {
-                    m_point: nuxie_render_api::Vec2D::new(vertex.point[0], vertex.point[1]),
-                    m_weight_pathID: (vertex.weight_path_id & !0xffff) | path_id as i32,
-                })
-            };
-            written += 1;
-        }
+    let faces = if winding == gpu::WindingFaces::negative {
+        crate::gr_triangulator::WindingFaces::Negative
+    } else if winding == gpu::WindingFaces::positive {
+        crate::gr_triangulator::WindingFaces::Positive
+    } else {
+        crate::gr_triangulator::WindingFaces::All
+    };
+    let triangles = interior.triangulator.triangles(
+        path_id as u16,
+        interior.triangulator_fill_rule,
+        interior.triangulator_reverse_triangles,
+        interior.triangulator_negate_winding,
+        faces,
+    );
+    for vertex in &triangles {
+        unsafe {
+            (&mut *writer).emplace_back(gpu::TriangleVertex {
+                m_point: nuxie_render_api::Vec2D::new(vertex.point[0], vertex.point[1]),
+                m_weight_pathID: vertex.weight_path_id,
+            })
+        };
     }
-    written
+    triangles.len()
 }
 
 unsafe fn push_path(
@@ -1530,7 +1534,7 @@ fn apply_fill_directions(fill: &mut FillTessellation, directions: gpu::ContourDi
 /// state is read from its source getter contract here so callers cannot bypass
 /// opacity modulation, fill flags, coverage selection, or geometry admission.
 pub unsafe fn make_path_draw_from_source(
-    context: &RenderContext,
+    context: &mut RenderContext,
     paint_matrix: Mat2D,
     image_matrix: Option<Mat2D>,
     path_ref: rcp<RiveRenderPath>,
@@ -1539,7 +1543,8 @@ pub unsafe fn make_path_draw_from_source(
     modulated_opacity: f32,
     precomputed_pixel_bounds: Option<IAABB>,
 ) -> Option<Box<PathDrawAllocation>> {
-    let path = unsafe { (&*path_ref.get()).getRawPath() };
+    let render_path = unsafe { &*path_ref.get() };
+    let path = render_path.getRawPath();
     debug_assert!(!path.verbs().is_empty());
     let coverage_type = select_path_coverage_type(
         paint.getFeather(),
@@ -1561,25 +1566,46 @@ pub unsafe fn make_path_draw_from_source(
         return None;
     }
 
-    let frame = context.frameDescriptor();
+    let clockwise_fill_override = context.frameDescriptor().clockwiseFillOverride;
     let directions = contour_directions_for_path(
         path,
         paint_matrix,
         initial_fill_rule,
         paint.getIsStroked(),
         coverage_type,
-        frame.clockwiseFillOverride,
+        clockwise_fill_override,
     );
-    let do_interior = !paint.getIsStroked()
-        && paint.getFeather() == 0.0
-        && context.frameInterlockMode() != gpu::InterlockMode::msaa
-        && should_use_interior_tessellation(path, paint_matrix);
-    let mut geometry = if do_interior {
+    let mut triangulator = None;
+    if !paint.getIsStroked() && paint.getFeather() == 0.0 {
+        let triangle_area =
+            gpu_cpp::find_transformed_area(render_path.getBounds(), paint_matrix);
+        let triangle_verb_count = path.verbs().len();
+        let eligible = context.frameInterlockMode() != gpu::InterlockMode::msaa
+            && context
+                .m_triangulation_controller
+                .isEligible(triangle_area, triangle_verb_count);
+        if eligible {
+            triangulator = render_path.cachedTriangulator();
+            if triangulator.is_some() {
+                context.m_triangulation_controller.recordCacheHit();
+            } else if context
+                .m_triangulation_controller
+                .admits(triangle_area, triangle_verb_count)
+            {
+                let start = context.m_impl.contract().secondsNow();
+                triangulator = Some(render_path.createTriangulator(context.perFrameAllocator()));
+                let elapsed = context.m_impl.contract().secondsNow() - start;
+                context.m_triangulation_controller.recordBuilt(elapsed);
+            }
+        }
+    }
+    let mut geometry = if let Some(triangulator) = triangulator {
         PreparedPathGeometry::Interior(crate::draw::build_interior_tessellation(
             path,
             paint_matrix,
             initial_fill_rule,
-            frame.clockwiseFillOverride,
+            clockwise_fill_override,
+            triangulator,
         )?)
     } else if paint.getFeather() != 0.0 {
         let direction = match directions {
@@ -1649,7 +1675,7 @@ pub unsafe fn make_path_draw_from_source(
             if feather_radius != 0.0 {
                 draw_contents |= gpu::DrawContents::featheredFill;
             }
-            if initial_fill_rule == FillRule::Clockwise || frame.clockwiseFillOverride {
+            if initial_fill_rule == FillRule::Clockwise || clockwise_fill_override {
                 draw_contents |= gpu::DrawContents::clockwiseFill;
             } else if initial_fill_rule == FillRule::NonZero {
                 draw_contents |= gpu::DrawContents::nonZeroFill;
@@ -1707,7 +1733,7 @@ pub unsafe fn make_path_draw_from_source(
             gpu::CoverageBufferRange::default(),
         )
     };
-    owner.path_fill_rule = if frame.clockwiseFillOverride {
+    owner.path_fill_rule = if clockwise_fill_override {
         FillRule::Clockwise
     } else {
         initial_fill_rule
@@ -1723,18 +1749,11 @@ pub unsafe fn make_path_draw_from_source(
     Some(owner)
 }
 
-fn should_use_interior_tessellation(path: &RawPath, matrix: Mat2D) -> bool {
-    path.verbs().len() < 1000
-        && path
-            .bounds()
-            .is_some_and(|bounds| gpu_cpp::find_transformed_area(bounds, matrix) > 512.0 * 512.0)
-}
-
 #[cfg(test)]
 mod transformed_area_consumer_tests {
     use super::{
         FillRule, Mat2D, PathCoverageType, RawPath, contour_directions_for_path, gpu,
-        should_use_interior_tessellation, transformed_cubic_segment_count,
+        transformed_cubic_segment_count,
     };
     use nuxie_render_api::Vec2D;
 
@@ -1798,25 +1817,6 @@ mod transformed_area_consumer_tests {
             ),
             gpu::ContourDirections::reverse,
         );
-    }
-
-    fn threshold_path() -> RawPath {
-        let mut path = RawPath::new();
-        path.move_to(0.0, 0.0);
-        path.line_to(512.0, 0.0);
-        path.line_to(512.0, 512.0);
-        path.line_to(0.0, 512.0);
-        path
-    }
-
-    #[test]
-    fn path_draw_uses_mapped_area_for_the_pinned_threshold_decision() {
-        let path = threshold_path();
-        let mut matrix = Mat2D([f32::from_bits(0x3f80_0001), 0.0, 0.0, 1.0, 0.0, 0.0]);
-        assert!(should_use_interior_tessellation(&path, matrix));
-
-        matrix.0[4] = f32::from_bits(0x4e80_0000);
-        assert!(!should_use_interior_tessellation(&path, matrix));
     }
 }
 

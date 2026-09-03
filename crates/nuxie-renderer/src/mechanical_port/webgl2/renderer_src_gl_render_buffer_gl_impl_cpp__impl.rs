@@ -161,6 +161,8 @@ mod tests {
             0
         }
 
+        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat { 0.0 }
+
         fn getString(&mut self, _parameter: GLenum) -> Option<Vec<u8>> {
             None
         }

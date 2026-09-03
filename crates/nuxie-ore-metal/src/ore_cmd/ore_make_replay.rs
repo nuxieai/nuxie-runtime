@@ -201,6 +201,7 @@ pub fn replayOreLifecycle(
             let code = blob(reader, p.code);
             let hlsl = blob(reader, p.hlslSource);
             let bindings = blob(reader, p.bindingMapBytes);
+            let pairs = blob(reader, p.texSamplerPairBytes);
             let fixups = blob(reader, p.glFixupBytes);
             let d = ShaderModuleDesc {
                 code,
@@ -216,6 +217,8 @@ pub fn replayOreLifecycle(
                 hlslEntryPoint: cstr(reader, p.hlslEntryPoint),
                 bindingMapBytes: bindings,
                 bindingMapSize: bindings.map_or(0, |b| b.len() as u32),
+                texSamplerPairBytes: pairs,
+                texSamplerPairSize: pairs.map_or(0, |b| b.len() as u32),
                 glFixupBytes: fixups,
                 glFixupSize: fixups.map_or(0, |b| b.len() as u32),
                 shaderAssetId: p.shaderAssetId,

@@ -1,47 +1,47 @@
 struct DC {
-    gc: f32,
-    qd: f32,
-    jf: f32,
+    hc: f32,
+    rd: f32,
     kf: f32,
-    o6_: u32,
-    Lg: u32,
-    Ue: u32,
+    lf: f32,
+    p6_: u32,
+    Mg: u32,
     Ve: u32,
-    T7_: vec4<i32>,
-    Hg: vec2<f32>,
-    rd: vec2<f32>,
-    a2_: u32,
-    Mg: f32,
-    c6_: u32,
+    We: u32,
+    U7_: vec4<i32>,
+    Ig: vec2<f32>,
+    sd: vec2<f32>,
+    c2_: u32,
+    Ng: f32,
+    d6_: u32,
     R2_: f32,
-    sd: f32,
-    Pe: u32,
+    td: f32,
+    Qe: u32,
     B3_: f32,
     C3_: f32,
-    td: f32,
-    Eg: u32,
+    ud: f32,
+    Fg: u32,
 }
 
 @group(1) @binding(11)
 var KC: texture_2d<f32>;
 @group(1) @binding(13)
-var ff: sampler;
-var<private> X1_1: vec2<f32>;
-var<private> Pg: vec4<f32>;
+var gf: sampler;
+var<private> Y1_1: vec2<f32>;
+var<private> Qg: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> m: DC;
 
 fn main_1() {
-    let _e6 = X1_1;
-    let _e7 = textureSampleLevel(KC, ff, _e6, 0f);
-    Pg = _e7;
+    let _e6 = Y1_1;
+    let _e7 = textureSampleLevel(KC, gf, _e6, 0f);
+    Qg = _e7;
     return;
 }
 
 @fragment
-fn main(@location(0) X1_: vec2<f32>) -> @location(0) vec4<f32> {
-    X1_1 = X1_;
+fn main(@location(0) Y1_: vec2<f32>) -> @location(0) vec4<f32> {
+    Y1_1 = Y1_;
     main_1();
-    let _e3 = Pg;
+    let _e3 = Qg;
     return _e3;
 }

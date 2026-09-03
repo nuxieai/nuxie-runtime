@@ -97,6 +97,7 @@ pub struct ShaderModuleDescPOD {
     pub hlslSource: BlobRef,
     pub hlslEntryPoint: BlobRef,
     pub bindingMapBytes: BlobRef,
+    pub texSamplerPairBytes: BlobRef,
     pub glFixupBytes: BlobRef,
     pub shaderAssetId: u32,
 }
@@ -108,6 +109,7 @@ crate::impl_wire_pod!(ShaderModuleDescPOD {
     hlslSource: BlobRef,
     hlslEntryPoint: BlobRef,
     bindingMapBytes: BlobRef,
+    texSamplerPairBytes: BlobRef,
     glFixupBytes: BlobRef,
     shaderAssetId: u32
 });

@@ -3,7 +3,7 @@
 //!
 //! The source citations are `renderer/src/metal/background_shader_compiler.h:17-30`
 //! and `renderer/src/metal/background_shader_compiler.mm:94-275` at pinned
-//! upstream SHA `3ed35ee0ded0d58fb8d380930a156041a4624a2f`, with the
+//! upstream SHA `1db281b3e82baf850635fd7aa2092920a80b6a2c`, with the
 //! feature-bit contract from `renderer/include/rive/renderer/gpu.hpp:775-836`.
 //!
 //! This module owns the `BackgroundCompileJob` inputs, deterministic
@@ -791,10 +791,10 @@ mod tests {
     #[test]
     fn generated_macro_fixture_is_pinned_complete_and_one_to_one() {
         for provenance in [
-            "upstream_sha=3ed35ee0ded0d58fb8d380930a156041a4624a2f",
+            "upstream_sha=1db281b3e82baf850635fd7aa2092920a80b6a2c",
             "generator_sha256=bc6f3cb877ff8af9c73177d06704ac067a5f6d9a1321fc5edd5ac429d33791b1",
             "makefile_sha256=ec5d0d98d78051e98cda80f92cd67858cb1fb70be64cddd8ad13bcd4ad5f50fc",
-            "input_set_sha256=67eae25a138b185318bd0e53cb9fdaf4f6dd29eaabd1beb7bc8bbc1b9d648b34",
+            "input_set_sha256=2376e07790b3846304e976b99dcfccc7f3f32b7594b94ae7f8b50addf629a4a7",
             "generated_header_sha256=9eec935c09e02af59a331f34757015f387b8896f13d9a10ca31ebd1c2e0ba672",
         ] {
             assert!(

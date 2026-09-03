@@ -19,7 +19,7 @@ use runtime_test_support::recording_gpu;
 use luaur_compiler::functions::luau_compile::luau_compile;
 use nuxie_render_api::{
     ColorInt, Factory, FillRule, GpuCanvasError, GpuCanvasShader, GpuCanvasShaderLoad,
-    ImageDecodeError, PersistentFactory, RawPath, RecordingFactory, RenderBuffer,
+    ImageDecodeError, OreContextHandle, PersistentFactory, RawPath, RecordingFactory, RenderBuffer,
     RenderBufferFlags, RenderBufferType, RenderGpuCanvasShader, RenderImage, RenderPaint,
     RenderPath, RenderShader,
 };
@@ -263,6 +263,7 @@ struct AsyncFactory {
     next_occurrence_id: u64,
     image_occurrences: Vec<(u64, u64)>,
     gpu: recording_gpu::RecordingGpu,
+    routed_ore: Option<OreContextHandle>,
 }
 
 impl AsyncFactory {
@@ -277,6 +278,7 @@ impl AsyncFactory {
             next_occurrence_id: 1,
             image_occurrences: Vec::new(),
             gpu: recording_gpu::RecordingGpu::new(),
+            routed_ore: None,
         }
     }
 
@@ -300,7 +302,9 @@ impl Factory for AsyncFactory {
         true
     }
     fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
-        Some(self.gpu.context.clone())
+        self.routed_ore
+            .clone()
+            .or_else(|| Some(self.gpu.context.clone()))
     }
     fn make_render_canvas(
         &mut self,
@@ -502,7 +506,7 @@ fn shader_lookup_uses_selected_ore_target_and_recorder_not_prepared_factory() {
 
     // An unbound recorder selects GLSL upstream. This WGSL-only asset must not
     // silently use the construction factory's target/prepared module instead.
-    vm.set_ore_context(Some(Rc::new(RefCell::new(DeferredOreContext::new(None)))));
+    factory.borrow_mut().routed_ore = Some(Rc::new(RefCell::new(DeferredOreContext::new(None))));
     assert_eq!(
         instance
             .call_method(
@@ -520,7 +524,7 @@ fn shader_lookup_uses_selected_ore_target_and_recorder_not_prepared_factory() {
         let recorder = Rc::new(RefCell::new(DeferredOreContext::new(Some(
             factory.borrow().gpu.context.clone(),
         ))));
-        vm.set_ore_context(Some(recorder.clone()));
+        factory.borrow_mut().routed_ore = Some(recorder.clone());
         assert_eq!(
             instance
                 .call_method(
@@ -573,6 +577,7 @@ fn changing_selected_ore_during_async_preparation_discards_old_device_module() {
     let recorder = Rc::new(RefCell::new(DeferredOreContext::new(Some(
         factory.borrow().gpu.context.clone(),
     ))));
+    let mut routing_factory = factory.clone();
     let mut future =
         Box::pin(vm.instantiate_registered_script_with_factory_async(&program, &mut factory));
     let waker = std::task::Waker::noop();
@@ -582,7 +587,7 @@ fn changing_selected_ore_during_async_preparation_discards_old_device_module() {
             .poll(&mut Context::from_waker(waker))
             .is_pending()
     );
-    vm.set_ore_context(Some(recorder.clone()));
+    routing_factory.borrow_mut().routed_ore = Some(recorder.clone());
     let mut instance = block_on(future).unwrap();
     assert_eq!(
         instance

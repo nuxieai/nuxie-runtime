@@ -1106,7 +1106,9 @@ impl_lua_rive!(ScriptedTriangleBuffer, 5, "TriangleBuffer");
 pub struct ScriptedImage {
     pub image: Option<RenderImageRef>,
     pub cached_ore_view: Option<OreTextureView>,
-    pub cached_mirror_image: Option<RenderImageRef>,
+    // Set when this image is a canvas's backing, so Image:view() imports
+    // through the backend's canvas sampling wrap rather than the raw texture.
+    pub source_canvas: Option<RenderCanvas>,
 }
 
 impl ScriptedImage {
@@ -2268,6 +2270,10 @@ pub trait ScriptingContext {
 
     fn factory(&mut self) -> &mut Factory {
         unsafe { &mut *self.data().factory }
+    }
+
+    fn adopt_import_factory(&mut self, factory: &mut Factory) {
+        self.data_mut().factory = factory as *mut Factory;
     }
 
     fn current_scripted_object(&self) -> Option<CoreHandle> {

@@ -143,6 +143,7 @@ pub(super) fn shader_userdata(
 pub(crate) fn image_view(
     lua: &Lua,
     image: Rc<dyn nuxie_render_api::RenderImage>,
+    source_canvas: Option<&nuxie_render_api::RenderCanvasHandle>,
     cached: &RefCell<Option<AnyResourceHandle>>,
 ) -> Result<AnyUserData> {
     let context =
@@ -161,6 +162,11 @@ pub(crate) fn image_view(
                 })
             };
             view.ok_or_else(|| Error::runtime("Image:view() recording failed"))?
+        } else if let Some(source_canvas) = source_canvas {
+            unsafe {
+                ctx.wrapCanvasSampleView(nuxie_render_api::canvas_texture_info(source_canvas))
+            }
+            .ok_or_else(|| Error::runtime("Image:view() not supported on this backend"))?
         } else {
             let info = image
                 .ore_texture_info()

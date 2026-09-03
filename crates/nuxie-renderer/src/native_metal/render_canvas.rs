@@ -324,13 +324,18 @@ impl RenderCanvasContract for NativeMetalRenderCanvas {
         };
         let renderer = {
             let mut mechanical = execution_guard.borrow_mut();
-            let context = unsafe { Pin::get_unchecked_mut(mechanical.render_context_mut()) };
-            context.beginFrameExecutable(&FrameDescriptor {
+            let mut descriptor = FrameDescriptor {
                 renderTargetWidth: width,
                 renderTargetHeight: height,
                 clearColor: clear_color,
                 ..FrameDescriptor::default()
-            });
+            };
+            #[cfg(test)]
+            if mechanical.uses_deterministic_validation_thresholds() {
+                descriptor.triangulationThresholds.frameBudgetMs = f32::INFINITY;
+            }
+            let context = unsafe { Pin::get_unchecked_mut(mechanical.render_context_mut()) };
+            context.beginFrameExecutable(&descriptor);
             unsafe { ExactSourceRendererAdapter::new(context, resource_domain.clone()) }
         };
         Ok(Box::new(NativeMetalRenderCanvasFrame {

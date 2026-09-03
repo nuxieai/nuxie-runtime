@@ -7,7 +7,7 @@ use nuxie_ore_metal::context::{
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::types::*;
-use nuxie_render_api::OreContextHandle;
+use nuxie_render_api::*;
 use nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext;
 
 // Upstream's device stand-in advertises capabilities; factories return null.
@@ -102,9 +102,70 @@ impl ContextApi for FakeDeviceContext {
     }
 }
 
+struct RecordingOreFactory {
+    inner: RecordingFactory,
+    recorder: OreContextHandle,
+}
+
+impl Factory for RecordingOreFactory {
+    fn ore(&mut self) -> Option<OreContextHandle> {
+        Some(self.recorder.clone())
+    }
+    fn make_render_buffer(
+        &mut self,
+        kind: RenderBufferType,
+        flags: RenderBufferFlags,
+        size: usize,
+    ) -> Box<dyn RenderBuffer> {
+        self.inner.make_render_buffer(kind, flags, size)
+    }
+    fn make_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.inner
+            .make_linear_gradient(sx, sy, ex, ey, colors, stops)
+    }
+    fn make_radial_gradient(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.inner
+            .make_radial_gradient(cx, cy, radius, colors, stops)
+    }
+    fn make_render_path(&mut self, path: RawPath, rule: FillRule) -> Box<dyn RenderPath> {
+        self.inner.make_render_path(path, rule)
+    }
+    fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+        self.inner.make_empty_render_path()
+    }
+    fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+        self.inner.make_render_paint()
+    }
+    fn decode_image(
+        &mut self,
+        bytes: &[u8],
+    ) -> std::result::Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.inner.decode_image(bytes)
+    }
+}
+
 fn run_with_ore_context(ore: OreContextHandle, source: &str) -> String {
     let vm = ScriptVm::new();
-    vm.set_ore_context(Some(ore));
+    let mut factory = PersistentFactory::new(RecordingOreFactory {
+        inner: RecordingFactory::new(),
+        recorder: ore,
+    });
+    vm.install_render_factory(&mut factory).unwrap();
     vm.install_rive_globals().unwrap();
     let bindings = vm.renderer_bindings.clone();
     let features = vm

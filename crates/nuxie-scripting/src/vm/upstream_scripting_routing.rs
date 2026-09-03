@@ -17,6 +17,7 @@ impl DeferredCanvasHost for StubCanvasHost {
 struct SessionFactory {
     inner: RecordingFactory,
     host: DeferredCanvasHostHandle,
+    ore: OreContextHandle,
     bound: bool,
 }
 impl Factory for SessionFactory {
@@ -25,6 +26,9 @@ impl Factory for SessionFactory {
     }
     fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
         Some(self.host.clone())
+    }
+    fn ore(&mut self) -> Option<OreContextHandle> {
+        Some(self.ore.clone())
     }
     fn make_render_buffer(
         &mut self,
@@ -83,9 +87,13 @@ fn import_session(
     DeferredCanvasHostHandle,
 ) {
     let host: DeferredCanvasHostHandle = Rc::new(RefCell::new(StubCanvasHost));
+    let ore: OreContextHandle = Rc::new(RefCell::new(
+        nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+    ));
     let mut factory = PersistentFactory::new(SessionFactory {
         inner: RecordingFactory::default(),
         host: host.clone(),
+        ore,
         bound,
     });
     let vm = Rc::new(ScriptVm::new());
@@ -111,9 +119,57 @@ fn import_session(
 }
 
 #[test]
+fn caller_supplied_vm_routes_through_import_factory() {
+    let vm = Rc::new(ScriptVm::new());
+    let mut construction_factory = PersistentFactory::new(RecordingFactory::new());
+    vm.install_render_factory(&mut construction_factory)
+        .unwrap();
+    let construction_identity = construction_factory
+        .persistent_context()
+        .unwrap()
+        .identity();
+
+    let host: DeferredCanvasHostHandle = Rc::new(RefCell::new(StubCanvasHost));
+    let ore: OreContextHandle = Rc::new(RefCell::new(
+        nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::new(None),
+    ));
+    let mut import_factory = PersistentFactory::new(SessionFactory {
+        inner: RecordingFactory::new(),
+        host: host.clone(),
+        ore: ore.clone(),
+        bound: true,
+    });
+    let import_identity = import_factory.persistent_context().unwrap().identity();
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let bytes = std::fs::read(
+        std::path::PathBuf::from(root).join("tests/unit_tests/assets/script_advance_test.riv"),
+    )
+    .unwrap();
+    nuxie_runtime::File::import(
+        &bytes,
+        nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut import_factory).unwrap(),
+        None,
+        None,
+        Some(
+            nuxie_runtime::source::lua::scripting_vm::RuntimeScriptingVmHandle::new(Box::new(
+                vm.clone(),
+            )),
+        ),
+    )
+    .expect("caller-supplied VM import");
+
+    assert_ne!(construction_identity, import_identity);
+    assert_eq!(vm.render_context().unwrap().identity(), import_identity);
+    assert!(Rc::ptr_eq(&vm.deferred_canvas_host().unwrap(), &host));
+    assert!(Rc::ptr_eq(&vm.ore_context().unwrap(), &ore));
+}
+
+#[test]
 fn import_routes_canvas_host_with_device() {
     let (vm, _file, factory, host) = import_session(true);
     assert!(Rc::ptr_eq(&vm.deferred_canvas_host().unwrap(), &host));
+    assert!(vm.ore_context().is_some());
     assert_eq!(
         vm.render_context().unwrap().identity(),
         factory.persistent_context().unwrap().identity()
@@ -125,6 +181,7 @@ fn import_routes_canvas_host_with_device() {
 fn import_routes_canvas_host_before_device() {
     let (vm, _file, _factory, host) = import_session(false);
     assert!(Rc::ptr_eq(&vm.deferred_canvas_host().unwrap(), &host));
+    assert!(vm.ore_context().is_some());
     assert!(vm.render_context_is_late_bound());
 }
 
@@ -148,8 +205,7 @@ fn install_test_context(vm: &ScriptVm) {
 
 #[test]
 fn sized_canvas_construction_pending_before_device() {
-    let vm = ScriptVm::new();
-    vm.set_deferred_canvas_host(Some(Rc::new(RefCell::new(StubCanvasHost))));
+    let (vm, _file, _factory, _host) = import_session(false);
     install_test_context(&vm);
     let result: bool=vm.lua().load("local gpu=context:gpuCanvas({width=4,height=4}); local c2d=context:canvas({width=4,height=4}); return gpu~=nil and c2d~=nil").eval().unwrap();
     assert!(result);

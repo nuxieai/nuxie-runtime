@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/render_context.cpp.
-// Upstream source revision: e949498e05483a852c10fbbdad2cd1941c15aebc
+// Upstream source revision: 1db281b3e82baf850635fd7aa2092920a80b6a2c
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -62,11 +62,11 @@
 // constexpr size_t kMaxTessellationVertexCount =
 //     kMaxTextureHeight * kTessTextureWidth;
 // constexpr size_t kMaxTessellationPaddingVertexCount =
-//     gpu::kMidpointFanPatchSegmentSpan + // Padding at the beginning of the tess
-//                                         // texture
-//     (gpu::kOuterCurvePatchSegmentSpan -
-//      1) + // Max padding between patch types in the tess texture
-//     1;    // Padding at the end of the tessellation texture
+//     gpu::kMidpointFanPatchSegmentSpan + // Padding at the beginning of the
+//                                         // tessellation texture
+//     gpu::OuterCubicPatchSegmentSpan + // Max padding between patch types in the
+//                                       // tessellation texture
+//     1; // Padding at the end of the tessellation texture
 // constexpr size_t kMaxTessellationVertexCountBeforePadding =
 //     kMaxTessellationVertexCount - kMaxTessellationPaddingVertexCount;
 //
@@ -1176,7 +1176,7 @@
 //         // outerCubic tessellation vertices reside after the midpointFan
 //         // vertices, aligned on a multiple of the outerCubic patch size.
 //         uint32_t interiorPadding =
-//             math::padding_to_align_up<gpu::kOuterCurvePatchSegmentSpan>(
+//             math::padding_to_align_up<gpu::OuterCubicPatchSegmentSpanPlusJoin>(
 //                 m_midpointFanTessEndLocation);
 //         m_outerCubicTessVertexIdx =
 //             m_midpointFanTessEndLocation + interiorPadding;
@@ -3241,6 +3241,34 @@
 //     }
 // }
 //
+// void RenderContext::TessellationWriter::pushRetrofitCubicTriStrip(
+//     const Vec2D pts[],
+//     size_t numPts,
+//     gpu::ContourDirections contourDirections,
+//     uint32_t contourIDWithFlags)
+// {
+//     // gpu::TessVertexSpan has 5 points into which we can retrofit strip
+//     // vertices (pts[4] and joinTangent), giving us a maximum of 3 triangles we
+//     // can shoehorn into a single patch. Due to the topology of an outer cubic
+//     // patch, and the structure of the tessellation shader, the strip ordering
+//     // has to be:
+//     //
+//     //   p0, p1, p3, p2, joinTangent
+//     //
+//     assert(3 <= numPts && numPts <= 5);
+//     Vec2D cubicTriangleStrip[4] = {pts[0],
+//                                    pts[1],
+//                                    pts[std::min<size_t>(3, numPts - 1)],
+//                                    pts[2]};
+//     pushCubic(cubicTriangleStrip,
+//               contourDirections,
+//               pts[std::min<size_t>(4, numPts - 1)],
+//               gpu::OuterCubicPatchSegmentSpan,
+//               1,
+//               1,
+//               contourIDWithFlags | RETROFIT_TRI_STRIP_CONTOUR_FLAG);
+// }
+//
 // RIVE_ALWAYS_INLINE void RenderContext::TessellationWriter::
 //     pushTessellationSpans(const Vec2D pts[4],
 //                           Vec2D joinTangent,
@@ -3445,13 +3473,15 @@
 //     assert(m_hasDoneLayout);
 //
 //     uint32_t baseInstance = math::lossless_numeric_cast<uint32_t>(
-//         tessLocation / kOuterCurvePatchSegmentSpan);
+//         tessLocation / OuterCubicPatchSegmentSpanPlusJoin);
 //     // flush() is responsible for alignment.
-//     assert(baseInstance * kOuterCurvePatchSegmentSpan == tessLocation);
+//     assert(baseInstance * OuterCubicPatchSegmentSpanPlusJoin == tessLocation);
 //
-//     uint32_t instanceCount = tessVertexCount / kOuterCurvePatchSegmentSpan;
+//     uint32_t instanceCount =
+//         tessVertexCount / OuterCubicPatchSegmentSpanPlusJoin;
 //     // flush() is responsible for alignment.
-//     assert(instanceCount * kOuterCurvePatchSegmentSpan == tessVertexCount);
+//     assert(instanceCount * OuterCubicPatchSegmentSpanPlusJoin ==
+//            tessVertexCount);
 //
 //     return pushPathDraw(draw,
 //                         drawType,
@@ -4089,7 +4119,7 @@ const K_DEFAULT_COMPLEX_GRADIENT_CAPACITY: usize = 1024;
 const K_MAX_TEXTURE_HEIGHT: usize = 2048;
 const K_MAX_TESSELLATION_VERTEX_COUNT: usize = K_MAX_TEXTURE_HEIGHT * gpu::kTessTextureWidth;
 const K_MAX_TESSELLATION_PADDING_VERTEX_COUNT: usize = gpu::kMidpointFanPatchSegmentSpan as usize
-    + (gpu::kOuterCurvePatchSegmentSpan as usize - 1)
+    + gpu::OuterCubicPatchSegmentSpan as usize
     + 1;
 const K_MAX_TESSELLATION_VERTEX_COUNT_BEFORE_PADDING: usize =
     K_MAX_TESSELLATION_VERTEX_COUNT - K_MAX_TESSELLATION_PADDING_VERTEX_COUNT;
@@ -4913,6 +4943,21 @@ impl RenderContext {
             .makeDeferredRenderCanvas(width, height)
     }
 
+    pub fn ensureCanvasBackingExecutable(
+        &mut self,
+        canvas: &mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
+    ) {
+        unsafe {
+            self.m_impl
+                .contract_mut()
+                .ensureCanvasBacking(canvas as *mut _)
+        }
+    }
+
+    pub fn scrubStateAfterOreExecutable(&mut self) {
+        self.m_impl.contract_mut().scrubStateAfterOre();
+    }
+
     /// Product adapter for the exact `ScriptedCanvas::endFrame()` sequence in
     /// pinned `src/lua/renderer/lua_gpu.cpp`: allocate one backend command
     /// buffer, flush into the canvas target, then commit that same buffer.
@@ -5115,6 +5160,9 @@ impl RenderContext {
             self.m_frame_descriptor.msaaSampleCount = 4;
         }
         self.m_frame_shader_features_mask = gpu::ShaderFeaturesMaskFor(self.m_frame_interlock_mode);
+        let triangulation_thresholds = self.m_frame_descriptor.triangulationThresholds;
+        self.m_triangulation_controller
+            .beginFrame(&triangulation_thresholds);
         if self.m_logical_flushes.is_empty() {
             self.m_logical_flushes
                 .push(unsafe { LogicalFlush::new_box(this) });
@@ -5228,6 +5276,7 @@ impl RenderContext {
             unsafe { (&*resources.renderTarget).height() },
             self.m_frame_descriptor.renderTargetHeight
         );
+        self.m_triangulation_controller.endFrame();
         self.m_clip_content_id = 0;
 
         let mut total = ResourceCounters::default();
@@ -6239,10 +6288,16 @@ impl LogicalFlush {
         location: u32,
         misc: gpu::ShaderMiscFlags,
     ) -> *mut gpu::DrawBatch {
-        let base = location / gpu::kOuterCurvePatchSegmentSpan;
-        debug_assert_eq!(base * gpu::kOuterCurvePatchSegmentSpan, location);
-        let instances = count / gpu::kOuterCurvePatchSegmentSpan;
-        debug_assert_eq!(instances * gpu::kOuterCurvePatchSegmentSpan, count);
+        let base = location / gpu::OuterCubicPatchSegmentSpanPlusJoin;
+        debug_assert_eq!(
+            base * gpu::OuterCubicPatchSegmentSpanPlusJoin,
+            location
+        );
+        let instances = count / gpu::OuterCubicPatchSegmentSpanPlusJoin;
+        debug_assert_eq!(
+            instances * gpu::OuterCubicPatchSegmentSpanPlusJoin,
+            count
+        );
         unsafe { self.pushPathDrawExecutable(draw, draw_type, misc, instances, base) }
     }
 
@@ -7374,7 +7429,7 @@ impl LogicalFlush {
                 pre_padding + self.m_resource_counts.midpointFanTessVertexCount as u32;
             let interior_padding = padding_to_align_up(
                 self.m_midpoint_fan_tess_end_location as usize,
-                gpu::kOuterCurvePatchSegmentSpan as usize,
+                gpu::OuterCubicPatchSegmentSpanPlusJoin as usize,
             ) as u32;
             self.m_outer_cubic_tess_vertex_idx =
                 self.m_midpoint_fan_tess_end_location + interior_padding;
@@ -7695,6 +7750,30 @@ impl<'a> TessellationWriter<'a> {
                     contour_id_flags,
                 ),
         }
+    }
+
+    pub fn pushRetrofitCubicTriStripExecutable(
+        &mut self,
+        pts: &[Vec2D],
+        directions: gpu::ContourDirections,
+        contour_id_flags: u32,
+    ) {
+        assert!((3..=5).contains(&pts.len()));
+        let cubic_triangle_strip = [
+            pts[0],
+            pts[1],
+            pts[3.min(pts.len() - 1)],
+            pts[2],
+        ];
+        self.pushCubicExecutable(
+            &cubic_triangle_strip,
+            directions,
+            pts[4.min(pts.len() - 1)],
+            gpu::OuterCubicPatchSegmentSpan,
+            1,
+            1,
+            contour_id_flags | crate::gpu::RETROFIT_TRI_STRIP_CONTOUR_FLAG,
+        );
     }
 
     fn converted_points(pts: &[Vec2D; 4]) -> [nuxie_render_api::Vec2D; 4] {
@@ -8276,6 +8355,14 @@ impl<'a> TessellationWriterContract<'a> for TessellationWriter<'a> {
         c: u32,
     ) {
         self.pushCubicExecutable(p, d, t, a, b, j, c)
+    }
+    fn pushRetrofitCubicTriStrip(
+        &mut self,
+        p: &[Vec2D],
+        d: gpu::ContourDirections,
+        c: u32,
+    ) {
+        self.pushRetrofitCubicTriStripExecutable(p, d, c)
     }
     fn pushTessellationSpans(
         &mut self,

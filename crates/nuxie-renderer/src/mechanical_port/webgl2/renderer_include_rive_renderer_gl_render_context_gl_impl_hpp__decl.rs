@@ -371,14 +371,25 @@ impl GLFlushInjector {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone)]
 pub(crate) struct CanvasMirrorEntry {
-    pub(crate) mirrorTex: GLuint,
+    pub(crate) mirrorImage: rcp<RiveRenderImage>,
     pub(crate) width: u32,
     pub(crate) height: u32,
     pub(crate) readFBO: GLuint,
     pub(crate) drawFBO: GLuint,
-    pub(crate) hasMirror: bool,
+}
+
+impl Default for CanvasMirrorEntry {
+    fn default() -> Self {
+        Self {
+            mirrorImage: rcp::new(),
+            width: 0,
+            height: 0,
+            readFBO: 0,
+            drawFBO: 0,
+        }
+    }
 }
 
 /// Shared logical owner for the source canvas-mirror map. Canvas textures keep
@@ -405,14 +416,6 @@ pub(crate) struct CanvasSourceTextureGLImpl {
     pub(crate) rust_canvas_registry: WeakCanvasMirrorRegistry,
     pub(crate) rust_released_canvas_targets: std::sync::Weak<Mutex<Vec<GLuint>>>,
     pub(crate) rust_has_released_canvas_targets: std::sync::Weak<std::sync::atomic::AtomicBool>,
-}
-
-#[repr(C)]
-pub(crate) struct CanvasMirrorTextureGLImpl {
-    pub(crate) base: ManuallyDrop<TextureGLImpl>,
-    pub(crate) m_owner: *mut RenderContextGLImpl,
-    pub(crate) m_sourceTexID: GLuint,
-    pub(crate) rust_canvas_registry: WeakCanvasMirrorRegistry,
 }
 
 #[repr(C)]
@@ -507,6 +510,9 @@ impl RenderContextGLImpl {
     }
     pub(crate) fn invalidateGLState(&mut self) {
         super::render_context_gl_impl::invalidateGLState(self)
+    }
+    pub(crate) fn scrubStateAfterOre(&mut self) {
+        super::render_context_gl_impl::scrubStateAfterOre(self)
     }
     pub(crate) fn unbindGLInternalResources(&mut self) {
         super::render_context_gl_impl::unbindGLInternalResources(self)
@@ -613,7 +619,7 @@ pub(crate) const SOURCE_GL_PIPELINE_MANAGER_FIELD_COUNT: usize = 1;
 pub(crate) const SOURCE_PLS_IMPL_FIELD_COUNT: usize = 1;
 pub(crate) const SOURCE_FIELD_DENOMINATOR: usize = 66;
 pub(crate) const RUST_RENDER_CONTEXT_SIDECAR_COUNT: usize = 2;
-const _: [(); 23132] = [(); PINNED_SOURCE.len()];
+const _: [(); 22172] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -621,7 +627,7 @@ mod tests {
 
     #[test]
     fn frozen_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 611);
+        assert_eq!(PINNED_SOURCE.lines().count(), 591);
         assert_eq!(SOURCE_CONTEXT_OPTION_FIELD_COUNT, 3);
         assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 43);
         assert_eq!(SOURCE_CANVAS_MIRROR_ENTRY_FIELD_COUNT, 6);

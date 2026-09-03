@@ -54,7 +54,7 @@ use core::{
 };
 
 pub const SUPPORTED_MAJOR_VERSION: u64 = 7;
-pub const SUPPORTED_MINOR_VERSION: u64 = 2;
+pub const SUPPORTED_MINOR_VERSION: u64 = 3;
 pub const VIEW_MODEL_SYMBOL_ITEM_INDEX: u8 = 15;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

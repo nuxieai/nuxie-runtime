@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 #[test]
 fn recycled_address_resolves_through_object_holding_it_now() {
-    let mut a = DeferredOreContext::new(None);
+    let mut a = DeferredOreContext::fromReal(None);
     let desc = ShaderModuleDesc::default();
     let mut dead = HashSet::new();
     {
@@ -20,7 +20,7 @@ fn recycled_address_resolves_through_object_holding_it_now() {
             modules.push(module);
         }
     }
-    let mut b = DeferredOreContext::new(None);
+    let mut b = DeferredOreContext::fromReal(None);
     let mut recycled = None;
     let mut modules = vec![];
     for _ in 0..32 {
@@ -60,7 +60,7 @@ fn recycled_address_resolves_through_object_holding_it_now() {
 
 #[test]
 fn session_teardown_off_recording_thread_stays_quiet() {
-    let mut d = Box::new(DeferredOreContext::new(None));
+    let mut d = Box::new(DeferredOreContext::fromReal(None));
     let desc = BufferDesc {
         usage: BufferUsage::vertex,
         size: 16,

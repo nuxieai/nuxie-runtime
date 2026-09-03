@@ -29,7 +29,7 @@ fn replay_preserves_the_complete_explicitly_sized_hlsl_source() {
             ..Default::default()
         },
     );
-    let mut recorder = DeferredOreContext::new(None);
+    let mut recorder = DeferredOreContext::fromReal(None);
     let mut residents = OreResident::default();
     replayOreStream(
         &mut recorder,
@@ -91,7 +91,7 @@ fn nullable_zero_count_descriptor_spans_survive_record_and_replay() {
         INVALID_HANDLE,
         &[],
     );
-    let mut recorder = DeferredOreContext::new(None);
+    let mut recorder = DeferredOreContext::fromReal(None);
     let mut residents = OreResident::default();
     replayOreStream(
         &mut recorder,

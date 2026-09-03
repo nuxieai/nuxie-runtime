@@ -26,7 +26,7 @@ fn scene(mode: ResMode) -> Vec<u8> {
         [0.1, 0.1, 0.15, 1.0],
     );
     if matches!(mode, ResMode::Unified) {
-        let mut dctx = DeferredOreContext::new(Some(host.ore.clone()));
+        let mut dctx = DeferredOreContext::fromReal(Some(host.ore.clone()));
         let vb = vertex_buffer(&mut dctx, "ore_deferred_resource_vb");
         {
             let mut pass = dctx
@@ -41,7 +41,7 @@ fn scene(mode: ResMode) -> Vec<u8> {
         let mut table = OreResident::default();
         let mut dctx = None;
         let vb = if matches!(mode, ResMode::ReplayBuffer) {
-            dctx = Some(DeferredOreContext::new(Some(host.ore.clone())));
+            dctx = Some(DeferredOreContext::fromReal(Some(host.ore.clone())));
             let dctx = dctx.as_mut().unwrap();
             let deferred = vertex_buffer(dctx, "ore_deferred_resource_vb");
             dctx.replayFrame(&mut *host.ore.borrow_mut(), &mut table, &mut |_| None);

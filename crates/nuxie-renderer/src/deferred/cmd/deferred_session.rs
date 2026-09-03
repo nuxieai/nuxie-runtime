@@ -1,4 +1,4 @@
-//! renderer/cmd/deferred_session.hpp at e949498e.
+//! renderer/cmd/deferred_session.hpp at e3c5dec2.
 use super::render_replay::RendererOwner;
 use super::{
     deferred_render_factory::*, deferred_render_resource::SharedRenderCommandBuffer,
@@ -6,7 +6,7 @@ use super::{
 };
 use crate::authored_ore_shader::{profile_for_target, ExactGpuCanvasShaderOccurrence};
 use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
-use nuxie_ore_metal::context::ContextApi;
+use nuxie_ore_metal::context::{ContextApi, ReplayCaps};
 use nuxie_render_api::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -189,29 +189,20 @@ pub struct DeferredSession {
 }
 impl DeferredSession {
     pub fn new(real_ore: Option<OreContextHandle>) -> Self {
+        Self::with_ore_context(|| DeferredOreContext::fromReal(real_ore))
+    }
+    pub fn with_caps(caps: ReplayCaps) -> Self {
+        Self::with_ore_context(|| DeferredOreContext::new(caps))
+    }
+    fn with_ore_context(make_ore: impl FnOnce() -> DeferredOreContext) -> Self {
         let factory = Rc::new(RefCell::new(DeferredFactory::new()));
         let canvases = Rc::new(RefCell::new(ForeignImageRegistry::default()));
         let routing = Rc::new(RefCell::new(SessionRouting::new(
             factory.borrow().buffer.clone(),
             canvases.clone(),
         )));
-        let mut ore = DeferredOreContext::new(real_ore);
-        let weak_routing = Rc::downgrade(&routing);
-        ore.setCanvasIdProvider(Some(Box::new(move |canvas| {
-            weak_routing
-                .upgrade()
-                .expect("live deferred session")
-                .borrow_mut()
-                .register_canvas(canvas)
-        })));
-        factory
-            .borrow()
-            .buffer
-            .lock()
-            .unwrap()
-            .bind_recording_thread();
-        ore.setCanvasRegistry(Some(canvases));
-        Self {
+        let ore = make_ore();
+        let mut out = Self {
             factory,
             ore_context: Rc::new(RefCell::new(ore)),
             routing,
@@ -219,10 +210,15 @@ impl DeferredSession {
             canvas_renderers: Rc::new(RefCell::new(HashMap::new())),
             screen_renderers: Rc::new(RefCell::new(HashMap::new())),
             targets: Rc::new(RefCell::new(SessionTargets::default())),
-        }
+        };
+        out.wire_ore_canvases();
+        out
     }
     pub fn bind_real_ore(&mut self, real: Option<OreContextHandle>) {
         self.ore_context.borrow_mut().bindReal(real);
+    }
+    pub fn bind_replay_caps(&mut self, caps: ReplayCaps) {
+        self.ore_context.borrow_mut().bindCaps(caps);
     }
     pub fn bind_render_context(&mut self, real: Option<PersistentFactoryContext>) {
         *self.render_context.borrow_mut() = real;
@@ -325,6 +321,27 @@ impl DeferredSession {
     }
     pub fn content_canvases(&self) -> HashMap<u32, RenderCanvasHandle> {
         self.routing.borrow().content_canvases.clone()
+    }
+    fn wire_ore_canvases(&mut self) {
+        let weak_routing = Rc::downgrade(&self.routing);
+        self.ore_context
+            .borrow_mut()
+            .setCanvasIdProvider(Some(Box::new(move |canvas| {
+                weak_routing
+                    .upgrade()
+                    .expect("live deferred session")
+                    .borrow_mut()
+                    .register_canvas(canvas)
+            })));
+        self.factory
+            .borrow()
+            .buffer
+            .lock()
+            .unwrap()
+            .bind_recording_thread();
+        self.ore_context
+            .borrow_mut()
+            .setCanvasRegistry(Some(self.canvases()));
     }
 }
 impl DeferredRouteHost for DeferredSession {

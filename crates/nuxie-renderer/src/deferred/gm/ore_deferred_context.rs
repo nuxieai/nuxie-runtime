@@ -4,7 +4,7 @@ use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
 fn scene(deferred: bool) -> Vec<u8> {
     let mut host = GmHost::new(0xff000000);
     let canvas = host.canvas(256, 256);
-    let mut dctx = DeferredOreContext::new(Some(host.ore.clone()));
+    let mut dctx = DeferredOreContext::fromReal(Some(host.ore.clone()));
     let (target, module, vb, pipeline) = {
         // Only the chosen API receiver changes, just as in the source GM.
         let mut real = (!deferred).then(|| host.ore.borrow_mut());

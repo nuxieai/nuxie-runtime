@@ -5,7 +5,7 @@
 //! makes the source, hash, and compiled-function oracles independently testable.
 //!
 //! Upstream: `rive-app/rive-runtime` at
-//! `966499fffe2aadcbcd1fe4388160e4e7d5c0d967`.
+//! `e3c5dec2873840d09ee1ea54f78e64e805ca22f7`.
 //! Primary source: `renderer/src/shaders/metal/draw.metal:1-42`.
 
 use objc2::runtime::{AnyObject, ProtocolObject};
@@ -17,7 +17,7 @@ use std::fmt;
 use std::ptr::NonNull;
 
 /// The upstream revision of the current shader batch.
-pub const UPSTREAM_SHA: &str = "966499fffe2aadcbcd1fe4388160e4e7d5c0d967";
+pub const UPSTREAM_SHA: &str = "e3c5dec2873840d09ee1ea54f78e64e805ca22f7";
 
 /// The Cargo build-script output consumed by [`DrawShaderLibrary`]. This name
 /// intentionally differs from the existing tracer artifact.

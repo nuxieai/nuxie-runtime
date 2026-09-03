@@ -5,7 +5,7 @@ use nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext;
 
 fn recording_vm() -> ScriptVm {
     let vm = ScriptVm::new();
-    let ore: OreContextHandle = Rc::new(RefCell::new(DeferredOreContext::new(None)));
+    let ore: OreContextHandle = Rc::new(RefCell::new(DeferredOreContext::fromReal(None)));
     let module = ore
         .borrow_mut()
         .makeShaderModule(&ShaderModuleDesc {

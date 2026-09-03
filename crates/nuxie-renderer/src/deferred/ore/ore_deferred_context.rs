@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_deferred_context.hpp at 707c4f60.
+//! renderer/ore/cmd/ore_deferred_context.hpp at e3c5dec2.
 #![allow(non_snake_case)]
 use crate::deferred::cmd::{
     foreign_image_registry::ForeignImageRegistry, render_handle::CANVAS_HANDLE_MASK,
@@ -20,7 +20,7 @@ use nuxie_ore_metal::ore_cmd::{
 use nuxie_ore_metal::{
     context::{
         ActiveRenderPass, CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor,
-        ShaderTarget,
+        ReplayCaps, ShaderTarget,
     },
     gpu_resource::{AnyResourceHandle, ResourceHandle},
     render_pass::RenderPassApi,
@@ -55,6 +55,9 @@ impl RealResources {
 }
 pub struct DeferredOreContext {
     base: Context,
+    // What the recording answers about the replay device; the only capability
+    // source. `real` exists solely for the sessionless GM wrap fallback.
+    caps: ReplayCaps,
     real: Option<Weak<RefCell<dyn ContextApi>>>,
     render: SharedOreCommandBuffer,
     ids: SharedIdAllocator,
@@ -88,7 +91,13 @@ impl DeferredOreContext {
         assert_eq!(Rc::strong_count(&pending), 2);
         assert_eq!(Rc::weak_count(&pending), 0);
     }
-    pub fn new(real: Option<OreContextHandle>) -> Self {
+    // Capability-only construction: recording holds no device.
+    pub fn new(caps: ReplayCaps) -> Self {
+        Self::withReal(caps, None)
+    }
+    // A host that also passes the real context keeps the sessionless GM wrap
+    // fallback; every capability answer still comes from `caps`.
+    pub fn withReal(caps: ReplayCaps, real: Option<OreContextHandle>) -> Self {
         let realResources = Rc::new(RefCell::new(RealResources::default()));
         let resources = realResources.clone();
         let mut render = OreCommandBuffer::default();
@@ -100,6 +109,7 @@ impl DeferredOreContext {
         register_recorder(Arc::as_ptr(&ids) as usize);
         let out = Self {
             base: nuxie_ore_metal::new_context_backend_base(Features::default(), None),
+            caps,
             real: real.as_ref().map(Rc::downgrade),
             render,
             ids,
@@ -107,8 +117,15 @@ impl DeferredOreContext {
             canvasIdProvider: None,
             canvasRegistry: None,
         };
-        out.adoptRealFeatures();
+        out.adoptCapsFeatures();
         out
+    }
+    pub fn fromReal(real: Option<OreContextHandle>) -> Self {
+        let caps = real
+            .as_ref()
+            .map(|real| ReplayCaps::from(&*real.borrow()))
+            .unwrap_or_default();
+        Self::withReal(caps, real)
     }
     fn real(&self) -> Option<OreContextHandle> {
         self.real.as_ref().and_then(Weak::upgrade)
@@ -119,34 +136,44 @@ impl DeferredOreContext {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .alloc()
     }
-    fn adoptRealFeatures(&self) {
-        if let Some(real) = self.real() {
-            nuxie_ore_metal::context_backend_set_features(&self.base, real.borrow().features());
+    fn adoptCapsFeatures(&self) {
+        if self.caps.featuresKnown {
+            nuxie_ore_metal::context_backend_set_features(&self.base, self.caps.features);
         }
     }
     pub fn bindReal(&mut self, real: Option<OreContextHandle>) {
-        let late = self.real().is_none() && real.is_some();
         self.real = real.as_ref().map(Rc::downgrade);
-        self.adoptRealFeatures();
+        if let Some(real) = real {
+            self.bindCaps(ReplayCaps::from(&*real.borrow()));
+        }
+    }
+    // Descriptor form of the late bind, for hosts whose device lives on
+    // another thread or process and only its capabilities travel.
+    pub fn bindCaps(&mut self, caps: ReplayCaps) {
+        let late = !self.caps.featuresKnown && caps.featuresKnown;
         if late {
-            let real = real.unwrap();
-            let real = real.borrow();
-            if real.shaderTarget() != ShaderTarget::glsl {
-                eprintln!(
-                    "rive deferred: TRIPWIRE late bound backend consumes shader target {}, but recording already loaded {}",
-                    real.shaderTarget() as u8,
-                    ShaderTarget::glsl as u8
-                );
-                debug_assert!(false, "late bind changed the recorded shader target");
-            }
-            if real.canvasTargetFormat() != TextureFormat::rgba8unorm {
-                eprintln!(
-                    "rive deferred: TRIPWIRE late bound backend allocates canvases as format {}, but recording already reserved canvas views as {}",
-                    real.canvasTargetFormat() as u8,
-                    TextureFormat::rgba8unorm as u8
-                );
-                debug_assert!(false, "late bind changed the recorded canvas format");
-            }
+            self.checkUnboundAssumptions(&caps);
+        }
+        self.caps = caps;
+        self.adoptCapsFeatures();
+    }
+    pub fn caps(&self) -> &ReplayCaps {
+        &self.caps
+    }
+    fn checkUnboundAssumptions(&self, incoming: &ReplayCaps) {
+        if incoming.shaderTarget != self.caps.shaderTarget {
+            eprintln!(
+                "rive deferred: TRIPWIRE late bound backend consumes shader target {}, but recording already loaded {}",
+                incoming.shaderTarget as u8, self.caps.shaderTarget as u8
+            );
+            debug_assert!(false, "late bind changed the recorded shader target");
+        }
+        if incoming.canvasTargetFormat != self.caps.canvasTargetFormat {
+            eprintln!(
+                "rive deferred: TRIPWIRE late bound backend allocates canvases as format {}, but recording already reserved canvas views as {}",
+                incoming.canvasTargetFormat as u8, self.caps.canvasTargetFormat as u8
+            );
+            debug_assert!(false, "late bind changed the recorded canvas format");
         }
     }
     pub fn setCanvasIdProvider(
@@ -195,6 +222,10 @@ impl DeferredOreContext {
         table: &mut OreResident,
         canvasAt: &mut dyn FnMut(u32) -> Option<CanvasTextureInfo>,
     ) {
+        debug_assert!(
+            !self.caps.featuresKnown || self.caps.matchesReplayDevice(realCtx),
+            "replay device does not match declared caps"
+        );
         let stream = self.render.borrow();
         replayOreStream(
             realCtx,
@@ -225,9 +256,7 @@ impl DeferredOreContext {
         let desc = TextureDesc {
             width,
             height,
-            format: self.real().map_or(TextureFormat::rgba8unorm, |r| {
-                r.borrow().canvasTargetFormat()
-            }),
+            format: self.caps.canvasTargetFormat,
             r#type: TextureType::texture2D,
             renderTarget: true,
             numMipmaps: 1,
@@ -275,7 +304,7 @@ impl ContextApi for DeferredOreContext {
         true
     }
     fn featuresKnown(&self) -> bool {
-        self.real().is_some()
+        self.caps.featuresKnown
     }
     fn features(&self) -> Features {
         self.base.features()
@@ -572,7 +601,6 @@ impl ContextApi for DeferredOreContext {
         texture
     }
     fn shaderTarget(&self) -> ShaderTarget {
-        self.real()
-            .map_or(ShaderTarget::glsl, |r| r.borrow().shaderTarget())
+        self.caps.shaderTarget
     }
 }

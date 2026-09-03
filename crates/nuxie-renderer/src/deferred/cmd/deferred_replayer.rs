@@ -1,4 +1,4 @@
-//! renderer/cmd/deferred_replayer.hpp at e949498e.
+//! renderer/cmd/deferred_replayer.hpp at e3c5dec2.
 use super::{
     canvas_schedule::schedule_canvases,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
@@ -7,6 +7,7 @@ use super::{
     render_replay::*,
 };
 use crate::deferred::ore::{ore_make_replay::OreResident, ore_replay::replayOreStream};
+use nuxie_ore_metal::context::ReplayCaps;
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_render_api::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -47,6 +48,7 @@ pub struct DeferredFrame {
     pub content_canvases: HashMap<u32, RenderCanvasHandle>,
     pub ore_reals: Vec<AnyResourceHandle>,
     pub segments: Vec<DeferredSegment>,
+    pub ore_caps: ReplayCaps,
 }
 pub fn snapshot_frame(session: &mut DeferredSession) -> DeferredFrame {
     session.close_open_range();
@@ -57,6 +59,7 @@ pub fn snapshot_frame(session: &mut DeferredSession) -> DeferredFrame {
     let stream = ore.stream();
     let stream = stream.borrow();
     let ore_reals = ore.realResources().to_vec();
+    let ore_caps = *ore.caps();
     DeferredFrame {
         commands: buffer.command_bytes().to_vec(),
         blobs: buffer.blob_bytes().to_vec(),
@@ -66,6 +69,7 @@ pub fn snapshot_frame(session: &mut DeferredSession) -> DeferredFrame {
         content_canvases: session.content_canvases(),
         ore_reals,
         segments,
+        ore_caps,
     }
 }
 pub fn take_frame(session: &mut DeferredSession) -> DeferredFrame {
@@ -114,6 +118,7 @@ impl DeferredReplayer {
             &reals,
             sink,
             &segments,
+            ore.caps(),
         );
     }
     pub fn replay_frame(&mut self, frame: &DeferredFrame, sink: &mut dyn DeferredFrameSink) {
@@ -127,6 +132,7 @@ impl DeferredReplayer {
             &frame.ore_reals,
             sink,
             &frame.segments,
+            &frame.ore_caps,
         );
     }
     fn replay(
@@ -140,6 +146,7 @@ impl DeferredReplayer {
         ore_reals: &[AnyResourceHandle],
         sink: &mut dyn DeferredFrameSink,
         segments: &[DeferredSegment],
+        ore_caps: &ReplayCaps,
     ) {
         self.stats = ReplayStats::default();
         self.table.clear_version_aliases();
@@ -229,6 +236,7 @@ impl DeferredReplayer {
                 &self.table,
                 ore_reals,
                 &content_canvas,
+                ore_caps,
             );
             if let Some(screen) = screen {
                 replay_render_commands(
@@ -263,6 +271,7 @@ impl DeferredReplayer {
                 &self.table,
                 ore_reals,
                 &content_canvas,
+                ore_caps,
             );
         }
         hooks.filter = ReplayFilter::Destroys;
@@ -287,6 +296,7 @@ fn open_screen_and_ore(
     table: &ResourceTable,
     reals: &[AnyResourceHandle],
     content_canvas: &RefCell<&mut dyn FnMut(u32) -> Option<RenderCanvasHandle>>,
+    ore_caps: &ReplayCaps,
 ) -> Option<RendererOwner> {
     let screen = screens
         .entry(target)
@@ -296,6 +306,12 @@ fn open_screen_and_ore(
         if !commands.is_empty() {
             let real = sink.borrow_mut().ore_context();
             if let Some(real) = real {
+                if ore_caps.featuresKnown && !ore_caps.matchesReplayDevice(&*real.borrow()) {
+                    eprintln!(
+                        "rive deferred: TRIPWIRE replay device disagrees with the declared ReplayCaps"
+                    );
+                    debug_assert!(false, "replay device does not match declared caps");
+                }
                 sink.borrow_mut().begin_ore_frame();
                 replayOreStream(
                     &mut *real.borrow_mut(),

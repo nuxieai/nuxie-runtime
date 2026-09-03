@@ -234,6 +234,47 @@ fn observed_node(events: &Rc<RefCell<Vec<FocusEventKind>>>) -> FocusNodeRef {
     }))))
 }
 
+#[derive(Default)]
+struct RoutedInputObservations {
+    return_value: Cell<bool>,
+    key_input_count: Cell<usize>,
+    text_input_count: Cell<usize>,
+    last_key: RefCell<Option<Key>>,
+    last_text: RefCell<String>,
+}
+
+struct RoutedInputFocusable {
+    observations: Rc<RoutedInputObservations>,
+}
+
+impl Focusable for RoutedInputFocusable {
+    fn key_input(&mut self, key: Key, _: KeyModifiers, _: bool, _: bool) -> bool {
+        self.observations
+            .key_input_count
+            .set(self.observations.key_input_count.get() + 1);
+        *self.observations.last_key.borrow_mut() = Some(key);
+        self.observations.return_value.get()
+    }
+
+    fn text_input(&mut self, text: &str) -> bool {
+        self.observations
+            .text_input_count
+            .set(self.observations.text_input_count.get() + 1);
+        self.observations.last_text.replace(text.to_owned());
+        self.observations.return_value.get()
+    }
+
+    fn focused(&mut self) {}
+
+    fn blurred(&mut self) {}
+}
+
+fn routed_input_node(observations: &Rc<RoutedInputObservations>) -> FocusNodeRef {
+    FocusNode::new(Some(Rc::new(RefCell::new(RoutedInputFocusable {
+        observations: observations.clone(),
+    }))))
+}
+
 fn import_bytes(bytes: &[u8]) -> RuntimeFileHandle {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained test factory");
@@ -1826,4 +1867,84 @@ fn wave_b3_focus_test_085_direct_port() {
     assert!(
         !focus_manager(&fixture.machine).with_focus_manager_mut(|manager| manager.focus_next())
     );
+}
+
+#[test]
+fn upstream_707c_state_machine_routes_key_and_text_input_to_focus() {
+    let (_file, _artboard, machine) = real_focus_fixture("assets/text_input_event.riv", None);
+    let manager = focus_manager(&machine);
+    manager.with_focus_manager_mut(FocusManager::clear_focus);
+
+    let observations = Rc::new(RoutedInputObservations::default());
+    observations.return_value.set(true);
+
+    assert!(!machine.with_instance_mut(|machine| {
+        machine.key_input(Key::A, KeyModifiers::NONE, true, false)
+    }));
+    assert!(!machine.with_instance_mut(|machine| machine.text_input("hello")));
+    assert_eq!(observations.key_input_count.get(), 0);
+    assert_eq!(observations.text_input_count.get(), 0);
+
+    let node = attached(&manager, None, routed_input_node(&observations));
+    manager.with_focus_manager_mut(|manager| manager.set_focus(node));
+
+    assert!(machine.with_instance_mut(|machine| {
+        machine.key_input(Key::B, KeyModifiers::SHIFT, true, false)
+    }));
+    assert_eq!(observations.key_input_count.get(), 1);
+    assert_eq!(*observations.last_key.borrow(), Some(Key::B));
+    assert!(machine.with_instance_mut(|machine| machine.text_input("world")));
+    assert_eq!(observations.text_input_count.get(), 1);
+    assert_eq!(&*observations.last_text.borrow(), "world");
+}
+
+#[test]
+fn upstream_707c_state_machine_reports_unhandled_focused_input() {
+    let (_file, _artboard, machine) = real_focus_fixture("assets/text_input_event.riv", None);
+    let manager = focus_manager(&machine);
+    manager.with_focus_manager_mut(FocusManager::clear_focus);
+
+    let observations = Rc::new(RoutedInputObservations::default());
+    let node = attached(&manager, None, routed_input_node(&observations));
+    manager.with_focus_manager_mut(|manager| manager.set_focus(node));
+
+    assert!(!machine.with_instance_mut(|machine| {
+        machine.key_input(Key::ESCAPE, KeyModifiers::NONE, true, false)
+    }));
+    assert!(!machine.with_instance_mut(|machine| machine.text_input("ignored")));
+    assert_eq!(observations.key_input_count.get(), 1);
+    assert_eq!(observations.text_input_count.get(), 1);
+}
+
+#[test]
+fn upstream_707c_state_machine_routes_input_through_external_focus_manager() {
+    let (_file, _artboard, machine) = real_focus_fixture("assets/text_input_event.riv", None);
+    let internal = machine.with_instance(|machine| machine.internal_focus_manager());
+    internal.with_focus_manager_mut(FocusManager::clear_focus);
+
+    let internal_observations = Rc::new(RoutedInputObservations::default());
+    internal_observations.return_value.set(true);
+    let internal_node = attached(&internal, None, routed_input_node(&internal_observations));
+    internal.with_focus_manager_mut(|manager| manager.set_focus(internal_node));
+
+    let external = RuntimeFocusManagerHandle::new(FocusManager::new());
+    let external_observations = Rc::new(RoutedInputObservations::default());
+    external_observations.return_value.set(true);
+    let external_node = attached(&external, None, routed_input_node(&external_observations));
+    external.with_focus_manager_mut(|manager| manager.set_focus(external_node));
+    machine.with_instance_mut(|machine| {
+        machine.set_external_focus_manager(Some(external.clone()));
+    });
+
+    assert!(machine.with_instance_mut(|machine| {
+        machine.key_input(Key::C, KeyModifiers::NONE, true, false)
+    }));
+    assert!(machine.with_instance_mut(|machine| machine.text_input("external")));
+    assert_eq!(external_observations.key_input_count.get(), 1);
+    assert_eq!(external_observations.text_input_count.get(), 1);
+    assert_eq!(&*external_observations.last_text.borrow(), "external");
+    assert_eq!(internal_observations.key_input_count.get(), 0);
+    assert_eq!(internal_observations.text_input_count.get(), 0);
+
+    machine.with_instance_mut(|machine| machine.set_external_focus_manager(None));
 }

@@ -1,4 +1,4 @@
-//! Upstream tests/unit_tests/renderer/ore_command_silver_test.cpp at e949498e.
+//! Upstream tests/unit_tests/renderer/ore_command_silver_test.cpp at 707c4f60.
 use nuxie_ore_metal::{
     ore_cmd::{
         ore_command_buffer::*, ore_command_silver::*, ore_commands::*, ore_handle::*,
@@ -54,8 +54,9 @@ fn representative(buf: &mut OreCommandBuffer) {
         CommandType::setIndexBuffer,
         &SetIndexBufferCmd {
             buffer: 5,
-            format: IndexFormat::uint16,
             offset: 0,
+            format: IndexFormat::uint16,
+            pad: [0; 3],
         },
     );
     let start = buf.append_blob(&encodePods(&[64u32, 128]));

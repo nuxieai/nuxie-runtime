@@ -421,10 +421,62 @@ impl ScriptedViewModel {
         1
     }
 
+    #[cfg(feature = "tools")]
+    fn cached_scripted_property_disposed(state: &mut LuaState, index: i32) -> Option<bool> {
+        if state.type_of(index) != LuaType::Userdata {
+            return None;
+        }
+        match state.userdata_tag(index) {
+            ScriptedPropertyNumber::LUA_TAG => {
+                Some(state.to_rive::<ScriptedPropertyNumber>(index).disposed())
+            }
+            ScriptedPropertyTrigger::LUA_TAG => {
+                Some(state.to_rive::<ScriptedPropertyTrigger>(index).disposed())
+            }
+            ScriptedPropertyList::LUA_TAG => Some(
+                state
+                    .to_rive::<ScriptedPropertyList>(index)
+                    .property
+                    .disposed(),
+            ),
+            ScriptedPropertyColor::LUA_TAG => {
+                Some(state.to_rive::<ScriptedPropertyColor>(index).disposed())
+            }
+            ScriptedPropertyString::LUA_TAG => {
+                Some(state.to_rive::<ScriptedPropertyString>(index).disposed())
+            }
+            ScriptedPropertyBoolean::LUA_TAG => {
+                Some(state.to_rive::<ScriptedPropertyBoolean>(index).disposed())
+            }
+            ScriptedPropertyEnum::LUA_TAG => {
+                Some(state.to_rive::<ScriptedPropertyEnum>(index).disposed())
+            }
+            ScriptedPropertyImage::LUA_TAG => {
+                Some(state.to_rive::<ScriptedPropertyImage>(index).disposed())
+            }
+            ScriptedPropertyFont::LUA_TAG => {
+                Some(state.to_rive::<ScriptedPropertyFont>(index).disposed())
+            }
+            ScriptedPropertyBlob::LUA_TAG => {
+                Some(state.to_rive::<ScriptedPropertyBlob>(index).disposed())
+            }
+            _ => None,
+        }
+    }
+
     pub fn push_value(&mut self, name: &str, core_type: u16) -> i32 {
         let state = unsafe { &mut *self.state };
-        if let Some(reference) = self.property_refs.get(name) {
-            state.raw_get_i(LUA_REGISTRY_INDEX, *reference);
+        if let Some(reference) = self.property_refs.get(name).copied() {
+            state.raw_get_i(LUA_REGISTRY_INDEX, reference);
+            #[cfg(feature = "tools")]
+            if Self::cached_scripted_property_disposed(state, -1) == Some(true) {
+                state.pop(1);
+                state.unref(reference);
+                self.property_refs.remove(name);
+            } else {
+                return 1;
+            }
+            #[cfg(not(feature = "tools"))]
             return 1;
         }
         if let Some(instance) = self.view_model_instance.as_ref() {
@@ -1092,18 +1144,8 @@ fn property_namecall_atom(
         LuaAtoms::AddListener => Some(property.add_listener()),
         LuaAtoms::RemoveListener => Some(property.remove_listener()),
         LuaAtoms::Fire => {
-            if let Some(value) = property.instance_value_mut()
-                && value
-                    .with_downcast_mut::<ViewModelInstanceTrigger, _>(|trigger| trigger.trigger())
-                    .is_some()
-            {
-                return Some(0);
-            }
-            let view_model = state.to_rive::<ScriptedViewModel>(2);
-            let instance = view_model.view_model_instance();
-            let list = property.instance_value_mut().unwrap();
-            if let Some(item) = insert_list_item(&list, instance) {
-                list.with_downcast_mut::<ViewModelInstanceList, _>(|list| list.add_item(item));
+            if let Some(value) = property.instance_value_mut() {
+                value.with_downcast_mut::<ViewModelInstanceTrigger, _>(|trigger| trigger.trigger());
             }
             Some(0)
         }

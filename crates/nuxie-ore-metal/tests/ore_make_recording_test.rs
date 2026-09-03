@@ -1,4 +1,4 @@
-//! Upstream tests/unit_tests/renderer/ore_make_recording_test.cpp at e949498e.
+//! Upstream tests/unit_tests/renderer/ore_make_recording_test.cpp at 707c4f60.
 use nuxie_ore_metal::{
     cmd::command_stream::WirePod,
     ore_cmd::{
@@ -357,6 +357,51 @@ fn make_stream_records_bind_group_entry_refs() {
     assert_eq!(s.slot, 2);
     assert_eq!(s.sampler, 8);
 }
+
+#[test]
+fn make_stream_records_equal_pipelines_byte_for_byte() {
+    fn depth_stencil_with_padding(fill: u8) -> DepthStencilState {
+        let mut storage = std::mem::MaybeUninit::<DepthStencilState>::uninit();
+        unsafe {
+            std::ptr::write_bytes(
+                storage.as_mut_ptr().cast::<u8>(),
+                fill,
+                std::mem::size_of::<DepthStencilState>(),
+            );
+            let ptr = storage.as_mut_ptr();
+            std::ptr::addr_of_mut!((*ptr).format).write(TextureFormat::depth24plusStencil8);
+            std::ptr::addr_of_mut!((*ptr).depthCompare).write(CompareFunction::always);
+            std::ptr::addr_of_mut!((*ptr).depthWriteEnabled).write(true);
+            std::ptr::addr_of_mut!((*ptr).depthBias).write(2);
+            std::ptr::addr_of_mut!((*ptr).depthBiasSlopeScale).write(0.0);
+            std::ptr::addr_of_mut!((*ptr).depthBiasClamp).write(0.0);
+            storage.assume_init()
+        }
+    }
+
+    fn record(stack_fill: u8, cb: &mut OreCommandBuffer) {
+        let mut desc = PipelineDesc {
+            vertexEntryPoint: Some("vs_main"),
+            fragmentEntryPoint: Some("fs_main"),
+            colorCount: 1,
+            depthStencil: depth_stencil_with_padding(stack_fill),
+            sampleCount: 4,
+            label: Some("pipe"),
+            ..Default::default()
+        };
+        desc.colorTargets[0].format = TextureFormat::rgba8unorm;
+        desc.colorTargets[0].blendEnabled = true;
+        desc.stencilFront.compare = CompareFunction::equal;
+        recordMakePipeline(cb, 0, 0, &desc, 10, 11, &[12]);
+    }
+
+    let mut zeroed = OreCommandBuffer::default();
+    let mut dirty = OreCommandBuffer::default();
+    record(0, &mut zeroed);
+    record(0xab, &mut dirty);
+    assert_eq!(zeroed.command_bytes(), dirty.command_bytes());
+}
+
 #[test]
 fn make_stream_reset_reuses_the_buffer() {
     let mut cb = OreCommandBuffer::default();

@@ -6,6 +6,7 @@ use crate::mechanical_port::source::{
 
 pub trait StyleOverrideProvider {
     fn is_row(&self) -> bool;
+    fn is_stack(&self) -> bool;
     fn instance_height_scale_type(&self) -> u32;
     fn instance_width_scale_type(&self) -> u32;
     fn instance_height_units_value(&self) -> u32;
@@ -29,6 +30,11 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
 
     pub fn update_height_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) {
         let is_row = provider.is_row();
+        LayoutComponent::set_parent_is_stack_with_host_occurrence(
+            &artboard.core_handle(),
+            provider.is_stack(),
+            provider.borrowed_artboard_host(),
+        );
         if provider.instance_height_scale_type() == 0 {
             LayoutComponent::set_height_intrinsically_size_override_occurrence(
                 &artboard.core_handle(),
@@ -72,6 +78,11 @@ impl<T: StyleOverrideProvider> StyleOverrider<T> {
     }
     pub fn update_width_override(provider: &mut T, artboard: &RuntimeArtboardInstanceHandle) {
         let is_row = provider.is_row();
+        LayoutComponent::set_parent_is_stack_with_host_occurrence(
+            &artboard.core_handle(),
+            provider.is_stack(),
+            provider.borrowed_artboard_host(),
+        );
         if provider.instance_width_scale_type() == 0 {
             LayoutComponent::set_width_intrinsically_size_override_occurrence(
                 &artboard.core_handle(),

@@ -22,7 +22,7 @@ use web_sys::{Event, HtmlCanvasElement};
 
 use super::gles3_decl::{
     GLCommand, GLContextLifecycleIngress, GLFinalReleaseIngress, GLObjectKind,
-    GLExecutionProvider, WebGLShaderPixelLocalStorageEnableResult, GLenum, GLint, GLuint,
+    GLExecutionProvider, WebGLShaderPixelLocalStorageEnableResult, GLenum, GLfloat, GLint, GLuint,
     GL_ARRAY_BUFFER_BINDING, GL_CURRENT_PROGRAM, GL_ELEMENT_ARRAY_BUFFER_BINDING,
     GL_FRAMEBUFFER_BINDING, GL_RENDERER, GL_RGBA, GL_UNIFORM_BUFFER_BINDING,
     GL_NUM_EXTENSIONS, GL_UNSIGNED_BYTE, GL_VERSION, GL_VERTEX_ARRAY_BINDING,

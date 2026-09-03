@@ -14,6 +14,7 @@ use crate::mechanical_port::source::{
         layout_node_provider::{LayoutNodeProvider, LayoutNodeProviderState},
         style_overrider::{StyleOverrideProvider, StyleOverrider},
     },
+    layout_component::LayoutComponent,
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     status_code::StatusCode,
 };
@@ -235,6 +236,21 @@ impl NestedArtboardLayout {
             .unwrap_or(true)
     }
 
+    pub fn is_stack(&self) -> bool {
+        self.base
+            .base
+            .parent_handle()
+            .and_then(|parent| {
+                parent.with(|parent| {
+                    parent
+                        .as_layout_component()
+                        .map(LayoutComponent::is_stack_container)
+                })
+            })
+            .flatten()
+            .unwrap_or(false)
+    }
+
     fn update_width_override(&mut self) {
         if let Some(instance) = self.base.base.artboard_instance_handle(0) {
             StyleOverrider::<NestedArtboardLayout>::update_width_override(self, &instance);
@@ -275,6 +291,9 @@ impl NestedArtboardLayoutBaseCallbacks for NestedArtboardLayout {
 impl StyleOverrideProvider for NestedArtboardLayout {
     fn is_row(&self) -> bool {
         NestedArtboardLayout::is_row(self)
+    }
+    fn is_stack(&self) -> bool {
+        NestedArtboardLayout::is_stack(self)
     }
     fn instance_height_scale_type(&self) -> u32 {
         self.base.instance_height_scale_type()

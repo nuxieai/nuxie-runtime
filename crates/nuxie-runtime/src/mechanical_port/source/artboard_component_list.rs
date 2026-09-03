@@ -335,12 +335,18 @@ impl ArtboardComponentList {
 
     pub fn mark_layout_node_dirty(&mut self, _should_force_update_layout_bounds: bool) {
         let parent_is_row = self.main_axis_is_row();
+        let parent_is_stack = self.is_stack();
         for index in 0..self.artboard_count() as i32 {
             if let Some(artboard) = self.artboard_instance(index) {
                 LayoutComponent::set_parent_is_row_with_host_occurrence(
                     &artboard.core_handle(),
                     parent_is_row,
                     self,
+                );
+                LayoutComponent::set_parent_is_stack_with_host_occurrence(
+                    &artboard.core_handle(),
+                    parent_is_stack,
+                    Some(self),
                 );
             }
         }
@@ -1661,10 +1667,16 @@ impl ArtboardComponentList {
         owner
             .with_downcast_mut::<Self, _>(|owner| {
                 let parent_is_row = owner.main_axis_is_row();
+                let parent_is_stack = owner.is_stack();
                 LayoutComponent::set_parent_is_row_with_host_occurrence(
                     &artboard.core_handle(),
                     parent_is_row,
                     owner,
+                );
+                LayoutComponent::set_parent_is_stack_with_host_occurrence(
+                    &artboard.core_handle(),
+                    parent_is_stack,
+                    Some(owner),
                 );
             })
             .expect("live ArtboardComponentList");
@@ -2152,6 +2164,11 @@ impl ArtboardComponentList {
 
     pub fn main_axis_is_row(&self) -> bool {
         self.main_axis_is_row_ref()
+    }
+
+    pub fn is_stack(&self) -> bool {
+        self.layout_parent_ref(LayoutComponent::is_stack_container)
+            .unwrap_or(false)
     }
 
     fn main_axis_is_row_ref(&self) -> bool {

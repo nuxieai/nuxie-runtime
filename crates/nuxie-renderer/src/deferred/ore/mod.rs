@@ -1,6 +1,8 @@
 //! ORE deferred owners; shared wire/replay implementations live with Context.
 #[cfg(test)]
 mod ore_deferred_alias_test;
+#[cfg(test)]
+mod ore_deferred_bookkeeping_test;
 pub mod ore_deferred_context;
 #[cfg(test)]
 mod ore_deferred_device_state_test;

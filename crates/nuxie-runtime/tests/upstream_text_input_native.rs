@@ -4,6 +4,7 @@
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     core::CoreHandle,
+    focus_data::FocusData,
     generated::core_registry::CoreRegistry,
     input::focusable::{Key, KeyModifiers},
     text::{
@@ -62,6 +63,56 @@ fn property_key_for_name(type_name: &str, property_name: &str) -> u16 {
         .expect("schema property")
         .key
         .int
+}
+
+#[test]
+fn upstream_707c_state_machine_key_and_text_input_forward_to_text_input() {
+    let (_file, artboard, text_input) = input_fixture();
+    let Some(machine) = artboard.state_machine_instance_handle(0) else {
+        return;
+    };
+    machine.advance_and_apply(0.0);
+
+    let Some(focus_data) = artboard.with_artboard(|artboard| {
+        artboard
+            .objects()
+            .iter()
+            .flatten()
+            .find(|object| object.is_type_of(FocusData::TYPE_KEY))
+            .cloned()
+    }) else {
+        panic!("authored FocusData");
+    };
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus_data)));
+
+    with_input(&text_input, |input| {
+        input.raw_text_input().set_text(String::new());
+        input.raw_text_input().set_cursor(Cursor::zero());
+    });
+
+    assert!(machine.with_instance_mut(|machine| machine.text_input("typed text")));
+    assert_eq!(
+        with_input(&text_input, |input| input.raw_text_input().text()),
+        "typed text"
+    );
+
+    assert!(machine.with_instance_mut(|machine| {
+        machine.key_input(Key::BACKSPACE, KeyModifiers::NONE, true, false)
+    }));
+    assert_eq!(
+        with_input(&text_input, |input| input.raw_text_input().text()),
+        "typed tex"
+    );
+
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert!(!machine.with_instance_mut(|machine| machine.text_input("more")));
+    assert!(!machine.with_instance_mut(|machine| {
+        machine.key_input(Key::BACKSPACE, KeyModifiers::NONE, true, false)
+    }));
+    assert_eq!(
+        with_input(&text_input, |input| input.raw_text_input().text()),
+        "typed tex"
+    );
 }
 
 #[test]

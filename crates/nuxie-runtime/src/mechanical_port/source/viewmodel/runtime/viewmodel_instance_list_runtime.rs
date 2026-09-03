@@ -91,6 +91,11 @@ impl ViewModelInstanceListRuntime {
         else {
             return false;
         };
+        item.with_mut(|item| {
+            item.as_view_model_instance_list_item_mut()
+                .expect("new list item")
+                .set_view_model_instance(Some(runtime.instance()));
+        });
         let inserted = self
             .base
             .handle()
@@ -100,11 +105,6 @@ impl ViewModelInstanceListRuntime {
             })
             .unwrap_or(false);
         if inserted {
-            item.with_mut(|item| {
-                item.as_view_model_instance_list_item_mut()
-                    .expect("new list item")
-                    .set_view_model_instance(Some(runtime.instance()));
-            });
             self.items.borrow_mut().insert(item, runtime);
         } else {
             item.remove_occurrence();

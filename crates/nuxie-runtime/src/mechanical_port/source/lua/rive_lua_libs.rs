@@ -1254,7 +1254,7 @@ pub struct ScriptedGPUTextureView {
     pub view: Option<OreTextureView>,
     pub retained_image: Option<RenderImageRef>,
 }
-impl_lua_rive!(ScriptedGPUTextureView, 51, "GPUTextureView", no_metatable);
+impl_lua_rive!(ScriptedGPUTextureView, 51, "GPUTextureView");
 
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1646,6 +1646,10 @@ impl ScriptedProperty {
 
     pub fn instance_value_mut(&mut self) -> Option<CoreHandle> {
         self.instance_value.clone()
+    }
+
+    pub fn disposed(&self) -> bool {
+        self.disposed
     }
 
     pub fn cached_value_ref(&self) -> i32 {

@@ -285,6 +285,10 @@ pub(crate) trait ExactSourceBackend: 'static {
     }
     fn abort_frame(&mut self);
 
+    /// Restore backend state after a deferred ORE stream has executed inside
+    /// an otherwise active presentation frame.
+    fn after_deferred_ore_frame(&mut self) {}
+
     fn gpu_canvas_shader_profile(&self) -> GpuCanvasShaderProfile {
         GpuCanvasShaderProfile::WebGpu
     }
@@ -365,6 +369,10 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
 
     pub(crate) fn resize(&self, width: u32, height: u32) -> Result<(), RendererError> {
         self.backend.borrow_mut().resize(width, height)
+    }
+
+    pub(crate) fn after_deferred_ore_frame(&self) {
+        self.backend.borrow_mut().after_deferred_ore_frame();
     }
 
     pub(crate) fn upload_rgba8_premul_srgb(

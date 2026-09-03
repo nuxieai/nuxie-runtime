@@ -47,6 +47,12 @@ impl WebGl2Factory {
             .begin_frame(clear_color, mode)
             .map(|core| WebGl2Frame { core })
     }
+
+    /// Restore Rive's cached GL state after a deferred GPU-canvas pass used
+    /// the shared browser context during an active presentation frame.
+    pub fn after_deferred_ore_frame(&mut self) {
+        self.core.after_deferred_ore_frame();
+    }
 }
 
 impl Factory for WebGl2Factory {

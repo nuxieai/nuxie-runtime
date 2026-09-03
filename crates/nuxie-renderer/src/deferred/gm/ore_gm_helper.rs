@@ -392,14 +392,16 @@ pub(super) fn triangle_pipeline(
 ) -> AnyResourceHandle {
     let attrs = [
         VertexAttribute {
-            format: VertexFormat::float2,
             offset: 0,
             shaderSlot: 0,
+            format: VertexFormat::float2,
+            ..Default::default()
         },
         VertexAttribute {
-            format: VertexFormat::float4,
             offset: 8,
             shaderSlot: 1,
+            format: VertexFormat::float4,
+            ..Default::default()
         },
     ];
     let layouts = [VertexBufferLayout {

@@ -1,4 +1,4 @@
-//! Fixed-width ORE enum/descriptor codecs for e949498e wire PODs.
+//! Fixed-width ORE enum/descriptor codecs for 966499ff wire PODs.
 use crate::cmd::command_stream::WirePod;
 use crate::types::*;
 
@@ -521,9 +521,10 @@ impl WirePod for ColorWriteMask {
     }
 }
 crate::impl_wire_pod!(VertexAttribute {
-    format: VertexFormat,
     offset: u32,
-    shaderSlot: u32
+    shaderSlot: u32,
+    format: VertexFormat,
+    pad: [u8; 3]
 });
 crate::impl_wire_pod!(BlendState {
     srcColor: BlendFactor,
@@ -549,6 +550,7 @@ crate::impl_wire_pod!(DepthStencilState {
     format: TextureFormat,
     depthCompare: CompareFunction,
     depthWriteEnabled: bool,
+    pad: u8,
     depthBias: i32,
     depthBiasSlopeScale: f32,
     depthBiasClamp: f32
@@ -562,6 +564,7 @@ crate::impl_wire_pod!(BindGroupLayoutEntry {
     textureViewDim: TextureViewDimension,
     textureSampleType: SampleType,
     textureMultisampled: bool,
+    pad: [u8; 2],
     minBindingSize: u32,
     nativeSlotVS: u32,
     nativeSlotFS: u32,

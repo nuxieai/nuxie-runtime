@@ -14,12 +14,13 @@ fn ore_command_stream_round_trips_through_the_reader() {
     begin.colors[0] = ColorAttachmentPOD {
         view: 0,
         resolveTarget: INVALID_HANDLE,
-        loadOp: LoadOp::clear,
-        storeOp: StoreOp::store,
         clearR: 0.25,
         clearG: 0.5,
         clearB: 0.75,
         clearA: 1.,
+        loadOp: LoadOp::clear,
+        storeOp: StoreOp::store,
+        pad: [0; 2],
     };
     begin.depthStencil.view = INVALID_HANDLE;
     buf.append(CommandType::beginRenderPass, &begin);

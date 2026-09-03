@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/draw_pipeline_vulkan.cpp`.
-//! Updated through upstream `707c4f60f2433b32d34597045b2f43460e6cd8fb`.
+//! Updated through upstream `966499fffe2aadcbcd1fe4388160e4e7d5c0d967`.
 
 #![allow(non_snake_case)]
 

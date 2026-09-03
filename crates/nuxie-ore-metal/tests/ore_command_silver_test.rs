@@ -1,4 +1,4 @@
-//! Upstream tests/unit_tests/renderer/ore_command_silver_test.cpp at 707c4f60.
+//! Upstream tests/unit_tests/renderer/ore_command_silver_test.cpp at 966499ff.
 use nuxie_ore_metal::{
     ore_cmd::{
         ore_command_buffer::*, ore_command_silver::*, ore_commands::*, ore_handle::*,
@@ -14,31 +14,33 @@ fn representative(buf: &mut OreCommandBuffer) {
     begin.colors[0] = ColorAttachmentPOD {
         view: 0,
         resolveTarget: INVALID_HANDLE,
-        loadOp: LoadOp::clear,
-        storeOp: StoreOp::store,
         clearR: 0.1,
         clearG: 0.2,
         clearB: 0.3,
         clearA: 1.,
+        loadOp: LoadOp::clear,
+        storeOp: StoreOp::store,
+        pad: [0; 2],
     };
     begin.colors[1] = ColorAttachmentPOD {
         view: 1,
         resolveTarget: 2,
-        loadOp: LoadOp::load,
-        storeOp: StoreOp::discard,
         clearR: 0.,
         clearG: 0.,
         clearB: 0.,
         clearA: 0.,
+        loadOp: LoadOp::load,
+        storeOp: StoreOp::discard,
+        pad: [0; 2],
     };
     begin.depthStencil = DepthStencilAttachmentPOD {
         view: 3,
+        depthClearValue: 1.,
+        stencilClearValue: 0,
         depthLoadOp: LoadOp::clear,
         depthStoreOp: StoreOp::store,
-        depthClearValue: 1.,
         stencilLoadOp: LoadOp::clear,
         stencilStoreOp: StoreOp::store,
-        stencilClearValue: 0,
     };
     buf.append(CommandType::beginRenderPass, &begin);
     buf.append(CommandType::setPipeline, &SetPipelineCmd { pipeline: 7 });
@@ -152,12 +154,13 @@ fn ore_silver_detects_a_diverging_field() {
     begin.colors[0] = ColorAttachmentPOD {
         view: 0,
         resolveTarget: INVALID_HANDLE,
-        loadOp: LoadOp::clear,
-        storeOp: StoreOp::store,
         clearR: 0.,
         clearG: 0.,
         clearB: 0.,
         clearA: 1.,
+        loadOp: LoadOp::clear,
+        storeOp: StoreOp::store,
+        pad: [0; 2],
     };
     begin.depthStencil.view = INVALID_HANDLE;
     a.append(CommandType::beginRenderPass, &begin);

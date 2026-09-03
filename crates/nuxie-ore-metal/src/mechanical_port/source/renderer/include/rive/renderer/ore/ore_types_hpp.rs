@@ -7,7 +7,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_types.hpp.
-// Upstream source revision: 707c4f60f2433b32d34597045b2f43460e6cd8fb
+// Upstream source revision: 966499fffe2aadcbcd1fe4388160e4e7d5c0d967
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -658,18 +658,23 @@ impl Default for ShaderModuleDesc<'_> {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
+// Recorded into the blob arena as raw structs. Fields are widest first and the
+// named trailing pad makes the complete representation deterministic.
 pub struct VertexAttribute {
-    pub format: VertexFormat,
     pub offset: u32,
     pub shaderSlot: u32,
+    pub format: VertexFormat,
+    pub pad: [u8; 3],
 }
+const _: [(); 12] = [(); std::mem::size_of::<VertexAttribute>()];
 
 impl Default for VertexAttribute {
     fn default() -> Self {
         Self {
-            format: VertexFormat::float4,
             offset: 0,
             shaderSlot: 0,
+            format: VertexFormat::float4,
+            pad: [0; 3],
         }
     }
 }
@@ -776,10 +781,13 @@ pub struct DepthStencilState {
     pub format: TextureFormat,
     pub depthCompare: CompareFunction,
     pub depthWriteEnabled: bool,
+    // Named so a recorded copy carries no indeterminate bytes.
+    pub pad: u8,
     pub depthBias: i32,
     pub depthBiasSlopeScale: f32,
     pub depthBiasClamp: f32,
 }
+const _: [(); 16] = [(); std::mem::size_of::<DepthStencilState>()];
 
 impl Default for DepthStencilState {
     fn default() -> Self {
@@ -787,6 +795,7 @@ impl Default for DepthStencilState {
             format: TextureFormat::rgba8unorm,
             depthCompare: CompareFunction::always,
             depthWriteEnabled: false,
+            pad: 0,
             depthBias: 0,
             depthBiasSlopeScale: 0.0,
             depthBiasClamp: 0.0,
@@ -874,6 +883,8 @@ pub struct BindGroupLayoutEntry {
     // backends map to the Dawn enum.
     pub textureSampleType: SampleType,
     pub textureMultisampled: bool,
+    // Named so recording an entry array copies no indeterminate bytes.
+    pub pad: [u8; 2],
 
     // UBO-only: smallest valid bind size for this entry. 0 = no minimum
     // (use the full buffer range). Matches WebGPU's
@@ -895,6 +906,7 @@ pub struct BindGroupLayoutEntry {
     pub nativeSlotFS: u32,
     pub nativeSlotCS: u32,
 }
+const _: [(); 28] = [(); std::mem::size_of::<BindGroupLayoutEntry>()];
 
 impl Default for BindGroupLayoutEntry {
     fn default() -> Self {
@@ -906,6 +918,7 @@ impl Default for BindGroupLayoutEntry {
             textureViewDim: TextureViewDimension::texture2D,
             textureSampleType: SampleType::floatFilterable,
             textureMultisampled: false,
+            pad: [0; 2],
             minBindingSize: 0,
             nativeSlotVS: Self::kNativeSlotAbsent,
             nativeSlotFS: Self::kNativeSlotAbsent,

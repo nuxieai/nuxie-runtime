@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_make_recording.hpp at 707c4f60.
+//! renderer/ore/cmd/ore_make_recording.hpp at 966499ff.
 #![allow(non_snake_case)]
 use super::{
     ore_command_buffer::OreCommandBuffer, ore_commands::*, ore_handle::*, ore_resource_commands::*,
@@ -23,15 +23,16 @@ pub fn recordMakeBuffer(
     desc: &BufferDesc<'_>,
 ) {
     let pod = BufferDescPOD {
-        usage: desc.usage,
-        size: desc.size,
-        immutable: desc.immutable,
         data: cb.appendBlobRef(
             desc.data,
             if desc.data.is_some() { desc.size } else { 0 },
             desc.data.is_none(),
         ),
         label: cb.appendStringRef(desc.label),
+        size: desc.size,
+        usage: desc.usage,
+        immutable: desc.immutable,
+        pad: [0; 2],
     };
     cb.append(CommandType::makeBuffer, &MakeResourcePOD { id, generation });
     cb.appendPayload(&pod);
@@ -43,15 +44,16 @@ pub fn recordMakeTexture(
     desc: &TextureDesc<'_>,
 ) {
     let pod = TextureDescPOD {
+        label: cb.appendStringRef(desc.label),
         width: desc.width,
         height: desc.height,
         depthOrArrayLayers: desc.depthOrArrayLayers,
+        numMipmaps: desc.numMipmaps,
+        sampleCount: desc.sampleCount,
         format: desc.format,
         r#type: desc.r#type,
         renderTarget: desc.renderTarget,
-        numMipmaps: desc.numMipmaps,
-        sampleCount: desc.sampleCount,
-        label: cb.appendStringRef(desc.label),
+        pad: [0; 1],
     };
     cb.append(
         CommandType::makeTexture,
@@ -66,6 +68,10 @@ pub fn recordMakeSampler(
     desc: &SamplerDesc<'_>,
 ) {
     let pod = SamplerDescPOD {
+        label: cb.appendStringRef(desc.label),
+        minLod: desc.minLod,
+        maxLod: desc.maxLod,
+        maxAnisotropy: desc.maxAnisotropy,
         minFilter: desc.minFilter,
         magFilter: desc.magFilter,
         mipmapFilter: desc.mipmapFilter,
@@ -73,10 +79,7 @@ pub fn recordMakeSampler(
         wrapV: desc.wrapV,
         wrapW: desc.wrapW,
         compare: desc.compare,
-        minLod: desc.minLod,
-        maxLod: desc.maxLod,
-        maxAnisotropy: desc.maxAnisotropy,
-        label: cb.appendStringRef(desc.label),
+        pad: [0; 5],
     };
     cb.append(
         CommandType::makeSampler,
@@ -92,8 +95,6 @@ pub fn recordMakeShaderModule(
 ) {
     let pod = ShaderModuleDescPOD {
         code: cb.appendBlobRef(desc.code, desc.codeSize, desc.code.is_none()),
-        language: desc.language,
-        stage: desc.stage,
         label: cb.appendStringRef(desc.label),
         hlslSource: cb.appendBlobRef(
             desc.hlslSource.map(str::as_bytes),
@@ -117,6 +118,9 @@ pub fn recordMakeShaderModule(
             desc.glFixupBytes.is_none(),
         ),
         shaderAssetId: desc.shaderAssetId,
+        language: desc.language,
+        stage: desc.stage,
+        pad: [0; 2],
     };
     cb.append(
         CommandType::makeShaderModule,
@@ -132,10 +136,10 @@ pub fn recordMakeBindGroupLayout(
 ) {
     let entries = &desc.entries.unwrap_or(&[])[..desc.entryCount as usize];
     let pod = BindGroupLayoutDescPOD {
-        groupIndex: desc.groupIndex,
-        entryCount: desc.entryCount,
         entries: appendPods(cb, entries, desc.entries.is_none()),
         label: cb.appendStringRef(desc.label),
+        groupIndex: desc.groupIndex,
+        entryCount: desc.entryCount,
     };
     cb.append(
         CommandType::makeBindGroupLayout,
@@ -152,12 +156,13 @@ pub fn recordMakeTextureView(
 ) {
     let pod = TextureViewDescPOD {
         texture: textureHandle,
-        dimension: desc.dimension,
-        aspect: desc.aspect,
         baseMipLevel: desc.baseMipLevel,
         mipCount: desc.mipCount,
         baseLayer: desc.baseLayer,
         layerCount: desc.layerCount,
+        dimension: desc.dimension,
+        aspect: desc.aspect,
+        pad: [0; 2],
     };
     cb.append(
         CommandType::makeTextureView,
@@ -177,45 +182,40 @@ pub fn recordMakePipeline(
     let mut vbPods = Vec::with_capacity(desc.vertexBufferCount as usize);
     for vb in &desc.vertexBuffers.unwrap_or(&[])[..desc.vertexBufferCount as usize] {
         vbPods.push(VertexBufferLayoutPOD {
-            stride: vb.stride,
-            stepMode: vb.stepMode,
-            attributeCount: vb.attributeCount,
             attributes: appendPods(
                 cb,
                 &vb.attributes.unwrap_or(&[])[..vb.attributeCount as usize],
                 vb.attributes.is_none(),
             ),
+            stride: vb.stride,
+            attributeCount: vb.attributeCount,
+            stepMode: vb.stepMode,
+            pad: [0; 7],
         });
     }
     let pod = PipelineDescPOD {
-        vertexModule,
         vertexEntryPoint: cb.appendStringRef(desc.vertexEntryPoint),
-        fragmentModule,
         fragmentEntryPoint: cb.appendStringRef(desc.fragmentEntryPoint),
-        vertexBufferCount: desc.vertexBufferCount,
         vertexBuffers: appendPods(cb, &vbPods, vbPods.is_empty()),
+        bindGroupLayouts: appendPods(cb, bindGroupLayouts, bindGroupLayouts.is_empty()),
+        label: cb.appendStringRef(desc.label),
+        vertexModule,
+        fragmentModule,
+        vertexBufferCount: desc.vertexBufferCount,
+        colorCount: desc.colorCount,
+        sampleCount: desc.sampleCount,
+        bindGroupLayoutCount: bindGroupLayouts.len() as u32,
+        depthStencil: desc.depthStencil,
+        colorTargets: desc.colorTargets,
+        stencilFront: desc.stencilFront,
+        stencilBack: desc.stencilBack,
         topology: desc.topology,
         indexFormat: desc.indexFormat,
         cullMode: desc.cullMode,
         winding: desc.winding,
-        colorTargets: desc.colorTargets,
-        colorCount: desc.colorCount,
-        depthStencil: DepthStencilState {
-            format: desc.depthStencil.format,
-            depthCompare: desc.depthStencil.depthCompare,
-            depthWriteEnabled: desc.depthStencil.depthWriteEnabled,
-            depthBias: desc.depthStencil.depthBias,
-            depthBiasSlopeScale: desc.depthStencil.depthBiasSlopeScale,
-            depthBiasClamp: desc.depthStencil.depthBiasClamp,
-        },
-        stencilFront: desc.stencilFront,
-        stencilBack: desc.stencilBack,
         stencilReadMask: desc.stencilReadMask,
         stencilWriteMask: desc.stencilWriteMask,
-        sampleCount: desc.sampleCount,
-        bindGroupLayoutCount: bindGroupLayouts.len() as u32,
-        bindGroupLayouts: appendPods(cb, bindGroupLayouts, bindGroupLayouts.is_empty()),
-        label: cb.appendStringRef(desc.label),
+        pad: [0; 6],
     };
     cb.append(
         CommandType::makePipeline,
@@ -260,14 +260,14 @@ pub fn recordMakeBindGroup(
         })
         .collect();
     let pod = BindGroupDescPOD {
-        layout,
-        uboCount: desc.uboCount,
         ubos: appendPods(cb, &ubos, ubos.is_empty()),
-        textureCount: desc.textureCount,
         textures: appendPods(cb, &textures, textures.is_empty()),
-        samplerCount: desc.samplerCount,
         samplers: appendPods(cb, &samplers, samplers.is_empty()),
         label: cb.appendStringRef(desc.label),
+        layout,
+        uboCount: desc.uboCount,
+        textureCount: desc.textureCount,
+        samplerCount: desc.samplerCount,
     };
     cb.append(
         CommandType::makeBindGroup,

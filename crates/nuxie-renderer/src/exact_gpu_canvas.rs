@@ -575,11 +575,14 @@ fn build_pipeline(
                 .attributes
                 .iter()
                 .map(|attribute| {
+                    let format = vertex_format(&attribute.format)?;
+                    let offset = u32::try_from(attribute.offset)
+                        .map_err(|_| rejected("vertex attribute offset exceeds u32"))?;
                     Ok(VertexAttribute {
-                        format: vertex_format(&attribute.format)?,
-                        offset: u32::try_from(attribute.offset)
-                            .map_err(|_| rejected("vertex attribute offset exceeds u32"))?,
+                        offset,
                         shaderSlot: attribute.shader_location,
+                        format,
+                        pad: [0; 3],
                     })
                 })
                 .collect::<Result<Vec<_>, GpuCanvasError>>()
@@ -1563,6 +1566,7 @@ fn depth_stencil(
             format: texture_format(&state.format)?,
             depthCompare: compare_function(&state.depth_compare)?,
             depthWriteEnabled: state.depth_write_enabled,
+            pad: 0,
             depthBias: state.depth_bias,
             depthBiasSlopeScale: state.depth_bias_slope_scale,
             depthBiasClamp: state.depth_bias_clamp,

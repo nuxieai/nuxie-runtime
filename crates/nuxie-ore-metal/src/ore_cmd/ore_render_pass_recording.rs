@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_render_pass_recording.hpp at 707c4f60.
+//! renderer/ore/cmd/ore_render_pass_recording.hpp at 966499ff.
 #![allow(non_snake_case)]
 use super::{
     ore_command_buffer::SharedOreCommandBuffer,
@@ -69,23 +69,24 @@ impl RenderPassRecording {
             begin.colors[i] = ColorAttachmentPOD {
                 view: out.idOf(src.view),
                 resolveTarget: out.idOf(src.resolveTarget),
-                loadOp: src.loadOp,
-                storeOp: src.storeOp,
                 clearR: src.clearColor.r,
                 clearG: src.clearColor.g,
                 clearB: src.clearColor.b,
                 clearA: src.clearColor.a,
+                loadOp: src.loadOp,
+                storeOp: src.storeOp,
+                pad: [0; 2],
             };
         }
         let ds = &desc.depthStencil;
         begin.depthStencil = DepthStencilAttachmentPOD {
             view: out.idOf(ds.view),
+            depthClearValue: ds.depthClearValue,
+            stencilClearValue: ds.stencilClearValue,
             depthLoadOp: ds.depthLoadOp,
             depthStoreOp: ds.depthStoreOp,
-            depthClearValue: ds.depthClearValue,
             stencilLoadOp: ds.stencilLoadOp,
             stencilStoreOp: ds.stencilStoreOp,
-            stencilClearValue: ds.stencilClearValue,
         };
         out.state
             .cmd

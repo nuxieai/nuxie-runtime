@@ -11,7 +11,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_pipeline.hpp.
-// Upstream source revision: 707c4f60f2433b32d34597045b2f43460e6cd8fb
+// Upstream source revision: 966499fffe2aadcbcd1fe4388160e4e7d5c0d967
 // Both upstream Pipeline constructors now call ownVertexLayout(). The Rust
 // PipelineSnapshot below owns the copied buffers and their attribute vectors;
 // absent source layouts normalize to zero entries before snapshot construction.

@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_commands.hpp at 707c4f60.
+//! renderer/ore/cmd/ore_commands.hpp at 966499ff.
 #![allow(non_snake_case, non_camel_case_types)]
 use super::ore_handle::ResourceHandle;
 use super::ore_resource_commands::*;
@@ -164,44 +164,49 @@ crate::impl_wire_pod!(DestroyResourcePOD {
 pub struct ColorAttachmentPOD {
     pub view: ResourceHandle,
     pub resolveTarget: ResourceHandle,
-    pub loadOp: LoadOp,
-    pub storeOp: StoreOp,
     pub clearR: f32,
     pub clearG: f32,
     pub clearB: f32,
     pub clearA: f32,
+    pub loadOp: LoadOp,
+    pub storeOp: StoreOp,
+    pub pad: [u8; 2],
 }
 crate::impl_wire_pod!(ColorAttachmentPOD {
     view: ResourceHandle,
     resolveTarget: ResourceHandle,
-    loadOp: LoadOp,
-    storeOp: StoreOp,
     clearR: f32,
     clearG: f32,
     clearB: f32,
-    clearA: f32
+    clearA: f32,
+    loadOp: LoadOp,
+    storeOp: StoreOp,
+    pad: [u8; 2]
 });
+const _: [(); 7 * std::mem::size_of::<u32>()] = [(); std::mem::size_of::<ColorAttachmentPOD>()];
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct DepthStencilAttachmentPOD {
     pub view: ResourceHandle,
+    pub depthClearValue: f32,
+    pub stencilClearValue: u32,
     pub depthLoadOp: LoadOp,
     pub depthStoreOp: StoreOp,
-    pub depthClearValue: f32,
     pub stencilLoadOp: LoadOp,
     pub stencilStoreOp: StoreOp,
-    pub stencilClearValue: u32,
 }
 crate::impl_wire_pod!(DepthStencilAttachmentPOD {
     view: ResourceHandle,
+    depthClearValue: f32,
+    stencilClearValue: u32,
     depthLoadOp: LoadOp,
     depthStoreOp: StoreOp,
-    depthClearValue: f32,
     stencilLoadOp: LoadOp,
-    stencilStoreOp: StoreOp,
-    stencilClearValue: u32
+    stencilStoreOp: StoreOp
 });
+const _: [(); 4 * std::mem::size_of::<u32>()] =
+    [(); std::mem::size_of::<DepthStencilAttachmentPOD>()];
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -215,6 +220,7 @@ crate::impl_wire_pod!(BeginRenderPassCmd {
     colors: [ColorAttachmentPOD; 4],
     depthStencil: DepthStencilAttachmentPOD
 });
+const _: [(); 33 * std::mem::size_of::<u32>()] = [(); std::mem::size_of::<BeginRenderPassCmd>()];
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]

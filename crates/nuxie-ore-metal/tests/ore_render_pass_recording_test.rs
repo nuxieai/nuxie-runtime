@@ -1,4 +1,4 @@
-//! Upstream tests/unit_tests/renderer/ore_render_pass_recording_test.cpp at e949498e.
+//! Upstream tests/unit_tests/renderer/ore_render_pass_recording_test.cpp at 966499ff.
 use nuxie_ore_metal::{
     ore_cmd::{
         ore_command_buffer::*, ore_command_silver::*, ore_commands::*, ore_handle::*,
@@ -37,21 +37,22 @@ fn render_pass_recording_emits_the_expected_command_stream() {
     begin.colors[0] = ColorAttachmentPOD {
         view: INVALID_HANDLE,
         resolveTarget: INVALID_HANDLE,
-        loadOp: LoadOp::clear,
-        storeOp: StoreOp::store,
         clearR: 0.25,
         clearG: 0.5,
         clearB: 0.75,
         clearA: 1.,
+        loadOp: LoadOp::clear,
+        storeOp: StoreOp::store,
+        pad: [0; 2],
     };
     begin.depthStencil = DepthStencilAttachmentPOD {
         view: INVALID_HANDLE,
+        depthClearValue: 1.,
+        stencilClearValue: 0,
         depthLoadOp: LoadOp::clear,
         depthStoreOp: StoreOp::store,
-        depthClearValue: 1.,
         stencilLoadOp: LoadOp::clear,
         stencilStoreOp: StoreOp::discard,
-        stencilClearValue: 0,
     };
     expected.append(CommandType::beginRenderPass, &begin);
     expected.append(

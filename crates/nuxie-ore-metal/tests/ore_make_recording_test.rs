@@ -1,4 +1,4 @@
-//! Upstream tests/unit_tests/renderer/ore_make_recording_test.cpp at 707c4f60.
+//! Upstream tests/unit_tests/renderer/ore_make_recording_test.cpp at 966499ff.
 use nuxie_ore_metal::{
     cmd::command_stream::WirePod,
     ore_cmd::{
@@ -240,14 +240,16 @@ fn make_stream_records_pipeline_vertex_layouts_and_refs() {
     let mut cb = OreCommandBuffer::default();
     let attrs = [
         VertexAttribute {
-            format: VertexFormat::float2,
             offset: 0,
             shaderSlot: 0,
+            format: VertexFormat::float2,
+            ..Default::default()
         },
         VertexAttribute {
-            format: VertexFormat::float4,
             offset: 8,
             shaderSlot: 1,
+            format: VertexFormat::float4,
+            ..Default::default()
         },
     ];
     let vbs = [VertexBufferLayout {
@@ -358,48 +360,186 @@ fn make_stream_records_bind_group_entry_refs() {
     assert_eq!(s.sampler, 8);
 }
 
-#[test]
-fn make_stream_records_equal_pipelines_byte_for_byte() {
-    fn depth_stencil_with_padding(fill: u8) -> DepthStencilState {
-        let mut storage = std::mem::MaybeUninit::<DepthStencilState>::uninit();
-        unsafe {
-            std::ptr::write_bytes(
-                storage.as_mut_ptr().cast::<u8>(),
-                fill,
-                std::mem::size_of::<DepthStencilState>(),
-            );
-            let ptr = storage.as_mut_ptr();
-            std::ptr::addr_of_mut!((*ptr).format).write(TextureFormat::depth24plusStencil8);
-            std::ptr::addr_of_mut!((*ptr).depthCompare).write(CompareFunction::always);
-            std::ptr::addr_of_mut!((*ptr).depthWriteEnabled).write(true);
-            std::ptr::addr_of_mut!((*ptr).depthBias).write(2);
-            std::ptr::addr_of_mut!((*ptr).depthBiasSlopeScale).write(0.0);
-            std::ptr::addr_of_mut!((*ptr).depthBiasClamp).write(0.0);
-            storage.assume_init()
-        }
-    }
+const PADDING_TEST_VERTS: [u32; 4] = [1, 2, 3, 4];
+const PADDING_TEST_CODE: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 
-    fn record(stack_fill: u8, cb: &mut OreCommandBuffer) {
-        let mut desc = PipelineDesc {
-            vertexEntryPoint: Some("vs_main"),
-            fragmentEntryPoint: Some("fs_main"),
-            colorCount: 1,
-            depthStencil: depth_stencil_with_padding(stack_fill),
+#[inline(never)]
+fn dirty_stack() {
+    let scratch = [0xabu8; 4096];
+    std::hint::black_box(&scratch);
+}
+
+fn record_one_of_each(cb: &mut OreCommandBuffer) {
+    let verts = encodePods(&PADDING_TEST_VERTS);
+    recordMakeBuffer(
+        cb,
+        0,
+        1,
+        &BufferDesc {
+            usage: BufferUsage::vertex,
+            size: verts.len() as u32,
+            data: Some(&verts),
+            immutable: true,
+            label: Some("vb"),
+        },
+    );
+    recordMakeTexture(
+        cb,
+        1,
+        1,
+        &TextureDesc {
+            width: 256,
+            height: 128,
+            format: TextureFormat::rgba8unorm,
+            renderTarget: true,
+            numMipmaps: 1,
             sampleCount: 4,
-            label: Some("pipe"),
+            label: Some("rt"),
             ..Default::default()
-        };
-        desc.colorTargets[0].format = TextureFormat::rgba8unorm;
-        desc.colorTargets[0].blendEnabled = true;
-        desc.stencilFront.compare = CompareFunction::equal;
-        recordMakePipeline(cb, 0, 0, &desc, 10, 11, &[12]);
-    }
+        },
+    );
+    recordMakeSampler(
+        cb,
+        2,
+        1,
+        &SamplerDesc {
+            minFilter: Filter::linear,
+            magFilter: Filter::nearest,
+            compare: CompareFunction::less,
+            minLod: 0.5,
+            maxLod: 7.0,
+            maxAnisotropy: 8,
+            ..Default::default()
+        },
+    );
+    recordMakeShaderModule(
+        cb,
+        3,
+        1,
+        &ShaderModuleDesc {
+            code: Some(&PADDING_TEST_CODE),
+            codeSize: PADDING_TEST_CODE.len() as u32,
+            language: ShaderLanguage::wgsl,
+            stage: ShaderStage::fragment,
+            label: Some("fs"),
+            ..Default::default()
+        },
+    );
 
-    let mut zeroed = OreCommandBuffer::default();
+    let entries = [
+        BindGroupLayoutEntry {
+            binding: 0,
+            kind: BindingKind::uniformBuffer,
+            hasDynamicOffset: true,
+            minBindingSize: 64,
+            ..Default::default()
+        },
+        BindGroupLayoutEntry {
+            binding: 1,
+            kind: BindingKind::sampledTexture,
+            nativeSlotFS: 5,
+            ..Default::default()
+        },
+    ];
+    recordMakeBindGroupLayout(
+        cb,
+        4,
+        1,
+        &BindGroupLayoutDesc {
+            groupIndex: 2,
+            entries: Some(&entries),
+            entryCount: 2,
+            label: Some("bgl"),
+        },
+    );
+    recordMakeTextureView(
+        cb,
+        5,
+        1,
+        &TextureViewDesc {
+            dimension: TextureViewDimension::texture2D,
+            aspect: TextureAspect::all,
+            mipCount: 1,
+            layerCount: 1,
+            ..Default::default()
+        },
+        1,
+    );
+
+    let attrs = [
+        VertexAttribute {
+            format: VertexFormat::float2,
+            ..Default::default()
+        },
+        VertexAttribute {
+            offset: 8,
+            shaderSlot: 1,
+            format: VertexFormat::float4,
+            ..Default::default()
+        },
+    ];
+    let layouts = [VertexBufferLayout {
+        stride: 24,
+        attributes: Some(&attrs),
+        attributeCount: 2,
+        ..Default::default()
+    }];
+    let mut pipeline = PipelineDesc {
+        vertexEntryPoint: Some("vs_main"),
+        fragmentEntryPoint: Some("fs_main"),
+        vertexBuffers: Some(&layouts),
+        vertexBufferCount: 1,
+        colorCount: 1,
+        depthStencil: DepthStencilState {
+            format: TextureFormat::depth24plusStencil8,
+            depthWriteEnabled: true,
+            depthBias: 2,
+            ..Default::default()
+        },
+        sampleCount: 4,
+        label: Some("pipe"),
+        ..Default::default()
+    };
+    pipeline.colorTargets[0].format = TextureFormat::rgba8unorm;
+    pipeline.colorTargets[0].blendEnabled = true;
+    pipeline.stencilFront.compare = CompareFunction::equal;
+    recordMakePipeline(cb, 6, 1, &pipeline, 3, 3, &[4]);
+
+    let ubos = [UBOEntry {
+        slot: 0,
+        size: 256,
+        ..Default::default()
+    }];
+    recordMakeBindGroup(
+        cb,
+        7,
+        1,
+        &BindGroupDesc {
+            layout: None,
+            ubos: &ubos,
+            uboCount: 1,
+            textures: &[],
+            textureCount: 0,
+            samplers: &[],
+            samplerCount: 0,
+            label: Some("bg"),
+        },
+        4,
+        &[0],
+        &[],
+        &[],
+    );
+}
+
+#[test]
+fn make_stream_records_equal_resources_byte_for_byte() {
+    let mut clean = OreCommandBuffer::default();
     let mut dirty = OreCommandBuffer::default();
-    record(0, &mut zeroed);
-    record(0xab, &mut dirty);
-    assert_eq!(zeroed.command_bytes(), dirty.command_bytes());
+    record_one_of_each(&mut clean);
+    dirty_stack();
+    record_one_of_each(&mut dirty);
+    assert_eq!(clean.command_bytes(), dirty.command_bytes());
+    assert_eq!(clean.blob_bytes(), dirty.blob_bytes());
 }
 
 #[test]

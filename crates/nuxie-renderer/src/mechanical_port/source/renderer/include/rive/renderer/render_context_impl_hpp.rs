@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/render_context_impl.hpp.
-// Upstream source revision: 707c4f60f2433b32d34597045b2f43460e6cd8fb
+// Upstream source revision: 966499fffe2aadcbcd1fe4388160e4e7d5c0d967
 
 // /*
 //  * Copyright 2023 Rive

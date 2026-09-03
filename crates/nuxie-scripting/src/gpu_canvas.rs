@@ -2069,6 +2069,7 @@ fn same_optional_shader(left: Option<&GpuShader>, right: Option<&GpuShader>) -> 
 pub struct GpuCanvasBytecodeProgram {
     vm: ScriptVm,
     instance: Table,
+    renderer: Table,
     state: Rc<RefCell<GpuCanvasState>>,
     execution_budget: Rc<Cell<u32>>,
 }
@@ -2101,6 +2102,12 @@ impl GpuCanvasBytecodeProgram {
         });
         let resource_budget = Rc::new(RefCell::new(GpuCanvasResourceBudget::default()));
         install_gpu_canvas_globals_with_budget(&vm, resource_budget)?;
+        crate::vm::lua_image::install_image_globals(vm.lua())?;
+        let renderer = vm.lua().create_table();
+        renderer.set(
+            "drawImage",
+            vm.lua().create_function(|_, _: MultiValue| Ok(()))?,
+        )?;
         let canvases = Rc::new(RefCell::new(Vec::new()));
         let bindings = GpuCanvasContextBindings {
             canvases: Rc::clone(&canvases),
@@ -2139,6 +2146,7 @@ impl GpuCanvasBytecodeProgram {
         Ok(Self {
             vm,
             instance,
+            renderer,
             state,
             execution_budget,
         })
@@ -2202,7 +2210,7 @@ impl GpuCanvasBytecodeProgram {
             ));
         };
         self.execution_budget.set(MAX_LUAU_INTERRUPTS_PER_CALL);
-        method.call::<()>((self.instance.clone(),))?;
+        method.call::<()>((self.instance.clone(), self.renderer.clone()))?;
         if self.state.borrow().unfinished_passes != 0 {
             self.state.borrow_mut().completed = None;
             return Err(Error::runtime(

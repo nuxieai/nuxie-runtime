@@ -93,3 +93,49 @@ fn retained_program_matches_cpp_c_string_boundaries() {
 
     assert!(program.advance(1.0 / 60.0).expect("truncated string input"));
 }
+
+#[test]
+fn retained_program_executes_the_current_draw_and_composite_contract() {
+    let source = r#"
+        return function(context)
+            local canvas = context:gpuCanvas()
+            local shader = context:shader("scene")
+            local pipeline = GPUPipeline.new {
+                vertex = shader,
+                fragment = shader,
+                vertexLayout = {},
+                colorTargets = { { format = "rgba8unorm" } },
+            }
+            local sampler = ImageSampler("clamp", "clamp", "nearest")
+            canvas:resize(8, 6)
+            return {
+                draw = function(self, renderer)
+                    local pass = canvas:beginRenderPass {
+                        color = {
+                            {
+                                loadOp = "clear",
+                                storeOp = "store",
+                                clearColor = { 0.25, 0.5, 0.75, 1.0 },
+                            },
+                        },
+                    }
+                    pass:setPipeline(pipeline)
+                    pass:draw(3)
+                    pass:finish()
+                    renderer:drawImage(canvas.image, sampler, "srcOver", 1.0)
+                end,
+            }
+        end
+    "#;
+    let mut program = GpuCanvasBytecodeProgram::load(
+        &compile_source(source).expect("current GPU-canvas source compiles"),
+    )
+    .expect("current GPU-canvas program loads");
+
+    let plan = program
+        .draw()
+        .expect("direct snapshots execute draw and ignore only the final 2D composite");
+    assert_eq!((plan.width, plan.height), (8, 6));
+    assert_eq!(plan.vertex_count, 3);
+    assert_eq!(plan.clear_color, [0.25, 0.5, 0.75, 1.0]);
+}

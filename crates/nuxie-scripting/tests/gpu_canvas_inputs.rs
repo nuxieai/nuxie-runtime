@@ -139,3 +139,58 @@ fn retained_program_executes_the_current_draw_and_composite_contract() {
     assert_eq!(plan.vertex_count, 3);
     assert_eq!(plan.clear_color, [0.25, 0.5, 0.75, 1.0]);
 }
+
+#[test]
+fn retained_program_ignores_the_current_scripted_renderer_surface() {
+    let source = r#"
+        return function(context)
+            local canvas = context:gpuCanvas()
+            local shader = context:shader("scene")
+            local pipeline = GPUPipeline.new {
+                vertex = shader,
+                fragment = shader,
+                vertexLayout = {},
+                colorTargets = { { format = "rgba8unorm" } },
+            }
+            canvas:resize(5, 7)
+            return {
+                draw = function(self, renderer)
+                    renderer:save()
+                    renderer:transform(nil)
+                    renderer:clipPath(nil)
+                    renderer:drawPath(nil, nil)
+                    renderer:drawImage(nil, nil, "srcOver", 1.0)
+                    renderer:drawImageMesh(nil, nil, nil, nil, nil, "srcOver", 1.0)
+
+                    local pass = canvas:beginRenderPass {
+                        color = {
+                            {
+                                loadOp = "clear",
+                                storeOp = "store",
+                                clearColor = { 0.1, 0.2, 0.3, 1.0 },
+                            },
+                        },
+                    }
+                    pass:setPipeline(pipeline)
+                    pass:draw(6)
+                    pass:finish()
+
+                    renderer:restore()
+                    renderer:save()
+                    renderer:restore()
+                end,
+            }
+        end
+    "#;
+    let mut program = GpuCanvasBytecodeProgram::load(
+        &compile_source(source).expect("mixed renderer source compiles"),
+    )
+    .expect("mixed renderer program loads");
+
+    let plan = program
+        .draw()
+        .expect("snapshot renderer ignores 2D calls and returns the GPU plan");
+    assert_eq!((plan.width, plan.height), (5, 7));
+    assert_eq!(plan.vertex_count, 6);
+    assert_eq!(plan.clear_color, [0.1, 0.2, 0.3, 1.0]);
+}

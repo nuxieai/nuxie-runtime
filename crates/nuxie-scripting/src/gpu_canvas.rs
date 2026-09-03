@@ -2104,10 +2104,17 @@ impl GpuCanvasBytecodeProgram {
         install_gpu_canvas_globals_with_budget(&vm, resource_budget)?;
         crate::vm::lua_image::install_image_globals(vm.lua())?;
         let renderer = vm.lua().create_table();
-        renderer.set(
+        for method in [
+            "save",
+            "restore",
+            "transform",
+            "clipPath",
+            "drawPath",
             "drawImage",
-            vm.lua().create_function(|_, _: MultiValue| Ok(()))?,
-        )?;
+            "drawImageMesh",
+        ] {
+            renderer.set(method, vm.lua().create_function(|_, _: MultiValue| Ok(()))?)?;
+        }
         let canvases = Rc::new(RefCell::new(Vec::new()));
         let bindings = GpuCanvasContextBindings {
             canvases: Rc::clone(&canvases),

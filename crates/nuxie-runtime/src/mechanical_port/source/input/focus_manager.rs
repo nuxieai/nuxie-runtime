@@ -217,12 +217,17 @@ fn bounds_center(bounds: Bounds) -> (f32, f32) {
 
 fn root_bounds(node: &FocusNodeRef) -> Option<Bounds> {
     let node = node.borrow();
+    if let Some(bounds) = node
+        .focusable
+        .as_ref()
+        .and_then(|focusable| focusable.borrow().world_bounds())
+    {
+        return Some(bounds);
+    }
     if node.has_world_bounds() {
         return Some(node.world_bounds);
     }
-    node.focusable
-        .as_ref()
-        .and_then(|focusable| focusable.borrow().world_bounds())
+    None
 }
 
 fn root_artboard(mut artboard: CoreHandle) -> CoreHandle {
@@ -242,12 +247,19 @@ fn root_artboard(mut artboard: CoreHandle) -> CoreHandle {
 
 fn root_position(node: &FocusNodeRef) -> Option<(f32, f32)> {
     let node = node.borrow();
+    if let Some(focusable) = node.focusable.as_ref() {
+        let focusable = focusable.borrow();
+        if let Some(bounds) = focusable.world_bounds() {
+            return Some(bounds_center(bounds));
+        }
+        if let Some(position) = focusable.world_position() {
+            return Some(position);
+        }
+    }
     if node.has_world_bounds() {
         return Some(bounds_center(node.world_bounds));
     }
-    node.focusable
-        .as_ref()
-        .and_then(|focusable| focusable.borrow().world_position())
+    None
 }
 
 fn score_candidate_bounds(current: Bounds, candidate: Bounds, direction: Direction) -> f32 {

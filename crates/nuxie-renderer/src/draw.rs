@@ -3723,7 +3723,13 @@ mod tests {
         // The source retrofit triangle-strip glue patches are part of the forward half of
         // the double-sided allocation, so the positive contour begins after
         // the complete reflected half rather than after only authored cubics.
-        assert_eq!(positive.contours[0].vertex_index0, 799);
+        let half_vertex_count = positive.instance_count / 2
+            * OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as u32;
+        assert_eq!(positive.instance_count, mirrored.instance_count);
+        assert_eq!(
+            positive.contours[0].vertex_index0,
+            mirrored.contours[0].vertex_index0 + half_vertex_count
+        );
         assert_eq!(mirrored.contours[0].vertex_index0, 17);
         assert_ne!(
             positive.spans[1].reflection_x0_x1,

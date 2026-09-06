@@ -144,7 +144,7 @@ fn independent_canvases_keep_record_order() {
 }
 #[test]
 fn replay_opens_sampled_canvas_before_reader() {
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let a = fake_canvas();
     let b = fake_canvas();
     let mut rb = session.begin_canvas_content(b.clone(), 0).unwrap();
@@ -171,7 +171,7 @@ fn replay_opens_sampled_canvas_before_reader() {
 }
 #[test]
 fn canvas_only_frame_opens_screen() {
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let canvas = fake_canvas();
     let mut r = session.begin_canvas_content(canvas.clone(), 0).unwrap();
     let paint = session.make_render_paint();
@@ -226,7 +226,7 @@ fn canvas_callbacks_can_reborrow_the_replay_factory() {
         }
     }
 
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let canvas = fake_canvas();
     let mut renderer = session.begin_canvas_content(canvas.clone(), 0).unwrap();
     let paint = session.make_render_paint();
@@ -253,7 +253,7 @@ fn canvas_callbacks_can_reborrow_the_replay_factory() {
 }
 #[test]
 fn resource_only_frame_opens_no_screen() {
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let _paint = session.make_render_paint();
     let _path = session.make_empty_render_path();
     session.close_open_range();

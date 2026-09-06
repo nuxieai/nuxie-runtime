@@ -24,7 +24,7 @@ use nuxie::{
 };
 use nuxie_renderer::deferred::cmd::{
     deferred_replayer::{DeferredFrameSink, DeferredReplayer, take_frame},
-    deferred_session::DeferredSession,
+    deferred_session::{DeferredSession, ReplayCaps},
     render_replay::RendererOwner,
 };
 use nuxie_renderer::{
@@ -370,7 +370,11 @@ impl Drop for OreFrame {
 impl AppleMetalFactory {
     fn new(inner: NativeMetalFactory) -> Result<Self, ApiFailure> {
         let mut native = PersistentFactory::new(inner);
-        let mut session = DeferredSession::new(native.ore());
+        let caps = native
+            .ore()
+            .map(|ore| ReplayCaps::from(&*ore.borrow()))
+            .unwrap_or_default();
+        let mut session = DeferredSession::with_caps(caps);
         session.bind_render_context(native.persistent_context());
         Ok(Self {
             session,

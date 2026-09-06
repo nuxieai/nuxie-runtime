@@ -10,7 +10,7 @@ fn replay(s: &mut DeferredSession, r: &mut DeferredReplayer, sink: &mut TestSink
 }
 #[test]
 fn counts_resident_not_running_total() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let mut r = DeferredReplayer::default();
     let mut sink = TestSink::default();
     let screen = s.screen_renderer(0);
@@ -26,7 +26,7 @@ fn counts_resident_not_running_total() {
 }
 #[test]
 fn bytes_scale_with_resident_resources() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let mut r = DeferredReplayer::default();
     let mut sink = TestSink::default();
     let screen = s.screen_renderer(0);
@@ -48,7 +48,7 @@ fn bytes_scale_with_resident_resources() {
 }
 #[test]
 fn destroyed_resource_leaves_census_keeps_slot() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let mut r = DeferredReplayer::default();
     let mut sink = TestSink::default();
     let screen = s.screen_renderer(0);
@@ -70,7 +70,7 @@ fn destroyed_resource_leaves_census_keeps_slot() {
 }
 #[test]
 fn reset_empties_census() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let mut r = DeferredReplayer::default();
     let mut sink = TestSink::default();
     let screen = s.screen_renderer(0);

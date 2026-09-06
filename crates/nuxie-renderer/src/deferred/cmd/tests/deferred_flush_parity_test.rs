@@ -51,7 +51,7 @@ impl DeferredFrameSink for NullContextSink {
     }
 }
 fn deferred(path: &Path) -> Vec<FlushStats> {
-    let mut factory = PersistentFactory::new(DeferredSession::new(None));
+    let mut factory = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
     let mut case = RuntimeCase::import(&std::fs::read(path).unwrap(), &mut factory)
         .expect("parity fixture imports");
     let (width, height) = case

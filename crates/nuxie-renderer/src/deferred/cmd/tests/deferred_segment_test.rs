@@ -19,7 +19,7 @@ fn size(session: &DeferredSession) -> u32 {
 }
 #[test]
 fn screen_only_frame_is_one_segment() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let paint = s.make_render_paint();
     let path = s.make_empty_render_path();
     let after = size(&s);
@@ -36,7 +36,7 @@ fn screen_only_frame_is_one_segment() {
 }
 #[test]
 fn untargeted_bytes_claim_no_segment() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let _paint = s.make_render_paint();
     let _path = s.make_empty_render_path();
     assert!(size(&s) > 0);
@@ -45,7 +45,7 @@ fn untargeted_bytes_claim_no_segment() {
 }
 #[test]
 fn canvas_carves_leading_and_trailing_segments() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let mut canvas = canvas_recorder(&s, 1);
     let paint = s.make_render_paint();
     let path = s.make_empty_render_path();
@@ -71,7 +71,7 @@ fn canvas_carves_leading_and_trailing_segments() {
 }
 #[test]
 fn initial_canvas_has_no_leading_screen() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let mut canvas = canvas_recorder(&s, 1);
     let paint = s.make_render_paint();
     let path = s.make_empty_render_path();
@@ -95,7 +95,7 @@ fn initial_canvas_has_no_leading_screen() {
 }
 #[test]
 fn screen_targets_get_own_segments() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let paint = s.make_render_paint();
     let path = s.make_empty_render_path();
     for id in [0, 7, 0] {
@@ -117,7 +117,7 @@ fn screen_targets_get_own_segments() {
 }
 #[test]
 fn canvas_hands_back_to_interrupted_screen() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let mut canvas = canvas_recorder(&s, 1);
     let paint = s.make_render_paint();
     let path = s.make_empty_render_path();
@@ -138,7 +138,7 @@ fn canvas_hands_back_to_interrupted_screen() {
 }
 #[test]
 fn frame_closes_when_last_target_finishes() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let a = s.acquire_screen_target();
     let b = s.acquire_screen_target();
     assert_eq!(a, 0);
@@ -156,7 +156,7 @@ fn frame_closes_when_last_target_finishes() {
 }
 #[test]
 fn screen_recorder_survives_reset() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let first = s.screen_renderer(3);
     s.reset_frame();
     assert!(Rc::ptr_eq(&first, &s.screen_renderer(3)));

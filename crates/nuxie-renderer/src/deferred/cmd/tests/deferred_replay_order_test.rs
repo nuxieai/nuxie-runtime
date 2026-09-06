@@ -90,7 +90,7 @@ impl DeferredFrameSink for CountingSink {
 fn deferred_ore_replay_scrubs_the_concrete_factory_before_2d_resumes() {
     use nuxie_ore_metal::{context::ContextApi, types::*};
 
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     assert!(session
         .ore_context
         .borrow_mut()
@@ -171,7 +171,7 @@ fn create_inside_canvas_replays_mint_order() {
 }
 #[test]
 fn interleaved_ranges_split_per_renderer() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let screen = s.screen_renderer(0);
     let mut c1 = DeferredRenderer::new(
         s.command_buffer(),
@@ -218,7 +218,7 @@ fn decoded_image_view_records_image_view_wrap() {
         ore_command_buffer::OreCommandReader,
         ore_commands::{CommandType, WrapCanvasViewMode, WrapCanvasViewPOD},
     };
-    let s = DeferredSession::new(None);
+    let s = DeferredSession::with_caps(Default::default());
     let view = s.ore_context.borrow_mut().recordWrapImageView(42, 64, 64);
     assert!(view.is_some());
     let stream = s.ore_context.borrow().stream();
@@ -269,7 +269,7 @@ fn destroy_in_screen_gap_does_not_starve_canvas() {
 }
 #[test]
 fn mutation_after_draw_keeps_version() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let screen = s.screen_renderer(0);
     let mut canvas = DeferredRenderer::new(
         s.command_buffer(),
@@ -293,7 +293,7 @@ fn mutation_after_draw_keeps_version() {
 }
 #[test]
 fn mutation_before_draw_stays_one_object() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let screen = s.screen_renderer(0);
     let mut paint = s.make_render_paint();
     let path = s.make_empty_render_path();
@@ -311,7 +311,7 @@ fn mutation_before_draw_stays_one_object() {
 }
 #[test]
 fn first_mutation_new_frame_reuses_live_object() {
-    let mut s = DeferredSession::new(None);
+    let mut s = DeferredSession::with_caps(Default::default());
     let screen = s.screen_renderer(0);
     let mut paint = s.make_render_paint();
     let path = s.make_empty_render_path();

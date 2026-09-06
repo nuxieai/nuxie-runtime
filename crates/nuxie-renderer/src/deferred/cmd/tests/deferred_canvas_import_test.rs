@@ -196,7 +196,7 @@ fn record_canvas_write_and_sample(session: &mut DeferredSession, canvas: &Render
 
 #[test]
 fn canvas_written_and_sampled_in_one_frame_wraps_after_its_content() {
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let canvas = fake_canvas();
     record_canvas_write_and_sample(&mut session, &canvas);
     session.close_open_range();
@@ -240,7 +240,7 @@ fn first_canvas_content_ensures_backing_before_beginning_the_draw() {
         image: Rc::new(ForeignImage::new(0, Rc::new(Cell::new(false)))),
         steps: steps.clone(),
     })));
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     record_canvas_write_and_sample(&mut session, &canvas);
     session.close_open_range();
 
@@ -252,7 +252,7 @@ fn first_canvas_content_ensures_backing_before_beginning_the_draw() {
 
 #[test]
 fn each_recorded_canvas_view_resolves_to_its_own_canvas() {
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let canvas_a = fake_canvas();
     let canvas_b = fake_canvas();
     record_canvas_write_and_sample(&mut session, &canvas_a);

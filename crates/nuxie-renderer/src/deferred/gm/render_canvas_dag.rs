@@ -29,7 +29,7 @@ fn chain(reversed: bool) -> Vec<u8> {
     let mut host = GmHost::with_screen(0xff202028, false);
     let a = host.canvas(128, 128);
     let b = host.canvas(128, 128);
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let mut replayer = DeferredReplayer::default();
     let green = solid(&mut session, 0xff30c060);
     let orange = solid(&mut session, 0xffe08830);
@@ -61,7 +61,7 @@ fn cycle() -> Vec<u8> {
     let mut host = GmHost::with_screen(0xff202028, false);
     let a = host.canvas(128, 128);
     let b = host.canvas(128, 128);
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let mut replayer = DeferredReplayer::default();
     {
         let green = solid(&mut session, 0xff30c060);

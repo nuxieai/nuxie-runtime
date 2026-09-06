@@ -2,7 +2,7 @@
 use super::ore_gm_helper::*;
 use crate::deferred::cmd::{
     deferred_replayer::{snapshot_frame, DeferredReplayer},
-    deferred_session::DeferredSession,
+    deferred_session::{DeferredSession, ReplayCaps},
 };
 fn record_clear(ctx: &mut dyn ContextApi, view: &AnyResourceHandle) {
     let desc = pass_desc(view, None, [0.10, 0.70, 0.55, 1.0]);
@@ -16,7 +16,7 @@ fn scene(deferred: bool) -> Vec<u8> {
     let mut host = GmHost::new(0xff202028);
     let canvas = host.canvas(200, 200);
     if deferred {
-        let mut session = DeferredSession::new(Some(host.ore.clone()));
+        let mut session = DeferredSession::with_caps(ReplayCaps::from(&*host.ore.borrow()));
         let view = wrap_canvas(&mut *session.ore_context.borrow_mut(), &canvas);
         record_clear(&mut *session.ore_context.borrow_mut(), &view);
         session.record_ore_replay_marker();

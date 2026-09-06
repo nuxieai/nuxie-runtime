@@ -422,7 +422,7 @@ fn measure_riv(name: &str, frames: i32, warmup: i32) {
         println!("MEASURE_SKIP,{name},missing");
         return;
     };
-    let mut factory = PersistentFactory::new(DeferredSession::new(None));
+    let mut factory = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
     let mut case = match RuntimeCase::import_result(&bytes, &mut factory) {
         Ok(case) => case,
         Err(reason) => {
@@ -537,7 +537,7 @@ fn concurrent_sessions() {
         let Ok(bytes) = std::fs::read(corpus_dir().join(&names[i as usize % names.len()])) else {
             continue;
         };
-        let mut factory = PersistentFactory::new(DeferredSession::new(None));
+        let mut factory = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
         let Some(case) = RuntimeCase::import(&bytes, &mut factory) else {
             continue;
         };

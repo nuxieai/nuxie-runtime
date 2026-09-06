@@ -30,7 +30,7 @@ fn line_path(from: (f32, f32), to: (f32, f32)) -> RawPath {
 
 #[test]
 fn retained_query_mirrors_mutations_in_source_order() {
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let mut path = session.make_empty_render_path();
     assert!(deferred(path.as_ref()).query_raw_path().is_none());
     deferred_mut(path.as_mut()).retain_query_geometry(None);
@@ -62,7 +62,7 @@ fn retained_query_mirrors_mutations_in_source_order() {
 
 #[test]
 fn retaining_a_seed_refreshes_instead_of_appending_and_rewind_clears_it() {
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let first = line_path((1.0, 2.0), (3.0, 4.0));
     let second = line_path((-5.0, -6.0), (-7.0, -8.0));
     let mut path = session.make_render_path(first.clone(), FillRule::NonZero);
@@ -83,7 +83,7 @@ fn retaining_a_seed_refreshes_instead_of_appending_and_rewind_clears_it() {
 
 #[test]
 fn transformed_append_requires_query_geometry_on_both_deferred_paths() {
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let retained_geometry = line_path((1.0, 2.0), (3.0, 4.0));
     let mut retained_source =
         session.make_render_path(retained_geometry.clone(), FillRule::NonZero);
@@ -122,7 +122,7 @@ fn transformed_append_requires_query_geometry_on_both_deferred_paths() {
 
 #[test]
 fn self_append_records_the_same_id_and_appends_a_frozen_query_copy() {
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let mut path = session.make_empty_render_path();
     deferred_mut(path.as_mut()).retain_query_geometry(None);
     path.move_to(1.0, 2.0);
@@ -182,7 +182,7 @@ fn identity_render_path_append_uses_the_non_null_cpp_map_path() {
     source_geometry.move_to(-0.0, -0.0);
     source_geometry.line_to(1.0, -0.0);
 
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     let mut source = session.make_render_path(source_geometry.clone(), FillRule::NonZero);
     deferred_mut(source.as_mut()).retain_query_geometry(Some(&source_geometry));
     let mut destination = session.make_empty_render_path();
@@ -231,7 +231,7 @@ fn seed_and_bulk_add_leave_query_contour_bookkeeping_at_source_defaults() {
     }
 
     let geometry = line_path((4.0, 5.0), (6.0, 7.0));
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
 
     let mut seeded = session.make_render_path(geometry.clone(), FillRule::NonZero);
     deferred_mut(seeded.as_mut()).retain_query_geometry(Some(&geometry));

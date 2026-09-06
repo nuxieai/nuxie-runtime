@@ -94,8 +94,8 @@ fn replayed_inline(session: &mut DeferredSession) -> Vec<(usize, i32)> {
 fn foreign_image_resolves_without_decode() {
     let destroyed = Rc::new(Cell::new(false));
     let image = ForeignImage::new(1, destroyed.clone());
-    let mut first = DeferredSession::new(None);
-    let mut second = DeferredSession::new(None);
+    let mut first = DeferredSession::with_caps(Default::default());
+    let mut second = DeferredSession::with_caps(Default::default());
     draw_foreign(&first, &image);
     let a = replayed(&take_frame(&mut first));
     draw_foreign(&second, &image);
@@ -113,12 +113,12 @@ fn foreign_image_resolves_without_decode() {
 fn opposite_numbering_resolves_each_session() {
     let a = ForeignImage::new(1, Rc::new(Cell::new(false)));
     let b = ForeignImage::new(2, Rc::new(Cell::new(false)));
-    let mut forward = DeferredSession::new(None);
+    let mut forward = DeferredSession::with_caps(Default::default());
     draw_foreign(&forward, &a);
     draw_foreign(&forward, &b);
     let fl = replayed_inline(&mut forward);
     let fs = replayed(&take_frame(&mut forward));
-    let mut reverse = DeferredSession::new(None);
+    let mut reverse = DeferredSession::with_caps(Default::default());
     draw_foreign(&reverse, &b);
     draw_foreign(&reverse, &a);
     let rl = replayed_inline(&mut reverse);
@@ -134,7 +134,7 @@ fn snapshot_retains_foreign_past_frame_and_caller() {
     let destroyed = Rc::new(Cell::new(false));
     let image = ForeignImage::new(3, destroyed.clone());
     let raw = image.image_identity();
-    let mut session = DeferredSession::new(None);
+    let mut session = DeferredSession::with_caps(Default::default());
     draw_foreign(&session, &image);
     let frame = take_frame(&mut session);
     assert!(Rc::strong_count(&image.0) > 1);

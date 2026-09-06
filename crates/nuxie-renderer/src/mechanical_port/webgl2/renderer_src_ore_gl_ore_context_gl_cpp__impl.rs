@@ -2527,7 +2527,7 @@ mod tests {
                 RenderContext::from_impl(implementation),
             ))),
         };
-        let mut session = DeferredSession::new(None);
+        let mut session = DeferredSession::with_caps(Default::default());
         assert!(session
             .ore_context
             .borrow_mut()

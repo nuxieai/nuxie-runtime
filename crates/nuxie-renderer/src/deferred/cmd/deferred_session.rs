@@ -1,4 +1,4 @@
-//! renderer/cmd/deferred_session.hpp at e3c5dec2.
+//! renderer/cmd/deferred_session.hpp at 8a494ced.
 use super::render_replay::RendererOwner;
 use super::{
     deferred_render_factory::*, deferred_render_resource::SharedRenderCommandBuffer,
@@ -6,7 +6,8 @@ use super::{
 };
 use crate::authored_ore_shader::{profile_for_target, ExactGpuCanvasShaderOccurrence};
 use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
-use nuxie_ore_metal::context::{ContextApi, ReplayCaps};
+use nuxie_ore_metal::context::ContextApi;
+pub use nuxie_ore_metal::context::ReplayCaps;
 use nuxie_render_api::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -188,20 +189,15 @@ pub struct DeferredSession {
     targets: Rc<RefCell<SessionTargets>>,
 }
 impl DeferredSession {
-    pub fn new(real_ore: Option<OreContextHandle>) -> Self {
-        Self::with_ore_context(|| DeferredOreContext::fromReal(real_ore))
-    }
+    // Recording holds no device. Web can bind initially unknown caps later.
     pub fn with_caps(caps: ReplayCaps) -> Self {
-        Self::with_ore_context(|| DeferredOreContext::new(caps))
-    }
-    fn with_ore_context(make_ore: impl FnOnce() -> DeferredOreContext) -> Self {
         let factory = Rc::new(RefCell::new(DeferredFactory::new()));
         let canvases = Rc::new(RefCell::new(ForeignImageRegistry::default()));
         let routing = Rc::new(RefCell::new(SessionRouting::new(
             factory.borrow().buffer.clone(),
             canvases.clone(),
         )));
-        let ore = make_ore();
+        let ore = DeferredOreContext::new(caps);
         let mut out = Self {
             factory,
             ore_context: Rc::new(RefCell::new(ore)),
@@ -213,9 +209,6 @@ impl DeferredSession {
         };
         out.wire_ore_canvases();
         out
-    }
-    pub fn bind_real_ore(&mut self, real: Option<OreContextHandle>) {
-        self.ore_context.borrow_mut().bindReal(real);
     }
     pub fn bind_replay_caps(&mut self, caps: ReplayCaps) {
         self.ore_context.borrow_mut().bindCaps(caps);

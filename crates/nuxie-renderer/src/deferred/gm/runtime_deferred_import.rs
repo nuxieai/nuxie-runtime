@@ -4,7 +4,7 @@
 use super::ore_gm_helper::*;
 use crate::deferred::cmd::{
     deferred_replayer::{take_frame, DeferredFrameSink, DeferredReplayer},
-    deferred_session::DeferredSession,
+    deferred_session::{DeferredSession, ReplayCaps},
 };
 use nuxie_runtime::{source::static_scene::StaticScene, File, RuntimeFactoryHandle};
 
@@ -12,7 +12,7 @@ fn frames(bytes: &[u8], deferred: bool) -> Vec<Vec<u8>> {
     let mut host = GmHost::with_screen(0xff202028, false);
     // Session precedes file/resources so their destruction still records into
     // the live stream (the source RIVLoader has the same lifetime ordering).
-    let mut session = DeferredSession::new(Some(host.ore.clone()));
+    let mut session = DeferredSession::with_caps(ReplayCaps::from(&*host.ore.borrow()));
     session.bind_render_context(host.factory.persistent_context());
     let mut import = PersistentFactory::new(session.clone());
     let factory = if deferred {

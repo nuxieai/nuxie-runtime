@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f35441b52a95e542a766debd9d2b3dc21905cdbb`
+- LAST_SYNCED_SHA: `47862791523acad123ef02e3d6d7476c9b615159`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `47862791523acad123ef02e3d6d7476c9b615159` | Yoga-only style-storage optimization is inapplicable to retained Taffy. Rust already has one authoritative LayoutData style (moved out/restored for safe applier borrowing), not duplicate YGNode/YGStyle state. Preserve three-phase applier ordering, dirt propagation, child synchronization, and solver-cache projection. | — |
 | `f35441b52a95e542a766debd9d2b3dc21905cdbb` | Already satisfied within approved browser boundaries: WebGL2 PLS passes owned Uint32Array values from Rust slices; scripted image decoding uses the Rust codec with owned bytes. Neither uses Emscripten Module heap-view exports. Do not introduce Emscripten for its heap-view fix. | — |
 | `463c59fd91c08538ba37f9cccc14fa3413a0da23` | Triangulator stability: disconnected-edge distance/rewind guards, active-list zombie removal, merge-call cap and resets, vertex-visit rejection, and upstream null-edge regression. Rust already uses scoped Side enum variants. | — |
 | `f7c22102d5aa505f70ebc03e9f83feb7f52301ab` | MSAA interior triangulation via outer-cubic patches, shared-edge triangle strips, source stack-vector/triangulator tests, and Metal/Vulkan/WebGPU/WebGL2 wiring. Unsupported D3D backends are not introduced; Dawn host string/backend reporting is already equivalent. | — |

@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "694c0879279e956e928baa182df6c15e534f0635"
+UPSTREAM_REF = "d97f3547db4db1b5d3c3a0b56189c30fee441248"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -2513,7 +2513,12 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     riv_sources = ("gamepad_test.riv",)
                 primary = riv_sources[0] if riv_sources else "inline-script"
                 dependencies = riv_sources[1:]
-                lane = "scripted" if "/scripting/" in f"/{relative}" else "runtime"
+                serialized_script = path.name == "serialized_scripts_test.cpp"
+                lane = (
+                    "scripted"
+                    if "/scripting/" in f"/{relative}" or serialized_script
+                    else "runtime"
+                )
                 serialized = path.name == "serialized_rendering_test.cpp"
                 producer_class = (
                     "serialized-rendering"
@@ -2563,6 +2568,18 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                 actions: str | tuple[dict[str, object], ...] = "cpp-test-body"
                 status = "pending-scripted" if lane == "scripted" else "pending"
                 blocker = None
+                if serialized_script:
+                    pointer_log = re.search(r'replayPointerLog\(\s*"([^"]+)"', chunk)
+                    if pointer_log is None:
+                        raise ValueError(f"{silver_id} has no pointer log")
+                    pointer_source = strip_asset_prefix(pointer_log.group(1))
+                    dependencies = (*dependencies, pointer_source)
+                    actions = (
+                        action("bind-authored-view-model-instance", instance_index=0),
+                        action("advance", target="state-machine", seconds=0.1),
+                        action("draw"),
+                        action("replay-pointer-log", source=pointer_source, fps=30.0),
+                    )
                 if lane == "runtime":
                     actions, blocker = executable_actions(chunk, state_machine, animation)
                     if (ported_actions := fl_d4_actions(silver_id)) is not None:
@@ -2667,6 +2684,13 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                 if lane == "scripted" and silver_id in SCRIPTED_EXACT_NOTES:
                     status = "exact"
                     note = SCRIPTED_EXACT_NOTES[silver_id]
+                elif serialized_script:
+                    note = (
+                        "Literal authored instance-0 binding, 0.1-second advance, initial "
+                        "draw, and recorded pointer log replay at 30 fps are executable. "
+                        "Replay completes; original output comparison is expected-red, "
+                        "tracked in UNIV-3015. No exact-parity claim."
+                    )
                 elif lane == "scripted":
                     note = (
                         "Scripted producer provenance is catalogued; scripted action/output "
@@ -3025,7 +3049,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (256, 211, 42, 3):
+    if (len(producers), runtime, scripted, unknown) != (259, 211, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3038,9 +3062,9 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 256",
+        "expected_entries = 259",
         "expected_runtime = 211",
-        "expected_scripted = 42",
+        "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",
         "cpp_rust_exact_ids = ["

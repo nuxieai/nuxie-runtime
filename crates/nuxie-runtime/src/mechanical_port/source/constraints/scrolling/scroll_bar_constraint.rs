@@ -279,112 +279,155 @@ impl ScrollBarConstraint {
         StatusCode::Ok
     }
 
-    pub fn hit_track(&mut self, world_position: Vec2D) {
-        if self.scroll_constraint.is_none() {
+    // Scroll offsets synchronously dirty dependents, including this scrollbar.
+    // Keep its identity across the source call, releasing its arena borrow
+    // before calling into another owner that can return to it.
+    fn with_owner<R>(owner: &CoreHandle, callback: impl FnOnce(&Self) -> R) -> R {
+        owner
+            .with_downcast::<Self, _>(callback)
+            .expect("live ScrollBarConstraint occurrence")
+    }
+
+    pub fn hit_track(owner: &CoreHandle, world_position: Vec2D) {
+        let Some((scroll, track)) = Self::with_owner(owner, |bar| {
+            Some((bar.scroll_constraint.clone()?, bar.track_handle()?))
+        }) else {
             return;
-        }
-        let Some((inverse_world, padding_left, padding_top, inner_width, inner_height)) = self
-            .with_track(|track| {
+        };
+        let Some(inverse_world) = track
+            .with(|track| {
+                let track = track.as_layout_component()?;
                 let mut inverse_world = Mat2D::default();
                 if !track.world_transform().invert(&mut inverse_world) {
                     return None;
                 }
-                Some((
-                    inverse_world,
-                    track.padding_left(),
-                    track.padding_top(),
-                    track.inner_width(),
-                    track.inner_height(),
-                ))
+                Some(inverse_world)
             })
             .flatten()
         else {
             return;
         };
         let mut local_position = inverse_world * world_position;
-        let horizontal = self.base.constrains_horizontal();
-        let vertical = self.base.constrains_vertical();
-        let thumb_width = horizontal.then(|| self.computed_thumb_width());
-        let thumb_height = vertical.then(|| self.computed_thumb_height());
-        self.with_scroll_mut(|scroll| {
-            if let Some(thumb_width) = thumb_width {
-                local_position.x -= padding_left;
-                let track_range = inner_width - thumb_width;
-                let max_offset = scroll.max_offset_x();
-                scroll.set_authored_scroll_offset_x(math_types::clamp(
-                    local_position.x / track_range * max_offset,
-                    max_offset,
-                    0.0,
-                ));
-            }
-            if let Some(thumb_height) = thumb_height {
-                local_position.y -= padding_top;
-                let track_range = inner_height - thumb_height;
-                let max_offset = scroll.max_offset_y();
-                scroll.set_authored_scroll_offset_y(math_types::clamp(
-                    local_position.y / track_range * max_offset,
-                    max_offset,
-                    0.0,
-                ));
-            }
-        })
-        .expect("resolved ScrollConstraint occurrence");
+        if Self::with_owner(owner, |bar| bar.base.constrains_horizontal()) {
+            local_position.x -= track
+                .with(|track| track.as_layout_component().unwrap().padding_left())
+                .expect("validated scrollbar track");
+            let inner_width = track
+                .with(|track| track.as_layout_component().unwrap().inner_width())
+                .expect("validated scrollbar track");
+            let thumb_width = Self::with_owner(owner, Self::computed_thumb_width);
+            let track_range = inner_width - thumb_width;
+            scroll
+                .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                    let max_offset = scroll.max_offset_x();
+                    scroll.set_authored_scroll_offset_x(math_types::clamp(
+                        local_position.x / track_range * max_offset,
+                        max_offset,
+                        0.0,
+                    ));
+                })
+                .expect("resolved ScrollConstraint occurrence");
+        }
+        if Self::with_owner(owner, |bar| bar.base.constrains_vertical()) {
+            local_position.y -= track
+                .with(|track| track.as_layout_component().unwrap().padding_top())
+                .expect("validated scrollbar track");
+            let inner_height = track
+                .with(|track| track.as_layout_component().unwrap().inner_height())
+                .expect("validated scrollbar track");
+            let thumb_height = Self::with_owner(owner, Self::computed_thumb_height);
+            let track_range = inner_height - thumb_height;
+            scroll
+                .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                    let max_offset = scroll.max_offset_y();
+                    scroll.set_authored_scroll_offset_y(math_types::clamp(
+                        local_position.y / track_range * max_offset,
+                        max_offset,
+                        0.0,
+                    ));
+                })
+                .expect("resolved ScrollConstraint occurrence");
+        }
     }
 
-    pub fn drag_thumb(&mut self, delta: Vec2D, time_stamp: f32) {
-        if self.scroll_constraint.is_none() {
-            return;
-        }
-        let Some((inner_width, inner_height)) =
-            self.with_track(|track| (track.inner_width(), track.inner_height()))
-        else {
+    pub fn drag_thumb(owner: &CoreHandle, delta: Vec2D, time_stamp: f32) {
+        let Some((scroll, thumb, track)) = Self::with_owner(owner, |bar| {
+            Some((
+                bar.scroll_constraint.clone()?,
+                bar.thumb_handle()?,
+                bar.track_handle()?,
+            ))
+        }) else {
             return;
         };
-        let horizontal = self.base.constrains_horizontal();
-        let vertical = self.base.constrains_vertical();
-        let thumb_width = horizontal.then(|| self.computed_thumb_width());
-        let thumb_height = vertical.then(|| self.computed_thumb_height());
-        if self.base.auto_size() {
-            self.with_thumb_mut(|thumb| {
-                if let Some(width) = thumb_width {
-                    thumb.set_forced_width(width);
-                }
-                if let Some(height) = thumb_height {
-                    thumb.set_forced_height(height);
-                }
-            })
-            .expect("validated ScrollBarConstraint thumb");
+        let (previous_x, previous_y) = scroll
+            .with_downcast::<ScrollConstraint, _>(|scroll| (scroll.offset_x(), scroll.offset_y()))
+            .expect("resolved ScrollConstraint occurrence");
+        if Self::with_owner(owner, |bar| bar.base.constrains_horizontal()) {
+            let inner_width = track
+                .with(|track| track.as_layout_component().unwrap().inner_width())
+                .expect("validated scrollbar track");
+            let thumb_width = Self::with_owner(owner, Self::computed_thumb_width);
+            if Self::with_owner(owner, |bar| bar.base.auto_size()) {
+                thumb
+                    .with_mut(|thumb| {
+                        thumb
+                            .as_layout_component_mut()
+                            .unwrap()
+                            .set_forced_width(thumb_width);
+                    })
+                    .expect("validated ScrollBarConstraint thumb");
+            }
+            let track_range = inner_width - thumb_width;
+            scroll
+                .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                    let max_offset = scroll.max_offset_x();
+                    let thumb_offset = scroll.offset_x() / max_offset * track_range + delta.x;
+                    scroll.set_authored_scroll_offset_x(math_types::clamp(
+                        thumb_offset / track_range * max_offset,
+                        max_offset,
+                        0.0,
+                    ));
+                })
+                .expect("resolved ScrollConstraint occurrence");
         }
-        self.with_scroll_mut(|scroll| {
-            let previous_x = scroll.offset_x();
-            let previous_y = scroll.offset_y();
-            if let Some(thumb_width) = thumb_width {
-                let track_range = inner_width - thumb_width;
-                let max_offset = scroll.max_offset_x();
-                let thumb_offset = scroll.offset_x() / max_offset * track_range + delta.x;
-                scroll.set_authored_scroll_offset_x(math_types::clamp(
-                    thumb_offset / track_range * max_offset,
-                    max_offset,
-                    0.0,
-                ));
+        if Self::with_owner(owner, |bar| bar.base.constrains_vertical()) {
+            let inner_height = track
+                .with(|track| track.as_layout_component().unwrap().inner_height())
+                .expect("validated scrollbar track");
+            let thumb_height = Self::with_owner(owner, Self::computed_thumb_height);
+            if Self::with_owner(owner, |bar| bar.base.auto_size()) {
+                thumb
+                    .with_mut(|thumb| {
+                        thumb
+                            .as_layout_component_mut()
+                            .unwrap()
+                            .set_forced_height(thumb_height);
+                    })
+                    .expect("validated ScrollBarConstraint thumb");
             }
-            if let Some(thumb_height) = thumb_height {
-                let track_range = inner_height - thumb_height;
-                let max_offset = scroll.max_offset_y();
-                let thumb_offset = scroll.offset_y() / max_offset * track_range + delta.y;
-                scroll.set_authored_scroll_offset_y(math_types::clamp(
-                    thumb_offset / track_range * max_offset,
-                    max_offset,
-                    0.0,
-                ));
-            }
-            let applied_delta = Vec2D::new(
-                scroll.offset_x() - previous_x,
-                scroll.offset_y() - previous_y,
-            );
-            scroll.accumulate_physics(applied_delta, time_stamp);
-        })
-        .expect("resolved ScrollConstraint occurrence");
+            let track_range = inner_height - thumb_height;
+            scroll
+                .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                    let max_offset = scroll.max_offset_y();
+                    let thumb_offset = scroll.offset_y() / max_offset * track_range + delta.y;
+                    scroll.set_authored_scroll_offset_y(math_types::clamp(
+                        thumb_offset / track_range * max_offset,
+                        max_offset,
+                        0.0,
+                    ));
+                })
+                .expect("resolved ScrollConstraint occurrence");
+        }
+        scroll
+            .with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                let applied_delta = Vec2D::new(
+                    scroll.offset_x() - previous_x,
+                    scroll.offset_y() - previous_y,
+                );
+                scroll.accumulate_physics(applied_delta, time_stamp);
+            })
+            .expect("resolved ScrollConstraint occurrence");
     }
     pub fn validate(&self, context: &dyn CoreContext) -> bool {
         context

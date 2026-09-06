@@ -129,6 +129,10 @@ impl PointerCoordinate {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
+    ReplayPointerLog {
+        source: String,
+        fps: f32,
+    },
     BindDefaultViewModel,
     BindFreshViewModel,
     BindAuthoredViewModel,
@@ -374,6 +378,24 @@ impl Execution {
             .actions
             .executable()
             .with_context(|| format!("{} has no executable action stream", case.id))?;
+        let mut expanded_actions = Vec::new();
+        for action in actions {
+            if let Action::ReplayPointerLog { source, fps } = action {
+                let path = runtime_dir.join("tests/unit_tests/assets").join(source);
+                let text = std::fs::read_to_string(&path)
+                    .with_context(|| format!("read pointer log {}", path.display()))?;
+                expanded_actions.extend(crate::pointer_log_replay::replay_actions(
+                    &text,
+                    crate::pointer_log_replay::PointerLogReplayOptions {
+                        fps: *fps,
+                        ..Default::default()
+                    },
+                )?);
+            } else {
+                expanded_actions.push(action.clone());
+            }
+        }
+        let actions = expanded_actions.as_slice();
         // The pinned Silver producers are unit tests compiled with TESTING.
         // In that build RandomProvider starts in FIFO mode and returns 0 when
         // the queue is empty; it never falls through to the platform RNG.
@@ -405,6 +427,14 @@ impl Execution {
         let file = import_file(&bytes, retained_factory.clone())?;
         let mut files = BTreeMap::from([(case.source.clone(), file.clone())]);
         for dependency in &case.dependencies {
+            // Pointer logs are input dependencies, not imported Rive files.
+            if case.actions.executable().is_some_and(|actions| {
+                actions.iter().any(|action| {
+                    matches!(action, Action::ReplayPointerLog { source, .. } if source == dependency)
+                })
+            }) {
+                continue;
+            }
             let path = runtime_dir.join("tests/unit_tests/assets").join(dependency);
             let bytes =
                 std::fs::read(&path).with_context(|| format!("read fixture {}", path.display()))?;
@@ -445,6 +475,9 @@ impl Execution {
         let mut staged_named = BTreeMap::<String, CoreHandle>::new();
         for action in &actions[first_runtime_action..] {
             match action {
+                Action::ReplayPointerLog { .. } => {
+                    unreachable!("pointer logs are expanded before execution")
+                }
                 Action::BindDefaultViewModel => {
                     let main = file.with_file_mut(|file| {
                         file.create_default_view_model_instance_for_artboard(source.clone())

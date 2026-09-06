@@ -1261,6 +1261,82 @@ fn data_only_list_items_support_atomic_structural_mutations_without_an_artboard(
     qualify_structural_mutations(shared_nested_list_fixture_with_item_artboard(false));
 }
 
+#[test]
+fn cumulative_list_growth_preserves_snapshot_limits_and_allows_retry() {
+    let file = import_bytes(&shared_nested_list_fixture_with_item_artboard(false));
+    let mut root = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut root) },
+        NuxStatus::Ok
+    );
+    let children = (0..1050)
+        .map(|_| {
+            let mut child = std::ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_view_model_instance_new(file, 1, &mut child) },
+                NuxStatus::Ok
+            );
+            child
+        })
+        .collect::<Vec<_>>();
+    let append = |start: usize, end: usize, index: usize| {
+        let mutations = children[start..end]
+            .iter()
+            .enumerate()
+            .map(|(offset, child)| NuxViewModelMutation {
+                kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+                instance: root,
+                related_instance: *child,
+                path: NuxStringView {
+                    data: b"items".as_ptr().cast(),
+                    len: 5,
+                },
+                index: index + offset,
+                ..NuxViewModelMutation::default()
+            })
+            .collect::<Vec<_>>();
+        let batch = NuxViewModelMutationBatch {
+            mutations: mutations.as_ptr(),
+            mutation_count: mutations.len(),
+            ..NuxViewModelMutationBatch::default()
+        };
+        let mut result = std::ptr::null_mut();
+        let status = unsafe { nux_view_model_mutate(&batch, &mut result) };
+        let mut info = NuxViewModelMutationResultInfo::default();
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_info(result, &mut info) },
+            NuxStatus::Ok
+        );
+        assert_eq!(info.status, status);
+        if status != NuxStatus::Ok {
+            assert_eq!(info.change_count, 0);
+        }
+        unsafe { nux_view_model_mutation_result_free(result) };
+        status
+    };
+
+    assert_eq!(append(0, 600, 1), NuxStatus::Ok);
+    let before = snapshot(root);
+    let before_edges = snapshot_edges(before);
+    assert_eq!(nested_and_list_ids(before).1.len(), 601);
+    assert_eq!(append(600, 1050, 601), NuxStatus::LimitExceeded);
+    let after = snapshot(root);
+    assert_eq!(snapshot_edges(after), before_edges);
+    assert_eq!(append(600, 700, 601), NuxStatus::Ok);
+    let retry = snapshot(root);
+    assert_eq!(nested_and_list_ids(retry).1.len(), 701);
+    unsafe {
+        nux_view_model_snapshot_free(before);
+        nux_view_model_snapshot_free(after);
+        nux_view_model_snapshot_free(retry);
+        for child in children {
+            nux_view_model_instance_free(child);
+        }
+        nux_view_model_instance_free(root);
+        nux_file_free(file);
+    }
+}
+
 fn qualify_structural_mutations(bytes: Vec<u8>) {
     let file = import_bytes(&bytes);
     let mut root = std::ptr::null_mut();

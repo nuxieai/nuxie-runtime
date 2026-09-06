@@ -2345,6 +2345,18 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 apply_transaction_mutation(&mut transaction, &live, mutation)?;
                 maybe_panic_during_vm_commit(index + 1);
             }
+            // Independent bounded batches can accumulate into a graph too large
+            // for the host's next snapshot. Validate each mutated root before
+            // committing, while the transaction can still restore its topology.
+            for address in resolved
+                .iter()
+                .map(|mutation| mutation.instance)
+                .collect::<BTreeSet<_>>()
+            {
+                let instance = unsafe { &*(address as *const NuxViewModelInstance) };
+                SnapshotBuilder::new(&instance.view_model_catalog)
+                    .snapshot(&instance.instance, instance.identity)?;
+            }
             let roots = live.values().cloned().collect::<Vec<_>>();
             let owner_changes =
                 RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
@@ -2394,7 +2406,7 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 status,
                 0,
                 if status == NuxStatus::LimitExceeded {
-                    "view-model mutation generation overflowed"
+                    "view-model mutation exceeds runtime limits; live graph restored"
                 } else {
                     "validated mutation diverged during commit; live graph restored"
                 },

@@ -29,11 +29,7 @@ impl DraggableProxy for ThumbDraggableProxy {
     }
     fn drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool {
         let delta = mouse_position - self.last_position;
-        self.constraint
-            .with_downcast_mut::<ScrollBarConstraint, _>(|constraint| {
-                constraint.drag_thumb(delta, time_stamp)
-            })
-            .expect("live ScrollBarConstraint occurrence");
+        ScrollBarConstraint::drag_thumb(&self.constraint, delta, time_stamp);
         self.last_position = mouse_position;
         true
     }
@@ -71,11 +67,7 @@ impl TrackDraggableProxy {
 }
 impl DraggableProxy for TrackDraggableProxy {
     fn start_drag(&mut self, mouse_position: Vec2D, _time_stamp: f32) -> bool {
-        self.constraint
-            .with_downcast_mut::<ScrollBarConstraint, _>(|constraint| {
-                constraint.hit_track(mouse_position)
-            })
-            .expect("live ScrollBarConstraint occurrence");
+        ScrollBarConstraint::hit_track(&self.constraint, mouse_position);
         true
     }
     fn drag(&mut self, _mouse_position: Vec2D, _time_stamp: f32) -> bool {

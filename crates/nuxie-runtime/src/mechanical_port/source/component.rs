@@ -153,9 +153,28 @@ impl ComponentOccurrenceHandle {
             }
             // Complete this owner's onDirty/artboard callbacks before visiting
             // dependents. They may synchronously call back into this owner.
-            let changed = handle
-                .with_mut(|object| object.component_add_dirt(value, false))
-                .unwrap_or(false);
+            let changed = if handle.is_type_of(
+                crate::mechanical_port::source::generated::constraints::constraint_base::ConstraintBase::TYPE_KEY,
+            ) {
+                // Constraint::onDirty dirties its parent, whose dependents can
+                // include this same constraint. Publish dirt first, then end
+                // the slot borrow before the inherited callback recurses.
+                if self
+                    .with_component_mut(|component| component.add_dirt_state(value))
+                    .flatten()
+                    .is_some()
+                {
+                    crate::mechanical_port::source::constraints::constraint::Constraint::mark_constraint_dirty_occurrence(handle);
+                    self.notify_artboard();
+                    true
+                } else {
+                    false
+                }
+            } else {
+                handle
+                    .with_mut(|object| object.component_add_dirt(value, false))
+                    .unwrap_or(false)
+            };
             if changed && recurse {
                 let dependents = handle
                     .with(|object| {
@@ -350,9 +369,9 @@ impl ComponentOccurrenceHandle {
                 return false;
             };
             if handle.is_type_of(
-                crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY,
+                crate::mechanical_port::source::generated::constraints::constraint_base::ConstraintBase::TYPE_KEY,
             ) {
-                // ScrollConstraint inherits Constraint::onDirty. Its parent
+                // Constraint subclasses inherit Constraint::onDirty. Their parent
                 // transform's dependents include this same constraint, so
                 // invoke that callback after releasing the constraint slot.
                 crate::mechanical_port::source::constraints::constraint::Constraint::mark_constraint_dirty_occurrence(handle);

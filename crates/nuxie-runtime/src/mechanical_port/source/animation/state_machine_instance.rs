@@ -772,13 +772,15 @@ impl StateMachineLayerInstance {
                     .flatten()
             })
             .collect::<Vec<_>>();
-        self.animation_reset = Some(
-            self.artboard_instance
-                .with_artboard(|artboard| {
-                    AnimationResetFactory::from_animation_handles(&animations, artboard, false)
-                })
-                .expect("a state-machine layer retains its artboard instance"),
-        );
+        let artboard = self
+            .artboard_instance
+            .upgrade()
+            .expect("a state-machine layer retains its artboard instance");
+        self.animation_reset = Some(AnimationResetFactory::from_animation_handles(
+            &animations,
+            &artboard,
+            false,
+        ));
     }
 
     fn profile_state_name(instance: Option<&RuntimeStateInstanceHandle>) -> String {

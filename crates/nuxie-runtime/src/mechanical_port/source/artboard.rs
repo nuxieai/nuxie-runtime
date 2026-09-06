@@ -4466,6 +4466,28 @@ impl crate::mechanical_port::source::animation::animation_reset_factory::ResetAr
     }
 }
 
+impl crate::mechanical_port::source::animation::animation_reset_factory::ResetArtboard
+    for RuntimeArtboardInstanceHandle
+{
+    fn resolves(&self, object_id: u32) -> bool {
+        self.with_artboard(|artboard| artboard.resolve_handle(object_id).is_some())
+    }
+
+    fn double_value(&self, object_id: u32, property_key: u32) -> f32 {
+        let object = self.with_artboard(|artboard| artboard.resolve_handle(object_id));
+        object
+            .and_then(|object| CoreRegistry::get_double_handle(&object, property_key as i32))
+            .unwrap_or_default()
+    }
+
+    fn color_value(&self, object_id: u32, property_key: u32) -> u32 {
+        let object = self.with_artboard(|artboard| artboard.resolve_handle(object_id));
+        object
+            .and_then(|object| CoreRegistry::get_color_handle(&object, property_key as i32))
+            .unwrap_or_default() as u32
+    }
+}
+
 impl crate::mechanical_port::source::animation::animation_reset::AnimationResetTarget
     for RuntimeArtboardInstanceHandle
 {

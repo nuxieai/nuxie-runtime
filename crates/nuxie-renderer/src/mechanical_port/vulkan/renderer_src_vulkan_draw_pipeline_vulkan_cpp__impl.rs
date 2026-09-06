@@ -181,10 +181,15 @@ pub(crate) fn subpass_index(
         | DrawType::msaaStrokes
         | DrawType::msaaMidpointFanBorrowedCoverage
         | DrawType::msaaDynamicMidpointFans
+        | DrawType::msaaDynamicOuterCubics
         | DrawType::msaaMidpointFans
         | DrawType::msaaMidpointFanStencilReset
         | DrawType::msaaMidpointFanPathsStencil
         | DrawType::msaaMidpointFanPathsCover
+        | DrawType::msaaOuterCubicBorrowedCoverage
+        | DrawType::msaaOuterCubicStencilReset
+        | DrawType::msaaOuterCubicPathsStencil
+        | DrawType::msaaOuterCubicPathsCover
         | DrawType::msaaOuterCubics
         | DrawType::clipReset => mainSubpassIdx,
         DrawType::renderPassResolve => mainSubpassIdx + 1,
@@ -403,10 +408,15 @@ impl DrawPipelineVulkan {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
+            | DrawType::msaaOuterCubicBorrowedCoverage
+            | DrawType::msaaOuterCubicStencilReset
+            | DrawType::msaaOuterCubicPathsStencil
+            | DrawType::msaaOuterCubicPathsCover
             | DrawType::msaaOuterCubics
             | DrawType::msaaStrokes
             | DrawType::msaaMidpointFanBorrowedCoverage
             | DrawType::msaaDynamicMidpointFans
+            | DrawType::msaaDynamicOuterCubics
             | DrawType::msaaMidpointFans
             | DrawType::msaaMidpointFanStencilReset
             | DrawType::msaaMidpointFanPathsStencil

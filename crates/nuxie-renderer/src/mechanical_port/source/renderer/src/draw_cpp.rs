@@ -18,7 +18,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp:
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
-    AABBu16, LogicalFlush, RenderContext, IAABB,
+    AABBu16, IAABB, LogicalFlush, RenderContext,
 };
 use crate::mechanical_port::source::renderer::src::gpu_cpp;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPath;
@@ -365,7 +365,6 @@ pub struct PathDrawAllocation {
     coverage_type: PathCoverageType,
     contour_directions: gpu::ContourDirections,
     path_fill_rule: FillRule,
-    triangulator_fill_rule: FillRule,
     triangulator_reverse_triangles: bool,
     triangulator_negate_winding: bool,
     atlas_scale_factor: f32,
@@ -789,8 +788,8 @@ impl PathDrawAllocation {
         debug_assert_eq!(self.coverage_type, PathCoverageType::clockwiseAtomic);
         !self.draw.isStroke() && !self.isOutermostClipUpdate()
     }
-    pub fn triangulatorFillRule(&self) -> FillRule {
-        self.triangulator_fill_rule
+    pub fn pathFillRule(&self) -> FillRule {
+        self.path_fill_rule
     }
     pub fn triangulatorReverseTriangles(&self) -> bool {
         self.triangulator_reverse_triangles
@@ -837,8 +836,8 @@ impl PathDraw {
     pub fn triangulator(&self) -> Option<&crate::gr_triangulator::InnerFanTriangulator> {
         self.allocation().triangulator()
     }
-    pub fn triangulatorFillRule(&self) -> FillRule {
-        self.allocation().triangulatorFillRule()
+    pub fn pathFillRule(&self) -> FillRule {
+        self.allocation().pathFillRule()
     }
     pub fn triangulatorReverseTriangles(&self) -> bool {
         self.allocation().triangulatorReverseTriangles()
@@ -903,9 +902,11 @@ unsafe fn allocate_path_resources(draw: *mut Draw, flush: *mut LogicalFlush) -> 
     debug_assert_eq!(owner.raw_path_mutation_id, unsafe {
         (&*owner.path_ref.get()).getRawPathMutationID()
     });
-    debug_assert!(!unsafe { (&*owner.path_ref.get()).getRawPath() }
-        .verbs()
-        .is_empty());
+    debug_assert!(
+        !unsafe { (&*owner.path_ref.get()).getRawPath() }
+            .verbs()
+            .is_empty()
+    );
     if !owner.gradient.get().is_null()
         && !unsafe {
             flush_ref.allocateGradientExecutable(
@@ -1122,7 +1123,7 @@ unsafe fn push_interior_triangles(
     };
     let triangles = interior.triangulator.triangles(
         path_id as u16,
-        interior.triangulator_fill_rule,
+        interior.path_fill_rule,
         interior.triangulator_reverse_triangles,
         interior.triangulator_negate_winding,
         faces,
@@ -1333,10 +1334,45 @@ unsafe fn push_path(
             let pass_count = owner.draw.base.prepass_count | owner.draw.base.subpass_count;
             let pass_index = subpass + owner.draw.base.prepass_count;
             if pass_index == 0 {
-                owner.tess_location =
-                    flush_ref.allocateMidpointFanTessVerticesExecutable(tess_vertex_count);
+                owner.tess_location = if interior {
+                    flush_ref.allocateOuterCubicTessVerticesExecutable(tess_vertex_count)
+                } else {
+                    flush_ref.allocateMidpointFanTessVerticesExecutable(tess_vertex_count)
+                };
                 owner.geometry.relocate_to(owner.tess_location);
                 unsafe { write_path_geometry(owner, flush) };
+            }
+            if interior {
+                let draw_type = if pass_count == 1 {
+                    if (owner.draw.base.draw_contents
+                        & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
+                        == (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip)
+                    {
+                        gpu::DrawType::msaaOuterCubicPathsStencil
+                    } else {
+                        gpu::DrawType::msaaDynamicOuterCubics
+                    }
+                } else if pass_count == 2 {
+                    [
+                        gpu::DrawType::msaaOuterCubicPathsStencil,
+                        gpu::DrawType::msaaOuterCubicPathsCover,
+                    ][pass_index as usize]
+                } else {
+                    [
+                        gpu::DrawType::msaaOuterCubicBorrowedCoverage,
+                        gpu::DrawType::msaaOuterCubics,
+                        gpu::DrawType::msaaOuterCubicStencilReset,
+                    ][pass_index as usize]
+                };
+                return unsafe {
+                    flush_ref.pushOuterCubicsDrawExecutable(
+                        &owner.draw,
+                        draw_type,
+                        tess_vertex_count,
+                        owner.tess_location,
+                        gpu::ShaderMiscFlags::none,
+                    )
+                };
             }
             let draw_type = if pass_count == 1 {
                 if owner.draw.isStroke() {
@@ -1577,13 +1613,11 @@ pub unsafe fn make_path_draw_from_source(
     );
     let mut triangulator = None;
     if !paint.getIsStroked() && paint.getFeather() == 0.0 {
-        let triangle_area =
-            gpu_cpp::find_transformed_area(render_path.getBounds(), paint_matrix);
+        let triangle_area = gpu_cpp::find_transformed_area(render_path.getBounds(), paint_matrix);
         let triangle_verb_count = path.verbs().len();
-        let eligible = context.frameInterlockMode() != gpu::InterlockMode::msaa
-            && context
-                .m_triangulation_controller
-                .isEligible(triangle_area, triangle_verb_count);
+        let eligible = context
+            .m_triangulation_controller
+            .isEligible(triangle_area, triangle_verb_count);
         if eligible {
             triangulator = render_path.cachedTriangulator();
             if triangulator.is_some() {
@@ -1606,6 +1640,7 @@ pub unsafe fn make_path_draw_from_source(
             initial_fill_rule,
             clockwise_fill_override,
             triangulator,
+            coverage_type == PathCoverageType::msaa,
         )?)
     } else if paint.getFeather() != 0.0 {
         let direction = match directions {
@@ -1737,11 +1772,6 @@ pub unsafe fn make_path_draw_from_source(
         FillRule::Clockwise
     } else {
         initial_fill_rule
-    };
-    owner.triangulator_fill_rule = if owner.path_fill_rule == FillRule::EvenOdd {
-        FillRule::EvenOdd
-    } else {
-        FillRule::NonZero
     };
     owner.triangulator_reverse_triangles = crate::draw::mat2d_determinant(paint_matrix) < 0.0;
     owner.triangulator_negate_winding = owner.triangulator_reverse_triangles
@@ -1918,7 +1948,6 @@ pub unsafe fn make_path_draw(
         coverage_type,
         contour_directions,
         path_fill_rule: FillRule::NonZero,
-        triangulator_fill_rule: FillRule::NonZero,
         triangulator_reverse_triangles: false,
         triangulator_negate_winding: false,
         atlas_scale_factor,

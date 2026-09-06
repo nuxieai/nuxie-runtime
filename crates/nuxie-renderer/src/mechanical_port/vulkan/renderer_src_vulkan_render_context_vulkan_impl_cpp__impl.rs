@@ -2590,10 +2590,15 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
+            | DrawType::msaaOuterCubicBorrowedCoverage
+            | DrawType::msaaOuterCubicStencilReset
+            | DrawType::msaaOuterCubicPathsStencil
+            | DrawType::msaaOuterCubicPathsCover
             | DrawType::msaaOuterCubics
             | DrawType::msaaStrokes
             | DrawType::msaaMidpointFanBorrowedCoverage
             | DrawType::msaaDynamicMidpointFans
+            | DrawType::msaaDynamicOuterCubics
             | DrawType::msaaMidpointFans
             | DrawType::msaaMidpointFanStencilReset
             | DrawType::msaaMidpointFanPathsStencil
@@ -3918,6 +3923,10 @@ fn submitDrawList(
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
+            | DrawType::msaaOuterCubicBorrowedCoverage
+            | DrawType::msaaOuterCubicStencilReset
+            | DrawType::msaaOuterCubicPathsStencil
+            | DrawType::msaaOuterCubicPathsCover
             | DrawType::msaaOuterCubics
             | DrawType::msaaStrokes
             | DrawType::msaaMidpointFanBorrowedCoverage
@@ -3968,7 +3977,7 @@ fn submitDrawList(
                     }
                 }
             }
-            DrawType::msaaDynamicMidpointFans => {
+            DrawType::msaaDynamicMidpointFans | DrawType::msaaDynamicOuterCubics => {
                 pending_tess_patches -= batch.elementCount;
                 if pipeline.is_none() {
                     continue;
@@ -4000,6 +4009,8 @@ fn submitDrawList(
                         vk::IndexType::UINT16,
                     );
                 }
+                // Outer-cubic passes use identical dynamic state to their
+                // midpoint-fan counterparts, so both use these pass types.
                 for pass in [
                     DrawType::msaaMidpointFanBorrowedCoverage,
                     DrawType::msaaMidpointFans,

@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d97f3547db4db1b5d3c3a0b56189c30fee441248`
+- LAST_SYNCED_SHA: `f7c22102d5aa505f70ebc03e9f83feb7f52301ab`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f7c22102d5aa505f70ebc03e9f83feb7f52301ab` | MSAA interior triangulation via outer-cubic patches, shared-edge triangle strips, source stack-vector/triangulator tests, and Metal/Vulkan/WebGPU/WebGL2 wiring. Unsupported D3D backends are not introduced; Dawn host string/backend reporting is already equivalent. | — |
 | `d97f3547db4db1b5d3c3a0b56189c30fee441248` | Translate JSON pointer-log parser/replay cadence and all three new serialized script cases. Correct existing constraint/scrollbar callback borrows and root-artboard animation-reset reads exposed by replay. Replays complete; original output assertions remain explicitly expected-red, not exact. Upstream deletions are commented-out tests only. | [UNIV-3015](https://universe.basis.dev/issue/UNIV-3015) |
 | `694c0879279e956e928baa182df6c15e534f0635` | Command-server asset loader quietly delegates TextAsset (including scripts/shaders), BlobAsset, and ManifestAsset to in-band import, matching upstream's type hierarchy. | — |
 | `526625850eaf34fc1263d181808ffca10cae6ac1` | Already satisfied: upstream corrects the new deferred geometry test's stale pointer constructor to empty replay capabilities, exactly as the preceding Rust translation already does. No production change. | — |

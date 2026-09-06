@@ -3464,9 +3464,14 @@ pub mod source_execution {
             DrawType::MsaaMidpointFans => gpu::DrawType::msaaMidpointFans,
             DrawType::MsaaMidpointFanStencilReset => gpu::DrawType::msaaMidpointFanStencilReset,
             DrawType::MsaaDynamicMidpointFans => gpu::DrawType::msaaDynamicMidpointFans,
+            DrawType::MsaaDynamicOuterCubics => gpu::DrawType::msaaDynamicOuterCubics,
             DrawType::MsaaMidpointFanPathsStencil => gpu::DrawType::msaaMidpointFanPathsStencil,
             DrawType::MsaaMidpointFanPathsCover => gpu::DrawType::msaaMidpointFanPathsCover,
             DrawType::MsaaOuterCubics => gpu::DrawType::msaaOuterCubics,
+            DrawType::MsaaOuterCubicBorrowedCoverage => gpu::DrawType::msaaOuterCubicBorrowedCoverage,
+            DrawType::MsaaOuterCubicStencilReset => gpu::DrawType::msaaOuterCubicStencilReset,
+            DrawType::MsaaOuterCubicPathsStencil => gpu::DrawType::msaaOuterCubicPathsStencil,
+            DrawType::MsaaOuterCubicPathsCover => gpu::DrawType::msaaOuterCubicPathsCover,
             DrawType::ClipReset => gpu::DrawType::clipReset,
             DrawType::RenderPassInitialize => gpu::DrawType::renderPassInitialize,
             DrawType::RenderPassResolve => gpu::DrawType::renderPassResolve,
@@ -6655,10 +6660,15 @@ pub mod source_execution {
                     DrawType::MsaaStrokes
                     | DrawType::MsaaMidpointFanBorrowedCoverage
                     | DrawType::MsaaDynamicMidpointFans
+                    | DrawType::MsaaDynamicOuterCubics
                     | DrawType::MsaaMidpointFans
                     | DrawType::MsaaMidpointFanStencilReset
                     | DrawType::MsaaMidpointFanPathsStencil
                     | DrawType::MsaaMidpointFanPathsCover
+                    | DrawType::MsaaOuterCubicBorrowedCoverage
+                    | DrawType::MsaaOuterCubicStencilReset
+                    | DrawType::MsaaOuterCubicPathsStencil
+                    | DrawType::MsaaOuterCubicPathsCover
                     | DrawType::MsaaOuterCubics
                     | DrawType::ClipReset => rive_unreachable(),
                 }
@@ -6848,10 +6858,15 @@ pub mod source_execution {
             | DrawType::MsaaStrokes
             | DrawType::MsaaMidpointFanBorrowedCoverage
             | DrawType::MsaaDynamicMidpointFans
+            | DrawType::MsaaDynamicOuterCubics
             | DrawType::MsaaMidpointFans
             | DrawType::MsaaMidpointFanStencilReset
             | DrawType::MsaaMidpointFanPathsStencil
             | DrawType::MsaaMidpointFanPathsCover
+            | DrawType::MsaaOuterCubicBorrowedCoverage
+            | DrawType::MsaaOuterCubicStencilReset
+            | DrawType::MsaaOuterCubicPathsStencil
+            | DrawType::MsaaOuterCubicPathsCover
             | DrawType::MsaaOuterCubics
             | DrawType::ImageRect
             | DrawType::ImageMesh

@@ -2347,7 +2347,11 @@ fn get_valid_draw_types(mode: InterlockMode) -> &'static [DrawType] {
             DrawType::msaaMidpointFanStencilReset,
             DrawType::msaaMidpointFanPathsStencil,
             DrawType::msaaMidpointFanPathsCover,
+            DrawType::msaaOuterCubicBorrowedCoverage,
             DrawType::msaaOuterCubics,
+            DrawType::msaaOuterCubicStencilReset,
+            DrawType::msaaOuterCubicPathsStencil,
+            DrawType::msaaOuterCubicPathsCover,
             DrawType::clipReset,
             DrawType::renderPassInitialize,
             DrawType::renderPassResolve,
@@ -2493,7 +2497,12 @@ pub fn ShaderUniqueKey(
         | DrawType::msaaMidpointFanStencilReset
         | DrawType::msaaMidpointFanPathsStencil
         | DrawType::msaaMidpointFanPathsCover
-        | DrawType::msaaOuterCubics => 0,
+        | DrawType::msaaOuterCubics
+        | DrawType::msaaOuterCubicBorrowedCoverage
+        | DrawType::msaaOuterCubicStencilReset
+        | DrawType::msaaDynamicOuterCubics
+        | DrawType::msaaOuterCubicPathsStencil
+        | DrawType::msaaOuterCubicPathsCover => 0,
         DrawType::interiorTriangulation => 1,
         DrawType::featherAtlasBlit => 2,
         DrawType::imageRect => 3,
@@ -3397,24 +3406,28 @@ pub fn get_depth_state(
         DrawType::imageRect
         | DrawType::imageMesh
         | DrawType::featherAtlasBlit
-        | DrawType::outerCurvePatches
         | DrawType::msaaMidpointFanBorrowedCoverage
         | DrawType::msaaMidpointFanPathsStencil
+        | DrawType::msaaOuterCubicBorrowedCoverage
+        | DrawType::msaaOuterCubicPathsStencil
         | DrawType::clipReset => DepthState {
             depthTestEnabled: true,
             depthWriteEnabled: false,
         },
-        DrawType::msaaStrokes | DrawType::msaaOuterCubics => DepthState {
+        DrawType::msaaStrokes => DepthState {
             depthTestEnabled: true,
             depthWriteEnabled: true,
         },
         DrawType::msaaDynamicMidpointFans
+        | DrawType::msaaDynamicOuterCubics
         | DrawType::msaaMidpointFans
-        | DrawType::msaaMidpointFanPathsCover => DepthState {
+        | DrawType::msaaMidpointFanPathsCover
+        | DrawType::msaaOuterCubics
+        | DrawType::msaaOuterCubicPathsCover => DepthState {
             depthTestEnabled: true,
             depthWriteEnabled: !has_u32(drawContents.0, DrawContents::clipUpdate.0),
         },
-        DrawType::msaaMidpointFanStencilReset => DepthState {
+        DrawType::msaaMidpointFanStencilReset | DrawType::msaaOuterCubicStencilReset => DepthState {
             depthTestEnabled: true,
             depthWriteEnabled: no_u32(
                 drawContents.0,
@@ -3426,6 +3439,7 @@ pub fn get_depth_state(
             depthWriteEnabled: false,
         },
         DrawType::interiorTriangulation
+        | DrawType::outerCurvePatches
         | DrawType::midpointFanPatches
         | DrawType::midpointFanCenterAAPatches => panic!("RIVE_UNREACHABLE"),
     }
@@ -3448,8 +3462,7 @@ pub fn get_stencil_info(
         DrawType::imageRect
         | DrawType::imageMesh
         | DrawType::featherAtlasBlit
-        | DrawType::msaaStrokes
-        | DrawType::msaaOuterCubics => {
+        | DrawType::msaaStrokes => {
             if has_u32(drawContents.0, DrawContents::activeClip.0) {
                 StencilInfo {
                     stencilType: StencilType::activeStencilClip,
@@ -3464,17 +3477,18 @@ pub fn get_stencil_info(
                 }
             }
         }
-        DrawType::msaaMidpointFanBorrowedCoverage => StencilInfo {
+        DrawType::msaaMidpointFanBorrowedCoverage | DrawType::msaaOuterCubicBorrowedCoverage => StencilInfo {
             stencilType: StencilType::borrowedCoverage,
             drawContentsMask: DrawContents::activeClip,
             areDrawContentsValid: valid,
         },
-        DrawType::msaaDynamicMidpointFans | DrawType::msaaMidpointFans => StencilInfo {
+        DrawType::msaaDynamicMidpointFans | DrawType::msaaDynamicOuterCubics
+        | DrawType::msaaMidpointFans | DrawType::msaaOuterCubics => StencilInfo {
             stencilType: StencilType::forwardClippedByBackward,
             drawContentsMask: DrawContents(DrawContents::activeClip.0 | DrawContents::clipUpdate.0),
             areDrawContentsValid: valid,
         },
-        DrawType::msaaMidpointFanStencilReset => StencilInfo {
+        DrawType::msaaMidpointFanStencilReset | DrawType::msaaOuterCubicStencilReset => StencilInfo {
             stencilType: StencilType::backwardTriangleCleanup,
             drawContentsMask: DrawContents(
                 DrawContents::clockwiseFill.0
@@ -3483,7 +3497,7 @@ pub fn get_stencil_info(
             ),
             areDrawContentsValid: valid,
         },
-        DrawType::msaaMidpointFanPathsStencil => StencilInfo {
+        DrawType::msaaMidpointFanPathsStencil | DrawType::msaaOuterCubicPathsStencil => StencilInfo {
             stencilType: StencilType::stencilNestedOrEvenOdd,
             drawContentsMask: DrawContents(
                 DrawContents::activeClip.0 | DrawContents::evenOddFill.0,
@@ -3492,7 +3506,7 @@ pub fn get_stencil_info(
                 || (drawContents.0 & (DrawContents::activeClip.0 | DrawContents::clipUpdate.0))
                     == (DrawContents::activeClip.0 | DrawContents::clipUpdate.0),
         },
-        DrawType::msaaMidpointFanPathsCover => StencilInfo {
+        DrawType::msaaMidpointFanPathsCover | DrawType::msaaOuterCubicPathsCover => StencilInfo {
             stencilType: StencilType::evenOddDrawAndReset,
             drawContentsMask: DrawContents::clipUpdate,
             areDrawContentsValid: has_u32(drawContents.0, DrawContents::evenOddFill.0),
@@ -3678,16 +3692,20 @@ pub fn get_cull_face(drawType: DrawType) -> CullFace {
         | DrawType::featherAtlasBlit
         | DrawType::msaaStrokes
         | DrawType::msaaDynamicMidpointFans
+        | DrawType::msaaDynamicOuterCubics
         | DrawType::msaaMidpointFans
+        | DrawType::msaaOuterCubics
         | DrawType::clipReset => CullFace::counterclockwise,
-        DrawType::msaaMidpointFanBorrowedCoverage | DrawType::msaaMidpointFanStencilReset => {
+        DrawType::msaaMidpointFanBorrowedCoverage | DrawType::msaaMidpointFanStencilReset
+        | DrawType::msaaOuterCubicBorrowedCoverage | DrawType::msaaOuterCubicStencilReset => {
             CullFace::clockwise
         }
         DrawType::imageRect
         | DrawType::imageMesh
         | DrawType::msaaMidpointFanPathsStencil
         | DrawType::msaaMidpointFanPathsCover
-        | DrawType::msaaOuterCubics
+        | DrawType::msaaOuterCubicPathsStencil
+        | DrawType::msaaOuterCubicPathsCover
         | DrawType::renderPassResolve
         | DrawType::renderPassInitialize => CullFace::none,
     }
@@ -3878,16 +3896,21 @@ pub fn get_color_write_enable(
                 fixedFunctionColorOutput || interlockMode == InterlockMode::msaa
             }
         }
-        DrawType::msaaStrokes | DrawType::msaaOuterCubics => true,
+        DrawType::msaaStrokes => true,
         DrawType::msaaMidpointFanBorrowedCoverage
         | DrawType::msaaMidpointFanPathsStencil
+        | DrawType::msaaOuterCubicBorrowedCoverage
+        | DrawType::msaaOuterCubicPathsStencil
         | DrawType::clipReset => false,
         DrawType::msaaDynamicMidpointFans
+        | DrawType::msaaDynamicOuterCubics
         | DrawType::msaaMidpointFans
-        | DrawType::msaaMidpointFanPathsCover => {
+        | DrawType::msaaMidpointFanPathsCover
+        | DrawType::msaaOuterCubics
+        | DrawType::msaaOuterCubicPathsCover => {
             !has_u32(drawContents.0, DrawContents::clipUpdate.0)
         }
-        DrawType::msaaMidpointFanStencilReset => no_u32(
+        DrawType::msaaMidpointFanStencilReset | DrawType::msaaOuterCubicStencilReset => no_u32(
             drawContents.0,
             DrawContents::clockwiseFill.0 | DrawContents::clipUpdate.0,
         ),
@@ -4010,7 +4033,12 @@ pub fn get_pipeline_state(
             | DrawType::msaaMidpointFanStencilReset
             | DrawType::msaaMidpointFanPathsStencil
             | DrawType::msaaMidpointFanPathsCover
-            | DrawType::msaaOuterCubics => debug_assert_eq!(interlockMode, InterlockMode::msaa),
+            | DrawType::msaaOuterCubics
+            | DrawType::msaaOuterCubicBorrowedCoverage
+            | DrawType::msaaOuterCubicStencilReset
+            | DrawType::msaaDynamicOuterCubics
+            | DrawType::msaaOuterCubicPathsStencil
+            | DrawType::msaaOuterCubicPathsCover => debug_assert_eq!(interlockMode, InterlockMode::msaa),
             DrawType::clipReset => debug_assert!(matches!(
                 interlockMode,
                 InterlockMode::clockwiseAtomic | InterlockMode::msaa

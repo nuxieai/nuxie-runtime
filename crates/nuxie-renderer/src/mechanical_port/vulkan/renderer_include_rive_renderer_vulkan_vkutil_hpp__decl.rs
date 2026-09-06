@@ -68,6 +68,7 @@ pub(crate) fn vkCullMode(face: CullFace) -> vk::CullModeFlags {
 
 pub(crate) fn hasPipelineDynamicState(draw_type: DrawType) -> bool {
     draw_type == DrawType::msaaDynamicMidpointFans
+        || draw_type == DrawType::msaaDynamicOuterCubics
 }
 
 // Vertex shaders multiply paint by this float: one writes, zero suppresses.

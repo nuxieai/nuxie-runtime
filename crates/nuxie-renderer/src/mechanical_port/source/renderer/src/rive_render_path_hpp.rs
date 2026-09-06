@@ -542,6 +542,27 @@ mod upstream_1db281b3_triangulation_cache_tests {
 mod mat2d_caller_tests {
     use super::{FillRule, Mat2D, RawPath, RiveRenderPath};
 
+    // tests/unit_tests/renderer/pls_path_test.cpp at 498419c4.
+    #[test]
+    fn add_untrusted_raw_path_prunes_empty_segments() {
+        use nuxie_render_api::{PathVerb, RenderPath};
+        let mut degenerate = RawPath::new();
+        degenerate.move_to(304.0, 160.0);
+        degenerate.line_to(304.0, 160.0);
+        degenerate.line_to(304.0, 160.0);
+        degenerate.line_to(304.0, 160.0);
+        degenerate.close();
+
+        let mut path = RiveRenderPath::default();
+        path.add_untrusted_raw_path(&degenerate);
+        assert_eq!(path.m_rawPath.verbs(), &[PathVerb::Move, PathVerb::Close]);
+        assert_eq!(path.m_rawPath.points().len(), 1);
+
+        let mut trusted = RiveRenderPath::default();
+        trusted.add_raw_path(&degenerate);
+        assert_eq!(trusted.m_rawPath.verbs().len(), 5);
+    }
+
     // tests/unit_tests/renderer/pls_path_test.cpp at e949498e.
     #[test]
     fn add_raw_path_invalidates_derived_state() {

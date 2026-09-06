@@ -208,6 +208,9 @@ impl TrimPath {
             }
             TrimPathMode::Unknown(_) => {}
         }
+        // getSegment has its own precision guards, but a tiny trim window can
+        // still land a segment on a single point.
+        raw.prune_empty_segments();
     }
     pub fn start_changed(&mut self) {
         StrokeEffect::invalidate_effect_from_local(self);

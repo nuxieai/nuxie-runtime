@@ -223,9 +223,8 @@ impl StrokeEffect for ScriptedPathEffect {
             &mut host,
         ) {
             Ok(output) => {
-                // mutableRawPath()->addPath does not prune or flatten the result.
+                // Through ShapePaintPath, which prunes what the script returned.
                 path.borrow_mut()
-                    .mutable_raw_path()
                     .add_path(&from_render_raw_path(&output), None);
             }
             Err(_) => eprintln!("update function failed"),

@@ -7,8 +7,10 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8a494cedae2db53f15bf85871406aa67b2429448`
-- Frozen target: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`; newer commits wait.
+- LAST_SYNCED_SHA: `498419c45ef2ec48676730d9949b76164b12f4d0`
+- Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
+  The user authorized continuing one commit at a time through latest upstream;
+  refresh the tip at catch-up and continue if it advances.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
   The preceding accounted change, upstream's Rive 7.3 layout translation,
   anchor, constraint, scroll virtualization-buffer, and Luau 0.733 update, was ported
@@ -18,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `498419c45ef2ec48676730d9949b76164b12f4d0` | Prune empty scripted/dash/trim segments at upstream boundaries; filter empty per-verb deferred geometry and its query mirror; translate both new geometry tests. The new C++ benchmark registration is performance harness infrastructure and is not imported; no runtime behavior is excluded. | — |
 | `8a494cedae2db53f15bf85871406aa67b2429448` | Capability-only `DeferredSession` construction; removed device constructor and `bind_real_ore`; migrated translated tests, GMs, and Apple C-API import caller to explicit replay caps. The `.rive_head` pointer is editor-owned. Shader and decoder sources/artifacts are unchanged from the preceding checkpoint; their historical provenance is preserved. | — |
 | `675703b9fd71e982eaf97c034b313eba9bde63f4` | ORE test-only hardening that exhaustively accounts for every `ShaderModuleDesc` field and verifies exact record/replay propagation, plus the exact regenerated `ore_gm_shaders.rstb.hpp` fixture and consumer offsets. The sibling `.rstb` bytes are unchanged. The `.rive_head` update (Naga 30, shader-bake diagnostics/problem reporting, parser readback, wasm-nightly, emsdk, and compiler changes) is editor/tooling-only and intentionally excluded; the runtime remains Naga-free. No checked-in production runtime or renderer source changed. | [UNIV-2414](https://universe.basis.dev/issue/UNIV-2414) |
 | `b36aa3d0085d7e30e7d43f422db89146d95a5c18` | Live root-space focus bounds for `FocusData`, live-first bounds and position lookup in `FocusManager`, the directly corresponding focus tests, and the moving-host fixture. Editor overlay and host-wrapper changes referenced through `.rive_head` are outside this runtime repository. | [UNIV-2413](https://universe.basis.dev/issue/UNIV-2413) |

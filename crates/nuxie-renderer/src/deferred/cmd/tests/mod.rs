@@ -13,6 +13,7 @@ mod deferred_canvas_import_test;
 ))]
 mod deferred_flush_parity_test;
 mod deferred_measure_test;
+mod deferred_path_geometry_test;
 #[cfg(feature = "with-rive-path-query")]
 mod deferred_path_query_test;
 mod deferred_replay_order_test;

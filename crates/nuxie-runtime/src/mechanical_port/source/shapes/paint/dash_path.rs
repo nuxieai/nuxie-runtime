@@ -104,6 +104,9 @@ pub trait PathDasher {
                 dashed += length;
                 draw = !draw;
             }
+            // getSegment has its own precision guards, but a tiny dash can still
+            // land a segment on a single point.
+            raw.prune_empty_segments();
         }
         destination
     }

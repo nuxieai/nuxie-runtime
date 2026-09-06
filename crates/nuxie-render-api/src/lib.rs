@@ -2481,7 +2481,14 @@ pub trait RenderPath: Any {
     fn add_render_path_self(&mut self, transform: Mat2D);
     // Upstream RenderPath's default is empty; RiveRenderPath overrides it.
     fn add_render_path_backwards(&mut self, _path: &dyn RenderPath, _transform: Mat2D) {}
+    /// The caller must supply a valid path with no zero-length segments.
     fn add_raw_path(&mut self, path: &RawPath);
+    /// Upstream RenderPath::addUntrustedRawPath: prune a copy of authored geometry.
+    fn add_untrusted_raw_path(&mut self, path: &RawPath) {
+        let mut sanitized = path.clone();
+        sanitized.prune_empty_segments();
+        self.add_raw_path(&sanitized);
+    }
     fn move_to(&mut self, x: f32, y: f32);
     fn line_to(&mut self, x: f32, y: f32);
     fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32);

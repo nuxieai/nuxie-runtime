@@ -749,7 +749,12 @@ impl Objc2MetalExecution {
                     DrawType::MidpointFanPatches | DrawType::MidpointFanCenterAAPatches => {
                         inventory.snapshot.midpoint_fan_draw_calls += 1
                     }
-                    DrawType::OuterCurvePatches | DrawType::MsaaOuterCubics => {
+                    DrawType::OuterCurvePatches
+                    | DrawType::MsaaDynamicOuterCubics
+                    | DrawType::MsaaOuterCubicBorrowedCoverage
+                    | DrawType::MsaaOuterCubicPathsStencil
+                    | DrawType::MsaaOuterCubicPathsCover
+                    | DrawType::MsaaOuterCubics => {
                         inventory.snapshot.outer_curve_draw_calls += 1
                     }
                     DrawType::InteriorTriangulation => {
@@ -757,7 +762,8 @@ impl Objc2MetalExecution {
                     }
                     DrawType::ImageRect => inventory.snapshot.image_rect_draw_calls += 1,
                     DrawType::ImageMesh => inventory.snapshot.image_mesh_draw_calls += 1,
-                    DrawType::ClipReset | DrawType::MsaaMidpointFanStencilReset => {
+                    DrawType::ClipReset | DrawType::MsaaMidpointFanStencilReset
+                    | DrawType::MsaaOuterCubicStencilReset => {
                         inventory.snapshot.clip_reset_draw_calls += 1
                     }
                     DrawType::RenderPassInitialize => {

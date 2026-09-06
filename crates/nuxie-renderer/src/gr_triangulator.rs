@@ -8,7 +8,13 @@
 #![allow(dead_code)]
 
 use crate::gpu::TriangleVertex;
+use crate::stack_vector::StackVector;
 use nuxie_render_api::{Aabb, FillRule, PathVerb, RawPath, Vec2D};
+use std::cell::Cell;
+
+#[cfg(test)]
+#[path = "gr_triangulator_test_paths.rs"]
+mod test_paths;
 
 type VertexId = usize;
 type EdgeId = usize;
@@ -270,6 +276,8 @@ struct Mesh {
 pub(crate) struct InnerFanTriangulator {
     mesh: Mesh,
     poly_head: Option<PolyId>,
+    non_zero_patch_count: Cell<Option<usize>>,
+    even_odd_patch_count: Cell<Option<usize>>,
 }
 
 impl InnerFanTriangulator {
@@ -287,7 +295,12 @@ impl InnerFanTriangulator {
             .and_then(|_| mesh.tessellate())
             .ok()
             .flatten();
-        Self { mesh, poly_head }
+        Self {
+            mesh,
+            poly_head,
+            non_zero_patch_count: Cell::new(None),
+            even_odd_patch_count: Cell::new(None),
+        }
     }
 
     pub(crate) fn max_vertex_count(&self, fill_rule: FillRule) -> usize {
@@ -318,8 +331,110 @@ impl InnerFanTriangulator {
             .max_triangle_vertex_count(self.poly_head, FillRule::NonZero)
     }
 
+    pub(crate) fn polys_to_retrofit_cubic_patches(
+        &self,
+        fill_rule: FillRule,
+        faces: WindingFaces,
+        emit_patch: &mut impl FnMut(&[Vec2D]),
+    ) -> usize {
+        let mut sink = BufferedTriStripSink {
+            corners: StackVector::new(Vec2D::new(0.0, 0.0)),
+            weight: 0,
+            emit_patch,
+            emitted_patch_count: 0,
+        };
+        self.mesh.emit_triangles_to(
+            self.poly_head,
+            fill_rule,
+            false,
+            faces,
+            &mut |a, b, c, weight| {
+                sink.emit_triangle(a, b, c, weight);
+            },
+        );
+        sink.flush();
+        sink.emitted_patch_count
+    }
+
+    pub(crate) fn retrofit_cubic_patch_count(&self, fill_rule: FillRule) -> usize {
+        let cached = if fill_rule == FillRule::EvenOdd {
+            &self.even_odd_patch_count
+        } else {
+            &self.non_zero_patch_count
+        };
+        if let Some(count) = cached.get() {
+            return count;
+        }
+        let count = self.polys_to_retrofit_cubic_patches(fill_rule, WindingFaces::All, &mut |_| {});
+        cached.set(Some(count));
+        count
+    }
+
     pub(crate) fn grout_triangles(&self) -> &[[Vec2D; 3]] {
         &self.mesh.breadcrumbs
+    }
+}
+
+struct BufferedTriStripSink<'a, F: FnMut(&[Vec2D])> {
+    corners: StackVector<Vec2D, 5>,
+    weight: i16,
+    emit_patch: &'a mut F,
+    emitted_patch_count: usize,
+}
+
+impl<F: FnMut(&[Vec2D])> BufferedTriStripSink<'_, F> {
+    fn emit_triangle(&mut self, a: Vec2D, b: Vec2D, c: Vec2D, weight: i16) {
+        if a == b || a == c || b == c || weight == 0 {
+            return;
+        }
+        if !self.try_merge(a, b, c, weight) {
+            self.flush();
+            self.corners.clear();
+            self.corners.push_back(a);
+            self.corners.push_back(b);
+            self.corners.push_back(c);
+            self.weight = weight;
+        }
+    }
+
+    fn flush(&mut self) {
+        if self.corners.size() == 0 {
+            return;
+        }
+        if self.weight < 0 {
+            self.corners.as_mut_slice().reverse();
+        }
+        self.corners.as_mut_slice()[..3].rotate_left(1);
+        let num_patches = i32::from(self.weight).unsigned_abs() as usize;
+        for _ in 0..num_patches {
+            (self.emit_patch)(self.corners.as_slice());
+        }
+        self.emitted_patch_count += num_patches;
+        self.corners.clear();
+    }
+
+    fn try_merge(&mut self, a: Vec2D, b: Vec2D, c: Vec2D, weight: i16) -> bool {
+        if self.corners.size() == 0 || weight != self.weight || self.corners.size() >= 5 {
+            return false;
+        }
+        let tri = [a, b, c];
+        for e in 0..3 {
+            let (e0, e1, opposite) = (tri[e], tri[(e + 1) % 3], tri[(e + 2) % 3]);
+            for i in 0..self.corners.size() {
+                let c0 = self.corners[i];
+                let c1 = self.corners[if i + 1 == self.corners.size() {
+                    0
+                } else {
+                    i + 1
+                }];
+                if e0 == c1 && e1 == c0 {
+                    self.corners.insert(i + 1, opposite);
+                    return true;
+                }
+                debug_assert!(e0 != c0 || e1 != c1);
+            }
+        }
+        false
     }
 }
 
@@ -1660,11 +1775,9 @@ impl Mesh {
     fn emit_monotone(
         &self,
         monotone: MonotoneId,
-        path_id: u16,
-        reverse: bool,
         negate_winding: bool,
         faces: WindingFaces,
-        output: &mut Vec<TriangleVertex>,
+        sink: &mut impl FnMut(Vec2D, Vec2D, Vec2D, i16),
     ) {
         let record = self.monotones[monotone];
         let mut weight = i16::try_from(-record.winding).expect("triangulator winding fits i16");
@@ -1697,17 +1810,15 @@ impl Mesh {
             let a = self.vertices[current].point;
             let b = self.vertices[previous].point;
             let c = self.vertices[next].point;
-            let cross = f64::from(a.x - b.x) * f64::from(c.y - a.y)
-                - f64::from(a.y - b.y) * f64::from(c.x - a.x);
+            let cross = (f64::from(a.x) - f64::from(b.x)) * (f64::from(c.y) - f64::from(a.y))
+                - (f64::from(a.y) - f64::from(b.y)) * (f64::from(c.x) - f64::from(a.x));
             if vertices.len() == 3 || cross >= 0.0 {
-                let mut triangle = [previous, current, next];
-                if reverse {
-                    triangle.swap(0, 2);
-                }
-                output.extend(triangle.map(|vertex| {
-                    let point = self.vertices[vertex].point;
-                    TriangleVertex::new([point.x, point.y], weight, path_id)
-                }));
+                sink(
+                    self.vertices[previous].point,
+                    self.vertices[current].point,
+                    self.vertices[next].point,
+                    weight,
+                );
                 if vertices.len() == 3 {
                     break;
                 }
@@ -1723,7 +1834,7 @@ impl Mesh {
 
     fn emit_triangles(
         &self,
-        mut poly: Option<PolyId>,
+        poly: Option<PolyId>,
         fill_rule: FillRule,
         path_id: u16,
         reverse: bool,
@@ -1731,25 +1842,40 @@ impl Mesh {
         faces: WindingFaces,
     ) -> Vec<TriangleVertex> {
         let mut output = Vec::new();
+        self.emit_triangles_to(
+            poly,
+            fill_rule,
+            negate_winding,
+            faces,
+            &mut |mut a, b, mut c, weight| {
+                if reverse {
+                    std::mem::swap(&mut a, &mut c);
+                }
+                output.extend([a, b, c].map(|p| TriangleVertex::new([p.x, p.y], weight, path_id)));
+            },
+        );
+        output
+    }
+
+    fn emit_triangles_to(
+        &self,
+        mut poly: Option<PolyId>,
+        fill_rule: FillRule,
+        negate_winding: bool,
+        faces: WindingFaces,
+        sink: &mut impl FnMut(Vec2D, Vec2D, Vec2D, i16),
+    ) {
         while let Some(poly_id) = poly {
             let record = self.polys[poly_id];
             if fill_rule_includes_winding(fill_rule, record.winding) && record.count >= 3 {
                 let mut monotone = record.head;
                 while let Some(monotone_id) = monotone {
-                    self.emit_monotone(
-                        monotone_id,
-                        path_id,
-                        reverse,
-                        negate_winding,
-                        faces,
-                        &mut output,
-                    );
+                    self.emit_monotone(monotone_id, negate_winding, faces, sink);
                     monotone = self.monotones[monotone_id].next;
                 }
             }
             poly = record.next;
         }
-        output
     }
 
     fn max_triangle_vertex_count(&self, mut poly: Option<PolyId>, fill_rule: FillRule) -> usize {
@@ -2061,6 +2187,76 @@ fn recursive_edge_intersection(
 
 #[cfg(test)]
 mod tests {
+    // tests/unit_tests/renderer/triangulator_test.cpp at f7c22102.
+    #[test]
+    fn inner_fan_triangulator_retrofitted_cubics() {
+        let signed_area = |a: Vec2D, b: Vec2D, c: Vec2D| {
+            let ab = b - a;
+            let ac = c - a;
+            ab.x * ac.y - ab.y * ac.x
+        };
+        for (i, create_path) in super::test_paths::NON_EDGE_AA_PATHS.iter().enumerate() {
+            let path = create_path();
+            let triangulator = InnerFanTriangulator::new(&path, path.bounds().unwrap());
+            for fill_rule in [FillRule::NonZero, FillRule::EvenOdd] {
+                for (faces, clockwise) in [
+                    (WindingFaces::Positive, true),
+                    (WindingFaces::Negative, false),
+                ] {
+                    triangulator.polys_to_retrofit_cubic_patches(fill_rule, faces, &mut |strip| {
+                        let mut area = signed_area(strip[0], strip[1], strip[2]);
+                        if strip.len() >= 4 {
+                            area += signed_area(strip[1], strip[3], strip[2]);
+                        }
+                        if strip.len() >= 5 {
+                            area += signed_area(strip[3], strip[4], strip[2]);
+                        }
+                        if !area.is_finite() || area == 0.0 {
+                            return;
+                        }
+                        if clockwise {
+                            assert!(area > 0.0, "fixture {i}, fill {fill_rule:?}, area {area}");
+                        } else {
+                            assert!(area < 0.0, "fixture {i}, fill {fill_rule:?}, area {area}");
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inner_fan_triangulator_retrofitted_cubic_count_cache() {
+        let uncached_count = |triangulator: &InnerFanTriangulator, fill_rule, faces| {
+            let mut count = 0;
+            triangulator.polys_to_retrofit_cubic_patches(fill_rule, faces, &mut |_| count += 1);
+            count
+        };
+        for (i, create_path) in super::test_paths::NON_EDGE_AA_PATHS.iter().enumerate() {
+            let path = create_path();
+            let triangulator = InnerFanTriangulator::new(&path, path.bounds().unwrap());
+            for fill_rule in [
+                FillRule::NonZero,
+                FillRule::Clockwise,
+                FillRule::EvenOdd,
+                FillRule::EvenOdd,
+                FillRule::NonZero,
+            ] {
+                let cached = triangulator.retrofit_cubic_patch_count(fill_rule);
+                assert_eq!(
+                    cached,
+                    uncached_count(&triangulator, fill_rule, WindingFaces::All),
+                    "fixture {i}, fill {fill_rule:?}"
+                );
+                assert!(
+                    uncached_count(&triangulator, fill_rule, WindingFaces::Positive)
+                        + uncached_count(&triangulator, fill_rule, WindingFaces::Negative)
+                        <= cached,
+                    "fixture {i}, fill {fill_rule:?}"
+                );
+            }
+        }
+    }
     use super::*;
 
     #[test]
@@ -2186,20 +2382,24 @@ mod tests {
         let intersect = |u0, u1, v0, v1| {
             recursive_edge_intersection(Line::new(u0, u1), u0, u1, Line::new(v0, v1), v0, v1)
         };
-        assert!(intersect(
-            Vec2D::new(0.0, 0.0),
-            Vec2D::new(1.0, 0.0),
-            Vec2D::new(0.0, 1.0),
-            Vec2D::new(1.0, 1.0),
-        )
-        .is_none());
-        assert!(intersect(
-            Vec2D::new(0.0, 0.0),
-            Vec2D::new(1.0, 1.0),
-            Vec2D::new(2.0, 0.0),
-            Vec2D::new(3.0, 1.0),
-        )
-        .is_none());
+        assert!(
+            intersect(
+                Vec2D::new(0.0, 0.0),
+                Vec2D::new(1.0, 0.0),
+                Vec2D::new(0.0, 1.0),
+                Vec2D::new(1.0, 1.0),
+            )
+            .is_none()
+        );
+        assert!(
+            intersect(
+                Vec2D::new(0.0, 0.0),
+                Vec2D::new(1.0, 1.0),
+                Vec2D::new(2.0, 0.0),
+                Vec2D::new(3.0, 1.0),
+            )
+            .is_none()
+        );
     }
 
     #[test]

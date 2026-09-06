@@ -1503,10 +1503,15 @@ pub(crate) fn makeDrawPipeline(
         DrawType::midpointFanPatches
         | DrawType::midpointFanCenterAAPatches
         | DrawType::outerCurvePatches
+        | DrawType::msaaOuterCubicBorrowedCoverage
+        | DrawType::msaaOuterCubicStencilReset
+        | DrawType::msaaOuterCubicPathsStencil
+        | DrawType::msaaOuterCubicPathsCover
         | DrawType::msaaOuterCubics
         | DrawType::msaaStrokes
         | DrawType::msaaMidpointFanBorrowedCoverage
         | DrawType::msaaDynamicMidpointFans
+        | DrawType::msaaDynamicOuterCubics
         | DrawType::msaaMidpointFans
         | DrawType::msaaMidpointFanStencilReset
         | DrawType::msaaMidpointFanPathsStencil
@@ -2062,10 +2067,15 @@ pub(crate) fn newDrawPipeline(
         InterlockMode::msaa => {
             let clipRect = shaderFeatures.0 & ShaderFeatures::ENABLE_CLIP_RECT.0 != 0;
             let (vertex, fragment, vertexLabel, fragmentLabel) = match drawType {
-                DrawType::msaaOuterCubics
+                DrawType::msaaOuterCubicBorrowedCoverage
+                | DrawType::msaaOuterCubicStencilReset
+                | DrawType::msaaOuterCubicPathsStencil
+                | DrawType::msaaOuterCubicPathsCover
+                | DrawType::msaaOuterCubics
                 | DrawType::msaaStrokes
                 | DrawType::msaaMidpointFanBorrowedCoverage
                 | DrawType::msaaDynamicMidpointFans
+                | DrawType::msaaDynamicOuterCubics
                 | DrawType::msaaMidpointFans
                 | DrawType::msaaMidpointFanStencilReset
                 | DrawType::msaaMidpointFanPathsStencil
@@ -3978,10 +3988,15 @@ unsafe fn executeDrawList(
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
+            | DrawType::msaaOuterCubicBorrowedCoverage
+            | DrawType::msaaOuterCubicStencilReset
+            | DrawType::msaaOuterCubicPathsStencil
+            | DrawType::msaaOuterCubicPathsCover
             | DrawType::msaaOuterCubics
             | DrawType::msaaStrokes
             | DrawType::msaaMidpointFanBorrowedCoverage
             | DrawType::msaaDynamicMidpointFans
+            | DrawType::msaaDynamicOuterCubics
             | DrawType::msaaMidpointFans
             | DrawType::msaaMidpointFanStencilReset
             | DrawType::msaaMidpointFanPathsStencil

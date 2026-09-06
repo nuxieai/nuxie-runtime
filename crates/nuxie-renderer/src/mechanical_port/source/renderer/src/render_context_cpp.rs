@@ -4118,9 +4118,8 @@ const K_DEFAULT_SIMPLE_GRADIENT_CAPACITY: usize = 512;
 const K_DEFAULT_COMPLEX_GRADIENT_CAPACITY: usize = 1024;
 const K_MAX_TEXTURE_HEIGHT: usize = 2048;
 const K_MAX_TESSELLATION_VERTEX_COUNT: usize = K_MAX_TEXTURE_HEIGHT * gpu::kTessTextureWidth;
-const K_MAX_TESSELLATION_PADDING_VERTEX_COUNT: usize = gpu::kMidpointFanPatchSegmentSpan as usize
-    + gpu::OuterCubicPatchSegmentSpan as usize
-    + 1;
+const K_MAX_TESSELLATION_PADDING_VERTEX_COUNT: usize =
+    gpu::kMidpointFanPatchSegmentSpan as usize + gpu::OuterCubicPatchSegmentSpan as usize + 1;
 const K_MAX_TESSELLATION_VERTEX_COUNT_BEFORE_PADDING: usize =
     K_MAX_TESSELLATION_VERTEX_COUNT - K_MAX_TESSELLATION_PADDING_VERTEX_COUNT;
 const K_MAX_REORDERED_DRAW_PASS_COUNT: i32 = i16::MAX as i32;
@@ -4679,7 +4678,12 @@ fn patch_indices(draw_type: gpu::DrawType) -> (u32, u32) {
             gpu::kMidpointFanPatchIndexCount - gpu::kMidpointFanPatchBorderIndexCount,
             gpu::kMidpointFanPatchBaseIndex + gpu::kMidpointFanPatchBorderIndexCount,
         ),
-        msaaOuterCubics => (
+        msaaOuterCubicBorrowedCoverage
+        | msaaDynamicOuterCubics
+        | msaaOuterCubics
+        | msaaOuterCubicStencilReset
+        | msaaOuterCubicPathsStencil
+        | msaaOuterCubicPathsCover => (
             gpu::kOuterCurvePatchIndexCount - gpu::kOuterCurvePatchBorderIndexCount,
             gpu::kOuterCurvePatchBaseIndex + gpu::kOuterCurvePatchBorderIndexCount,
         ),
@@ -6289,15 +6293,9 @@ impl LogicalFlush {
         misc: gpu::ShaderMiscFlags,
     ) -> *mut gpu::DrawBatch {
         let base = location / gpu::OuterCubicPatchSegmentSpanPlusJoin;
-        debug_assert_eq!(
-            base * gpu::OuterCubicPatchSegmentSpanPlusJoin,
-            location
-        );
+        debug_assert_eq!(base * gpu::OuterCubicPatchSegmentSpanPlusJoin, location);
         let instances = count / gpu::OuterCubicPatchSegmentSpanPlusJoin;
-        debug_assert_eq!(
-            instances * gpu::OuterCubicPatchSegmentSpanPlusJoin,
-            count
-        );
+        debug_assert_eq!(instances * gpu::OuterCubicPatchSegmentSpanPlusJoin, count);
         unsafe { self.pushPathDrawExecutable(draw, draw_type, misc, instances, base) }
     }
 
@@ -7759,12 +7757,7 @@ impl<'a> TessellationWriter<'a> {
         contour_id_flags: u32,
     ) {
         assert!((3..=5).contains(&pts.len()));
-        let cubic_triangle_strip = [
-            pts[0],
-            pts[1],
-            pts[3.min(pts.len() - 1)],
-            pts[2],
-        ];
+        let cubic_triangle_strip = [pts[0], pts[1], pts[3.min(pts.len() - 1)], pts[2]];
         self.pushCubicExecutable(
             &cubic_triangle_strip,
             directions,
@@ -8356,12 +8349,7 @@ impl<'a> TessellationWriterContract<'a> for TessellationWriter<'a> {
     ) {
         self.pushCubicExecutable(p, d, t, a, b, j, c)
     }
-    fn pushRetrofitCubicTriStrip(
-        &mut self,
-        p: &[Vec2D],
-        d: gpu::ContourDirections,
-        c: u32,
-    ) {
+    fn pushRetrofitCubicTriStrip(&mut self, p: &[Vec2D], d: gpu::ContourDirections, c: u32) {
         self.pushRetrofitCubicTriStripExecutable(p, d, c)
     }
     fn pushTessellationSpans(

@@ -73,8 +73,13 @@ pub(crate) fn precompiled_function_name(
         | DrawType::MsaaMidpointFans
         | DrawType::MsaaMidpointFanStencilReset
         | DrawType::MsaaDynamicMidpointFans
+        | DrawType::MsaaDynamicOuterCubics
         | DrawType::MsaaMidpointFanPathsStencil
         | DrawType::MsaaMidpointFanPathsCover
+        | DrawType::MsaaOuterCubicBorrowedCoverage
+        | DrawType::MsaaOuterCubicStencilReset
+        | DrawType::MsaaOuterCubicPathsStencil
+        | DrawType::MsaaOuterCubicPathsCover
         | DrawType::MsaaOuterCubics
         | DrawType::ClipReset
         | DrawType::RenderPassInitialize

@@ -541,10 +541,15 @@ fn append_draw_defines(
         DrawType::MsaaStrokes
         | DrawType::MsaaMidpointFanBorrowedCoverage
         | DrawType::MsaaDynamicMidpointFans
+        | DrawType::MsaaDynamicOuterCubics
         | DrawType::MsaaMidpointFans
         | DrawType::MsaaMidpointFanStencilReset
         | DrawType::MsaaMidpointFanPathsStencil
         | DrawType::MsaaMidpointFanPathsCover
+        | DrawType::MsaaOuterCubicBorrowedCoverage
+        | DrawType::MsaaOuterCubicStencilReset
+        | DrawType::MsaaOuterCubicPathsStencil
+        | DrawType::MsaaOuterCubicPathsCover
         | DrawType::MsaaOuterCubics
         | DrawType::ClipReset => {
             return Err(BackgroundCompilePlanError::UnsupportedDrawType {
@@ -597,10 +602,15 @@ fn append_interlock_sources(
             DrawType::MsaaStrokes
             | DrawType::MsaaMidpointFanBorrowedCoverage
             | DrawType::MsaaDynamicMidpointFans
+            | DrawType::MsaaDynamicOuterCubics
             | DrawType::MsaaMidpointFans
             | DrawType::MsaaMidpointFanStencilReset
             | DrawType::MsaaMidpointFanPathsStencil
             | DrawType::MsaaMidpointFanPathsCover
+            | DrawType::MsaaOuterCubicBorrowedCoverage
+            | DrawType::MsaaOuterCubicStencilReset
+            | DrawType::MsaaOuterCubicPathsStencil
+            | DrawType::MsaaOuterCubicPathsCover
             | DrawType::MsaaOuterCubics
             | DrawType::ClipReset => {
                 return Err(BackgroundCompilePlanError::UnsupportedDrawType {

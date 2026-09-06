@@ -1970,10 +1970,15 @@ impl BackgroundShaderCompiler {
                 DrawType::msaaStrokes
                 | DrawType::msaaMidpointFanBorrowedCoverage
                 | DrawType::msaaDynamicMidpointFans
+                | DrawType::msaaDynamicOuterCubics
                 | DrawType::msaaMidpointFans
                 | DrawType::msaaMidpointFanStencilReset
                 | DrawType::msaaMidpointFanPathsStencil
                 | DrawType::msaaMidpointFanPathsCover
+                | DrawType::msaaOuterCubicBorrowedCoverage
+                | DrawType::msaaOuterCubicStencilReset
+                | DrawType::msaaOuterCubicPathsStencil
+                | DrawType::msaaOuterCubicPathsCover
                 | DrawType::msaaOuterCubics
                 | DrawType::clipReset => rive_unreachable(),
             }
@@ -2039,10 +2044,15 @@ impl BackgroundShaderCompiler {
                     | DrawType::msaaStrokes
                     | DrawType::msaaMidpointFanBorrowedCoverage
                     | DrawType::msaaDynamicMidpointFans
+                    | DrawType::msaaDynamicOuterCubics
                     | DrawType::msaaMidpointFans
                     | DrawType::msaaMidpointFanStencilReset
                     | DrawType::msaaMidpointFanPathsStencil
                     | DrawType::msaaMidpointFanPathsCover
+                    | DrawType::msaaOuterCubicBorrowedCoverage
+                    | DrawType::msaaOuterCubicStencilReset
+                    | DrawType::msaaOuterCubicPathsStencil
+                    | DrawType::msaaOuterCubicPathsCover
                     | DrawType::msaaOuterCubics
                     | DrawType::clipReset
                     | DrawType::renderPassInitialize

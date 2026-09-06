@@ -6,6 +6,7 @@
 use nuxie_render_api::authored_ore_shader;
 pub mod deferred;
 mod renderer_types;
+mod stack_vector;
 pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};
 
 #[cfg(any(

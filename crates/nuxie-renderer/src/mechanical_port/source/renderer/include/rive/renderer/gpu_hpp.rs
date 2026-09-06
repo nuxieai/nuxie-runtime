@@ -2574,12 +2574,17 @@ pub enum DrawType {
     msaaMidpointFans = 9,
     msaaMidpointFanStencilReset = 10,
     msaaDynamicMidpointFans = 11,
-    msaaMidpointFanPathsStencil = 12,
-    msaaMidpointFanPathsCover = 13,
-    msaaOuterCubics = 14,
-    clipReset = 15,
-    renderPassInitialize = 16,
-    renderPassResolve = 17,
+    msaaOuterCubicBorrowedCoverage = 12,
+    msaaOuterCubics = 13,
+    msaaOuterCubicStencilReset = 14,
+    msaaDynamicOuterCubics = 15,
+    msaaMidpointFanPathsStencil = 16,
+    msaaMidpointFanPathsCover = 17,
+    msaaOuterCubicPathsStencil = 18,
+    msaaOuterCubicPathsCover = 19,
+    clipReset = 20,
+    renderPassInitialize = 21,
+    renderPassResolve = 22,
 }
 
 // Source-name spellings used by the translated Metal unit.  These are
@@ -2598,6 +2603,11 @@ impl DrawType {
     pub const MsaaMidpointFans: Self = Self::msaaMidpointFans;
     pub const MsaaMidpointFanStencilReset: Self = Self::msaaMidpointFanStencilReset;
     pub const MsaaDynamicMidpointFans: Self = Self::msaaDynamicMidpointFans;
+    pub const MsaaOuterCubicBorrowedCoverage: Self = Self::msaaOuterCubicBorrowedCoverage;
+    pub const MsaaOuterCubicStencilReset: Self = Self::msaaOuterCubicStencilReset;
+    pub const MsaaDynamicOuterCubics: Self = Self::msaaDynamicOuterCubics;
+    pub const MsaaOuterCubicPathsStencil: Self = Self::msaaOuterCubicPathsStencil;
+    pub const MsaaOuterCubicPathsCover: Self = Self::msaaOuterCubicPathsCover;
     pub const MsaaMidpointFanPathsStencil: Self = Self::msaaMidpointFanPathsStencil;
     pub const MsaaMidpointFanPathsCover: Self = Self::msaaMidpointFanPathsCover;
     pub const MsaaOuterCubics: Self = Self::msaaOuterCubics;
@@ -2785,11 +2795,16 @@ pub const fn ShaderFeaturesMaskForDraw(
         | DrawType::msaaStrokes
         | DrawType::msaaMidpointFanBorrowedCoverage
         | DrawType::msaaDynamicMidpointFans
+        | DrawType::msaaDynamicOuterCubics
         | DrawType::msaaMidpointFans
         | DrawType::msaaMidpointFanStencilReset
         | DrawType::msaaMidpointFanPathsStencil
         | DrawType::msaaMidpointFanPathsCover
         | DrawType::msaaOuterCubics
+        | DrawType::msaaOuterCubicBorrowedCoverage
+        | DrawType::msaaOuterCubicStencilReset
+        | DrawType::msaaOuterCubicPathsStencil
+        | DrawType::msaaOuterCubicPathsCover
         | DrawType::imageRect
         | DrawType::imageMesh
         | DrawType::featherAtlasBlit => kAllShaderFeatures,

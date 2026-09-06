@@ -170,10 +170,15 @@ fn isTessellationDraw(drawType: gpu::DrawType) -> bool {
             | gpu::DrawType::msaaStrokes
             | gpu::DrawType::msaaMidpointFanBorrowedCoverage
             | gpu::DrawType::msaaDynamicMidpointFans
+            | gpu::DrawType::msaaDynamicOuterCubics
             | gpu::DrawType::msaaMidpointFans
             | gpu::DrawType::msaaMidpointFanStencilReset
             | gpu::DrawType::msaaMidpointFanPathsStencil
             | gpu::DrawType::msaaMidpointFanPathsCover
+            | gpu::DrawType::msaaOuterCubicBorrowedCoverage
+            | gpu::DrawType::msaaOuterCubicStencilReset
+            | gpu::DrawType::msaaOuterCubicPathsStencil
+            | gpu::DrawType::msaaOuterCubicPathsCover
             | gpu::DrawType::msaaOuterCubics
     )
 }
@@ -2038,10 +2043,15 @@ fn newDrawShader(
         | gpu::DrawType::msaaStrokes
         | gpu::DrawType::msaaMidpointFanBorrowedCoverage
         | gpu::DrawType::msaaDynamicMidpointFans
+        | gpu::DrawType::msaaDynamicOuterCubics
         | gpu::DrawType::msaaMidpointFans
         | gpu::DrawType::msaaMidpointFanStencilReset
         | gpu::DrawType::msaaMidpointFanPathsStencil
         | gpu::DrawType::msaaMidpointFanPathsCover
+        | gpu::DrawType::msaaOuterCubicBorrowedCoverage
+        | gpu::DrawType::msaaOuterCubicStencilReset
+        | gpu::DrawType::msaaOuterCubicPathsStencil
+        | gpu::DrawType::msaaOuterCubicPathsCover
         | gpu::DrawType::msaaOuterCubics => {
             if shaderType == GL_VERTEX_SHADER {
                 defines.push(GLSL_ENABLE_INSTANCE_INDEX);
@@ -2123,10 +2133,15 @@ fn newDrawShader(
             gpu::DrawType::msaaStrokes
             | gpu::DrawType::msaaMidpointFanBorrowedCoverage
             | gpu::DrawType::msaaDynamicMidpointFans
+            | gpu::DrawType::msaaDynamicOuterCubics
             | gpu::DrawType::msaaMidpointFans
             | gpu::DrawType::msaaMidpointFanStencilReset
             | gpu::DrawType::msaaMidpointFanPathsStencil
             | gpu::DrawType::msaaMidpointFanPathsCover
+            | gpu::DrawType::msaaOuterCubicBorrowedCoverage
+            | gpu::DrawType::msaaOuterCubicStencilReset
+            | gpu::DrawType::msaaOuterCubicPathsStencil
+            | gpu::DrawType::msaaOuterCubicPathsCover
             | gpu::DrawType::msaaOuterCubics
             | gpu::DrawType::interiorTriangulation
             | gpu::DrawType::featherAtlasBlit => {
@@ -3724,10 +3739,15 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 | gpu::DrawType::msaaStrokes
                 | gpu::DrawType::msaaMidpointFanBorrowedCoverage
                 | gpu::DrawType::msaaDynamicMidpointFans
+                | gpu::DrawType::msaaDynamicOuterCubics
                 | gpu::DrawType::msaaMidpointFans
                 | gpu::DrawType::msaaMidpointFanStencilReset
                 | gpu::DrawType::msaaMidpointFanPathsStencil
                 | gpu::DrawType::msaaMidpointFanPathsCover
+                | gpu::DrawType::msaaOuterCubicBorrowedCoverage
+                | gpu::DrawType::msaaOuterCubicStencilReset
+                | gpu::DrawType::msaaOuterCubicPathsStencil
+                | gpu::DrawType::msaaOuterCubicPathsCover
                 | gpu::DrawType::msaaOuterCubics => {
                     context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
                     if desc.interlockMode == gpu::InterlockMode::rasterOrdering {

@@ -102,10 +102,15 @@ fn select_shader_pair(
             | DrawType::msaaStrokes
             | DrawType::msaaMidpointFanBorrowedCoverage
             | DrawType::msaaDynamicMidpointFans
+            | DrawType::msaaDynamicOuterCubics
             | DrawType::msaaMidpointFans
             | DrawType::msaaMidpointFanStencilReset
             | DrawType::msaaMidpointFanPathsStencil
             | DrawType::msaaMidpointFanPathsCover
+            | DrawType::msaaOuterCubicBorrowedCoverage
+            | DrawType::msaaOuterCubicStencilReset
+            | DrawType::msaaOuterCubicPathsStencil
+            | DrawType::msaaOuterCubicPathsCover
             | DrawType::msaaOuterCubics
             | DrawType::clipReset
             | DrawType::renderPassInitialize => source_unreachable(),
@@ -177,10 +182,15 @@ fn select_shader_pair(
             DrawType::msaaStrokes
             | DrawType::msaaMidpointFanBorrowedCoverage
             | DrawType::msaaDynamicMidpointFans
+            | DrawType::msaaDynamicOuterCubics
             | DrawType::msaaMidpointFanStencilReset
             | DrawType::msaaMidpointFans
             | DrawType::msaaMidpointFanPathsStencil
             | DrawType::msaaMidpointFanPathsCover
+            | DrawType::msaaOuterCubicBorrowedCoverage
+            | DrawType::msaaOuterCubicStencilReset
+            | DrawType::msaaOuterCubicPathsStencil
+            | DrawType::msaaOuterCubicPathsCover
             | DrawType::msaaOuterCubics
             | DrawType::clipReset
             | DrawType::renderPassInitialize => source_unreachable(),
@@ -244,10 +254,15 @@ fn select_shader_pair(
                 | DrawType::msaaStrokes
                 | DrawType::msaaMidpointFanBorrowedCoverage
                 | DrawType::msaaDynamicMidpointFans
+                | DrawType::msaaDynamicOuterCubics
                 | DrawType::msaaMidpointFanStencilReset
                 | DrawType::msaaMidpointFans
                 | DrawType::msaaMidpointFanPathsStencil
                 | DrawType::msaaMidpointFanPathsCover
+                | DrawType::msaaOuterCubicBorrowedCoverage
+                | DrawType::msaaOuterCubicStencilReset
+                | DrawType::msaaOuterCubicPathsStencil
+                | DrawType::msaaOuterCubicPathsCover
                 | DrawType::msaaOuterCubics
                 | DrawType::clipReset
                 | DrawType::renderPassResolve
@@ -357,10 +372,15 @@ fn select_shader_pair(
                 | DrawType::msaaStrokes
                 | DrawType::msaaMidpointFanBorrowedCoverage
                 | DrawType::msaaDynamicMidpointFans
+                | DrawType::msaaDynamicOuterCubics
                 | DrawType::msaaMidpointFanStencilReset
                 | DrawType::msaaMidpointFans
                 | DrawType::msaaMidpointFanPathsStencil
                 | DrawType::msaaMidpointFanPathsCover
+                | DrawType::msaaOuterCubicBorrowedCoverage
+                | DrawType::msaaOuterCubicStencilReset
+                | DrawType::msaaOuterCubicPathsStencil
+                | DrawType::msaaOuterCubicPathsCover
                 | DrawType::msaaOuterCubics
                 | DrawType::renderPassResolve => source_unreachable(),
             }
@@ -372,10 +392,15 @@ fn select_shader_pair(
             | DrawType::outerCurvePatches
             | DrawType::interiorTriangulation
             | DrawType::imageRect => source_unreachable(),
-            DrawType::msaaOuterCubics
+            DrawType::msaaOuterCubicBorrowedCoverage
+            | DrawType::msaaOuterCubicStencilReset
+            | DrawType::msaaOuterCubicPathsStencil
+            | DrawType::msaaOuterCubicPathsCover
+            | DrawType::msaaOuterCubics
             | DrawType::msaaStrokes
             | DrawType::msaaMidpointFanBorrowedCoverage
             | DrawType::msaaDynamicMidpointFans
+            | DrawType::msaaDynamicOuterCubics
             | DrawType::msaaMidpointFans
             | DrawType::msaaMidpointFanStencilReset
             | DrawType::msaaMidpointFanPathsStencil

@@ -193,10 +193,15 @@ pub(crate) fn shader_features_mask_for(
         | DrawType::MsaaStrokes
         | DrawType::MsaaMidpointFanBorrowedCoverage
         | DrawType::MsaaDynamicMidpointFans
+        | DrawType::MsaaDynamicOuterCubics
         | DrawType::MsaaMidpointFans
         | DrawType::MsaaMidpointFanStencilReset
         | DrawType::MsaaMidpointFanPathsStencil
         | DrawType::MsaaMidpointFanPathsCover
+        | DrawType::MsaaOuterCubicBorrowedCoverage
+        | DrawType::MsaaOuterCubicStencilReset
+        | DrawType::MsaaOuterCubicPathsStencil
+        | DrawType::MsaaOuterCubicPathsCover
         | DrawType::MsaaOuterCubics => ALL_SHADER_FEATURES,
         DrawType::ClipReset => ENABLE_DITHER,
         DrawType::RenderPassInitialize => match interlock_mode {
@@ -282,10 +287,15 @@ pub(crate) fn pipeline_key(
         | DrawType::MsaaStrokes
         | DrawType::MsaaMidpointFanBorrowedCoverage
         | DrawType::MsaaDynamicMidpointFans
+        | DrawType::MsaaDynamicOuterCubics
         | DrawType::MsaaMidpointFans
         | DrawType::MsaaMidpointFanStencilReset
         | DrawType::MsaaMidpointFanPathsStencil
         | DrawType::MsaaMidpointFanPathsCover
+        | DrawType::MsaaOuterCubicBorrowedCoverage
+        | DrawType::MsaaOuterCubicStencilReset
+        | DrawType::MsaaOuterCubicPathsStencil
+        | DrawType::MsaaOuterCubicPathsCover
         | DrawType::MsaaOuterCubics => 0,
         DrawType::InteriorTriangulation => 1,
         DrawType::AtlasBlit => 2,

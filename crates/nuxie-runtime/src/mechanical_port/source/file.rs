@@ -1083,7 +1083,7 @@ impl File {
                         Some(list.list_items().to_vec())
                     })
                     .flatten();
-                for item in items.into_iter().flatten() {
+                for (index, item) in items.into_iter().flatten().enumerate() {
                     let ids = item
                         .with(|item| {
                             let item = item.as_view_model_instance_list_item()?;
@@ -1118,10 +1118,11 @@ impl File {
                         copied
                     };
                     if let Some(copied) = copied {
-                        item.with_mut(|item| {
-                            if let Some(item) = item.as_view_model_instance_list_item_mut() {
-                                item.set_view_model_instance(Some(copied));
-                            }
+                        value.with_mut(|value| {
+                            value
+                                .as_view_model_instance_list_mut()
+                                .expect("list VMI value")
+                                .set_item_instance(index, copied);
                         });
                     }
                 }

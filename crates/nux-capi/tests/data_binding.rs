@@ -1093,8 +1093,8 @@ fn linked_child_and_list_item_mutations_invalidate_the_bound_root_occurrence() {
     );
     assert_eq!(
         unsafe { nux_player_acknowledge_presented(player, after_replace) },
-        NuxStatus::Ok,
-        "exact C++ parent bookkeeping deduplicates equal parents, then removing either edge removes that parent even while another edge remains"
+        NuxStatus::HandleMismatch,
+        "removing one reference must preserve invalidation through the remaining list reference"
     );
 
     let before_detach = step_and_ack(player);
@@ -1339,6 +1339,20 @@ fn cumulative_list_growth_preserves_snapshot_limits_and_allows_retry() {
 
 #[test]
 fn retained_child_writes_preserve_the_shared_root_snapshot_budget() {
+    qualify_shared_owner_snapshot_budget(false, false);
+}
+
+#[test]
+fn nested_path_writes_validate_every_shared_child_owner() {
+    qualify_shared_owner_snapshot_budget(true, false);
+}
+
+#[test]
+fn removing_one_duplicate_list_reference_preserves_child_ownership() {
+    qualify_shared_owner_snapshot_budget(false, true);
+}
+
+fn qualify_shared_owner_snapshot_budget(nested_path: bool, remove_duplicate: bool) {
     let file = import_bytes(&shared_nested_list_fixture_with_item_artboard(false));
     let mut root = std::ptr::null_mut();
     assert_eq!(
@@ -1382,13 +1396,46 @@ fn retained_child_writes_preserve_the_shared_root_snapshot_budget() {
         })
         .collect::<Vec<_>>();
     assert_eq!(mutate(&insertions), NuxStatus::Ok);
+    let mut sibling = std::ptr::null_mut();
+    if nested_path {
+        assert_eq!(unsafe { nux_view_model_instance_new(file, 0, &mut sibling) }, NuxStatus::Ok);
+        assert_eq!(mutate(&[NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: sibling,
+            related_instance: children[4],
+            path: NuxStringView { data: b"child".as_ptr().cast(), len: 5 },
+            ..NuxViewModelMutation::default()
+        }]), NuxStatus::Ok);
+    }
+    if remove_duplicate {
+        assert_eq!(mutate(&[NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+            instance: root,
+            related_instance: children[4],
+            path: NuxStringView { data: b"items".as_ptr().cast(), len: 5 },
+            index: 6,
+            ..NuxViewModelMutation::default()
+        }]), NuxStatus::Ok);
+        assert_eq!(mutate(&[NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE,
+            instance: root,
+            path: NuxStringView { data: b"items".as_ptr().cast(), len: 5 },
+            index: 6,
+            ..NuxViewModelMutation::default()
+        }]), NuxStatus::Ok);
+    }
     let write = |child, bytes: &[u8]| {
+        let (instance, path): (_, &[u8]) = if nested_path && child == children[4] {
+            (sibling, b"child/label")
+        } else {
+            (child, b"label")
+        };
         mutate(&[NuxViewModelMutation {
             kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
-            instance: child,
+            instance,
             path: NuxStringView {
-                data: b"label".as_ptr().cast(),
-                len: 5,
+                data: path.as_ptr().cast(),
+                len: path.len(),
             },
             bytes_value: NuxByteView {
                 data: bytes.as_ptr(),
@@ -1420,8 +1467,47 @@ fn retained_child_writes_preserve_the_shared_root_snapshot_budget() {
         for child in children {
             nux_view_model_instance_free(child);
         }
+        if !sibling.is_null() {
+            nux_view_model_instance_free(sibling);
+        }
         nux_view_model_instance_free(root);
         nux_file_free(file);
+    }
+}
+
+#[test]
+fn authored_shared_child_keeps_each_imported_parent_reference() {
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+    use nuxie_runtime::{File, RuntimeFactoryHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance};
+
+    for clear_list_first in [true, false] {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        let file = File::import(&shared_nested_list_fixture(), retained, None, None, None).unwrap();
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
+        );
+        let child = root.linked_view_model_by_property_name_path("child").unwrap();
+        let listed = root.list_items_by_property_name_path("items").unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(child.ptr_eq(&listed[0]));
+        let replacement = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(file, 1).unwrap(),
+        );
+        if clear_list_first {
+            assert!(root.clear_list_items_by_property_name_path("items"));
+        } else {
+            assert!(root.link_view_model_by_property_name_path("child", &replacement).unwrap());
+        }
+        let owners = child.parent_instances().unwrap();
+        assert_eq!(owners.len(), 1, "the remaining authored reference owns its child");
+        assert!(owners[0].ptr_eq(&root));
+        if clear_list_first {
+            assert!(root.link_view_model_by_property_name_path("child", &replacement).unwrap());
+        } else {
+            assert!(root.clear_list_items_by_property_name_path("items"));
+        }
+        assert!(child.parent_instances().unwrap().is_empty(), "the last unlink releases its owner");
     }
 }
 

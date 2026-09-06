@@ -1337,6 +1337,94 @@ fn cumulative_list_growth_preserves_snapshot_limits_and_allows_retry() {
     }
 }
 
+#[test]
+fn retained_child_writes_preserve_the_shared_root_snapshot_budget() {
+    let file = import_bytes(&shared_nested_list_fixture_with_item_artboard(false));
+    let mut root = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut root) },
+        NuxStatus::Ok
+    );
+    let children = (0..5)
+        .map(|_| {
+            let mut child = std::ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_view_model_instance_new(file, 1, &mut child) },
+                NuxStatus::Ok
+            );
+            child
+        })
+        .collect::<Vec<_>>();
+    let mutate = |mutations: &[NuxViewModelMutation]| {
+        let batch = NuxViewModelMutationBatch {
+            mutations: mutations.as_ptr(),
+            mutation_count: mutations.len(),
+            ..NuxViewModelMutationBatch::default()
+        };
+        let mut result = std::ptr::null_mut();
+        let status = unsafe { nux_view_model_mutate(&batch, &mut result) };
+        unsafe { nux_view_model_mutation_result_free(result) };
+        status
+    };
+    let insertions = children
+        .iter()
+        .enumerate()
+        .map(|(index, child)| NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+            instance: root,
+            related_instance: *child,
+            path: NuxStringView {
+                data: b"items".as_ptr().cast(),
+                len: 5,
+            },
+            index: index + 1,
+            ..NuxViewModelMutation::default()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(mutate(&insertions), NuxStatus::Ok);
+    let write = |child, bytes: &[u8]| {
+        mutate(&[NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+            instance: child,
+            path: NuxStringView {
+                data: b"label".as_ptr().cast(),
+                len: 5,
+            },
+            bytes_value: NuxByteView {
+                data: bytes.as_ptr(),
+                len: bytes.len(),
+            },
+            ..NuxViewModelMutation::default()
+        }])
+    };
+    let large = vec![b'x'; 900_000];
+    for child in &children[..4] {
+        assert_eq!(write(*child, &large), NuxStatus::Ok);
+    }
+    assert_eq!(write(children[4], &large), NuxStatus::LimitExceeded);
+    let preserved = snapshot(root);
+    let preserved_child = snapshot(children[4]);
+    let mut label = NuxViewModelSnapshotValueView::default();
+    assert_eq!(
+        unsafe { nux_view_model_snapshot_value(preserved_child, 0, &mut label) },
+        NuxStatus::Ok
+    );
+    assert_eq!(label.bytes_value.len, 0);
+    assert_eq!(write(children[0], b""), NuxStatus::Ok);
+    assert_eq!(write(children[4], &large), NuxStatus::Ok);
+    let retry = snapshot(root);
+    unsafe {
+        nux_view_model_snapshot_free(preserved);
+        nux_view_model_snapshot_free(preserved_child);
+        nux_view_model_snapshot_free(retry);
+        for child in children {
+            nux_view_model_instance_free(child);
+        }
+        nux_view_model_instance_free(root);
+        nux_file_free(file);
+    }
+}
+
 fn qualify_structural_mutations(bytes: Vec<u8>) {
     let file = import_bytes(&bytes);
     let mut root = std::ptr::null_mut();

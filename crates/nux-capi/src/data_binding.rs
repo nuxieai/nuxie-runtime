@@ -2351,6 +2351,25 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                     &roots, capture,
                 )
                 .ok_or(NuxStatus::RuntimeError)?;
+            // A path can mutate a child shared by otherwise unrelated roots.
+            // Validate from the actual changed cells, including every owner,
+            // while the transaction can still restore values and topology.
+            let mut pending = roots;
+            pending.extend(owner_changes.iter().map(|(owner, _)| owner.clone()));
+            let mut checked = BTreeSet::new();
+            while let Some(owner) = pending.pop() {
+                if !checked.insert(owner.instance_identity()) {
+                    continue;
+                }
+                if checked.len() > MAX_SNAPSHOT_INSTANCES {
+                    return Err(NuxStatus::LimitExceeded);
+                }
+                let address = resolved.first().ok_or(NuxStatus::RuntimeError)?.instance;
+                let catalog_instance = unsafe { &*(address as *const NuxViewModelInstance) };
+                SnapshotBuilder::new(&catalog_instance.view_model_catalog)
+                    .snapshot(&owner, owner.instance_identity())?;
+                pending.extend(owner.parent_instances().ok_or(NuxStatus::RuntimeError)?);
+            }
             let mut changed_owners = Vec::new();
             let mut changes = Vec::with_capacity(owner_changes.len());
             for (owner, change) in owner_changes {
@@ -2394,7 +2413,7 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 status,
                 0,
                 if status == NuxStatus::LimitExceeded {
-                    "view-model mutation generation overflowed"
+                    "view-model mutation exceeds runtime limits; live graph restored"
                 } else {
                     "validated mutation diverged during commit; live graph restored"
                 },
